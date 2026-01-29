@@ -1,0 +1,15 @@
+node_modules
+dist
+.git
+.env
+.env.*
+!.env.example
+*.log
+.tmp
+supabase/.temp
+supabase/.branches
+directives
+execution
+docs
+*.md
+!README.md

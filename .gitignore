@@ -1,0 +1,44 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+.env.production
+.env.development
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Temporary files for agent orchestration
+.tmp/
+
+# Supabase local files (contain sensitive data)
+supabase/.temp/
+supabase/.branches/
+
+# SQL files with credentials (should not be committed)
+*.credentials.sql
+CRIAR_ORGANIZACAO*.sql
+VINCULAR_ORGANIZACAO.sql
+SOLUCAO_DEFINITIVA_RLS.sql

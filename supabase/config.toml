@@ -1,0 +1,41 @@
+project_id = "twoghutcvlfgemadaeez"
+
+# Auth: não exigir confirmação de email para login (SDR/equipe interno).
+# Em projetos hospedados, desative em: Dashboard → Authentication → Providers → Email → "Confirm email".
+[auth.email]
+enable_confirmations = false
+
+[functions.webhook-new-lead]
+verify_jwt = false
+
+[functions.webhook-confirmacao]
+verify_jwt = false
+
+[functions.oraculo-comercial]
+verify_jwt = false
+
+[functions.calculate-lead-score]
+verify_jwt = false
+
+[functions.agent-message]
+verify_jwt = false
+
+[functions.webhook-orchestrator]
+verify_jwt = false
+
+[functions.evolution-api-proxy]
+verify_jwt = false
+
+[functions.evolution-webhook]
+verify_jwt = false
+
+[functions.process-webhook-deliveries]
+verify_jwt = false
+
+# verify_jwt = false para permitir preflight OPTIONS sem JWT; o JWT é validado dentro da função
+[functions.webhook-send-test]
+verify_jwt = false
+
+# verify_jwt = false para preflight OPTIONS; JWT validado dentro da função
+[functions.webhook-validate-url]
+verify_jwt = false

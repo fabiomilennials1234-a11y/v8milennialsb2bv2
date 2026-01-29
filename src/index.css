@@ -1,0 +1,405 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Racing+Sans+One&display=swap');
+
+@layer base {
+  :root {
+    /* Millennials Brand Colors */
+    --background: 45 20% 98%;
+    --foreground: 30 18% 20%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 30 18% 20%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 30 18% 20%;
+
+    /* Primary Yellow - Brand Identity */
+    --primary: 48 92% 53%;
+    --primary-foreground: 30 18% 15%;
+
+    /* Secondary - Soft Yellow */
+    --secondary: 48 60% 95%;
+    --secondary-foreground: 30 18% 20%;
+
+    /* Muted */
+    --muted: 45 20% 95%;
+    --muted-foreground: 30 10% 50%;
+
+    /* Accent - Dark Brown */
+    --accent: 36 20% 22%;
+    --accent-foreground: 45 100% 96%;
+
+    /* Destructive */
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* Success - Gamification Green */
+    --success: 142 70% 45%;
+    --success-foreground: 0 0% 100%;
+
+    /* Warning */
+    --warning: 38 92% 50%;
+    --warning-foreground: 30 18% 15%;
+
+    --border: 45 20% 90%;
+    --input: 45 20% 90%;
+    --ring: 48 92% 53%;
+
+    --radius: 0.75rem;
+
+    /* Sidebar - Dark Theme */
+    --sidebar-background: 36 20% 18%;
+    --sidebar-foreground: 45 20% 90%;
+    --sidebar-primary: 48 92% 53%;
+    --sidebar-primary-foreground: 30 18% 15%;
+    --sidebar-accent: 36 15% 25%;
+    --sidebar-accent-foreground: 45 20% 95%;
+    --sidebar-border: 36 15% 25%;
+    --sidebar-ring: 48 92% 53%;
+
+    /* Chart Colors */
+    --chart-1: 48 92% 53%;
+    --chart-2: 142 70% 45%;
+    --chart-3: 36 20% 22%;
+    --chart-4: 0 84% 60%;
+    --chart-5: 200 80% 50%;
+
+    /* Custom Gradients */
+    --gradient-gold: linear-gradient(135deg, hsl(48 92% 53%) 0%, hsl(38 92% 58%) 100%);
+    --gradient-success: linear-gradient(135deg, hsl(142 70% 45%) 0%, hsl(152 70% 50%) 100%);
+    --gradient-dark: linear-gradient(135deg, hsl(36 20% 18%) 0%, hsl(36 15% 25%) 100%);
+    
+    /* Shadows */
+    --shadow-sm: 0 1px 2px 0 hsl(30 18% 20% / 0.05);
+    --shadow-md: 0 4px 6px -1px hsl(30 18% 20% / 0.08), 0 2px 4px -2px hsl(30 18% 20% / 0.05);
+    --shadow-lg: 0 10px 15px -3px hsl(30 18% 20% / 0.1), 0 4px 6px -4px hsl(30 18% 20% / 0.05);
+    --shadow-gold: 0 10px 30px -10px hsl(48 92% 53% / 0.3);
+  }
+
+  html.dark,
+  .dark {
+    color-scheme: dark;
+    --background: 36 20% 12%;
+    --foreground: 45 20% 95%;
+
+    --card: 36 20% 16%;
+    --card-foreground: 45 20% 95%;
+
+    --popover: 36 20% 16%;
+    --popover-foreground: 45 20% 95%;
+
+    --primary: 48 92% 53%;
+    --primary-foreground: 30 18% 15%;
+
+    --secondary: 36 15% 22%;
+    --secondary-foreground: 45 20% 95%;
+
+    --muted: 36 15% 22%;
+    --muted-foreground: 45 15% 60%;
+
+    --accent: 48 92% 53%;
+    --accent-foreground: 30 18% 15%;
+
+    --destructive: 0 62% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 142 70% 45%;
+    --success-foreground: 0 0% 100%;
+
+    --border: 36 15% 25%;
+    --input: 36 15% 25%;
+    --ring: 48 92% 53%;
+
+    --sidebar-background: 36 20% 10%;
+    --sidebar-foreground: 45 20% 90%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Inter', system-ui, sans-serif;
+    min-height: 100vh;
+  }
+
+  #root {
+    min-height: 100vh;
+    @apply bg-background;
+  }
+
+  /* Durante a transição de tema, só o fundo principal fica transparente (sidebar mantém a cor) */
+  body.theme-transitioning,
+  body.theme-transitioning #root,
+  body.theme-transitioning [data-layout="main"] {
+    background: transparent !important;
+  }
+
+  /* Transição suave de cor e fundo ao trocar tema (texto e fundo acompanham sem gargalo) */
+  body,
+  #root,
+  [data-layout="main"] {
+    transition: background-color 0.45s ease, color 0.45s ease;
+  }
+
+  /* Durante a transição de tema, texto e elementos da área principal acompanham a cor suavemente */
+  body.theme-transitioning [data-layout="main"],
+  body.theme-transitioning [data-layout="main"] *,
+  body.theme-transitioning [data-layout="main"] *::before,
+  body.theme-transitioning [data-layout="main"] *::after {
+    transition: color 0.45s ease, border-color 0.35s ease, background-color 0.45s ease;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-semibold tracking-tight;
+  }
+}
+
+@layer components {
+  .glass-card {
+    @apply bg-card/80 backdrop-blur-md border border-border/50 shadow-md;
+  }
+
+  .metric-card {
+    @apply bg-card rounded-xl border border-border p-5 shadow-sm transition-all duration-200 hover:shadow-md hover:-translate-y-0.5;
+  }
+
+  .kanban-column {
+    @apply bg-muted/50 rounded-xl p-4 min-h-[400px];
+  }
+
+  .kanban-card {
+    @apply bg-card rounded-lg p-4 shadow-sm border border-border cursor-grab active:cursor-grabbing transition-all duration-200 hover:shadow-md hover:-translate-y-0.5;
+  }
+
+  .sidebar-item {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-lg text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-all duration-150;
+  }
+
+  .sidebar-item-active {
+    @apply bg-primary text-primary-foreground font-medium;
+  }
+
+  .badge-success {
+    @apply bg-success/10 text-success border-success/20;
+  }
+
+  .badge-warning {
+    @apply bg-warning/10 text-warning border-warning/20;
+  }
+
+  .badge-destructive {
+    @apply bg-destructive/10 text-destructive border-destructive/20;
+  }
+
+  .progress-bar {
+    @apply h-2 rounded-full bg-muted overflow-hidden;
+  }
+
+  .progress-fill {
+    @apply h-full rounded-full transition-all duration-500 ease-out;
+  }
+
+  .ranking-card {
+    @apply bg-card rounded-xl border border-border p-4 transition-all duration-300;
+  }
+
+  .ranking-card-winner {
+    @apply border-primary shadow-gold bg-gradient-to-r from-primary/5 to-transparent;
+  }
+}
+
+@layer utilities {
+  .gradient-gold {
+    background: var(--gradient-gold);
+  }
+
+  .gradient-success {
+    background: var(--gradient-success);
+  }
+
+  .gradient-dark {
+    background: var(--gradient-dark);
+  }
+
+  .text-gradient-gold {
+    @apply bg-clip-text text-transparent;
+    background: var(--gradient-gold);
+  }
+
+  /* V8 Racing Font */
+  .font-racing {
+    font-family: 'Racing Sans One', 'Inter', sans-serif;
+  }
+
+  .animate-pulse-success {
+    animation: pulse-success 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  @keyframes pulse-success {
+    0%, 100% {
+      opacity: 1;
+      box-shadow: 0 0 0 0 hsl(var(--success) / 0.4);
+    }
+    50% {
+      opacity: 0.9;
+      box-shadow: 0 0 20px 10px hsl(var(--success) / 0);
+    }
+  }
+
+  .animate-celebrate {
+    animation: celebrate 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  }
+
+  @keyframes celebrate {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+    100% { transform: scale(1); }
+  }
+
+  /* V8 Racing Animations */
+  .animate-engine-start {
+    animation: engine-start 0.5s ease-out;
+  }
+
+  @keyframes engine-start {
+    0% { transform: translateX(-20px); opacity: 0; }
+    50% { transform: translateX(5px); }
+    100% { transform: translateX(0); opacity: 1; }
+  }
+
+  .animate-speedometer {
+    animation: speedometer 1s ease-out;
+  }
+
+  @keyframes speedometer {
+    0% { transform: rotate(-90deg); }
+    100% { transform: rotate(0deg); }
+  }
+
+  .animate-race-in {
+    animation: race-in 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  @keyframes race-in {
+    0% { 
+      transform: translateX(-100px) scale(0.9); 
+      opacity: 0; 
+    }
+    100% { 
+      transform: translateX(0) scale(1); 
+      opacity: 1; 
+    }
+  }
+
+  .animate-checkered-flag {
+    animation: checkered-wave 2s ease-in-out infinite;
+  }
+
+  @keyframes checkered-wave {
+    0%, 100% { transform: rotate(-5deg); }
+    50% { transform: rotate(5deg); }
+  }
+
+  .animate-turbo {
+    animation: turbo-boost 0.3s ease-out;
+  }
+
+  @keyframes turbo-boost {
+    0% { transform: scale(1); filter: brightness(1); }
+    50% { transform: scale(1.05); filter: brightness(1.2); }
+    100% { transform: scale(1); filter: brightness(1); }
+  }
+
+  .animate-rev {
+    animation: engine-rev 0.15s ease-in-out;
+  }
+
+  @keyframes engine-rev {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-2px); }
+    75% { transform: translateX(2px); }
+  }
+
+  /* Checkered pattern for racing theme */
+  .checkered-pattern {
+    background-image: 
+      linear-gradient(45deg, hsl(var(--primary)) 25%, transparent 25%),
+      linear-gradient(-45deg, hsl(var(--primary)) 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, hsl(var(--primary)) 75%),
+      linear-gradient(-45deg, transparent 75%, hsl(var(--primary)) 75%);
+    background-size: 20px 20px;
+    background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+  }
+
+  /* Racing stripes */
+  .racing-stripe {
+    @apply relative overflow-hidden;
+  }
+  
+  .racing-stripe::before {
+    content: '';
+    @apply absolute top-0 left-0 w-2 h-full bg-primary opacity-20;
+  }
+  
+  .racing-stripe::after {
+    content: '';
+    @apply absolute top-0 left-4 w-1 h-full bg-primary opacity-10;
+  }
+
+  /* Route 66 vintage style */
+  .vintage-border {
+    border: 3px solid hsl(var(--primary));
+    box-shadow: 
+      inset 0 0 0 2px hsl(var(--background)),
+      inset 0 0 0 4px hsl(var(--primary) / 0.3);
+  }
+
+  /* Neon glow for rock bar style */
+  .neon-glow {
+    text-shadow: 
+      0 0 5px hsl(var(--primary)),
+      0 0 10px hsl(var(--primary)),
+      0 0 20px hsl(var(--primary) / 0.5);
+  }
+
+  .neon-glow-box {
+    box-shadow: 
+      0 0 5px hsl(var(--primary)),
+      0 0 10px hsl(var(--primary) / 0.5),
+      0 0 20px hsl(var(--primary) / 0.3);
+  }
+
+  /* Fuel gauge animation */
+  .animate-fuel-fill {
+    animation: fuel-fill 1.5s ease-out;
+  }
+
+  @keyframes fuel-fill {
+    0% { width: 0%; }
+    100% { width: var(--fuel-level, 100%); }
+  }
+
+  /* Exhaust smoke effect */
+  .exhaust-smoke {
+    animation: smoke 2s ease-out infinite;
+  }
+
+  @keyframes smoke {
+    0% { 
+      opacity: 0.8; 
+      transform: translateX(0) scale(1); 
+    }
+    100% { 
+      opacity: 0; 
+      transform: translateX(50px) scale(2); 
+    }
+  }
+}

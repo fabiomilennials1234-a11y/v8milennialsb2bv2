@@ -1,0 +1,18 @@
+# Deploy na VPS Hostinger (Docker)
+# Use com MCP Hostinger: VPS_createNewProjectV1 apontando para este repo ou para a URL deste arquivo.
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
+        - VITE_SUPABASE_PUBLISHABLE_KEY=${VITE_SUPABASE_PUBLISHABLE_KEY}
+        - VITE_SUPABASE_PROJECT_ID=${VITE_SUPABASE_PROJECT_ID}
+        - VITE_CALENDAR_SERVICE_URL=${VITE_CALENDAR_SERVICE_URL}
+        - VITE_INVITE_API_URL=${VITE_INVITE_API_URL}
+        - VITE_INTERNAL_API_KEY=${VITE_INTERNAL_API_KEY}
+    ports:
+      - "80:80"
+    restart: unless-stopped
