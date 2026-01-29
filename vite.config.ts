@@ -33,16 +33,14 @@ export default defineConfig(({ mode }) => {
       "@": path.resolve(__dirname, "./src"),
     },
   },
-  // Configurações de build para produção
+  // Configurações de build para produção (esbuild não exige dependência terser)
   build: {
-    // Remover console.log em produção para segurança
-    minify: 'terser',
-    terserOptions: {
-      compress: {
-        drop_console: mode === 'production',
-        drop_debugger: true,
+    minify: 'esbuild',
+    ...(mode === 'production' && {
+      esbuild: {
+        drop: ['console', 'debugger'],
       },
-    },
+    }),
     // Source maps apenas em desenvolvimento
     sourcemap: mode === 'development',
     // Dividir chunks para melhor cache
