@@ -10,7 +10,7 @@ WORKDIR /app
 
 # Dependências (cache melhor se package*.json não mudar)
 COPY package.json package-lock.json* ./
-RUN npm ci
+RUN npm install
 
 COPY . .
 
