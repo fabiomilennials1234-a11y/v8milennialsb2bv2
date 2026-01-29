@@ -8,9 +8,9 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Dependências (cache melhor se package*.json não mudar)
+# Dependências (npm install tolera lock file desatualizado; use npm ci após atualizar package-lock.json)
 COPY package.json package-lock.json* ./
-RUN npm ci
+RUN npm install
 
 COPY . .
 
