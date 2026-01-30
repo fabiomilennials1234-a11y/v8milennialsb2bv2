@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
 import { triggerFollowUpAutomation } from "./useAutoFollowUp";
 import { useRealtimeSubscription } from "./useRealtimeSubscription";
+import { useOrganization } from "./useOrganization";
 
 export type PipeConfirmacao = Tables<"pipe_confirmacao">;
 export type PipeConfirmacaoInsert = TablesInsert<"pipe_confirmacao">;
@@ -36,11 +37,15 @@ export const statusColumns: { id: PipeConfirmacaoStatus; title: string; color: s
 ];
 
 export function usePipeConfirmacao() {
+  const { organizationId, isReady } = useOrganization();
   useRealtimeSubscription("pipe_confirmacao", ["pipe_confirmacao", "follow_ups"]);
-  
+
   return useQuery({
-    queryKey: ["pipe_confirmacao"],
+    queryKey: ["pipe_confirmacao", organizationId],
     queryFn: async () => {
+      if (!organizationId) {
+        return [];
+      }
       const { data, error } = await supabase
         .from("pipe_confirmacao")
         .select(`
@@ -54,25 +59,35 @@ export function usePipeConfirmacao() {
           sdr:team_members!pipe_confirmacao_sdr_id_fkey(id, name),
           closer:team_members!pipe_confirmacao_closer_id_fkey(id, name)
         `)
+        .eq("organization_id", organizationId)
         .order("meeting_date", { ascending: true });
-      
+
       if (error) throw error;
       return data;
     },
+    enabled: isReady && !!organizationId,
   });
 }
 
 export function useCreatePipeConfirmacao() {
   const queryClient = useQueryClient();
-  
+  const { organizationId } = useOrganization();
+
   return useMutation({
     mutationFn: async (item: PipeConfirmacaoInsert) => {
+      if (!organizationId) {
+        throw new Error("Cannot create pipe_confirmacao: No organization context");
+      }
+      const securedItem = {
+        ...item,
+        organization_id: organizationId,
+      };
       const { data, error } = await supabase
         .from("pipe_confirmacao")
-        .insert(item)
+        .insert(securedItem)
         .select()
         .single();
-      
+
       if (error) throw error;
 
       // Trigger automation for the initial status
@@ -82,6 +97,7 @@ export function useCreatePipeConfirmacao() {
         pipeType: "confirmacao",
         stage: data.status,
         sourcePipeId: data.id,
+        organizationId: data.organization_id,
       });
 
       return data;
@@ -118,6 +134,7 @@ export function useUpdatePipeConfirmacao() {
           pipeType: "confirmacao",
           stage: updates.status,
           sourcePipeId: data.id,
+          organizationId: data.organization_id,
         });
       }
 

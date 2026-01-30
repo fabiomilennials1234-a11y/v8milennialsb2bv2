@@ -7,6 +7,7 @@ interface TriggerAutomationParams {
   pipeType: "whatsapp" | "confirmacao" | "propostas";
   stage: string;
   sourcePipeId: string;
+  organizationId: string;
 }
 
 export async function triggerFollowUpAutomation({
@@ -15,9 +16,11 @@ export async function triggerFollowUpAutomation({
   pipeType,
   stage,
   sourcePipeId,
+  organizationId,
 }: TriggerAutomationParams): Promise<void> {
   try {
-    // Fetch active automations for this pipe and stage
+    if (!organizationId) return;
+
     const { data: automations, error: automationsError } = await supabase
       .from("follow_up_automations")
       .select("*")
@@ -34,7 +37,6 @@ export async function triggerFollowUpAutomation({
       return;
     }
 
-    // Create follow ups for each automation
     const followUps = automations.map((automation: FollowUpAutomation) => {
       const dueDate = new Date();
       dueDate.setDate(dueDate.getDate() + automation.days_offset);
@@ -49,6 +51,7 @@ export async function triggerFollowUpAutomation({
         source_pipe: pipeType,
         source_pipe_id: sourcePipeId,
         is_automated: true,
+        organization_id: organizationId,
       };
     });
 

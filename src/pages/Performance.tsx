@@ -47,6 +47,7 @@ import { useAwards, useCreateAward, useUpdateAward, useDeleteAward, Award as Awa
 import { useDashboardMetrics, useRankingData } from "@/hooks/useDashboardMetrics";
 import { useTeamMembers, type TeamMember } from "@/hooks/useTeamMembers";
 import { useUserRole, useIsAdmin } from "@/hooks/useUserRole";
+import { useOrganization } from "@/hooks/useOrganization";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -617,6 +618,7 @@ export default function Performance() {
 
   // Hooks
   const { isAdmin } = useIsAdmin();
+  const { organizationId } = useOrganization();
   const { data: teamGoals, isLoading: goalsLoading } = useTeamGoals(selectedMonth, selectedYear);
   const { data: individualGoals, isLoading: individualLoading } = useIndividualGoals(selectedMonth, selectedYear);
   const { data: allGoals = [] } = useGoals(selectedMonth, selectedYear);
@@ -732,14 +734,18 @@ export default function Performance() {
   };
 
   const handleDeleteGoal = async () => {
-    if (!deleteGoalId) return;
+    if (!deleteGoalId || !organizationId) return;
     try {
-      const { error } = await supabase.from("goals").delete().eq("id", deleteGoalId);
+      const { error } = await supabase
+        .from("goals")
+        .delete()
+        .eq("id", deleteGoalId)
+        .eq("organization_id", organizationId);
       if (error) throw error;
       toast.success("Meta excluída com sucesso!");
       setDeleteGoalId(null);
     } catch (error: unknown) {
-      toast.error("Erro ao excluir meta: " + error.message);
+      toast.error("Erro ao excluir meta: " + (error as Error).message);
     }
   };
 

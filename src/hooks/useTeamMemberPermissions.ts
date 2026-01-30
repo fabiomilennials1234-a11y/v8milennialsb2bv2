@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables, TablesInsert } from "@/integrations/supabase/types";
+import { useOrganization } from "./useOrganization";
 
 export type TeamMemberPermission = Tables<"team_member_permissions">;
 export type TeamMemberPermissionInsert = TablesInsert<"team_member_permissions">;
@@ -71,20 +72,32 @@ export const EXPORT_OPTIONS: { value: PermissionValue; label: string; descriptio
   { value: "allowed", label: "Permitido", description: "Pode exportar todos os dados do recurso" },
 ];
 
-/** Permissões de um ou mais team_members (por team_member_id) */
+/**
+ * Permissões de um ou mais team_members (por team_member_id).
+ * SECURITY: Só retorna permissões de membros da organização atual.
+ */
 export function useTeamMemberPermissions(teamMemberIds: string[]) {
+  const { organizationId, isReady } = useOrganization();
+
   return useQuery({
-    queryKey: ["team-member-permissions", teamMemberIds.sort().join(",")],
+    queryKey: ["team-member-permissions", teamMemberIds.sort().join(","), organizationId],
     queryFn: async () => {
-      if (teamMemberIds.length === 0) return [];
+      if (teamMemberIds.length === 0 || !organizationId) return [];
+      const { data: membersInOrg } = await supabase
+        .from("team_members")
+        .select("id")
+        .eq("organization_id", organizationId)
+        .in("id", teamMemberIds);
+      const allowedIds = (membersInOrg ?? []).map((m) => m.id);
+      if (allowedIds.length === 0) return [];
       const { data, error } = await supabase
         .from("team_member_permissions")
         .select("*")
-        .in("team_member_id", teamMemberIds);
+        .in("team_member_id", allowedIds);
       if (error) throw error;
-      return data as TeamMemberPermission[];
+      return (data ?? []) as TeamMemberPermission[];
     },
-    enabled: teamMemberIds.length > 0,
+    enabled: isReady && !!organizationId && teamMemberIds.length > 0,
   });
 }
 
@@ -138,9 +151,13 @@ export function getValue(
   return (row?.value as PermissionValue) || "denied";
 }
 
-/** Salvar matriz de permissões. Para view/export, values pode ter vários itens (múltiplos escopos). */
+/**
+ * Salvar matriz de permissões. Para view/export, values pode ter vários itens (múltiplos escopos).
+ * SECURITY: Só permite salvar permissões de membros da organização atual.
+ */
 export function useSaveTeamMemberPermissions() {
   const queryClient = useQueryClient();
+  const { organizationId } = useOrganization();
 
   return useMutation({
     mutationFn: async ({
@@ -154,6 +171,20 @@ export function useSaveTeamMemberPermissions() {
         values: PermissionValue[];
       }[];
     }) => {
+      if (!organizationId) throw new Error("Organização não disponível");
+
+      const { data: membersInOrg } = await supabase
+        .from("team_members")
+        .select("id")
+        .eq("organization_id", organizationId)
+        .in("id", teamMemberIds);
+
+      const validIds = new Set((membersInOrg ?? []).map((m) => m.id));
+      const invalidCount = teamMemberIds.filter((id) => !validIds.has(id)).length;
+      if (invalidCount > 0) {
+        throw new Error("Só é possível editar permissões de membros da sua organização.");
+      }
+
       const toDelete = new Set<string>();
       teamMemberIds.forEach((tmId) => {
         permissions.forEach((p) => {

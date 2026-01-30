@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
 import { triggerFollowUpAutomation } from "./useAutoFollowUp";
 import { useRealtimeSubscription } from "./useRealtimeSubscription";
+import { useOrganization } from "./useOrganization";
 
 export type PipeProposta = Tables<"pipe_propostas">;
 export type PipePropostaInsert = TablesInsert<"pipe_propostas">;
@@ -28,11 +29,15 @@ export const statusColumns: { id: PipePropostasStatus; title: string; color: str
 ];
 
 export function usePipePropostas() {
+  const { organizationId, isReady } = useOrganization();
   useRealtimeSubscription("pipe_propostas", ["pipe_propostas", "follow_ups", "recent_activity"]);
-  
+
   return useQuery({
-    queryKey: ["pipe_propostas"],
+    queryKey: ["pipe_propostas", organizationId],
     queryFn: async () => {
+      if (!organizationId) {
+        return [];
+      }
       const { data, error } = await supabase
         .from("pipe_propostas")
         .select(`
@@ -50,25 +55,35 @@ export function usePipePropostas() {
             product:products(id, name, type, ticket, ticket_minimo)
           )
         `)
+        .eq("organization_id", organizationId)
         .order("updated_at", { ascending: false });
-      
+
       if (error) throw error;
       return data;
     },
+    enabled: isReady && !!organizationId,
   });
 }
 
 export function useCreatePipeProposta() {
   const queryClient = useQueryClient();
-  
+  const { organizationId } = useOrganization();
+
   return useMutation({
     mutationFn: async (item: PipePropostaInsert) => {
+      if (!organizationId) {
+        throw new Error("Cannot create pipe_propostas: No organization context");
+      }
+      const securedItem = {
+        ...item,
+        organization_id: organizationId,
+      };
       const { data, error } = await supabase
         .from("pipe_propostas")
-        .insert(item)
+        .insert(securedItem)
         .select()
         .single();
-      
+
       if (error) throw error;
 
       // Trigger automation for the initial status
@@ -78,6 +93,7 @@ export function useCreatePipeProposta() {
         pipeType: "propostas",
         stage: data.status,
         sourcePipeId: data.id,
+        organizationId: data.organization_id,
       });
 
       return data;
@@ -113,6 +129,7 @@ export function useUpdatePipeProposta() {
           pipeType: "propostas",
           stage: updates.status,
           sourcePipeId: data.id,
+          organizationId: data.organization_id,
         });
       }
 

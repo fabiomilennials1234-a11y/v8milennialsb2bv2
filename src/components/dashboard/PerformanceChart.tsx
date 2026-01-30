@@ -13,6 +13,7 @@ import {
 } from "recharts";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useOrganization } from "@/hooks/useOrganization";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -34,34 +35,39 @@ interface DailyData {
 }
 
 function usePerformanceData(month: number, year: number) {
+  const { organizationId, isReady } = useOrganization();
   const startDate = startOfMonth(new Date(year, month - 1));
   const endDate = endOfMonth(new Date(year, month - 1));
   const today = new Date();
 
   return useQuery({
-    queryKey: ["performance-chart", month, year],
+    queryKey: ["performance-chart", month, year, organizationId],
     queryFn: async (): Promise<DailyData[]> => {
+      if (!organizationId) return [];
       const daysInMonth = eachDayOfInterval({ start: startDate, end: endDate });
 
-      // Get all leads
+      // Get all leads (scoped to organization)
       const { data: leads } = await supabase
         .from("leads")
         .select("created_at")
+        .eq("organization_id", organizationId)
         .gte("created_at", startDate.toISOString())
         .lte("created_at", endDate.toISOString());
 
-      // Get all meetings compareceu
+      // Get all meetings compareceu (scoped to organization)
       const { data: meetings } = await supabase
         .from("pipe_confirmacao")
         .select("updated_at")
+        .eq("organization_id", organizationId)
         .eq("status", "compareceu")
         .gte("updated_at", startDate.toISOString())
         .lte("updated_at", endDate.toISOString());
 
-      // Get all sales
+      // Get all sales (scoped to organization)
       const { data: sales } = await supabase
         .from("pipe_propostas")
         .select("closed_at, sale_value")
+        .eq("organization_id", organizationId)
         .eq("status", "vendido")
         .gte("closed_at", startDate.toISOString())
         .lte("closed_at", endDate.toISOString());
@@ -96,6 +102,7 @@ function usePerformanceData(month: number, year: number) {
           };
         });
     },
+    enabled: isReady && !!organizationId,
   });
 }
 

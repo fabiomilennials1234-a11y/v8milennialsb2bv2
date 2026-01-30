@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 import { DollarSign, Target, Flame, CheckCircle } from "lucide-react";
 import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
 import { useCommissionSummary } from "@/hooks/useCommissions";
+import { useOrganization } from "@/hooks/useOrganization";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { OraculoComercial } from "./OraculoComercial";
@@ -15,35 +16,36 @@ function formatCurrency(value: number): string {
   }).format(value);
 }
 
-// Hook para buscar confirmações do SDR no mês atual
+// Hook para buscar confirmações do SDR no mês atual (scoped to organization)
 function useSDRConfirmations(sdrId: string | undefined) {
+  const { organizationId, isReady } = useOrganization();
   const now = new Date();
   const month = now.getMonth() + 1;
   const year = now.getFullYear();
-  
+
   return useQuery({
-    queryKey: ["sdr_confirmations", sdrId, month, year],
+    queryKey: ["sdr_confirmations", sdrId, month, year, organizationId],
     queryFn: async () => {
-      if (!sdrId) return { confirmed: 0, goal: 0 };
-      
+      if (!sdrId || !organizationId) return { confirmed: 0, goal: 0 };
+
       const startDate = new Date(year, month - 1, 1);
       const endDate = new Date(year, month, 0, 23, 59, 59);
-      
-      // Buscar confirmações do mês (status compareceu)
+
       const { data: confirmations, error: confError } = await supabase
         .from("pipe_confirmacao")
         .select("id")
+        .eq("organization_id", organizationId)
         .eq("sdr_id", sdrId)
         .eq("status", "compareceu")
         .gte("meeting_date", startDate.toISOString())
         .lte("meeting_date", endDate.toISOString());
-      
+
       if (confError) throw confError;
-      
-      // Buscar meta do SDR (prioriza individual; se não existir, usa meta do time)
+
       const { data: individualGoal } = await supabase
         .from("goals")
         .select("target_value, name, created_at")
+        .eq("organization_id", organizationId)
         .eq("team_member_id", sdrId)
         .eq("month", month)
         .eq("year", year)
@@ -57,6 +59,7 @@ function useSDRConfirmations(sdrId: string | undefined) {
         : await supabase
             .from("goals")
             .select("target_value, name, created_at")
+            .eq("organization_id", organizationId)
             .is("team_member_id", null)
             .eq("month", month)
             .eq("year", year)
@@ -74,31 +77,32 @@ function useSDRConfirmations(sdrId: string | undefined) {
         goalName,
       };
     },
-    enabled: !!sdrId,
+    enabled: isReady && !!organizationId && !!sdrId,
   });
 }
 
-// Hook para buscar vendas do Closer no mês atual - SEMPRE em valor (R$)
+// Hook para buscar vendas do Closer no mês atual - SEMPRE em valor (R$), scoped to organization
 function useCloserSales(closerId: string | undefined) {
+  const { organizationId, isReady } = useOrganization();
   const now = new Date();
   const month = now.getMonth() + 1;
   const year = now.getFullYear();
-  
+
   return useQuery({
-    queryKey: ["closer_sales_count", closerId, month, year],
+    queryKey: ["closer_sales_count", closerId, month, year, organizationId],
     queryFn: async () => {
-      if (!closerId) return { salesValue: 0, salesCount: 0, goal: 0, goalName: "" };
-      
+      if (!closerId || !organizationId) return { salesValue: 0, salesCount: 0, goal: 0, goalName: "" };
+
       const startDate = new Date(year, month - 1, 1);
       const endDate = new Date(year, month, 0, 23, 59, 59);
-      
+
       const startIso = startDate.toISOString();
       const endIso = endDate.toISOString();
 
-      // Buscar vendas do mês
       const { data: sales, error: salesError } = await supabase
         .from("pipe_propostas")
         .select("id, sale_value")
+        .eq("organization_id", organizationId)
         .eq("closer_id", closerId)
         .eq("status", "vendido")
         .or(
@@ -113,10 +117,10 @@ function useCloserSales(closerId: string | undefined) {
         0
       );
 
-      // Buscar meta do Closer (prioriza individual tipo "vendas"; se não existir, usa meta do time tipo "faturamento")
       const { data: individualGoal } = await supabase
         .from("goals")
         .select("target_value, name, created_at")
+        .eq("organization_id", organizationId)
         .eq("team_member_id", closerId)
         .eq("month", month)
         .eq("year", year)
@@ -125,12 +129,12 @@ function useCloserSales(closerId: string | undefined) {
         .limit(1)
         .maybeSingle();
 
-      // Se não tem meta individual, busca meta de time (tipo "faturamento")
       const { data: teamGoal } = individualGoal
         ? { data: null }
         : await supabase
             .from("goals")
             .select("target_value, name, created_at")
+            .eq("organization_id", organizationId)
             .is("team_member_id", null)
             .eq("month", month)
             .eq("year", year)
@@ -150,7 +154,7 @@ function useCloserSales(closerId: string | undefined) {
         goalName,
       };
     },
-    enabled: !!closerId,
+    enabled: isReady && !!organizationId && !!closerId,
   });
 }
 

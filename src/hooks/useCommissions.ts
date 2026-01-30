@@ -1,15 +1,19 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
+import { useOrganization } from "./useOrganization";
 
 export type Commission = Tables<"commissions">;
 export type CommissionInsert = TablesInsert<"commissions">;
 export type CommissionUpdate = TablesUpdate<"commissions">;
 
 export function useCommissions(month?: number, year?: number) {
+  const { organizationId, isReady } = useOrganization();
+
   return useQuery({
-    queryKey: ["commissions", month, year],
+    queryKey: ["commissions", month, year, organizationId],
     queryFn: async () => {
+      if (!organizationId) return [];
       let query = supabase
         .from("commissions")
         .select(`
@@ -20,26 +24,31 @@ export function useCommissions(month?: number, year?: number) {
             lead:leads(name, company)
           )
         `)
+        .eq("organization_id", organizationId)
         .order("created_at", { ascending: false });
-      
+
       if (month !== undefined) {
         query = query.eq("month", month);
       }
       if (year !== undefined) {
         query = query.eq("year", year);
       }
-      
+
       const { data, error } = await query;
       if (error) throw error;
       return data;
     },
+    enabled: isReady && !!organizationId,
   });
 }
 
 export function useCommissionsByMember(teamMemberId: string, month?: number, year?: number) {
+  const { organizationId, isReady } = useOrganization();
+
   return useQuery({
-    queryKey: ["commissions", "member", teamMemberId, month, year],
+    queryKey: ["commissions", "member", teamMemberId, month, year, organizationId],
     queryFn: async () => {
+      if (!organizationId) return [];
       let query = supabase
         .from("commissions")
         .select(`
@@ -49,35 +58,39 @@ export function useCommissionsByMember(teamMemberId: string, month?: number, yea
             lead:leads(name, company)
           )
         `)
+        .eq("organization_id", organizationId)
         .eq("team_member_id", teamMemberId)
         .order("created_at", { ascending: false });
-      
+
       if (month !== undefined) {
         query = query.eq("month", month);
       }
       if (year !== undefined) {
         query = query.eq("year", year);
       }
-      
+
       const { data, error } = await query;
       if (error) throw error;
       return data;
     },
-    enabled: !!teamMemberId,
+    enabled: isReady && !!organizationId && !!teamMemberId,
   });
 }
 
 export function useCreateCommission() {
   const queryClient = useQueryClient();
-  
+  const { organizationId } = useOrganization();
+
   return useMutation({
     mutationFn: async (commission: CommissionInsert) => {
+      if (!organizationId) throw new Error("Organização não disponível");
+      const secured = { ...commission, organization_id: organizationId };
       const { data, error } = await supabase
         .from("commissions")
-        .insert(commission)
+        .insert(secured)
         .select()
         .single();
-      
+
       if (error) throw error;
       return data;
     },
@@ -89,16 +102,20 @@ export function useCreateCommission() {
 
 export function useUpdateCommission() {
   const queryClient = useQueryClient();
-  
+  const { organizationId } = useOrganization();
+
   return useMutation({
     mutationFn: async ({ id, ...updates }: CommissionUpdate & { id: string }) => {
+      if (!organizationId) throw new Error("Organização não disponível");
+      const { organization_id: _, ...safeUpdates } = updates as CommissionUpdate & { organization_id?: string };
       const { data, error } = await supabase
         .from("commissions")
-        .update(updates)
+        .update(safeUpdates)
         .eq("id", id)
+        .eq("organization_id", organizationId)
         .select()
         .single();
-      
+
       if (error) throw error;
       return data;
     },

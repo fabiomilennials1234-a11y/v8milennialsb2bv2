@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
 import { triggerFollowUpAutomation } from "./useAutoFollowUp";
 import { useRealtimeSubscription } from "./useRealtimeSubscription";
+import { useOrganization } from "./useOrganization";
 
 export type PipeWhatsapp = Tables<"pipe_whatsapp">;
 export type PipeWhatsappInsert = TablesInsert<"pipe_whatsapp">;
@@ -20,11 +21,15 @@ export const statusColumns: { id: PipeWhatsappStatus; title: string; color: stri
 ];
 
 export function usePipeWhatsapp() {
+  const { organizationId, isReady } = useOrganization();
   useRealtimeSubscription("pipe_whatsapp", ["pipe_whatsapp", "follow_ups"]);
-  
+
   return useQuery({
-    queryKey: ["pipe_whatsapp"],
+    queryKey: ["pipe_whatsapp", organizationId],
     queryFn: async () => {
+      if (!organizationId) {
+        return [];
+      }
       const { data, error } = await supabase
         .from("pipe_whatsapp")
         .select(`
@@ -37,25 +42,35 @@ export function usePipeWhatsapp() {
           ),
           sdr:team_members!pipe_whatsapp_sdr_id_fkey(id, name)
         `)
+        .eq("organization_id", organizationId)
         .order("created_at", { ascending: false });
-      
+
       if (error) throw error;
       return data;
     },
+    enabled: isReady && !!organizationId,
   });
 }
 
 export function useCreatePipeWhatsapp() {
   const queryClient = useQueryClient();
-  
+  const { organizationId } = useOrganization();
+
   return useMutation({
     mutationFn: async (item: PipeWhatsappInsert) => {
+      if (!organizationId) {
+        throw new Error("Cannot create pipe_whatsapp: No organization context");
+      }
+      const securedItem = {
+        ...item,
+        organization_id: organizationId,
+      };
       const { data, error } = await supabase
         .from("pipe_whatsapp")
-        .insert(item)
+        .insert(securedItem)
         .select()
         .single();
-      
+
       if (error) throw error;
 
       // Trigger automation for the initial status
@@ -65,6 +80,7 @@ export function useCreatePipeWhatsapp() {
         pipeType: "whatsapp",
         stage: data.status,
         sourcePipeId: data.id,
+        organizationId: data.organization_id,
       });
 
       return data;
@@ -98,6 +114,7 @@ export function useUpdatePipeWhatsapp() {
           pipeType: "whatsapp",
           stage: updates.status,
           sourcePipeId: data.id,
+          organizationId: data.organization_id,
         });
       }
 

@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "./useTeamMembers";
+import { useOrganization } from "./useOrganization";
 import { useIsAdmin } from "./useUserRole";
 
 export interface WhatsAppInstanceAllowedMember {
@@ -13,20 +14,31 @@ export interface WhatsAppInstanceAllowedMember {
 /**
  * Lista de vendedores (team_member_id) autorizados a responder neste número.
  * Se vazio = todos da organização podem responder.
+ * SECURITY: Só retorna dados se a instância pertencer à organização atual.
  */
 export function useAllowedMembersForInstance(whatsappInstanceId: string | null) {
+  const { organizationId, isReady } = useOrganization();
+
   return useQuery({
-    queryKey: ["whatsapp_instance_allowed_members", whatsappInstanceId],
+    queryKey: ["whatsapp_instance_allowed_members", whatsappInstanceId, organizationId],
     queryFn: async () => {
-      if (!whatsappInstanceId) return [];
+      if (!whatsappInstanceId || !organizationId) return [];
+      const { data: instance, error: instError } = await supabase
+        .from("whatsapp_instances")
+        .select("id")
+        .eq("id", whatsappInstanceId)
+        .eq("organization_id", organizationId)
+        .maybeSingle();
+      if (instError) throw instError;
+      if (!instance) return [];
       const { data, error } = await supabase
         .from("whatsapp_instance_allowed_members")
         .select("id, team_member_id, created_at")
         .eq("whatsapp_instance_id", whatsappInstanceId);
       if (error) throw error;
-      return data as WhatsAppInstanceAllowedMember[];
+      return (data ?? []) as WhatsAppInstanceAllowedMember[];
     },
-    enabled: !!whatsappInstanceId,
+    enabled: isReady && !!organizationId && !!whatsappInstanceId,
   });
 }
 
@@ -86,9 +98,11 @@ export function useCanReplyOnInstanceByName(instanceName: string | null) {
 /**
  * (Admin) Define a lista de vendedores que podem responder neste número.
  * Passa array de team_member_id; substitui a lista atual.
+ * SECURITY: Só permite alterar instâncias da organização atual e só aceita team_member_ids da organização.
  */
 export function useSetAllowedMembersForInstance() {
   const queryClient = useQueryClient();
+  const { organizationId } = useOrganization();
 
   return useMutation({
     mutationFn: async ({
@@ -98,6 +112,30 @@ export function useSetAllowedMembersForInstance() {
       whatsappInstanceId: string;
       teamMemberIds: string[];
     }) => {
+      if (!organizationId) throw new Error("Organização não disponível");
+
+      const { data: instance, error: instError } = await supabase
+        .from("whatsapp_instances")
+        .select("id")
+        .eq("id", whatsappInstanceId)
+        .eq("organization_id", organizationId)
+        .maybeSingle();
+      if (instError) throw instError;
+      if (!instance) throw new Error("Instância de WhatsApp não encontrada ou não pertence à sua organização.");
+
+      if (teamMemberIds.length > 0) {
+        const { data: membersInOrg } = await supabase
+          .from("team_members")
+          .select("id")
+          .eq("organization_id", organizationId)
+          .in("id", teamMemberIds);
+        const validIds = new Set((membersInOrg ?? []).map((m) => m.id));
+        const invalid = teamMemberIds.filter((id) => !validIds.has(id));
+        if (invalid.length > 0) {
+          throw new Error("Só é possível atribuir membros da sua organização a esta instância.");
+        }
+      }
+
       await supabase
         .from("whatsapp_instance_allowed_members")
         .delete()

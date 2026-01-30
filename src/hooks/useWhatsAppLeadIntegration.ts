@@ -6,18 +6,20 @@ import type { Tables, TablesInsert } from "@/integrations/supabase/types";
 export type Lead = Tables<"leads">;
 
 /**
- * Busca lead por número de telefone
+ * Busca lead por número de telefone na organização atual.
+ * SECURITY: Filtra por organization_id para isolamento entre organizações.
  */
 export function useLeadByPhone(phone: string | null) {
-  return useQuery({
-    queryKey: ["lead_by_phone", phone],
-    queryFn: async () => {
-      if (!phone) return null;
+  const { data: teamMember } = useCurrentTeamMember();
+  const organizationId = teamMember?.organization_id ?? null;
 
-      // Normalizar o número (remover caracteres especiais)
+  return useQuery({
+    queryKey: ["lead_by_phone", phone, organizationId],
+    queryFn: async () => {
+      if (!phone || !organizationId) return null;
+
       const normalizedPhone = phone.replace(/\D/g, "");
 
-      // Buscar lead com esse telefone (pode ter variações de formato)
       const { data, error } = await supabase
         .from("leads")
         .select(`
@@ -26,6 +28,7 @@ export function useLeadByPhone(phone: string | null) {
           closer:team_members!leads_closer_id_fkey(id, name),
           lead_tags(tag:tags(id, name, color))
         `)
+        .eq("organization_id", organizationId)
         .or(`phone.ilike.%${normalizedPhone}%,phone.ilike.%${normalizedPhone.slice(-9)}%`)
         .limit(1)
         .maybeSingle();
@@ -37,23 +40,27 @@ export function useLeadByPhone(phone: string | null) {
 
       return data;
     },
-    enabled: !!phone,
+    enabled: !!phone && !!organizationId,
   });
 }
 
 /**
- * Busca status do lead no pipeline WhatsApp
+ * Busca status do lead no pipeline WhatsApp da organização atual.
  */
 export function usePipeWhatsappByLeadId(leadId: string | null) {
+  const { data: teamMember } = useCurrentTeamMember();
+  const organizationId = teamMember?.organization_id ?? null;
+
   return useQuery({
-    queryKey: ["pipe_whatsapp_by_lead", leadId],
+    queryKey: ["pipe_whatsapp_by_lead", leadId, organizationId],
     queryFn: async () => {
-      if (!leadId) return null;
+      if (!leadId || !organizationId) return null;
 
       const { data, error } = await supabase
         .from("pipe_whatsapp")
         .select("*")
         .eq("lead_id", leadId)
+        .eq("organization_id", organizationId)
         .maybeSingle();
 
       if (error && error.code !== "PGRST116") {
@@ -63,7 +70,7 @@ export function usePipeWhatsappByLeadId(leadId: string | null) {
 
       return data;
     },
-    enabled: !!leadId,
+    enabled: !!leadId && !!organizationId,
   });
 }
 
@@ -108,6 +115,7 @@ export function useCreateLeadFromWhatsApp() {
         origin: "whatsapp",
         sdr_id: teamMember.id,
         notes: `Lead criado automaticamente via WhatsApp`,
+        organization_id: teamMember.organization_id,
       };
 
       const { data: newLead, error: leadError } = await supabase
@@ -128,6 +136,7 @@ export function useCreateLeadFromWhatsApp() {
         lead_id: newLead.id,
         status: "novo",
         sdr_id: teamMember.id,
+        organization_id: teamMember.organization_id,
       });
 
       if (pipeError) {
@@ -192,12 +201,13 @@ export function useLinkLeadToWhatsApp() {
         .eq("lead_id", leadId)
         .maybeSingle();
 
-      if (!existingPipe && teamMember?.id) {
+      if (!existingPipe && teamMember?.id && teamMember?.organization_id) {
         // Adicionar ao pipeline se não estiver
         await supabase.from("pipe_whatsapp").insert({
           lead_id: leadId,
           status: "novo",
           sdr_id: teamMember.id,
+          organization_id: teamMember.organization_id,
         });
       }
 

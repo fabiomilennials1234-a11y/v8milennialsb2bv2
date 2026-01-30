@@ -33,6 +33,7 @@ export function useDashboardMetrics(month?: number, year?: number) {
   const selectedYear = year ?? now.getFullYear();
   const { isAdmin } = useIsAdmin();
   const { data: currentTeamMember } = useCurrentTeamMember();
+  const organizationId = currentTeamMember?.organization_id ?? null;
   const myId = currentTeamMember?.id ?? null;
   const filterByMe = !isAdmin && myId;
 
@@ -40,12 +41,28 @@ export function useDashboardMetrics(month?: number, year?: number) {
   const endDate = endOfMonth(new Date(selectedYear, selectedMonth - 1));
 
   return useQuery({
-    queryKey: ["dashboard-metrics", selectedMonth, selectedYear, filterByMe, myId],
+    queryKey: ["dashboard-metrics", selectedMonth, selectedYear, filterByMe, myId, organizationId],
     queryFn: async (): Promise<DashboardMetrics> => {
-      // Total Leads: quando dashboard "só meu", filtrar por sdr_id ou closer_id = myId
+      if (!organizationId) {
+        return {
+          totalLeads: 0,
+          reunioesMarcadas: 0,
+          reunioesComparecidas: 0,
+          noShow: 0,
+          taxaNoShow: 0,
+          vendaTotal: 0,
+          vendaMRR: 0,
+          vendaProjeto: 0,
+          ticketMedio: 0,
+          ticketMedioMRR: 0,
+          ticketMedioProjeto: 0,
+          novosClientes: 0,
+        };
+      }
       let leadsQuery = supabase
         .from("leads")
         .select("*", { count: "exact", head: true })
+        .eq("organization_id", organizationId)
         .gte("created_at", startDate.toISOString())
         .lte("created_at", endDate.toISOString());
       if (filterByMe) {
@@ -53,10 +70,10 @@ export function useDashboardMetrics(month?: number, year?: number) {
       }
       const { count: totalLeads } = await leadsQuery;
 
-      // Pipe Confirmação: quando filterByMe, só onde sdr_id ou closer_id = myId
       let confirmacaoQuery = supabase
         .from("pipe_confirmacao")
         .select("status, meeting_date, sdr_id, closer_id")
+        .eq("organization_id", organizationId)
         .gte("created_at", startDate.toISOString())
         .lte("created_at", endDate.toISOString());
       if (filterByMe) {
@@ -73,10 +90,10 @@ export function useDashboardMetrics(month?: number, year?: number) {
       ).length || 0;
       const taxaNoShow = reunioesMarcadas > 0 ? (noShow / reunioesMarcadas) * 100 : 0;
 
-      // Pipe Propostas - vendas fechadas: quando filterByMe, só closer_id = myId
       let propostasQuery = supabase
         .from("pipe_propostas")
         .select("sale_value, product_type, status, closed_at")
+        .eq("organization_id", organizationId)
         .eq("status", "vendido")
         .gte("closed_at", startDate.toISOString())
         .lte("closed_at", endDate.toISOString());
@@ -117,6 +134,7 @@ export function useDashboardMetrics(month?: number, year?: number) {
         novosClientes,
       };
     },
+    enabled: !!organizationId,
   });
 }
 
@@ -124,33 +142,36 @@ export function useConversionRates(month?: number, year?: number) {
   const now = new Date();
   const selectedMonth = month ?? now.getMonth() + 1;
   const selectedYear = year ?? now.getFullYear();
-  
+  const { data: currentTeamMember } = useCurrentTeamMember();
+  const organizationId = currentTeamMember?.organization_id ?? null;
+
   const startDate = startOfMonth(new Date(selectedYear, selectedMonth - 1));
   const endDate = endOfMonth(new Date(selectedYear, selectedMonth - 1));
 
   return useQuery({
-    queryKey: ["conversion-rates", selectedMonth, selectedYear],
+    queryKey: ["conversion-rates", selectedMonth, selectedYear, organizationId],
     queryFn: async () => {
-      // Get team members
+      if (!organizationId) return { sdrRates: [], closerRates: [] };
       const { data: teamMembers } = await supabase
         .from("team_members")
         .select("id, name, role")
+        .eq("organization_id", organizationId)
         .eq("is_active", true);
 
       const closers = teamMembers?.filter((m) => m.role === "closer") || [];
       const sdrs = teamMembers?.filter((m) => m.role === "sdr") || [];
 
-      // Get confirmacao data for SDR conversion (meetings comparecidas)
       const { data: confirmacaoData } = await supabase
         .from("pipe_confirmacao")
         .select("sdr_id, status")
+        .eq("organization_id", organizationId)
         .gte("created_at", startDate.toISOString())
         .lte("created_at", endDate.toISOString());
 
-      // Get propostas data for Closer conversion
       const { data: propostasData } = await supabase
         .from("pipe_propostas")
         .select("closer_id, status")
+        .eq("organization_id", organizationId)
         .gte("created_at", startDate.toISOString())
         .lte("created_at", endDate.toISOString());
 
@@ -186,6 +207,7 @@ export function useConversionRates(month?: number, year?: number) {
 
       return { sdrRates, closerRates };
     },
+    enabled: !!organizationId,
   });
 }
 
@@ -193,46 +215,57 @@ export function useFunnelData(month?: number, year?: number) {
   const now = new Date();
   const selectedMonth = month ?? now.getMonth() + 1;
   const selectedYear = year ?? now.getFullYear();
-  
+  const { data: currentTeamMember } = useCurrentTeamMember();
+  const organizationId = currentTeamMember?.organization_id ?? null;
+
   const startDate = startOfMonth(new Date(selectedYear, selectedMonth - 1));
   const endDate = endOfMonth(new Date(selectedYear, selectedMonth - 1));
 
   return useQuery({
-    queryKey: ["funnel-data", selectedMonth, selectedYear],
+    queryKey: ["funnel-data", selectedMonth, selectedYear, organizationId],
     queryFn: async () => {
-      // Leads
+      if (!organizationId) {
+        return [
+          { label: "Leads", value: 0, color: "hsl(var(--primary))" },
+          { label: "Reuniões Marcadas", value: 0, color: "hsl(var(--chart-2))" },
+          { label: "Compareceu", value: 0, color: "hsl(var(--chart-3))" },
+          { label: "Propostas", value: 0, color: "hsl(var(--chart-4))" },
+          { label: "Vendas", value: 0, color: "hsl(var(--chart-5))" },
+        ];
+      }
       const { count: totalLeads } = await supabase
         .from("leads")
         .select("*", { count: "exact", head: true })
+        .eq("organization_id", organizationId)
         .gte("created_at", startDate.toISOString())
         .lte("created_at", endDate.toISOString());
 
-      // Reuniões marcadas (pipe_confirmacao)
       const { count: reunioesMarcadas } = await supabase
         .from("pipe_confirmacao")
         .select("*", { count: "exact", head: true })
+        .eq("organization_id", organizationId)
         .gte("created_at", startDate.toISOString())
         .lte("created_at", endDate.toISOString());
 
-      // Reuniões comparecidas
       const { count: reunioesComparecidas } = await supabase
         .from("pipe_confirmacao")
         .select("*", { count: "exact", head: true })
+        .eq("organization_id", organizationId)
         .eq("status", "compareceu")
         .gte("created_at", startDate.toISOString())
         .lte("created_at", endDate.toISOString());
 
-      // Propostas
       const { count: propostas } = await supabase
         .from("pipe_propostas")
         .select("*", { count: "exact", head: true })
+        .eq("organization_id", organizationId)
         .gte("created_at", startDate.toISOString())
         .lte("created_at", endDate.toISOString());
 
-      // Vendas fechadas
       const { count: vendas } = await supabase
         .from("pipe_propostas")
         .select("*", { count: "exact", head: true })
+        .eq("organization_id", organizationId)
         .eq("status", "vendido")
         .gte("closed_at", startDate.toISOString())
         .lte("closed_at", endDate.toISOString());
@@ -245,6 +278,7 @@ export function useFunnelData(month?: number, year?: number) {
         { label: "Vendas", value: vendas || 0, color: "hsl(var(--chart-5))" },
       ];
     },
+    enabled: !!organizationId,
   });
 }
 
@@ -252,42 +286,45 @@ export function useRankingData(month?: number, year?: number) {
   const now = new Date();
   const selectedMonth = month ?? now.getMonth() + 1;
   const selectedYear = year ?? now.getFullYear();
-  
+  const { data: currentTeamMember } = useCurrentTeamMember();
+  const organizationId = currentTeamMember?.organization_id ?? null;
+
   const startDate = startOfMonth(new Date(selectedYear, selectedMonth - 1));
   const endDate = endOfMonth(new Date(selectedYear, selectedMonth - 1));
 
   return useQuery({
-    queryKey: ["ranking-data", selectedMonth, selectedYear],
+    queryKey: ["ranking-data", selectedMonth, selectedYear, organizationId],
     queryFn: async () => {
-      // Get team members
+      if (!organizationId) return { closerRanking: [], sdrRanking: [] };
       const { data: teamMembers } = await supabase
         .from("team_members")
         .select("id, name, role")
+        .eq("organization_id", organizationId)
         .eq("is_active", true);
 
       const closers = teamMembers?.filter((m) => m.role === "closer") || [];
       const sdrs = teamMembers?.filter((m) => m.role === "sdr") || [];
 
-      // Get all closed sales
       const { data: sales } = await supabase
         .from("pipe_propostas")
         .select("closer_id, sale_value, status")
+        .eq("organization_id", organizationId)
         .eq("status", "vendido")
         .gte("closed_at", startDate.toISOString())
         .lte("closed_at", endDate.toISOString());
 
-      // Get all compareceu meetings
       const { data: meetings } = await supabase
         .from("pipe_confirmacao")
         .select("sdr_id, status")
+        .eq("organization_id", organizationId)
         .eq("status", "compareceu")
         .gte("created_at", startDate.toISOString())
         .lte("created_at", endDate.toISOString());
 
-      // Get goals
       const { data: goals } = await supabase
         .from("goals")
         .select("team_member_id, target_value, current_value, type")
+        .eq("organization_id", organizationId)
         .eq("month", selectedMonth)
         .eq("year", selectedYear);
 
@@ -334,5 +371,6 @@ export function useRankingData(month?: number, year?: number) {
 
       return { closerRanking, sdrRanking };
     },
+    enabled: !!organizationId,
   });
 }

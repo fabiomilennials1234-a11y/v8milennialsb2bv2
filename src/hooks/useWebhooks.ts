@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
+import { useOrganization } from "./useOrganization";
 
 export type Webhook = Tables<"webhooks">;
 export type WebhookInsert = TablesInsert<"webhooks">;
@@ -31,26 +32,35 @@ export const WEBHOOK_EVENTS = [
 export const HTTP_METHODS = ["POST", "PUT", "PATCH"] as const;
 
 export function useWebhooks() {
+  const { organizationId, isReady } = useOrganization();
+
   return useQuery({
-    queryKey: ["webhooks"],
+    queryKey: ["webhooks", organizationId],
     queryFn: async () => {
+      if (!organizationId) return [];
       const { data, error } = await supabase
         .from("webhooks")
         .select("*")
+        .eq("organization_id", organizationId)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return data as Webhook[];
+      return (data ?? []) as Webhook[];
     },
+    enabled: isReady && !!organizationId,
   });
 }
 
 export function useCreateWebhook() {
   const queryClient = useQueryClient();
+  const { organizationId } = useOrganization();
+
   return useMutation({
-    mutationFn: async (webhook: WebhookInsert) => {
+    mutationFn: async (webhook: WebhookInsert | Omit<WebhookInsert, "organization_id">) => {
+      if (!organizationId) throw new Error("Organização não disponível");
+      const payload: WebhookInsert = { ...webhook, organization_id: organizationId };
       const { data, error } = await supabase
         .from("webhooks")
-        .insert(webhook)
+        .insert(payload)
         .select()
         .single();
       if (error) throw error;
@@ -64,12 +74,16 @@ export function useCreateWebhook() {
 
 export function useUpdateWebhook() {
   const queryClient = useQueryClient();
+  const { organizationId } = useOrganization();
+
   return useMutation({
     mutationFn: async ({ id, ...updates }: WebhookUpdate & { id: string }) => {
+      if (!organizationId) throw new Error("Organização não disponível");
       const { data, error } = await supabase
         .from("webhooks")
         .update(updates)
         .eq("id", id)
+        .eq("organization_id", organizationId)
         .select()
         .single();
       if (error) throw error;
@@ -83,9 +97,16 @@ export function useUpdateWebhook() {
 
 export function useDeleteWebhook() {
   const queryClient = useQueryClient();
+  const { organizationId } = useOrganization();
+
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("webhooks").delete().eq("id", id);
+      if (!organizationId) throw new Error("Organização não disponível");
+      const { error } = await supabase
+        .from("webhooks")
+        .delete()
+        .eq("id", id)
+        .eq("organization_id", organizationId);
       if (error) throw error;
     },
     onSuccess: () => {

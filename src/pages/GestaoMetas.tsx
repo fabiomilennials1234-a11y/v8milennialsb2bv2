@@ -33,6 +33,7 @@ import {
 import { useGoals, useCreateGoal, useUpdateGoal, Goal } from "@/hooks/useGoals";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
 import { useIsAdmin } from "@/hooks/useUserRole";
+import { useOrganization } from "@/hooks/useOrganization";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -70,6 +71,7 @@ export default function GestaoMetas() {
   const [deleteGoalId, setDeleteGoalId] = useState<string | null>(null);
 
   const { isAdmin, isLoading: adminLoading } = useIsAdmin();
+  const { organizationId } = useOrganization();
   const { data: goals = [], isLoading: goalsLoading } = useGoals(selectedMonth, selectedYear);
   const { data: teamMembers = [] } = useTeamMembers();
   const createGoal = useCreateGoal();
@@ -141,15 +143,19 @@ export default function GestaoMetas() {
   };
 
   const handleDeleteGoal = async () => {
-    if (!deleteGoalId) return;
-    
+    if (!deleteGoalId || !organizationId) return;
+
     try {
-      const { error } = await supabase.from("goals").delete().eq("id", deleteGoalId);
+      const { error } = await supabase
+        .from("goals")
+        .delete()
+        .eq("id", deleteGoalId)
+        .eq("organization_id", organizationId);
       if (error) throw error;
       toast.success("Meta excluída com sucesso!");
       setDeleteGoalId(null);
-    } catch (error: any) {
-      toast.error("Erro ao excluir meta: " + error.message);
+    } catch (error: unknown) {
+      toast.error("Erro ao excluir meta: " + (error as Error).message);
     }
   };
 

@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
+import { useOrganization } from "./useOrganization";
 
 export type TeamMember = Tables<"team_members">;
 export type TeamMemberInsert = TablesInsert<"team_members">;
@@ -52,15 +53,23 @@ export function useCurrentTeamMember() {
   });
 }
 
+/**
+ * Lista membros da equipe da organização atual.
+ * SECURITY: Filtra por organization_id para isolamento entre organizações.
+ */
 export function useTeamMembers() {
+  const { organizationId, isReady } = useOrganization();
+
   return useQuery({
-    queryKey: ["team_members"],
+    queryKey: ["team_members", organizationId],
     queryFn: async () => {
+      if (!organizationId) return [];
       const { data, error } = await supabase
         .from("team_members")
         .select("*")
+        .eq("organization_id", organizationId)
         .order("name");
-      
+
       if (error) {
         console.error("❌ useTeamMembers: Erro ao buscar:", {
           message: error.message,
@@ -71,27 +80,36 @@ export function useTeamMembers() {
         });
         throw error;
       }
-      
+
       return data as TeamMember[];
     },
+    enabled: isReady && !!organizationId,
     retry: 1,
   });
 }
 
+/**
+ * Busca um membro por ID apenas se pertencer à organização atual.
+ * SECURITY: Filtra por organization_id para evitar vazamento entre organizações.
+ */
 export function useTeamMember(id: string) {
+  const { organizationId, isReady } = useOrganization();
+
   return useQuery({
-    queryKey: ["team_members", id],
+    queryKey: ["team_members", id, organizationId],
     queryFn: async () => {
+      if (!organizationId) return null;
       const { data, error } = await supabase
         .from("team_members")
         .select("*")
         .eq("id", id)
-        .single();
-      
+        .eq("organization_id", organizationId)
+        .maybeSingle();
+
       if (error) throw error;
-      return data as TeamMember;
+      return data as TeamMember | null;
     },
-    enabled: !!id,
+    enabled: isReady && !!organizationId && !!id,
   });
 }
 

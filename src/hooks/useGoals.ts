@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useOrganization } from "./useOrganization";
 
 export interface Goal {
   id: string;
@@ -19,19 +20,23 @@ export function useGoals(month?: number, year?: number) {
   const now = new Date();
   const selectedMonth = month ?? now.getMonth() + 1;
   const selectedYear = year ?? now.getFullYear();
+  const { organizationId, isReady } = useOrganization();
 
   return useQuery({
-    queryKey: ["goals", selectedMonth, selectedYear],
+    queryKey: ["goals", selectedMonth, selectedYear, organizationId],
     queryFn: async () => {
+      if (!organizationId) return [];
       const { data, error } = await supabase
         .from("goals")
         .select("*")
+        .eq("organization_id", organizationId)
         .eq("month", selectedMonth)
         .eq("year", selectedYear);
 
       if (error) throw error;
       return data as Goal[];
     },
+    enabled: isReady && !!organizationId,
   });
 }
 
@@ -39,14 +44,16 @@ export function useTeamGoals(month?: number, year?: number) {
   const now = new Date();
   const selectedMonth = month ?? now.getMonth() + 1;
   const selectedYear = year ?? now.getFullYear();
+  const { organizationId, isReady } = useOrganization();
 
   return useQuery({
-    queryKey: ["team-goals", selectedMonth, selectedYear],
+    queryKey: ["team-goals", selectedMonth, selectedYear, organizationId],
     queryFn: async () => {
-      // Get goals
+      if (!organizationId) return [];
       const { data: goals, error } = await supabase
         .from("goals")
         .select("*")
+        .eq("organization_id", organizationId)
         .eq("month", selectedMonth)
         .eq("year", selectedYear)
         .is("team_member_id", null);
@@ -54,6 +61,7 @@ export function useTeamGoals(month?: number, year?: number) {
       if (error) throw error;
       return goals as Goal[];
     },
+    enabled: isReady && !!organizationId,
   });
 }
 
@@ -61,20 +69,22 @@ export function useIndividualGoals(month?: number, year?: number) {
   const now = new Date();
   const selectedMonth = month ?? now.getMonth() + 1;
   const selectedYear = year ?? now.getFullYear();
+  const { organizationId, isReady } = useOrganization();
 
   return useQuery({
-    queryKey: ["individual-goals", selectedMonth, selectedYear],
+    queryKey: ["individual-goals", selectedMonth, selectedYear, organizationId],
     queryFn: async () => {
-      // Get team members
+      if (!organizationId) return { closerGoals: [], sdrGoals: [] };
       const { data: teamMembers } = await supabase
         .from("team_members")
         .select("id, name, role")
+        .eq("organization_id", organizationId)
         .eq("is_active", true);
 
-      // Get individual goals
       const { data: goals, error } = await supabase
         .from("goals")
         .select("*")
+        .eq("organization_id", organizationId)
         .eq("month", selectedMonth)
         .eq("year", selectedYear)
         .not("team_member_id", "is", null);
@@ -119,17 +129,21 @@ export function useIndividualGoals(month?: number, year?: number) {
 
       return { closerGoals, sdrGoals };
     },
+    enabled: isReady && !!organizationId,
   });
 }
 
 export function useCreateGoal() {
   const queryClient = useQueryClient();
+  const { organizationId } = useOrganization();
 
   return useMutation({
     mutationFn: async (goal: Omit<Goal, "id" | "created_at" | "updated_at">) => {
+      if (!organizationId) throw new Error("Organização não disponível");
+      const securedGoal = { ...goal, organization_id: organizationId };
       const { data, error } = await supabase
         .from("goals")
-        .insert([goal])
+        .insert([securedGoal])
         .select()
         .single();
 
@@ -150,13 +164,17 @@ export function useCreateGoal() {
 
 export function useUpdateGoal() {
   const queryClient = useQueryClient();
+  const { organizationId } = useOrganization();
 
   return useMutation({
     mutationFn: async ({ id, ...updates }: Partial<Goal> & { id: string }) => {
+      if (!organizationId) throw new Error("Organização não disponível");
+      const { organization_id: _, ...safeUpdates } = updates as Partial<Goal> & { organization_id?: string };
       const { data, error } = await supabase
         .from("goals")
-        .update(updates)
+        .update(safeUpdates)
         .eq("id", id)
+        .eq("organization_id", organizationId)
         .select()
         .single();
 

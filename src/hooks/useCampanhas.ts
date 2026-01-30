@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
+import { useOrganization } from "@/hooks/useOrganization";
 
 // Tipos para os modos de campanha
 export type CampaignType = 'automatica' | 'semi_automatica' | 'manual';
@@ -118,39 +119,45 @@ export interface CampanhaStageInsert {
   is_reuniao_marcada?: boolean;
 }
 
-// Hook to fetch all campaigns
 export function useCampanhas() {
+  const { organizationId, isReady } = useOrganization();
+
   return useQuery({
-    queryKey: ["campanhas"],
+    queryKey: ["campanhas", organizationId],
     queryFn: async () => {
+      if (!organizationId) return [];
       const { data, error } = await supabase
         .from("campanhas")
         .select("*")
+        .eq("organization_id", organizationId)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
       return data as Campanha[];
     },
+    enabled: isReady && !!organizationId,
   });
 }
 
-// Hook to fetch a single campaign with all related data
 export function useCampanha(id: string | undefined) {
+  const { organizationId, isReady } = useOrganization();
+
   return useQuery({
-    queryKey: ["campanha", id],
+    queryKey: ["campanha", id, organizationId],
     queryFn: async () => {
-      if (!id) return null;
+      if (!id || !organizationId) return null;
 
       const { data, error } = await supabase
         .from("campanhas")
         .select("*")
         .eq("id", id)
-        .single();
+        .eq("organization_id", organizationId)
+        .maybeSingle();
 
       if (error) throw error;
-      return data as Campanha;
+      return data as Campanha | null;
     },
-    enabled: !!id,
+    enabled: isReady && !!organizationId && !!id,
   });
 }
 

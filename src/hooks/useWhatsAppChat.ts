@@ -496,8 +496,10 @@ async function uploadMediaToStorage(
   const byteArray = new Uint8Array(byteNumbers);
   const blob = new Blob([byteArray], { type: mimeType });
 
-  // Gerar nome único do arquivo (sanitizado)
-  const extension = mimeType.split("/")[1]?.split(";")[0] || "bin";
+  // Gerar nome único do arquivo (sanitizado); .mp3 para áudio universal
+  const extMap: Record<string, string> = { mpeg: "mp3", mp3: "mp3" };
+  const rawExt = mimeType.split("/")[1]?.split(";")[0] || "bin";
+  const extension = extMap[rawExt] || rawExt;
   const timestamp = Date.now();
   const baseName = fileName ? sanitizeFileName(fileName) : `${mediaType}_${timestamp}`;
   const uniqueFileName = `${baseName}_${timestamp}.${extension}`;

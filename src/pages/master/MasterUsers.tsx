@@ -14,6 +14,7 @@ import {
   UserPlus,
   UserCheck,
   Clock,
+  KeyRound,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -59,6 +60,7 @@ import {
   useMasterMoveUserToOrg,
   useMasterUnassignedUsers,
   useMasterAssignUserToOrg,
+  useMasterResetUserPassword,
   type UnassignedUser,
 } from "@/hooks/useMasterUsers";
 import { useMasterOrganizations } from "@/hooks/useMasterOrganizations";
@@ -86,6 +88,11 @@ export default function MasterUsers() {
   const [assignOrgId, setAssignOrgId] = useState("");
   const [assignRole, setAssignRole] = useState("member");
 
+  const [resetPasswordOpen, setResetPasswordOpen] = useState(false);
+  const [resetPasswordUser, setResetPasswordUser] = useState<any>(null);
+  const [resetPasswordNew, setResetPasswordNew] = useState("");
+  const [resetPasswordConfirm, setResetPasswordConfirm] = useState("");
+
   const queryClient = useQueryClient();
   const { data: users, isLoading } = useMasterUsers();
   const { data: unassignedUsers = [], isLoading: loadingUnassigned } = useMasterUnassignedUsers();
@@ -94,6 +101,7 @@ export default function MasterUsers() {
   const toggleActive = useMasterToggleUserActive();
   const moveToOrg = useMasterMoveUserToOrg();
   const assignUserToOrg = useMasterAssignUserToOrg();
+  const resetPassword = useMasterResetUserPassword();
 
   const filteredUsers = users?.filter(
     (user) =>
@@ -398,6 +406,17 @@ export default function MasterUsers() {
                             <Building2 className="w-4 h-4 mr-2" />
                             Mover para Organização
                           </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setResetPasswordUser(user);
+                              setResetPasswordNew("");
+                              setResetPasswordConfirm("");
+                              setResetPasswordOpen(true);
+                            }}
+                          >
+                            <KeyRound className="w-4 h-4 mr-2" />
+                            Redefinir senha
+                          </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
                             onClick={() =>
@@ -612,6 +631,77 @@ export default function MasterUsers() {
               disabled={!assignOrgId || assignUserToOrg.isPending}
             >
               {assignUserToOrg.isPending ? "Vinculando..." : "Vincular"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Redefinir senha (Master) */}
+      <Dialog open={resetPasswordOpen} onOpenChange={setResetPasswordOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Redefinir senha</DialogTitle>
+          </DialogHeader>
+          {resetPasswordUser && (
+            <div className="space-y-4 py-4">
+              <div className="rounded-lg bg-muted/50 p-3 text-sm">
+                <p className="font-medium">{resetPasswordUser.full_name || "Sem nome"}</p>
+                <p className="text-muted-foreground">{resetPasswordUser.email || "—"}</p>
+              </div>
+              <div className="space-y-2">
+                <Label>Nova senha (mín. 6 caracteres)</Label>
+                <Input
+                  type="password"
+                  placeholder="Digite a nova senha"
+                  value={resetPasswordNew}
+                  onChange={(e) => setResetPasswordNew(e.target.value)}
+                  autoComplete="new-password"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Confirmar senha</Label>
+                <Input
+                  type="password"
+                  placeholder="Repita a nova senha"
+                  value={resetPasswordConfirm}
+                  onChange={(e) => setResetPasswordConfirm(e.target.value)}
+                  autoComplete="new-password"
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setResetPasswordOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={async () => {
+                if (!resetPasswordUser) return;
+                if (!resetPasswordNew || resetPasswordNew.length < 6) {
+                  toast.error("Senha deve ter no mínimo 6 caracteres");
+                  return;
+                }
+                if (resetPasswordNew !== resetPasswordConfirm) {
+                  toast.error("As senhas não coincidem");
+                  return;
+                }
+                await resetPassword.mutateAsync({
+                  user_id: resetPasswordUser.id,
+                  new_password: resetPasswordNew,
+                });
+                setResetPasswordOpen(false);
+                setResetPasswordUser(null);
+                setResetPasswordNew("");
+                setResetPasswordConfirm("");
+              }}
+              disabled={
+                !resetPasswordNew ||
+                resetPasswordNew.length < 6 ||
+                resetPasswordNew !== resetPasswordConfirm ||
+                resetPassword.isPending
+              }
+            >
+              {resetPassword.isPending ? "Alterando..." : "Alterar senha"}
             </Button>
           </DialogFooter>
         </DialogContent>

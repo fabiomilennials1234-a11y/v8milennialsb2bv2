@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { useLeads } from "@/hooks/useLeads";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
+import { useOrganization } from "@/hooks/useOrganization";
 import { useCreatePipeWhatsapp, usePipeWhatsapp } from "@/hooks/usePipeWhatsapp";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -62,6 +63,7 @@ export function CreateOpportunityModal({
     notes: "",
   });
 
+  const { organizationId } = useOrganization();
   const { data: leads = [], isLoading: leadsLoading } = useLeads();
   const { data: pipeData = [] } = usePipeWhatsapp();
   const { data: teamMembers = [] } = useTeamMembers();
@@ -125,12 +127,17 @@ export function CreateOpportunityModal({
     }
 
     try {
+      if (!organizationId) {
+        toast.error("Organização não disponível");
+        return;
+      }
       await createPipeWhatsapp.mutateAsync({
         lead_id: selectedLeadId,
         status: "novo",
         sdr_id: formData.sdr_id || null,
         scheduled_date: formData.scheduled_date ? new Date(formData.scheduled_date).toISOString() : null,
         notes: formData.notes || null,
+        organization_id: organizationId,
       });
 
       toast.success("🎉 Oportunidade criada com sucesso!");

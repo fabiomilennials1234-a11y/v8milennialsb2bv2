@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useOrganization } from "@/hooks/useOrganization";
 import { formatDistanceToNow, isToday, isBefore, addHours } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -62,6 +63,7 @@ function addViewedIds(ids: string[]) {
 
 export function AlertsDropdown() {
   const navigate = useNavigate();
+  const { organizationId, isReady } = useOrganization();
   const [open, setOpen] = useState(false);
   const [viewedIds, setViewedIds] = useState<Set<string>>(() => getViewedIds());
 
@@ -70,12 +72,13 @@ export function AlertsDropdown() {
   }, []);
 
   const { data: alerts = [] } = useQuery({
-    queryKey: ["user-alerts"],
+    queryKey: ["user-alerts", organizationId],
     queryFn: async (): Promise<Alert[]> => {
+      if (!organizationId) return [];
       const now = new Date();
       const alerts: Alert[] = [];
 
-      // Get meetings today
+      // Get meetings today (scoped to current organization)
       const startOfDay = new Date();
       startOfDay.setHours(0, 0, 0, 0);
       const endOfDay = new Date();
@@ -89,6 +92,7 @@ export function AlertsDropdown() {
           status,
           lead:leads(name, company)
         `)
+        .eq("organization_id", organizationId)
         .gte("meeting_date", startOfDay.toISOString())
         .lte("meeting_date", endOfDay.toISOString())
         .not("status", "in", '("compareceu","perdido")');
@@ -108,7 +112,7 @@ export function AlertsDropdown() {
         });
       });
 
-      // Get overdue follow-ups (excluir arquivadas)
+      // Get overdue follow-ups (excluir arquivadas, scoped to organization)
       const { data: followUps } = await supabase
         .from("follow_ups")
         .select(`
@@ -118,6 +122,7 @@ export function AlertsDropdown() {
           priority,
           lead:leads(name)
         `)
+        .eq("organization_id", organizationId)
         .is("completed_at", null)
         .is("archived_at", null)
         .lte("due_date", now.toISOString())
@@ -136,7 +141,7 @@ export function AlertsDropdown() {
         });
       });
 
-      // Get follow-ups due today (excluir arquivadas)
+      // Get follow-ups due today (excluir arquivadas, scoped to organization)
       const { data: todayFollowUps } = await supabase
         .from("follow_ups")
         .select(`
@@ -145,6 +150,7 @@ export function AlertsDropdown() {
           due_date,
           lead:leads(name)
         `)
+        .eq("organization_id", organizationId)
         .is("completed_at", null)
         .is("archived_at", null)
         .gte("due_date", startOfDay.toISOString())
@@ -175,6 +181,7 @@ export function AlertsDropdown() {
         return a.time.getTime() - b.time.getTime();
       });
     },
+    enabled: isReady && !!organizationId,
     refetchInterval: 60000, // Refresh every minute
   });
 

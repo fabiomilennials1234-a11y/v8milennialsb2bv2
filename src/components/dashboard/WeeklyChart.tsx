@@ -17,11 +17,15 @@ import { ptBR } from "date-fns/locale";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TrendingUp } from "lucide-react";
+import { useOrganization } from "@/hooks/useOrganization";
 
 export function WeeklyChart() {
+  const { organizationId, isReady } = useOrganization();
+
   const { data: chartData, isLoading } = useQuery({
-    queryKey: ["weekly-performance"],
+    queryKey: ["weekly-performance", organizationId],
     queryFn: async () => {
+      if (!organizationId) return [];
       const days = 7;
       const data = [];
 
@@ -30,32 +34,32 @@ export function WeeklyChart() {
         const dayStart = startOfDay(date).toISOString();
         const dayEnd = endOfDay(date).toISOString();
 
-        // Leads created
         const { count: leads } = await supabase
           .from("leads")
           .select("*", { count: "exact", head: true })
+          .eq("organization_id", organizationId)
           .gte("created_at", dayStart)
           .lte("created_at", dayEnd);
 
-        // Meetings scheduled
         const { count: meetings } = await supabase
           .from("pipe_confirmacao")
           .select("*", { count: "exact", head: true })
+          .eq("organization_id", organizationId)
           .gte("meeting_date", dayStart)
           .lte("meeting_date", dayEnd);
 
-        // Meetings attended
         const { count: attended } = await supabase
           .from("pipe_confirmacao")
           .select("*", { count: "exact", head: true })
+          .eq("organization_id", organizationId)
           .eq("status", "compareceu")
           .gte("meeting_date", dayStart)
           .lte("meeting_date", dayEnd);
 
-        // Sales closed
         const { count: sales } = await supabase
           .from("pipe_propostas")
           .select("*", { count: "exact", head: true })
+          .eq("organization_id", organizationId)
           .eq("status", "vendido")
           .gte("closed_at", dayStart)
           .lte("closed_at", dayEnd);
@@ -72,6 +76,7 @@ export function WeeklyChart() {
 
       return data;
     },
+    enabled: isReady && !!organizationId,
   });
 
   if (isLoading) {

@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { useOrganization } from "./useOrganization";
 
 export interface Activity {
   id: string;
@@ -17,15 +18,18 @@ export interface Activity {
 }
 
 export function useRecentActivity(limit: number = 10) {
+  const { organizationId, isReady } = useOrganization();
+
   return useQuery({
-    queryKey: ["recent-activity", limit],
+    queryKey: ["recent-activity", limit, organizationId],
     queryFn: async (): Promise<Activity[]> => {
+      if (!organizationId) return [];
       const activities: Activity[] = [];
 
-      // Get recent leads
       const { data: leads } = await supabase
         .from("leads")
         .select("id, name, company, created_at")
+        .eq("organization_id", organizationId)
         .order("created_at", { ascending: false })
         .limit(5);
 
@@ -46,7 +50,6 @@ export function useRecentActivity(limit: number = 10) {
         });
       });
 
-      // Get recent meetings (compareceu)
       const { data: meetings } = await supabase
         .from("pipe_confirmacao")
         .select(`
@@ -54,6 +57,7 @@ export function useRecentActivity(limit: number = 10) {
           lead:leads(name, company),
           sdr:team_members!pipe_confirmacao_sdr_id_fkey(name)
         `)
+        .eq("organization_id", organizationId)
         .eq("status", "compareceu")
         .order("updated_at", { ascending: false })
         .limit(5);
@@ -75,7 +79,6 @@ export function useRecentActivity(limit: number = 10) {
         });
       });
 
-      // Get recent sales
       const { data: sales } = await supabase
         .from("pipe_propostas")
         .select(`
@@ -83,6 +86,7 @@ export function useRecentActivity(limit: number = 10) {
           lead:leads(name, company),
           closer:team_members!pipe_propostas_closer_id_fkey(name)
         `)
+        .eq("organization_id", organizationId)
         .eq("status", "vendido")
         .order("closed_at", { ascending: false })
         .limit(5);
@@ -106,13 +110,13 @@ export function useRecentActivity(limit: number = 10) {
         });
       });
 
-      // Get recent lost deals
       const { data: lost } = await supabase
         .from("pipe_propostas")
         .select(`
           id, updated_at,
           lead:leads(name, company)
         `)
+        .eq("organization_id", organizationId)
         .eq("status", "perdido")
         .order("updated_at", { ascending: false })
         .limit(3);
@@ -134,11 +138,11 @@ export function useRecentActivity(limit: number = 10) {
         });
       });
 
-      // Sort by timestamp and limit
       return activities
         .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
         .slice(0, limit);
     },
-    refetchInterval: 30000, // Refetch every 30 seconds
+    enabled: isReady && !!organizationId,
+    refetchInterval: 30000,
   });
 }

@@ -12,52 +12,64 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { startOfDay, endOfDay, isToday, isBefore } from "date-fns";
 import { cn } from "@/lib/utils";
+import { useOrganization } from "@/hooks/useOrganization";
 
 interface QuickStatsProps {
   className?: string;
 }
 
 export function QuickStats({ className }: QuickStatsProps) {
+  const { organizationId, isReady } = useOrganization();
+
   const { data: stats } = useQuery({
-    queryKey: ["quick-stats"],
+    queryKey: ["quick-stats", organizationId],
     queryFn: async () => {
+      if (!organizationId) {
+        return {
+          meetingsToday: 0,
+          confirmedToday: 0,
+          pendingFollowUps: 0,
+          overdueFollowUps: 0,
+          newLeadsToday: 0,
+        };
+      }
       const now = new Date();
       const todayStart = startOfDay(now).toISOString();
       const todayEnd = endOfDay(now).toISOString();
 
-      // Meetings today
       const { count: meetingsToday } = await supabase
         .from("pipe_confirmacao")
         .select("*", { count: "exact", head: true })
+        .eq("organization_id", organizationId)
         .gte("meeting_date", todayStart)
         .lte("meeting_date", todayEnd);
 
-      // Confirmed meetings (using is_confirmed field)
       const { count: confirmedToday } = await supabase
         .from("pipe_confirmacao")
         .select("*", { count: "exact", head: true })
+        .eq("organization_id", organizationId)
         .gte("meeting_date", todayStart)
         .lte("meeting_date", todayEnd)
         .eq("is_confirmed", true);
 
-      // Pending follow-ups
       const { count: pendingFollowUps } = await supabase
         .from("follow_ups")
         .select("*", { count: "exact", head: true })
+        .eq("organization_id", organizationId)
         .is("completed_at", null)
         .lte("due_date", todayEnd);
 
-      // Overdue follow-ups
       const { count: overdueFollowUps } = await supabase
         .from("follow_ups")
         .select("*", { count: "exact", head: true })
+        .eq("organization_id", organizationId)
         .is("completed_at", null)
         .lt("due_date", now.toISOString());
 
-      // New leads today
       const { count: newLeadsToday } = await supabase
         .from("leads")
         .select("*", { count: "exact", head: true })
+        .eq("organization_id", organizationId)
         .gte("created_at", todayStart)
         .lte("created_at", todayEnd);
 
@@ -69,6 +81,7 @@ export function QuickStats({ className }: QuickStatsProps) {
         newLeadsToday: newLeadsToday || 0,
       };
     },
+    enabled: isReady && !!organizationId,
     refetchInterval: 30000,
   });
 

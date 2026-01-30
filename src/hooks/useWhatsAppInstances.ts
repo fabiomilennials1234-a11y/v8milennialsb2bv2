@@ -125,13 +125,18 @@ export function useCreateWhatsAppInstance() {
 
 export function useUpdateWhatsAppInstance() {
   const queryClient = useQueryClient();
+  const { data: teamMember } = useCurrentTeamMember();
 
   return useMutation({
     mutationFn: async ({ id, ...updates }: WhatsAppInstanceUpdate & { id: string }) => {
+      if (!teamMember?.organization_id) {
+        throw new Error("Usuário não está vinculado a uma organização");
+      }
       const { data, error } = await supabase
         .from("whatsapp_instances")
         .update(updates)
         .eq("id", id)
+        .eq("organization_id", teamMember.organization_id)
         .select()
         .single();
 
@@ -146,12 +151,15 @@ export function useUpdateWhatsAppInstance() {
 
 export function useRefreshQRCode() {
   const queryClient = useQueryClient();
+  const { data: teamMember } = useCurrentTeamMember();
 
   return useMutation({
     mutationFn: async (instanceName: string) => {
+      if (!teamMember?.organization_id) {
+        throw new Error("Usuário não está vinculado a uma organização");
+      }
       const qrResponse = await getQRCode(instanceName);
 
-      // Atualizar no Supabase
       const { data, error } = await supabase
         .from("whatsapp_instances")
         .update({
@@ -160,6 +168,7 @@ export function useRefreshQRCode() {
           status: "connecting",
         })
         .eq("instance_name", instanceName)
+        .eq("organization_id", teamMember.organization_id)
         .select()
         .single();
 
@@ -174,13 +183,16 @@ export function useRefreshQRCode() {
 
 export function useCheckConnectionStatus() {
   const queryClient = useQueryClient();
+  const { data: teamMember } = useCurrentTeamMember();
 
   return useMutation({
     mutationFn: async (instanceName: string) => {
+      if (!teamMember?.organization_id) {
+        throw new Error("Usuário não está vinculado a uma organização");
+      }
       const statusResponse = await getConnectionState(instanceName);
       const isConnected = statusResponse.instance?.state === "open";
 
-      // Atualizar status no Supabase
       const { data, error } = await supabase
         .from("whatsapp_instances")
         .update({
@@ -188,6 +200,7 @@ export function useCheckConnectionStatus() {
           last_connection_at: isConnected ? new Date().toISOString() : null,
         })
         .eq("instance_name", instanceName)
+        .eq("organization_id", teamMember.organization_id)
         .select()
         .single();
 
@@ -207,6 +220,7 @@ export type DeleteInstanceResult = {
 
 export function useDeleteWhatsAppInstance() {
   const queryClient = useQueryClient();
+  const { data: teamMember } = useCurrentTeamMember();
 
   return useMutation({
     mutationFn: async ({
@@ -216,9 +230,11 @@ export function useDeleteWhatsAppInstance() {
       id: string;
       instance_name: string;
     }): Promise<DeleteInstanceResult> => {
+      if (!teamMember?.organization_id) {
+        throw new Error("Usuário não está vinculado a uma organização");
+      }
       let removedFromEvolution = false;
 
-      // 1. Sempre tentar remover na Evolution primeiro para não sobrecarregar o servidor
       try {
         await deleteEvolutionInstance(instance_name);
         removedFromEvolution = true;
@@ -226,20 +242,18 @@ export function useDeleteWhatsAppInstance() {
         const status = error?.status;
         const is404 = status === 404;
         if (is404) {
-          // Instância já não existe na Evolution (ex.: removida manualmente) — considerar sucesso
           removedFromEvolution = true;
         } else {
           console.error("Erro ao deletar da Evolution API:", error);
-          // Remove do sistema mesmo assim, mas o caller pode avisar o usuário
           removedFromEvolution = false;
         }
       }
 
-      // 2. Deletar do Supabase (sempre, para manter consistência local)
       const { error } = await supabase
         .from("whatsapp_instances")
         .delete()
-        .eq("id", id);
+        .eq("id", id)
+        .eq("organization_id", teamMember.organization_id);
 
       if (error) throw error;
 
@@ -258,12 +272,15 @@ export function useDeleteWhatsAppInstance() {
 
 export function useLogoutInstance() {
   const queryClient = useQueryClient();
+  const { data: teamMember } = useCurrentTeamMember();
 
   return useMutation({
     mutationFn: async (instanceName: string) => {
+      if (!teamMember?.organization_id) {
+        throw new Error("Usuário não está vinculado a uma organização");
+      }
       await logoutInstance(instanceName);
 
-      // Atualizar status no Supabase
       const { data, error } = await supabase
         .from("whatsapp_instances")
         .update({
@@ -272,6 +289,7 @@ export function useLogoutInstance() {
           qr_code_expires_at: null,
         })
         .eq("instance_name", instanceName)
+        .eq("organization_id", teamMember.organization_id)
         .select()
         .single();
 

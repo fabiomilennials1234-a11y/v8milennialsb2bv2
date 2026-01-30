@@ -358,3 +358,54 @@ export function useMasterAssignUserToOrg() {
     },
   });
 }
+
+/**
+ * Redefinir senha de um usuário (Master only)
+ * Chama a Edge Function admin-reset-user-password.
+ */
+export function useMasterResetUserPassword() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      user_id,
+      new_password,
+    }: {
+      user_id: string;
+      new_password: string;
+    }) => {
+      const { data: session } = await supabase.auth.getSession();
+      const token = session?.session?.access_token;
+      if (!token) throw new Error("Não autenticado");
+
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+      const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
+      if (!supabaseUrl?.trim() || !anonKey?.trim())
+        throw new Error("Configure VITE_SUPABASE_URL e VITE_SUPABASE_PUBLISHABLE_KEY no .env");
+
+      const url = `${supabaseUrl.replace(/\/$/, "")}/functions/v1/admin-reset-user-password`;
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${anonKey}`,
+          "X-User-JWT": token,
+        },
+        body: JSON.stringify({ user_id, new_password: new_password.trim() }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        success?: boolean;
+        message?: string;
+        error?: string;
+      };
+      if (!res.ok) throw new Error(data?.message ?? data?.error ?? "Erro ao redefinir senha");
+      return data;
+    },
+    onSuccess: () => {
+      toast.success("Senha alterada com sucesso!");
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || "Erro ao redefinir senha");
+    },
+  });
+}

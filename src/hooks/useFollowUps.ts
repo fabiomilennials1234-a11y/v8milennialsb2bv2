@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useRealtimeSubscription } from "./useRealtimeSubscription";
+import { useOrganization } from "./useOrganization";
 
 export interface FollowUp {
   id: string;
@@ -45,17 +46,19 @@ export interface FollowUpAutomation {
   updated_at: string;
 }
 
-export function useFollowUps(filters?: { 
+export function useFollowUps(filters?: {
   assignedTo?: string;
   showCompleted?: boolean;
   showArchived?: boolean;
   dateFilter?: "today" | "overdue" | "upcoming" | "all";
 }) {
+  const { organizationId, isReady } = useOrganization();
   useRealtimeSubscription("follow_ups", ["follow_ups"]);
-  
+
   return useQuery({
-    queryKey: ["follow_ups", filters],
+    queryKey: ["follow_ups", filters, organizationId],
     queryFn: async () => {
+      if (!organizationId) return [];
       let query = supabase
         .from("follow_ups")
         .select(`
@@ -63,6 +66,7 @@ export function useFollowUps(filters?: {
           lead:leads(id, name, company, phone, email),
           team_member:team_members!follow_ups_assigned_to_fkey(id, name, role)
         `)
+        .eq("organization_id", organizationId)
         .order("due_date", { ascending: true });
 
       if (filters?.assignedTo) {
@@ -93,10 +97,11 @@ export function useFollowUps(filters?: {
       }
 
       const { data, error } = await query;
-      
+
       if (error) throw error;
       return data as unknown as FollowUp[];
     },
+    enabled: isReady && !!organizationId,
   });
 }
 
@@ -119,6 +124,7 @@ export function useFollowUpAutomations() {
 export function useCreateFollowUp() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { organizationId } = useOrganization();
 
   return useMutation({
     mutationFn: async (followUp: {
@@ -132,9 +138,11 @@ export function useCreateFollowUp() {
       source_pipe_id?: string;
       is_automated?: boolean;
     }) => {
+      if (!organizationId) throw new Error("Organização não disponível");
+      const secured = { ...followUp, organization_id: organizationId };
       const { data, error } = await supabase
         .from("follow_ups")
-        .insert(followUp)
+        .insert(secured)
         .select()
         .single();
 
@@ -161,13 +169,17 @@ export function useCreateFollowUp() {
 export function useUpdateFollowUp() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { organizationId } = useOrganization();
 
   return useMutation({
     mutationFn: async ({ id, ...updates }: Partial<FollowUp> & { id: string }) => {
+      if (!organizationId) throw new Error("Organização não disponível");
+      const { organization_id: _, ...safeUpdates } = updates as Partial<FollowUp> & { organization_id?: string };
       const { data, error } = await supabase
         .from("follow_ups")
-        .update(updates)
+        .update(safeUpdates)
         .eq("id", id)
+        .eq("organization_id", organizationId)
         .select()
         .single();
 
@@ -190,13 +202,16 @@ export function useUpdateFollowUp() {
 export function useCompleteFollowUp() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { organizationId } = useOrganization();
 
   return useMutation({
     mutationFn: async (id: string) => {
+      if (!organizationId) throw new Error("Organização não disponível");
       const { data, error } = await supabase
         .from("follow_ups")
         .update({ completed_at: new Date().toISOString() })
         .eq("id", id)
+        .eq("organization_id", organizationId)
         .select()
         .single();
 
@@ -223,13 +238,16 @@ export function useCompleteFollowUp() {
 export function useArchiveFollowUp() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { organizationId } = useOrganization();
 
   return useMutation({
     mutationFn: async (id: string) => {
+      if (!organizationId) throw new Error("Organização não disponível");
       const { data, error } = await supabase
         .from("follow_ups")
         .update({ archived_at: new Date().toISOString() })
         .eq("id", id)
+        .eq("organization_id", organizationId)
         .select()
         .single();
 
@@ -256,13 +274,16 @@ export function useArchiveFollowUp() {
 export function useArchiveManyFollowUps() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { organizationId } = useOrganization();
 
   return useMutation({
     mutationFn: async (ids: string[]) => {
+      if (!organizationId) throw new Error("Organização não disponível");
       if (ids.length === 0) return { count: 0 };
       const { error } = await supabase
         .from("follow_ups")
         .update({ archived_at: new Date().toISOString() })
+        .eq("organization_id", organizationId)
         .in("id", ids);
 
       if (error) throw error;
@@ -288,13 +309,16 @@ export function useArchiveManyFollowUps() {
 export function useDeleteFollowUp() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { organizationId } = useOrganization();
 
   return useMutation({
     mutationFn: async (id: string) => {
+      if (!organizationId) throw new Error("Organização não disponível");
       const { error } = await supabase
         .from("follow_ups")
         .delete()
-        .eq("id", id);
+        .eq("id", id)
+        .eq("organization_id", organizationId);
 
       if (error) throw error;
     },
@@ -420,6 +444,7 @@ export function useDeleteFollowUpAutomation() {
 
 export function useCreateAutomatedFollowUps() {
   const queryClient = useQueryClient();
+  const { organizationId } = useOrganization();
 
   return useMutation({
     mutationFn: async ({
@@ -435,6 +460,8 @@ export function useCreateAutomatedFollowUps() {
       stage: string;
       sourcePipeId: string;
     }) => {
+      if (!organizationId) throw new Error("Organização não disponível");
+
       // Fetch active automations for this pipe and stage
       const { data: automations, error: automationsError } = await supabase
         .from("follow_up_automations")
@@ -446,11 +473,11 @@ export function useCreateAutomatedFollowUps() {
       if (automationsError) throw automationsError;
       if (!automations || automations.length === 0) return [];
 
-      // Create follow ups for each automation
+      // Create follow ups for each automation (scoped to current organization)
       const followUps = automations.map((automation: FollowUpAutomation) => {
         const dueDate = new Date();
         dueDate.setDate(dueDate.getDate() + automation.days_offset);
-        
+
         return {
           lead_id: leadId,
           assigned_to: assignedTo,
@@ -461,6 +488,7 @@ export function useCreateAutomatedFollowUps() {
           source_pipe: pipeType,
           source_pipe_id: sourcePipeId,
           is_automated: true,
+          organization_id: organizationId,
         };
       });
 
