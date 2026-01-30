@@ -1061,6 +1061,127 @@ function extractMessageText(msg: MessageData): string | null {
 }
 
 /**
+ * Converte áudio OGG/Opus (base64) para MP3 no Edge, sem API externa.
+ * WhatsApp envia voice em OGG Opus; esta conversão garante reprodução em todos os navegadores (incl. Safari).
+ * Retorna null se o formato não for OGG/Opus ou se a conversão falhar.
+ */
+async function convertOggOpusBase64ToMp3InEdge(base64: string, _mimeType: string): Promise<Uint8Array | null> {
+  const SAMPLE_BLOCK = 1152;
+  try {
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+
+    const { OggOpusDecoder } = await import("npm:ogg-opus-decoder@1.0.4");
+    const lameMod = await import("npm:lamejs@1.2.1");
+    const lamejs = (lameMod as { default?: unknown }).default ?? lameMod;
+    const Mp3Encoder = (lamejs as { Mp3Encoder?: new (ch: number, sr: number, kbps: number) => { encodeBuffer: (l: Int16Array, r?: Int16Array) => Int8Array; flush: () => Int8Array } }).Mp3Encoder;
+    if (!Mp3Encoder) {
+      console.warn("[Evolution Webhook] lamejs Mp3Encoder not found");
+      return null;
+    }
+
+    const decoder = new OggOpusDecoder();
+    await decoder.ready;
+    const { channelData, sampleRate } = decoder.decode(bytes);
+    decoder.free();
+    if (!channelData?.length || !sampleRate) {
+      console.warn("[Evolution Webhook] OggOpus decode returned no data");
+      return null;
+    }
+
+    const left = channelData[0];
+    const right = channelData.length > 1 ? channelData[1] : left;
+    const floatTo16 = (f: Float32Array): Int16Array => {
+      const out = new Int16Array(f.length);
+      for (let i = 0; i < f.length; i++) {
+        const s = Math.max(-1, Math.min(1, f[i]));
+        out[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+      }
+      return out;
+    };
+    const left16 = floatTo16(left);
+    const right16 = channelData.length > 1 ? floatTo16(right) : left16;
+    const numChannels = channelData.length;
+    const encoder = new Mp3Encoder(numChannels, sampleRate, 128);
+    const mp3Chunks: Int8Array[] = [];
+    for (let i = 0; i < left16.length; i += SAMPLE_BLOCK) {
+      const lChunk = left16.subarray(i, i + SAMPLE_BLOCK);
+      const rChunk = right16.subarray(i, i + SAMPLE_BLOCK);
+      const buf = encoder.encodeBuffer(lChunk, rChunk);
+      if (buf.length > 0) mp3Chunks.push(buf);
+    }
+    const flush = encoder.flush();
+    if (flush.length > 0) mp3Chunks.push(flush);
+
+    const totalLen = mp3Chunks.reduce((acc, c) => acc + c.length, 0);
+    const out = new Uint8Array(totalLen);
+    let offset = 0;
+    for (const c of mp3Chunks) {
+      out.set(c, offset);
+      offset += c.length;
+    }
+    console.log("[Evolution Webhook] Audio converted to MP3 in-edge, size:", out.length);
+    return out;
+  } catch (e) {
+    console.warn("[Evolution Webhook] In-edge OGG->MP3 conversion failed:", e);
+    return null;
+  }
+}
+
+/**
+ * Converte áudio (base64) para MP3: primeiro tenta conversão in-edge (OGG/Opus), depois API externa se configurada.
+ * Retorna null se não for possível converter (armazena original).
+ */
+async function convertAudioBase64ToMp3(base64: string, mimeType: string): Promise<Uint8Array | null> {
+  const type = (mimeType || "").toLowerCase();
+  const isOggOrOpus = type.includes("ogg") || type.includes("opus") || type.includes("webm");
+
+  if (isOggOrOpus) {
+    const inEdge = await convertOggOpusBase64ToMp3InEdge(base64, mimeType);
+    if (inEdge && inEdge.length > 0) return inEdge;
+  }
+
+  const apiUrl = Deno.env.get("AUDIO_CONVERSION_API_URL");
+  if (!apiUrl?.trim()) return null;
+  const apiKey = Deno.env.get("AUDIO_CONVERSION_API_KEY");
+  try {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (apiKey?.trim()) {
+      headers["Authorization"] = `Bearer ${apiKey}`;
+      headers["X-API-Key"] = apiKey;
+    }
+    const res = await fetch(apiUrl, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ base64, mimeType }),
+    });
+    if (!res.ok) {
+      console.warn("[Evolution Webhook] Audio conversion API error:", res.status);
+      return null;
+    }
+    const ct = (res.headers.get("Content-Type") || "").toLowerCase();
+    if (ct.includes("audio/mpeg") || ct.includes("audio/mp3") || ct.includes("application/octet-stream")) {
+      const buf = await res.arrayBuffer();
+      return new Uint8Array(buf);
+    }
+    const json = await res.json() as { base64?: string };
+    if (json?.base64) {
+      const binary = atob(json.base64);
+      const out = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
+      return out;
+    }
+    return null;
+  } catch (e) {
+    console.warn("[Evolution Webhook] Audio conversion API failed:", e);
+    return null;
+  }
+}
+
+/**
  * Baixa mídia usando a API getBase64FromMediaMessage e salva no Storage
  */
 async function downloadAndSaveMedia(
@@ -1148,22 +1269,40 @@ async function downloadAndSaveMedia(
       "video/mp4": "mp4",
       "application/pdf": "pdf",
     };
-    const ext = extMap[contentType] || contentType.split("/")[1]?.split(";")[0] || "bin";
 
-    // Converter base64 para Uint8Array
-    const binaryString = atob(result.base64);
-    const bytes = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
+    let bytes: Uint8Array;
+    let finalContentType = contentType;
+    let finalExt = extMap[contentType] || contentType.split("/")[1]?.split(";")[0] || "bin";
+
+    if (mediaType === "audio" || mediaType === "ptt") {
+      const mp3Bytes = await convertAudioBase64ToMp3(result.base64, contentType);
+      if (mp3Bytes && mp3Bytes.length > 0) {
+        bytes = mp3Bytes;
+        finalContentType = "audio/mpeg";
+        finalExt = "mp3";
+        console.log("[Evolution Webhook] Audio converted to MP3, size:", bytes.length);
+      } else {
+        const binaryString = atob(result.base64);
+        bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+      }
+    } else {
+      const binaryString = atob(result.base64);
+      bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
     }
 
     // Gerar nome único do arquivo
-    const fileName = `${mediaType}_${messageId}_${Date.now()}.${ext}`;
+    const fileName = `${mediaType}_${messageId}_${Date.now()}.${finalExt}`;
     const filePath = `whatsapp-media/${organizationId}/${fileName}`;
 
     console.log("[Evolution Webhook] Saving to storage:", {
       filePath,
-      contentType,
+      contentType: finalContentType,
       size: bytes.byteLength,
     });
 
@@ -1171,7 +1310,7 @@ async function downloadAndSaveMedia(
     const { data, error } = await supabase.storage
       .from("media")
       .upload(filePath, bytes, {
-        contentType,
+        contentType: finalContentType,
         upsert: true,
       });
 

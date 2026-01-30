@@ -39,3 +39,7 @@ verify_jwt = false
 # verify_jwt = false para preflight OPTIONS; JWT validado dentro da função
 [functions.webhook-validate-url]
 verify_jwt = false
+
+# stream-media: proxy de áudio do Storage; GET sem JWT para <audio> ou fetch com token no front
+[functions.stream-media]
+verify_jwt = false

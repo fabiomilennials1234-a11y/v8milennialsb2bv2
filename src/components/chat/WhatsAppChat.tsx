@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, Component } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
@@ -44,6 +44,7 @@ import {
   ChatContact,
   WhatsAppMessage,
 } from "@/hooks/useWhatsAppChat";
+import { convertAudioBlobToMp3 } from "@/lib/audioToMp3";
 import { useCanReplyOnInstanceByName } from "@/hooks/useWhatsAppInstanceAllowedMembers";
 import { useLeadByPhone } from "@/hooks/useWhatsAppLeadIntegration";
 import { LeadDetailContent } from "./LeadDetailContent";
@@ -55,8 +56,54 @@ import { format, isToday, isYesterday } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
 
+/**
+ * Para áudios no bucket "media" do Supabase, usa a Edge Function stream-media como proxy.
+ * Isso evita CORS: o navegador recebe o áudio da mesma origem (Supabase Functions com CORS),
+ * em vez de pedir direto ao Storage (que pode bloquear por CORS).
+ */
+function getAudioPlaybackUrl(mediaUrl: string | null): string | null {
+  if (!mediaUrl) return null;
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+  if (!supabaseUrl?.trim()) return mediaUrl;
+  const match = mediaUrl.match(/\/object\/public\/media\/(.+)$/);
+  if (!match) return mediaUrl;
+  const path = match[1];
+  const base = supabaseUrl.replace(/\/$/, "");
+  return `${base}/functions/v1/stream-media?path=${encodeURIComponent(path)}`;
+}
+
+/** Error boundary só para a área de mensagens; evita "fewer hooks" ao não desmontar o ChatWindow */
+class MessagesAreaErrorBoundary extends Component<
+  { children: React.ReactNode },
+  { hasError: boolean }
+> {
+  state = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error) {
+    console.error("[Chat] Error rendering messages:", error);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-[200px] text-center p-6 gap-2">
+          <AlertCircle className="w-10 h-10 text-destructive" />
+          <p className="text-sm text-muted-foreground">Erro ao carregar mensagens.</p>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 function formatMessageTime(timestamp: string): string {
+  if (!timestamp) return "--:--";
   const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return "--:--";
   if (isToday(date)) {
     return format(date, "HH:mm");
   }
@@ -67,7 +114,9 @@ function formatMessageTime(timestamp: string): string {
 }
 
 function formatContactTime(timestamp: string): string {
+  if (!timestamp) return "";
   const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return "";
   if (isToday(date)) {
     return format(date, "HH:mm");
   }
@@ -94,7 +143,7 @@ function MessageStatusIcon({ status }: { status: string }) {
 
 /** Nome de exibição do contato: prioriza lead (CRM) para evitar troca de nomes */
 function contactDisplayName(c: ChatContact): string {
-  return c.lead_name || c.push_name || c.phone_number;
+  return (c.lead_name || c.push_name || c.phone_number || "").trim() || "Contato";
 }
 
 function ContactList({
@@ -158,6 +207,7 @@ function ContactList({
               const isSelected = selectedPhone === contact.phone_number;
               return (
                 <motion.button
+                  type="button"
                   key={contact.phone_number}
                   onClick={() => onSelectContact(contact.phone_number)}
                   className={cn(
@@ -173,7 +223,7 @@ function ContactList({
                   <div className="flex items-start gap-3">
                     <Avatar className="w-11 h-11 shrink-0 rounded-full border-2 border-background shadow-sm">
                       <AvatarFallback className="bg-primary/10 text-primary font-medium text-sm">
-                        {displayName[0].toUpperCase()}
+                        {(displayName.charAt(0) || "?").toUpperCase()}
                       </AvatarFallback>
                     </Avatar>
                     <div className="flex-1 min-w-0">
@@ -216,39 +266,167 @@ function ContactList({
   );
 }
 
+// Edge Function exige Authorization; <audio src="..."> não envia header → 401. Resolvemos via fetch com token e blob.
+const STREAM_MEDIA_PATH = "/functions/v1/stream-media";
+
 // Componente de player de áudio - com fallback para carregar via blob quando a reprodução direta falhar (CORS/formato)
 function AudioPlayer({ src, isOutgoing }: { src: string; isOutgoing: boolean }) {
   const [error, setError] = useState(false);
-  const [fallbackSrc, setFallbackSrc] = useState<string | null>(null);
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const conversionAttemptedRef = useRef(false);
+  const rawBlobRef = useRef<Blob | null>(null);
 
-  const effectiveSrc = fallbackSrc || src;
+  const isStreamMediaUrl = src.includes(STREAM_MEDIA_PATH);
+  const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
 
-  const handleError = useCallback(async () => {
-    if (fallbackSrc) {
-      setError(true);
-      return;
+  const isValidSrc = src && (src.startsWith("http://") || src.startsWith("https://") || src.startsWith("blob:"));
+
+  /**
+   * Inferir tipo de áudio pela extensão da URL (funciona com stream-media?path=...file.mp3)
+   */
+  const inferAudioType = useCallback((url: string): string => {
+    const ext = url.split(".").pop()?.split("?")[0]?.toLowerCase() || "";
+    const typeMap: Record<string, string> = {
+      mp3: "audio/mpeg", ogg: "audio/ogg", opus: "audio/ogg",
+      webm: "audio/webm", m4a: "audio/mp4", aac: "audio/aac", wav: "audio/wav",
+    };
+    return typeMap[ext] || "audio/ogg";
+  }, []);
+
+  /**
+   * Garantir que o blob tenha um Content-Type de áudio correto.
+   * Se o tipo for genérico (application/octet-stream ou vazio), infere pela URL.
+   */
+  const ensureBlobType = useCallback(async (blob: Blob, url: string): Promise<Blob> => {
+    const type = (blob.type || "").toLowerCase();
+    if (!type || type === "application/octet-stream") {
+      const inferred = inferAudioType(url);
+      return new Blob([await blob.arrayBuffer()], { type: inferred });
     }
+    return blob;
+  }, [inferAudioType]);
+
+  // Etapa 1: Baixar o blob do stream-media com Authorization e servir com tipo correto
+  // NÃO tenta converter — deixa o navegador reproduzir o formato original primeiro.
+  useEffect(() => {
+    if (!isStreamMediaUrl || !anonKey?.trim() || !src) return;
+    let cancelled = false;
+    conversionAttemptedRef.current = false;
+    rawBlobRef.current = null;
+    setBlobUrl((prev) => { if (prev) URL.revokeObjectURL(prev); return null; });
+    setError(false);
+    setLoading(true);
+
+    (async () => {
+      try {
+        const res = await fetch(src, {
+          method: "GET",
+          headers: { Authorization: `Bearer ${anonKey}` },
+          credentials: "omit",
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        let blob = await res.blob();
+        if (cancelled) return;
+
+        // Corrigir tipo genérico para que o navegador saiba decodificar
+        blob = await ensureBlobType(blob, src);
+        if (cancelled) return;
+
+        // Salvar blob original para fallback de conversão se o navegador não conseguir reproduzir
+        rawBlobRef.current = blob;
+
+        const url = URL.createObjectURL(blob);
+        setBlobUrl(url);
+        setLoading(false);
+      } catch (e) {
+        if (cancelled) return;
+        console.warn("[AudioPlayer] Failed to fetch audio:", e);
+        setLoading(false);
+        setError(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      setBlobUrl((prev) => { if (prev) URL.revokeObjectURL(prev); return null; });
+    };
+  }, [src, isStreamMediaUrl, anonKey, ensureBlobType]);
+
+  // Resetar ao trocar de src (não-stream-media)
+  useEffect(() => {
+    if (isStreamMediaUrl) return;
+    setError(false);
+    setLoading(false);
+    conversionAttemptedRef.current = false;
+    rawBlobRef.current = null;
+    setBlobUrl((prev) => { if (prev) URL.revokeObjectURL(prev); return null; });
+  }, [src, isStreamMediaUrl]);
+
+  // Etapa 2 (fallback): Se o <audio> disparar erro, tentar converter para MP3
+  const handleError = useCallback(async () => {
+    if (!isValidSrc) { setError(true); return; }
+
+    // Se já tentou converter, desiste
+    if (conversionAttemptedRef.current) { setError(true); return; }
+    conversionAttemptedRef.current = true;
+
+    // Pegar o blob já baixado ou re-baixar
+    let blob = rawBlobRef.current;
+    if (!blob) {
+      setLoading(true);
+      try {
+        const headers: HeadersInit = {};
+        if (isStreamMediaUrl && anonKey?.trim()) headers["Authorization"] = `Bearer ${anonKey}`;
+        const res = await fetch(src, { mode: "cors", credentials: "omit", headers });
+        if (!res.ok) throw new Error("Fetch failed");
+        blob = await ensureBlobType(await res.blob(), src);
+      } catch {
+        setLoading(false);
+        setError(true);
+        return;
+      }
+    }
+
+    setLoading(true);
     try {
-      const res = await fetch(src, { mode: "cors" });
-      if (!res.ok) throw new Error("Fetch failed");
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      setFallbackSrc(url);
-      if (audioRef.current) {
-        audioRef.current.src = url;
-        audioRef.current.load();
+      const converted = await convertAudioBlobToMp3(blob);
+      if (converted !== blob && converted.type.includes("mpeg")) {
+        // Conversão para MP3 teve sucesso
+        setBlobUrl((prev) => { if (prev) URL.revokeObjectURL(prev); return null; });
+        const url = URL.createObjectURL(converted);
+        setBlobUrl(url);
+        setLoading(false);
+        if (audioRef.current) {
+          audioRef.current.src = url;
+          audioRef.current.load();
+        }
+        return;
       }
     } catch {
-      setError(true);
+      // Conversão falhou
     }
-  }, [src, fallbackSrc]);
 
+    // Nem original nem MP3 funcionou
+    setLoading(false);
+    setError(true);
+  }, [src, isValidSrc, isStreamMediaUrl, anonKey, ensureBlobType]);
+
+  // Cleanup de blobUrl no unmount
   useEffect(() => {
     return () => {
-      if (fallbackSrc) URL.revokeObjectURL(fallbackSrc);
+      setBlobUrl((prev) => { if (prev) URL.revokeObjectURL(prev); return null; });
     };
-  }, [fallbackSrc]);
+  }, []);
+
+  if (!isValidSrc) {
+    return (
+      <div className="flex flex-col gap-1 min-w-[200px]">
+        <p className="text-xs text-muted-foreground">URL do áudio inválida.</p>
+      </div>
+    );
+  }
 
   if (error) {
     return (
@@ -268,15 +446,24 @@ function AudioPlayer({ src, isOutgoing }: { src: string; isOutgoing: boolean }) 
     );
   }
 
+  if (loading || (isStreamMediaUrl && !blobUrl)) {
+    return (
+      <div className="flex items-center gap-2 min-w-[200px]">
+        <Loader2 className="w-5 h-5 animate-spin text-muted-foreground shrink-0" />
+        <p className="text-xs text-muted-foreground">Carregando áudio…</p>
+      </div>
+    );
+  }
+
   return (
     <div className="flex items-center gap-2 min-w-[200px]">
       <audio
         ref={audioRef}
         controls
         controlsList="nodownload"
-        src={effectiveSrc}
-        className="h-10 max-w-[250px]"
-        preload="metadata"
+        src={blobUrl || src}
+        className="h-10 max-w-[280px] flex-1"
+        preload="auto"
         onError={handleError}
         playsInline
       />
@@ -457,7 +644,9 @@ function MessageBubble({
 
         {/* Áudio */}
         {isAudio && message.media_url && (
-          <AudioPlayer src={message.media_url} isOutgoing={isOutgoing} />
+          <div>
+            <AudioPlayer src={getAudioPlaybackUrl(message.media_url) ?? message.media_url} isOutgoing={isOutgoing} />
+          </div>
         )}
 
         {/* Imagem */}
@@ -713,7 +902,8 @@ function ChatWindow({
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
+  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
+
   const { data: messages = [], isLoading } = useWhatsAppMessages(phoneNumber);
   const sendMessage = useSendWhatsAppMessage();
   const sendMedia = useSendWhatsAppMedia();
@@ -807,23 +997,23 @@ function ChatWindow({
     }
   };
 
-  // Enviar áudio
+  // Enviar áudio (converte WebM/OGG → MP3 para reprodução em todos os navegadores, ex.: Safari)
   const handleAudioRecorded = async (audioBlob: Blob) => {
     setIsRecording(false);
-    
+
     try {
-      // Converter blob para base64
+      const blobToSend = await convertAudioBlobToMp3(audioBlob);
       const base64 = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve(reader.result as string);
         reader.onerror = reject;
-        reader.readAsDataURL(audioBlob);
+        reader.readAsDataURL(blobToSend);
       });
 
       console.log("[Audio] Sending audio:", {
-        blobType: audioBlob.type,
-        blobSize: audioBlob.size,
-        base64Length: base64.length,
+        originalType: audioBlob.type,
+        sentType: blobToSend.type,
+        blobSize: blobToSend.size,
       });
 
       await sendMedia.mutateAsync({
@@ -831,9 +1021,9 @@ function ChatWindow({
         instanceName,
         mediaType: "audio",
         media: base64,
-        mimetype: audioBlob.type || "audio/ogg",
+        mimetype: blobToSend.type || "audio/mpeg",
       });
-      
+
       toast.success("Áudio enviado!");
     } catch (error: any) {
       console.error("[Audio] Error sending:", error);
@@ -842,15 +1032,13 @@ function ChatWindow({
   };
 
   // Nome do contato: priorizar lead (CRM) para evitar nomes trocados
-  const contactName =
+  const contactNameRaw =
     selectedLeadName ??
     selectedContact?.lead_name ??
     selectedContact?.push_name ??
     messages.find((m) => m.push_name)?.push_name ??
     phoneNumber;
-
-  // Estado para preview de imagem em modal
-  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
+  const contactName = (contactNameRaw && String(contactNameRaw).trim()) ? String(contactNameRaw).trim() : (phoneNumber || "?");
 
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -870,7 +1058,7 @@ function ChatWindow({
               "font-medium text-primary",
               hasLead ? "bg-primary/15 text-primary" : "bg-primary/10"
             )}>
-              {contactName[0].toUpperCase()}
+              {(contactName.charAt(0) || "?").toUpperCase()}
             </AvatarFallback>
           </Avatar>
           <div className="flex-1 min-w-0">
@@ -964,10 +1152,11 @@ function ChatWindow({
         )}
       </div>
 
-      {/* Área de mensagens: altura limitada com scroll interno */}
+      {/* Área de mensagens: altura limitada com scroll interno; boundary evita "fewer hooks" ao isolar erros */}
       <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
         <ScrollArea className="flex-1 h-full">
           <div className="p-4 min-h-full">
+            <MessagesAreaErrorBoundary>
             {isLoading ? (
               <div className="flex items-center justify-center min-h-[200px]">
                 <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
@@ -983,18 +1172,23 @@ function ChatWindow({
               <div className="space-y-1 pb-4">
                 {(() => {
                   let lastDate = "";
-                  return messages.map((message) => {
-                    const msgDate = format(new Date(message.timestamp), "dd/MM/yyyy", { locale: ptBR });
+                  return messages.map((message, index) => {
+                    const ts = message?.timestamp;
+                    const date = ts ? new Date(ts) : new Date();
+                    const validDate = !Number.isNaN(date.getTime());
+                    const msgDate = validDate ? format(date, "dd/MM/yyyy", { locale: ptBR }) : "";
                     const showDateSeparator = msgDate !== lastDate;
                     if (showDateSeparator) lastDate = msgDate;
-                    const dateLabel =
-                      isToday(new Date(message.timestamp))
+                    const dateLabel = validDate
+                      ? isToday(date)
                         ? "Hoje"
-                        : isYesterday(new Date(message.timestamp))
+                        : isYesterday(date)
                           ? "Ontem"
-                          : format(new Date(message.timestamp), "dd/MM/yyyy", { locale: ptBR });
+                          : format(date, "dd/MM/yyyy", { locale: ptBR })
+                      : "";
+                    const safeKey = message?.id || `msg-${index}-${ts || index}`;
                     return (
-                      <div key={message.id}>
+                      <div key={safeKey}>
                         {showDateSeparator && (
                           <div className="flex justify-center py-3">
                             <span className="text-xs text-muted-foreground bg-muted/50 px-3 py-1 rounded-full">
@@ -1013,6 +1207,7 @@ function ChatWindow({
                 <div ref={messagesEndRef} />
               </div>
             )}
+            </MessagesAreaErrorBoundary>
           </div>
         </ScrollArea>
       </div>
