@@ -136,6 +136,9 @@ export function useWhatsAppContacts() {
       return Array.from(contactsMap.values());
     },
     enabled: !!organizationId,
+    // Polling de fallback: atualiza lista (e badge da sidebar) a cada 10s quando a aba está em foco (realtime pode falhar em produção)
+    refetchInterval: 10_000,
+    refetchIntervalInBackground: false,
   });
 }
 
@@ -162,6 +165,9 @@ export function useWhatsAppMessages(phoneNumber: string | null) {
       return data as WhatsAppMessage[];
     },
     enabled: !!organizationId && !!phoneNumber,
+    // Polling de fallback: atualiza mensagens do chat a cada 8s quando a aba está em foco
+    refetchInterval: phoneNumber ? 8_000 : false,
+    refetchIntervalInBackground: false,
   });
 }
 
@@ -577,20 +583,21 @@ export function useWhatsAppMessagesRealtime(phoneNumber: string | null) {
         (payload) => {
           console.log("[WhatsApp Realtime] Event received:", payload.eventType, payload);
 
-          // Invalidar queries para atualizar a UI
-          queryClient.invalidateQueries({ queryKey: ["whatsapp_contacts", organizationId] });
+          const message = (payload.new || payload.old) as WhatsAppMessage | undefined;
+          const messagePhone = message?.phone_number;
+          const normalizePhone = (p: string) => p.replace(/\D/g, "").slice(-10) || p;
 
-          // Se temos um telefone selecionado, atualizar mensagens desse contato
-          if (phoneNumber) {
-            const message = (payload.new || payload.old) as WhatsAppMessage;
-            if (message?.phone_number === phoneNumber) {
-              console.log("[WhatsApp Realtime] Updating messages for phone:", phoneNumber);
-              queryClient.invalidateQueries({
+          // Forçar refetch imediato da lista de contatos (sidebar e inbox) para notificação e última mensagem
+          queryClient.refetchQueries({ queryKey: ["whatsapp_contacts", organizationId] });
+
+          // Atualizar mensagens do chat aberto se o evento for do contato selecionado (comparar telefone normalizado)
+          if (phoneNumber && messagePhone) {
+            if (normalizePhone(messagePhone) === normalizePhone(phoneNumber)) {
+              queryClient.refetchQueries({
                 queryKey: ["whatsapp_messages", organizationId, phoneNumber],
               });
             }
           } else {
-            // Se não tem telefone selecionado, atualizar todas as mensagens
             queryClient.invalidateQueries({ queryKey: ["whatsapp_messages", organizationId] });
           }
         }

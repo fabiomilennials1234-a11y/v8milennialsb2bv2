@@ -260,3 +260,101 @@ export function useMasterToggleUserActive() {
     },
   });
 }
+
+/** Usuário que se cadastrou mas não tem organização (não está em team_members) */
+export interface UnassignedUser {
+  id: string;
+  email: string;
+  created_at: string;
+  full_name: string | null;
+}
+
+/**
+ * Lista usuários que se cadastraram por si só mas não têm organização (Master only)
+ */
+export function useMasterUnassignedUsers() {
+  return useQuery({
+    queryKey: ["master-unassigned-users"],
+    queryFn: async (): Promise<UnassignedUser[]> => {
+      const { data: session } = await supabase.auth.getSession();
+      const token = session?.session?.access_token;
+      if (!token) throw new Error("Não autenticado");
+
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+      const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
+      if (!supabaseUrl?.trim() || !anonKey?.trim()) throw new Error("Configure VITE_SUPABASE_URL e VITE_SUPABASE_PUBLISHABLE_KEY no .env");
+      const url = `${supabaseUrl.replace(/\/$/, "")}/functions/v1/list-unassigned-users`;
+      const res = await fetch(url, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${anonKey}`,
+          "X-User-JWT": token,
+        },
+      });
+      const data = (await res.json().catch(() => ({}))) as { success?: boolean; users?: UnassignedUser[]; error?: string; message?: string };
+      if (!res.ok) throw new Error(data?.message ?? data?.error ?? "Erro ao listar cadastros pendentes");
+      if (!data.success || !Array.isArray(data.users)) return [];
+      return data.users;
+    },
+    staleTime: 30 * 1000,
+  });
+}
+
+/**
+ * Vincula um usuário (cadastro pendente) a uma organização (Master only)
+ */
+export function useMasterAssignUserToOrg() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      user_id,
+      organization_id,
+      role,
+      email,
+      full_name,
+    }: {
+      user_id: string;
+      organization_id: string;
+      role?: string;
+      email?: string;
+      full_name?: string | null;
+    }) => {
+      const { data: session } = await supabase.auth.getSession();
+      const token = session?.session?.access_token;
+      if (!token) throw new Error("Não autenticado");
+
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+      const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
+      if (!supabaseUrl?.trim() || !anonKey?.trim()) throw new Error("Configure VITE_SUPABASE_URL e VITE_SUPABASE_PUBLISHABLE_KEY no .env");
+      const url = `${supabaseUrl.replace(/\/$/, "")}/functions/v1/assign-user-to-org`;
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${anonKey}`,
+          "X-User-JWT": token,
+        },
+        body: JSON.stringify({
+          user_id,
+          organization_id,
+          role: role ?? "member",
+          email: email ?? undefined,
+          full_name: full_name ?? undefined,
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { success?: boolean; message?: string; error?: string };
+      if (!res.ok) throw new Error(data?.message ?? data?.error ?? "Erro ao vincular usuário");
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["master-unassigned-users"] });
+      queryClient.invalidateQueries({ queryKey: ["master-users"] });
+      queryClient.invalidateQueries({ queryKey: ["master-user-stats"] });
+      toast.success("Usuário vinculado à organização!");
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || "Erro ao vincular usuário");
+    },
+  });
+}

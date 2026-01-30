@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
@@ -216,16 +216,69 @@ function ContactList({
   );
 }
 
-// Componente de player de áudio - usando controles nativos para máxima compatibilidade
+// Componente de player de áudio - com fallback para carregar via blob quando a reprodução direta falhar (CORS/formato)
 function AudioPlayer({ src, isOutgoing }: { src: string; isOutgoing: boolean }) {
+  const [error, setError] = useState(false);
+  const [fallbackSrc, setFallbackSrc] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
+
+  const effectiveSrc = fallbackSrc || src;
+
+  const handleError = useCallback(async () => {
+    if (fallbackSrc) {
+      setError(true);
+      return;
+    }
+    try {
+      const res = await fetch(src, { mode: "cors" });
+      if (!res.ok) throw new Error("Fetch failed");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      setFallbackSrc(url);
+      if (audioRef.current) {
+        audioRef.current.src = url;
+        audioRef.current.load();
+      }
+    } catch {
+      setError(true);
+    }
+  }, [src, fallbackSrc]);
+
+  useEffect(() => {
+    return () => {
+      if (fallbackSrc) URL.revokeObjectURL(fallbackSrc);
+    };
+  }, [fallbackSrc]);
+
+  if (error) {
+    return (
+      <div className="flex flex-col gap-1 min-w-[200px]">
+        <p className="text-xs text-muted-foreground">Não foi possível reproduzir o áudio.</p>
+        <a
+          href={src}
+          target="_blank"
+          rel="noopener noreferrer"
+          download
+          className="text-xs text-primary underline flex items-center gap-1 w-fit"
+        >
+          <Download className="w-3 h-3" />
+          Baixar áudio
+        </a>
+      </div>
+    );
+  }
+
   return (
     <div className="flex items-center gap-2 min-w-[200px]">
-      <audio 
-        controls 
+      <audio
+        ref={audioRef}
+        controls
         controlsList="nodownload"
-        src={src}
+        src={effectiveSrc}
         className="h-10 max-w-[250px]"
         preload="metadata"
+        onError={handleError}
+        playsInline
       />
     </div>
   );
@@ -354,7 +407,7 @@ function MessageDocument({
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium truncate">{displayName}</p>
-        <p className="text-xs opacity-70 flex items-center gap-1">
+        <p className="text-xs text-muted-foreground flex items-center gap-1">
           <Download className="w-3 h-3" />
           Clique para baixar
         </p>
@@ -439,7 +492,7 @@ function MessageBubble({
 
         {/* Mensagem sem conteúdo e sem mídia */}
         {!message.content && !hasMedia && (
-          <p className="text-sm italic opacity-70">
+          <p className="text-sm italic text-muted-foreground">
             [Mensagem não suportada]
           </p>
         )}

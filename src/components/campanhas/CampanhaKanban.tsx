@@ -372,7 +372,7 @@ function KanbanCardItem({ lead, isReuniao, onMoveToConfirmacao, onCardClick, onE
 
           {/* Lead notes from the lead table (read-only) */}
           {leadData?.notes && (
-            <div className="flex items-start gap-1.5 text-xs text-muted-foreground/70 rounded p-1.5 border border-dashed border-border">
+            <div className="flex items-start gap-1.5 text-xs text-muted-foreground dark:text-muted-foreground/90 rounded p-1.5 border border-dashed border-border">
               <MessageSquare className="w-3 h-3 mt-0.5 shrink-0" />
               <span className="line-clamp-2">{leadData.notes}</span>
             </div>
@@ -424,20 +424,20 @@ function KanbanColumn({
   return (
     <div 
       ref={setNodeRef}
-      className={`flex flex-col min-w-[300px] max-w-[300px] bg-muted/30 rounded-lg transition-all duration-200 ${
-        isOver ? "ring-2 ring-primary/50 bg-primary/5" : ""
+      className={`flex flex-col min-w-[300px] max-w-[300px] bg-muted/30 dark:bg-muted/50 rounded-lg transition-all duration-200 border border-border ${
+        isOver ? "ring-2 ring-primary/50 bg-primary/5 dark:bg-primary/10" : ""
       }`}
     >
       <div
-        className="p-3 border-b flex items-center justify-between"
+        className="p-3 border-b flex items-center justify-between bg-card/50 dark:bg-card/30"
         style={{ borderBottomColor: stage.color || "#3B82F6" }}
       >
         <div className="flex items-center gap-2">
           <div
-            className="w-3 h-3 rounded-full"
+            className="w-3 h-3 rounded-full shrink-0"
             style={{ backgroundColor: stage.color || "#3B82F6" }}
           />
-          <h3 className="font-semibold text-sm">{stage.name}</h3>
+          <h3 className="font-semibold text-sm text-foreground">{stage.name}</h3>
         </div>
         <Badge variant="secondary" className="text-xs">
           {leads.length}

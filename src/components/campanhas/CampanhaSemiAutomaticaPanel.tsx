@@ -132,11 +132,11 @@ export function CampanhaSemiAutomaticaPanel({ campanha }: CampanhaSemiAutomatica
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "scheduled":
-        return <Badge variant="outline" className="text-blue-600 border-blue-300">Agendado</Badge>;
+        return <Badge variant="outline" className="text-blue-600 dark:text-blue-400 border-blue-300 dark:border-blue-600">Agendado</Badge>;
       case "processing":
-        return <Badge variant="outline" className="text-amber-600 border-amber-300">Processando</Badge>;
+        return <Badge variant="outline" className="text-amber-600 dark:text-amber-400 border-amber-300 dark:border-amber-600">Processando</Badge>;
       case "completed":
-        return <Badge variant="outline" className="text-green-600 border-green-300">Concluído</Badge>;
+        return <Badge variant="outline" className="text-green-600 dark:text-green-400 border-green-300 dark:border-green-600">Concluído</Badge>;
       case "failed":
         return <Badge variant="destructive">Falhou</Badge>;
       case "cancelled":
@@ -175,8 +175,8 @@ export function CampanhaSemiAutomaticaPanel({ campanha }: CampanhaSemiAutomatica
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
-                <FileText className="w-5 h-5 text-blue-600" />
+              <div className="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center">
+                <FileText className="w-5 h-5 text-blue-600 dark:text-blue-400" />
               </div>
               <div>
                 <p className="text-2xl font-bold">{templates.length}</p>
@@ -189,8 +189,8 @@ export function CampanhaSemiAutomaticaPanel({ campanha }: CampanhaSemiAutomatica
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-amber-100 flex items-center justify-center">
-                <Clock className="w-5 h-5 text-amber-600" />
+              <div className="w-10 h-10 rounded-lg bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center">
+                <Clock className="w-5 h-5 text-amber-600 dark:text-amber-400" />
               </div>
               <div>
                 <p className="text-2xl font-bold">{stats?.pending || 0}</p>
@@ -203,8 +203,8 @@ export function CampanhaSemiAutomaticaPanel({ campanha }: CampanhaSemiAutomatica
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center">
-                <Check className="w-5 h-5 text-green-600" />
+              <div className="w-10 h-10 rounded-lg bg-green-100 dark:bg-green-900/40 flex items-center justify-center">
+                <Check className="w-5 h-5 text-green-600 dark:text-green-400" />
               </div>
               <div>
                 <p className="text-2xl font-bold">{stats?.sent || 0}</p>
@@ -217,8 +217,8 @@ export function CampanhaSemiAutomaticaPanel({ campanha }: CampanhaSemiAutomatica
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-red-100 flex items-center justify-center">
-                <X className="w-5 h-5 text-red-600" />
+              <div className="w-10 h-10 rounded-lg bg-red-100 dark:bg-red-900/40 flex items-center justify-center">
+                <X className="w-5 h-5 text-red-600 dark:text-red-400" />
               </div>
               <div>
                 <p className="text-2xl font-bold">{stats?.failed || 0}</p>
@@ -294,15 +294,15 @@ export function CampanhaSemiAutomaticaPanel({ campanha }: CampanhaSemiAutomatica
                     <div className="flex items-center gap-4">
                       <div className={cn(
                         "w-10 h-10 rounded-lg flex items-center justify-center",
-                        batch.status === "scheduled" ? "bg-blue-100" :
-                        batch.status === "processing" ? "bg-amber-100" :
-                        batch.status === "completed" ? "bg-green-100" : "bg-gray-100"
+                        batch.status === "scheduled" ? "bg-blue-100 dark:bg-blue-900/40" :
+                        batch.status === "processing" ? "bg-amber-100 dark:bg-amber-900/40" :
+                        batch.status === "completed" ? "bg-green-100 dark:bg-green-900/40" : "bg-gray-100 dark:bg-muted"
                       )}>
                         <Zap className={cn(
                           "w-5 h-5",
-                          batch.status === "scheduled" ? "text-blue-600" :
-                          batch.status === "processing" ? "text-amber-600" :
-                          batch.status === "completed" ? "text-green-600" : "text-gray-400"
+                          batch.status === "scheduled" ? "text-blue-600 dark:text-blue-400" :
+                          batch.status === "processing" ? "text-amber-600 dark:text-amber-400" :
+                          batch.status === "completed" ? "text-green-600 dark:text-green-400" : "text-gray-400 dark:text-muted-foreground"
                         )} />
                       </div>
                       <div>
@@ -492,7 +492,7 @@ export function CampanhaSemiAutomaticaPanel({ campanha }: CampanhaSemiAutomatica
               </div>
 
               {/* Leads count */}
-              <div className="flex items-center gap-2 p-3 bg-blue-50 rounded-lg text-blue-700">
+              <div className="flex items-center gap-2 p-3 bg-blue-50 dark:bg-blue-900/30 rounded-lg text-blue-700 dark:text-blue-300">
                 <Users className="w-4 h-4" />
                 <span className="text-sm">
                   <strong>{filteredLeadsCount}</strong> lead(s) serão impactados

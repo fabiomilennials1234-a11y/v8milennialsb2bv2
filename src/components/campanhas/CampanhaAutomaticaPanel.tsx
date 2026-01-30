@@ -26,9 +26,9 @@ export function CampanhaAutomaticaPanel({ campanha }: CampanhaAutomaticaPanelPro
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "pending":
-        return <Badge variant="outline" className="text-amber-600 border-amber-300">Pendente</Badge>;
+        return <Badge variant="outline" className="text-amber-600 dark:text-amber-400 border-amber-300 dark:border-amber-600">Pendente</Badge>;
       case "sent":
-        return <Badge variant="outline" className="text-green-600 border-green-300">Enviado</Badge>;
+        return <Badge variant="outline" className="text-green-600 dark:text-green-400 border-green-300 dark:border-green-600">Enviado</Badge>;
       case "failed":
         return <Badge variant="destructive">Falhou</Badge>;
       case "cancelled":
@@ -55,18 +55,18 @@ export function CampanhaAutomaticaPanel({ campanha }: CampanhaAutomaticaPanelPro
             <div className="flex items-center gap-3">
               <div className={cn(
                 "w-12 h-12 rounded-lg flex items-center justify-center",
-                agent?.is_active ? "bg-green-100" : "bg-gray-100"
+                agent?.is_active ? "bg-green-100 dark:bg-green-900/40" : "bg-gray-100 dark:bg-muted"
               )}>
                 <Bot className={cn(
                   "w-6 h-6",
-                  agent?.is_active ? "text-green-600" : "text-gray-400"
+                  agent?.is_active ? "text-green-600 dark:text-green-400" : "text-gray-400 dark:text-muted-foreground"
                 )} />
               </div>
               <div>
                 <CardTitle className="text-lg flex items-center gap-2">
                   {agent?.name || "Agente não encontrado"}
                   {agent?.is_active ? (
-                    <Badge variant="outline" className="text-green-600 border-green-300">Ativo</Badge>
+                    <Badge variant="outline" className="text-green-600 dark:text-green-400 border-green-300 dark:border-green-600">Ativo</Badge>
                   ) : (
                     <Badge variant="secondary">Inativo</Badge>
                   )}
@@ -128,8 +128,8 @@ export function CampanhaAutomaticaPanel({ campanha }: CampanhaAutomaticaPanelPro
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-amber-100 flex items-center justify-center">
-                <Clock className="w-5 h-5 text-amber-600" />
+              <div className="w-10 h-10 rounded-lg bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center">
+                <Clock className="w-5 h-5 text-amber-600 dark:text-amber-400" />
               </div>
               <div>
                 <p className="text-2xl font-bold">{stats?.pending || 0}</p>
@@ -142,8 +142,8 @@ export function CampanhaAutomaticaPanel({ campanha }: CampanhaAutomaticaPanelPro
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center">
-                <Check className="w-5 h-5 text-green-600" />
+              <div className="w-10 h-10 rounded-lg bg-green-100 dark:bg-green-900/40 flex items-center justify-center">
+                <Check className="w-5 h-5 text-green-600 dark:text-green-400" />
               </div>
               <div>
                 <p className="text-2xl font-bold">{stats?.sent || 0}</p>
@@ -156,8 +156,8 @@ export function CampanhaAutomaticaPanel({ campanha }: CampanhaAutomaticaPanelPro
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-red-100 flex items-center justify-center">
-                <X className="w-5 h-5 text-red-600" />
+              <div className="w-10 h-10 rounded-lg bg-red-100 dark:bg-red-900/40 flex items-center justify-center">
+                <X className="w-5 h-5 text-red-600 dark:text-red-400" />
               </div>
               <div>
                 <p className="text-2xl font-bold">{stats?.failed || 0}</p>
@@ -170,8 +170,8 @@ export function CampanhaAutomaticaPanel({ campanha }: CampanhaAutomaticaPanelPro
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
-                <MessageSquare className="w-5 h-5 text-blue-600" />
+              <div className="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center">
+                <MessageSquare className="w-5 h-5 text-blue-600 dark:text-blue-400" />
               </div>
               <div>
                 <p className="text-2xl font-bold">{stats?.total || 0}</p>

@@ -185,7 +185,19 @@ serve(async (req) => {
       userIdFromAuth = user.id;
     }
 
-    if (!isBackendCall) {
+    // Se chamador for master, pular user_creation_key e checagem de admin da org
+    let isMaster = false;
+    if (!isBackendCall && userIdFromAuth) {
+      const { data: masterRow } = await supabase
+        .from("master_users")
+        .select("id")
+        .eq("user_id", userIdFromAuth)
+        .eq("is_active", true)
+        .maybeSingle();
+      isMaster = Boolean(masterRow?.id);
+    }
+
+    if (!isBackendCall && !isMaster) {
       if (!userCreationKey) {
         return jsonResponse(
           { success: false, error: "Bad request", message: "user_creation_key é obrigatório quando usar JWT" },
@@ -258,7 +270,8 @@ serve(async (req) => {
       .maybeSingle();
     const limitsCreate = (planCreate?.limits as Record<string, number>) ?? {};
     const userLimitCreate = limitsCreate.users;
-    if (typeof userLimitCreate === "number" && userLimitCreate !== -1) {
+    // Master pode criar à vontade; admin da org respeita limite do plano
+    if (!isMaster && typeof userLimitCreate === "number" && userLimitCreate !== -1) {
       const { count, error: countErr } = await supabase
         .from("team_members")
         .select("id", { count: "exact", head: true })

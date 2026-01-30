@@ -45,6 +45,39 @@ import MasterAuditLogs from "./pages/master/MasterAuditLogs";
 
 const queryClient = new QueryClient();
 
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+function EnvMissingScreen() {
+  return (
+    <div style={{
+      minHeight: '100vh',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexDirection: 'column',
+      padding: 24,
+      fontFamily: 'system-ui, sans-serif',
+      background: '#0f172a',
+      color: '#e2e8f0',
+      textAlign: 'center',
+    }}>
+      <h1 style={{ fontSize: '1.5rem', marginBottom: 12 }}>Configuração necessária</h1>
+      <p style={{ marginBottom: 16, maxWidth: 400 }}>
+        No EasyPanel, em <strong>Ambiente</strong> (Environment), adicione as variáveis do Supabase e faça um novo deploy:
+      </p>
+      <ul style={{ textAlign: 'left', marginBottom: 16, listStyle: 'none' }}>
+        <li><code style={{ background: '#334155', padding: '2px 6px' }}>VITE_SUPABASE_URL</code></li>
+        <li><code style={{ background: '#334155', padding: '2px 6px' }}>VITE_SUPABASE_PUBLISHABLE_KEY</code></li>
+        <li><code style={{ background: '#334155', padding: '2px 6px' }}>VITE_SUPABASE_PROJECT_ID</code></li>
+      </ul>
+      <p style={{ fontSize: '0.875rem', color: '#94a3b8' }}>
+        Depois clique em <strong>Implantar</strong> novamente.
+      </p>
+    </div>
+  );
+}
+
 // Wrapper for pages that need the main layout
 function LayoutWrapper({ children }: { children: React.ReactNode }) {
   useAutoAdminAssignment();
@@ -279,22 +312,28 @@ function AppRoutes() {
   );
 }
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <ThemeProvider attribute="class" defaultTheme="system" storageKey="v8-theme" enableSystem>
-      <ThemeTransitionProvider>
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <BrowserRouter>
-            <AuthProvider>
-              <AppRoutes />
-            </AuthProvider>
-          </BrowserRouter>
-        </TooltipProvider>
-      </ThemeTransitionProvider>
-    </ThemeProvider>
-  </QueryClientProvider>
-);
+const App = () => {
+  const hasSupabaseEnv = Boolean(SUPABASE_URL?.trim() && SUPABASE_ANON_KEY?.trim());
+  if (!hasSupabaseEnv) {
+    return <EnvMissingScreen />;
+  }
+  return (
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider attribute="class" defaultTheme="system" storageKey="v8-theme" enableSystem>
+        <ThemeTransitionProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Sonner />
+            <BrowserRouter>
+              <AuthProvider>
+                <AppRoutes />
+              </AuthProvider>
+            </BrowserRouter>
+          </TooltipProvider>
+        </ThemeTransitionProvider>
+      </ThemeProvider>
+    </QueryClientProvider>
+  );
+};
 
 export default App;

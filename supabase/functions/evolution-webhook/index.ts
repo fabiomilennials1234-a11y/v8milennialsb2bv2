@@ -1125,21 +1125,26 @@ async function downloadAndSaveMedia(
     const rawMimeType = result.mimetype || mimeType || "application/octet-stream";
     let contentType = rawMimeType.split(";")[0].trim();
     
-    // Para áudio OGG com opus, manter como audio/ogg
+    // Normalizar content-type de áudio para formato que o navegador consiga reproduzir
     if (contentType === "audio/ogg" || rawMimeType.includes("opus")) {
       contentType = "audio/ogg";
     }
+    if (contentType === "audio/webm" || rawMimeType.includes("webm")) {
+      contentType = "audio/webm";
+    }
 
-    // Determinar extensão do arquivo
+    // Determinar extensão do arquivo (inclui formatos de áudio comuns para reprodução no navegador)
     const extMap: Record<string, string> = {
       "image/jpeg": "jpg",
       "image/png": "png",
       "image/webp": "webp",
       "image/gif": "gif",
       "audio/ogg": "ogg",
+      "audio/webm": "webm",
       "audio/mpeg": "mp3",
       "audio/mp4": "m4a",
       "audio/aac": "aac",
+      "audio/x-m4a": "m4a",
       "video/mp4": "mp4",
       "application/pdf": "pdf",
     };

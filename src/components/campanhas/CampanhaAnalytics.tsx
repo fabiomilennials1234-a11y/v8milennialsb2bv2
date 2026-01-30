@@ -128,7 +128,7 @@ function MemberGoalCard({
 
   const getRankIcon = () => {
     if (rank === 1) return <Crown className="w-5 h-5 text-yellow-400" />;
-    if (rank === 2) return <Trophy className="w-5 h-5 text-gray-400" />;
+    if (rank === 2) return <Trophy className="w-5 h-5 text-gray-400 dark:text-muted-foreground" />;
     if (rank === 3) return <Award className="w-5 h-5 text-orange-400" />;
     return <span className="text-muted-foreground font-bold">{rank}º</span>;
   };
