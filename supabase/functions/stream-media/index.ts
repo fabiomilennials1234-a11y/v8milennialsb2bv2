@@ -35,16 +35,25 @@ serve(async (req) => {
   }
 
   const url = new URL(req.url);
-  const path = url.searchParams.get("path");
+  let path = url.searchParams.get("path");
+  if (path) {
+    try {
+      path = decodeURIComponent(path);
+    } catch {
+      path = path;
+    }
+  }
   if (!path || path.includes("..") || !path.startsWith(ALLOWED_PREFIX)) {
-    return new Response(JSON.stringify({ error: "Invalid or missing path" }), {
+    console.warn("[stream-media] Invalid or missing path", { path: path ?? "(missing)" });
+    return new Response(JSON.stringify({ error: "Invalid or missing path", code: "INVALID_PATH" }), {
       status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-    return new Response(JSON.stringify({ error: "Server misconfiguration" }), {
+    console.error("[stream-media] Server misconfiguration: missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
+    return new Response(JSON.stringify({ error: "Server misconfiguration", code: "CONFIG" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
@@ -55,45 +64,53 @@ serve(async (req) => {
     const { data, error } = await supabase.storage.from(BUCKET).download(path);
 
     if (error || !data) {
-      return new Response(JSON.stringify({ error: error?.message ?? "Not found" }), {
-        status: error?.message === "Object not found" ? 404 : 500,
+      const isNotFound = error?.message === "Object not found";
+      console.warn("[stream-media] Storage download failed", { path, error: error?.message, code: isNotFound ? "NOT_FOUND" : "STORAGE_ERROR" });
+      return new Response(JSON.stringify({ error: error?.message ?? "Not found", code: isNotFound ? "NOT_FOUND" : "STORAGE_ERROR" }), {
+        status: isNotFound ? 404 : 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     // Determinar Content-Type: usar o tipo do blob se disponível, senão inferir da extensão
+    const ext = path.split(".").pop()?.toLowerCase();
+    const mimeMap: Record<string, string> = {
+      mp3: "audio/mpeg",
+      ogg: "audio/ogg",
+      opus: "audio/ogg",
+      webm: "audio/webm",
+      m4a: "audio/mp4",
+      aac: "audio/aac",
+      wav: "audio/wav",
+      mp4: "video/mp4",
+      jpg: "image/jpeg",
+      jpeg: "image/jpeg",
+      png: "image/png",
+      webp: "image/webp",
+      gif: "image/gif",
+      pdf: "application/pdf",
+    };
     let contentType = data.type || "";
     if (!contentType || contentType === "application/octet-stream") {
-      const ext = path.split(".").pop()?.toLowerCase();
-      const mimeMap: Record<string, string> = {
-        mp3: "audio/mpeg",
-        ogg: "audio/ogg",
-        opus: "audio/ogg",
-        webm: "audio/webm",
-        m4a: "audio/mp4",
-        aac: "audio/aac",
-        wav: "audio/wav",
-        mp4: "video/mp4",
-        jpg: "image/jpeg",
-        jpeg: "image/jpeg",
-        png: "image/png",
-        webp: "image/webp",
-        gif: "image/gif",
-        pdf: "application/pdf",
-      };
       contentType = (ext && mimeMap[ext]) || "application/octet-stream";
+    }
+    // Áudio: forçar audio/mpeg para .mp3 e Accept-Ranges (Safari)
+    const finalContentType = ext === "mp3" ? "audio/mpeg" : contentType;
+    const headers: Record<string, string> = {
+      ...corsHeaders,
+      "Content-Type": finalContentType,
+      "Cache-Control": "private, max-age=3600",
+    };
+    if (finalContentType.startsWith("audio/")) {
+      headers["Accept-Ranges"] = "bytes";
     }
     return new Response(data, {
       status: 200,
-      headers: {
-        ...corsHeaders,
-        "Content-Type": contentType,
-        "Cache-Control": "private, max-age=3600",
-      },
+      headers,
     });
   } catch (e) {
-    console.error("[stream-media] Error:", e);
-    return new Response(JSON.stringify({ error: "Internal error" }), {
+    console.error("[stream-media] Unexpected error", { error: e instanceof Error ? e.message : String(e), path });
+    return new Response(JSON.stringify({ error: "Internal error", code: "INTERNAL" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

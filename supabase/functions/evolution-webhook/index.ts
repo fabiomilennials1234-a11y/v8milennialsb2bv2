@@ -73,6 +73,11 @@ interface MessageData {
     stickerMessage?: {
       url?: string;
     };
+    /** Reação a uma mensagem (emoji). Ignoramos: não inserir em whatsapp_messages. */
+    reactionMessage?: {
+      key?: { id: string };
+      text?: string;
+    };
   };
   messageType?: string;
   messageTimestamp?: number;
@@ -689,6 +694,12 @@ async function handleMessagesUpsert(
         continue;
       }
 
+      // Ignorar reações: não salvar como mensagem para evitar "[Mensagem não suportada]" no chat
+      if (msg.message?.reactionMessage || msg.messageType === "reactionMessage") {
+        console.log("[Evolution Webhook] Ignoring reaction message:", msg.key?.id);
+        continue;
+      }
+
       const phoneNumber = extractPhoneNumber(msg.key.remoteJid);
       let messageText = extractMessageText(msg);
       const direction = msg.key.fromMe ? "outgoing" : "incoming";
@@ -743,6 +754,8 @@ async function handleMessagesUpsert(
           if (savedUrl) {
             mediaUrl = savedUrl;
             console.log("[Evolution Webhook] Media saved to storage:", savedUrl);
+          } else if (messageType === "audio" || messageType === "ptt") {
+            console.warn("[Evolution Webhook] Audio message will be saved without media_url (download/save failed). Check logs above for reason.");
           }
         } catch (mediaError) {
           console.error("[Evolution Webhook] Error saving media:", mediaError);
@@ -1229,14 +1242,22 @@ async function downloadAndSaveMedia(
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("[Evolution Webhook] getBase64 failed:", response.status, errorText);
+      console.error("[Evolution Webhook] Audio/Media failed: getBase64FromMediaMessage failed", {
+        status: response.status,
+        messageId,
+        mediaType,
+        body: errorText?.slice(0, 500),
+      });
       return null;
     }
 
     const result = await response.json();
-    
+
     if (!result.base64) {
-      console.error("[Evolution Webhook] No base64 in response:", result);
+      console.error("[Evolution Webhook] Audio/Media failed: no base64 in Evolution response", {
+        messageId,
+        mediaType,
+      });
       return null;
     }
 
@@ -1282,6 +1303,10 @@ async function downloadAndSaveMedia(
         finalExt = "mp3";
         console.log("[Evolution Webhook] Audio converted to MP3, size:", bytes.length);
       } else {
+        console.warn("[Evolution Webhook] Audio: MP3 conversion failed or skipped, saving as original format", {
+          contentType,
+          messageId,
+        });
         const binaryString = atob(result.base64);
         bytes = new Uint8Array(binaryString.length);
         for (let i = 0; i < binaryString.length; i++) {
@@ -1315,7 +1340,11 @@ async function downloadAndSaveMedia(
       });
 
     if (error) {
-      console.error("[Evolution Webhook] Storage upload error:", error);
+      console.error("[Evolution Webhook] Audio/Media failed: storage upload error", {
+        message: error.message,
+        filePath,
+        mediaType,
+      });
       return null;
     }
 
@@ -1327,7 +1356,11 @@ async function downloadAndSaveMedia(
     console.log("[Evolution Webhook] Media saved successfully:", urlData?.publicUrl);
     return urlData?.publicUrl || null;
   } catch (error) {
-    console.error("[Evolution Webhook] Download/save error:", error);
+    console.error("[Evolution Webhook] Audio/Media failed: download or save exception", {
+      error: error instanceof Error ? error.message : String(error),
+      messageId,
+      mediaType,
+    });
     return null;
   }
 }

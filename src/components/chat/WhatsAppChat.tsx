@@ -44,7 +44,7 @@ import {
   ChatContact,
   WhatsAppMessage,
 } from "@/hooks/useWhatsAppChat";
-import { convertAudioBlobToMp3 } from "@/lib/audioToMp3";
+import { convertAudioBlobToMp3, preloadLamejs } from "@/lib/audioToMp3";
 import { useCanReplyOnInstanceByName } from "@/hooks/useWhatsAppInstanceAllowedMembers";
 import { useLeadByPhone } from "@/hooks/useWhatsAppLeadIntegration";
 import { LeadDetailContent } from "./LeadDetailContent";
@@ -65,9 +65,12 @@ function getAudioPlaybackUrl(mediaUrl: string | null): string | null {
   if (!mediaUrl) return null;
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
   if (!supabaseUrl?.trim()) return mediaUrl;
-  const match = mediaUrl.match(/\/object\/public\/media\/(.+)$/);
+  // Remover query e fragment para não enviar lixo ao stream-media
+  const urlWithoutQuery = mediaUrl.split("?")[0].split("#")[0];
+  const match = urlWithoutQuery.match(/\/object\/public\/media\/(.+)$/);
   if (!match) return mediaUrl;
-  const path = match[1];
+  const path = match[1].replace(/\/$/, "");
+  if (!path.startsWith("whatsapp-media/")) return mediaUrl;
   const base = supabaseUrl.replace(/\/$/, "");
   return `${base}/functions/v1/stream-media?path=${encodeURIComponent(path)}`;
 }
@@ -276,6 +279,7 @@ function AudioPlayer({ src, isOutgoing }: { src: string; isOutgoing: boolean }) 
   const [loading, setLoading] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
   const conversionAttemptedRef = useRef(false);
+  const retryWithNewBlobUrlRef = useRef(false);
   const rawBlobRef = useRef<Blob | null>(null);
 
   const isStreamMediaUrl = src.includes(STREAM_MEDIA_PATH);
@@ -314,6 +318,7 @@ function AudioPlayer({ src, isOutgoing }: { src: string; isOutgoing: boolean }) 
     if (!isStreamMediaUrl || !anonKey?.trim() || !src) return;
     let cancelled = false;
     conversionAttemptedRef.current = false;
+    retryWithNewBlobUrlRef.current = false;
     rawBlobRef.current = null;
     setBlobUrl((prev) => { if (prev) URL.revokeObjectURL(prev); return null; });
     setError(false);
@@ -326,15 +331,29 @@ function AudioPlayer({ src, isOutgoing }: { src: string; isOutgoing: boolean }) 
           headers: { Authorization: `Bearer ${anonKey}` },
           credentials: "omit",
         });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        if (!res.ok) {
+          let detail = "";
+          try {
+            const json = await res.json() as { error?: string; code?: string };
+            detail = json?.code ? ` code=${json.code}` : "";
+            if (json?.error) detail += ` ${json.error}`;
+          } catch {
+            detail = await res.text().then((t) => t.slice(0, 200)).catch(() => "");
+          }
+          console.error("[AudioPlayer] stream-media fetch failed", { status: res.status, detail, url: src?.slice(0, 80) });
+          throw new Error(`HTTP ${res.status}${detail ? ` ${detail}` : ""}`);
+        }
         let blob = await res.blob();
         if (cancelled) return;
 
-        // Corrigir tipo genérico para que o navegador saiba decodificar
+        // Corrigir tipo genérico para que o navegador saiba decodificar; MP3 deve ser audio/mpeg
         blob = await ensureBlobType(blob, src);
         if (cancelled) return;
-
-        // Salvar blob original para fallback de conversão se o navegador não conseguir reproduzir
+        if (blob.size === 0) {
+          setLoading(false);
+          setError(true);
+          return;
+        }
         rawBlobRef.current = blob;
 
         const url = URL.createObjectURL(blob);
@@ -342,7 +361,7 @@ function AudioPlayer({ src, isOutgoing }: { src: string; isOutgoing: boolean }) 
         setLoading(false);
       } catch (e) {
         if (cancelled) return;
-        console.warn("[AudioPlayer] Failed to fetch audio:", e);
+        console.error("[AudioPlayer] Fetch failed (network/CORS/auth)", { error: e instanceof Error ? e.message : e, url: src?.slice(0, 80) });
         setLoading(false);
         setError(true);
       }
@@ -360,28 +379,61 @@ function AudioPlayer({ src, isOutgoing }: { src: string; isOutgoing: boolean }) 
     setError(false);
     setLoading(false);
     conversionAttemptedRef.current = false;
+    retryWithNewBlobUrlRef.current = false;
     rawBlobRef.current = null;
     setBlobUrl((prev) => { if (prev) URL.revokeObjectURL(prev); return null; });
   }, [src, isStreamMediaUrl]);
 
-  // Etapa 2 (fallback): Se o <audio> disparar erro, tentar converter para MP3
+  // Etapa 2 (fallback): Se o <audio> disparar erro, tentar novo blob URL (Safari) ou converter para MP3
   const handleError = useCallback(async () => {
-    if (!isValidSrc) { setError(true); return; }
+    if (!isValidSrc) {
+      setError(true);
+      return;
+    }
 
-    // Se já tentou converter, desiste
-    if (conversionAttemptedRef.current) { setError(true); return; }
+    const blob = rawBlobRef.current;
+    const isMp3 = blob && (blob.type || "").toLowerCase().includes("mpeg") && blob.size > 0;
+
+    // Se o blob já é MP3, tentar uma vez com novo blob URL (Safari às vezes falha no primeiro)
+    if (isMp3 && !retryWithNewBlobUrlRef.current) {
+      retryWithNewBlobUrlRef.current = true;
+      try {
+        const buf = await blob.arrayBuffer();
+        const newBlob = new Blob([buf], { type: "audio/mpeg" });
+        const newUrl = URL.createObjectURL(newBlob);
+        setBlobUrl((prev) => {
+          if (prev) URL.revokeObjectURL(prev);
+          return newUrl;
+        });
+        if (audioRef.current) {
+          audioRef.current.src = newUrl;
+          audioRef.current.load();
+        }
+        return;
+      } catch {
+        // Segue para conversão
+      }
+    }
+
+    if (conversionAttemptedRef.current) {
+      setError(true);
+      return;
+    }
     conversionAttemptedRef.current = true;
 
-    // Pegar o blob já baixado ou re-baixar
-    let blob = rawBlobRef.current;
-    if (!blob) {
+    let blobToConvert = rawBlobRef.current;
+    if (!blobToConvert) {
       setLoading(true);
       try {
         const headers: HeadersInit = {};
         if (isStreamMediaUrl && anonKey?.trim()) headers["Authorization"] = `Bearer ${anonKey}`;
         const res = await fetch(src, { mode: "cors", credentials: "omit", headers });
-        if (!res.ok) throw new Error("Fetch failed");
-        blob = await ensureBlobType(await res.blob(), src);
+        if (!res.ok) {
+          setLoading(false);
+          setError(true);
+          return;
+        }
+        blobToConvert = await ensureBlobType(await res.blob(), src);
       } catch {
         setLoading(false);
         setError(true);
@@ -391,9 +443,8 @@ function AudioPlayer({ src, isOutgoing }: { src: string; isOutgoing: boolean }) 
 
     setLoading(true);
     try {
-      const converted = await convertAudioBlobToMp3(blob);
-      if (converted !== blob && converted.type.includes("mpeg")) {
-        // Conversão para MP3 teve sucesso
+      const converted = await convertAudioBlobToMp3(blobToConvert);
+      if (converted !== blobToConvert && converted.type.includes("mpeg")) {
         setBlobUrl((prev) => { if (prev) URL.revokeObjectURL(prev); return null; });
         const url = URL.createObjectURL(converted);
         setBlobUrl(url);
@@ -408,7 +459,6 @@ function AudioPlayer({ src, isOutgoing }: { src: string; isOutgoing: boolean }) 
       // Conversão falhou
     }
 
-    // Nem original nem MP3 funcionou
     setLoading(false);
     setError(true);
   }, [src, isValidSrc, isStreamMediaUrl, anonKey, ensureBlobType]);
@@ -432,16 +482,6 @@ function AudioPlayer({ src, isOutgoing }: { src: string; isOutgoing: boolean }) 
     return (
       <div className="flex flex-col gap-1 min-w-[200px]">
         <p className="text-xs text-muted-foreground">Não foi possível reproduzir o áudio.</p>
-        <a
-          href={src}
-          target="_blank"
-          rel="noopener noreferrer"
-          download
-          className="text-xs text-primary underline flex items-center gap-1 w-fit"
-        >
-          <Download className="w-3 h-3" />
-          Baixar áudio
-        </a>
       </div>
     );
   }
@@ -904,6 +944,11 @@ function ChatWindow({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
 
+  // Pré-carregar lamejs para conversão WebM→MP3 na gravação (evita enviar áudio em formato que Safari não reproduz)
+  useEffect(() => {
+    preloadLamejs();
+  }, []);
+
   const { data: messages = [], isLoading } = useWhatsAppMessages(phoneNumber);
   const sendMessage = useSendWhatsAppMessage();
   const sendMedia = useSendWhatsAppMedia();
@@ -997,12 +1042,18 @@ function ChatWindow({
     }
   };
 
-  // Enviar áudio (converte WebM/OGG → MP3 para reprodução em todos os navegadores, ex.: Safari)
+  // Enviar áudio: só envia em MP3 para reprodução em todos os navegadores (Safari não reproduz WebM/OGG)
   const handleAudioRecorded = async (audioBlob: Blob) => {
     setIsRecording(false);
 
     try {
       const blobToSend = await convertAudioBlobToMp3(audioBlob);
+      const isMp3 = (blobToSend.type || "").toLowerCase().includes("mpeg") || (blobToSend.type || "").toLowerCase().includes("mp3");
+      if (!isMp3 || blobToSend.size === 0) {
+        toast.error("Não foi possível converter o áudio para MP3. Tente gravar novamente.");
+        return;
+      }
+
       const base64 = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve(reader.result as string);
@@ -1010,18 +1061,12 @@ function ChatWindow({
         reader.readAsDataURL(blobToSend);
       });
 
-      console.log("[Audio] Sending audio:", {
-        originalType: audioBlob.type,
-        sentType: blobToSend.type,
-        blobSize: blobToSend.size,
-      });
-
       await sendMedia.mutateAsync({
         phoneNumber,
         instanceName,
         mediaType: "audio",
         media: base64,
-        mimetype: blobToSend.type || "audio/mpeg",
+        mimetype: "audio/mpeg",
       });
 
       toast.success("Áudio enviado!");

@@ -57,6 +57,11 @@ function loadLamejs(): Promise<LamejsGlobal | null> {
   return _lamejsPromise;
 }
 
+/** Pré-carrega lamejs para garantir conversão MP3 na gravação (evita enviar WebM). */
+export function preloadLamejs(): void {
+  loadLamejs().catch(() => {});
+}
+
 function floatTo16BitPCM(float32: Float32Array): Int16Array {
   const int16 = new Int16Array(float32.length);
   for (let i = 0; i < float32.length; i++) {
