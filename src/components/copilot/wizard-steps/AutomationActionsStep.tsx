@@ -31,9 +31,33 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { Zap, CheckCircle, XCircle, UserPlus, Plus, X } from "lucide-react";
+import { Zap, CheckCircle, XCircle, UserPlus, Plus, X, ArrowRightCircle } from "lucide-react";
 import { useState } from "react";
 import type { CopilotWizardData } from "@/types/copilot";
+import {
+  PIPE_CONFIRMACAO_STAGES,
+  PIPE_PROPOSTAS_STAGES,
+} from "@/types/copilot";
+
+const PIPE_CONFIRMACAO_LABELS: Record<string, string> = {
+  reuniao_marcada: "Reunião marcada",
+  confirmar_d3: "Confirmar D-3",
+  confirmar_d2: "Confirmar D-2",
+  confirmar_d1: "Confirmar D-1",
+  pre_confirmada: "Pré-confirmada",
+  confirmacao_no_dia: "Confirmação no dia",
+  confirmada_no_dia: "Confirmada no dia",
+  compareceu: "Compareceu",
+  perdido: "Perdido",
+};
+const PIPE_PROPOSTAS_LABELS: Record<string, string> = {
+  marcar_compromisso: "Marcar compromisso",
+  compromisso_marcado: "Compromisso marcado",
+  esfriou: "Esfriou",
+  futuro: "Futuro",
+  vendido: "Vendido",
+  perdido: "Perdido",
+};
 
 const STAGES = [
   { value: "novo", label: "Novo" },
@@ -66,6 +90,7 @@ function ActionSection({
 
   const tags = watch(`automationActions.${prefix}.addTags`) || [];
   const sendMessage = watch(`automationActions.${prefix}.sendMessage`);
+  const moveToPipe = watch(`automationActions.${prefix}.moveToPipe`);
 
   const addTag = () => {
     if (newTag.trim() && !tags.includes(newTag.trim())) {
@@ -131,6 +156,76 @@ function ActionSection({
             </FormItem>
           )}
         />
+
+        {/* Mover para outro pipe (Confirmação ou Propostas) */}
+        <div className="space-y-2">
+          <FormLabel className="flex items-center gap-2">
+            <ArrowRightCircle className="w-4 h-4" />
+            Mover para pipe
+          </FormLabel>
+          <div className="flex gap-2 flex-wrap">
+            <Select
+              value={moveToPipe?.pipe ?? "__none__"}
+              onValueChange={(v) => {
+                if (v === "__none__") {
+                  setValue(`automationActions.${prefix}.moveToPipe`, null, {
+                    shouldValidate: true,
+                  });
+                } else {
+                  const defaultStage =
+                    v === "confirmacao"
+                      ? PIPE_CONFIRMACAO_STAGES[0]
+                      : PIPE_PROPOSTAS_STAGES[0];
+                  setValue(
+                    `automationActions.${prefix}.moveToPipe`,
+                    { pipe: v as "confirmacao" | "propostas", stage: defaultStage },
+                    { shouldValidate: true }
+                  );
+                }
+              }}
+            >
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Nenhum" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">Nenhum</SelectItem>
+                <SelectItem value="confirmacao">Confirmação</SelectItem>
+                <SelectItem value="propostas">Propostas</SelectItem>
+              </SelectContent>
+            </Select>
+            {moveToPipe?.pipe && (
+              <Select
+                value={moveToPipe.stage}
+                onValueChange={(stage) =>
+                  setValue(
+                    `automationActions.${prefix}.moveToPipe`,
+                    { ...moveToPipe, stage },
+                    { shouldValidate: true }
+                  )
+                }
+              >
+                <SelectTrigger className="w-[200px]">
+                  <SelectValue placeholder="Etapa" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(moveToPipe.pipe === "confirmacao"
+                    ? PIPE_CONFIRMACAO_STAGES
+                    : PIPE_PROPOSTAS_STAGES
+                  ).map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {moveToPipe.pipe === "confirmacao"
+                        ? PIPE_CONFIRMACAO_LABELS[s] ?? s
+                        : PIPE_PROPOSTAS_LABELS[s] ?? s}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+          <FormDescription>
+            Ao disparar esta ação, o lead será movido para o pipe escolhido na etapa indicada.
+          </FormDescription>
+        </div>
 
         {/* Tags a adicionar */}
         <div className="space-y-2">

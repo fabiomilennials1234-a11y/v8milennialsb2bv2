@@ -215,10 +215,28 @@ export interface OutboundConfig {
 }
 
 /**
+ * Mover lead para outro pipe (Confirmação ou Propostas) em uma etapa
+ */
+export interface MoveToPipeConfig {
+  pipe: "confirmacao" | "propostas";
+  stage: string;
+}
+
+/** Etapas válidas por pipe (para moveToPipe) */
+export const PIPE_CONFIRMACAO_STAGES = [
+  "reuniao_marcada", "confirmar_d3", "confirmar_d2", "confirmar_d1",
+  "pre_confirmada", "confirmacao_no_dia", "confirmada_no_dia", "compareceu", "perdido",
+] as const;
+export const PIPE_PROPOSTAS_STAGES = [
+  "marcar_compromisso", "compromisso_marcado", "esfriou", "futuro", "vendido", "perdido",
+] as const;
+
+/**
  * Ações a executar em determinado resultado
  */
 export interface ResultAction {
-  moveToStage: string;        // Mover para qual etapa
+  moveToStage: string;        // Mover para qual etapa (pipe WhatsApp)
+  moveToPipe?: MoveToPipeConfig | null; // Mover para pipe Confirmação ou Propostas
   addTags: string[];          // Tags a adicionar
   notifyUserId: string | null; // ID do usuário a notificar
   sendMessage: boolean;       // Enviar mensagem automática

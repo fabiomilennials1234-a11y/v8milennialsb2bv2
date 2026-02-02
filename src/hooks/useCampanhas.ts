@@ -345,6 +345,24 @@ export function useUpdateCampanha() {
 
   return useMutation({
     mutationFn: async ({ id, ...updates }: Partial<Campanha> & { id: string }) => {
+      const newAgentId = updates.agent_id !== undefined ? updates.agent_id : undefined;
+
+      if (newAgentId !== undefined) {
+        const { data: current } = await supabase
+          .from("campanhas")
+          .select("agent_id")
+          .eq("id", id)
+          .single();
+        const oldAgentId = (current as { agent_id: string | null } | null)?.agent_id ?? null;
+
+        if (oldAgentId) {
+          await supabase
+            .from("copilot_agents")
+            .update({ campaign_id: null })
+            .eq("id", oldAgentId);
+        }
+      }
+
       const { data, error } = await supabase
         .from("campanhas")
         .update(updates)
@@ -353,6 +371,14 @@ export function useUpdateCampanha() {
         .single();
 
       if (error) throw error;
+
+      if (newAgentId !== undefined && newAgentId) {
+        await supabase
+          .from("copilot_agents")
+          .update({ campaign_id: id })
+          .eq("id", newAgentId);
+      }
+
       return data;
     },
     onSuccess: (_, variables) => {

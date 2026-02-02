@@ -491,6 +491,26 @@ async function sendOutboundMessage(supabase: any, dispatchId: string, organizati
       .update({ pipe_whatsapp: "abordado" })
       .eq("id", dispatch.lead_id);
 
+    // Sincronizar tabela pipe_whatsapp para o Kanban refletir a mudança
+    const { data: existingPipe } = await supabase
+      .from("pipe_whatsapp")
+      .select("id")
+      .eq("lead_id", dispatch.lead_id)
+      .eq("organization_id", organizationId)
+      .maybeSingle();
+    if (existingPipe) {
+      await supabase
+        .from("pipe_whatsapp")
+        .update({ status: "abordado" })
+        .eq("id", existingPipe.id);
+    } else {
+      await supabase.from("pipe_whatsapp").insert({
+        lead_id: dispatch.lead_id,
+        organization_id: organizationId,
+        status: "abordado",
+      });
+    }
+
     // Salvar mensagem no histórico de conversa
     await supabase
       .from("whatsapp_messages")

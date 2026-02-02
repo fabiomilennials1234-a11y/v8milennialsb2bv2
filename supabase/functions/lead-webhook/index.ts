@@ -25,6 +25,7 @@ interface PlaceInPipe {
 interface PlaceInCampaign {
   campaign_id: string; // UUID da campanha
   stage_id: string;    // UUID do campanha_stages
+  notes?: string;     // Observações do lead nesta campanha (card na campanha)
 }
 
 interface LeadWebhookPayload {
@@ -48,6 +49,9 @@ interface LeadWebhookPayload {
   
   // Organização (identificada por API key ou passada diretamente)
   organization_id?: string;
+  
+  // Padrão: sempre cria um novo lead. Se true, busca por telefone/email e atualiza o lead existente (evita duplicar).
+  update_existing_if_match?: boolean;
   
   // Destino opcional: colocar o lead direto em um pipe e/ou campanha (ex: n8n, campanha de ads)
   place_in_pipe?: PlaceInPipe;
@@ -111,7 +115,18 @@ serve(async (req) => {
     }
 
     // Usar serviço centralizado para buscar ou criar lead
-    const { name, phone, email, company, ...customFields } = payload.fields;
+    const {
+      name,
+      phone,
+      email,
+      company,
+      notes: fieldsNotes,
+      segment,
+      faturamento,
+      urgency,
+      rating,
+      ...customFields
+    } = payload.fields;
 
     // Mapear origem
     const originMap: Record<string, string> = {
@@ -125,20 +140,64 @@ serve(async (req) => {
     };
     const origin = originMap[payload.source.toLowerCase()] || "outro";
 
-    const result = await getOrCreateLead(supabase, {
-      organizationId,
-      phone: phone || null,
-      email: email || null,
-      name: name || "Lead sem nome",
-      origin,
-    });
+    let result: Awaited<ReturnType<typeof getOrCreateLead>>;
 
-    if (!result) {
-      console.error("[lead-webhook] Failed to get or create lead");
-      return new Response(
-        JSON.stringify({ error: "Failed to get or create lead" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    // Padrão: sempre criar novo lead. Só busca por telefone/email quando o cliente envia update_existing_if_match === true.
+    const shouldDeduplicate = payload.update_existing_if_match === true;
+    if (shouldDeduplicate) {
+      result = await getOrCreateLead(supabase, {
+        organizationId,
+        phone: phone || null,
+        email: email || null,
+        name: name || "Lead sem nome",
+        origin,
+      });
+
+      if (!result) {
+        console.error("[lead-webhook] Failed to get or create lead");
+        return new Response(
+          JSON.stringify({ error: "Failed to get or create lead" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      console.log("[lead-webhook] update_existing_if_match: lead resolved:", result.lead.id, "created:", result.created);
+    } else {
+      // Sempre criar novo lead (padrão do sistema)
+      const leadName = name || "Lead sem nome";
+      const insertData: Record<string, unknown> = {
+        name: leadName,
+        phone: phone || null,
+        email: email || null,
+        origin,
+        organization_id: organizationId,
+        pipe_whatsapp: "novo",
+      };
+      const { data: newLead, error: createError } = await supabase
+        .from("leads")
+        .insert(insertData)
+        .select("id, name, phone, email, organization_id, normalized_phone")
+        .single();
+
+      if (createError) {
+        console.error("[lead-webhook] Failed to create lead:", createError);
+        return new Response(
+          JSON.stringify({ error: "Failed to create lead", details: createError.message }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      try {
+        await supabase.from("pipe_whatsapp").insert({
+          lead_id: newLead.id,
+          status: "novo",
+          sdr_id: null,
+        });
+      } catch (pipeError) {
+        console.warn("[lead-webhook] pipe_whatsapp insert failed:", pipeError);
+      }
+
+      result = { lead: newLead, created: true, source: "created" };
+      console.log("[lead-webhook] New lead created:", newLead.id);
     }
 
     const leadId = result.lead.id;
@@ -150,61 +209,67 @@ serve(async (req) => {
       source: result.source
     });
 
-    // Se é novo lead, atualizar campos adicionais
-    if (isNewLead) {
-      // Atualizar campos que não são cobertos pelo getOrCreateLead
-      const updateData: Record<string, unknown> = {};
-      if (company) updateData.company = company;
-      if (payload.campaign_name || payload.campaign_id) {
-        updateData.utm_campaign = payload.campaign_name || payload.campaign_id;
-      }
+    // Atualizar lead (novo ou existente) com dados do payload
+    const updateData: Record<string, unknown> = {};
+    if (name) updateData.name = name;
+    if (company !== undefined) updateData.company = company || null;
+    if (payload.campaign_name || payload.campaign_id) {
+      updateData.utm_campaign = payload.campaign_name || payload.campaign_id;
+    }
+    if (fieldsNotes !== undefined && fieldsNotes !== "") {
+      updateData.notes = fieldsNotes;
+    } else if (isNewLead) {
       updateData.notes = `Fonte: ${payload.source}`;
+    }
+    if (segment !== undefined) updateData.segment = segment || null;
+    if (faturamento !== undefined) updateData.faturamento = faturamento || null;
+    if (urgency !== undefined) updateData.urgency = urgency || null;
+    if (rating !== undefined && rating !== "") {
+      const r = Number(rating);
+      if (!Number.isNaN(r) && r >= 0 && r <= 10) updateData.rating = r;
+    }
 
-      if (Object.keys(updateData).length > 0) {
-        await supabase
-          .from("leads")
-          .update(updateData)
-          .eq("id", leadId);
-      }
+    if (Object.keys(updateData).length > 0) {
+      await supabase
+        .from("leads")
+        .update(updateData)
+        .eq("id", leadId);
+    }
 
-      // Salvar campos personalizados
-      if (Object.keys(customFields).length > 0) {
-        for (const [fieldName, fieldValue] of Object.entries(customFields)) {
-          if (fieldValue) {
-            // Buscar ou criar campo personalizado
-            let { data: customField } = await supabase
+    // Salvar campos personalizados (novo e existente)
+    if (Object.keys(customFields).length > 0) {
+      for (const [fieldName, fieldValue] of Object.entries(customFields)) {
+        if (fieldValue !== undefined && fieldValue !== null && String(fieldValue).trim() !== "") {
+          let { data: customField } = await supabase
+            .from("lead_custom_fields")
+            .select("id")
+            .eq("organization_id", organizationId)
+            .eq("field_name", fieldName)
+            .maybeSingle();
+
+          if (!customField) {
+            const { data: newField } = await supabase
               .from("lead_custom_fields")
-              .select("id")
-              .eq("organization_id", organizationId)
-              .eq("field_name", fieldName)
-              .maybeSingle();
+              .insert({
+                organization_id: organizationId,
+                field_name: fieldName,
+                field_type: "text",
+              })
+              .select()
+              .single();
+            customField = newField;
+          }
 
-            if (!customField) {
-              // Criar campo personalizado
-              const { data: newField } = await supabase
-                .from("lead_custom_fields")
-                .insert({
-                  organization_id: organizationId,
-                  field_name: fieldName,
-                  field_type: "text",
-                })
-                .select()
-                .single();
-              customField = newField;
-            }
-
-            if (customField) {
-              // Salvar valor
-              await supabase
-                .from("lead_custom_field_values")
-                .upsert({
-                  lead_id: leadId,
-                  field_id: customField.id,
-                  value: fieldValue,
-                }, {
-                  onConflict: "lead_id,field_id",
-                });
-            }
+          if (customField) {
+            await supabase
+              .from("lead_custom_field_values")
+              .upsert({
+                lead_id: leadId,
+                field_id: customField.id,
+                value: String(fieldValue),
+              }, {
+                onConflict: "lead_id,field_id",
+              });
           }
         }
       }
@@ -304,8 +369,10 @@ serve(async (req) => {
     }
 
     // Colocar lead em uma campanha em etapa específica (ex: campanha de ads)
+    let placedInCampaign: boolean | undefined;
+    let placeInCampaignError: string | undefined;
     if (payload.place_in_campaign?.campaign_id && payload.place_in_campaign?.stage_id) {
-      const { campaign_id, stage_id } = payload.place_in_campaign;
+      const { campaign_id, stage_id, notes } = payload.place_in_campaign;
       const { data: campaign } = await supabase
         .from("campanhas")
         .select("id")
@@ -313,7 +380,8 @@ serve(async (req) => {
         .eq("organization_id", organizationId)
         .maybeSingle();
       if (!campaign) {
-        console.warn("[lead-webhook] Campaign not found or not in org:", campaign_id);
+        placeInCampaignError = "Campaign not found or not in org";
+        console.warn("[lead-webhook]", placeInCampaignError, campaign_id);
       } else {
         const { data: stage } = await supabase
           .from("campanha_stages")
@@ -322,7 +390,8 @@ serve(async (req) => {
           .eq("campanha_id", campaign_id)
           .maybeSingle();
         if (!stage) {
-          console.warn("[lead-webhook] Stage not found or not in campaign:", stage_id);
+          placeInCampaignError = "Stage not found or not in campaign";
+          console.warn("[lead-webhook]", placeInCampaignError, stage_id);
         } else {
           const { data: existing } = await supabase
             .from("campanha_leads")
@@ -331,17 +400,41 @@ serve(async (req) => {
             .eq("campanha_id", campaign_id)
             .maybeSingle();
           if (existing) {
-            await supabase.from("campanha_leads").update({ stage_id }).eq("id", existing.id);
+            const updatePayload: { stage_id: string; notes?: string } = { stage_id };
+            if (notes !== undefined) updatePayload.notes = notes;
+            const { error: updateErr } = await supabase
+              .from("campanha_leads")
+              .update(updatePayload)
+              .eq("id", existing.id);
+            if (updateErr) {
+              placeInCampaignError = updateErr.message;
+              console.warn("[lead-webhook] campanha_leads update failed:", updateErr);
+            } else {
+              placedInCampaign = true;
+              console.log("[lead-webhook] Lead placed in campaign:", campaign_id, "stage:", stage_id);
+            }
           } else {
-            await supabase.from("campanha_leads").insert({
+            const insertPayload: { campanha_id: string; lead_id: string; stage_id: string; notes?: string } = {
               campanha_id: campaign_id,
               lead_id: leadId,
               stage_id,
-            });
+            };
+            if (notes !== undefined) insertPayload.notes = notes;
+            const { error: insertErr } = await supabase
+              .from("campanha_leads")
+              .insert(insertPayload);
+            if (insertErr) {
+              placeInCampaignError = insertErr.message;
+              console.warn("[lead-webhook] campanha_leads insert failed:", insertErr);
+            } else {
+              placedInCampaign = true;
+              console.log("[lead-webhook] Lead placed in campaign:", campaign_id, "stage:", stage_id);
+            }
           }
-          console.log("[lead-webhook] Lead placed in campaign:", campaign_id, "stage:", stage_id);
         }
       }
+      if (placedInCampaign === undefined && !placeInCampaignError) placeInCampaignError = "Placement failed";
+      if (placedInCampaign !== true) placedInCampaign = false;
     }
 
     // Enfileira webhooks outbound (lead.created ou lead.updated)
@@ -394,10 +487,14 @@ serve(async (req) => {
       success: true,
       lead_id: leadId,
       is_new: isNewLead,
-      message: isNewLead ? "Lead created successfully" : "Lead already exists",
+      message: isNewLead ? "Lead criado com sucesso" : "Lead encontrado e atualizado",
     };
     if (payload.place_in_pipe) responseBody.place_in_pipe = payload.place_in_pipe;
-    if (payload.place_in_campaign) responseBody.place_in_campaign = payload.place_in_campaign;
+    if (payload.place_in_campaign) {
+      responseBody.place_in_campaign = payload.place_in_campaign;
+      responseBody.placed_in_campaign = placedInCampaign === true;
+      if (placeInCampaignError) responseBody.place_in_campaign_error = placeInCampaignError;
+    }
 
     return new Response(
       JSON.stringify(responseBody),

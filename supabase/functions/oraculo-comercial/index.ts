@@ -28,10 +28,11 @@ serve(async (req) => {
 
   try {
     const { metrics } = await req.json() as { metrics: MetricsData };
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    const openRouterApiKey = Deno.env.get("OPENROUTER_API_KEY");
+    const referer = Deno.env.get("OPENROUTER_REFERER_URL") || "https://v8millennials.com";
 
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+    if (!openRouterApiKey) {
+      throw new Error("OPENROUTER_API_KEY is not configured");
     }
 
     const systemPrompt = `Você é um coach comercial direto e pragmático. Você analisa métricas e dá UMA única tarefa prioritária do dia.
@@ -87,14 +88,15 @@ Qual o problema principal e qual a tarefa prioritária de hoje?`;
 Qual o problema principal e qual a tarefa prioritária de hoje?`;
     }
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "Authorization": `Bearer ${openRouterApiKey}`,
         "Content-Type": "application/json",
+        "HTTP-Referer": referer,
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model: "openai/gpt-4o-mini",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
@@ -118,8 +120,8 @@ Qual o problema principal e qual a tarefa prioritária de hoje?`;
         );
       }
       const errorText = await response.text();
-      console.error("AI gateway error:", response.status, errorText);
-      throw new Error("AI gateway error");
+      console.error("OpenRouter error:", response.status, errorText);
+      throw new Error("OpenRouter error");
     }
 
     const data = await response.json();

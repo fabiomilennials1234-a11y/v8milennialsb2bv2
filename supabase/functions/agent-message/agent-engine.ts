@@ -244,6 +244,9 @@ export class AgentEngine {
           console.warn('[AgentEngine] Failed to update lead:', updateError);
         } else {
           console.log('[AgentEngine] Lead updated with automation:', updates);
+          if (actionConfig.moveToStage) {
+            await this.upsertPipeWhatsapp(leadId, this.organizationId, actionConfig.moveToStage);
+          }
         }
       }
 
@@ -287,10 +290,74 @@ export class AgentEngine {
         console.log('[AgentEngine] Should notify user:', actionConfig.notifyUserId);
       }
 
+      // Mover para outro pipe (Confirmação ou Propostas)
+      const moveToPipe = actionConfig.moveToPipe;
+      if (moveToPipe && (moveToPipe.pipe === 'confirmacao' || moveToPipe.pipe === 'propostas') && moveToPipe.stage) {
+        await this.executeMoveToPipe(leadId, moveToPipe.pipe, moveToPipe.stage);
+      }
+
       console.log('[AgentEngine] Automation actions executed for:', actionType);
 
     } catch (error) {
       console.error('[AgentEngine] Error executing automation actions:', error);
+    }
+  }
+
+  /**
+   * Move lead para pipe Confirmação ou Propostas na etapa indicada
+   */
+  private async executeMoveToPipe(leadId: string, pipe: 'confirmacao' | 'propostas', stage: string) {
+    try {
+      if (pipe === 'confirmacao') {
+        const { data: existing } = await this.supabase
+          .from('pipe_confirmacao')
+          .select('id')
+          .eq('lead_id', leadId)
+          .maybeSingle();
+        if (existing) {
+          await this.supabase
+            .from('pipe_confirmacao')
+            .update({ status: stage })
+            .eq('id', existing.id);
+        } else {
+          await this.supabase
+            .from('pipe_confirmacao')
+            .insert({
+              lead_id: leadId,
+              organization_id: this.organizationId,
+              status: stage,
+            });
+        }
+        console.log('[AgentEngine] Lead moved to pipe_confirmacao:', stage);
+      } else {
+        const { data: existing } = await this.supabase
+          .from('pipe_propostas')
+          .select('id')
+          .eq('lead_id', leadId)
+          .maybeSingle();
+        if (existing) {
+          await this.supabase
+            .from('pipe_propostas')
+            .update({ status: stage })
+            .eq('id', existing.id);
+        } else {
+          await this.supabase
+            .from('pipe_propostas')
+            .insert({
+              lead_id: leadId,
+              organization_id: this.organizationId,
+              status: stage,
+            });
+        }
+        console.log('[AgentEngine] Lead moved to pipe_propostas:', stage);
+      }
+      // Remover do pipe WhatsApp para não aparecer em dois funis
+      await this.supabase
+        .from('pipe_whatsapp')
+        .delete()
+        .eq('lead_id', leadId);
+    } catch (e) {
+      console.warn('[AgentEngine] Failed to execute moveToPipe:', e);
     }
   }
 
@@ -347,10 +414,41 @@ export class AgentEngine {
             from: currentStage,
             to: newStage,
           });
+          await this.upsertPipeWhatsapp(leadId, this.organizationId, newStage);
         }
       }
     } catch (e) {
       console.warn('[AgentEngine] Failed to update lead pipeline stage:', e);
+    }
+  }
+
+  /**
+   * Sincroniza o estágio do lead na tabela pipe_whatsapp para o Kanban refletir
+   */
+  private async upsertPipeWhatsapp(leadId: string, organizationId: string, status: string) {
+    try {
+      const { data: existing } = await this.supabase
+        .from('pipe_whatsapp')
+        .select('id')
+        .eq('lead_id', leadId)
+        .maybeSingle();
+
+      if (existing) {
+        await this.supabase
+          .from('pipe_whatsapp')
+          .update({ status })
+          .eq('id', existing.id);
+      } else {
+        await this.supabase
+          .from('pipe_whatsapp')
+          .insert({
+            lead_id: leadId,
+            organization_id: organizationId,
+            status,
+          });
+      }
+    } catch (e) {
+      console.warn('[AgentEngine] Failed to upsert pipe_whatsapp:', e);
     }
   }
 

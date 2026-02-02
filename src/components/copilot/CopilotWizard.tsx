@@ -134,6 +134,7 @@ const wizardSchema = z.object({
   automationActions: z.object({
     onQualify: z.object({
       moveToStage: z.string().optional().or(z.literal("")),
+      moveToPipe: z.object({ pipe: z.enum(["confirmacao", "propostas"]), stage: z.string() }).optional().nullable(),
       addTags: z.array(z.string()),
       notifyUserId: z.string().nullable(),
       sendMessage: z.boolean(),
@@ -155,6 +156,7 @@ const wizardSchema = z.object({
     ),
     onDisqualify: z.object({
       moveToStage: z.string().optional().or(z.literal("")),
+      moveToPipe: z.object({ pipe: z.enum(["confirmacao", "propostas"]), stage: z.string() }).optional().nullable(),
       addTags: z.array(z.string()),
       notifyUserId: z.string().nullable(),
       sendMessage: z.boolean(),
@@ -174,6 +176,7 @@ const wizardSchema = z.object({
     ),
     onNeedHuman: z.object({
       moveToStage: z.string().optional().or(z.literal("")),
+      moveToPipe: z.object({ pipe: z.enum(["confirmacao", "propostas"]), stage: z.string() }).optional().nullable(),
       addTags: z.array(z.string()),
       notifyUserId: z.string().nullable(),
       sendMessage: z.boolean(),
@@ -301,6 +304,7 @@ export function CopilotWizard() {
       automationActions: {
         onQualify: {
           moveToStage: "agendado",
+          moveToPipe: null,
           addTags: ["qualificado"],
           notifyUserId: null,
           sendMessage: false,
@@ -308,6 +312,7 @@ export function CopilotWizard() {
         },
         onDisqualify: {
           moveToStage: "descartado",
+          moveToPipe: null,
           addTags: ["sem_fit"],
           notifyUserId: null,
           sendMessage: true,
@@ -315,6 +320,7 @@ export function CopilotWizard() {
         },
         onNeedHuman: {
           moveToStage: "aguardando_humano",
+          moveToPipe: null,
           addTags: ["precisa_humano"],
           notifyUserId: null,
           sendMessage: true,

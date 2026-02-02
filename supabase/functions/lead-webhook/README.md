@@ -2,6 +2,19 @@
 
 Webhook para receber leads (n8n, Meta Ads, Zapier, formulários, etc.). Cria ou atualiza o lead e opcionalmente coloca em um **pipe** (funil) e/ou em uma **campanha** em etapa específica.
 
+## Deploy
+
+Após alterações no código, publique a função no Supabase para que o n8n use a versão nova:
+
+```bash
+cd v8milennialsb2b-main
+supabase login   # se aparecer "Access token not provided"
+supabase link    # vincule ao projeto Supabase correto, se ainda não estiver
+supabase functions deploy lead-webhook
+```
+
+(O Easypanel faz deploy da aplicação; as Edge Functions são publicadas separadamente no Supabase.)
+
 ## Headers
 
 - `Authorization: Bearer <anon_key>` (obrigatório para o gateway Supabase)
@@ -84,3 +97,12 @@ Coloca o lead em uma campanha em uma etapa (ex.: campanha de ads). Requer UUIDs 
 ```
 
 Pode enviar só `place_in_pipe`, só `place_in_campaign`, ou ambos. Se omitir os dois, o lead é apenas criado/atualizado (comportamento anterior).
+
+## Resposta (quando envia `place_in_campaign`)
+
+Além de `success`, `lead_id`, `is_new` e `message`, a resposta pode incluir:
+
+- **`placed_in_campaign`** (boolean): `true` se o lead foi inserido/atualizado em `campanha_leads`; `false` se falhou.
+- **`place_in_campaign_error`** (string, opcional): mensagem de erro quando `placed_in_campaign` é `false` (ex.: "Campaign not found or not in org", "Stage not found or not in campaign", ou erro do banco).
+
+Use no n8n para saber se o lead entrou na campanha e, em caso de falha, o motivo.

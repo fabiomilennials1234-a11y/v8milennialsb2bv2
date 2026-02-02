@@ -20,7 +20,9 @@ import {
   ArrowRight,
   Zap,
   Bot,
+  PhoneCall,
 } from "lucide-react";
+import { Link } from "react-router-dom";
 import {
   Dialog,
   DialogContent,
@@ -403,9 +405,25 @@ export function LeadDetailModal({ open, onOpenChange, leadId, onEdit }: LeadDeta
                         </div>
                       )}
                       {lead.phone && (
-                        <div className="flex items-center gap-2 p-3 bg-muted rounded-lg">
-                          <Phone className="w-4 h-4 text-muted-foreground" />
-                          <span className="text-sm">{lead.phone}</span>
+                        <div className="flex flex-col gap-2 p-3 bg-muted rounded-lg col-span-2">
+                          <div className="flex items-center gap-2">
+                            <Phone className="w-4 h-4 text-muted-foreground shrink-0" />
+                            <span className="text-sm">{lead.phone}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button variant="outline" size="sm" className="gap-1.5" asChild>
+                              <Link to={`/chat-whatsapp?phone=${encodeURIComponent(lead.phone.replace(/\D/g, "") || lead.phone)}`} onClick={() => onOpenChange(false)}>
+                                <MessageSquare className="w-3.5 h-3.5" />
+                                Enviar mensagem
+                              </Link>
+                            </Button>
+                            <Button variant="outline" size="sm" className="gap-1.5" asChild>
+                              <a href={`tel:${(lead.phone || "").replace(/\D/g, "")}`}>
+                                <PhoneCall className="w-3.5 h-3.5" />
+                                Ligar
+                              </a>
+                            </Button>
+                          </div>
                         </div>
                       )}
                     </div>

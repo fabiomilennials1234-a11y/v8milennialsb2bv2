@@ -43,10 +43,11 @@ serve(async (req) => {
     
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
+    const openRouterApiKey = Deno.env.get("OPENROUTER_API_KEY");
+    const referer = Deno.env.get("OPENROUTER_REFERER_URL") || "https://v8millennials.com";
 
-    if (!lovableApiKey) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+    if (!openRouterApiKey) {
+      throw new Error("OPENROUTER_API_KEY is not configured");
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -167,18 +168,21 @@ IMPORTANTE: Responda APENAS com JSON válido, sem texto adicional.`;
 
       const userPrompt = `Analise este lead e gere o scoring:\n${leadContext}`;
 
-      const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      const aiResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${lovableApiKey}`,
+          "Authorization": `Bearer ${openRouterApiKey}`,
           "Content-Type": "application/json",
+          "HTTP-Referer": referer,
         },
         body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
+          model: "openai/gpt-4o-mini",
           messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: userPrompt },
           ],
+          temperature: 0.5,
+          max_tokens: 400,
         }),
       });
 

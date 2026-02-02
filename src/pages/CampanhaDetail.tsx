@@ -13,12 +13,13 @@ import { CampanhaSemiAutomaticaPanel } from "@/components/campanhas/CampanhaSemi
 import { AddLeadToCampanhaModal } from "@/components/campanhas/AddLeadToCampanhaModal";
 import { ImportLeadsModal } from "@/components/campanhas/ImportLeadsModal";
 import { ManageStagesModal } from "@/components/campanhas/ManageStagesModal";
+import { EditCampanhaModal } from "@/components/campanhas/EditCampanhaModal";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { ArrowLeft, Plus, BarChart3, Kanban, Loader2, Upload, Wrench, Settings2, Bot, Zap, Copy, Link2 } from "lucide-react";
+import { ArrowLeft, Plus, BarChart3, Kanban, Loader2, Upload, Wrench, Settings2, Bot, Zap, Copy, Link2, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -38,6 +39,7 @@ export default function CampanhaDetail() {
   const [addLeadOpen, setAddLeadOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [manageStagesOpen, setManageStagesOpen] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("kanban");
   const [isFixingNames, setIsFixingNames] = useState(false);
   const { data: campanha, isLoading: loadingCampanha } = useCampanha(id);
@@ -191,6 +193,14 @@ export default function CampanhaDetail() {
         </div>
 
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setEditModalOpen(true)}
+          >
+            <Pencil className="w-4 h-4 mr-2" />
+            Editar
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -371,6 +381,11 @@ export default function CampanhaDetail() {
         onOpenChange={setManageStagesOpen}
         campanhaId={id!}
         stages={stages}
+      />
+      <EditCampanhaModal
+        open={editModalOpen}
+        onOpenChange={setEditModalOpen}
+        campanha={campanha}
       />
     </div>
   );

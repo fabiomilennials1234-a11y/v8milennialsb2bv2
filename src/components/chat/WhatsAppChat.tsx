@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback, Component } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
@@ -1389,8 +1390,14 @@ function normalizePhoneForStorage(phone: string): string {
   return phone.replace(/\D/g, "").slice(-10) || phone;
 }
 
+/** Normaliza telefone para URL/API: só dígitos. */
+function normalizePhoneForParam(phone: string): string {
+  return phone.replace(/\D/g, "") || phone;
+}
+
 export function WhatsAppChat() {
   const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [isLeadPanelOpen, setIsLeadPanelOpen] = useState(false);
@@ -1398,6 +1405,18 @@ export function WhatsAppChat() {
   const { data: contacts = [], isLoading: contactsLoading } = useWhatsAppContacts();
   const { data: activeInstance, isLoading: instanceLoading } = useActiveWhatsAppInstance();
   const { data: selectedLead } = useLeadByPhone(selectedPhone);
+
+  // Abrir conversa pelo parâmetro ?phone= (pipes, campanhas, etc.)
+  useEffect(() => {
+    const phoneParam = searchParams.get("phone");
+    if (phoneParam) {
+      const normalized = normalizePhoneForParam(phoneParam);
+      if (normalized) {
+        setSelectedPhone(normalized);
+        setSearchParams({}, { replace: true });
+      }
+    }
+  }, [searchParams, setSearchParams]);
 
   // Ativar realtime para lista de contatos
   useWhatsAppMessagesRealtime(null);

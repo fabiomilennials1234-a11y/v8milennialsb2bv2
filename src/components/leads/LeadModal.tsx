@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { Star, Building, Phone, Mail, User, Tag, Plus, Type, Hash, Calendar, List, ToggleLeft } from "lucide-react";
+import { Star, Building, Phone, Mail, User, Tag, Plus, Type, Hash, Calendar, List, ToggleLeft, MessageSquare, PhoneCall } from "lucide-react";
+import { Link } from "react-router-dom";
 import {
   Dialog,
   DialogContent,
@@ -339,6 +340,22 @@ export function LeadModal({
                     className="pl-9"
                   />
                 </div>
+                {formData.phone.trim() && (
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" className="gap-1.5" asChild>
+                      <Link to={`/chat-whatsapp?phone=${encodeURIComponent(formData.phone.replace(/\D/g, "") || formData.phone)}`} onClick={() => onOpenChange(false)}>
+                        <MessageSquare className="w-3.5 h-3.5" />
+                        Enviar mensagem
+                      </Link>
+                    </Button>
+                    <Button variant="outline" size="sm" className="gap-1.5" asChild>
+                      <a href={`tel:${(formData.phone || "").replace(/\D/g, "")}`}>
+                        <PhoneCall className="w-3.5 h-3.5" />
+                        Ligar
+                      </a>
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
 
