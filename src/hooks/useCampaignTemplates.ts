@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useOrganization } from "./useOrganization";
 
 // ============================================
 // Types
@@ -79,7 +80,22 @@ export const TEMPLATE_VARIABLES = [
   { key: 'origem', label: 'Origem', example: 'Meta Ads' },
   { key: 'segmento', label: 'Segmento', example: 'Tecnologia' },
   { key: 'faturamento', label: 'Faturamento', example: 'R$100 mil' },
+  { key: 'saudacao', label: 'Saudação (bom dia / boa tarde / boa noite)', example: 'bom dia' },
+  { key: 'data', label: 'Data atual (dd/mm/aaaa)', example: '30/01/2026' },
+  { key: 'hora', label: 'Hora atual', example: '14:30' },
 ] as const;
+
+/** Retorna saudação, data e hora no fuso do Brasil (preview/envio) */
+export function getTimeBasedVariables(now: Date = new Date()): { saudacao: string; data: string; hora: string } {
+  const br = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+  const hour = br.getHours();
+  let saudacao = 'bom dia';
+  if (hour >= 12 && hour < 18) saudacao = 'boa tarde';
+  else if (hour >= 18 || hour < 5) saudacao = 'boa noite';
+  const data = br.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const hora = br.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', hour12: false });
+  return { saudacao, data, hora };
+}
 
 // ============================================
 // Helper Functions
@@ -108,18 +124,24 @@ export async function uploadCampaignTemplateAudio(
 }
 
 /**
- * Substitui variáveis no template com valores de exemplo
+ * Substitui variáveis no template com valores de exemplo (inclui saudação/data/hora atuais na preview)
  */
 export function replaceVariablesWithExamples(content: string): string {
   let result = content;
+  const timeVars = getTimeBasedVariables();
   for (const variable of TEMPLATE_VARIABLES) {
-    result = result.replace(new RegExp(`\\{${variable.key}\\}`, 'g'), variable.example);
+    const value =
+      variable.key === 'saudacao' ? timeVars.saudacao
+      : variable.key === 'data' ? timeVars.data
+      : variable.key === 'hora' ? timeVars.hora
+      : variable.example;
+    result = result.replace(new RegExp(`\\{${variable.key}\\}`, 'gi'), value);
   }
   return result;
 }
 
 /**
- * Substitui variáveis no template com dados do lead
+ * Substitui variáveis no template com dados do lead + saudação/data/hora atuais
  */
 export function replaceVariablesWithLeadData(
   content: string,
@@ -133,14 +155,18 @@ export function replaceVariablesWithLeadData(
     faturamento?: string;
   }
 ): string {
+  const time = getTimeBasedVariables();
   return content
-    .replace(/\{nome\}/g, lead.name || '')
-    .replace(/\{empresa\}/g, lead.company || '')
-    .replace(/\{email\}/g, lead.email || '')
-    .replace(/\{telefone\}/g, lead.phone || '')
-    .replace(/\{origem\}/g, lead.origin || '')
-    .replace(/\{segmento\}/g, lead.segment || '')
-    .replace(/\{faturamento\}/g, lead.faturamento || '');
+    .replace(/\{nome\}/gi, lead.name || '')
+    .replace(/\{empresa\}/gi, lead.company || '')
+    .replace(/\{email\}/gi, lead.email || '')
+    .replace(/\{telefone\}/gi, lead.phone || '')
+    .replace(/\{origem\}/gi, lead.origin || '')
+    .replace(/\{segmento\}/gi, lead.segment || '')
+    .replace(/\{faturamento\}/gi, lead.faturamento || '')
+    .replace(/\{saudacao\}/gi, time.saudacao)
+    .replace(/\{data\}/gi, time.data)
+    .replace(/\{hora\}/gi, time.hora);
 }
 
 // ============================================
@@ -148,71 +174,70 @@ export function replaceVariablesWithLeadData(
 // ============================================
 
 /**
- * Lista todos os templates ativos da organização
+ * Lista todos os templates ativos da organização atual (isolado por organização)
  */
 export function useCampaignTemplates() {
+  const { organizationId, isReady } = useOrganization();
+
   return useQuery({
-    queryKey: ["campaign_templates"],
+    queryKey: ["campaign_templates", organizationId],
     queryFn: async () => {
+      if (!organizationId) return [];
       const { data, error } = await supabase
         .from("campaign_templates")
         .select("*")
+        .eq("organization_id", organizationId)
         .eq("is_active", true)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-      return data as CampaignTemplate[];
+      return (data ?? []) as CampaignTemplate[];
     },
+    enabled: isReady && !!organizationId,
   });
 }
 
 /**
- * Busca um template específico
+ * Busca um template específico da organização atual (isolado por organização)
  */
 export function useCampaignTemplate(id: string | undefined) {
+  const { organizationId, isReady } = useOrganization();
+
   return useQuery({
-    queryKey: ["campaign_template", id],
+    queryKey: ["campaign_template", id, organizationId],
     queryFn: async () => {
-      if (!id) return null;
+      if (!id || !organizationId) return null;
 
       const { data, error } = await supabase
         .from("campaign_templates")
         .select("*")
         .eq("id", id)
-        .single();
+        .eq("organization_id", organizationId)
+        .maybeSingle();
 
       if (error) throw error;
-      return data as CampaignTemplate;
+      return data as CampaignTemplate | null;
     },
-    enabled: !!id,
+    enabled: isReady && !!organizationId && !!id,
   });
 }
 
 /**
- * Cria um novo template
+ * Cria um novo template na organização atual (sempre vinculado à org do usuário)
  */
 export function useCreateCampaignTemplate() {
   const queryClient = useQueryClient();
+  const { organizationId } = useOrganization();
 
   return useMutation({
     mutationFn: async (template: CampaignTemplateInsert) => {
-      // Buscar organization_id do usuário
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Usuário não autenticado");
-
-      const { data: teamMember } = await supabase
-        .from("team_members")
-        .select("organization_id")
-        .eq("user_id", user.id)
-        .single();
-
-      if (!teamMember) throw new Error("Usuário não pertence a uma organização");
+      if (!organizationId) throw new Error("Organização não disponível");
 
       const { data, error } = await supabase
         .from("campaign_templates")
         .insert({
           ...template,
-          organization_id: teamMember.organization_id,
+          organization_id: organizationId,
           available_variables: template.available_variables || TEMPLATE_VARIABLES.map(v => v.key),
         })
         .select()
@@ -222,12 +247,11 @@ export function useCreateCampaignTemplate() {
         console.error("Erro ao criar template:", error);
         throw new Error(error.message || "Erro ao criar template");
       }
-      
-      // Verificar se o template foi realmente criado (RLS pode bloquear silenciosamente)
+
       if (!data) {
         throw new Error("Não foi possível criar o template. Verifique suas permissões.");
       }
-      
+
       return data as CampaignTemplate;
     },
     onSuccess: () => {
@@ -240,13 +264,16 @@ export function useCreateCampaignTemplate() {
 }
 
 /**
- * Atualiza um template
+ * Atualiza um template (apenas da organização atual)
  */
 export function useUpdateCampaignTemplate() {
   const queryClient = useQueryClient();
+  const { organizationId } = useOrganization();
 
   return useMutation({
     mutationFn: async ({ id, ...updates }: Partial<CampaignTemplate> & { id: string }) => {
+      if (!organizationId) throw new Error("Organização não disponível");
+
       const { data, error } = await supabase
         .from("campaign_templates")
         .update({
@@ -254,6 +281,7 @@ export function useUpdateCampaignTemplate() {
           updated_at: new Date().toISOString(),
         })
         .eq("id", id)
+        .eq("organization_id", organizationId)
         .select()
         .single();
 
@@ -268,17 +296,21 @@ export function useUpdateCampaignTemplate() {
 }
 
 /**
- * Deleta um template (soft delete via is_active = false)
+ * Deleta um template (soft delete via is_active = false), apenas da organização atual
  */
 export function useDeleteCampaignTemplate() {
   const queryClient = useQueryClient();
+  const { organizationId } = useOrganization();
 
   return useMutation({
     mutationFn: async (id: string) => {
+      if (!organizationId) throw new Error("Organização não disponível");
+
       const { error } = await supabase
         .from("campaign_templates")
         .update({ is_active: false })
-        .eq("id", id);
+        .eq("id", id)
+        .eq("organization_id", organizationId);
 
       if (error) throw error;
     },
@@ -370,13 +402,15 @@ export function useRemoveTemplateFromCampanha() {
 // ============================================
 
 /**
- * Lista lotes de disparo de uma campanha
+ * Lista lotes de disparo de uma campanha (apenas da organização atual)
  */
 export function useDispatchBatches(campanhaId: string | undefined) {
+  const { organizationId, isReady } = useOrganization();
+
   return useQuery({
-    queryKey: ["dispatch_batches", campanhaId],
+    queryKey: ["dispatch_batches", campanhaId, organizationId],
     queryFn: async () => {
-      if (!campanhaId) return [];
+      if (!campanhaId || !organizationId) return [];
 
       const { data, error } = await supabase
         .from("campaign_dispatch_batches")
@@ -385,40 +419,35 @@ export function useDispatchBatches(campanhaId: string | undefined) {
           template:campaign_templates(id, name, content)
         `)
         .eq("campanha_id", campanhaId)
+        .eq("organization_id", organizationId)
         .order("scheduled_at", { ascending: false });
 
       if (error) throw error;
-      return data as DispatchBatch[];
+      return (data ?? []) as DispatchBatch[];
     },
-    enabled: !!campanhaId,
+    enabled: isReady && !!organizationId && !!campanhaId,
   });
 }
 
 /**
- * Cria um lote de disparo agendado
+ * Cria um lote de disparo agendado (sempre na organização atual)
  */
 export function useCreateDispatchBatch() {
   const queryClient = useQueryClient();
+  const { organizationId } = useOrganization();
 
   return useMutation({
     mutationFn: async (batch: DispatchBatchInsert & { total_leads?: number }) => {
-      // Buscar organization_id e user_id
+      if (!organizationId) throw new Error("Organização não disponível");
+
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Usuário não autenticado");
-
-      const { data: teamMember } = await supabase
-        .from("team_members")
-        .select("organization_id")
-        .eq("user_id", user.id)
-        .single();
-
-      if (!teamMember) throw new Error("Usuário não pertence a uma organização");
 
       const { data, error } = await supabase
         .from("campaign_dispatch_batches")
         .insert({
           ...batch,
-          organization_id: teamMember.organization_id,
+          organization_id: organizationId,
           created_by: user.id,
           total_leads: batch.total_leads || 0,
         })
@@ -435,18 +464,22 @@ export function useCreateDispatchBatch() {
 }
 
 /**
- * Cancela um lote de disparo agendado
+ * Cancela um lote de disparo agendado (apenas da organização atual)
  */
 export function useCancelDispatchBatch() {
   const queryClient = useQueryClient();
+  const { organizationId } = useOrganization();
 
   return useMutation({
     mutationFn: async ({ id, campanha_id }: { id: string; campanha_id: string }) => {
+      if (!organizationId) throw new Error("Organização não disponível");
+
       const { data, error } = await supabase
         .from("campaign_dispatch_batches")
         .update({ status: 'cancelled' })
         .eq("id", id)
-        .eq("status", 'scheduled') // Só pode cancelar se ainda está agendado
+        .eq("organization_id", organizationId)
+        .eq("status", 'scheduled')
         .select()
         .single();
 
@@ -464,13 +497,15 @@ export function useCancelDispatchBatch() {
 // ============================================
 
 /**
- * Lista histórico de disparos de uma campanha
+ * Lista histórico de disparos de uma campanha (apenas da organização atual)
  */
 export function useDispatchLog(campanhaId: string | undefined, limit: number = 50) {
+  const { organizationId, isReady } = useOrganization();
+
   return useQuery({
-    queryKey: ["dispatch_log", campanhaId, limit],
+    queryKey: ["dispatch_log", campanhaId, organizationId, limit],
     queryFn: async () => {
-      if (!campanhaId) return [];
+      if (!campanhaId || !organizationId) return [];
 
       const { data, error } = await supabase
         .from("outbound_dispatch_log")
@@ -479,29 +514,33 @@ export function useDispatchLog(campanhaId: string | undefined, limit: number = 5
           lead:leads(id, name, company, phone)
         `)
         .eq("campanha_id", campanhaId)
+        .eq("organization_id", organizationId)
         .order("created_at", { ascending: false })
         .limit(limit);
 
       if (error) throw error;
-      return data;
+      return data ?? [];
     },
-    enabled: !!campanhaId,
+    enabled: isReady && !!organizationId && !!campanhaId,
   });
 }
 
 /**
- * Estatísticas de disparo de uma campanha
+ * Estatísticas de disparo de uma campanha (apenas da organização atual)
  */
 export function useDispatchStats(campanhaId: string | undefined) {
+  const { organizationId, isReady } = useOrganization();
+
   return useQuery({
-    queryKey: ["dispatch_stats", campanhaId],
+    queryKey: ["dispatch_stats", campanhaId, organizationId],
     queryFn: async () => {
-      if (!campanhaId) return { pending: 0, sent: 0, failed: 0, total: 0 };
+      if (!campanhaId || !organizationId) return { pending: 0, sent: 0, failed: 0, total: 0 };
 
       const { data, error } = await supabase
         .from("outbound_dispatch_log")
         .select("status")
-        .eq("campanha_id", campanhaId);
+        .eq("campanha_id", campanhaId)
+        .eq("organization_id", organizationId);
 
       if (error) throw error;
 
@@ -522,6 +561,6 @@ export function useDispatchStats(campanhaId: string | undefined) {
 
       return stats;
     },
-    enabled: !!campanhaId,
+    enabled: isReady && !!organizationId && !!campanhaId,
   });
 }

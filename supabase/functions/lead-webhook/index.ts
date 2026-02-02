@@ -15,6 +15,18 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-webhook-key",
 };
 
+// Destino opcional: colocar o lead em um pipe (funil) em uma etapa específica
+interface PlaceInPipe {
+  pipe: "whatsapp" | "confirmacao" | "propostas";
+  stage: string; // ex: "novo", "abordado", "reuniao_marcada", "marcar_compromisso"
+}
+
+// Destino opcional: colocar o lead em uma campanha em uma etapa específica
+interface PlaceInCampaign {
+  campaign_id: string; // UUID da campanha
+  stage_id: string;    // UUID do campanha_stages
+}
+
 interface LeadWebhookPayload {
   // Identificação da fonte
   source: string; // "meta_ads", "google_ads", "landing_page", etc.
@@ -36,6 +48,10 @@ interface LeadWebhookPayload {
   
   // Organização (identificada por API key ou passada diretamente)
   organization_id?: string;
+  
+  // Destino opcional: colocar o lead direto em um pipe e/ou campanha (ex: n8n, campanha de ads)
+  place_in_pipe?: PlaceInPipe;
+  place_in_campaign?: PlaceInCampaign;
 }
 
 serve(async (req) => {
@@ -228,6 +244,106 @@ serve(async (req) => {
       }
     }
 
+    // Colocar lead em um pipe (funil) em etapa específica (ex: n8n, campanha de ads)
+    if (payload.place_in_pipe?.pipe && payload.place_in_pipe?.stage) {
+      const { pipe, stage } = payload.place_in_pipe;
+      const stageVal = stage as string;
+
+      if (pipe === "whatsapp") {
+        const { data: existing } = await supabase
+          .from("pipe_whatsapp")
+          .select("id")
+          .eq("lead_id", leadId)
+          .eq("organization_id", organizationId)
+          .maybeSingle();
+        if (existing) {
+          await supabase.from("pipe_whatsapp").update({ status: stageVal }).eq("id", existing.id);
+        } else {
+          await supabase.from("pipe_whatsapp").insert({
+            lead_id: leadId,
+            organization_id: organizationId,
+            status: stageVal,
+          });
+        }
+        console.log("[lead-webhook] Lead placed in pipe_whatsapp stage:", stageVal);
+      } else if (pipe === "confirmacao") {
+        const { data: existing } = await supabase
+          .from("pipe_confirmacao")
+          .select("id")
+          .eq("lead_id", leadId)
+          .eq("organization_id", organizationId)
+          .maybeSingle();
+        if (existing) {
+          await supabase.from("pipe_confirmacao").update({ status: stageVal }).eq("id", existing.id);
+        } else {
+          await supabase.from("pipe_confirmacao").insert({
+            lead_id: leadId,
+            organization_id: organizationId,
+            status: stageVal,
+          });
+        }
+        console.log("[lead-webhook] Lead placed in pipe_confirmacao stage:", stageVal);
+      } else if (pipe === "propostas") {
+        const { data: existing } = await supabase
+          .from("pipe_propostas")
+          .select("id")
+          .eq("lead_id", leadId)
+          .eq("organization_id", organizationId)
+          .maybeSingle();
+        if (existing) {
+          await supabase.from("pipe_propostas").update({ status: stageVal }).eq("id", existing.id);
+        } else {
+          await supabase.from("pipe_propostas").insert({
+            lead_id: leadId,
+            organization_id: organizationId,
+            status: stageVal,
+          });
+        }
+        console.log("[lead-webhook] Lead placed in pipe_propostas stage:", stageVal);
+      }
+    }
+
+    // Colocar lead em uma campanha em etapa específica (ex: campanha de ads)
+    if (payload.place_in_campaign?.campaign_id && payload.place_in_campaign?.stage_id) {
+      const { campaign_id, stage_id } = payload.place_in_campaign;
+      const { data: campaign } = await supabase
+        .from("campanhas")
+        .select("id")
+        .eq("id", campaign_id)
+        .eq("organization_id", organizationId)
+        .maybeSingle();
+      if (!campaign) {
+        console.warn("[lead-webhook] Campaign not found or not in org:", campaign_id);
+      } else {
+        const { data: stage } = await supabase
+          .from("campanha_stages")
+          .select("id")
+          .eq("id", stage_id)
+          .eq("campanha_id", campaign_id)
+          .maybeSingle();
+        if (!stage) {
+          console.warn("[lead-webhook] Stage not found or not in campaign:", stage_id);
+        } else {
+          const { data: existing } = await supabase
+            .from("campanha_leads")
+            .select("id")
+            .eq("lead_id", leadId)
+            .eq("campanha_id", campaign_id)
+            .maybeSingle();
+          if (existing) {
+            await supabase.from("campanha_leads").update({ stage_id }).eq("id", existing.id);
+          } else {
+            await supabase.from("campanha_leads").insert({
+              campanha_id: campaign_id,
+              lead_id: leadId,
+              stage_id,
+            });
+          }
+          console.log("[lead-webhook] Lead placed in campaign:", campaign_id, "stage:", stage_id);
+        }
+      }
+    }
+
     // Enfileira webhooks outbound (lead.created ou lead.updated)
     const webhookPayload = {
       event: isNewLead ? "lead.created" : "lead.updated",
@@ -274,13 +390,17 @@ serve(async (req) => {
       }
     }
 
+    const responseBody: Record<string, unknown> = {
+      success: true,
+      lead_id: leadId,
+      is_new: isNewLead,
+      message: isNewLead ? "Lead created successfully" : "Lead already exists",
+    };
+    if (payload.place_in_pipe) responseBody.place_in_pipe = payload.place_in_pipe;
+    if (payload.place_in_campaign) responseBody.place_in_campaign = payload.place_in_campaign;
+
     return new Response(
-      JSON.stringify({
-        success: true,
-        lead_id: leadId,
-        is_new: isNewLead,
-        message: isNewLead ? "Lead created successfully" : "Lead already exists",
-      }),
+      JSON.stringify(responseBody),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
 

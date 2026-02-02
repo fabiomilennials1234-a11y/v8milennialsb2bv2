@@ -13,7 +13,12 @@ import { CampanhaSemiAutomaticaPanel } from "@/components/campanhas/CampanhaSemi
 import { AddLeadToCampanhaModal } from "@/components/campanhas/AddLeadToCampanhaModal";
 import { ImportLeadsModal } from "@/components/campanhas/ImportLeadsModal";
 import { ManageStagesModal } from "@/components/campanhas/ManageStagesModal";
-import { ArrowLeft, Plus, BarChart3, Kanban, Loader2, Upload, Wrench, Settings2, Bot, Zap } from "lucide-react";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { ArrowLeft, Plus, BarChart3, Kanban, Loader2, Upload, Wrench, Settings2, Bot, Zap, Copy, Link2 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -213,6 +218,71 @@ export default function CampanhaDetail() {
           </Button>
         </div>
       </div>
+
+      {/* IDs para integração (n8n / webhook) */}
+      <Collapsible>
+        <CollapsibleTrigger asChild>
+          <button
+            type="button"
+            className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <Link2 className="w-4 h-4" />
+            IDs para integração (n8n, webhook)
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="rounded-lg border bg-muted/30 p-4 space-y-3 mt-2">
+            <p className="text-xs text-muted-foreground">
+              Use estes IDs no payload do webhook (<code className="bg-muted px-1 rounded">place_in_campaign</code>) para enviar leads direto para esta campanha.
+            </p>
+            <div className="space-y-1">
+              <span className="text-xs font-medium text-muted-foreground">Campanha</span>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 text-xs bg-muted px-2 py-1.5 rounded truncate font-mono">
+                  {campanha.id}
+                </code>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 shrink-0"
+                  onClick={() => {
+                    navigator.clipboard.writeText(campanha.id);
+                    toast.success("ID da campanha copiado");
+                  }}
+                >
+                  <Copy className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <span className="text-xs font-medium text-muted-foreground">Etapas (stage_id)</span>
+              <ul className="space-y-1.5">
+                {stages.map((stage) => (
+                  <li key={stage.id} className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground w-32 shrink-0">{stage.name}</span>
+                    <code className="flex-1 text-xs bg-muted px-2 py-1 rounded truncate font-mono">
+                      {stage.id}
+                    </code>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 shrink-0"
+                      onClick={() => {
+                        navigator.clipboard.writeText(stage.id);
+                        toast.success(`Stage "${stage.name}" copiado`);
+                      }}
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>

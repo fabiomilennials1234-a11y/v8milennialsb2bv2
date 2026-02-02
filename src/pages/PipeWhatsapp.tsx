@@ -56,7 +56,7 @@ import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
 import { openWhatsApp, formatPhoneForWhatsApp } from "@/lib/whatsapp";
 
-// Origin labels and colors mapping
+// Origin labels and colors mapping (todas as origens do enum lead_origin)
 const originLabels: Record<string, { label: string; color: string }> = {
   calendly: { label: "Calendly", color: "bg-blue-500" },
   whatsapp: { label: "WhatsApp", color: "bg-green-500" },
@@ -68,8 +68,17 @@ const originLabels: Record<string, { label: string; color: string }> = {
   quiz: { label: "Quiz", color: "bg-indigo-500" },
   site: { label: "Site", color: "bg-teal-500" },
   organico: { label: "Orgânico", color: "bg-lime-500" },
+  cal: { label: "Cal.com", color: "bg-blue-600" },
+  ambos: { label: "Ambos", color: "bg-slate-500" },
+  zydon: { label: "Zydon", color: "bg-violet-500" },
   outro: { label: "Outro", color: "bg-gray-500" },
 };
+
+// Todas as origens possíveis para filtro (enum lead_origin), em ordem de exibição
+const ALL_ORIGIN_OPTIONS = [
+  "calendly", "whatsapp", "meta_ads", "remarketing", "base_clientes",
+  "parceiro", "indicacao", "quiz", "site", "organico", "cal", "ambos", "zydon", "outro",
+];
 
 interface WhatsappCard extends DraggableItem {
   name: string;
@@ -482,18 +491,6 @@ export default function PipeWhatsapp() {
     return teamMembers?.filter(m => m.role === "sdr" && m.is_active) || [];
   }, [teamMembers]);
 
-  // Get unique origins from pipe data
-  const availableOrigins = useMemo(() => {
-    if (!pipeData) return [];
-    const origins = new Set<string>();
-    pipeData.forEach(item => {
-      if (item.lead?.origin) {
-        origins.add(item.lead.origin);
-      }
-    });
-    return Array.from(origins);
-  }, [pipeData]);
-
   // Transform pipe data to WhatsappCard format
   const transformToCard = (item: any): WhatsappCard => {
     const lead = item.lead;
@@ -738,7 +735,7 @@ export default function PipeWhatsapp() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todas Origens</SelectItem>
-            {availableOrigins.map(origin => (
+            {ALL_ORIGIN_OPTIONS.map(origin => (
               <SelectItem key={origin} value={origin}>
                 {originLabels[origin]?.label || origin}
               </SelectItem>

@@ -228,6 +228,7 @@ serve(async (req) => {
       }
     });
 
+    const timeVars = getTimeBasedVariables();
     const messageContent = replaceVariables(outboundConfig.firstMessageTemplate, {
       nome: lead.name || "você",
       empresa: lead.company || "",
@@ -237,6 +238,9 @@ serve(async (req) => {
       interesse: customFields.interesse || customFields.Interesse || "",
       segmento: lead.segment || "",
       campanha: lead.utm_campaign || payload.source,
+      saudacao: timeVars.saudacao,
+      data: timeVars.data,
+      hora: timeVars.hora,
       ...customFields,
     });
 
@@ -322,6 +326,33 @@ function evaluateCondition(fieldValue: string, operator: string, compareValue: s
     default:
       return false;
   }
+}
+
+/**
+ * Retorna saudação, data e hora no fuso do Brasil (America/Sao_Paulo)
+ */
+function getTimeBasedVariables(now: Date = new Date()): { saudacao: string; data: string; hora: string } {
+  const tz = "America/Sao_Paulo";
+  const hour = parseInt(
+    new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "2-digit", hour12: false }).format(now),
+    10
+  );
+  let saudacao = "bom dia";
+  if (hour >= 12 && hour < 18) saudacao = "boa tarde";
+  else if (hour >= 18 || hour < 5) saudacao = "boa noite";
+  const data = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: tz,
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(now);
+  const hora = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: tz,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(now);
+  return { saudacao, data, hora };
 }
 
 /**

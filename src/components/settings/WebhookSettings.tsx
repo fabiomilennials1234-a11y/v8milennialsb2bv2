@@ -272,6 +272,14 @@ export function WebhookSettings() {
         email: "lead@email.com",
         company: "Empresa",
       },
+      place_in_pipe: {
+        pipe: "whatsapp",
+        stage: "novo",
+      },
+      place_in_campaign: {
+        campaign_id: "<uuid-da-campanha>",
+        stage_id: "<uuid-do-campanha_stages>",
+      },
     },
     null,
     2
@@ -319,6 +327,9 @@ export function WebhookSettings() {
               <Label className="text-xs text-muted-foreground">Método e header</Label>
               <p className="text-xs text-muted-foreground">
                 Método: <strong>POST</strong>. Envie o header <code className="bg-muted px-1 rounded">x-webhook-key</code> com a chave fornecida pelo administrador; use o mesmo valor ao chamar de Facebook, Zapier ou outras integrações.
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Opcional: <code className="bg-muted px-1 rounded">place_in_pipe</code> coloca o lead em um funil (whatsapp, confirmacao, propostas) em uma etapa; <code className="bg-muted px-1 rounded">place_in_campaign</code> coloca o lead em uma campanha em uma etapa (ex.: campanha de ads).
               </p>
             </div>
             <Collapsible>

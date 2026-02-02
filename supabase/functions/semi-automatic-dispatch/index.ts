@@ -282,6 +282,7 @@ async function processBatch(
           template.audio_url
         );
       } else {
+        const timeVars = getTimeBasedVariables();
         const messageContent = replaceVariables(template.content || "", {
           nome: lead.name || "você",
           empresa: lead.company || "",
@@ -290,6 +291,9 @@ async function processBatch(
           origem: lead.origin || "",
           segmento: lead.segment || "",
           faturamento: "",
+          saudacao: timeVars.saudacao,
+          data: timeVars.data,
+          hora: timeVars.hora,
         });
         sendResult = await sendWhatsAppMessage(
           whatsappInstance.instance_name,
@@ -298,6 +302,7 @@ async function processBatch(
         );
       }
 
+      const timeVarsForLog = getTimeBasedVariables();
       const messageContent = isAudioTemplate ? "[Áudio]" : replaceVariables(template.content || "", {
         nome: lead.name || "você",
         empresa: lead.company || "",
@@ -306,6 +311,9 @@ async function processBatch(
         origem: lead.origin || "",
         segmento: lead.segment || "",
         faturamento: "",
+        saudacao: timeVarsForLog.saudacao,
+        data: timeVarsForLog.data,
+        hora: timeVarsForLog.hora,
       });
 
       if (sendResult.success) {
@@ -386,6 +394,33 @@ async function processBatch(
   });
 
   return { success: true, sent, failed, skipped };
+}
+
+/**
+ * Retorna saudação, data e hora no fuso do Brasil (America/Sao_Paulo)
+ */
+function getTimeBasedVariables(now: Date = new Date()): { saudacao: string; data: string; hora: string } {
+  const tz = "America/Sao_Paulo";
+  const hour = parseInt(
+    new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "2-digit", hour12: false }).format(now),
+    10
+  );
+  let saudacao = "bom dia";
+  if (hour >= 12 && hour < 18) saudacao = "boa tarde";
+  else if (hour >= 18 || hour < 5) saudacao = "boa noite";
+  const data = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: tz,
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(now);
+  const hora = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: tz,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(now);
+  return { saudacao, data, hora };
 }
 
 /**
