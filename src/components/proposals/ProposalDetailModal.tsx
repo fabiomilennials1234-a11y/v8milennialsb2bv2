@@ -4,7 +4,7 @@ import {
   Calendar, Clock, DollarSign, Package, User, Building2, 
   Star, Phone, Mail, Tag, History, FileText, TrendingUp, 
   ArrowRight, CheckCircle2, XCircle, AlertCircle, MessageSquare,
-  Loader2, Plus, Trash2
+  Loader2, Plus, Trash2, Settings
 } from "lucide-react";
 import {
   Dialog,
@@ -382,10 +382,14 @@ export function ProposalDetailModal({
         </DialogHeader>
 
         <Tabs defaultValue="details" className="flex-1 flex flex-col min-h-0 overflow-hidden">
-          <TabsList className="grid w-full grid-cols-3 shrink-0 mx-6">
+          <TabsList className="grid w-full grid-cols-4 shrink-0 mx-6">
             <TabsTrigger value="details" className="gap-1.5">
               <FileText className="w-4 h-4" />
               Proposta
+            </TabsTrigger>
+            <TabsTrigger value="config" className="gap-1.5">
+              <Settings className="w-4 h-4" />
+              Configurações
             </TabsTrigger>
             <TabsTrigger value="lead" className="gap-1.5">
               <User className="w-4 h-4" />
@@ -544,7 +548,9 @@ export function ProposalDetailModal({
                   </p>
                 )}
               </motion.div>
+            </TabsContent>
 
+            <TabsContent value="config" className="m-0 space-y-4 pt-2">
               {/* Status Selection */}
               <div className="grid gap-2">
                 <Label>Status da Proposta</Label>

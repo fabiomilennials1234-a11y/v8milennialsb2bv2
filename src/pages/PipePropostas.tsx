@@ -104,8 +104,9 @@ function ProposalCardComponent({
   return (
     <motion.div
       whileHover={{ scale: 1.02, y: -2 }}
-      className="kanban-card group cursor-pointer w-full"
+      className="kanban-card group cursor-pointer w-full flex flex-col max-h-[340px] overflow-hidden"
     >
+      <div className="overflow-y-auto overflow-x-hidden min-h-0 flex-1 pr-1 -mr-1 [scrollbar-gutter:stable]">
       {/* Quick Actions Row */}
       <div className="flex items-center justify-between gap-2 mb-2">
         <CalorSlider 
@@ -270,6 +271,7 @@ function ProposalCardComponent({
             </div>
           )}
         </div>
+      </div>
       </div>
     </motion.div>
   );
