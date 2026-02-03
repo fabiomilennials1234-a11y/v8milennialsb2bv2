@@ -2,6 +2,241 @@ import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import Papa from "papaparse";
+import * as XLSX from "xlsx";
+import { useOrganization } from "./useOrganization";
+
+/** Campos conhecidos do sistema (leads + UTM + funil). Custom fields são passados separadamente. */
+export const KNOWN_LEAD_FIELDS = [
+  "name",
+  "company",
+  "email",
+  "phone",
+  "faturamento",
+  "segment",
+  "notes",
+  "rating",
+  "origin",
+  "utm_campaign",
+  "utm_source",
+  "utm_medium",
+  "utm_content",
+  "utm_term",
+  "urgency",
+  "compromisso_date",
+  "temperatura",
+  "valor",
+  "produto",
+  "data_compromisso",
+  "tempo_contrato",
+  "observacoes_etapa",
+] as const;
+
+/** Aliases comuns (header normalizado → campo sistema) para sugestão de mapeamento */
+const HEADER_TO_FIELD: Record<string, string> = {
+  nome: "name",
+  "nome completo": "name",
+  "lead título": "name",
+  "nome do contato": "name",
+  contato: "name",
+  empresa: "company",
+  "nome da empresa": "company",
+  "razão social": "company",
+  "nome fantasia": "company",
+  email: "email",
+  "e-mail": "email",
+  "email comercial": "email",
+  "email pessoal": "email",
+  telefone: "phone",
+  celular: "phone",
+  whatsapp: "phone",
+  fone: "phone",
+  faturamento: "faturamento",
+  "faixa de faturamento": "faturamento",
+  segmento: "segment",
+  setor: "segment",
+  "segmento de atuação": "segment",
+  prioridade: "rating",
+  "prioridade do lead": "rating",
+  origem: "origin",
+  "público de origem": "origin",
+  notas: "notes",
+  observações: "notes",
+  comentário: "notes",
+  utm_campaign: "utm_campaign",
+  "utm campaign": "utm_campaign",
+  utm_source: "utm_source",
+  "utm source": "utm_source",
+  utm_medium: "utm_medium",
+  "utm medium": "utm_medium",
+  utm_content: "utm_content",
+  "utm content": "utm_content",
+  utm_term: "utm_term",
+  "utm term": "utm_term",
+  urgência: "urgency",
+  "data compromisso": "compromisso_date",
+  "compromisso": "compromisso_date",
+  temperatura: "temperatura",
+  "temperatura lead": "temperatura",
+  calor: "temperatura",
+  valor: "valor",
+  "valor da proposta": "valor",
+  "valor proposta": "valor",
+  produto: "produto",
+  "nome do produto": "produto",
+  "data compromisso": "data_compromisso",
+  "data do compromisso": "data_compromisso",
+  "compromisso": "data_compromisso",
+  "tempo c": "tempo_contrato",
+  "tempo de contrato": "tempo_contrato",
+  "duração contrato": "tempo_contrato",
+  "observações etapa": "observacoes_etapa",
+  "observacoes etapa": "observacoes_etapa",
+  "observações": "observacoes_etapa",
+  "obs etapa": "observacoes_etapa",
+};
+
+export interface FilePreviewResult {
+  columns: string[];
+  sampleRows: Record<string, string>[];
+  suggestedMapping: Record<string, string>;
+  unmappedColumns: string[];
+  knownFields: string[];
+  totalRows: number;
+}
+
+export interface ColumnMappingOption {
+  fileColumn: string;
+  systemField: string;
+  isCustomField?: boolean;
+}
+
+/** Lê CSV ou XLSX e retorna array de linhas (objetos chave = coluna). */
+export function parseFileToRows(file: File): Promise<Record<string, string>[]> {
+  const name = (file.name || "").toLowerCase();
+  if (name.endsWith(".csv")) {
+    return new Promise((resolve, reject) => {
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        encoding: "UTF-8",
+        complete: (r) => {
+          const rows = (r.data || []) as Record<string, string>[];
+          resolve(rows.map((row) => {
+            const out: Record<string, string> = {};
+            for (const k of Object.keys(row)) {
+              const v = row[k];
+              out[k] = v != null ? String(v).trim() : "";
+            }
+            return out;
+          }));
+        },
+        error: (e) => reject(e),
+      });
+    });
+  }
+  if (name.endsWith(".xlsx") || name.endsWith(".xls")) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const data = e.target?.result;
+          if (!data) {
+            reject(new Error("Arquivo vazio"));
+            return;
+          }
+          const wb = XLSX.read(data, { type: "binary", cellDates: true });
+          const firstSheet = wb.SheetNames[0];
+          const sheet = wb.Sheets[firstSheet];
+          const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
+            header: 1,
+            defval: "",
+            raw: false,
+          }) as unknown[][];
+          if (json.length === 0) {
+            resolve([]);
+            return;
+          }
+          const headers = (json[0] || []).map((h) => String(h ?? "").trim());
+          const rows: Record<string, string>[] = [];
+          for (let i = 1; i < json.length; i++) {
+            const arr = json[i] as unknown[] || [];
+            const row: Record<string, string> = {};
+            headers.forEach((h, j) => {
+              const v = arr[j];
+              row[h] = v != null ? String(v).trim() : "";
+            });
+            rows.push(row);
+          }
+          resolve(rows);
+        } catch (err) {
+          reject(err);
+        }
+      };
+      reader.onerror = () => reject(reader.error);
+      reader.readAsBinaryString(file);
+    });
+  }
+  return Promise.reject(new Error("Formato não suportado. Use CSV ou XLSX."));
+}
+
+const normalizeForPreview = (s: string) =>
+  s
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+
+/**
+ * Faz preview do arquivo: colunas, amostra, sugestão de mapeamento e colunas não mapeadas.
+ * Use antes de importar para notificar o usuário a mapear ou criar custom field.
+ */
+export function parseFilePreview(
+  file: File,
+  customFieldNames: string[] = []
+): Promise<FilePreviewResult> {
+  const knownFields = [...KNOWN_LEAD_FIELDS, ...customFieldNames];
+  const customSet = new Set(customFieldNames.map(normalizeForPreview));
+
+  return parseFileToRows(file).then((rows) => {
+    if (rows.length === 0) {
+      return {
+        columns: [],
+        sampleRows: [],
+        suggestedMapping: {},
+        unmappedColumns: [],
+        knownFields: [...knownFields],
+        totalRows: 0,
+      };
+    }
+    const columns = [...new Set(rows.flatMap((r) => Object.keys(r)))].filter(Boolean);
+    const sampleRows = rows.slice(0, 10);
+    const suggestedMapping: Record<string, string> = {};
+    const mappedNormalized = new Set<string>();
+
+    for (const col of columns) {
+      const norm = normalizeForPreview(col);
+      if (HEADER_TO_FIELD[norm]) {
+        suggestedMapping[col] = HEADER_TO_FIELD[norm];
+        mappedNormalized.add(norm);
+      } else if (customSet.has(norm)) {
+        const customName = customFieldNames.find((n) => normalizeForPreview(n) === norm);
+        if (customName) suggestedMapping[col] = `custom:${customName}`;
+        mappedNormalized.add(norm);
+      }
+    }
+
+    const unmappedColumns = columns.filter((col) => !suggestedMapping[col]);
+
+    return {
+      columns,
+      sampleRows,
+      suggestedMapping,
+      unmappedColumns,
+      knownFields: [...knownFields],
+      totalRows: rows.length,
+    };
+  });
+}
 
 interface ImportResult {
   total: number;
@@ -28,12 +263,155 @@ interface ParsedLead {
   utm_term?: string;
   rating?: number; // From "Prioridade do lead"
   origin?: string; // From "Público de origem"
+  /** Nome da etapa na planilha (ex: "Novo", "Abordado"). Será mapeado para stage_key na importação. */
+  stage?: string;
+  /** Nome do vendedor/responsável na planilha. Será mapeado ao vendedor com nome mais parecido no sistema. */
+  seller_name?: string;
+  /** Temperatura/calor do lead (1-10). Usado no funil de propostas. */
+  calor?: number;
+  /** Valor da proposta em número. Usado no funil de propostas. */
+  valor_proposta?: number;
+  /** Nome do produto na planilha. Será mapeado ao produto com nome mais parecido no sistema. */
+  product_name?: string;
+  /** Data de compromisso (ISO ou DD/MM/YYYY). Usado em propostas/confirmação. */
+  commitment_date?: string;
+  /** Tempo de contrato em meses (número). Tempo C. */
+  contract_duration?: number;
+  /** Observações da etapa no funil (pipe_notes). */
+  pipe_notes?: string;
+}
+
+export type FunnelDestination = "qualificacao" | "propostas" | "confirmacao";
+
+export interface ImportLeadsToFunnelOptions {
+  destination: FunnelDestination;
+  /** Etapa padrão quando a linha não tem coluna Etapa ou o valor não corresponde a nenhuma etapa. */
+  stageKey: string;
+  /** Lista de etapas do funil para mapear nome (planilha) → stage_key. Se informada, cada lead usa a etapa da coluna Etapa quando existir. */
+  stages?: { stage_key: string; name: string }[];
+  /** Lista de vendedores (id, name) para mapear nome (planilha) → id. Se informada, cada lead usa o vendedor com nome mais parecido. */
+  members?: { id: string; name: string }[];
+  /** Lista de produtos (id, name) para mapear nome (planilha) → id. Usado no funil de propostas. */
+  products?: { id: string; name: string }[];
+  /** Mapeamento coluna do arquivo → campo do sistema (para parseCSV). */
+  userColumnMapping?: Record<string, string>;
+  sdrId?: string | null;
+  closerId?: string | null;
+}
+
+/** Normaliza nome para comparação (lowercase, sem acentos, trim). */
+function normalizeName(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+/**
+ * Resolve o nome do vendedor (planilha) para id usando a lista de membros.
+ * Retorna o id do vendedor com nome mais parecido (exato, depois contém, depois mais próximo).
+ */
+export function resolveSellerToId(
+  sellerName: string | undefined,
+  members: { id: string; name: string }[],
+  defaultId: string | null
+): string | null {
+  if (!sellerName || !sellerName.trim() || !members.length) return defaultId;
+  const normalized = normalizeName(sellerName);
+  if (!normalized) return defaultId;
+  const withNorm = members.map((m) => ({ ...m, norm: normalizeName(m.name || "") })).filter((m) => m.norm);
+  if (withNorm.length === 0) return defaultId;
+  const exact = withNorm.find((m) => m.norm === normalized);
+  if (exact) return exact.id;
+  const contains = withNorm.find((m) => m.norm.includes(normalized) || normalized.includes(m.norm));
+  if (contains) return contains.id;
+  const byLength = [...withNorm].sort((a, b) => {
+    const distA = Math.abs(a.norm.length - normalized.length);
+    const distB = Math.abs(b.norm.length - normalized.length);
+    return distA - distB;
+  });
+  const closest = byLength[0];
+  return closest ? closest.id : defaultId;
+}
+
+/**
+ * Resolve o nome do produto (planilha) para id usando a lista de produtos.
+ * Vincula automaticamente quando o nome é igual ou corresponde (exato, contém, ou mais próximo).
+ */
+export function resolveProductToId(
+  productName: string | undefined,
+  products: { id: string; name: string }[],
+  defaultId: string | null
+): string | null {
+  if (!products.length) return defaultId;
+  const raw = (productName || "").trim();
+  if (!raw) return defaultId;
+  const normalized = normalizeName(raw);
+  if (!normalized) return defaultId;
+  const withNorm = products
+    .map((p) => ({ ...p, norm: normalizeName((p.name || "").trim()) }))
+    .filter((p) => p.norm);
+  if (withNorm.length === 0) return defaultId;
+  const exact = withNorm.find((p) => p.norm === normalized);
+  if (exact) return exact.id;
+  const startsWith = withNorm.find((p) => p.norm.startsWith(normalized) || normalized.startsWith(p.norm));
+  if (startsWith) return startsWith.id;
+  const contains = withNorm.find((p) => p.norm.includes(normalized) || normalized.includes(p.norm));
+  if (contains) return contains.id;
+  const byLength = [...withNorm].sort((a, b) => {
+    const distA = Math.abs(a.norm.length - normalized.length);
+    const distB = Math.abs(b.norm.length - normalized.length);
+    return distA - distB;
+  });
+  const closest = byLength[0];
+  return closest ? closest.id : defaultId;
+}
+
+/** Normaliza texto para comparação (lowercase, sem acentos, trim, sem ✓/✗ no final). */
+function normalizeStageName(s: string): string {
+  return s
+    .replace(/\s*[✓✗]\s*$/g, "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+/** Resolve o nome da etapa (planilha) para stage_key usando a lista de etapas do sistema. */
+export function resolveStageFromName(
+  stageName: string | undefined,
+  stages: { stage_key: string; name: string }[],
+  defaultStageKey: string
+): string {
+  if (!stageName || !stageName.trim()) return defaultStageKey;
+  const normalized = normalizeStageName(stageName);
+  if (!normalized) return defaultStageKey;
+  const found = stages.find(
+    (s) => {
+      const nameNorm = normalizeStageName(s.name);
+      const keyNorm = normalizeStageName(s.stage_key);
+      return nameNorm === normalized || keyNorm === normalized || nameNorm.includes(normalized) || normalized.includes(nameNorm);
+    }
+  );
+  return found ? found.stage_key : defaultStageKey;
+}
+
+export interface ImportFunnelResult {
+  total: number;
+  imported: number;
+  duplicates: number;
+  updated: number;
+  invalid: number;
 }
 
 export function useImportLeads() {
   const [isImporting, setIsImporting] = useState(false);
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState<ImportResult | null>(null);
+  const { organizationId } = useOrganization();
 
   const KOMMO_BLOCK_START = "--- Kommo (campos) ---";
   const KOMMO_BLOCK_END = "--- /Kommo (campos) ---";
@@ -258,26 +636,26 @@ export function useImportLeads() {
     return incoming.length > existing.length;
   };
 
-  const parseCSV = (file: File): Promise<ParsedLead[]> => {
-    return new Promise((resolve, reject) => {
-      Papa.parse(file, {
-        header: true,
-        skipEmptyLines: true,
-        encoding: "UTF-8",
-        complete: (results) => {
-          const leads: ParsedLead[] = [];
-          
-          // Log column names for debugging
-          if (results.data.length > 0) {
-            console.log("CSV Columns found:", Object.keys(results.data[0] as Record<string, string>));
-          }
-          
-          for (const row of results.data as Record<string, string>[]) {
+  const parseCSV = async (file: File, userColumnMapping?: Record<string, string>): Promise<ParsedLead[]> => {
+    const rows = await parseFileToRows(file);
+    const leads: ParsedLead[] = [];
+    if (rows.length > 0) {
+      console.log("Columns found:", Object.keys(rows[0]));
+    }
+    for (const row of rows) {
             const usedKeys = new Set<string>();
+            const rowForParse: Record<string, string> = { ...row };
+            if (userColumnMapping) {
+              for (const [fileCol, field] of Object.entries(userColumnMapping)) {
+                if (field && field !== "ignore" && row[fileCol] != null) {
+                  rowForParse[field] = String(row[fileCol]).trim();
+                }
+              }
+            }
 
             // NOME COMPLETO - prioriza "Nome completo" que é o nome real do lead
             const nomeCompletoField = collectFieldValues(
-              row,
+              rowForParse,
               ["Nome completo"],
               []
             );
@@ -286,7 +664,7 @@ export function useImportLeads() {
 
             // LEAD TÍTULO - pode ser nome da pessoa ou código (Lead #xxx)
             const leadTituloField = collectFieldValues(
-              row,
+              rowForParse,
               ["Lead título"],
               []
             );
@@ -295,7 +673,7 @@ export function useImportLeads() {
 
             // EMPRESA - busca em múltiplas colunas
             const companyField = collectFieldValues(
-              row,
+              rowForParse,
               ["Nome da empresa", "Empresa", "Company", "Razão Social", "Nome fantasia", "Empresa lead 's"],
               [/empresa/, /\bcompany\b/, /razao/, /raz[aã]o/, /fantasia/]
             );
@@ -373,7 +751,7 @@ export function useImportLeads() {
             } else {
               // Fallback: buscar em outras colunas de nome
               const nameField = collectFieldValues(
-                row,
+                rowForParse,
                 ["Nome", "Nome do contato", "Contato"],
                 [/\bnome\b/, /\bname\b/, /contato/]
               );
@@ -385,7 +763,7 @@ export function useImportLeads() {
 
             // TELEFONE
             const phoneField = collectFieldValues(
-              row,
+              rowForParse,
               ["Celular", "Telefone comercial", "Telefone", "Telefone pessoal", "WhatsApp", "Fone"],
               [/celular/, /telefone/, /\bphone\b/, /whatsapp/, /\bfone\b/, /\btel\b/]
             );
@@ -394,7 +772,7 @@ export function useImportLeads() {
 
             // EMAIL
             const emailField = collectFieldValues(
-              row,
+              rowForParse,
               [
                 "Email comercial",
                 "Email pessoal",
@@ -413,7 +791,7 @@ export function useImportLeads() {
 
             // FATURAMENTO - multiple columns, choose best
             const faturamentoField = collectFieldValues(
-              row,
+              rowForParse,
               [
                 "Qual o faturamento atual?",
                 "Faixa de faturamento (b2b)",
@@ -436,7 +814,7 @@ export function useImportLeads() {
 
             // SEGMENTO - also look for "Segmento de Atuação" and "Tipo de empresa"
             const segmentField = collectFieldValues(
-              row,
+              rowForParse,
               ["Segmento de Atuação", "Segmento", "Setor", "Ramo", "Área de atuação", "Nicho", "Tipo de empresa"],
               [/segmento/, /setor/, /ramo/, /nicho/, /area/, /área/, /tipo.*empresa/]
             );
@@ -445,7 +823,7 @@ export function useImportLeads() {
 
             // PRIORIDADE → RATING (Máxima=10, Alta=8, Média=5, Baixa=2)
             const prioridadeField = collectFieldValues(
-              row,
+              rowForParse,
               ["Prioridade do lead", "Prioridade"],
               [/prioridade/]
             );
@@ -462,52 +840,157 @@ export function useImportLeads() {
 
             // ORIGEM (Público de origem)
             const origemField = collectFieldValues(
-              row,
+              rowForParse,
               ["Público de origem"],
               [/publico.*origem/]
             );
             origemField.matchedKeys.forEach(k => usedKeys.add(k));
             const origemValue = chooseBestValue("name", origemField.values);
 
+            // ETAPA (stage do funil/campanha - nome como na planilha)
+            const etapaField = collectFieldValues(
+              rowForParse,
+              ["Etapa", "Stage", "Estágio", "Etapa (Qualificação)", "Etapa (Propostas)", "Etapa (Confirmação)"],
+              [/etapa/, /stage/, /est[aá]gio/]
+            );
+            etapaField.matchedKeys.forEach(k => usedKeys.add(k));
+            const stageValue = chooseBestValue("name", etapaField.values);
+
+            // VENDEDOR (responsável SDR/Closer - nome como na planilha; sistema associa ao mais parecido)
+            const vendedorField = collectFieldValues(
+              rowForParse,
+              ["Vendedor", "Responsável", "SDR", "Closer", "Vendedor (Qualificação)", "Vendedor (Propostas)", "Vendedor (Confirmação)"],
+              [/vendedor/, /respons[aá]vel/, /sdr/, /closer/, /atribuido|atribuído/]
+            );
+            vendedorField.matchedKeys.forEach(k => usedKeys.add(k));
+            const sellerNameValue = chooseBestValue("name", vendedorField.values);
+
+            // TEMPERATURA / CALOR (1-10), VALOR, PRODUTO, DATA COMPROMISSO, TEMPO CONTRATO, OBSERVAÇÕES ETAPA
+            const temperaturaField = collectFieldValues(
+              rowForParse,
+              ["Temperatura", "Calor", "temperatura", "Temperatura (Propostas)"],
+              [/temperatura/, /calor/]
+            );
+            temperaturaField.matchedKeys.forEach(k => usedKeys.add(k));
+            const temperaturaStr = chooseBestValue("name", temperaturaField.values);
+            let calor: number | undefined;
+            if (temperaturaStr) {
+              const n = parseInt(temperaturaStr.replace(/\D/g, ""), 10);
+              if (!isNaN(n)) calor = Math.min(10, Math.max(1, n));
+            }
+
+            const valorField = collectFieldValues(
+              rowForParse,
+              ["Valor", "Valor da proposta", "Valor proposta", "Valor (Propostas)"],
+              [/valor/, /proposta/]
+            );
+            valorField.matchedKeys.forEach(k => usedKeys.add(k));
+            const valorStr = chooseBestValue("name", valorField.values);
+            let valor_proposta: number | undefined;
+            if (valorStr) {
+              const cleaned = valorStr.replace(/R\$\s*/gi, "").replace(/\./g, "").replace(",", ".");
+              const n = parseFloat(cleaned);
+              if (!isNaN(n)) valor_proposta = n;
+            }
+
+            const produtoField = collectFieldValues(
+              rowForParse,
+              ["produto", "Produto", "Nome do produto", "Produto (Propostas)", "Product", "Produto 2", "Produto 3", "Product 2", "Product 3"],
+              [/produto/, /product/]
+            );
+            produtoField.matchedKeys.forEach(k => usedKeys.add(k));
+            // Coletar todos os produtos: múltiplas colunas (Produto, Produto 2, etc.) e valores separados por , ; ou quebra de linha
+            const productNameParts = produtoField.values.flatMap((v) =>
+              (v || "")
+                .trim()
+                .split(/[\n,;]+/)
+                .map((s) => s.trim())
+                .filter(Boolean)
+            );
+            const product_name = productNameParts.length > 0 ? productNameParts.join("; ") : undefined;
+
+            const dataCompromissoField = collectFieldValues(
+              rowForParse,
+              ["Data Compromisso", "Data do Compromisso", "Data compromisso", "Compromisso"],
+              [/data.*compromisso/, /compromisso/, /data.*reuniao/]
+            );
+            dataCompromissoField.matchedKeys.forEach(k => usedKeys.add(k));
+            const commitmentDateStr = chooseBestValue("name", dataCompromissoField.values);
+            let commitment_date: string | undefined;
+            if (commitmentDateStr?.trim()) {
+              const s = commitmentDateStr.trim();
+              const ddmmyy = /^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/.exec(s);
+              if (ddmmyy) {
+                const [, d, m, y] = ddmmyy;
+                const year = y.length === 2 ? 2000 + parseInt(y, 10) : parseInt(y, 10);
+                const date = new Date(year, parseInt(m, 10) - 1, parseInt(d, 10));
+                if (!isNaN(date.getTime())) commitment_date = date.toISOString();
+              } else {
+                const parsed = new Date(s);
+                if (!isNaN(parsed.getTime())) commitment_date = parsed.toISOString();
+              }
+            }
+
+            const tempoContratoField = collectFieldValues(
+              rowForParse,
+              ["Tempo C", "Tempo de contrato", "Duração contrato", "Tempo contrato"],
+              [/tempo.*c/, /tempo.*contrato/, /dura[cç][aã]o.*contrato/]
+            );
+            tempoContratoField.matchedKeys.forEach(k => usedKeys.add(k));
+            const tempoContratoStr = chooseBestValue("name", tempoContratoField.values);
+            let contract_duration: number | undefined;
+            if (tempoContratoStr) {
+              const n = parseInt(tempoContratoStr.replace(/\D/g, ""), 10);
+              if (!isNaN(n)) contract_duration = n;
+            }
+
+            const observacoesEtapaField = collectFieldValues(
+              rowForParse,
+              ["observacoes_etapa", "Observações etapa", "Observações", "Obs etapa", "Observações (etapa)"],
+              [/observa[cç][oõ]es.*etapa/, /obs.*etapa/]
+            );
+            observacoesEtapaField.matchedKeys.forEach(k => usedKeys.add(k));
+            const pipe_notes = chooseBestValue("name", observacoesEtapaField.values);
+
             // UTM (variações de header)
             const utm_campaign = chooseBestValue(
               "utm",
-              collectFieldValues(row, ["utm_campaign", "UTM Campaign", "UTM campaign"], [/utm.*campaign/]).values
+              collectFieldValues(rowForParse, ["utm_campaign", "UTM Campaign", "UTM campaign"], [/utm.*campaign/]).values
             );
             const utm_source = chooseBestValue(
               "utm",
-              collectFieldValues(row, ["utm_source", "UTM Source", "UTM source"], [/utm.*source/]).values
+              collectFieldValues(rowForParse, ["utm_source", "UTM Source", "UTM source"], [/utm.*source/]).values
             );
             const utm_medium = chooseBestValue(
               "utm",
-              collectFieldValues(row, ["utm_medium", "UTM Medium", "UTM medium"], [/utm.*medium/]).values
+              collectFieldValues(rowForParse, ["utm_medium", "UTM Medium", "UTM medium"], [/utm.*medium/]).values
             );
             const utm_content = chooseBestValue(
               "utm",
-              collectFieldValues(row, ["utm_content", "UTM Content", "UTM content"], [/utm.*content/]).values
+              collectFieldValues(rowForParse, ["utm_content", "UTM Content", "UTM content"], [/utm.*content/]).values
             );
             const utm_term = chooseBestValue(
               "utm",
-              collectFieldValues(row, ["utm_term", "UTM Term", "UTM term"], [/utm.*term/]).values
+              collectFieldValues(rowForParse, ["utm_term", "UTM Term", "UTM term"], [/utm.*term/]).values
             );
 
             // NOTES - concatena colunas de nota/observação
-            const noteColumns = Object.keys(row).filter(key =>
+            const noteColumns = Object.keys(rowForParse).filter(key =>
               /nota|note|observa|comentario|comentário/.test(normalizeHeader(key))
             );
             noteColumns.forEach(k => usedKeys.add(k));
             const notes = noteColumns
-              .map(col => row[col]?.trim())
+              .map(col => rowForParse[col]?.trim())
               .filter(Boolean)
               .join("\n\n");
 
             // Outros campos: tudo o que tem valor e não foi mapeado acima
-            const otherFields = Object.keys(row)
+            const otherFields = Object.keys(rowForParse)
               .filter(key => {
-                const value = row[key]?.trim();
+                const value = rowForParse[key]?.trim();
                 return !!value && !usedKeys.has(key);
               })
-              .map(key => ({ key, value: row[key].trim() }));
+              .map(key => ({ key, value: rowForParse[key].trim() }));
 
             const kommoBlock = buildKommoBlock({
               nameValues: [nomeCompleto, leadTitulo, name].filter(Boolean) as string[],
@@ -542,16 +1025,18 @@ export function useImportLeads() {
               utm_term: utm_term || undefined,
               rating,
               origin: origemValue,
+              stage: stageValue,
+              seller_name: sellerNameValue,
+              calor,
+              valor_proposta,
+              product_name: product_name || undefined,
+              commitment_date,
+              contract_duration,
+              pipe_notes: pipe_notes || undefined,
             });
           }
 
-          resolve(leads);
-        },
-        error: (error) => {
-          reject(error);
-        },
-      });
-    });
+    return leads;
   };
 
   const formatPhone = (phone: string): string => {
@@ -577,7 +1062,9 @@ export function useImportLeads() {
     stageId: string,
     sdrId?: string,
     autoDistribute?: boolean,
-    memberIds?: string[]
+    memberIds?: string[],
+    /** Etapas da campanha (id, name) para mapear coluna Etapa da planilha → stage_id. Se informado, cada lead usa a etapa da coluna Etapa quando existir. */
+    campaignStages?: { id: string; name: string }[]
   ): Promise<ImportResult> => {
     setIsImporting(true);
     setProgress(0);
@@ -653,7 +1140,15 @@ export function useImportLeads() {
         
         for (const lead of batch) {
           const formattedPhone = lead.phone ? formatPhone(lead.phone) : undefined;
-          
+          const stageIdForLead =
+            campaignStages && campaignStages.length > 0
+              ? resolveStageFromName(
+                  lead.stage,
+                  campaignStages.map((s) => ({ stage_key: s.id, name: s.name })),
+                  stageId
+                )
+              : stageId;
+
           // Skip if already processed in this import
           if (formattedPhone && processedPhones.has(formattedPhone)) {
             duplicates++;
@@ -724,7 +1219,7 @@ export function useImportLeads() {
                 await supabase.from("campanha_leads").insert({
                   campanha_id: campanhaId,
                   lead_id: existingLead.id,
-                  stage_id: stageId,
+                  stage_id: stageIdForLead,
                   sdr_id: assignedSdrId,
                 });
 
@@ -790,7 +1285,7 @@ export function useImportLeads() {
             await supabase.from("campanha_leads").insert({
               campanha_id: campanhaId,
               lead_id: newLead.id,
-              stage_id: stageId,
+              stage_id: stageIdForLead,
               sdr_id: assignedSdrId,
             });
 
@@ -832,6 +1327,226 @@ export function useImportLeads() {
       return result;
     } catch (error) {
       console.error("Import error:", error);
+      throw error;
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  const importLeadsToFunnel = async (
+    file: File,
+    options: ImportLeadsToFunnelOptions
+  ): Promise<ImportFunnelResult> => {
+    if (!organizationId) {
+      throw new Error("Organização não encontrada");
+    }
+    setIsImporting(true);
+    setProgress(0);
+    setResult(null);
+
+    try {
+      const parsedLeads = await parseCSV(file, options.userColumnMapping);
+      if (parsedLeads.length === 0) {
+        throw new Error("Nenhum lead válido encontrado no arquivo");
+      }
+
+      let productsForPropostas = options.products ?? [];
+      if (options.destination === "propostas" && productsForPropostas.length === 0) {
+        const { data: productsFromDb } = await supabase
+          .from("products")
+          .select("id, name")
+          .order("name");
+        productsForPropostas = (productsFromDb || []).map((p) => ({ id: p.id, name: p.name || "" }));
+      }
+
+      const phones = parsedLeads
+        .filter((l) => l.phone)
+        .map((l) => formatPhone(l.phone!));
+      const { data: existingLeads } = await supabase
+        .from("leads")
+        .select("id, phone, name, company, email, faturamento, segment, notes, rating, utm_campaign, utm_source, utm_medium, utm_content, utm_term")
+        .eq("organization_id", organizationId)
+        .in("phone", phones);
+
+      const existingLeadsMap = new Map<string, (typeof existingLeads)[number]>();
+      existingLeads?.forEach((l) => {
+        if (l.phone) existingLeadsMap.set(l.phone, l);
+      });
+
+      let imported = 0;
+      let duplicates = 0;
+      let updated = 0;
+      let invalid = 0;
+      const processedPhones = new Set<string>();
+      const BATCH_SIZE = 25;
+
+      for (let i = 0; i < parsedLeads.length; i += BATCH_SIZE) {
+        const batch = parsedLeads.slice(i, i + BATCH_SIZE);
+        for (const lead of batch) {
+          const formattedPhone = lead.phone ? formatPhone(lead.phone) : undefined;
+          if (formattedPhone && processedPhones.has(formattedPhone)) {
+            duplicates++;
+            continue;
+          }
+          const existingLead = formattedPhone ? existingLeadsMap.get(formattedPhone) : null;
+
+          try {
+            let leadId: string;
+            if (existingLead) {
+              leadId = existingLead.id;
+              const updates: Record<string, unknown> = {};
+              if (shouldReplaceValue(existingLead.name, lead.name, "name")) updates.name = lead.name;
+              if (shouldReplaceValue(existingLead.company, lead.company, "company")) updates.company = lead.company;
+              if (shouldReplaceValue(existingLead.email, lead.email, "email")) updates.email = lead.email;
+              if (shouldReplaceValue(existingLead.faturamento, lead.faturamento, "faturamento")) updates.faturamento = lead.faturamento;
+              if (shouldReplaceValue(existingLead.segment, lead.segment, "segment")) updates.segment = lead.segment;
+              if (Object.keys(updates).length > 0) {
+                await supabase.from("leads").update(updates).eq("id", existingLead.id);
+                updated++;
+              } else {
+                duplicates++;
+              }
+            } else {
+              const { data: newLead, error: leadError } = await supabase
+                .from("leads")
+                .insert({
+                  organization_id: organizationId,
+                  name: lead.name,
+                  company: lead.company,
+                  phone: formattedPhone,
+                  email: lead.email,
+                  faturamento: lead.faturamento,
+                  segment: lead.segment,
+                  notes: mergeNotes(undefined, lead.notes, lead.kommoBlock),
+                  origin: "outro" as const,
+                  rating: lead.rating || 0,
+                  utm_campaign: lead.utm_campaign,
+                  utm_source: lead.utm_source,
+                  utm_medium: lead.utm_medium,
+                  utm_content: lead.utm_content,
+                  utm_term: lead.utm_term,
+                } as Record<string, unknown>)
+                .select("id")
+                .single();
+              if (leadError) {
+                invalid++;
+                continue;
+              }
+              leadId = newLead.id;
+              imported++;
+            }
+
+            const stageKeyForLead =
+              options.stages && options.stages.length > 0
+                ? resolveStageFromName(lead.stage, options.stages, options.stageKey)
+                : options.stageKey;
+
+            const members = options.members ?? [];
+            const defaultSdrId = options.sdrId ?? null;
+            const defaultCloserId = options.closerId ?? null;
+            const assignedSdrId = (destination: "qualificacao" | "confirmacao") =>
+              resolveSellerToId(lead.seller_name, members, destination === "qualificacao" ? defaultSdrId : defaultSdrId);
+            const assignedCloserId = () =>
+              resolveSellerToId(lead.seller_name, members, defaultCloserId);
+
+            const sdrIdForLead = options.destination === "qualificacao" ? assignedSdrId("qualificacao") : options.destination === "confirmacao" ? assignedSdrId("confirmacao") : null;
+            const closerIdForLead = options.destination === "propostas" ? assignedCloserId() : options.destination === "confirmacao" ? assignedCloserId() : null;
+            if (sdrIdForLead !== null || closerIdForLead !== null) {
+              const leadUpdates: Record<string, unknown> = {};
+              if (sdrIdForLead !== null) leadUpdates.sdr_id = sdrIdForLead;
+              if (closerIdForLead !== null) leadUpdates.closer_id = closerIdForLead;
+              if (Object.keys(leadUpdates).length > 0) {
+                await supabase.from("leads").update(leadUpdates).eq("id", leadId);
+              }
+            }
+
+            if (options.destination === "qualificacao") {
+              await supabase.from("pipe_whatsapp").insert({
+                lead_id: leadId,
+                status: stageKeyForLead,
+                organization_id: organizationId,
+                sdr_id: assignedSdrId("qualificacao"),
+              });
+            } else if (options.destination === "propostas") {
+              const productNamesRaw = (lead.product_name || "").trim();
+              const productNames = productNamesRaw
+                ? productNamesRaw.split(/[\n,;]+/).map((s) => s.trim()).filter(Boolean)
+                : [];
+              const productIds: string[] = [];
+              for (const name of productNames) {
+                const id = resolveProductToId(name, productsForPropostas, null);
+                if (id) productIds.push(id);
+              }
+              const firstProductId = productIds.length > 0 ? productIds[0] : null;
+              const totalValue = lead.valor_proposta ?? null;
+
+              const { data: newProposta, error: propostaError } = await supabase
+                .from("pipe_propostas")
+                .insert({
+                  lead_id: leadId,
+                  status: stageKeyForLead,
+                  organization_id: organizationId,
+                  closer_id: assignedCloserId(),
+                  sale_value: totalValue,
+                  calor: lead.calor ?? null,
+                  commitment_date: lead.commitment_date ?? null,
+                  contract_duration: lead.contract_duration ?? null,
+                  notes: lead.pipe_notes ?? null,
+                  product_id: firstProductId,
+                })
+                .select("id")
+                .single();
+              if (propostaError) {
+                invalid++;
+                continue;
+              }
+              const pipePropostaId = newProposta.id;
+              if (productIds.length > 0) {
+                const n = productIds.length;
+                const valuePerItem = totalValue != null && n > 0 ? Math.floor(totalValue / n) : null;
+                const remainder = totalValue != null && n > 0 ? totalValue - (valuePerItem ?? 0) * n : 0;
+                const itemsToInsert = productIds.map((product_id, index) => ({
+                  pipe_proposta_id: pipePropostaId,
+                  product_id,
+                  sale_value: totalValue != null && valuePerItem != null
+                    ? (index < n - 1 ? valuePerItem : valuePerItem + remainder)
+                    : null,
+                }));
+                await supabase.from("pipe_proposta_items").insert(itemsToInsert);
+              }
+            } else {
+              await supabase.from("pipe_confirmacao").insert({
+                lead_id: leadId,
+                status: stageKeyForLead,
+                organization_id: organizationId,
+                sdr_id: assignedSdrId("confirmacao"),
+                closer_id: assignedCloserId(),
+                meeting_date: lead.commitment_date ?? null,
+                notes: lead.pipe_notes ?? null,
+              });
+            }
+
+            if (formattedPhone) processedPhones.add(formattedPhone);
+          } catch (err) {
+            console.error("Error processing lead:", err);
+            invalid++;
+          }
+        }
+        setProgress(Math.round(((i + batch.length) / parsedLeads.length) * 100));
+      }
+
+      const funnelResult: ImportFunnelResult = {
+        total: parsedLeads.length,
+        imported,
+        duplicates,
+        updated,
+        invalid,
+      };
+      setProgress(100);
+      setResult(funnelResult as ImportResult);
+      return funnelResult;
+    } catch (error) {
+      console.error("Import funnel error:", error);
       throw error;
     } finally {
       setIsImporting(false);
@@ -927,6 +1642,7 @@ export function useImportLeads() {
   return {
     parseCSV,
     importLeads,
+    importLeadsToFunnel,
     resetImport,
     fixExistingLeadNames,
     isImporting,

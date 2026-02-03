@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { motion } from "framer-motion";
-import { Search, Plus, Zap, User, Building2, Star, Phone, Loader2, Globe, Trash2, MoreVertical, Target, MessageCircle, Mail, Calendar, DollarSign, Clock, Briefcase, Settings2, Type, Bot } from "lucide-react";
+import { Search, Plus, Zap, User, Building2, Star, Phone, Loader2, Globe, Trash2, MoreVertical, Target, MessageCircle, Mail, Calendar, DollarSign, Clock, Briefcase, Settings2, Type, Bot, Upload, FileDown } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -39,11 +39,13 @@ import { usePipelineStages, stagesToColumns } from "@/hooks/usePipelineStages";
 import { ManagePipelineStagesModal } from "@/components/pipelines/ManagePipelineStagesModal";
 import { useCreatePipeConfirmacao } from "@/hooks/usePipeConfirmacao";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
-import { useDeleteLead, useToggleLeadAI } from "@/hooks/useLeads";
+import { useDeleteLead, useDeleteAllLeadsInPipe, useToggleLeadAI } from "@/hooks/useLeads";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useCreateAcaoDoDia } from "@/hooks/useAcoesDoDia";
 import { LeadModal } from "@/components/leads/LeadModal";
 import { CreateOpportunityModal } from "@/components/kanban/CreateOpportunityModal";
+import { ImportLeadsFunnelModal } from "@/components/leads/ImportLeadsFunnelModal";
+import { ExportLeadsModal } from "@/components/leads/ExportLeadsModal";
 import { CustomFieldsManager } from "@/components/leads/CustomFieldsManager";
 import {
   Dialog,
@@ -160,7 +162,7 @@ function WhatsappCardComponent({ card, onDelete, isAdmin, onQuickAdd, onCardClic
   return (
     <motion.div
       whileHover={{ scale: 1.02, y: -2 }}
-      className="kanban-card group cursor-pointer relative"
+      className="kanban-card group cursor-pointer relative w-full"
       onClick={onCardClick}
     >
       {/* Actions Menu */}
@@ -232,19 +234,19 @@ function WhatsappCardComponent({ card, onDelete, isAdmin, onQuickAdd, onCardClic
       </div>
 
       {/* Header: Name, Company, Rating */}
-      <div className="flex items-start justify-between mb-2 pr-16">
+      <div className="flex items-start justify-between gap-2 mb-2 pr-16">
         <div className="flex-1 min-w-0">
-          <h4 className="font-medium text-sm truncate group-hover:text-primary transition-colors">
+          <h4 className="font-medium text-sm break-words line-clamp-2 group-hover:text-primary transition-colors" title={card.name}>
             {card.name}
           </h4>
           {card.company && (
-            <div className="flex items-center gap-1 text-muted-foreground mt-0.5">
+            <div className="flex items-center gap-1 text-muted-foreground mt-0.5 min-w-0">
               <Building2 className="w-3 h-3 flex-shrink-0" />
-              <span className="text-xs truncate">{card.company}</span>
+              <span className="text-xs break-words line-clamp-2" title={card.company}>{card.company}</span>
             </div>
           )}
         </div>
-        <div className="flex items-center gap-0.5 ml-2">
+        <div className="flex items-center gap-0.5 shrink-0">
           {[...Array(5)].map((_, i) => (
             <Star
               key={i}
@@ -276,17 +278,17 @@ function WhatsappCardComponent({ card, onDelete, isAdmin, onQuickAdd, onCardClic
       </div>
 
       {/* Contact Info */}
-      <div className="space-y-1 mb-2">
+      <div className="space-y-1 mb-2 min-w-0">
         {card.phone && (
-          <div className="flex items-center gap-1.5 text-muted-foreground">
+          <div className="flex items-center gap-1.5 text-muted-foreground min-w-0">
             <Phone className="w-3 h-3 flex-shrink-0" />
-            <span className="text-xs truncate">{card.phone}</span>
+            <span className="text-xs break-all truncate" title={card.phone}>{card.phone}</span>
           </div>
         )}
         {card.email && (
-          <div className="flex items-center gap-1.5 text-muted-foreground">
+          <div className="flex items-center gap-1.5 text-muted-foreground min-w-0">
             <Mail className="w-3 h-3 flex-shrink-0" />
-            <span className="text-xs truncate">{card.email}</span>
+            <span className="text-xs break-all truncate" title={card.email}>{card.email}</span>
           </div>
         )}
       </div>
@@ -341,11 +343,11 @@ function WhatsappCardComponent({ card, onDelete, isAdmin, onQuickAdd, onCardClic
       )}
 
       {/* Footer: SDR & Time */}
-      <div className="flex items-center justify-between pt-2 border-t border-border">
-        <span className="text-[10px] text-muted-foreground">
+      <div className="flex items-center justify-between gap-2 pt-2 border-t border-border min-w-0">
+        <span className="text-[10px] text-muted-foreground truncate min-w-0">
           {formatDistanceToNow(new Date(card.createdAt), { addSuffix: true, locale: ptBR })}
         </span>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           {formatPhoneForWhatsApp(card.phone) && (
             <button
               onClick={(e) => openWhatsApp(card.phone, e)}
@@ -356,9 +358,9 @@ function WhatsappCardComponent({ card, onDelete, isAdmin, onQuickAdd, onCardClic
             </button>
           )}
           {card.sdr && (
-            <div className="flex items-center gap-1">
-              <User className="w-3 h-3 text-muted-foreground" />
-              <span className="text-[10px] text-muted-foreground">{card.sdr}</span>
+            <div className="flex items-center gap-1 min-w-0">
+              <User className="w-3 h-3 text-muted-foreground shrink-0" />
+              <span className="text-[10px] text-muted-foreground truncate max-w-[100px]" title={card.sdr}>{card.sdr}</span>
             </div>
           )}
         </div>
@@ -473,8 +475,11 @@ export default function PipeWhatsapp() {
   const [isOpportunityModalOpen, setIsOpportunityModalOpen] = useState(false);
   const [isStagesModalOpen, setIsStagesModalOpen] = useState(false);
   const [isCustomFieldsModalOpen, setIsCustomFieldsModalOpen] = useState(false);
+  const [isImportFunnelOpen, setIsImportFunnelOpen] = useState(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [editingLead, setEditingLead] = useState<any>(null);
   const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; pipeId: string; leadId: string } | null>(null);
+  const [deleteAllLeadsDialogOpen, setDeleteAllLeadsDialogOpen] = useState(false);
   const { data: pipeData, isLoading, refetch } = usePipeWhatsapp();
   const { data: pipelineStages = [], isLoading: loadingStages } = usePipelineStages("whatsapp");
   const { data: teamMembers } = useTeamMembers();
@@ -482,6 +487,7 @@ export default function PipeWhatsapp() {
   const updatePipeWhatsapp = useUpdatePipeWhatsapp();
   const deletePipeWhatsapp = useDeletePipeWhatsapp();
   const deleteLead = useDeleteLead();
+  const deleteAllLeadsInPipe = useDeleteAllLeadsInPipe("whatsapp");
   const createPipeConfirmacao = useCreatePipeConfirmacao();
   const createAcaoDoDia = useCreateAcaoDoDia();
 
@@ -680,6 +686,14 @@ export default function PipeWhatsapp() {
             <Settings2 className="w-4 h-4 mr-2" />
             Etapas
           </Button>
+          <Button size="sm" variant="outline" onClick={() => setIsImportFunnelOpen(true)}>
+            <Upload className="w-4 h-4 mr-2" />
+            Importar
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => setIsExportModalOpen(true)}>
+            <FileDown className="w-4 h-4 mr-2" />
+            Exportar
+          </Button>
           <Button size="sm" variant="outline" onClick={() => { setEditingLead(null); setIsLeadModalOpen(true); }}>
             <Plus className="w-4 h-4 mr-2" />
             Novo Lead
@@ -762,6 +776,7 @@ export default function PipeWhatsapp() {
       <DraggableKanbanBoard
         columns={columns}
         onStatusChange={handleStatusChange}
+        onDeleteAllLeads={() => setDeleteAllLeadsDialogOpen(true)}
         renderCard={(card) => (
           <WhatsappCardComponent 
             card={card} 
@@ -780,6 +795,14 @@ export default function PipeWhatsapp() {
           />
         )}
       />
+
+      {/* Import Leads Funnel Modal */}
+      <ImportLeadsFunnelModal
+        open={isImportFunnelOpen}
+        onOpenChange={setIsImportFunnelOpen}
+        destination="qualificacao"
+      />
+      <ExportLeadsModal open={isExportModalOpen} onOpenChange={setIsExportModalOpen} />
 
       {/* Create Opportunity Modal */}
       <CreateOpportunityModal
@@ -818,6 +841,36 @@ export default function PipeWhatsapp() {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {isAdmin ? "Excluir Lead e Oportunidade" : "Remover do Funil"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete ALL leads from THIS stage (Qualificação) confirmation */}
+      <AlertDialog open={deleteAllLeadsDialogOpen} onOpenChange={setDeleteAllLeadsDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir todos os leads desta etapa</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação irá excluir todos os leads que estão no funil de Qualificação (WhatsApp) e na base de dados (histórico, tags, etc.). Não afeta outros funis nem outras organizações. Não é possível desfazer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                try {
+                  const result = await deleteAllLeadsInPipe.mutateAsync();
+                  setDeleteAllLeadsDialogOpen(false);
+                  refetch();
+                  toast.success(result?.deleted ? `${result.deleted} leads excluídos desta etapa.` : "Todos os leads desta etapa foram excluídos.");
+                } catch (e) {
+                  toast.error("Erro ao excluir leads.");
+                }
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteAllLeadsInPipe.isPending ? "Excluindo..." : "Excluir todos os leads desta etapa"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

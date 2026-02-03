@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { 
   Search, Filter, Plus, Calendar, User, Building2, Star, 
   DollarSign, Clock, Tag, Loader2, TrendingUp, Package,
-  ArrowUpRight, Percent, BarChart3, Target, Flame, MessageCircle, Settings2
+  ArrowUpRight, Percent, BarChart3, Target, Flame, MessageCircle, Settings2, Upload, FileDown
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -16,12 +16,25 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { DraggableKanbanBoard, DraggableItem, KanbanColumn } from "@/components/kanban/DraggableKanbanBoard";
 import { usePipePropostas, useUpdatePipeProposta, PipePropostasStatus } from "@/hooks/usePipePropostas";
+import { useDeleteAllLeadsInPipe } from "@/hooks/useLeads";
 import { usePipelineStages, stagesToColumns } from "@/hooks/usePipelineStages";
 import { ManagePipelineStagesModal } from "@/components/pipelines/ManagePipelineStagesModal";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
 import { CreateProposalModal } from "@/components/proposals/CreateProposalModal";
+import { ImportLeadsFunnelModal } from "@/components/leads/ImportLeadsFunnelModal";
+import { ExportLeadsModal } from "@/components/leads/ExportLeadsModal";
 import { ProposalDetailModal } from "@/components/proposals/ProposalDetailModal";
 import { FunnelChart } from "@/components/dashboard/FunnelChart";
 import { CalorSlider, CalorBadge } from "@/components/proposals/CalorSlider";
@@ -91,10 +104,10 @@ function ProposalCardComponent({
   return (
     <motion.div
       whileHover={{ scale: 1.02, y: -2 }}
-      className="kanban-card group cursor-pointer"
+      className="kanban-card group cursor-pointer w-full"
     >
       {/* Quick Actions Row */}
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex items-center justify-between gap-2 mb-2">
         <CalorSlider 
           value={proposal.calor} 
           onChange={onCalorChange}
@@ -105,17 +118,17 @@ function ProposalCardComponent({
         />
       </div>
 
-      <div className="flex items-start justify-between mb-3">
+      <div className="flex items-start justify-between gap-2 mb-2">
         <div className="flex-1 min-w-0">
-          <h4 className="font-medium text-sm truncate group-hover:text-primary transition-colors">
+          <h4 className="font-medium text-sm break-words line-clamp-2 group-hover:text-primary transition-colors" title={proposal.name}>
             {proposal.name}
           </h4>
           <div className="flex items-center gap-1 text-muted-foreground mt-0.5">
-            <Building2 className="w-3 h-3" />
-            <span className="text-xs truncate">{proposal.company || "Sem empresa"}</span>
+            <Building2 className="w-3 h-3 shrink-0 mt-0.5" />
+            <span className="text-xs break-words line-clamp-2" title={proposal.company || "Sem empresa"}>{proposal.company || "Sem empresa"}</span>
           </div>
         </div>
-        <div className="flex items-center gap-0.5 ml-2">
+        <div className="flex items-center gap-0.5 shrink-0">
           {[...Array(5)].map((_, i) => (
             <Star
               key={i}
@@ -130,13 +143,13 @@ function ProposalCardComponent({
         </div>
       </div>
 
-      {/* Product Items - Show each product with type badge and value */}
+      {/* Product Items - Show each product with type badge and value (até 5 no card, resto em "+N") */}
       {proposal.items.length > 0 ? (
-        <div className="space-y-1.5 mb-3">
-          {proposal.items.slice(0, 3).map((item) => (
+        <div className="space-y-1.5 mb-2">
+          {proposal.items.slice(0, 5).map((item) => (
             <div 
               key={item.id} 
-              className="flex items-center justify-between gap-2 p-1.5 rounded bg-muted/50"
+              className="flex items-center justify-between gap-2 p-1.5 rounded bg-muted/50 min-w-0"
             >
               <div className="flex items-center gap-1.5 flex-1 min-w-0">
                 {item.product?.type && (
@@ -154,16 +167,16 @@ function ProposalCardComponent({
                     {item.product.type === "mrr" ? "MRR" : item.product.type === "unitario" ? "Unit" : "Proj"}
                   </Badge>
                 )}
-                <span className="text-xs truncate">{item.product?.name || "Produto"}</span>
+                <span className="text-xs break-words line-clamp-2 min-w-0" title={item.product?.name || "Produto"}>{item.product?.name || "Produto"}</span>
               </div>
               <span className="text-xs font-medium text-success shrink-0">
                 {formatCurrency(item.sale_value || 0)}
               </span>
             </div>
           ))}
-          {proposal.items.length > 3 && (
+          {proposal.items.length > 5 && (
             <p className="text-[10px] text-muted-foreground text-center">
-              +{proposal.items.length - 3} produto(s)
+              +{proposal.items.length - 5} produto(s)
             </p>
           )}
         </div>
@@ -195,9 +208,9 @@ function ProposalCardComponent({
 
       {/* Total Value - Show when multiple products */}
       {proposal.items.length > 0 && (
-        <div className="flex items-center justify-between mb-3 pt-2 border-t border-border/50">
+        <div className="flex items-center justify-between mb-2 pt-2 border-t border-border/50">
           <span className="text-xs text-muted-foreground">Total:</span>
-          <div className="flex items-center gap-1 text-success font-semibold text-sm">
+          <div className="flex items-center gap-1 text-success font-semibold text-sm shrink-0">
             <DollarSign className="w-3.5 h-3.5" />
             {formatCurrency(proposal.value)}
           </div>
@@ -206,41 +219,41 @@ function ProposalCardComponent({
 
       {/* Contract Duration */}
       {proposal.contractDuration > 0 && (
-        <div className="flex items-center gap-1.5 text-muted-foreground mb-3">
-          <Clock className="w-3.5 h-3.5" />
+        <div className="flex items-center gap-1.5 text-muted-foreground mb-2">
+          <Clock className="w-3.5 h-3.5 shrink-0" />
           <span className="text-xs">Contrato: {proposal.contractDuration} meses</span>
         </div>
       )}
 
       {/* Tags */}
       {proposal.tags.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 mb-3">
-          {proposal.tags.slice(0, 2).map((tag) => (
-            <Badge key={tag} variant="secondary" className="text-xs">
+        <div className="flex flex-wrap gap-1.5 mb-2">
+          {proposal.tags.slice(0, 3).map((tag) => (
+            <Badge key={tag} variant="secondary" className="text-xs break-all max-w-full">
               {tag}
             </Badge>
           ))}
-          {proposal.tags.length > 2 && (
+          {proposal.tags.length > 3 && (
             <Badge variant="secondary" className="text-xs">
-              +{proposal.tags.length - 2}
+              +{proposal.tags.length - 3}
             </Badge>
           )}
         </div>
       )}
 
       {/* Meeting Date & Days Until */}
-      <div className="flex items-center justify-between pt-2 border-t border-border">
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between gap-2 pt-2 border-t border-border min-w-0">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
           {proposal.commitmentDate ? (
             <DaysUntilMeeting commitmentDate={proposal.commitmentDate} compact />
           ) : proposal.lastContact ? (
-            <div className="flex items-center gap-1.5 text-muted-foreground">
-              <Calendar className="w-3 h-3" />
-              <span className="text-xs">{proposal.lastContact}</span>
+            <div className="flex items-center gap-1.5 text-muted-foreground min-w-0">
+              <Calendar className="w-3 h-3 shrink-0" />
+              <span className="text-xs truncate">{proposal.lastContact}</span>
             </div>
           ) : null}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           {formattedPhone && (
             <button
               onClick={(e) => openWhatsApp(proposal.phone, e)}
@@ -251,9 +264,9 @@ function ProposalCardComponent({
             </button>
           )}
           {proposal.closer && (
-            <div className="flex items-center gap-1.5">
-              <User className="w-3 h-3 text-muted-foreground" />
-              <span className="text-xs text-muted-foreground">{proposal.closer}</span>
+            <div className="flex items-center gap-1.5 min-w-0">
+              <User className="w-3 h-3 text-muted-foreground shrink-0" />
+              <span className="text-xs text-muted-foreground truncate max-w-[100px]" title={proposal.closer}>{proposal.closer}</span>
             </div>
           )}
         </div>
@@ -269,6 +282,8 @@ export default function PipePropostas() {
   const [filterPriority, setFilterPriority] = useState("all");
   const [filterCalor, setFilterCalor] = useState("all");
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isImportFunnelOpen, setIsImportFunnelOpen] = useState(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [isStagesModalOpen, setIsStagesModalOpen] = useState(false);
   const [selectedProposta, setSelectedProposta] = useState<any>(null);
@@ -283,11 +298,13 @@ export default function PipePropostas() {
     closerId: string | null;
     leadName: string;
   } | null>(null);
+  const [deleteAllLeadsDialogOpen, setDeleteAllLeadsDialogOpen] = useState(false);
 
   const { data: pipeData, isLoading, refetch } = usePipePropostas();
   const { data: pipelineStages = [] } = usePipelineStages("propostas");
   const { data: teamMembers } = useTeamMembers();
   const updatePipeProposta = useUpdatePipeProposta();
+  const deleteAllLeadsInPipe = useDeleteAllLeadsInPipe("propostas");
 
   const closers = useMemo(() => {
     return teamMembers?.filter(m => m.role === "closer" && m.is_active) || [];
@@ -297,18 +314,41 @@ export default function PipePropostas() {
   const transformToCard = (item: any): ProposalCard => {
     const lead = item.lead;
     const items = item.items || [];
-    
-    // Calculate total value from items, fallback to sale_value for backwards compatibility
-    const totalValue = items.length > 0 
-      ? items.reduce((sum: number, i: any) => sum + (i.sale_value || 0), 0)
+    const hasItemsFromDb = items.length > 0;
+    const hasMainProduct = !hasItemsFromDb && item.product_id && item.product;
+
+    const itemsForCard = hasItemsFromDb
+      ? items.map((i: any) => ({
+          id: i.id,
+          product_id: i.product_id,
+          sale_value: i.sale_value,
+          product: i.product ? {
+            id: i.product.id,
+            name: i.product.name,
+            type: i.product.type,
+          } : undefined,
+        }))
+      : hasMainProduct
+        ? [{
+            id: `main-${item.id}`,
+            product_id: item.product_id,
+            sale_value: item.sale_value,
+            product: item.product ? {
+              id: item.product.id,
+              name: item.product.name,
+              type: item.product.type,
+            } : undefined,
+          }]
+        : [];
+
+    const totalValue = itemsForCard.length > 0
+      ? itemsForCard.reduce((sum: number, i: any) => sum + (i.sale_value || 0), 0)
       : (item.sale_value || 0);
-    
-    // Determine product types from items
-    const hasItems = items.length > 0;
-    const productTypes = hasItems 
-      ? [...new Set(items.map((i: any) => i.product?.type).filter(Boolean))]
+
+    const productTypes = itemsForCard.length > 0
+      ? [...new Set(itemsForCard.map((i: any) => i.product?.type).filter(Boolean))]
       : item.product_type ? [item.product_type] : [];
-    
+
     return {
       id: item.id,
       name: lead?.name || "Sem nome",
@@ -329,16 +369,7 @@ export default function PipePropostas() {
       segment: lead?.segment,
       commitmentDate: item.commitment_date ? new Date(item.commitment_date) : undefined,
       leadId: lead?.id,
-      items: items.map((i: any) => ({
-        id: i.id,
-        product_id: i.product_id,
-        sale_value: i.sale_value,
-        product: i.product ? {
-          id: i.product.id,
-          name: i.product.name,
-          type: i.product.type,
-        } : undefined,
-      })),
+      items: itemsForCard,
     };
   };
 
@@ -717,12 +748,27 @@ export default function PipePropostas() {
             <Settings2 className="w-4 h-4" />
             Etapas
           </Button>
+          <Button variant="outline" className="gap-2" onClick={() => setIsImportFunnelOpen(true)}>
+            <Upload className="w-4 h-4" />
+            Importar
+          </Button>
+          <Button variant="outline" className="gap-2" onClick={() => setIsExportModalOpen(true)}>
+            <FileDown className="w-4 h-4" />
+            Exportar
+          </Button>
           <Button className="gap-2" onClick={() => setIsCreateModalOpen(true)}>
             <Plus className="w-4 h-4" />
             Nova Proposta
           </Button>
         </div>
       </div>
+
+      <ImportLeadsFunnelModal
+        open={isImportFunnelOpen}
+        onOpenChange={setIsImportFunnelOpen}
+        destination="propostas"
+      />
+      <ExportLeadsModal open={isExportModalOpen} onOpenChange={setIsExportModalOpen} />
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
@@ -898,6 +944,7 @@ export default function PipePropostas() {
             <DraggableKanbanBoard
               columns={columns}
               onStatusChange={handleStatusChange}
+              onDeleteAllLeads={() => setDeleteAllLeadsDialogOpen(true)}
               renderCard={(card) => (
                 <div onClick={() => {
                   const item = pipeData?.find(p => p.id === card.id);
@@ -1111,6 +1158,36 @@ export default function PipePropostas() {
         pipelineType="propostas"
         stages={pipelineStages}
       />
+
+      {/* Delete ALL leads from THIS stage (Propostas) confirmation */}
+      <AlertDialog open={deleteAllLeadsDialogOpen} onOpenChange={setDeleteAllLeadsDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir todos os leads desta etapa</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação irá excluir todos os leads que estão no funil de Propostas e na base de dados (histórico, tags, etc.). Não afeta outros funis nem outras organizações. Não é possível desfazer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                try {
+                  const result = await deleteAllLeadsInPipe.mutateAsync();
+                  setDeleteAllLeadsDialogOpen(false);
+                  refetch();
+                  toast.success(result?.deleted ? `${result.deleted} leads excluídos desta etapa.` : "Todos os leads desta etapa foram excluídos.");
+                } catch (e) {
+                  toast.error("Erro ao excluir leads.");
+                }
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteAllLeadsInPipe.isPending ? "Excluindo..." : "Excluir todos os leads desta etapa"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

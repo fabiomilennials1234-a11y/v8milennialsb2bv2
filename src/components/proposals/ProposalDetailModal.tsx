@@ -151,7 +151,10 @@ export function ProposalDetailModal({
         sale_value: proposta.sale_value?.toString() || "",
       }]);
     } else {
-      setLocalItems([{ id: crypto.randomUUID(), product_id: "", sale_value: "", isNew: true }]);
+      setLocalItems([
+        { id: crypto.randomUUID(), product_id: "", sale_value: "", isNew: true },
+        { id: crypto.randomUUID(), product_id: "", sale_value: "", isNew: true },
+      ]);
     }
   }, [itemsData, proposta]);
 

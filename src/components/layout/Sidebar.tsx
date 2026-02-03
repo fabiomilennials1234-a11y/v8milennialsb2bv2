@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
-import { motion, AnimatePresence } from "framer-motion";
 import {
   Gauge,
   Fuel,
@@ -74,10 +73,15 @@ const bottomNavItems: NavItem[] = [
   { label: "Pitstop", icon: Settings, path: "/configuracoes" },
 ];
 
+const FUNIS_PATHS = ["/pipe-whatsapp", "/pipe-propostas", "/pipe-confirmacao", "/funis"] as const;
+
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
-  const [expandedMenus, setExpandedMenus] = useState<string[]>(["Funis"]); // Funis aberto por padrão
+  const [hovered, setHovered] = useState(false);
+  const [expandedMenus, setExpandedMenus] = useState<string[]>([]);
   const location = useLocation();
+  const isOnFunisPage = FUNIS_PATHS.some((p) => location.pathname.startsWith(p));
+  const open = isOnFunisPage ? !collapsed : !collapsed || hovered;
   const { user, signOut } = useAuth();
   const { data: userRole } = useUserRole();
 
@@ -125,17 +129,22 @@ export function Sidebar() {
     return labels[userRole.role] || "Piloto";
   };
 
+  const sidebarEase = "cubic-bezier(0.32, 0.72, 0, 1)";
+
   return (
-    <motion.aside
-      initial={false}
-      animate={{ width: collapsed ? 80 : 260 }}
-      transition={{ duration: 0.2, ease: "easeInOut" }}
-      className="h-screen bg-sidebar flex flex-col border-r border-sidebar-border sticky top-0"
+    <aside
+      style={{
+        width: open ? 260 : 80,
+        transition: `width 0.55s ${sidebarEase}`,
+      }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      className="h-screen bg-sidebar flex flex-col border-r border-sidebar-border sticky top-0 group/sidebar overflow-x-hidden shrink-0"
       data-sidebar
     >
       {/* Logo */}
       <div className="p-4 flex items-center justify-between border-b border-sidebar-border min-h-[80px]">
-        {collapsed ? (
+        {!open ? (
           <div className="flex flex-col items-center w-full gap-2">
             <img src={v8Logo} alt="V8" className="h-10 w-10 object-contain" />
             <button
@@ -179,47 +188,49 @@ export function Sidebar() {
                   }`}
                 >
                   <item.icon className="w-5 h-5 flex-shrink-0" />
-                  <motion.span
-                    animate={{ opacity: collapsed ? 0 : 1, width: collapsed ? 0 : "auto" }}
-                    className="overflow-hidden whitespace-nowrap flex-1 text-left"
+                  <span
+                    className={cn(
+                      "overflow-hidden whitespace-nowrap flex-1 text-left text-sm min-w-0 transition-opacity duration-400 ease-out group-hover/sidebar:translate-x-0.5 transition-transform",
+                      open ? "opacity-100" : "opacity-0"
+                    )}
                   >
                     {item.label}
-                  </motion.span>
-                  {!collapsed && (
-                    <motion.div
-                      animate={{ rotate: expandedMenus.includes(item.label) ? 180 : 0 }}
-                      transition={{ duration: 0.2 }}
+                  </span>
+                  {open && (
+                    <span
+                      className="inline-block transition-transform duration-400 ease-out"
+                      style={{
+                        transform: expandedMenus.includes(item.label) ? "rotate(180deg)" : "rotate(0deg)",
+                        transitionTimingFunction: sidebarEase,
+                      }}
                     >
                       <ChevronDown className="w-4 h-4" />
-                    </motion.div>
+                    </span>
                   )}
                 </button>
-                <AnimatePresence>
-                  {expandedMenus.includes(item.label) && !collapsed && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: "auto", opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      transition={{ duration: 0.2 }}
-                      className="overflow-hidden ml-4 border-l border-sidebar-border"
-                    >
-                      {item.children.map((child) => (
-                        <NavLink
-                          key={child.path}
-                          to={child.path}
-                          className={`sidebar-item pl-4 ${
-                            isActive(child.path) ? "sidebar-item-active" : ""
-                          }`}
-                        >
-                          <child.icon className="w-4 h-4 flex-shrink-0" />
-                          <span className="overflow-hidden whitespace-nowrap flex-1">
-                            {child.label}
-                          </span>
-                        </NavLink>
-                      ))}
-                    </motion.div>
+                <div
+                  className={cn(
+                    "grid transition-[grid-template-rows] duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] ml-4 border-l border-sidebar-border",
+                    expandedMenus.includes(item.label) && open ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
                   )}
-                </AnimatePresence>
+                >
+                  <div className="min-h-0 overflow-hidden">
+                    {item.children.map((child) => (
+                      <NavLink
+                        key={child.path}
+                        to={child.path}
+                        className={`sidebar-item pl-4 ${
+                          isActive(child.path) ? "sidebar-item-active" : ""
+                        }`}
+                      >
+                        <child.icon className="w-4 h-4 flex-shrink-0" />
+                        <span className="overflow-hidden whitespace-nowrap flex-1">
+                          {child.label}
+                        </span>
+                      </NavLink>
+                    ))}
+                  </div>
+                </div>
               </>
             ) : (
               // Item simples
@@ -230,13 +241,15 @@ export function Sidebar() {
                 }`}
               >
                 <item.icon className="w-5 h-5 flex-shrink-0" />
-                <motion.span
-                  animate={{ opacity: collapsed ? 0 : 1, width: collapsed ? 0 : "auto" }}
-                  className="overflow-hidden whitespace-nowrap flex-1"
+                <span
+                  className={cn(
+                    "overflow-hidden whitespace-nowrap flex-1 text-sm min-w-0 transition-opacity duration-400 ease-out group-hover/sidebar:translate-x-0.5 transition-transform",
+                    open ? "opacity-100" : "opacity-0"
+                  )}
                 >
                   {item.label}
-                </motion.span>
-                {!collapsed && (item.path === "/chat-whatsapp" ? chatUnreadTotal > 0 : item.badge) && (
+                </span>
+                {open && (item.path === "/chat-whatsapp" ? chatUnreadTotal > 0 : item.badge) && (
                   <span
                     className={cn(
                       "text-xs font-semibold min-w-[1.25rem] h-5 px-1.5 rounded-full flex items-center justify-center",
@@ -258,7 +271,7 @@ export function Sidebar() {
         {/* Admin Navigation */}
         {userRole?.role === "admin" && (
           <>
-            {!collapsed && (
+            {open && (
               <div className="pt-3 pb-1">
                 <span className="text-xs text-sidebar-foreground/50 uppercase font-medium">Admin</span>
               </div>
@@ -272,12 +285,14 @@ export function Sidebar() {
                 }`}
               >
                 <item.icon className="w-5 h-5 flex-shrink-0" />
-                <motion.span
-                  animate={{ opacity: collapsed ? 0 : 1, width: collapsed ? 0 : "auto" }}
-                  className="overflow-hidden whitespace-nowrap flex-1"
+                <span
+                  className={cn(
+                    "overflow-hidden whitespace-nowrap flex-1 text-sm min-w-0 transition-opacity duration-400 ease-out group-hover/sidebar:translate-x-0.5 transition-transform",
+                    open ? "opacity-100" : "opacity-0"
+                  )}
                 >
                   {item.label}
-                </motion.span>
+                </span>
               </NavLink>
             ))}
           </>
@@ -285,7 +300,7 @@ export function Sidebar() {
       </nav>
 
       {/* Performance Widget */}
-      <SidebarPerformanceWidget collapsed={collapsed} />
+      <SidebarPerformanceWidget collapsed={!open} />
 
       {/* Bottom Navigation */}
       <div className="p-3 border-t border-sidebar-border space-y-1">
@@ -298,12 +313,14 @@ export function Sidebar() {
             }`}
           >
             <item.icon className="w-5 h-5 flex-shrink-0" />
-            <motion.span
-              animate={{ opacity: collapsed ? 0 : 1, width: collapsed ? 0 : "auto" }}
-              className="overflow-hidden whitespace-nowrap"
+            <span
+              className={cn(
+                "overflow-hidden whitespace-nowrap text-sm min-w-0 transition-opacity duration-400 ease-out group-hover/sidebar:translate-x-0.5 transition-transform",
+                open ? "opacity-100" : "opacity-0"
+              )}
             >
               {item.label}
-            </motion.span>
+            </span>
           </NavLink>
         ))}
       </div>
@@ -314,14 +331,16 @@ export function Sidebar() {
           <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
             <span className="text-sm font-semibold text-primary-foreground">{getUserInitials()}</span>
           </div>
-          <motion.div
-            animate={{ opacity: collapsed ? 0 : 1, width: collapsed ? 0 : "auto" }}
-            className="overflow-hidden flex-1"
+          <div
+            className={cn(
+              "overflow-hidden flex-1 min-w-0 transition-opacity duration-400 ease-out",
+              open ? "opacity-100" : "opacity-0"
+            )}
           >
             <p className="text-sm font-medium text-sidebar-foreground truncate">{getUserName()}</p>
             <p className="text-xs text-sidebar-foreground/60">{getRoleLabel()}</p>
-          </motion.div>
-          {!collapsed && (
+          </div>
+          {open && (
             <Button
               variant="ghost"
               size="icon"
@@ -333,6 +352,6 @@ export function Sidebar() {
           )}
         </div>
       </div>
-    </motion.aside>
+    </aside>
   );
 }

@@ -176,6 +176,199 @@ export function useDeleteLead() {
   });
 }
 
+const BATCH_SIZE = 200;
+const FETCH_PAGE_SIZE = 1000;
+
+/**
+ * Fetch all lead ids for the organization, including:
+ * - leads.organization_id = org (base de leads)
+ * - lead_id present in pipe_whatsapp / pipe_confirmacao / pipe_propostas for this org (todos que estão no funil/etapa)
+ * Uses pagination so no row limit (e.g. 30/1000) cuts the list.
+ * SECURITY: Only returns ids for the given organization_id.
+ */
+async function fetchAllLeadIdsForOrganization(
+  organizationId: string
+): Promise<string[]> {
+  const idSet = new Set<string>();
+
+  const fetchPage = async (table: string, orderBy: string, selectCol: string): Promise<void> => {
+    let offset = 0;
+    while (true) {
+      const { data, error } = await supabase
+        .from(table)
+        .select(selectCol)
+        .eq("organization_id", organizationId)
+        .order(orderBy, { ascending: true })
+        .range(offset, offset + FETCH_PAGE_SIZE - 1);
+      if (error) throw error;
+      const list = (data ?? []).map((r: Record<string, string>) => r[selectCol]).filter(Boolean);
+      list.forEach((id) => idSet.add(id));
+      if (list.length < FETCH_PAGE_SIZE) break;
+      offset += FETCH_PAGE_SIZE;
+    }
+  };
+
+  const fetchLeadsPage = async (): Promise<void> => {
+    let offset = 0;
+    while (true) {
+      const { data, error } = await supabase
+        .from("leads")
+        .select("id")
+        .eq("organization_id", organizationId)
+        .order("id", { ascending: true })
+        .range(offset, offset + FETCH_PAGE_SIZE - 1);
+      if (error) throw error;
+      const list = (data ?? []).map((r: { id: string }) => r.id);
+      list.forEach((id) => idSet.add(id));
+      if (list.length < FETCH_PAGE_SIZE) break;
+      offset += FETCH_PAGE_SIZE;
+    }
+  };
+
+  await Promise.all([
+    fetchLeadsPage(),
+    fetchPage("pipe_whatsapp", "lead_id", "lead_id"),
+    fetchPage("pipe_confirmacao", "lead_id", "lead_id"),
+    fetchPage("pipe_propostas", "lead_id", "lead_id"),
+  ]);
+
+  return Array.from(idSet);
+}
+
+const PIPE_TABLES = {
+  whatsapp: "pipe_whatsapp",
+  propostas: "pipe_propostas",
+  confirmacao: "pipe_confirmacao",
+} as const;
+
+export type PipeTypeForDelete = keyof typeof PIPE_TABLES;
+
+/**
+ * Fetch all lead_ids that are in a given pipe (funnel/stage) for the organization.
+ * SECURITY: Only returns ids for the given organization_id; uses pagination.
+ */
+async function fetchAllLeadIdsInPipe(
+  organizationId: string,
+  pipeType: PipeTypeForDelete
+): Promise<string[]> {
+  const table = PIPE_TABLES[pipeType];
+  const idSet = new Set<string>();
+  let offset = 0;
+  while (true) {
+    const { data, error } = await supabase
+      .from(table)
+      .select("lead_id")
+      .eq("organization_id", organizationId)
+      .order("lead_id", { ascending: true })
+      .range(offset, offset + FETCH_PAGE_SIZE - 1);
+    if (error) throw error;
+    const list = (data ?? []).map((r: { lead_id: string }) => r.lead_id).filter(Boolean);
+    list.forEach((id) => idSet.add(id));
+    if (list.length < FETCH_PAGE_SIZE) break;
+    offset += FETCH_PAGE_SIZE;
+  }
+  return Array.from(idSet);
+}
+
+function deleteLeadsAndRelated(ids: string[]): Promise<void> {
+  return (async () => {
+    for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+      const batch = ids.slice(i, i + BATCH_SIZE);
+      const { data: propostaRows } = await supabase
+        .from("pipe_propostas")
+        .select("id")
+        .in("lead_id", batch);
+      const propostaIds = (propostaRows ?? []).map((x: { id: string }) => x.id);
+      if (propostaIds.length > 0) {
+        for (let j = 0; j < propostaIds.length; j += BATCH_SIZE) {
+          const propBatch = propostaIds.slice(j, j + BATCH_SIZE);
+          await supabase.from("pipe_proposta_items").delete().in("pipe_proposta_id", propBatch);
+        }
+      }
+      await supabase.from("lead_tags").delete().in("lead_id", batch);
+      await supabase.from("lead_history").delete().in("lead_id", batch);
+      await supabase.from("follow_ups").delete().in("lead_id", batch);
+      await supabase.from("acoes_do_dia").delete().in("lead_id", batch);
+      await supabase.from("campanha_leads").delete().in("lead_id", batch);
+      await supabase.from("lead_scores").delete().in("lead_id", batch);
+      await supabase.from("leads_reativacao").delete().in("lead_id", batch);
+      await supabase.from("pipe_whatsapp").delete().in("lead_id", batch);
+      await supabase.from("pipe_confirmacao").delete().in("lead_id", batch);
+      await supabase.from("pipe_propostas").delete().in("lead_id", batch);
+    }
+    for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+      const batch = ids.slice(i, i + BATCH_SIZE);
+      const { error: deleteError } = await supabase.from("leads").delete().in("id", batch);
+      if (deleteError) throw deleteError;
+    }
+  })();
+}
+
+/**
+ * Delete ALL leads that are in THIS pipe (funnel/stage) only — not the whole organization.
+ * SECURITY: Only deletes leads for current organization_id; uses pagination so all rows in the pipe are considered.
+ */
+export function useDeleteAllLeadsInPipe(pipeType: PipeTypeForDelete) {
+  const queryClient = useQueryClient();
+  const { organizationId } = useOrganization();
+
+  return useMutation({
+    mutationFn: async () => {
+      if (!organizationId) {
+        throw new Error("Cannot delete leads: No organization context");
+      }
+
+      const ids = await fetchAllLeadIdsInPipe(organizationId, pipeType);
+      if (ids.length === 0) return { deleted: 0 };
+
+      await deleteLeadsAndRelated(ids);
+      return { deleted: ids.length };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["leads"] });
+      queryClient.invalidateQueries({ queryKey: ["pipe_whatsapp"] });
+      queryClient.invalidateQueries({ queryKey: ["pipe_confirmacao"] });
+      queryClient.invalidateQueries({ queryKey: ["pipe_propostas"] });
+      queryClient.invalidateQueries({ queryKey: ["follow_ups"] });
+      queryClient.invalidateQueries({ queryKey: ["campanha_leads"] });
+      queryClient.invalidateQueries({ queryKey: ["acoes_do_dia"] });
+    },
+  });
+}
+
+/**
+ * Delete ALL leads of the current organization and all related records (geral — toda a organização).
+ * Excludes every lead that belongs to the org: both in the leads base and all that appear in any funnel (stage).
+ * SECURITY: Only deletes leads for current organization_id; uses pagination so all rows are considered.
+ */
+export function useDeleteAllLeads() {
+  const queryClient = useQueryClient();
+  const { organizationId } = useOrganization();
+
+  return useMutation({
+    mutationFn: async () => {
+      if (!organizationId) {
+        throw new Error("Cannot delete leads: No organization context");
+      }
+
+      const ids = await fetchAllLeadIdsForOrganization(organizationId);
+      if (ids.length === 0) return { deleted: 0 };
+
+      await deleteLeadsAndRelated(ids);
+      return { deleted: ids.length };
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["leads"] });
+      queryClient.invalidateQueries({ queryKey: ["pipe_whatsapp"] });
+      queryClient.invalidateQueries({ queryKey: ["pipe_confirmacao"] });
+      queryClient.invalidateQueries({ queryKey: ["pipe_propostas"] });
+      queryClient.invalidateQueries({ queryKey: ["follow_ups"] });
+      queryClient.invalidateQueries({ queryKey: ["campanha_leads"] });
+      queryClient.invalidateQueries({ queryKey: ["acoes_do_dia"] });
+    },
+  });
+}
+
 /**
  * Toggle AI disabled status for a lead
  * When disabled, the Copilot agent will not respond to messages from this lead

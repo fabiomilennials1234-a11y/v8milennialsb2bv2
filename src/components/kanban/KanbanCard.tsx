@@ -64,12 +64,12 @@ export function KanbanCard({ lead, onClick }: KanbanCardProps) {
   return (
     <div
       onClick={onClick}
-      className="kanban-card group"
+      className="kanban-card group w-full"
     >
-      <div className="flex items-start justify-between mb-3">
+      <div className="flex items-start justify-between gap-2 mb-2">
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <h4 className="font-medium text-sm truncate group-hover:text-primary transition-colors">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h4 className="font-medium text-sm break-words line-clamp-2 group-hover:text-primary transition-colors" title={lead.name}>
               {lead.name}
             </h4>
             {leadScore ? (
@@ -88,9 +88,9 @@ export function KanbanCard({ lead, onClick }: KanbanCardProps) {
               />
             ) : null}
           </div>
-          <div className="flex items-center gap-1 text-muted-foreground mt-0.5">
-            <Building2 className="w-3 h-3" />
-            <span className="text-xs truncate">{lead.company}</span>
+          <div className="flex items-center gap-1 text-muted-foreground mt-0.5 min-w-0">
+            <Building2 className="w-3 h-3 shrink-0" />
+            <span className="text-xs break-words line-clamp-2" title={lead.company}>{lead.company}</span>
           </div>
         </div>
         <div className="flex items-center gap-1 ml-2">
@@ -119,13 +119,13 @@ export function KanbanCard({ lead, onClick }: KanbanCardProps) {
       </div>
 
       {lead.meetingDate && (
-        <div className="flex items-center gap-1.5 text-muted-foreground mb-3">
-          <Calendar className="w-3.5 h-3.5" />
+        <div className="flex items-center gap-1.5 text-muted-foreground mb-2">
+          <Calendar className="w-3.5 h-3.5 shrink-0" />
           <span className="text-xs">{lead.meetingDate}</span>
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-1.5 mb-3">
+      <div className="flex flex-wrap items-center gap-1.5 mb-2">
         <Badge variant="outline" className={originColors[lead.origin]}>
           {originLabels[lead.origin]}
         </Badge>
@@ -224,17 +224,17 @@ export function KanbanCard({ lead, onClick }: KanbanCardProps) {
       </div>
 
       {(lead.sdr || lead.closer) && (
-        <div className="flex items-center gap-3 pt-2 border-t border-border">
+        <div className="flex items-center gap-2 pt-2 border-t border-border min-w-0 flex-wrap">
           {lead.sdr && (
-            <div className="flex items-center gap-1.5">
-              <User className="w-3 h-3 text-muted-foreground" />
-              <span className="text-xs text-muted-foreground">SDR: {lead.sdr}</span>
+            <div className="flex items-center gap-1.5 min-w-0">
+              <User className="w-3 h-3 text-muted-foreground shrink-0" />
+              <span className="text-xs text-muted-foreground truncate max-w-[120px]" title={lead.sdr}>SDR: {lead.sdr}</span>
             </div>
           )}
           {lead.closer && (
-            <div className="flex items-center gap-1.5">
-              <User className="w-3 h-3 text-muted-foreground" />
-              <span className="text-xs text-muted-foreground">Closer: {lead.closer}</span>
+            <div className="flex items-center gap-1.5 min-w-0">
+              <User className="w-3 h-3 text-muted-foreground shrink-0" />
+              <span className="text-xs text-muted-foreground truncate max-w-[120px]" title={lead.closer}>Closer: {lead.closer}</span>
             </div>
           )}
         </div>

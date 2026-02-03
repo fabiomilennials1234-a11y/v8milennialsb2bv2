@@ -16,6 +16,7 @@ import {
   Edit2,
   Eye,
   ChevronDown,
+  FileDown,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -51,6 +52,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useLeads, useCreateLead, useUpdateLead, useDeleteLead, type Lead } from "@/hooks/useLeads";
+import { ExportLeadsModal } from "@/components/leads/ExportLeadsModal";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -156,6 +158,7 @@ export default function Leads() {
   const [filterOrigin, setFilterOrigin] = useState<string>("all");
   const [filterRating, setFilterRating] = useState<string>("all");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [formData, setFormData] = useState<LeadFormData>(initialFormData);
 
@@ -314,6 +317,10 @@ export default function Leads() {
           </p>
         </div>
 
+        <Button variant="outline" onClick={() => setIsExportModalOpen(true)} className="gap-2">
+          <FileDown className="w-4 h-4" />
+          Exportar
+        </Button>
         <Button onClick={() => handleOpenDialog()} className="gap-2">
           <Plus className="w-4 h-4" />
           Novo Lead
@@ -516,6 +523,8 @@ export default function Leads() {
           </TableBody>
         </Table>
       </div>
+
+      <ExportLeadsModal open={isExportModalOpen} onOpenChange={setIsExportModalOpen} />
 
       {/* Lead Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>

@@ -18,8 +18,15 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { motion } from "framer-motion";
-import { Plus, MoreHorizontal, GripVertical } from "lucide-react";
+import { Plus, MoreHorizontal, GripVertical, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Button } from "@/components/ui/button";
 
 export interface DraggableItem {
   id: string;
@@ -39,6 +46,8 @@ interface DraggableKanbanBoardProps<T extends DraggableItem> {
   renderCard: (item: T, isDragging?: boolean) => React.ReactNode;
   columnClassName?: string;
   renderColumnFooter?: (column: KanbanColumn<T>) => React.ReactNode;
+  /** When provided, the column header three-dots menu shows "Excluir todos os leads desta etapa" */
+  onDeleteAllLeads?: () => void;
 }
 
 function DroppableColumn<T extends DraggableItem>({
@@ -46,11 +55,13 @@ function DroppableColumn<T extends DraggableItem>({
   children,
   className,
   renderColumnFooter,
+  onDeleteAllLeads,
 }: {
   column: KanbanColumn<T>;
   children: React.ReactNode;
   className?: string;
   renderColumnFooter?: (column: KanbanColumn<T>) => React.ReactNode;
+  onDeleteAllLeads?: () => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({
     id: column.id,
@@ -63,7 +74,7 @@ function DroppableColumn<T extends DraggableItem>({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
       className={cn(
-        "kanban-column min-w-[280px] max-w-[300px] flex-shrink-0 transition-all duration-200",
+        "kanban-column min-w-[320px] max-w-[360px] flex-shrink-0 transition-all duration-200",
         isOver && "ring-2 ring-primary/50 bg-primary/5",
         className
       )}
@@ -83,9 +94,31 @@ function DroppableColumn<T extends DraggableItem>({
           <button className="p-1.5 rounded-lg hover:bg-background transition-colors">
             <Plus className="w-4 h-4 text-muted-foreground" />
           </button>
-          <button className="p-1.5 rounded-lg hover:bg-background transition-colors">
-            <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
-          </button>
+          {onDeleteAllLeads ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                <Button variant="ghost" size="icon" className="h-8 w-8 p-0">
+                  <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  className="text-destructive focus:text-destructive"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDeleteAllLeads();
+                  }}
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Excluir todos os leads desta etapa
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : (
+            <button className="p-1.5 rounded-lg hover:bg-background transition-colors">
+              <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -148,6 +181,7 @@ export function DraggableKanbanBoard<T extends DraggableItem>({
   renderCard,
   columnClassName,
   renderColumnFooter,
+  onDeleteAllLeads,
 }: DraggableKanbanBoardProps<T>) {
   const [activeItem, setActiveItem] = useState<T | null>(null);
 
@@ -236,6 +270,7 @@ export function DraggableKanbanBoard<T extends DraggableItem>({
             column={column}
             className={columnClassName}
             renderColumnFooter={renderColumnFooter}
+            onDeleteAllLeads={onDeleteAllLeads}
           >
             <SortableContext
               items={column.items.map((item) => item.id)}

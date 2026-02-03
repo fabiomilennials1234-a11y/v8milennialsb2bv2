@@ -1,14 +1,27 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { Plus, Calendar, Loader2, LayoutGrid, List, Settings2 } from "lucide-react";
+import { Plus, Calendar, Loader2, LayoutGrid, List, Settings2, Upload, FileDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { DraggableKanbanBoard, DraggableItem, KanbanColumn } from "@/components/kanban/DraggableKanbanBoard";
 import { usePipeConfirmacao, useUpdatePipeConfirmacao, PipeConfirmacaoStatus } from "@/hooks/usePipeConfirmacao";
 import { usePipelineStages, stagesToColumns } from "@/hooks/usePipelineStages";
 import { ManagePipelineStagesModal } from "@/components/pipelines/ManagePipelineStagesModal";
+import { useDeleteAllLeadsInPipe } from "@/hooks/useLeads";
 import { useCreatePipeProposta } from "@/hooks/usePipePropostas";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
 import { LeadModal } from "@/components/leads/LeadModal";
+import { ImportLeadsFunnelModal } from "@/components/leads/ImportLeadsFunnelModal";
+import { ExportLeadsModal } from "@/components/leads/ExportLeadsModal";
 import { AddMeetingModal } from "@/components/confirmacao/AddMeetingModal";
 import { ConfirmacaoDetailModal } from "@/components/confirmacao/ConfirmacaoDetailModal";
 import { ConfirmacaoStats } from "@/components/confirmacao/ConfirmacaoStats";
@@ -117,6 +130,8 @@ export default function PipeConfirmacao() {
   const [selectedCloserId, setSelectedCloserId] = useState<string>("all");
   const [isLeadModalOpen, setIsLeadModalOpen] = useState(false);
   const [isMeetingModalOpen, setIsMeetingModalOpen] = useState(false);
+  const [isImportFunnelOpen, setIsImportFunnelOpen] = useState(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [isStagesModalOpen, setIsStagesModalOpen] = useState(false);
   const [editingLead, setEditingLead] = useState<any>(null);
@@ -127,12 +142,14 @@ export default function PipeConfirmacao() {
   const [isCompareceuModalOpen, setIsCompareceuModalOpen] = useState(false);
   const [pendingCompareceuItem, setPendingCompareceuItem] = useState<any>(null);
   const [isProcessingCompareceu, setIsProcessingCompareceu] = useState(false);
-  
+  const [deleteAllLeadsDialogOpen, setDeleteAllLeadsDialogOpen] = useState(false);
+
   const { data: pipeData, isLoading, refetch } = usePipeConfirmacao();
   const { data: pipelineStages = [] } = usePipelineStages("confirmacao");
   const { data: teamMembers = [] } = useTeamMembers();
   const updatePipeConfirmacao = useUpdatePipeConfirmacao();
   const createPipeProposta = useCreatePipeProposta();
+  const deleteAllLeadsInPipe = useDeleteAllLeadsInPipe("confirmacao");
 
   // Transform team members for filter
   const teamMemberOptions = useMemo(() => 
@@ -395,12 +412,27 @@ export default function PipeConfirmacao() {
             <Settings2 className="w-4 h-4 mr-2" />
             Etapas
           </Button>
+          <Button size="sm" variant="outline" onClick={() => setIsImportFunnelOpen(true)}>
+            <Upload className="w-4 h-4 mr-2" />
+            Importar
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => setIsExportModalOpen(true)}>
+            <FileDown className="w-4 h-4 mr-2" />
+            Exportar
+          </Button>
           <Button size="sm" className="gradient-gold" onClick={() => setIsMeetingModalOpen(true)}>
             <Plus className="w-4 h-4 mr-2" />
             Nova Reunião
           </Button>
         </div>
       </div>
+
+      <ImportLeadsFunnelModal
+        open={isImportFunnelOpen}
+        onOpenChange={setIsImportFunnelOpen}
+        destination="confirmacao"
+      />
+      <ExportLeadsModal open={isExportModalOpen} onOpenChange={setIsExportModalOpen} />
 
       {/* Stats */}
       <ConfirmacaoStats data={pipeData || []} />
@@ -430,6 +462,7 @@ export default function PipeConfirmacao() {
         <DraggableKanbanBoard
           columns={columns}
           onStatusChange={handleStatusChange}
+          onDeleteAllLeads={() => setDeleteAllLeadsDialogOpen(true)}
           renderCard={(card) => (
             <ConfirmacaoCard 
               card={card} 
@@ -487,6 +520,36 @@ export default function PipeConfirmacao() {
         pipelineType="confirmacao"
         stages={pipelineStages}
       />
+
+      {/* Delete ALL leads from THIS stage (Confirmação) confirmation */}
+      <AlertDialog open={deleteAllLeadsDialogOpen} onOpenChange={setDeleteAllLeadsDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir todos os leads desta etapa</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação irá excluir todos os leads que estão no funil de Confirmação e na base de dados (histórico, tags, etc.). Não afeta outros funis nem outras organizações. Não é possível desfazer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                try {
+                  const result = await deleteAllLeadsInPipe.mutateAsync();
+                  setDeleteAllLeadsDialogOpen(false);
+                  refetch();
+                  toast.success(result?.deleted ? `${result.deleted} leads excluídos desta etapa.` : "Todos os leads desta etapa foram excluídos.");
+                } catch (e) {
+                  toast.error("Erro ao excluir leads.");
+                }
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteAllLeadsInPipe.isPending ? "Excluindo..." : "Excluir todos os leads desta etapa"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

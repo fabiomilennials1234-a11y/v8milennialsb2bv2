@@ -1,15 +1,16 @@
 # Importação de Leads
 
 ## Objetivo
-Importar leads de arquivo CSV ou Excel, validar dados, mapear colunas, processar em lote e gerar relatório de importação com erros e sucessos.
+Importar leads de arquivo CSV ou Excel (XLSX/XLS), validar dados, mapear colunas (com notificação de colunas não reconhecidas para mapear ou criar campo personalizado), processar em lote e gerar relatório de importação. Disponível em: Campanhas (etapa da campanha), Qualificação (funil WhatsApp), Propostas e Confirmação.
 
 ## Entradas
 - file_path: string - Caminho do arquivo CSV/Excel (obrigatório)
-- column_mapping: object - Mapeamento de colunas do arquivo para campos do sistema (obrigatório)
+- column_mapping: object - Mapeamento de colunas do arquivo para campos do sistema (obrigatório no script; no frontend há preview e mapeamento de colunas não reconhecidas)
 - tenant_id: string - ID da organização (obrigatório)
 - user_id: string - ID do usuário que está executando (obrigatório)
 - skip_duplicates: boolean? - Se deve pular leads duplicados (padrão: true)
 - batch_size: number? - Tamanho do lote para processamento (padrão: 100)
+- destination (frontend): 'campanha' | 'qualificacao' | 'propostas' | 'confirmacao' - Destino do import (funil)
 
 ## Ferramentas
 - `execution/python/data_processing/import_leads.py` - Script de importação

@@ -2,10 +2,11 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Edit2, Trash2, Package, FileText, Link as LinkIcon, ExternalLink } from "lucide-react";
+import { Plus, Edit2, Trash2, Package, FileText, Link as LinkIcon, FileSpreadsheet } from "lucide-react";
 import { useProducts, useDeleteProduct, Product } from "@/hooks/useProducts";
 import { CreateProductModal } from "@/components/products/CreateProductModal";
 import { EditProductModal } from "@/components/products/EditProductModal";
+import { ProductImportModal } from "@/components/products/ProductImportModal";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,6 +22,7 @@ export default function Produtos() {
   const { data: products, isLoading } = useProducts();
   const deleteProduct = useDeleteProduct();
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [deletingProductId, setDeletingProductId] = useState<string | null>(null);
 
@@ -50,10 +52,23 @@ export default function Produtos() {
               Gerencie seus produtos de MRR e Projetos
             </p>
           </div>
-          <Button onClick={() => setIsCreateModalOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Novo Produto
-          </Button>
+          <div className="flex items-center gap-2">
+            <a
+              href="/products_import_template.xlsx"
+              download="products_import_template.xlsx"
+              className="text-sm text-muted-foreground hover:text-primary hover:underline"
+            >
+              Baixar modelo
+            </a>
+            <Button variant="outline" onClick={() => setIsImportModalOpen(true)}>
+              <FileSpreadsheet className="mr-2 h-4 w-4" />
+              Importar do Excel
+            </Button>
+            <Button onClick={() => setIsCreateModalOpen(true)}>
+              <Plus className="mr-2 h-4 w-4" />
+              Novo Produto
+            </Button>
+          </div>
         </div>
 
         {/* Products Grid */}
@@ -213,6 +228,11 @@ export default function Produtos() {
       <CreateProductModal
         open={isCreateModalOpen}
         onOpenChange={setIsCreateModalOpen}
+      />
+
+      <ProductImportModal
+        open={isImportModalOpen}
+        onOpenChange={setIsImportModalOpen}
       />
 
       {editingProduct && (

@@ -61,7 +61,8 @@ export function CreateProposalModal({
   });
 
   const [productItems, setProductItems] = useState<ProductItem[]>([
-    { id: crypto.randomUUID(), product_id: "", sale_value: "" }
+    { id: crypto.randomUUID(), product_id: "", sale_value: "" },
+    { id: crypto.randomUUID(), product_id: "", sale_value: "" },
   ]);
 
   const { data: leads = [], isLoading: leadsLoading } = useLeads();
@@ -98,7 +99,10 @@ export function CreateProposalModal({
           commitment_date: "",
           notes: "",
         });
-        setProductItems([{ id: crypto.randomUUID(), product_id: "", sale_value: "" }]);
+        setProductItems([
+          { id: crypto.randomUUID(), product_id: "", sale_value: "" },
+          { id: crypto.randomUUID(), product_id: "", sale_value: "" },
+        ]);
       }, 200);
     }
   }, [open, preselectedLeadId]);
@@ -350,7 +354,10 @@ export function CreateProposalModal({
               {/* Products Section */}
               <div className="space-y-4 mb-6">
                 <div className="flex items-center justify-between">
-                  <Label className="text-base font-semibold">Produtos *</Label>
+                  <div>
+                    <Label className="text-base font-semibold">Produtos *</Label>
+                    <p className="text-xs text-muted-foreground mt-0.5">Adicione um ou mais produtos à proposta</p>
+                  </div>
                   <Button 
                     type="button" 
                     variant="outline" 

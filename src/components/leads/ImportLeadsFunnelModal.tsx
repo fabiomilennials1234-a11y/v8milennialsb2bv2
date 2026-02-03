@@ -5,22 +5,45 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Switch } from "@/components/ui/switch";
-import { CampanhaStage, CampanhaMember } from "@/hooks/useCampanhas";
-import { useImportLeads, parseFilePreview, KNOWN_LEAD_FIELDS, type FilePreviewResult } from "@/hooks/useImportLeads";
+import {
+  useImportLeads,
+  parseFilePreview,
+  KNOWN_LEAD_FIELDS,
+  type FilePreviewResult,
+  type FunnelDestination,
+} from "@/hooks/useImportLeads";
 import { useLeadCustomFields } from "@/hooks/useLeadCustomFields";
+import { usePipelineStages } from "@/hooks/usePipelineStages";
+import { useTeamMembers } from "@/hooks/useTeamMembers";
+import { useProducts } from "@/hooks/useProducts";
 import { downloadLeadsImportTemplate } from "@/lib/leadsImportTemplate";
 import { toast } from "sonner";
-import { Upload, FileSpreadsheet, CheckCircle2, XCircle, AlertCircle, Loader2, Sparkles, Users, RefreshCw, AlertTriangle, FileDown } from "lucide-react";
+import {
+  Upload,
+  FileSpreadsheet,
+  CheckCircle2,
+  XCircle,
+  AlertCircle,
+  Loader2,
+  Sparkles,
+  Users,
+  RefreshCw,
+  AlertTriangle,
+  FileDown,
+} from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
-interface ImportLeadsModalProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  campanhaId: string;
-  stages: CampanhaStage[];
-  members: CampanhaMember[];
-}
+const PIPELINE_TYPE: Record<FunnelDestination, "whatsapp" | "propostas" | "confirmacao"> = {
+  qualificacao: "whatsapp",
+  propostas: "propostas",
+  confirmacao: "confirmacao",
+};
+
+const DESTINATION_LABELS: Record<FunnelDestination, string> = {
+  qualificacao: "Qualificação",
+  propostas: "Propostas",
+  confirmacao: "Confirmação",
+};
 
 interface PreviewLead {
   name: string;
@@ -31,109 +54,109 @@ interface PreviewLead {
 
 type Step = "upload" | "map_columns" | "preview" | "importing" | "complete";
 
-export function ImportLeadsModal({
+interface ImportLeadsFunnelModalProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  destination: FunnelDestination;
+}
+
+export function ImportLeadsFunnelModal({
   open,
   onOpenChange,
-  campanhaId,
-  stages,
-  members,
-}: ImportLeadsModalProps) {
+  destination,
+}: ImportLeadsFunnelModalProps) {
   const [step, setStep] = useState<Step>("upload");
   const [file, setFile] = useState<File | null>(null);
   const [previewLeads, setPreviewLeads] = useState<PreviewLead[]>([]);
   const [totalLeads, setTotalLeads] = useState(0);
   const [previewResult, setPreviewResult] = useState<FilePreviewResult | null>(null);
   const [userColumnMapping, setUserColumnMapping] = useState<Record<string, string>>({});
-  const [selectedStageId, setSelectedStageId] = useState<string>("");
+  const [selectedStageKey, setSelectedStageKey] = useState<string>("");
   const [selectedSdrId, setSelectedSdrId] = useState<string>("");
-  const [autoDistribute, setAutoDistribute] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
-  
+  const [selectedCloserId, setSelectedCloserId] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { parseCSV, importLeads, resetImport, isImporting, progress, result } = useImportLeads();
+
+  const pipelineType = PIPELINE_TYPE[destination];
+  const { data: stages = [] } = usePipelineStages(pipelineType);
+  const { data: members = [] } = useTeamMembers();
+  const { data: products = [] } = useProducts();
+  const { parseCSV, importLeadsToFunnel, resetImport, isImporting, progress, result } = useImportLeads();
   const { data: customFields = [] } = useLeadCustomFields();
   const customFieldNames = customFields.map((f) => f.field_name);
+  const productOptions = (products || []).map((p) => ({ id: p.id, name: p.name || "" }));
 
-  // Set default stage to first stage (Lead)
-  const defaultStage = stages.find(s => s.position === 0) || stages[0];
+  const defaultStage = stages.find((s) => s.position === 0) || stages[0];
 
-  const handleFileSelect = useCallback(async (selectedFile: File) => {
-    const name = (selectedFile.name || "").toLowerCase();
-    if (!name.endsWith(".csv") && !name.endsWith(".xlsx") && !name.endsWith(".xls")) {
-      toast.error("Use um arquivo CSV ou Excel (.xlsx, .xls)");
-      return;
-    }
-
-    setFile(selectedFile);
-    setPreviewResult(null);
-    setUserColumnMapping({});
-    
-    try {
-      const customNames = customFields.map((f) => f.field_name);
-      const preview = await parseFilePreview(selectedFile, customNames);
-      setPreviewResult(preview);
-      setTotalLeads(preview.totalRows);
-
-      if (preview.unmappedColumns.length > 0) {
-        setStep("map_columns");
+  const handleFileSelect = useCallback(
+    async (selectedFile: File) => {
+      const name = (selectedFile.name || "").toLowerCase();
+      if (!name.endsWith(".csv") && !name.endsWith(".xlsx") && !name.endsWith(".xls")) {
+        toast.error("Use um arquivo CSV ou Excel (.xlsx, .xls)");
         return;
       }
+      setFile(selectedFile);
+      setPreviewResult(null);
+      setUserColumnMapping({});
+      try {
+        const preview = await parseFilePreview(selectedFile, customFieldNames);
+        setPreviewResult(preview);
+        setTotalLeads(preview.totalRows);
+        if (preview.unmappedColumns.length > 0) {
+          setStep("map_columns");
+          return;
+        }
+        const mapping = { ...(preview.suggestedMapping ?? {}), ...userColumnMapping };
+        const leads = await parseCSV(selectedFile, Object.keys(mapping).length ? mapping : undefined);
+        setTotalLeads(leads.length);
+        setPreviewLeads(
+          leads.slice(0, 10).map((l) => ({
+            name: l.name,
+            company: l.company,
+            phone: l.phone,
+            email: l.email,
+          }))
+        );
+        setSelectedStageKey(defaultStage?.stage_key ?? "");
+        setStep("preview");
+      } catch (error) {
+        console.error("Error parsing file:", error);
+        toast.error("Erro ao processar arquivo. Verifique o formato (CSV ou XLSX).");
+      }
+    },
+    [parseCSV, defaultStage, customFieldNames]
+  );
 
-      const leads = await parseCSV(selectedFile);
-      setTotalLeads(leads.length);
-      setPreviewLeads(leads.slice(0, 10).map(l => ({
-        name: l.name,
-        company: l.company,
-        phone: l.phone,
-        email: l.email,
-      })));
-      setSelectedStageId(defaultStage?.id || "");
-      setStep("preview");
-    } catch (error) {
-      console.error("Error parsing file:", error);
-      toast.error("Erro ao processar arquivo. Verifique o formato (CSV ou XLSX).");
-    }
-  }, [parseCSV, defaultStage, customFields]);
-
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    
-    const droppedFile = e.dataTransfer.files[0];
-    if (droppedFile) {
-      handleFileSelect(droppedFile);
-    }
-  }, [handleFileSelect]);
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      const droppedFile = e.dataTransfer.files[0];
+      if (droppedFile) handleFileSelect(droppedFile);
+    },
+    [handleFileSelect]
+  );
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
-    setIsDragging(true);
-  }, []);
-
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-  }, []);
+  });
 
   const handleImport = async () => {
-    if (!file || !selectedStageId) {
-      toast.error("Selecione uma etapa inicial");
+    if (!file || !selectedStageKey) {
+      toast.error("Selecione uma etapa padrão (usada quando a coluna Etapa estiver vazia)");
       return;
     }
-
     setStep("importing");
-
     try {
-      const memberIds = members.map(m => m.team_member_id);
-      await importLeads(
-        file,
-        campanhaId,
-        selectedStageId,
-        autoDistribute ? undefined : (selectedSdrId === "none" ? undefined : selectedSdrId || undefined),
-        autoDistribute,
-        autoDistribute ? memberIds : undefined,
-        stages.map((s) => ({ id: s.id, name: s.name }))
-      );
+      const fullMapping = { ...(previewResult?.suggestedMapping ?? {}), ...userColumnMapping };
+      await importLeadsToFunnel(file, {
+        destination,
+        stageKey: selectedStageKey,
+        stages: stages.map((s) => ({ stage_key: s.stage_key, name: s.name })),
+        members: memberOptions,
+        products: destination === "propostas" ? productOptions : undefined,
+        userColumnMapping: Object.keys(fullMapping).length ? fullMapping : undefined,
+        sdrId: selectedSdrId === "none" ? undefined : selectedSdrId || undefined,
+        closerId: selectedCloserId === "none" ? undefined : selectedCloserId || undefined,
+      });
       setStep("complete");
     } catch (error) {
       console.error("Import error:", error);
@@ -149,12 +172,14 @@ export function ImportLeadsModal({
     setTotalLeads(0);
     setPreviewResult(null);
     setUserColumnMapping({});
-    setSelectedStageId("");
+    setSelectedStageKey("");
     setSelectedSdrId("");
-    setAutoDistribute(false);
+    setSelectedCloserId("");
     resetImport();
     onOpenChange(false);
   };
+
+  const memberOptions = (members || []).map((m) => ({ id: m.id, name: m.name || "" }));
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -162,7 +187,7 @@ export function ImportLeadsModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileSpreadsheet className="w-5 h-5 text-primary" />
-            Importar Leads
+            Importar Leads — {DESTINATION_LABELS[destination]}
           </DialogTitle>
         </DialogHeader>
 
@@ -178,21 +203,13 @@ export function ImportLeadsModal({
               <div
                 onDrop={handleDrop}
                 onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
                 onClick={() => fileInputRef.current?.click()}
-                className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all ${
-                  isDragging
-                    ? "border-primary bg-primary/10"
-                    : "border-muted-foreground/30 hover:border-primary/50 hover:bg-muted/50"
-                }`}
+                className="border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all border-muted-foreground/30 hover:border-primary/50 hover:bg-muted/50"
               >
-                <Upload className={`w-12 h-12 mx-auto mb-4 ${isDragging ? "text-primary" : "text-muted-foreground"}`} />
+                <Upload className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
                 <p className="font-medium">Arraste o arquivo CSV ou Excel aqui</p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  ou clique para selecionar (.csv, .xlsx, .xls)
-                </p>
+                <p className="text-sm text-muted-foreground mt-1">ou clique para selecionar (.csv, .xlsx, .xls)</p>
               </div>
-              
               <input
                 ref={fileInputRef}
                 type="file"
@@ -200,7 +217,6 @@ export function ImportLeadsModal({
                 onChange={(e) => e.target.files?.[0] && handleFileSelect(e.target.files[0])}
                 className="hidden"
               />
-
               <div className="flex items-center gap-3 flex-wrap">
                 <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
                   Selecionar arquivo
@@ -211,11 +227,11 @@ export function ImportLeadsModal({
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
-                O modelo traz as colunas certas e uma aba <strong>Instruções</strong> com passos e o que preencher em cada campo. Use CSV ou Excel (XLSX/XLS).
+                O modelo traz as colunas certas e uma aba <strong>Instruções</strong> com passos e o que preencher em cada campo.
               </p>
               <div className="p-3 bg-muted/50 rounded-lg">
                 <p className="text-xs text-muted-foreground">
-                  <strong>Formatos:</strong> CSV ou Excel (XLSX/XLS). Colunas não reconhecidas serão exibidas para você mapear ou criar como campo personalizado.
+                  Colunas não reconhecidas serão exibidas para você mapear ou criar como campo personalizado antes de criar os leads.
                 </p>
               </div>
             </motion.div>
@@ -232,17 +248,14 @@ export function ImportLeadsModal({
               <div className="flex items-start gap-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
                 <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
                 <div>
-                  <p className="font-medium text-sm text-amber-800 dark:text-amber-200">
-                    Colunas não reconhecidas
-                  </p>
+                  <p className="font-medium text-sm text-amber-800 dark:text-amber-200">Colunas não reconhecidas</p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    O arquivo contém colunas que não existem no sistema. Mapeie cada uma para um campo existente, ou ignore. Para usar como novo dado, crie um campo personalizado em Configurações → Leads → Campos personalizados e importe de novo.
+                    Mapeie cada coluna para um campo existente ou ignore. Para novo dado, crie um campo personalizado em Configurações → Leads.
                   </p>
                 </div>
               </div>
-
               <div className="space-y-2">
-                <Label>Mapeamento das colunas do arquivo</Label>
+                <Label>Mapeamento das colunas</Label>
                 <ScrollArea className="h-48 rounded-lg border p-2">
                   <div className="space-y-3">
                     {previewResult.unmappedColumns.map((col) => (
@@ -252,9 +265,7 @@ export function ImportLeadsModal({
                         </span>
                         <Select
                           value={userColumnMapping[col] ?? "ignore"}
-                          onValueChange={(v) =>
-                            setUserColumnMapping((prev) => ({ ...prev, [col]: v }))
-                          }
+                          onValueChange={(v) => setUserColumnMapping((prev) => ({ ...prev, [col]: v }))}
                         >
                           <SelectTrigger className="w-[200px]">
                             <SelectValue placeholder="Escolher..." />
@@ -278,7 +289,6 @@ export function ImportLeadsModal({
                   </div>
                 </ScrollArea>
               </div>
-
               <div className="flex justify-end gap-2 pt-2 border-t">
                 <Button variant="outline" onClick={() => setStep("upload")}>
                   Voltar
@@ -286,7 +296,10 @@ export function ImportLeadsModal({
                 <Button
                   onClick={async () => {
                     try {
-                      const leads = await parseCSV(file!);
+                      const mapping = previewResult
+                        ? { ...(previewResult.suggestedMapping ?? {}), ...userColumnMapping }
+                        : userColumnMapping;
+                      const leads = await parseCSV(file!, Object.keys(mapping).length ? mapping : undefined);
                       setTotalLeads(leads.length);
                       setPreviewLeads(
                         leads.slice(0, 10).map((l) => ({
@@ -296,9 +309,9 @@ export function ImportLeadsModal({
                           email: l.email,
                         }))
                       );
-                      setSelectedStageId(defaultStage?.id || "");
+                      setSelectedStageKey(defaultStage?.stage_key ?? "");
                       setStep("preview");
-                    } catch (e) {
+                    } catch {
                       toast.error("Erro ao processar arquivo");
                     }
                   }}
@@ -317,45 +330,38 @@ export function ImportLeadsModal({
               exit={{ opacity: 0, y: -10 }}
               className="space-y-4"
             >
-              {/* File info */}
               <div className="flex items-center gap-3 p-3 bg-primary/10 rounded-lg">
                 <FileSpreadsheet className="w-8 h-8 text-primary" />
                 <div>
                   <p className="font-medium text-sm">{file?.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {totalLeads} leads encontrados
-                  </p>
+                  <p className="text-xs text-muted-foreground">{totalLeads} leads encontrados</p>
                 </div>
               </div>
-
-              {/* Preview */}
               <div className="space-y-2">
-                <Label>Preview (primeiros 10 leads)</Label>
+                <Label>Preview (primeiros 10)</Label>
                 <ScrollArea className="h-40 rounded-lg border">
                   <div className="p-2 space-y-1">
                     {previewLeads.map((lead, index) => (
                       <div key={index} className="p-2 bg-muted/30 rounded text-sm">
                         <p className="font-medium">{lead.name}</p>
                         <p className="text-xs text-muted-foreground">
-                          {[lead.company, lead.phone, lead.email].filter(Boolean).join(" • ") || "Sem informações adicionais"}
+                          {[lead.company, lead.phone, lead.email].filter(Boolean).join(" • ") || "—"}
                         </p>
                       </div>
                     ))}
                   </div>
                 </ScrollArea>
               </div>
-
-              {/* Stage Selection */}
               <div className="space-y-2">
                 <Label>Etapa padrão *</Label>
                 <p className="text-xs text-muted-foreground mb-1">Usada quando a coluna &quot;Etapa&quot; da planilha estiver vazia ou não corresponder a nenhuma etapa.</p>
-                <Select value={selectedStageId} onValueChange={setSelectedStageId}>
+                <Select value={selectedStageKey} onValueChange={setSelectedStageKey}>
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione a etapa" />
                   </SelectTrigger>
                   <SelectContent>
                     {stages.map((stage) => (
-                      <SelectItem key={stage.id} value={stage.id}>
+                      <SelectItem key={stage.id} value={stage.stage_key}>
                         <div className="flex items-center gap-2">
                           <div
                             className="w-3 h-3 rounded-full"
@@ -368,71 +374,58 @@ export function ImportLeadsModal({
                   </SelectContent>
                 </Select>
               </div>
-
-              {/* Auto Distribution Toggle */}
-              {members.length > 1 && (
-                <div className="flex items-center justify-between p-3 bg-primary/5 rounded-lg border border-primary/20">
-                  <div className="flex items-center gap-3">
-                    <Users className="w-5 h-5 text-primary" />
-                    <div>
-                      <Label className="font-medium">Distribuição Automática</Label>
-                      <p className="text-xs text-muted-foreground">
-                        Distribuir leads igualmente entre {members.length} vendedores
-                      </p>
-                    </div>
-                  </div>
-                  <Switch
-                    checked={autoDistribute}
-                    onCheckedChange={(checked) => {
-                      setAutoDistribute(checked);
-                      if (checked) setSelectedSdrId("");
-                    }}
-                  />
-                </div>
-              )}
-
-              {/* SDR Selection - Only show if not auto distributing */}
-              {!autoDistribute && (
+              <div className="p-3 bg-muted/50 rounded-lg space-y-1">
+                <p className="text-xs font-medium flex items-center gap-1.5">
+                  <Users className="w-3.5 h-3.5 text-primary" />
+                  Vínculo com vendedores
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Use a coluna <strong>Vendedor</strong> na planilha com o nome do responsável. O sistema associa ao vendedor com nome mais parecido na equipe. Se a linha não tiver nome ou não houver correspondência, usa o responsável padrão abaixo.
+                </p>
+              </div>
+              {(destination === "qualificacao" || destination === "confirmacao") && (
                 <div className="space-y-2">
-                  <Label>Atribuir a Vendedor (opcional)</Label>
+                  <Label>Responsável padrão (SDR)</Label>
+                  <p className="text-xs text-muted-foreground -mt-1">Usado quando a coluna Vendedor estiver vazia ou não corresponder a ninguém.</p>
                   <Select value={selectedSdrId} onValueChange={setSelectedSdrId}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Sem atribuição" />
+                      <SelectValue placeholder="Escolher vendedor..." />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">Sem atribuição</SelectItem>
-                      {members.map((member) => (
-                        <SelectItem key={member.team_member_id} value={member.team_member_id}>
-                          {member.team_member?.name}
+                      {memberOptions.map((m) => (
+                        <SelectItem key={m.id} value={m.id}>
+                          {m.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
               )}
-
-              {/* Distribution Preview */}
-              {autoDistribute && members.length > 0 && (
-                <div className="p-3 bg-muted/50 rounded-lg">
-                  <p className="text-xs text-muted-foreground mb-2">
-                    Cada vendedor receberá aproximadamente:
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {members.map((member) => (
-                      <span key={member.team_member_id} className="inline-flex items-center gap-1 px-2 py-1 bg-primary/10 rounded-full text-xs">
-                        {member.team_member?.name}: ~{Math.ceil(totalLeads / members.length)} leads
-                      </span>
-                    ))}
-                  </div>
+              {(destination === "propostas" || destination === "confirmacao") && (
+                <div className="space-y-2">
+                  <Label>Responsável padrão (Closer)</Label>
+                  <p className="text-xs text-muted-foreground -mt-1">Usado quando a coluna Vendedor estiver vazia ou não corresponder a ninguém.</p>
+                  <Select value={selectedCloserId} onValueChange={setSelectedCloserId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Escolher vendedor..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Sem atribuição</SelectItem>
+                      {memberOptions.map((m) => (
+                        <SelectItem key={m.id} value={m.id}>
+                          {m.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               )}
-
-              {/* Actions */}
               <div className="flex justify-end gap-2 pt-4 border-t">
                 <Button variant="outline" onClick={() => setStep("upload")}>
                   Voltar
                 </Button>
-                <Button onClick={handleImport} disabled={!selectedStageId}>
+                <Button onClick={handleImport} disabled={!selectedStageKey}>
                   Importar {totalLeads} leads
                 </Button>
               </div>
@@ -450,16 +443,9 @@ export function ImportLeadsModal({
               <div className="text-center">
                 <Loader2 className="w-12 h-12 mx-auto mb-4 text-primary animate-spin" />
                 <p className="font-medium">Importando leads...</p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  {Math.round(progress)}% concluído
-                </p>
+                <p className="text-sm text-muted-foreground mt-1">{Math.round(progress)}% concluído</p>
               </div>
-              
               <Progress value={progress} className="h-2" />
-              
-              <p className="text-xs text-center text-muted-foreground">
-                Não feche esta janela durante a importação
-              </p>
             </motion.div>
           )}
 
@@ -471,99 +457,37 @@ export function ImportLeadsModal({
               exit={{ opacity: 0, scale: 0.95 }}
               className="py-6 space-y-6"
             >
-              {/* Success celebration */}
               <div className="text-center">
-                <motion.div
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  transition={{ type: "spring", bounce: 0.5, delay: 0.2 }}
-                >
-                  <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-green-500/20 flex items-center justify-center">
-                    <Sparkles className="w-8 h-8 text-green-500" />
-                  </div>
-                </motion.div>
-                <h3 className="text-xl font-bold">Importação Concluída!</h3>
+                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-green-500/20 flex items-center justify-center">
+                  <Sparkles className="w-8 h-8 text-green-500" />
+                </div>
+                <h3 className="text-xl font-bold">Importação concluída!</h3>
               </div>
-
-              {/* Stats */}
-              <div className="grid grid-cols-4 gap-3">
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.3 }}
-                  className="p-4 bg-green-500/10 rounded-xl text-center"
-                >
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-4 bg-green-500/10 rounded-xl text-center">
                   <CheckCircle2 className="w-6 h-6 mx-auto mb-2 text-green-500" />
                   <p className="text-2xl font-bold text-green-500">{result.imported}</p>
                   <p className="text-xs text-muted-foreground">Importados</p>
-                </motion.div>
-
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.35 }}
-                  className="p-4 bg-blue-500/10 rounded-xl text-center"
-                >
+                </div>
+                <div className="p-4 bg-blue-500/10 rounded-xl text-center">
                   <RefreshCw className="w-6 h-6 mx-auto mb-2 text-blue-500" />
-                  <p className="text-2xl font-bold text-blue-500">{result.updated}</p>
+                  <p className="text-2xl font-bold text-blue-500">{(result as { updated?: number }).updated ?? 0}</p>
                   <p className="text-xs text-muted-foreground">Atualizados</p>
-                </motion.div>
-
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.4 }}
-                  className="p-4 bg-amber-500/10 rounded-xl text-center"
-                >
+                </div>
+                <div className="p-4 bg-amber-500/10 rounded-xl text-center">
                   <AlertCircle className="w-6 h-6 mx-auto mb-2 text-amber-500" />
                   <p className="text-2xl font-bold text-amber-500">{result.duplicates}</p>
                   <p className="text-xs text-muted-foreground">Duplicados</p>
-                </motion.div>
-
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.45 }}
-                  className="p-4 bg-red-500/10 rounded-xl text-center"
-                >
+                </div>
+                <div className="p-4 bg-red-500/10 rounded-xl text-center">
                   <XCircle className="w-6 h-6 mx-auto mb-2 text-red-500" />
                   <p className="text-2xl font-bold text-red-500">{result.invalid}</p>
                   <p className="text-xs text-muted-foreground">Inválidos</p>
-                </motion.div>
+                </div>
               </div>
-
-              {/* Distribution breakdown */}
-              {result.distribution && Object.keys(result.distribution).length > 0 && (
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.6 }}
-                  className="p-4 bg-primary/5 rounded-xl"
-                >
-                  <div className="flex items-center gap-2 mb-3">
-                    <Users className="w-4 h-4 text-primary" />
-                    <p className="text-sm font-medium">Distribuição por Vendedor</p>
-                  </div>
-                  <div className="space-y-2">
-                    {Object.entries(result.distribution).map(([sdrId, count]) => {
-                      const member = members.find(m => m.team_member_id === sdrId);
-                      return (
-                        <div key={sdrId} className="flex items-center justify-between text-sm">
-                          <span>{member?.team_member?.name || "Vendedor"}</span>
-                          <span className="font-medium text-primary">{count} leads</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </motion.div>
-              )}
-
-              {/* Info */}
               <p className="text-sm text-center text-muted-foreground">
-                Os leads importados já estão disponíveis no Kanban da campanha
+                Os leads já estão em {DESTINATION_LABELS[destination]}.
               </p>
-
-              {/* Close button */}
               <Button className="w-full" onClick={handleClose}>
                 Fechar
               </Button>
