@@ -359,8 +359,8 @@ export function ProposalDetailModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[750px] max-h-[90vh] overflow-hidden flex flex-col">
-        <DialogHeader className="pb-4">
+      <DialogContent className="sm:max-w-[750px] max-h-[90vh] overflow-hidden flex flex-col p-0 gap-0">
+        <DialogHeader className="px-6 pt-6 pb-2 shrink-0">
           <div className="flex items-center justify-between">
             <DialogTitle className="flex items-center gap-2">
               <Package className="w-5 h-5 text-primary" />
@@ -381,8 +381,8 @@ export function ProposalDetailModal({
           </div>
         </DialogHeader>
 
-        <Tabs defaultValue="details" className="flex-1 flex flex-col min-h-0">
-          <TabsList className="grid w-full grid-cols-3">
+        <Tabs defaultValue="details" className="flex-1 flex flex-col min-h-0 overflow-hidden">
+          <TabsList className="grid w-full grid-cols-3 shrink-0 mx-6">
             <TabsTrigger value="details" className="gap-1.5">
               <FileText className="w-4 h-4" />
               Proposta
@@ -397,8 +397,9 @@ export function ProposalDetailModal({
             </TabsTrigger>
           </TabsList>
 
-          <ScrollArea className="flex-1 mt-4">
-            <TabsContent value="details" className="m-0 space-y-4">
+          <ScrollArea className="flex-1 min-h-0 mt-4 mx-6">
+            <div className="pr-4 pb-4">
+            <TabsContent value="details" className="m-0 space-y-4 pt-2">
               {/* Products Section */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
@@ -644,7 +645,7 @@ export function ProposalDetailModal({
               </div>
             </TabsContent>
 
-            <TabsContent value="lead" className="m-0 space-y-4">
+            <TabsContent value="lead" className="m-0 space-y-4 pt-2">
               {lead ? (
                 <>
                   {/* Lead Header */}
@@ -773,7 +774,7 @@ export function ProposalDetailModal({
               )}
             </TabsContent>
 
-            <TabsContent value="history" className="m-0 space-y-4">
+            <TabsContent value="history" className="m-0 space-y-4 pt-2">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-semibold">Linha do Tempo</h3>
                 {leadHistory && leadHistory.length > 0 && (
@@ -889,11 +890,12 @@ export function ProposalDetailModal({
                 </div>
               )}
             </TabsContent>
+            </div>
           </ScrollArea>
         </Tabs>
 
         {/* Footer */}
-        <div className="flex justify-between gap-2 pt-4 border-t mt-4">
+        <div className="flex justify-between gap-2 px-6 py-4 border-t shrink-0 bg-background">
           <div className="flex gap-2">
             {/* Excluir apenas proposta */}
             <AlertDialog>
