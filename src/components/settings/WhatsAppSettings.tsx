@@ -43,7 +43,7 @@ import {
   useLogoutInstance,
   WhatsAppInstance,
 } from "@/hooks/useWhatsAppInstances";
-import { useIsAdmin } from "@/hooks/useUserRole";
+import { useCanManageWhatsApp } from "@/hooks/useUserRole";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
 import {
   useAllowedMembersForInstance,
@@ -192,7 +192,7 @@ export function WhatsAppSettings() {
   const deleteInstance = useDeleteWhatsAppInstance();
   const checkStatus = useCheckConnectionStatus();
   const logout = useLogoutInstance();
-  const { isAdmin } = useIsAdmin();
+  const { canManage } = useCanManageWhatsApp();
   const { data: allowedMembers = [] } = useAllowedMembersForInstance(vendedoresInstance?.id ?? null);
   const setAllowedMembers = useSetAllowedMembersForInstance();
   const [selectedVendedores, setSelectedVendedores] = useState<Set<string>>(new Set());
@@ -418,7 +418,7 @@ export function WhatsAppSettings() {
               )}
             </Badge>
           )}
-          {isAdmin && (
+          {canManage && (
             <Button onClick={() => setIsCreateDialogOpen(true)} size="sm" className="gap-2">
               <Plus className="w-4 h-4" />
               Nova Instância
@@ -458,7 +458,7 @@ export function WhatsAppSettings() {
         <div className="text-center py-12 text-muted-foreground border border-dashed rounded-lg">
           <MessageSquare className="w-12 h-12 mx-auto mb-4 opacity-50" />
           <p>Nenhuma instância WhatsApp cadastrada</p>
-          {isAdmin && (
+          {canManage && (
             <Button
               onClick={() => setIsCreateDialogOpen(true)}
               variant="outline"
@@ -496,7 +496,7 @@ export function WhatsAppSettings() {
                   )}
                 </div>
                 <div className="flex items-center gap-2">
-                  {isAdmin && (
+                  {canManage && (
                     <Button
                       variant="outline"
                       size="sm"
@@ -535,7 +535,7 @@ export function WhatsAppSettings() {
                       <LogOut className="w-4 h-4" />
                     </Button>
                   )}
-                  {isAdmin && (
+                  {canManage && (
                     <Button
                       variant="ghost"
                       size="sm"

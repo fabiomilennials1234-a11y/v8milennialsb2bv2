@@ -49,7 +49,7 @@ import {
   useSetDefaultCopilotAgent,
 } from "@/hooks/useCopilotAgents";
 import { useCopilotSubscription } from "@/hooks/useCopilotSubscription";
-import { useIsAdmin } from "@/hooks/useUserRole";
+import { useCanManageCopilot } from "@/hooks/useUserRole";
 import { AgentConfigModal } from "@/components/copilot/AgentConfigModal";
 import type { CopilotAgentWithRelations } from "@/types/copilot";
 
@@ -58,7 +58,7 @@ export default function Copilot() {
   const { data: agents, isLoading } = useCopilotAgents();
   const { hasAccess, isTrial, isLoading: subLoading } =
     useCopilotSubscription();
-  const { isAdmin } = useIsAdmin();
+  const { canManage: canManageCopilot } = useCanManageCopilot();
   const deleteAgent = useDeleteCopilotAgent();
   const toggleAgent = useToggleCopilotAgent();
   const setDefault = useSetDefaultCopilotAgent();
@@ -73,10 +73,9 @@ export default function Copilot() {
   };
 
   const handleCreateAgent = () => {
-    // Admins sempre têm acesso
-    if (!isAdmin && !hasAccess) {
-      // Mostrar modal de upgrade apenas para não-admins
-      navigate("/configuracoes"); // Redirecionar para configurações/assinatura
+    // Admins e closers sempre têm acesso; outros precisam de assinatura ativa
+    if (!canManageCopilot && !hasAccess) {
+      navigate("/configuracoes");
       return;
     }
     navigate("/copilot/novo");
@@ -114,11 +113,16 @@ export default function Copilot() {
             Configure e gerencie seus agentes de IA personalizados
           </p>
           <p className="text-xs text-muted-foreground mt-1 max-w-xl">
-            Apenas o admin cria copilots e vincula a um número (Configurações → WhatsApp). Vendedores podem ativar ou desativar a IA em cada conversa (toggle no chat, painel do lead ou card no funil).
+            Admin e Closers podem criar copilots e vincular a números em Configurações → WhatsApp. SDRs podem ativar ou desativar a IA em cada conversa (toggle no chat, painel do lead ou card no funil).
           </p>
+          {!canManageCopilot && (
+            <p className="text-xs text-muted-foreground/80 mt-1 max-w-xl">
+              Se você é Closer ou Admin na equipe e não vê o botão &quot;Novo Copilot&quot;, peça ao admin para conferir sua role em Pitstop → Equipe.
+            </p>
+          )}
         </div>
 
-        {isAdmin && (
+        {canManageCopilot && (
           <Button
             onClick={handleCreateAgent}
             className="bg-millennials-yellow hover:bg-millennials-yellow/90 text-black"
@@ -129,8 +133,8 @@ export default function Copilot() {
         )}
       </motion.div>
 
-      {/* Subscription Warning - Apenas para não-admins */}
-      {!isAdmin && (isTrial || !hasAccess) && (
+      {/* Subscription Warning - Apenas para quem não tem acesso */}
+      {!canManageCopilot && (isTrial || !hasAccess) && (
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -247,7 +251,7 @@ export default function Copilot() {
                     </div>
                   </div>
 
-                  {isAdmin && (
+                  {canManageCopilot && (
                     <div className="flex gap-2 pt-4 border-t flex-wrap">
                       <Button
                         variant="outline"
@@ -325,7 +329,7 @@ export default function Copilot() {
                 Crie seu primeiro agente de IA para começar a automatizar suas
                 vendas
               </p>
-              {isAdmin && (
+              {canManageCopilot && (
                 <Button
                   onClick={handleCreateAgent}
                   className="bg-millennials-yellow hover:bg-millennials-yellow/90 text-black"

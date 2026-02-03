@@ -7,13 +7,13 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { checkCurrentUserSubscription } from "@/lib/subscription";
-import { useIsAdmin } from "@/hooks/useUserRole";
+import { useCanManageCopilot } from "@/hooks/useUserRole";
 
 /**
  * Verifica se o usuário tem acesso ao Copilot
  *
- * Regra: 
- * - Admins têm acesso completo (mesmo sem subscription)
+ * Regra:
+ * - Admins e Closers têm acesso completo (mesmo sem subscription)
  * - Outros usuários precisam de subscription status === 'active'
  * - Trial não tem acesso (requer upgrade)
  *
@@ -25,7 +25,7 @@ import { useIsAdmin } from "@/hooks/useUserRole";
  * }
  */
 export function useCopilotSubscription() {
-  const { isAdmin, isLoading: adminLoading } = useIsAdmin();
+  const { canManage, isLoading: adminLoading } = useCanManageCopilot();
   const { data: subscription, isLoading: subLoading } = useQuery({
     queryKey: ["subscription", "copilot"],
     queryFn: async () => {
@@ -38,10 +38,10 @@ export function useCopilotSubscription() {
 
   const isLoading = adminLoading || subLoading;
 
-  // Admins têm acesso completo, outros precisam de subscription ativa
-  const hasAccess = isAdmin || 
+  // Admins e Closers têm acesso completo, outros precisam de subscription ativa
+  const hasAccess = canManage ||
     (subscription?.isValid === true && subscription?.status === "active");
-  const isTrial = !isAdmin && subscription?.status === "trial";
+  const isTrial = !canManage && subscription?.status === "trial";
 
   return {
     hasAccess,
