@@ -146,7 +146,7 @@ export function PermissoesEquipe() {
             <div>
               <CardTitle>Permissões de personalização</CardTitle>
               <CardDescription>
-                Selecione um ou mais usuários e defina o que cada um pode fazer em cada recurso. Em <strong>Ver</strong> e <strong>Exportar</strong> você pode marcar vários escopos: se responsável, equipe, todos e sem responsável. Passe o mouse no nome da coluna para ver a descrição.
+                Selecione um ou mais usuários e defina o que cada um pode fazer em cada recurso. Em <strong>Ver</strong> e <strong>Exportar</strong> você pode marcar <strong>vários escopos ao mesmo tempo</strong> (ex.: &quot;Se responsável&quot; e &quot;Sem responsável&quot;) — o vendedor verá os leads que é responsável e os que não têm ninguém atribuído. Passe o mouse no nome da coluna para ver a descrição.
               </CardDescription>
             </div>
           </div>

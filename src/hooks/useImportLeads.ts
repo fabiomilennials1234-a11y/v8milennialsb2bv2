@@ -29,6 +29,8 @@ export const KNOWN_LEAD_FIELDS = [
   "data_compromisso",
   "tempo_contrato",
   "observacoes_etapa",
+  "stage", // Etapa do funil — mapeada automaticamente para as etapas do sistema
+  "vendedor", // Responsável / Time — mapeado automaticamente ao vendedor da equipe
 ] as const;
 
 /** Aliases comuns (header normalizado → campo sistema) para sugestão de mapeamento */
@@ -93,6 +95,28 @@ const HEADER_TO_FIELD: Record<string, string> = {
   "observacoes etapa": "observacoes_etapa",
   "observações": "observacoes_etapa",
   "obs etapa": "observacoes_etapa",
+  // Etapa do funil (usada para mapear ao stage_key do pipeline)
+  etapa: "stage",
+  stage: "stage",
+  estágio: "stage",
+  "etapa (qualificação)": "stage",
+  "etapa (propostas)": "stage",
+  "etapa (confirmação)": "stage",
+  fase: "stage",
+  status: "stage",
+  // Responsável / Time / Vendedor (mapeado ao membro da equipe)
+  vendedor: "vendedor",
+  responsável: "vendedor",
+  responsavel: "vendedor",
+  sdr: "vendedor",
+  closer: "vendedor",
+  time: "vendedor",
+  equipe: "vendedor",
+  "vendedor (qualificação)": "vendedor",
+  "vendedor (propostas)": "vendedor",
+  "vendedor (confirmação)": "vendedor",
+  "atribuído a": "vendedor",
+  "atribuido a": "vendedor",
 };
 
 export interface FilePreviewResult {
@@ -372,12 +396,21 @@ export function resolveProductToId(
 /** Normaliza texto para comparação (lowercase, sem acentos, trim, sem ✓/✗ no final). */
 function normalizeStageName(s: string): string {
   return s
-    .replace(/\s*[✓✗]\s*$/g, "")
+    .replace(/\s*[✓✗📅]\s*$/g, "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .trim()
+    .replace(/\s+/g, " ")
+    .replace(/-/g, " "); // "D-5" e "D5" comparáveis
+}
+
+/** Cria versão comparável: "confirmar_d5" e "confirmar d 5" e "confirmar d5" matcheiam. */
+function stageComparable(str: string): string {
+  const n = normalizeStageName(str)
+    .replace(/_/g, " ")
     .replace(/\s+/g, " ");
+  return n;
 }
 
 /** Resolve o nome da etapa (planilha) para stage_key usando a lista de etapas do sistema. */
@@ -387,16 +420,30 @@ export function resolveStageFromName(
   defaultStageKey: string
 ): string {
   if (!stageName || !stageName.trim()) return defaultStageKey;
-  const normalized = normalizeStageName(stageName);
-  if (!normalized) return defaultStageKey;
-  const found = stages.find(
-    (s) => {
-      const nameNorm = normalizeStageName(s.name);
-      const keyNorm = normalizeStageName(s.stage_key);
-      return nameNorm === normalized || keyNorm === normalized || nameNorm.includes(normalized) || normalized.includes(nameNorm);
-    }
-  );
-  return found ? found.stage_key : defaultStageKey;
+  const inputNorm = stageComparable(stageName);
+  if (!inputNorm) return defaultStageKey;
+  // 1) Match exato (nome ou stage_key)
+  const exact = stages.find((s) => {
+    const n = stageComparable(s.name);
+    const k = stageComparable(s.stage_key);
+    return n === inputNorm || k === inputNorm;
+  });
+  if (exact) return exact.stage_key;
+  // 2) Match por inclusão (ex: "reuniao marcada" em "reuniao marcada" ou "Reunião Marcada")
+  const contains = stages.find((s) => {
+    const n = stageComparable(s.name);
+    const k = stageComparable(s.stage_key);
+    return n.includes(inputNorm) || inputNorm.includes(n) || k.includes(inputNorm) || inputNorm.includes(k);
+  });
+  if (contains) return contains.stage_key;
+  // 3) Match por começa com (ex: "confirmar" para "confirmar_d5")
+  const startsWith = stages.find((s) => {
+    const n = stageComparable(s.name);
+    const k = stageComparable(s.stage_key);
+    return inputNorm.startsWith(n) || n.startsWith(inputNorm) || inputNorm.startsWith(k) || k.startsWith(inputNorm);
+  });
+  if (startsWith) return startsWith.stage_key;
+  return defaultStageKey;
 }
 
 export interface ImportFunnelResult {
@@ -847,20 +894,20 @@ export function useImportLeads() {
             origemField.matchedKeys.forEach(k => usedKeys.add(k));
             const origemValue = chooseBestValue("name", origemField.values);
 
-            // ETAPA (stage do funil/campanha - nome como na planilha)
+            // ETAPA (stage do funil/campanha - mapeada automaticamente às etapas do sistema)
             const etapaField = collectFieldValues(
               rowForParse,
-              ["Etapa", "Stage", "Estágio", "Etapa (Qualificação)", "Etapa (Propostas)", "Etapa (Confirmação)"],
-              [/etapa/, /stage/, /est[aá]gio/]
+              ["Etapa", "Stage", "Estágio", "Etapa (Qualificação)", "Etapa (Propostas)", "Etapa (Confirmação)", "Fase", "Status"],
+              [/etapa/, /stage/, /est[aá]gio/, /fase/, /status/]
             );
             etapaField.matchedKeys.forEach(k => usedKeys.add(k));
             const stageValue = chooseBestValue("name", etapaField.values);
 
-            // VENDEDOR (responsável SDR/Closer - nome como na planilha; sistema associa ao mais parecido)
+            // VENDEDOR / TIME (responsável - nome como na planilha; sistema associa ao membro mais parecido)
             const vendedorField = collectFieldValues(
               rowForParse,
-              ["Vendedor", "Responsável", "SDR", "Closer", "Vendedor (Qualificação)", "Vendedor (Propostas)", "Vendedor (Confirmação)"],
-              [/vendedor/, /respons[aá]vel/, /sdr/, /closer/, /atribuido|atribuído/]
+              ["Vendedor", "Responsável", "SDR", "Closer", "Time", "Equipe", "Vendedor (Qualificação)", "Vendedor (Propostas)", "Vendedor (Confirmação)"],
+              [/vendedor/, /respons[aá]vel/, /sdr/, /closer/, /time/, /equipe/, /atribuido|atribuído/]
             );
             vendedorField.matchedKeys.forEach(k => usedKeys.add(k));
             const sellerNameValue = chooseBestValue("name", vendedorField.values);

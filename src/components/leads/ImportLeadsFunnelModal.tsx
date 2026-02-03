@@ -354,7 +354,9 @@ export function ImportLeadsFunnelModal({
               </div>
               <div className="space-y-2">
                 <Label>Etapa padrão *</Label>
-                <p className="text-xs text-muted-foreground mb-1">Usada quando a coluna &quot;Etapa&quot; da planilha estiver vazia ou não corresponder a nenhuma etapa.</p>
+                <p className="text-xs text-muted-foreground mb-1">
+                  O sistema usa automaticamente a coluna <strong>Etapa</strong> (ou Stage/Estágio/Fase) da planilha para colocar cada lead na etapa correta. Use a etapa padrão abaixo apenas quando a linha estiver vazia ou não corresponder.
+                </p>
                 <Select value={selectedStageKey} onValueChange={setSelectedStageKey}>
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione a etapa" />
@@ -377,10 +379,10 @@ export function ImportLeadsFunnelModal({
               <div className="p-3 bg-muted/50 rounded-lg space-y-1">
                 <p className="text-xs font-medium flex items-center gap-1.5">
                   <Users className="w-3.5 h-3.5 text-primary" />
-                  Vínculo com vendedores
+                  Etapa e responsável — reconhecimento automático
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Use a coluna <strong>Vendedor</strong> na planilha com o nome do responsável. O sistema associa ao vendedor com nome mais parecido na equipe. Se a linha não tiver nome ou não houver correspondência, usa o responsável padrão abaixo.
+                  Use as colunas <strong>Etapa</strong> (ou Stage/Fase) e <strong>Vendedor</strong> (ou Time/Equipe/Responsável) na planilha. O sistema identifica automaticamente e posiciona cada lead na etapa correta e associa ao vendedor mais parecido da equipe. Se estiver vazio, usa os padrões selecionados abaixo.
                 </p>
               </div>
               {(destination === "qualificacao" || destination === "confirmacao") && (
