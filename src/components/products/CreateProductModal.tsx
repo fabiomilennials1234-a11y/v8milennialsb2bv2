@@ -18,6 +18,8 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useCreateProduct, ProductType } from "@/hooks/useProducts";
+import { useOrganization } from "@/hooks/useOrganization";
+import { toast } from "sonner";
 import { Plus, X } from "lucide-react";
 
 interface CreateProductModalProps {
@@ -26,6 +28,7 @@ interface CreateProductModalProps {
 }
 
 export function CreateProductModal({ open, onOpenChange }: CreateProductModalProps) {
+  const { organizationId } = useOrganization();
   const createProduct = useCreateProduct();
   const [formData, setFormData] = useState({
     name: "",
@@ -44,6 +47,10 @@ export function CreateProductModal({ open, onOpenChange }: CreateProductModalPro
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!organizationId) {
+      toast.error("Organização não identificada. Faça login novamente.");
+      return;
+    }
 
     await createProduct.mutateAsync({
       name: formData.name,
@@ -57,6 +64,7 @@ export function CreateProductModal({ open, onOpenChange }: CreateProductModalPro
       contrato_padrao_url: formData.contrato_padrao_url || null,
       contrato_minimo_url: formData.contrato_minimo_url || null,
       is_active: formData.is_active,
+      organization_id: organizationId,
     });
 
     setFormData({

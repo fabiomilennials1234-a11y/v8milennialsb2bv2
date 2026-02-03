@@ -17,6 +17,7 @@ export interface Product {
   contrato_padrao_url: string | null;
   contrato_minimo_url: string | null;
   is_active: boolean;
+  organization_id: string | null;
   created_at: string;
   updated_at: string;
 }
