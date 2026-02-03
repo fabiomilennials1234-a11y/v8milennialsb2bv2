@@ -1423,6 +1423,33 @@ export type Database = {
         }
         Relationships: []
       }
+      team_member_org_permissions: {
+        Row: {
+          id: string
+          team_member_id: string
+          permission_key: string
+          enabled: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          team_member_id: string
+          permission_key: string
+          enabled?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          team_member_id?: string
+          permission_key?: string
+          enabled?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       team_member_permissions: {
         Row: {
           id: string
@@ -1430,6 +1457,7 @@ export type Database = {
           resource_key: string
           action_key: string
           value: string
+          value_scopes: Json | null
           created_at: string
           updated_at: string
         }
@@ -1439,6 +1467,7 @@ export type Database = {
           resource_key: string
           action_key: string
           value?: string
+          value_scopes?: Json | null
           created_at?: string
           updated_at?: string
         }
@@ -1448,6 +1477,7 @@ export type Database = {
           resource_key?: string
           action_key?: string
           value?: string
+          value_scopes?: Json | null
           created_at?: string
           updated_at?: string
         }
@@ -1488,6 +1518,10 @@ export type Database = {
       }
       is_team_member: { Args: { _user_id: string }; Returns: boolean }
       user_has_org_permission: { Args: { p_permission_key: string }; Returns: boolean }
+      save_team_member_permissions: {
+        Args: { p_team_member_ids: string[]; p_permissions: Json }
+        Returns: undefined
+      }
     }
     Enums: {
       app_role: "admin" | "sdr" | "closer"

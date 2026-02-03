@@ -101,38 +101,46 @@ export function useTeamMemberPermissions(teamMemberIds: string[]) {
   });
 }
 
-/** Escopos selecionados para "Ver" (pode haver várias linhas por recurso) */
+/** Escopos selecionados para "Ver". Uma linha por (tm, resource, action); value_scopes = array de escopos. */
 export function getViewScopes(
   permissionsList: TeamMemberPermission[],
   teamMemberId: string,
   resource: ResourceKey
 ): PermissionValue[] {
-  return permissionsList
-    .filter(
-      (p) =>
-        p.team_member_id === teamMemberId &&
-        p.resource_key === resource &&
-        p.action_key === "view" &&
-        p.value !== "denied"
-    )
-    .map((p) => p.value as PermissionValue);
+  const row = permissionsList.find(
+    (p) =>
+      p.team_member_id === teamMemberId &&
+      p.resource_key === resource &&
+      p.action_key === "view"
+  );
+  if (!row) return [];
+  const raw = (row as TeamMemberPermission & { value_scopes?: unknown }).value_scopes;
+  const scopes = Array.isArray(raw) ? raw : null;
+  if (scopes && scopes.length > 0) {
+    return scopes.filter((s) => s && s !== "denied") as PermissionValue[];
+  }
+  return row.value && row.value !== "denied" ? [row.value as PermissionValue] : [];
 }
 
-/** Escopos selecionados para "Exportar" */
+/** Escopos selecionados para "Exportar". */
 export function getExportScopes(
   permissionsList: TeamMemberPermission[],
   teamMemberId: string,
   resource: ResourceKey
 ): PermissionValue[] {
-  return permissionsList
-    .filter(
-      (p) =>
-        p.team_member_id === teamMemberId &&
-        p.resource_key === resource &&
-        p.action_key === "export" &&
-        p.value !== "denied"
-    )
-    .map((p) => p.value as PermissionValue);
+  const row = permissionsList.find(
+    (p) =>
+      p.team_member_id === teamMemberId &&
+      p.resource_key === resource &&
+      p.action_key === "export"
+  );
+  if (!row) return [];
+  const raw = (row as TeamMemberPermission & { value_scopes?: unknown }).value_scopes;
+  const scopes = Array.isArray(raw) ? raw : null;
+  if (scopes && scopes.length > 0) {
+    return scopes.filter((s) => s && s !== "denied") as PermissionValue[];
+  }
+  return row.value && row.value !== "denied" ? [row.value as PermissionValue] : [];
 }
 
 /** Valor único para Criar/Editar/Excluir (uma linha por recurso+ação) */
@@ -152,8 +160,9 @@ export function getValue(
 }
 
 /**
- * Salvar matriz de permissões. Para view/export, values pode ter vários itens (múltiplos escopos).
- * SECURITY: Só permite salvar permissões de membros da organização atual.
+ * Salvar matriz de permissões via RPC (SECURITY DEFINER).
+ * Para view/export, values pode ter vários itens (múltiplos escopos).
+ * Evita 401 por RLS e 409 por concorrência ao fazer DELETE+INSERT no servidor.
  */
 export function useSaveTeamMemberPermissions() {
   const queryClient = useQueryClient();
@@ -171,53 +180,42 @@ export function useSaveTeamMemberPermissions() {
         values: PermissionValue[];
       }[];
     }) => {
+      await supabase.auth.refreshSession().catch(() => {});
       if (!organizationId) throw new Error("Organização não disponível");
 
-      const { data: membersInOrg } = await supabase
-        .from("team_members")
-        .select("id")
-        .eq("organization_id", organizationId)
-        .in("id", teamMemberIds);
+      const validIds = teamMemberIds.filter(Boolean);
+      if (validIds.length === 0) return;
 
-      const validIds = new Set((membersInOrg ?? []).map((m) => m.id));
-      const invalidCount = teamMemberIds.filter((id) => !validIds.has(id)).length;
-      if (invalidCount > 0) {
-        throw new Error("Só é possível editar permissões de membros da sua organização.");
-      }
+      const payload = permissions.map((p) => ({
+        resource_key: p.resource_key,
+        action_key: p.action_key,
+        values: p.values.length ? p.values : ["denied"],
+      }));
 
-      const toDelete = new Set<string>();
-      teamMemberIds.forEach((tmId) => {
-        permissions.forEach((p) => {
-          toDelete.add(`${tmId}|${p.resource_key}|${p.action_key}`);
-        });
+      const { error } = await supabase.rpc("save_team_member_permissions", {
+        p_team_member_ids: validIds,
+        p_permissions: payload,
       });
 
-      for (const key of toDelete) {
-        const [tmId, resource_key, action_key] = key.split("|");
-        await supabase
-          .from("team_member_permissions")
-          .delete()
-          .eq("team_member_id", tmId)
-          .eq("resource_key", resource_key)
-          .eq("action_key", action_key);
+      if (error) {
+        const msg = error.message ?? "";
+        if (
+          error.code === "PGRST301" ||
+          error.code === "401" ||
+          msg.toLowerCase().includes("jwt") ||
+          msg.toLowerCase().includes("refresh") ||
+          msg.toLowerCase().includes("unauthorized")
+        ) {
+          throw new Error("Sessão expirada. Faça login novamente.");
+        }
+        if (error.code === "23505" || msg.toLowerCase().includes("conflito") || msg.toLowerCase().includes("duplicate")) {
+          throw new Error("Conflito ao salvar. Tente novamente ou faça login de novo.");
+        }
+        if (msg.toLowerCase().includes("acesso negado") || msg.toLowerCase().includes("apenas admin")) {
+          throw new Error("Acesso negado. Apenas admin pode alterar permissões.");
+        }
+        throw error;
       }
-
-      const rows: TeamMemberPermissionInsert[] = teamMemberIds.flatMap((tmId) =>
-        permissions.flatMap((p) =>
-          (p.values.length ? p.values : ["denied"]).map((value) => ({
-            team_member_id: tmId,
-            resource_key: p.resource_key,
-            action_key: p.action_key,
-            value,
-            updated_at: new Date().toISOString(),
-          }))
-        )
-      );
-      if (rows.length === 0) return;
-      const { error } = await supabase
-        .from("team_member_permissions")
-        .insert(rows);
-      if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["team-member-permissions"] });

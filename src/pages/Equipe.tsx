@@ -52,10 +52,18 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTeamMembers, useUpdateTeamMember, TeamMember } from "@/hooks/useTeamMembers";
 import { useOrganization } from "@/hooks/useOrganization";
 import { useIsAdmin } from "@/hooks/useUserRole";
+import {
+  useTeamMemberOrgPermissions,
+  useSaveTeamMemberOrgPermissions,
+  PERMISSION_LABELS,
+  type PermissionKey,
+} from "@/hooks/usePermissions";
 import { PermissoesEquipe } from "@/components/team/PermissoesEquipe";
 import { useProfiles } from "@/hooks/useProfiles";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useEffect } from "react";
 
 type TeamRole = "sdr" | "closer";
 
@@ -95,12 +103,26 @@ export default function Equipe() {
   const [createUserLoading, setCreateUserLoading] = useState(false);
   const [createdUserEmail, setCreatedUserEmail] = useState<string | null>(null);
   const [removingMemberId, setRemovingMemberId] = useState<string | null>(null);
+  const [memberPermissions, setMemberPermissions] = useState<Record<PermissionKey, boolean>>({
+    see_unassigned_cards: false,
+    see_subordinates_cards: false,
+    see_general_info: false,
+    see_all_leads: false,
+  });
 
   const { data: members = [], isLoading } = useTeamMembers();
   const updateMember = useUpdateTeamMember();
+  const savePermissions = useSaveTeamMemberOrgPermissions();
   const { organizationId } = useOrganization();
   const { isAdmin } = useIsAdmin();
   const queryClient = useQueryClient();
+  const { data: editingMemberPerms } = useTeamMemberOrgPermissions(editingMember?.id ?? null);
+
+  useEffect(() => {
+    if (editingMember && editingMemberPerms) {
+      setMemberPermissions(editingMemberPerms);
+    }
+  }, [editingMember?.id, editingMemberPerms]);
 
   const { data: orgKeyData } = useQuery({
     queryKey: ["organization", "user_creation_key", organizationId],
@@ -158,6 +180,23 @@ export default function Equipe() {
       await updateMember.mutateAsync({
         id: editingMember.id,
         ...formData,
+      });
+      // Sincronizar user_roles para que RLS e UI vejam a role correta (admin/closer/sdr)
+      if (editingMember.user_id) {
+        await supabase.from("user_roles").delete().eq("user_id", editingMember.user_id);
+        const { error: insertErr } = await supabase.from("user_roles").insert({
+          user_id: editingMember.user_id,
+          role: formData.role,
+        });
+        if (insertErr && !String(insertErr.message).toLowerCase().includes("duplicate")) {
+          console.warn("[Equipe] Sync user_roles:", insertErr.message);
+        }
+        queryClient.invalidateQueries({ queryKey: ["user_role"] });
+      }
+      // Salvar permissões (seleção múltipla) do membro
+      await savePermissions.mutateAsync({
+        teamMemberId: editingMember.id,
+        permissions: memberPermissions,
       });
       toast.success("Membro atualizado com sucesso!");
       setIsDialogOpen(false);
@@ -488,13 +527,41 @@ export default function Equipe() {
                     onCheckedChange={(checked) => setFormData({ ...formData, is_active: checked })}
                   />
                 </div>
+                <div className="space-y-3 border-t pt-4">
+                  <Label>Permissões (seleção múltipla)</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Marque as features que este membro pode acessar. Admin sempre tem todas.
+                  </p>
+                  <div className="grid gap-2">
+                    {(Object.keys(PERMISSION_LABELS) as PermissionKey[]).map((key) => (
+                      <div key={key} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`perm-${key}`}
+                          checked={memberPermissions[key]}
+                          onCheckedChange={(checked) =>
+                            setMemberPermissions((p) => ({ ...p, [key]: !!checked }))
+                          }
+                        />
+                        <label
+                          htmlFor={`perm-${key}`}
+                          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                        >
+                          {PERMISSION_LABELS[key]}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
                 <DialogFooter>
                   <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
                     Cancelar
                   </Button>
-                  <Button onClick={handleSubmitEdit} disabled={updateMember.isPending}>
-                    Salvar
+                  <Button
+                    onClick={handleSubmitEdit}
+                    disabled={updateMember.isPending || savePermissions.isPending}
+                  >
+                    {updateMember.isPending || savePermissions.isPending ? "Salvando..." : "Salvar"}
                   </Button>
                 </DialogFooter>
               </DialogContent>

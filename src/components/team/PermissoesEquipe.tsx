@@ -99,7 +99,16 @@ export function PermissoesEquipe() {
       },
       {
         onSuccess: () => toast.success("Permissão atualizada"),
-        onError: () => toast.error("Erro ao salvar"),
+        onError: (err: Error) => {
+          const msg = err?.message ?? "";
+          if (msg.includes("Sessão expirada") || msg.includes("login")) {
+            toast.error("Sessão expirada. Faça login novamente para continuar.");
+          } else if (msg.includes("Conflito")) {
+            toast.error("Conflito ao salvar. Tente novamente ou faça login de novo.");
+          } else {
+            toast.error(msg || "Erro ao salvar permissões");
+          }
+        },
       }
     );
   };
