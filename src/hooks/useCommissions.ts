@@ -153,19 +153,24 @@ export interface CommissionSummary {
 }
 
 export function useCommissionSummary(teamMemberId: string, month: number, year: number) {
+  const { organizationId, isReady } = useOrganization();
+
   return useQuery({
-    queryKey: ["commission_summary", teamMemberId, month, year],
+    queryKey: ["commission_summary", teamMemberId, month, year, organizationId],
     queryFn: async () => {
-      // Get team member info
+      if (!organizationId) throw new Error("Organização não disponível");
+
+      // Get team member info (scoped to organization)
       const { data: member, error: memberError } = await supabase
         .from("team_members")
         .select("*")
         .eq("id", teamMemberId)
+        .eq("organization_id", organizationId)
         .single();
-      
+
       if (memberError) throw memberError;
 
-      // Get closed sales for this month
+      // Get closed sales for this month (scoped to organization)
       const startDate = new Date(year, month - 1, 1);
       const endDate = new Date(year, month, 0, 23, 59, 59);
 
@@ -175,6 +180,7 @@ export function useCommissionSummary(teamMemberId: string, month: number, year: 
       const { data: sales, error: salesError } = await supabase
         .from("pipe_propostas")
         .select("sale_value, product_type, closed_at, updated_at")
+        .eq("organization_id", organizationId)
         .eq("closer_id", teamMemberId)
         .eq("status", "vendido")
         // Nem sempre o closed_at está preenchido. Quando estiver null,
@@ -216,10 +222,11 @@ export function useCommissionSummary(teamMemberId: string, month: number, year: 
       let goalCurrent = 0;
 
       const fetchGoalTarget = async (type: string) => {
-        // 1) individual goal
+        // 1) individual goal (scoped to organization)
         const { data: individualGoal } = await supabase
           .from("goals")
           .select("target_value, created_at")
+          .eq("organization_id", organizationId)
           .eq("team_member_id", teamMemberId)
           .eq("month", month)
           .eq("year", year)
@@ -232,10 +239,11 @@ export function useCommissionSummary(teamMemberId: string, month: number, year: 
           return Number(individualGoal.target_value) || 0;
         }
 
-        // 2) team goal
+        // 2) team goal (scoped to organization)
         const { data: teamGoal } = await supabase
           .from("goals")
           .select("target_value, created_at")
+          .eq("organization_id", organizationId)
           .is("team_member_id", null)
           .eq("month", month)
           .eq("year", year)
@@ -251,10 +259,11 @@ export function useCommissionSummary(teamMemberId: string, month: number, year: 
         // Meta de reuniões (quantidade)
         goalTarget = await fetchGoalTarget("reunioes");
 
-        // Contar reuniões comparecidas do SDR
+        // Contar reuniões comparecidas do SDR (scoped to organization)
         const { data: confirmations } = await supabase
           .from("pipe_confirmacao")
           .select("id")
+          .eq("organization_id", organizationId)
           .eq("sdr_id", teamMemberId)
           .eq("status", "compareceu")
           .gte("meeting_date", startDate.toISOString())
@@ -346,6 +355,6 @@ export function useCommissionSummary(teamMemberId: string, month: number, year: 
 
       return summary;
     },
-    enabled: !!teamMemberId,
+    enabled: isReady && !!organizationId && !!teamMemberId,
   });
 }

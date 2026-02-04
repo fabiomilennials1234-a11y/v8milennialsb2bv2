@@ -17,12 +17,13 @@ import { CSS } from "@dnd-kit/utilities";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { CampanhaStage, CampanhaLead, useUpdateCampanhaLead, useDeleteCampanhaLead } from "@/hooks/useCampanhas";
 import { useDeleteLead } from "@/hooks/useLeads";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
-import { Phone, Mail, Building2, GripVertical, User, DollarSign, Star, Tag, Trash2, Edit2, Filter, MessageSquare, Save, X } from "lucide-react";
+import { Phone, Mail, Building2, GripVertical, User, DollarSign, Star, Tag, Trash2, Edit2, Filter, MessageSquare, Save, X, Search } from "lucide-react";
 import { toast } from "sonner";
 import { openWhatsApp } from "@/lib/whatsapp";
 import { LeadDetailModal } from "@/components/leads/LeadDetailModal";
@@ -500,6 +501,7 @@ export function CampanhaKanban({
   const [editLeadId, setEditLeadId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<CampanhaLead | null>(null);
   const [sdrFilter, setSdrFilter] = useState<string>("all");
+  const [nameFilter, setNameFilter] = useState("");
   const updateLead = useUpdateCampanhaLead();
   const deleteCampanhaLead = useDeleteCampanhaLead();
   const deleteLead = useDeleteLead();
@@ -516,12 +518,28 @@ export function CampanhaKanban({
     return Array.from(sdrMap.values());
   }, [leads]);
 
-  // Filter leads by SDR
+  // Normaliza texto para busca (sem acentos, minúsculo)
+  const normalizeForSearch = (s: string) =>
+    (s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+  // Filter leads by SDR and by name
   const filteredLeads = useMemo(() => {
-    if (sdrFilter === "all") return leads;
-    if (sdrFilter === "none") return leads.filter((l) => !l.sdr_id);
-    return leads.filter((l) => l.sdr_id === sdrFilter);
-  }, [leads, sdrFilter]);
+    let list = leads;
+    if (sdrFilter !== "all") {
+      if (sdrFilter === "none") list = list.filter((l) => !l.sdr_id);
+      else list = list.filter((l) => l.sdr_id === sdrFilter);
+    }
+    const search = nameFilter.trim();
+    if (search) {
+      const norm = normalizeForSearch(search);
+      list = list.filter((l) => {
+        const name = normalizeForSearch(l.lead?.name ?? "");
+        const company = normalizeForSearch(l.lead?.company ?? "");
+        return name.includes(norm) || company.includes(norm);
+      });
+    }
+    return list;
+  }, [leads, sdrFilter, nameFilter]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -655,13 +673,22 @@ export function CampanhaKanban({
   return (
     <>
       {/* Filter Bar */}
-      <div className="flex items-center gap-3 mb-4 p-3 bg-muted/30 rounded-lg">
+      <div className="flex flex-wrap items-center gap-3 mb-4 p-3 bg-muted/30 rounded-lg">
+        <div className="flex items-center gap-2">
+          <Search className="w-4 h-4 text-muted-foreground" />
+          <Input
+            placeholder="Buscar por nome ou empresa..."
+            value={nameFilter}
+            onChange={(e) => setNameFilter(e.target.value)}
+            className="w-[220px] h-9"
+          />
+        </div>
         <div className="flex items-center gap-2">
           <Filter className="w-4 h-4 text-muted-foreground" />
-          <span className="text-sm font-medium">Filtrar por Vendedor:</span>
+          <span className="text-sm font-medium">Vendedor:</span>
         </div>
         <Select value={sdrFilter} onValueChange={setSdrFilter}>
-          <SelectTrigger className="w-[200px]">
+          <SelectTrigger className="w-[200px] h-9">
             <SelectValue placeholder="Todos os vendedores" />
           </SelectTrigger>
           <SelectContent>
@@ -674,9 +701,16 @@ export function CampanhaKanban({
             ))}
           </SelectContent>
         </Select>
-        {sdrFilter !== "all" && (
-          <Button variant="ghost" size="sm" onClick={() => setSdrFilter("all")}>
-            Limpar filtro
+        {(sdrFilter !== "all" || nameFilter.trim()) && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setSdrFilter("all");
+              setNameFilter("");
+            }}
+          >
+            Limpar filtros
           </Button>
         )}
         <div className="ml-auto text-sm text-muted-foreground">
