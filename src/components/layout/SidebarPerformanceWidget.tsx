@@ -99,6 +99,7 @@ function useCloserSales(closerId: string | undefined) {
       const startIso = startDate.toISOString();
       const endIso = endDate.toISOString();
 
+      // Só conta vendas fechadas neste mês: closed_at no período ou, se closed_at for null, updated_at no período
       const { data: sales, error: salesError } = await supabase
         .from("pipe_propostas")
         .select("id, sale_value")
@@ -106,7 +107,7 @@ function useCloserSales(closerId: string | undefined) {
         .eq("closer_id", closerId)
         .eq("status", "vendido")
         .or(
-          `and(closed_at.gte.${startIso},closed_at.lte.${endIso}),and(updated_at.gte.${startIso},updated_at.lte.${endIso})`
+          `and(closed_at.gte.${startIso},closed_at.lte.${endIso}),and(closed_at.is.null,updated_at.gte.${startIso},updated_at.lte.${endIso})`
         );
 
       if (salesError) throw salesError;

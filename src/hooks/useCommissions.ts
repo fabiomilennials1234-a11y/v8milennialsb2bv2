@@ -177,16 +177,15 @@ export function useCommissionSummary(teamMemberId: string, month: number, year: 
       const startIso = startDate.toISOString();
       const endIso = endDate.toISOString();
 
+      // Só conta vendas fechadas neste mês: closed_at no período ou, se closed_at for null, updated_at no período
       const { data: sales, error: salesError } = await supabase
         .from("pipe_propostas")
         .select("sale_value, product_type, closed_at, updated_at")
         .eq("organization_id", organizationId)
         .eq("closer_id", teamMemberId)
         .eq("status", "vendido")
-        // Nem sempre o closed_at está preenchido. Quando estiver null,
-        // usamos updated_at (momento que normalmente foi marcado como vendido).
         .or(
-          `and(closed_at.gte.${startIso},closed_at.lte.${endIso}),and(updated_at.gte.${startIso},updated_at.lte.${endIso})`
+          `and(closed_at.gte.${startIso},closed_at.lte.${endIso}),and(closed_at.is.null,updated_at.gte.${startIso},updated_at.lte.${endIso})`
         );
 
       if (salesError) throw salesError;
