@@ -43,12 +43,14 @@ interface CampanhaKanbanProps {
   stages: CampanhaStage[];
   leads: CampanhaLead[];
   onMoveToConfirmacao: (lead: CampanhaLead) => void;
+  onExtractToPipe?: (lead: CampanhaLead) => void;
 }
 
 interface KanbanCardProps {
   lead: CampanhaLead;
   isReuniao: boolean;
   onMoveToConfirmacao: (lead: CampanhaLead) => void;
+  onExtractToPipe?: (lead: CampanhaLead) => void;
   onCardClick: (leadId: string) => void;
   onEdit: (leadId: string) => void;
   onDelete: (lead: CampanhaLead) => void;
@@ -99,7 +101,7 @@ const formatFaturamento = (value: string): string => {
   return formatted;
 };
 
-function KanbanCardItem({ lead, isReuniao, onMoveToConfirmacao, onCardClick, onEdit, onDelete, onUpdateNotes }: KanbanCardProps) {
+function KanbanCardItem({ lead, isReuniao, onMoveToConfirmacao, onExtractToPipe, onCardClick, onEdit, onDelete, onUpdateNotes }: KanbanCardProps) {
   const [isEditingNotes, setIsEditingNotes] = useState(false);
   const [notesValue, setNotesValue] = useState(lead.notes || "");
   const [isSaving, setIsSaving] = useState(false);
@@ -373,20 +375,35 @@ function KanbanCardItem({ lead, isReuniao, onMoveToConfirmacao, onCardClick, onE
             </div>
           )}
 
-          {/* Move to Confirmação button */}
-          {isReuniao && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full mt-2 text-xs h-7"
-              onClick={(e) => {
-                e.stopPropagation();
-                onMoveToConfirmacao(lead);
-              }}
-            >
-              Enviar para Confirmação
-            </Button>
-          )}
+          {/* Actions: Enviar para pipe (qualquer etapa) e Enviar para Confirmação (só reunião) */}
+          <div className="flex flex-col gap-1.5 mt-2">
+            {onExtractToPipe && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full text-xs h-7"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onExtractToPipe(lead);
+                }}
+              >
+                Enviar para pipe
+              </Button>
+            )}
+            {isReuniao && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full text-xs h-7"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onMoveToConfirmacao(lead);
+                }}
+              >
+                Enviar para Confirmação
+              </Button>
+            )}
+          </div>
         </CardContent>
       </Card>
     </div>
@@ -398,6 +415,7 @@ function KanbanColumn({
   leads,
   isReuniao,
   onMoveToConfirmacao,
+  onExtractToPipe,
   onCardClick,
   onEdit,
   onDelete,
@@ -407,6 +425,7 @@ function KanbanColumn({
   leads: CampanhaLead[];
   isReuniao: boolean;
   onMoveToConfirmacao: (lead: CampanhaLead) => void;
+  onExtractToPipe?: (lead: CampanhaLead) => void;
   onCardClick: (leadId: string) => void;
   onEdit: (leadId: string) => void;
   onDelete: (lead: CampanhaLead) => void;
@@ -450,6 +469,7 @@ function KanbanColumn({
               lead={lead}
               isReuniao={isReuniao}
               onMoveToConfirmacao={onMoveToConfirmacao}
+              onExtractToPipe={onExtractToPipe}
               onCardClick={onCardClick}
               onEdit={onEdit}
               onDelete={onDelete}
@@ -473,6 +493,7 @@ export function CampanhaKanban({
   stages,
   leads,
   onMoveToConfirmacao,
+  onExtractToPipe,
 }: CampanhaKanbanProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
@@ -678,6 +699,7 @@ export function CampanhaKanban({
               leads={filteredLeads.filter((l) => l.stage_id === stage.id)}
               isReuniao={stage.id === reuniaoStage?.id}
               onMoveToConfirmacao={onMoveToConfirmacao}
+              onExtractToPipe={onExtractToPipe}
               onCardClick={handleCardClick}
               onEdit={handleEdit}
               onDelete={setDeleteTarget}

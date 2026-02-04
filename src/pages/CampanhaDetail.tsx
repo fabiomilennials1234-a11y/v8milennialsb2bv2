@@ -3,9 +3,10 @@ import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { useCampanha, useCampanhaStages, useCampanhaLeads, useCampanhaMembers, useUpdateCampanhaMember } from "@/hooks/useCampanhas";
+import { useCampanha, useCampanhaStages, useCampanhaLeads, useCampanhaMembers, useUpdateCampanhaMember, useDeleteCampanhaLead } from "@/hooks/useCampanhas";
 import { useCreatePipeConfirmacao } from "@/hooks/usePipeConfirmacao";
 import { useImportLeads } from "@/hooks/useImportLeads";
+import { useOrganization } from "@/hooks/useOrganization";
 import { CampanhaKanban } from "@/components/campanhas/CampanhaKanban";
 import { CampanhaAnalytics } from "@/components/campanhas/CampanhaAnalytics";
 import { CampanhaAutomaticaPanel } from "@/components/campanhas/CampanhaAutomaticaPanel";
@@ -14,12 +15,14 @@ import { AddLeadToCampanhaModal } from "@/components/campanhas/AddLeadToCampanha
 import { ImportLeadsModal } from "@/components/campanhas/ImportLeadsModal";
 import { ManageStagesModal } from "@/components/campanhas/ManageStagesModal";
 import { EditCampanhaModal } from "@/components/campanhas/EditCampanhaModal";
+import { CampanhaViewersSection } from "@/components/campanhas/CampanhaViewersSection";
+import { ExtractToPipeModal } from "@/components/campanhas/ExtractToPipeModal";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { ArrowLeft, Plus, BarChart3, Kanban, Loader2, Upload, Wrench, Settings2, Bot, Zap, Copy, Link2, Pencil } from "lucide-react";
+import { ArrowLeft, Plus, BarChart3, Kanban, Loader2, Upload, Wrench, Settings2, Bot, Zap, Copy, Link2, Pencil, Users } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -46,8 +49,11 @@ export default function CampanhaDetail() {
   const { data: stages = [] } = useCampanhaStages(id);
   const { data: leads = [] } = useCampanhaLeads(id);
   const { data: members = [] } = useCampanhaMembers(id);
+  const [extractModalLead, setExtractModalLead] = useState<import("@/hooks/useCampanhas").CampanhaLead | null>(null);
   const createConfirmacao = useCreatePipeConfirmacao();
   const updateMember = useUpdateCampanhaMember();
+  const deleteCampanhaLead = useDeleteCampanhaLead();
+  const { organizationId } = useOrganization();
   const { fixExistingLeadNames } = useImportLeads();
 
   const handleFixNames = async () => {
@@ -140,7 +146,10 @@ export default function CampanhaDetail() {
         }
       }
 
-      toast.success("Lead enviado para Confirmação com tag da campanha!");
+      // 5. Remover lead da campanha (sai da campanha e fica só no pipe)
+      await deleteCampanhaLead.mutateAsync({ id: lead.id, campanha_id: campanha!.id });
+
+      toast.success("Lead enviado para Confirmação e removido da campanha!");
     } catch (error) {
       console.error("Error moving to confirmação:", error);
       toast.error("Erro ao enviar para Confirmação");
@@ -228,6 +237,24 @@ export default function CampanhaDetail() {
           </Button>
         </div>
       </div>
+
+      {/* Usuários com visualização */}
+      <Collapsible>
+        <CollapsibleTrigger asChild>
+          <button
+            type="button"
+            className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <Users className="w-4 h-4" />
+            Usuários com visualização
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="rounded-lg border bg-muted/30 p-4 mt-2">
+            <CampanhaViewersSection campanhaId={id!} />
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
 
       {/* IDs para integração (n8n / webhook) */}
       <Collapsible>
@@ -329,6 +356,7 @@ export default function CampanhaDetail() {
             stages={stages}
             leads={leads}
             onMoveToConfirmacao={handleMoveToConfirmacao}
+            onExtractToPipe={setExtractModalLead}
           />
         </TabsContent>
 
@@ -387,6 +415,16 @@ export default function CampanhaDetail() {
         open={editModalOpen}
         onOpenChange={setEditModalOpen}
         campanha={campanha}
+      />
+
+      <ExtractToPipeModal
+        open={!!extractModalLead}
+        onOpenChange={(open) => !open && setExtractModalLead(null)}
+        lead={extractModalLead}
+        campanhaId={id!}
+        campanhaName={campanha?.name ?? ""}
+        organizationId={organizationId ?? null}
+        onSuccess={() => queryClient.invalidateQueries({ queryKey: ["campanha_leads", id] })}
       />
     </div>
   );

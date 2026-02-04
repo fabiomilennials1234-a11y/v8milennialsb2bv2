@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { useOrganization } from "@/hooks/useOrganization";
+import { triggerFollowUpAutomation } from "@/hooks/useAutoFollowUp";
 
 // Tipos para os modos de campanha
 export type CampaignType = 'automatica' | 'semi_automatica' | 'manual';
@@ -751,6 +752,207 @@ export function useReorderCampanhaStages() {
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["campanha_stages", variables.campanha_id] });
+    },
+  });
+}
+
+// --- Campanha allowed viewers (quem pode ver a campanha) ---
+
+export interface CampanhaViewer {
+  id: string;
+  campanha_id: string;
+  team_member_id: string;
+  created_at: string;
+  team_member?: {
+    id: string;
+    name: string;
+    role: string;
+  };
+}
+
+export function useCampanhaViewers(campanhaId: string | undefined) {
+  return useQuery({
+    queryKey: ["campanha_allowed_viewers", campanhaId],
+    queryFn: async () => {
+      if (!campanhaId) return [];
+      const { data, error } = await supabase
+        .from("campanha_allowed_viewers")
+        .select(`
+          *,
+          team_member:team_members(id, name, role)
+        `)
+        .eq("campanha_id", campanhaId);
+      if (error) throw error;
+      return (data ?? []) as CampanhaViewer[];
+    },
+    enabled: !!campanhaId,
+  });
+}
+
+export function useAddCampanhaViewer() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ campanha_id, team_member_id }: { campanha_id: string; team_member_id: string }) => {
+      const { data, error } = await supabase
+        .from("campanha_allowed_viewers")
+        .insert({ campanha_id, team_member_id })
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["campanha_allowed_viewers", variables.campanha_id] });
+      queryClient.invalidateQueries({ queryKey: ["campanhas"] });
+      queryClient.invalidateQueries({ queryKey: ["campanha", variables.campanha_id] });
+    },
+  });
+}
+
+export function useRemoveCampanhaViewer() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, campanha_id }: { id: string; campanha_id: string }) => {
+      const { error } = await supabase.from("campanha_allowed_viewers").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["campanha_allowed_viewers", variables.campanha_id] });
+      queryClient.invalidateQueries({ queryKey: ["campanhas"] });
+      queryClient.invalidateQueries({ queryKey: ["campanha", variables.campanha_id] });
+    },
+  });
+}
+
+// --- Extrair lead da campanha e enviar para um pipe (sai da campanha, entra no pipe) ---
+
+export type ExtractLeadToPipeTarget = "pipe_whatsapp" | "pipe_confirmacao" | "pipe_propostas";
+
+export function useExtractLeadToPipe() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      campanha_lead_id,
+      campanha_id,
+      lead_id,
+      target_pipe,
+      organization_id,
+      sdr_id,
+      closer_id,
+      campaign_name,
+    }: {
+      campanha_lead_id: string;
+      campanha_id: string;
+      lead_id: string;
+      target_pipe: ExtractLeadToPipeTarget;
+      organization_id: string;
+      sdr_id?: string | null;
+      closer_id?: string | null;
+      campaign_name?: string;
+    }) => {
+      const notes = campaign_name ? `Campanha: ${campaign_name}` : undefined;
+
+      if (target_pipe === "pipe_whatsapp") {
+        const { data: existing } = await supabase
+          .from("pipe_whatsapp")
+          .select("id")
+          .eq("lead_id", lead_id)
+          .maybeSingle();
+        if (!existing) {
+          const { data: row, error } = await supabase
+            .from("pipe_whatsapp")
+            .insert({
+              lead_id,
+              status: "novo",
+              sdr_id: sdr_id ?? null,
+              organization_id,
+              notes: notes ?? null,
+            })
+            .select()
+            .single();
+          if (error) throw error;
+          await triggerFollowUpAutomation({
+            leadId: lead_id,
+            assignedTo: sdr_id ?? null,
+            pipeType: "whatsapp",
+            stage: "novo",
+            sourcePipeId: row.id,
+            organizationId: organization_id,
+          });
+        }
+      } else if (target_pipe === "pipe_confirmacao") {
+        const { data: existing } = await supabase
+          .from("pipe_confirmacao")
+          .select("id")
+          .eq("lead_id", lead_id)
+          .maybeSingle();
+        if (!existing) {
+          const { data: row, error } = await supabase
+            .from("pipe_confirmacao")
+            .insert({
+              lead_id,
+              status: "reuniao_marcada",
+              sdr_id: sdr_id ?? null,
+              organization_id,
+              notes: notes ?? null,
+            })
+            .select()
+            .single();
+          if (error) throw error;
+          await triggerFollowUpAutomation({
+            leadId: lead_id,
+            assignedTo: sdr_id ?? closer_id ?? null,
+            pipeType: "confirmacao",
+            stage: "reuniao_marcada",
+            sourcePipeId: row.id,
+            organizationId: organization_id,
+          });
+        }
+      } else {
+        const { data: existing } = await supabase
+          .from("pipe_propostas")
+          .select("id")
+          .eq("lead_id", lead_id)
+          .maybeSingle();
+        if (!existing) {
+          const { data: row, error } = await supabase
+            .from("pipe_propostas")
+            .insert({
+              lead_id,
+              status: "marcar_compromisso",
+              closer_id: closer_id ?? null,
+              organization_id,
+              notes: notes ?? null,
+            })
+            .select()
+            .single();
+          if (error) throw error;
+          await triggerFollowUpAutomation({
+            leadId: lead_id,
+            assignedTo: closer_id ?? null,
+            pipeType: "propostas",
+            stage: "marcar_compromisso",
+            sourcePipeId: row.id,
+            organizationId: organization_id,
+          });
+        }
+      }
+
+      const { error: delError } = await supabase
+        .from("campanha_leads")
+        .delete()
+        .eq("id", campanha_lead_id);
+      if (delError) throw delError;
+
+      return { target_pipe };
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["campanha_leads", variables.campanha_id] });
+      queryClient.invalidateQueries({ queryKey: ["pipe_whatsapp"] });
+      queryClient.invalidateQueries({ queryKey: ["pipe_confirmacao"] });
+      queryClient.invalidateQueries({ queryKey: ["pipe_propostas"] });
+      queryClient.invalidateQueries({ queryKey: ["follow_ups"] });
     },
   });
 }
