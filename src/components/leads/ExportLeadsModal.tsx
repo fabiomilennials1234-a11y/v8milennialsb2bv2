@@ -93,8 +93,8 @@ export function ExportLeadsModal({ open, onOpenChange }: ExportLeadsModalProps) 
             </RadioGroup>
           </div>
           <p className="text-xs text-muted-foreground">
-            O arquivo exportado usa o mesmo modelo de colunas da importação (Nome, Empresa, Email, Telefone, etc.),
-            para você poder editar e importar novamente se quiser.
+            O arquivo inclui todos os dados: lead (nome, empresa, contato, prioridade, origem, UTMs, datas),
+            etapa e datas de cada pipe (WhatsApp, Confirmação, Propostas), valores, SDR/Closer e notas.
           </p>
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isExporting}>
