@@ -373,6 +373,7 @@ export default function CampanhaDetail() {
         campanhaId={id!}
         stages={stages}
         members={members}
+        campanha={campanha}
       />
 
       {/* Manage Stages Modal */}

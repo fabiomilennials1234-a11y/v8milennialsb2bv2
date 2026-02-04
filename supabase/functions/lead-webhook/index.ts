@@ -9,6 +9,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getOrCreateLead } from "../_shared/lead-service.ts";
 import { enqueueWebhookDeliveries } from "../_shared/webhook-utils.ts";
+import { getCampaignLeadAssignment } from "../_shared/campaign-distribution.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -128,15 +129,19 @@ serve(async (req) => {
       ...customFields
     } = payload.fields;
 
-    // Mapear origem
+    // Mapear origem (valores do enum: whatsapp, meta_ads, outro, site, remarketing, google_ads, cal)
     const originMap: Record<string, string> = {
       "meta_ads": "meta_ads",
       "facebook": "meta_ads",
       "instagram": "meta_ads",
-      "google_ads": "outro",
-      "landing_page": "outro",
+      "google_ads": "google_ads",
+      "landing_page": "site",
+      "site": "site",
+      "remarketing": "remarketing",
       "whatsapp": "whatsapp",
-      "calendly": "calendly",
+      "calendly": "cal",
+      "cal": "cal",
+      "cal.com": "cal",
     };
     const origin = originMap[payload.source.toLowerCase()] || "outro";
 
@@ -414,12 +419,14 @@ serve(async (req) => {
               console.log("[lead-webhook] Lead placed in campaign:", campaign_id, "stage:", stage_id);
             }
           } else {
-            const insertPayload: { campanha_id: string; lead_id: string; stage_id: string; notes?: string } = {
+            const sdrId = await getCampaignLeadAssignment(supabase, campaign_id);
+            const insertPayload: { campanha_id: string; lead_id: string; stage_id: string; notes?: string; sdr_id?: string } = {
               campanha_id: campaign_id,
               lead_id: leadId,
               stage_id,
             };
             if (notes !== undefined) insertPayload.notes = notes;
+            if (sdrId) insertPayload.sdr_id = sdrId;
             const { error: insertErr } = await supabase
               .from("campanha_leads")
               .insert(insertPayload);

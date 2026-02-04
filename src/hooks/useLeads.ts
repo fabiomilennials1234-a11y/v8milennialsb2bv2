@@ -15,7 +15,7 @@ export type LeadUpdate = TablesUpdate<"leads">;
 export function useLeads() {
   const { organizationId, isReady } = useOrganization();
   
-  useRealtimeSubscription("leads", ["leads", "pipe_whatsapp", "pipe_confirmacao", "pipe_propostas"]);
+  useRealtimeSubscription("leads", ["leads", "pipe_whatsapp", "pipe_confirmacao", "pipe_propostas", "tv-dashboard"]);
   
   return useQuery({
     queryKey: ["leads", organizationId],

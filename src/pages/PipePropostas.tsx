@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { DraggableKanbanBoard, DraggableItem, KanbanColumn } from "@/components/kanban/DraggableKanbanBoard";
 import { usePipePropostas, useUpdatePipeProposta, PipePropostasStatus } from "@/hooks/usePipePropostas";
+import { usePipePropostasMetrics, type MetricsPeriod } from "@/hooks/usePipeMetrics";
 import { useDeleteAllLeadsInPipe } from "@/hooks/useLeads";
 import { usePipelineStages, stagesToColumns } from "@/hooks/usePipelineStages";
 import { ManagePipelineStagesModal } from "@/components/pipelines/ManagePipelineStagesModal";
@@ -301,12 +302,21 @@ export default function PipePropostas() {
     leadName: string;
   } | null>(null);
   const [deleteAllLeadsDialogOpen, setDeleteAllLeadsDialogOpen] = useState(false);
+  const [metricsPeriod, setMetricsPeriod] = useState<MetricsPeriod>("all");
+  const now = new Date();
+  const [selectedMetricsMonth, setSelectedMetricsMonth] = useState(now.getMonth() + 1);
+  const [selectedMetricsYear, setSelectedMetricsYear] = useState(now.getFullYear());
 
   const { data: pipeData, isLoading, refetch } = usePipePropostas();
   const { data: pipelineStages = [] } = usePipelineStages("propostas");
   const { data: teamMembers } = useTeamMembers();
   const updatePipeProposta = useUpdatePipeProposta();
   const deleteAllLeadsInPipe = useDeleteAllLeadsInPipe("propostas");
+  const { data: metricsByPeriod } = usePipePropostasMetrics(
+    metricsPeriod,
+    metricsPeriod === "month" ? selectedMetricsMonth : undefined,
+    metricsPeriod === "month" ? selectedMetricsYear : undefined
+  );
 
   const closers = useMemo(() => {
     return teamMembers?.filter(m => m.role === "closer" && m.is_active) || [];
@@ -486,8 +496,9 @@ export default function PipePropostas() {
       .filter(item => item.product_type === "projeto" && activeStatuses.includes(item.status))
       .reduce((sum, item) => sum + (item.sale_value || 0), 0);
 
-    const closedCount = soldData.length + lostData.length;
-    const conversionRate = closedCount > 0 ? (soldData.length / closedCount) * 100 : 0;
+    // Taxa de conversão = Leads vendido / TODOS os leads no pipe de propostas
+    const totalNoPipe = pipeData.length;
+    const conversionRate = totalNoPipe > 0 ? (soldData.length / totalNoPipe) * 100 : 0;
 
     return { 
       total, 
@@ -500,6 +511,18 @@ export default function PipePropostas() {
       conversionRate 
     };
   }, [pipeData]);
+
+  // Exibir métricas: "Geral" = stats do pipe; "Este mês" = hook (vendidos no mês); pipeline ativo sempre do pipe atual
+  const displayStats = useMemo(() => {
+    if (metricsPeriod === "all" || !metricsByPeriod) {
+      return stats;
+    }
+    return {
+      ...metricsByPeriod,
+      inProgress: stats.inProgress,
+      inProgressCount: stats.inProgressCount,
+    };
+  }, [metricsPeriod, metricsByPeriod, stats]);
 
   // Funnel data
   const funnelData = useMemo(() => {
@@ -772,6 +795,46 @@ export default function PipePropostas() {
       />
       <ExportLeadsModal open={isExportModalOpen} onOpenChange={setIsExportModalOpen} />
 
+      {/* Período das métricas: Este mês | Geral */}
+      <div className="flex flex-wrap items-center gap-3">
+        <Tabs value={metricsPeriod} onValueChange={(v) => setMetricsPeriod(v as MetricsPeriod)}>
+          <TabsList className="h-9">
+            <TabsTrigger value="all" className="gap-1.5 text-xs">Geral</TabsTrigger>
+            <TabsTrigger value="month" className="gap-1.5 text-xs">Este mês</TabsTrigger>
+          </TabsList>
+        </Tabs>
+        {metricsPeriod === "month" && (
+          <>
+            <Select value={String(selectedMetricsMonth)} onValueChange={(v) => setSelectedMetricsMonth(Number(v))}>
+              <SelectTrigger className="w-[140px] h-9">
+                <Calendar className="w-4 h-4 mr-2" />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {[1,2,3,4,5,6,7,8,9,10,11,12].map((m) => (
+                  <SelectItem key={m} value={String(m)}>
+                    {format(new Date(selectedMetricsYear, m - 1), "MMMM", { locale: ptBR })}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={String(selectedMetricsYear)} onValueChange={(v) => setSelectedMetricsYear(Number(v))}>
+              <SelectTrigger className="w-[100px] h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {[selectedMetricsYear - 2, selectedMetricsYear - 1, selectedMetricsYear, selectedMetricsYear + 1].map((y) => (
+                  <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </>
+        )}
+        <span className="text-xs text-muted-foreground">
+          {metricsPeriod === "all" ? "Métricas do pipe no geral" : `Métricas de ${format(new Date(selectedMetricsYear, selectedMetricsMonth - 1), "MMMM/yyyy", { locale: ptBR })}`}
+        </span>
+      </div>
+
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <motion.div
@@ -783,8 +846,8 @@ export default function PipePropostas() {
             <p className="text-xs text-muted-foreground">Pipeline Ativo</p>
             <Target className="w-4 h-4 text-primary" />
           </div>
-          <p className="text-xl font-bold">{formatCurrency(stats.inProgress)}</p>
-          <p className="text-xs text-muted-foreground">{stats.inProgressCount} propostas</p>
+          <p className="text-xl font-bold">{formatCurrency(displayStats.inProgress)}</p>
+          <p className="text-xs text-muted-foreground">{displayStats.inProgressCount} propostas</p>
         </motion.div>
         
         <motion.div
@@ -797,8 +860,8 @@ export default function PipePropostas() {
             <p className="text-xs text-muted-foreground">Vendido</p>
             <TrendingUp className="w-4 h-4 text-success" />
           </div>
-          <p className="text-xl font-bold text-success">{formatCurrency(stats.sold)}</p>
-          <p className="text-xs text-muted-foreground">{stats.soldCount} vendas</p>
+          <p className="text-xl font-bold text-success">{formatCurrency(displayStats.sold)}</p>
+          <p className="text-xs text-muted-foreground">{displayStats.soldCount} vendas</p>
         </motion.div>
         
         <motion.div
@@ -811,7 +874,7 @@ export default function PipePropostas() {
             <p className="text-xs text-muted-foreground">MRR Potencial</p>
             <ArrowUpRight className="w-4 h-4 text-chart-5" />
           </div>
-          <p className="text-xl font-bold text-chart-5">{formatCurrency(stats.mrr)}</p>
+          <p className="text-xl font-bold text-chart-5">{formatCurrency(displayStats.mrr)}</p>
           <p className="text-xs text-muted-foreground">/mês</p>
         </motion.div>
         
@@ -825,7 +888,7 @@ export default function PipePropostas() {
             <p className="text-xs text-muted-foreground">Projetos</p>
             <Package className="w-4 h-4 text-primary" />
           </div>
-          <p className="text-xl font-bold text-primary">{formatCurrency(stats.projeto)}</p>
+          <p className="text-xl font-bold text-primary">{formatCurrency(displayStats.projeto)}</p>
           <p className="text-xs text-muted-foreground">valor total</p>
         </motion.div>
         
@@ -839,8 +902,8 @@ export default function PipePropostas() {
             <p className="text-xs text-muted-foreground">Taxa de Conversão</p>
             <Percent className="w-4 h-4 text-chart-3" />
           </div>
-          <p className="text-xl font-bold">{stats.conversionRate.toFixed(1)}%</p>
-          <p className="text-xs text-muted-foreground">vendas/fechadas</p>
+          <p className="text-xl font-bold">{displayStats.conversionRate.toFixed(1)}%</p>
+          <p className="text-xs text-muted-foreground">vendas / total no pipe</p>
         </motion.div>
       </div>
 

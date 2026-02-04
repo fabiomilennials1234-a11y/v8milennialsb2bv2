@@ -30,6 +30,7 @@ import {
   RefreshCw,
   AlertTriangle,
   FileDown,
+  Calendar,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -44,6 +45,25 @@ const DESTINATION_LABELS: Record<FunnelDestination, string> = {
   propostas: "Propostas",
   confirmacao: "Confirmação",
 };
+
+const MONTH_NAMES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+
+function buildMetricsPeriodOptions(): { value: string; label: string; month?: number; year?: number }[] {
+  const options: { value: string; label: string; month?: number; year?: number }[] = [
+    { value: "current", label: "Mês atual (padrão)" },
+  ];
+  const now = new Date();
+  for (let i = 1; i <= 24; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const month = d.getMonth() + 1;
+    const year = d.getFullYear();
+    const value = `${year}-${String(month).padStart(2, "0")}`;
+    options.push({ value, label: `${MONTH_NAMES[d.getMonth()]}/${year}`, month, year });
+  }
+  return options;
+}
+
+const METRICS_PERIOD_OPTIONS = buildMetricsPeriodOptions();
 
 interface PreviewLead {
   name: string;
@@ -74,6 +94,7 @@ export function ImportLeadsFunnelModal({
   const [selectedStageKey, setSelectedStageKey] = useState<string>("");
   const [selectedSdrId, setSelectedSdrId] = useState<string>("");
   const [selectedCloserId, setSelectedCloserId] = useState<string>("");
+  const [selectedMetricsPeriod, setSelectedMetricsPeriod] = useState<string>("current");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const pipelineType = PIPELINE_TYPE[destination];
@@ -147,6 +168,7 @@ export function ImportLeadsFunnelModal({
     setStep("importing");
     try {
       const fullMapping = { ...(previewResult?.suggestedMapping ?? {}), ...userColumnMapping };
+      const metricsOpt = METRICS_PERIOD_OPTIONS.find((o) => o.value === selectedMetricsPeriod);
       await importLeadsToFunnel(file, {
         destination,
         stageKey: selectedStageKey,
@@ -156,6 +178,8 @@ export function ImportLeadsFunnelModal({
         userColumnMapping: Object.keys(fullMapping).length ? fullMapping : undefined,
         sdrId: selectedSdrId === "none" ? undefined : selectedSdrId || undefined,
         closerId: selectedCloserId === "none" ? undefined : selectedCloserId || undefined,
+        metricsPeriodMonth: metricsOpt?.month,
+        metricsPeriodYear: metricsOpt?.year,
       });
       setStep("complete");
     } catch (error) {
@@ -175,6 +199,7 @@ export function ImportLeadsFunnelModal({
     setSelectedStageKey("");
     setSelectedSdrId("");
     setSelectedCloserId("");
+    setSelectedMetricsPeriod("current");
     resetImport();
     onOpenChange(false);
   };
@@ -371,6 +396,27 @@ export function ImportLeadsFunnelModal({
                           />
                           {stage.name}
                         </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1.5">
+                  <Calendar className="w-3.5 h-3.5 text-primary" />
+                  Período para métricas
+                </Label>
+                <p className="text-xs text-muted-foreground -mt-1">
+                  Para leads antigos de outros meses, escolha o período em que eles devem contar nas métricas. Deixe &quot;Mês atual&quot; para leads novos.
+                </p>
+                <Select value={selectedMetricsPeriod} onValueChange={setSelectedMetricsPeriod}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o período" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {METRICS_PERIOD_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
                       </SelectItem>
                     ))}
                   </SelectContent>

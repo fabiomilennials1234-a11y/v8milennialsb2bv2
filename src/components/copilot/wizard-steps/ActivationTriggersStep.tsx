@@ -29,13 +29,13 @@ import { useState } from "react";
 import type { CopilotWizardData, TriggerCondition, TriggerOperator } from "@/types/copilot";
 
 const ORIGINS = [
-  { value: "meta_ads", label: "Meta Ads (Facebook/Instagram)" },
-  { value: "google_ads", label: "Google Ads" },
-  { value: "whatsapp", label: "WhatsApp Direto" },
-  { value: "calendly", label: "Calendly" },
-  { value: "landing_page", label: "Landing Page" },
+  { value: "whatsapp", label: "WhatsApp" },
+  { value: "meta_ads", label: "Meta Ads" },
+  { value: "outro", label: "Outros" },
+  { value: "site", label: "Site" },
   { value: "remarketing", label: "Remarketing" },
-  { value: "outro", label: "Outro" },
+  { value: "google_ads", label: "Google Ads" },
+  { value: "cal", label: "Cal.com" },
 ];
 
 const OPERATORS: { value: TriggerOperator; label: string }[] = [

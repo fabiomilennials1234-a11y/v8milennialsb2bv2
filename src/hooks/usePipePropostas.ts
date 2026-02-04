@@ -30,7 +30,7 @@ export const statusColumns: { id: PipePropostasStatus; title: string; color: str
 
 export function usePipePropostas() {
   const { organizationId, isReady } = useOrganization();
-  useRealtimeSubscription("pipe_propostas", ["pipe_propostas", "follow_ups", "recent_activity"]);
+  useRealtimeSubscription("pipe_propostas", ["pipe_propostas", "follow_ups", "recent_activity", "tv-dashboard"]);
 
   return useQuery({
     queryKey: ["pipe_propostas", organizationId],

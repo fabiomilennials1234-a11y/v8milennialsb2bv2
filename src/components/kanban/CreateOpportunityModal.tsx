@@ -27,19 +27,15 @@ import { useCreatePipeWhatsapp, usePipeWhatsapp } from "@/hooks/usePipeWhatsapp"
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
-// Origin labels and colors mapping
+// Origin labels and colors mapping (enum lead_origin)
 const originLabels: Record<string, { label: string; color: string }> = {
-  calendly: { label: "Calendly", color: "bg-blue-500" },
   whatsapp: { label: "WhatsApp", color: "bg-green-500" },
   meta_ads: { label: "Meta Ads", color: "bg-purple-500" },
-  remarketing: { label: "Remarketing", color: "bg-orange-500" },
-  base_clientes: { label: "Base Clientes", color: "bg-cyan-500" },
-  parceiro: { label: "Parceiro", color: "bg-pink-500" },
-  indicacao: { label: "Indicação", color: "bg-yellow-500" },
-  quiz: { label: "Quiz", color: "bg-indigo-500" },
+  outro: { label: "Outros", color: "bg-gray-500" },
   site: { label: "Site", color: "bg-teal-500" },
-  organico: { label: "Orgânico", color: "bg-lime-500" },
-  outro: { label: "Outro", color: "bg-gray-500" },
+  remarketing: { label: "Remarketing", color: "bg-orange-500" },
+  google_ads: { label: "Google Ads", color: "bg-red-500" },
+  cal: { label: "Cal.com", color: "bg-blue-500" },
 };
 
 interface CreateOpportunityModalProps {

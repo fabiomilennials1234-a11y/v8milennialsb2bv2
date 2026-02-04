@@ -39,7 +39,7 @@ interface ConfirmacaoCardProps {
     meetingDate?: string;
     meetingDateTime?: Date;
     rating: number;
-    origin: "calendly" | "whatsapp" | "meta_ads" | "outro";
+    origin: "whatsapp" | "meta_ads" | "outro" | "site" | "remarketing" | "google_ads" | "cal";
     sdr?: string;
     closer?: string;
     tags: string[];
@@ -62,11 +62,14 @@ const urgencyConfig: Record<string, { label: string; color: string }> = {
   "6-meses": { label: "🕐 6+ meses", color: "bg-muted text-muted-foreground border-border" },
 };
 
-const originConfig = {
-  calendly: { label: "Calendly", color: "bg-purple-500/10 text-purple-500 border-purple-500/30", icon: "📅" },
+const originConfig: Record<string, { label: string; color: string; icon: string }> = {
   whatsapp: { label: "WhatsApp", color: "bg-green-500/10 text-green-500 border-green-500/30", icon: "💬" },
   meta_ads: { label: "Meta Ads", color: "bg-blue-500/10 text-blue-500 border-blue-500/30", icon: "📱" },
-  outro: { label: "Outro", color: "bg-muted text-muted-foreground border-border", icon: "📋" },
+  outro: { label: "Outros", color: "bg-muted text-muted-foreground border-border", icon: "📋" },
+  site: { label: "Site", color: "bg-teal-500/10 text-teal-500 border-teal-500/30", icon: "🌐" },
+  remarketing: { label: "Remarketing", color: "bg-orange-500/10 text-orange-500 border-orange-500/30", icon: "🔄" },
+  google_ads: { label: "Google Ads", color: "bg-red-500/10 text-red-500 border-red-500/30", icon: "🔍" },
+  cal: { label: "Cal.com", color: "bg-purple-500/10 text-purple-500 border-purple-500/30", icon: "📅" },
 };
 
 function getMeetingIndicator(meetingDate: Date | null, status?: string) {

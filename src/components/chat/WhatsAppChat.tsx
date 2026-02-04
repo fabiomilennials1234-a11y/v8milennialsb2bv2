@@ -41,7 +41,8 @@ import {
   useSendWhatsAppMessage,
   useSendWhatsAppMedia,
   useWhatsAppMessagesRealtime,
-  useActiveWhatsAppInstance,
+  useWhatsAppInstancesForUser,
+  type WhatsAppInstanceForUser,
   ChatContact,
   WhatsAppMessage,
 } from "@/hooks/useWhatsAppChat";
@@ -53,6 +54,13 @@ import {
   Sheet,
   SheetContent,
 } from "@/components/ui/sheet";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { format, isToday, isYesterday } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
@@ -157,6 +165,9 @@ function ContactList({
   searchQuery,
   onSearchChange,
   isLoading,
+  instances,
+  selectedInstanceId,
+  onSelectInstance,
 }: {
   contacts: ChatContact[];
   selectedPhone: string | null;
@@ -164,6 +175,9 @@ function ContactList({
   searchQuery: string;
   onSearchChange: (query: string) => void;
   isLoading: boolean;
+  instances?: WhatsAppInstanceForUser[];
+  selectedInstanceId?: string | null;
+  onSelectInstance?: (instanceId: string) => void;
 }) {
   const filteredContacts = contacts.filter(
     (c) =>
@@ -175,6 +189,25 @@ function ContactList({
   return (
     <div className="flex flex-col h-full min-h-0 border-r border-border/60 bg-muted/20">
       <div className="p-3 border-b bg-background shrink-0">
+        {instances && instances.length > 0 && onSelectInstance && selectedInstanceId != null && (
+          <div className="mb-3">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5">
+              Número / Inbox
+            </p>
+            <Select value={selectedInstanceId || ""} onValueChange={onSelectInstance}>
+              <SelectTrigger className="h-9 w-full bg-background">
+                <SelectValue placeholder="Escolha o número..." />
+              </SelectTrigger>
+              <SelectContent>
+                {instances.map((inst) => (
+                  <SelectItem key={inst.id} value={inst.id}>
+                    {inst.instance_name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
           Inbox
         </p>
@@ -912,6 +945,7 @@ function ChatWindow({
   phoneNumber,
   onBack,
   instanceName,
+  instanceId,
   onOpenLeadModal,
   hasLead,
   leadId,
@@ -922,6 +956,7 @@ function ChatWindow({
   phoneNumber: string;
   onBack: () => void;
   instanceName: string;
+  instanceId: string;
   onOpenLeadModal: () => void;
   hasLead: boolean;
   leadId?: string;
@@ -950,7 +985,7 @@ function ChatWindow({
     preloadLamejs();
   }, []);
 
-  const { data: messages = [], isLoading } = useWhatsAppMessages(phoneNumber);
+  const { data: messages = [], isLoading } = useWhatsAppMessages(phoneNumber, instanceId);
   const sendMessage = useSendWhatsAppMessage();
   const sendMedia = useSendWhatsAppMedia();
   const { canReply: canReplyOnThisNumber } = useCanReplyOnInstanceByName(instanceName);
@@ -971,6 +1006,7 @@ function ChatWindow({
         phoneNumber,
         message: newMessage.trim(),
         instanceName,
+        instanceId,
       });
       setNewMessage("");
     } catch (error: any) {
@@ -1026,6 +1062,7 @@ function ChatWindow({
       await sendMedia.mutateAsync({
         phoneNumber,
         instanceName,
+        instanceId,
         mediaType: "image",
         media: base64,
         caption: imageCaption || undefined,
@@ -1065,6 +1102,7 @@ function ChatWindow({
       await sendMedia.mutateAsync({
         phoneNumber,
         instanceName,
+        instanceId,
         mediaType: "audio",
         media: base64,
         mimetype: "audio/mpeg",
@@ -1395,16 +1433,39 @@ function normalizePhoneForParam(phone: string): string {
   return phone.replace(/\D/g, "") || phone;
 }
 
+const CHAT_SELECTED_INSTANCE_KEY = "whatsapp_chat_selected_instance_id";
+
 export function WhatsAppChat() {
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [isLeadPanelOpen, setIsLeadPanelOpen] = useState(false);
-  
-  const { data: contacts = [], isLoading: contactsLoading } = useWhatsAppContacts();
-  const { data: activeInstance, isLoading: instanceLoading } = useActiveWhatsAppInstance();
+
+  const { data: instances = [], isLoading: instancesLoading } = useWhatsAppInstancesForUser();
+  const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(() => {
+    if (typeof sessionStorage === "undefined") return null;
+    return sessionStorage.getItem(CHAT_SELECTED_INSTANCE_KEY);
+  });
+
+  const selectedInstance = instances.find((i) => i.id === selectedInstanceId) ?? instances[0] ?? null;
+  const effectiveInstanceId = selectedInstance?.id ?? selectedInstanceId;
+
+  const { data: contacts = [], isLoading: contactsLoading } = useWhatsAppContacts(effectiveInstanceId);
   const { data: selectedLead } = useLeadByPhone(selectedPhone);
+
+  // Persistir e sincronizar instância selecionada
+  useEffect(() => {
+    if (effectiveInstanceId && typeof sessionStorage !== "undefined") {
+      sessionStorage.setItem(CHAT_SELECTED_INSTANCE_KEY, effectiveInstanceId);
+    }
+  }, [effectiveInstanceId]);
+
+  useEffect(() => {
+    if (instances.length > 0 && !effectiveInstanceId) {
+      setSelectedInstanceId(instances[0].id);
+    }
+  }, [instances, effectiveInstanceId]);
 
   // Abrir conversa pelo parâmetro ?phone= (pipes, campanhas, etc.)
   useEffect(() => {
@@ -1432,7 +1493,7 @@ export function WhatsAppChat() {
   // Pegar pushName do contato selecionado
   const selectedContact = contacts.find((c) => c.phone_number === selectedPhone);
 
-  if (instanceLoading) {
+  if (instancesLoading) {
     return (
       <div className="flex-1 min-h-0 flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
@@ -1440,13 +1501,14 @@ export function WhatsAppChat() {
     );
   }
 
-  if (!activeInstance) {
+  if (instances.length === 0) {
     return (
       <div className="flex-1 min-h-0 flex flex-col items-center justify-center text-center p-8">
         <AlertCircle className="w-16 h-16 text-muted-foreground/50 mb-4" />
-        <h3 className="text-lg font-medium mb-2">WhatsApp não conectado</h3>
-        <p className="text-muted-foreground mb-4">
-          Para usar o chat, você precisa ter uma instância do WhatsApp conectada.
+        <h3 className="text-lg font-medium mb-2">Você não está vinculado a nenhum número</h3>
+        <p className="text-muted-foreground mb-4 max-w-md">
+          Nenhuma conversa será exibida até que um administrador vincule você a um número/inbox.
+          Peça ao administrador para incluir você na configuração da instância desejada.
         </p>
         <Button variant="outline" asChild>
           <a href="/configuracoes">Ir para Configurações</a>
@@ -1472,16 +1534,20 @@ export function WhatsAppChat() {
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
             isLoading={contactsLoading}
+            instances={instances}
+            selectedInstanceId={effectiveInstanceId}
+            onSelectInstance={setSelectedInstanceId}
           />
         </div>
 
         {/* Chat Window - min-h-0 para scroll interno na área de mensagens */}
         <div className={cn("flex-1 min-h-0 overflow-hidden flex flex-col", !selectedPhone && "hidden md:flex")}>
-          {selectedPhone ? (
+          {selectedPhone && selectedInstance ? (
             <ChatWindow
               phoneNumber={selectedPhone}
               onBack={() => setSelectedPhone(null)}
-              instanceName={activeInstance.instance_name}
+              instanceName={selectedInstance.instance_name}
+              instanceId={selectedInstance.id}
               onOpenLeadModal={() => setIsLeadPanelOpen(true)}
               hasLead={!!(selectedLead || selectedContact?.lead_id)}
               leadId={selectedLead?.id ?? selectedContact?.lead_id ?? undefined}
@@ -1489,7 +1555,7 @@ export function WhatsAppChat() {
               selectedContact={selectedContact}
               selectedLeadName={selectedLead?.name}
             />
-          ) : (
+          ) : selectedPhone ? null : (
             <div className="flex flex-col items-center justify-center h-full w-full text-center p-8">
               <MessageSquare className="w-16 h-16 text-muted-foreground/50 mb-4" />
               <h3 className="text-lg font-medium mb-2">Selecione uma conversa</h3>

@@ -38,7 +38,7 @@ export const statusColumns: { id: PipeConfirmacaoStatus; title: string; color: s
 
 export function usePipeConfirmacao() {
   const { organizationId, isReady } = useOrganization();
-  useRealtimeSubscription("pipe_confirmacao", ["pipe_confirmacao", "follow_ups"]);
+  useRealtimeSubscription("pipe_confirmacao", ["pipe_confirmacao", "follow_ups", "tv-dashboard"]);
 
   return useQuery({
     queryKey: ["pipe_confirmacao", organizationId],

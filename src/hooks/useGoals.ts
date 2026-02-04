@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useOrganization } from "./useOrganization";
+import { useRealtimeSubscription } from "./useRealtimeSubscription";
 
 export interface Goal {
   id: string;
@@ -45,6 +46,7 @@ export function useTeamGoals(month?: number, year?: number) {
   const selectedMonth = month ?? now.getMonth() + 1;
   const selectedYear = year ?? now.getFullYear();
   const { organizationId, isReady } = useOrganization();
+  useRealtimeSubscription("goals", ["goals", "team-goals", "individual-goals", "tv-dashboard"]);
 
   return useQuery({
     queryKey: ["team-goals", selectedMonth, selectedYear, organizationId],

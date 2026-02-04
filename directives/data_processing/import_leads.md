@@ -11,6 +11,8 @@ Importar leads de arquivo CSV ou Excel (XLSX/XLS), validar dados, mapear colunas
 - skip_duplicates: boolean? - Se deve pular leads duplicados (padrão: true)
 - batch_size: number? - Tamanho do lote para processamento (padrão: 100)
 - destination (frontend): 'campanha' | 'qualificacao' | 'propostas' | 'confirmacao' - Destino do import (funil)
+- metrics_period_month: number? - Mês (1-12) em que os leads devem contar nas métricas. Quando informado com metrics_period_year, leads antigos importados não distorcem as métricas do mês atual
+- metrics_period_year: number? - Ano em que os leads devem contar nas métricas. Usado junto com metrics_period_month
 
 ## Ferramentas
 - `execution/python/data_processing/import_leads.py` - Script de importação
@@ -34,6 +36,7 @@ Importar leads de arquivo CSV ou Excel (XLSX/XLS), validar dados, mapear colunas
 - Memória insuficiente: Processar em chunks menores
 - Leads duplicados: Aplicar estratégia configurada (skip, merge, update)
 - Timeout: Salvar progresso e permitir retomada
+- Leads antigos importados: Quando metrics_period_month/year são informados, os leads contam no período indicado e não nas métricas do mês atual (evita distorção)
 
 ## Aprendizados
 (Atualizado automaticamente pelo sistema)

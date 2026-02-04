@@ -5,16 +5,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { useCreateCampanha, type CampaignType, type AutoConfig } from "@/hooks/useCampanhas";
+import { useCreateCampanha, type CampaignType, type AutoConfig, type LeadDistributionMode } from "@/hooks/useCampanhas";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
 import { toast } from "sonner";
 import {
   Plus, X, GripVertical, Target, Users, Calendar, DollarSign,
   Bot, FileText, Kanban, ChevronLeft, ChevronRight, Check,
-  Zap, Clock, MousePointer
+  Zap, Clock, MousePointer, Shuffle, User
 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -120,6 +121,10 @@ export function CreateCampanhaModal({ open, onOpenChange }: CreateCampanhaModalP
   // Stages and members
   const [stages, setStages] = useState<StageInput[]>(defaultStages);
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
+
+  // Distribuição de leads (importação, Meta Ads, integrações)
+  const [leadDistributionMode, setLeadDistributionMode] = useState<LeadDistributionMode>(null);
+  const [leadAssignedTo, setLeadAssignedTo] = useState<string | null>(null);
 
   const createCampanha = useCreateCampanha();
   const { data: teamMembers } = useTeamMembers();
@@ -236,6 +241,8 @@ export function CreateCampanhaModal({ open, onOpenChange }: CreateCampanhaModalP
         campaign_type: campaignType,
         agent_id: campaignType === "automatica" ? selectedAgentId : null,
         auto_config: campaignType === "automatica" ? autoConfig : null,
+        lead_distribution_mode: leadDistributionMode || null,
+        lead_assigned_to: leadDistributionMode === "single" ? leadAssignedTo : null,
         stages: stages
           .filter((s) => s.name.trim())
           .map((s, index) => ({
@@ -276,6 +283,8 @@ export function CreateCampanhaModal({ open, onOpenChange }: CreateCampanhaModalP
     setBonusValue(500);
     setStages(defaultStages);
     setSelectedMembers([]);
+    setLeadDistributionMode(null);
+    setLeadAssignedTo(null);
   };
 
   const renderStepContent = () => {
@@ -563,6 +572,84 @@ export function CreateCampanhaModal({ open, onOpenChange }: CreateCampanhaModalP
                 </span>
               </div>
             )}
+
+            {/* Distribuição automática de leads */}
+            <div className="space-y-3 pt-4 border-t mt-4">
+              <h3 className="font-semibold flex items-center gap-2">
+                <Shuffle className="w-4 h-4" />
+                Distribuição de Leads
+              </h3>
+              <p className="text-xs text-muted-foreground">
+                Quando leads forem importados ou chegarem via integrações (Meta Ads, etc.), como atribuir ao vendedor?
+              </p>
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 p-3 rounded-lg border cursor-pointer hover:bg-muted/50">
+                  <input
+                    type="radio"
+                    name="leadDistribution"
+                    checked={leadDistributionMode === null}
+                    onChange={() => { setLeadDistributionMode(null); setLeadAssignedTo(null); }}
+                    className="rounded-full"
+                  />
+                  <span className="text-sm">Manual</span>
+                  <span className="text-xs text-muted-foreground">— definir na importação</span>
+                </label>
+                <label className="flex items-center gap-2 p-3 rounded-lg border cursor-pointer hover:bg-muted/50">
+                  <input
+                    type="radio"
+                    name="leadDistribution"
+                    checked={leadDistributionMode === "random"}
+                    onChange={() => setLeadDistributionMode("random")}
+                    className="rounded-full"
+                  />
+                  <span className="text-sm">Aleatório</span>
+                  <span className="text-xs text-muted-foreground">— distribui entre todos da campanha</span>
+                </label>
+                <label className="flex items-center gap-2 p-3 rounded-lg border cursor-pointer hover:bg-muted/50">
+                  <input
+                    type="radio"
+                    name="leadDistribution"
+                    checked={leadDistributionMode === "round_robin"}
+                    onChange={() => setLeadDistributionMode("round_robin")}
+                    className="rounded-full"
+                  />
+                  <span className="text-sm">Rotativo</span>
+                  <span className="text-xs text-muted-foreground">— alterna entre os vendedores</span>
+                </label>
+                <label className="flex items-center gap-2 p-3 rounded-lg border cursor-pointer hover:bg-muted/50">
+                  <input
+                    type="radio"
+                    name="leadDistribution"
+                    checked={leadDistributionMode === "single"}
+                    onChange={() => setLeadDistributionMode("single")}
+                    className="rounded-full"
+                  />
+                  <span className="text-sm">Pessoa específica</span>
+                </label>
+                {leadDistributionMode === "single" && (
+                  <div className="ml-6 pl-4 border-l">
+                    <Select
+                      value={leadAssignedTo ?? ""}
+                      onValueChange={(v) => setLeadAssignedTo(v || null)}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Selecione o vendedor" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {teamMembers?.filter((m) => selectedMembers.includes(m.id)).map((m) => (
+                          <SelectItem key={m.id} value={m.id}>
+                            <span className="flex items-center gap-2">
+                              <User className="w-3 h-3" />
+                              {m.name}
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         );
 

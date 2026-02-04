@@ -1,7 +1,7 @@
--- Assign all products that have no organization (the ones that appeared to everyone
--- before RLS) to the Milennials/Millennials organization.
+-- (Re)assign products without organization to Milennials org.
+-- Use this if the first assign migration ran before org matching was fixed,
+-- or if products were left without organization_id (invisible to all after RLS).
 
--- Match org by name or slug: Milennials (1 L), Millennials (2 Ls), and variants
 UPDATE public.products
 SET organization_id = (
   SELECT id FROM public.organizations
@@ -21,5 +21,3 @@ WHERE organization_id IS NULL
     )
     LIMIT 1
   );
-
-COMMENT ON TABLE public.products IS 'Products are scoped by organization_id; legacy rows were assigned to the Milennials org.';

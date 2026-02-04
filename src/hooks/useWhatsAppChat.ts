@@ -33,19 +33,87 @@ export interface ChatContact {
   lead_name: string | null;
 }
 
+/** Instância de WhatsApp que o usuário pode acessar (para seletor de inbox) */
+export interface WhatsAppInstanceForUser {
+  id: string;
+  instance_name: string;
+  status: string;
+}
+
 /**
- * Hook para listar contatos/conversas do WhatsApp
+ * Lista instâncias conectadas às quais o usuário está vinculado (pode ver conversas).
+ * Se a instância não tiver vendedores em whatsapp_instance_allowed_members, todos da org podem.
+ * Caso contrário, só retorna instâncias em que o team_member do usuário está na lista.
  */
-export function useWhatsAppContacts() {
+export function useWhatsAppInstancesForUser() {
+  const { data: teamMember } = useCurrentTeamMember();
+  const organizationId = teamMember?.organization_id;
+  const teamMemberId = teamMember?.id;
+
+  return useQuery({
+    queryKey: ["whatsapp_instances_for_user", organizationId, teamMemberId],
+    queryFn: async () => {
+      if (!organizationId || !teamMemberId) return [];
+
+      const { data: instances, error: instError } = await supabase
+        .from("whatsapp_instances")
+        .select("id, instance_name, status")
+        .eq("organization_id", organizationId)
+        .eq("status", "connected")
+        .order("instance_name");
+
+      if (instError) throw instError;
+      if (!instances?.length) return [];
+
+      const { data: allowedRows } = await supabase
+        .from("whatsapp_instance_allowed_members")
+        .select("whatsapp_instance_id")
+        .in("whatsapp_instance_id", instances.map((i) => i.id));
+
+      const instanceIdsWithRestriction = new Set(
+        (allowedRows ?? []).map((r) => r.whatsapp_instance_id)
+      );
+      const allowedMemberByInstance: Record<string, boolean> = {};
+      if (allowedRows?.length) {
+        const { data: memberRows } = await supabase
+          .from("whatsapp_instance_allowed_members")
+          .select("whatsapp_instance_id, team_member_id")
+          .in("whatsapp_instance_id", instances.map((i) => i.id))
+          .eq("team_member_id", teamMemberId);
+        for (const row of memberRows ?? []) {
+          allowedMemberByInstance[row.whatsapp_instance_id] = true;
+        }
+      }
+
+      const result: WhatsAppInstanceForUser[] = [];
+      for (const inst of instances) {
+        const hasRestriction = instanceIdsWithRestriction.has(inst.id);
+        if (!hasRestriction) {
+          result.push(inst as WhatsAppInstanceForUser);
+        } else if (allowedMemberByInstance[inst.id]) {
+          result.push(inst as WhatsAppInstanceForUser);
+        }
+      }
+      return result;
+    },
+    enabled: !!organizationId && !!teamMemberId,
+  });
+}
+
+/**
+ * Hook para listar contatos/conversas do WhatsApp de uma instância (inbox por número).
+ * Se instanceId for null, não retorna conversas — usuário deve escolher um número primeiro.
+ */
+export function useWhatsAppContacts(instanceId: string | null) {
   const { data: teamMember } = useCurrentTeamMember();
   const organizationId = teamMember?.organization_id;
 
   return useQuery({
-    queryKey: ["whatsapp_contacts", organizationId],
+    queryKey: ["whatsapp_contacts", organizationId, instanceId],
     queryFn: async () => {
-      if (!organizationId) return [];
+      if (!organizationId || !instanceId) return [];
 
-      // Buscar mensagens agrupadas por contato
+      // Buscar mensagens agrupadas por contato desta instância
       const { data, error } = await supabase
         .from("whatsapp_messages")
         .select(`
@@ -58,6 +126,7 @@ export function useWhatsAppContacts() {
           leads(name)
         `)
         .eq("organization_id", organizationId)
+        .eq("instance_id", instanceId)
         .order("timestamp", { ascending: false });
 
       if (error) throw error;
@@ -116,6 +185,7 @@ export function useWhatsAppContacts() {
         .from("whatsapp_messages")
         .select("phone_number, timestamp")
         .eq("organization_id", organizationId)
+        .eq("instance_id", instanceId)
         .eq("direction", "incoming")
         .order("timestamp", { ascending: false });
 
@@ -135,38 +205,43 @@ export function useWhatsAppContacts() {
 
       return Array.from(contactsMap.values());
     },
-    enabled: !!organizationId,
+    enabled: !!organizationId && !!instanceId,
     // Polling de fallback: atualiza lista (e badge da sidebar) a cada 10s quando a aba está em foco (realtime pode falhar em produção)
-    refetchInterval: 10_000,
+    refetchInterval: instanceId ? 10_000 : false,
     refetchIntervalInBackground: false,
   });
 }
 
 /**
- * Hook para buscar mensagens de um contato específico
+ * Hook para buscar mensagens de um contato específico em uma instância (inbox).
+ * Filtra por instanceId para mostrar só a conversa daquele número.
  */
-export function useWhatsAppMessages(phoneNumber: string | null) {
+export function useWhatsAppMessages(
+  phoneNumber: string | null,
+  instanceId: string | null
+) {
   const { data: teamMember } = useCurrentTeamMember();
   const organizationId = teamMember?.organization_id;
 
   return useQuery({
-    queryKey: ["whatsapp_messages", organizationId, phoneNumber],
+    queryKey: ["whatsapp_messages", organizationId, phoneNumber, instanceId],
     queryFn: async () => {
-      if (!organizationId || !phoneNumber) return [];
+      if (!organizationId || !phoneNumber || !instanceId) return [];
 
       const { data, error } = await supabase
         .from("whatsapp_messages")
         .select("*")
         .eq("organization_id", organizationId)
+        .eq("instance_id", instanceId)
         .eq("phone_number", phoneNumber)
         .order("timestamp", { ascending: true });
 
       if (error) throw error;
       return data as WhatsAppMessage[];
     },
-    enabled: !!organizationId && !!phoneNumber,
+    enabled: !!organizationId && !!phoneNumber && !!instanceId,
     // Polling de fallback: atualiza mensagens do chat a cada 8s quando a aba está em foco
-    refetchInterval: phoneNumber ? 8_000 : false,
+    refetchInterval: phoneNumber && instanceId ? 8_000 : false,
     refetchIntervalInBackground: false,
   });
 }
@@ -216,10 +291,12 @@ export function useSendWhatsAppMessage() {
       phoneNumber,
       message,
       instanceName,
+      instanceId,
     }: {
       phoneNumber: string;
       message: string;
       instanceName: string;
+      instanceId?: string | null;
     }) => {
       if (!teamMember?.organization_id || !teamMember?.id) {
         throw new Error("Usuário não vinculado à equipe");
@@ -248,9 +325,10 @@ export function useSendWhatsAppMessage() {
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
 
-      // Salvar mensagem no banco localmente
+      // Salvar mensagem no banco localmente (com instance_id para aparecer no inbox correto)
       const { error: insertError } = await supabase.from("whatsapp_messages").insert({
         organization_id: teamMember?.organization_id,
+        instance_id: instanceId || null,
         message_id: data?.key?.id || `local_${Date.now()}`,
         remote_jid: `${formattedNumber}@s.whatsapp.net`,
         phone_number: formattedNumber,
@@ -294,6 +372,7 @@ export function useSendWhatsAppMedia() {
     mutationFn: async ({
       phoneNumber,
       instanceName,
+      instanceId,
       mediaType,
       media,
       caption,
@@ -302,6 +381,7 @@ export function useSendWhatsAppMedia() {
     }: {
       phoneNumber: string;
       instanceName: string;
+      instanceId?: string | null;
       mediaType: "image" | "audio" | "document" | "video";
       media: string; // base64 ou URL
       caption?: string;
@@ -399,9 +479,10 @@ export function useSendWhatsAppMedia() {
 
       console.log("[WhatsApp Media] Success:", data);
 
-      // Salvar mensagem no banco
+      // Salvar mensagem no banco (com instance_id para aparecer no inbox correto)
       const { error: insertError } = await supabase.from("whatsapp_messages").insert({
         organization_id: teamMember?.organization_id,
+        instance_id: instanceId || null,
         message_id: data?.key?.id || `local_${Date.now()}`,
         remote_jid: `${formattedNumber}@s.whatsapp.net`,
         phone_number: formattedNumber,

@@ -22,6 +22,7 @@ import {
   Package,
   Bot,
   GitBranch,
+  BarChart2,
 } from "lucide-react";
 import logoDark from "@/assets/logo-light.png";
 import v8Logo from "@/assets/v8-logo.png";
@@ -54,6 +55,7 @@ const funisSubItems: NavItem[] = [
 const navItems: NavItemWithChildren[] = [
   { label: "Central de Comando", icon: Gauge, path: "/" },
   { label: "Campanhas", icon: Target, path: "/campanhas" },
+  { label: "Marketing", icon: BarChart2, path: "/marketing" },
   { label: "Chat", icon: Zap, path: "/chat-whatsapp" },
   { label: "Funis", icon: GitBranch, path: "/funis", children: funisSubItems },
   { label: "Revisão", icon: Wrench, path: "/follow-ups" },
@@ -87,7 +89,7 @@ export function Sidebar() {
 
   // Subscription realtime ativa em qualquer página para atualizar contagem de não lidas
   useWhatsAppMessagesRealtime(null);
-  const { data: chatContacts = [] } = useWhatsAppContacts();
+  const { data: chatContacts = [] } = useWhatsAppContacts(null);
   const chatUnreadTotal = chatContacts.reduce((sum, c) => sum + (c.unread_count || 0), 0);
 
   const isActive = (path: string) => {

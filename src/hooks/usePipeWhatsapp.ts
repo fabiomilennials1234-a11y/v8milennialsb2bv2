@@ -22,7 +22,7 @@ export const statusColumns: { id: PipeWhatsappStatus; title: string; color: stri
 
 export function usePipeWhatsapp() {
   const { organizationId, isReady } = useOrganization();
-  useRealtimeSubscription("pipe_whatsapp", ["pipe_whatsapp", "follow_ups"]);
+  useRealtimeSubscription("pipe_whatsapp", ["pipe_whatsapp", "follow_ups", "tv-dashboard"]);
 
   return useQuery({
     queryKey: ["pipe_whatsapp", organizationId],

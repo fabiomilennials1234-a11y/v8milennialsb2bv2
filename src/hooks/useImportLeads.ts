@@ -321,6 +321,9 @@ export interface ImportLeadsToFunnelOptions {
   userColumnMapping?: Record<string, string>;
   sdrId?: string | null;
   closerId?: string | null;
+  /** Período para métricas: mês (1-12) e ano. Quando informado, leads importados contam no mês/ano indicado em vez do mês atual. */
+  metricsPeriodMonth?: number;
+  metricsPeriodYear?: number;
 }
 
 /** Normaliza nome para comparação (lowercase, sem acentos, trim). */
@@ -1111,7 +1114,9 @@ export function useImportLeads() {
     autoDistribute?: boolean,
     memberIds?: string[],
     /** Etapas da campanha (id, name) para mapear coluna Etapa da planilha → stage_id. Se informado, cada lead usa a etapa da coluna Etapa quando existir. */
-    campaignStages?: { id: string; name: string }[]
+    campaignStages?: { id: string; name: string }[],
+    /** Modo de distribuição quando autoDistribute: round_robin (padrão) ou random */
+    distributionMode?: "round_robin" | "random"
   ): Promise<ImportResult> => {
     setIsImporting(true);
     setProgress(0);
@@ -1255,8 +1260,12 @@ export function useImportLeads() {
                 // Determine SDR for this lead
                 let assignedSdrId: string | null = null;
                 if (autoDistribute && memberIds && memberIds.length > 0) {
-                  assignedSdrId = memberIds[memberIndex % memberIds.length];
-                  memberIndex++;
+                  if (distributionMode === "random") {
+                    assignedSdrId = memberIds[Math.floor(Math.random() * memberIds.length)];
+                  } else {
+                    assignedSdrId = memberIds[memberIndex % memberIds.length];
+                    memberIndex++;
+                  }
                   distribution[assignedSdrId] = (distribution[assignedSdrId] || 0) + 1;
                 } else if (sdrId) {
                   assignedSdrId = sdrId;
@@ -1321,14 +1330,18 @@ export function useImportLeads() {
             // Determine SDR for this lead
             let assignedSdrId: string | null = null;
             if (autoDistribute && memberIds && memberIds.length > 0) {
-              assignedSdrId = memberIds[memberIndex % memberIds.length];
-              memberIndex++;
+              if (distributionMode === "random") {
+                assignedSdrId = memberIds[Math.floor(Math.random() * memberIds.length)];
+              } else {
+                assignedSdrId = memberIds[memberIndex % memberIds.length];
+                memberIndex++;
+              }
               distribution[assignedSdrId] = (distribution[assignedSdrId] || 0) + 1;
             } else if (sdrId) {
               assignedSdrId = sdrId;
             }
 
-            // Add to campaign
+                // Add to campaign
             await supabase.from("campanha_leads").insert({
               campanha_id: campanhaId,
               lead_id: newLead.id,
@@ -1397,6 +1410,11 @@ export function useImportLeads() {
         throw new Error("Nenhum lead válido encontrado no arquivo");
       }
 
+      const metricsPeriodAt =
+        options.metricsPeriodMonth != null && options.metricsPeriodYear != null
+          ? new Date(Date.UTC(options.metricsPeriodYear, options.metricsPeriodMonth - 1, 1)).toISOString()
+          : undefined;
+
       let productsForPropostas = options.products ?? [];
       if (options.destination === "propostas" && productsForPropostas.length === 0) {
         const { data: productsFromDb } = await supabase
@@ -1447,6 +1465,7 @@ export function useImportLeads() {
               if (shouldReplaceValue(existingLead.email, lead.email, "email")) updates.email = lead.email;
               if (shouldReplaceValue(existingLead.faturamento, lead.faturamento, "faturamento")) updates.faturamento = lead.faturamento;
               if (shouldReplaceValue(existingLead.segment, lead.segment, "segment")) updates.segment = lead.segment;
+              if (metricsPeriodAt != null) updates.metrics_period_at = metricsPeriodAt;
               if (Object.keys(updates).length > 0) {
                 await supabase.from("leads").update(updates).eq("id", existingLead.id);
                 updated++;
@@ -1454,25 +1473,27 @@ export function useImportLeads() {
                 duplicates++;
               }
             } else {
+              const leadInsert: Record<string, unknown> = {
+                organization_id: organizationId,
+                name: lead.name,
+                company: lead.company,
+                phone: formattedPhone,
+                email: lead.email,
+                faturamento: lead.faturamento,
+                segment: lead.segment,
+                notes: mergeNotes(undefined, lead.notes, lead.kommoBlock),
+                origin: "outro" as const,
+                rating: lead.rating || 0,
+                utm_campaign: lead.utm_campaign,
+                utm_source: lead.utm_source,
+                utm_medium: lead.utm_medium,
+                utm_content: lead.utm_content,
+                utm_term: lead.utm_term,
+              };
+              if (metricsPeriodAt != null) leadInsert.metrics_period_at = metricsPeriodAt;
               const { data: newLead, error: leadError } = await supabase
                 .from("leads")
-                .insert({
-                  organization_id: organizationId,
-                  name: lead.name,
-                  company: lead.company,
-                  phone: formattedPhone,
-                  email: lead.email,
-                  faturamento: lead.faturamento,
-                  segment: lead.segment,
-                  notes: mergeNotes(undefined, lead.notes, lead.kommoBlock),
-                  origin: "outro" as const,
-                  rating: lead.rating || 0,
-                  utm_campaign: lead.utm_campaign,
-                  utm_source: lead.utm_source,
-                  utm_medium: lead.utm_medium,
-                  utm_content: lead.utm_content,
-                  utm_term: lead.utm_term,
-                } as Record<string, unknown>)
+                .insert(leadInsert)
                 .select("id")
                 .single();
               if (leadError) {
@@ -1527,20 +1548,22 @@ export function useImportLeads() {
               const firstProductId = productIds.length > 0 ? productIds[0] : null;
               const totalValue = lead.valor_proposta ?? null;
 
+              const propostaInsert: Record<string, unknown> = {
+                lead_id: leadId,
+                status: stageKeyForLead,
+                organization_id: organizationId,
+                closer_id: assignedCloserId(),
+                sale_value: totalValue,
+                calor: lead.calor ?? null,
+                commitment_date: lead.commitment_date ?? null,
+                contract_duration: lead.contract_duration ?? null,
+                notes: lead.pipe_notes ?? null,
+                product_id: firstProductId,
+              };
+              if (metricsPeriodAt != null) propostaInsert.metrics_period_at = metricsPeriodAt;
               const { data: newProposta, error: propostaError } = await supabase
                 .from("pipe_propostas")
-                .insert({
-                  lead_id: leadId,
-                  status: stageKeyForLead,
-                  organization_id: organizationId,
-                  closer_id: assignedCloserId(),
-                  sale_value: totalValue,
-                  calor: lead.calor ?? null,
-                  commitment_date: lead.commitment_date ?? null,
-                  contract_duration: lead.contract_duration ?? null,
-                  notes: lead.pipe_notes ?? null,
-                  product_id: firstProductId,
-                })
+                .insert(propostaInsert)
                 .select("id")
                 .single();
               if (propostaError) {
@@ -1562,7 +1585,7 @@ export function useImportLeads() {
                 await supabase.from("pipe_proposta_items").insert(itemsToInsert);
               }
             } else {
-              await supabase.from("pipe_confirmacao").insert({
+              const confirmacaoInsert: Record<string, unknown> = {
                 lead_id: leadId,
                 status: stageKeyForLead,
                 organization_id: organizationId,
@@ -1570,7 +1593,9 @@ export function useImportLeads() {
                 closer_id: assignedCloserId(),
                 meeting_date: lead.commitment_date ?? null,
                 notes: lead.pipe_notes ?? null,
-              });
+              };
+              if (metricsPeriodAt != null) confirmacaoInsert.metrics_period_at = metricsPeriodAt;
+              await supabase.from("pipe_confirmacao").insert(confirmacaoInsert);
             }
 
             if (formattedPhone) processedPhones.add(formattedPhone);

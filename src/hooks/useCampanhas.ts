@@ -17,6 +17,8 @@ export interface AutoConfig {
   };
 }
 
+export type LeadDistributionMode = "random" | "round_robin" | "single" | null;
+
 export interface Campanha {
   id: string;
   name: string;
@@ -32,6 +34,26 @@ export interface Campanha {
   campaign_type: CampaignType;
   agent_id: string | null;
   auto_config: AutoConfig | null;
+  // Distribuição de leads (importação, Meta Ads, integrações)
+  lead_distribution_mode: LeadDistributionMode;
+  lead_assigned_to: string | null;
+  // Investimento para métricas MKT (manual ou API)
+  investimento_cents: number | null;
+  investimento_updated_at: string | null;
+  investimento_source: "manual" | "api" | null;
+  // Quais leads da campanha contam para Marketing Call / Cadastro (por origem ou etiqueta)
+  mkt_call_origins: string[] | null;
+  mkt_call_tag_ids: string[] | null;
+  mkt_cadastro_origins: string[] | null;
+  mkt_cadastro_tag_ids: string[] | null;
+  // Tipo de marketing: incluir em Call e/ou Cadastro (qual(is) dashboard(s) mostrar)
+  mkt_incluir_call: boolean | null;
+  mkt_incluir_cadastro: boolean | null;
+  // Campanha vinculada ao marketing (aparece na divisão e pode ser configurada)
+  mkt_ativo: boolean | null;
+  // Investimento por tipo (Call e Cadastro) em centavos
+  mkt_investimento_call_cents: number | null;
+  mkt_investimento_cadastro_cents: number | null;
 }
 
 export interface CampanhaStage {
@@ -109,6 +131,12 @@ export interface CampanhaInsert {
   campaign_type?: CampaignType;
   agent_id?: string | null;
   auto_config?: AutoConfig | null;
+  // Distribuição de leads
+  lead_distribution_mode?: LeadDistributionMode;
+  lead_assigned_to?: string | null;
+  // Investimento MKT
+  investimento_cents?: number | null;
+  investimento_source?: "manual" | "api" | null;
 }
 
 export interface CampanhaStageInsert {
@@ -269,6 +297,9 @@ export function useCreateCampanha() {
           campaign_type: campanha.campaign_type || 'manual',
           agent_id: campanha.agent_id || null,
           auto_config: campanha.auto_config || null,
+          // Distribuição de leads
+          lead_distribution_mode: campanha.lead_distribution_mode ?? null,
+          lead_assigned_to: campanha.lead_assigned_to ?? null,
           // Organization
           organization_id: teamMember.organization_id,
         })
@@ -384,6 +415,7 @@ export function useUpdateCampanha() {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["campanhas"] });
       queryClient.invalidateQueries({ queryKey: ["campanha", variables.id] });
+      queryClient.invalidateQueries({ queryKey: ["campanhas-mkt-leads"] });
     },
   });
 }
@@ -403,6 +435,94 @@ export function useDeleteCampanha() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["campanhas"] });
+    },
+  });
+}
+
+// Hook to update campaign investment (MKT)
+export function useUpdateCampanhaInvestimento() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      id,
+      investimento_cents,
+      investimento_source = "manual",
+    }: {
+      id: string;
+      investimento_cents: number | null;
+      investimento_source?: "manual" | "api";
+    }) => {
+      const { data, error } = await supabase
+        .from("campanhas")
+        .update({
+          investimento_cents,
+          investimento_source,
+          investimento_updated_at: new Date().toISOString(),
+        })
+        .eq("id", id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["campanhas"] });
+      queryClient.invalidateQueries({ queryKey: ["campanha", variables.id] });
+    },
+  });
+}
+
+// Hook to update campaign MKT config (which leads count for Call / Cadastro by origin or tag)
+export function useUpdateCampanhaMktConfig() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      id,
+      mkt_call_origins,
+      mkt_call_tag_ids,
+      mkt_cadastro_origins,
+      mkt_cadastro_tag_ids,
+      mkt_incluir_call,
+      mkt_incluir_cadastro,
+      mkt_investimento_call_cents,
+      mkt_investimento_cadastro_cents,
+    }: {
+      id: string;
+      mkt_call_origins?: string[] | null;
+      mkt_call_tag_ids?: string[] | null;
+      mkt_cadastro_origins?: string[] | null;
+      mkt_cadastro_tag_ids?: string[] | null;
+      mkt_incluir_call?: boolean | null;
+      mkt_incluir_cadastro?: boolean | null;
+      mkt_investimento_call_cents?: number | null;
+      mkt_investimento_cadastro_cents?: number | null;
+    }) => {
+      const { data, error } = await supabase
+        .from("campanhas")
+        .update({
+          ...(mkt_call_origins !== undefined && { mkt_call_origins }),
+          ...(mkt_call_tag_ids !== undefined && { mkt_call_tag_ids }),
+          ...(mkt_cadastro_origins !== undefined && { mkt_cadastro_origins }),
+          ...(mkt_cadastro_tag_ids !== undefined && { mkt_cadastro_tag_ids }),
+          ...(mkt_incluir_call !== undefined && { mkt_incluir_call }),
+          ...(mkt_incluir_cadastro !== undefined && { mkt_incluir_cadastro }),
+          ...(mkt_investimento_call_cents !== undefined && { mkt_investimento_call_cents }),
+          ...(mkt_investimento_cadastro_cents !== undefined && { mkt_investimento_cadastro_cents }),
+        })
+        .eq("id", id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["campanhas"] });
+      queryClient.invalidateQueries({ queryKey: ["campanha", variables.id] });
+      queryClient.invalidateQueries({ queryKey: ["campanhas-mkt-leads"] });
     },
   });
 }

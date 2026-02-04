@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
-import { CampanhaStage, CampanhaMember } from "@/hooks/useCampanhas";
+import { CampanhaStage, CampanhaMember, type Campanha } from "@/hooks/useCampanhas";
 import { useImportLeads, parseFilePreview, KNOWN_LEAD_FIELDS, type FilePreviewResult } from "@/hooks/useImportLeads";
 import { useLeadCustomFields } from "@/hooks/useLeadCustomFields";
 import { downloadLeadsImportTemplate } from "@/lib/leadsImportTemplate";
@@ -20,6 +20,7 @@ interface ImportLeadsModalProps {
   campanhaId: string;
   stages: CampanhaStage[];
   members: CampanhaMember[];
+  campanha?: Campanha | null;
 }
 
 interface PreviewLead {
@@ -37,6 +38,7 @@ export function ImportLeadsModal({
   campanhaId,
   stages,
   members,
+  campanha,
 }: ImportLeadsModalProps) {
   const [step, setStep] = useState<Step>("upload");
   const [file, setFile] = useState<File | null>(null);
@@ -47,7 +49,26 @@ export function ImportLeadsModal({
   const [selectedStageId, setSelectedStageId] = useState<string>("");
   const [selectedSdrId, setSelectedSdrId] = useState<string>("");
   const [autoDistribute, setAutoDistribute] = useState(false);
+  const [distributionMode, setDistributionMode] = useState<"round_robin" | "random">("round_robin");
   const [isDragging, setIsDragging] = useState(false);
+  const [hasInitializedFromCampaign, setHasInitializedFromCampaign] = useState(false);
+
+  // Preencher com configuração da campanha ao abrir
+  useEffect(() => {
+    if (open && campanha && !hasInitializedFromCampaign) {
+      const distMode = (campanha as any)?.lead_distribution_mode;
+      const distAssignedTo = (campanha as any)?.lead_assigned_to;
+      if (distMode === "single" && distAssignedTo) {
+        setAutoDistribute(false);
+        setSelectedSdrId(distAssignedTo);
+      } else if (distMode === "random" || distMode === "round_robin") {
+        setAutoDistribute(true);
+        setDistributionMode(distMode);
+      }
+      setHasInitializedFromCampaign(true);
+    }
+    if (!open) setHasInitializedFromCampaign(false);
+  }, [open, campanha, hasInitializedFromCampaign]);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { parseCSV, importLeads, resetImport, isImporting, progress, result } = useImportLeads();
@@ -132,7 +153,8 @@ export function ImportLeadsModal({
         autoDistribute ? undefined : (selectedSdrId === "none" ? undefined : selectedSdrId || undefined),
         autoDistribute,
         autoDistribute ? memberIds : undefined,
-        stages.map((s) => ({ id: s.id, name: s.name }))
+        stages.map((s) => ({ id: s.id, name: s.name })),
+        autoDistribute ? distributionMode : undefined
       );
       setStep("complete");
     } catch (error) {
@@ -406,6 +428,22 @@ export function ImportLeadsModal({
                           {member.team_member?.name}
                         </SelectItem>
                       ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {/* Distribution mode (round_robin vs random) when auto distribute */}
+              {autoDistribute && members.length > 1 && (
+                <div className="space-y-2">
+                  <Label>Modo de distribuição</Label>
+                  <Select value={distributionMode} onValueChange={(v) => setDistributionMode(v as "round_robin" | "random")}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="round_robin">Rotativo — alterna entre vendedores em ordem</SelectItem>
+                      <SelectItem value="random">Aleatório — distribui ao acaso entre vendedores</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

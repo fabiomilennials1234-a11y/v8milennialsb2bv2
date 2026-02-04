@@ -63,11 +63,14 @@ interface ConfirmacaoDetailModalProps {
   onSuccess?: () => void;
 }
 
-const originConfig = {
-  calendly: { label: "Calendly", color: "bg-purple-500/10 text-purple-500 border-purple-500/20", icon: "📅" },
+const originConfig: Record<string, { label: string; color: string; icon: string }> = {
   whatsapp: { label: "WhatsApp", color: "bg-green-500/10 text-green-500 border-green-500/20", icon: "💬" },
   meta_ads: { label: "Meta Ads", color: "bg-blue-500/10 text-blue-500 border-blue-500/20", icon: "📱" },
-  outro: { label: "Outro", color: "bg-muted text-muted-foreground border-border", icon: "📋" },
+  outro: { label: "Outros", color: "bg-muted text-muted-foreground border-border", icon: "📋" },
+  site: { label: "Site", color: "bg-teal-500/10 text-teal-500 border-teal-500/20", icon: "🌐" },
+  remarketing: { label: "Remarketing", color: "bg-orange-500/10 text-orange-500 border-orange-500/20", icon: "🔄" },
+  google_ads: { label: "Google Ads", color: "bg-red-500/10 text-red-500 border-red-500/20", icon: "🔍" },
+  cal: { label: "Cal.com", color: "bg-purple-500/10 text-purple-500 border-purple-500/20", icon: "📅" },
 };
 
 function getMeetingUrgency(meetingDate: Date | null) {

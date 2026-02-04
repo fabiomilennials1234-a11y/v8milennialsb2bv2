@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/popover";
 import { DraggableKanbanBoard, DraggableItem, KanbanColumn } from "@/components/kanban/DraggableKanbanBoard";
 import { usePipeWhatsapp, useUpdatePipeWhatsapp, useDeletePipeWhatsapp } from "@/hooks/usePipeWhatsapp";
+import { usePipeWhatsappMetrics, type MetricsPeriod } from "@/hooks/usePipeMetrics";
 import { usePipelineStages, stagesToColumns } from "@/hooks/usePipelineStages";
 import { ManagePipelineStagesModal } from "@/components/pipelines/ManagePipelineStagesModal";
 import { useCreatePipeConfirmacao } from "@/hooks/usePipeConfirmacao";
@@ -53,33 +54,26 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow, format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { openWhatsApp, formatPhoneForWhatsApp } from "@/lib/whatsapp";
 
-// Origin labels and colors mapping (todas as origens do enum lead_origin)
+// Origin labels and colors mapping (origens do enum lead_origin)
 const originLabels: Record<string, { label: string; color: string }> = {
-  calendly: { label: "Calendly", color: "bg-blue-500" },
   whatsapp: { label: "WhatsApp", color: "bg-green-500" },
   meta_ads: { label: "Meta Ads", color: "bg-purple-500" },
-  remarketing: { label: "Remarketing", color: "bg-orange-500" },
-  base_clientes: { label: "Base Clientes", color: "bg-cyan-500" },
-  parceiro: { label: "Parceiro", color: "bg-pink-500" },
-  indicacao: { label: "Indicação", color: "bg-yellow-500" },
-  quiz: { label: "Quiz", color: "bg-indigo-500" },
+  outro: { label: "Outros", color: "bg-gray-500" },
   site: { label: "Site", color: "bg-teal-500" },
-  organico: { label: "Orgânico", color: "bg-lime-500" },
+  remarketing: { label: "Remarketing", color: "bg-orange-500" },
+  google_ads: { label: "Google Ads", color: "bg-red-500" },
   cal: { label: "Cal.com", color: "bg-blue-600" },
-  ambos: { label: "Ambos", color: "bg-slate-500" },
-  zydon: { label: "Zydon", color: "bg-violet-500" },
-  outro: { label: "Outro", color: "bg-gray-500" },
 };
 
-// Todas as origens possíveis para filtro (enum lead_origin), em ordem de exibição
+// Origens para filtro (enum lead_origin), em ordem de exibição
 const ALL_ORIGIN_OPTIONS = [
-  "calendly", "whatsapp", "meta_ads", "remarketing", "base_clientes",
-  "parceiro", "indicacao", "quiz", "site", "organico", "cal", "ambos", "zydon", "outro",
+  "whatsapp", "meta_ads", "outro", "site", "remarketing", "google_ads", "cal",
 ];
 
 interface WhatsappCard extends DraggableItem {
@@ -470,6 +464,7 @@ function AIToggle({ leadId, aiDisabled }: { leadId: string; aiDisabled?: boolean
 export default function PipeWhatsapp() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterSdr, setFilterSdr] = useState("all");
+  const [filterCloser, setFilterCloser] = useState("all");
   const [filterOrigin, setFilterOrigin] = useState("all");
   const [isLeadModalOpen, setIsLeadModalOpen] = useState(false);
   const [isOpportunityModalOpen, setIsOpportunityModalOpen] = useState(false);
@@ -480,8 +475,18 @@ export default function PipeWhatsapp() {
   const [editingLead, setEditingLead] = useState<any>(null);
   const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; pipeId: string; leadId: string } | null>(null);
   const [deleteAllLeadsDialogOpen, setDeleteAllLeadsDialogOpen] = useState(false);
+  const [metricsPeriod, setMetricsPeriod] = useState<MetricsPeriod>("all");
+  const now = new Date();
+  const [selectedMetricsMonth, setSelectedMetricsMonth] = useState(now.getMonth() + 1);
+  const [selectedMetricsYear, setSelectedMetricsYear] = useState(now.getFullYear());
+
   const { data: pipeData, isLoading, refetch } = usePipeWhatsapp();
   const { data: pipelineStages = [], isLoading: loadingStages } = usePipelineStages("whatsapp");
+  const { data: metricsByPeriod } = usePipeWhatsappMetrics(
+    metricsPeriod,
+    metricsPeriod === "month" ? selectedMetricsMonth : undefined,
+    metricsPeriod === "month" ? selectedMetricsYear : undefined
+  );
   const { data: teamMembers } = useTeamMembers();
   const { data: userRole } = useUserRole();
   const updatePipeWhatsapp = useUpdatePipeWhatsapp();
@@ -495,6 +500,10 @@ export default function PipeWhatsapp() {
 
   const sdrs = useMemo(() => {
     return teamMembers?.filter(m => m.role === "sdr" && m.is_active) || [];
+  }, [teamMembers]);
+
+  const closers = useMemo(() => {
+    return teamMembers?.filter(m => m.role === "closer" && m.is_active) || [];
   }, [teamMembers]);
 
   // Transform pipe data to WhatsappCard format
@@ -535,11 +544,14 @@ export default function PipeWhatsapp() {
     
     // SDR filter
     const matchesSdr = filterSdr === "all" || item.sdr_id === filterSdr;
+
+    // Closer filter (lead.closer_id)
+    const matchesCloser = filterCloser === "all" || lead?.closer_id === filterCloser;
     
     // Origin filter
     const matchesOrigin = filterOrigin === "all" || lead?.origin === filterOrigin;
     
-    return matchesSearch && matchesSdr && matchesOrigin;
+    return matchesSearch && matchesSdr && matchesCloser && matchesOrigin;
   };
 
   // Converte etapas do banco para o formato do Kanban (com fallback)
@@ -572,7 +584,7 @@ export default function PipeWhatsapp() {
         items: columnItems,
       };
     });
-  }, [pipeData, pipelineStages, statusColumns, searchTerm, filterSdr, filterOrigin]);
+  }, [pipeData, pipelineStages, statusColumns, searchTerm, filterSdr, filterCloser, filterOrigin]);
 
   // Calculate stats based on FILTERED data
   const stats = useMemo(() => {
@@ -587,7 +599,12 @@ export default function PipeWhatsapp() {
     const pending = filteredData.filter(item => item.status === "novo").length;
 
     return { total, abordado, respondeu, scheduled, pending };
-  }, [pipeData, searchTerm, filterSdr, filterOrigin]);
+  }, [pipeData, searchTerm, filterSdr, filterCloser, filterOrigin]);
+
+  const displayStats = useMemo(() => {
+    if (metricsPeriod === "all" || !metricsByPeriod) return stats;
+    return metricsByPeriod;
+  }, [metricsPeriod, metricsByPeriod, stats]);
 
   // Handle status change from drag-and-drop
   const handleStatusChange = async (itemId: string, newStatus: string) => {
@@ -705,7 +722,47 @@ export default function PipeWhatsapp() {
         </div>
       </div>
 
-      {/* Stats Bar - Updated based on filters */}
+      {/* Período das métricas: Este mês | Geral */}
+      <div className="flex flex-wrap items-center gap-3">
+        <Tabs value={metricsPeriod} onValueChange={(v) => setMetricsPeriod(v as MetricsPeriod)}>
+          <TabsList className="h-9">
+            <TabsTrigger value="all" className="gap-1.5 text-xs">Geral</TabsTrigger>
+            <TabsTrigger value="month" className="gap-1.5 text-xs">Este mês</TabsTrigger>
+          </TabsList>
+        </Tabs>
+        {metricsPeriod === "month" && (
+          <>
+            <Select value={String(selectedMetricsMonth)} onValueChange={(v) => setSelectedMetricsMonth(Number(v))}>
+              <SelectTrigger className="w-[140px] h-9">
+                <Calendar className="w-4 h-4 mr-2" />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {[1,2,3,4,5,6,7,8,9,10,11,12].map((m) => (
+                  <SelectItem key={m} value={String(m)}>
+                    {format(new Date(selectedMetricsYear, m - 1), "MMMM", { locale: ptBR })}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={String(selectedMetricsYear)} onValueChange={(v) => setSelectedMetricsYear(Number(v))}>
+              <SelectTrigger className="w-[100px] h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {[selectedMetricsYear - 2, selectedMetricsYear - 1, selectedMetricsYear, selectedMetricsYear + 1].map((y) => (
+                  <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </>
+        )}
+        <span className="text-xs text-muted-foreground">
+          {metricsPeriod === "all" ? "Métricas do pipe no geral" : `Métricas de ${format(new Date(selectedMetricsYear, selectedMetricsMonth - 1), "MMMM/yyyy", { locale: ptBR })}`}
+        </span>
+      </div>
+
+      {/* Stats Bar - Updated based on filters and period */}
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
@@ -713,19 +770,19 @@ export default function PipeWhatsapp() {
       >
         <div className="bg-card rounded-lg border border-border p-4">
           <p className="text-sm text-muted-foreground">Total Leads</p>
-          <p className="text-2xl font-bold mt-1">{stats.total}</p>
+          <p className="text-2xl font-bold mt-1">{displayStats.total}</p>
         </div>
         <div className="bg-card rounded-lg border border-border p-4">
           <p className="text-sm text-muted-foreground">Abordados</p>
-          <p className="text-2xl font-bold text-success mt-1">{stats.abordado}</p>
+          <p className="text-2xl font-bold text-success mt-1">{displayStats.abordado}</p>
         </div>
         <div className="bg-card rounded-lg border border-border p-4">
           <p className="text-sm text-muted-foreground">Respondeu</p>
-          <p className="text-2xl font-bold text-blue-500 mt-1">{stats.respondeu}</p>
+          <p className="text-2xl font-bold text-blue-500 mt-1">{displayStats.respondeu}</p>
         </div>
         <div className="bg-card rounded-lg border border-border p-4">
           <p className="text-sm text-muted-foreground">Agendados</p>
-          <p className="text-2xl font-bold text-primary mt-1">{stats.scheduled}</p>
+          <p className="text-2xl font-bold text-primary mt-1">{displayStats.scheduled}</p>
         </div>
       </motion.div>
 
@@ -767,6 +824,20 @@ export default function PipeWhatsapp() {
             <SelectItem value="all">Todos SDRs</SelectItem>
             {sdrs.map(sdr => (
               <SelectItem key={sdr.id} value={sdr.id}>{sdr.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {/* Closer Filter */}
+        <Select value={filterCloser} onValueChange={setFilterCloser}>
+          <SelectTrigger className="w-[180px]">
+            <User className="w-4 h-4 mr-2" />
+            <SelectValue placeholder="Closer" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos Closers</SelectItem>
+            {closers.map(closer => (
+              <SelectItem key={closer.id} value={closer.id}>{closer.name}</SelectItem>
             ))}
           </SelectContent>
         </Select>

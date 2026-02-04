@@ -17,7 +17,7 @@ Deno.serve(async (req) => {
     const body = await req.json();
     
     // Valid origin enum values
-    const validOrigins = ["calendly", "whatsapp", "meta_ads", "remarketing", "base_clientes", "parceiro", "indicacao", "quiz", "site", "organico", "outro"];
+    const validOrigins = ["whatsapp", "meta_ads", "outro", "site", "remarketing", "google_ads", "cal"];
     
     // Expected fields from n8n
     const {

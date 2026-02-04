@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
 import { useOrganization } from "./useOrganization";
+import { useRealtimeSubscription } from "./useRealtimeSubscription";
 
 export type TeamMember = Tables<"team_members">;
 export type TeamMemberInsert = TablesInsert<"team_members">;
@@ -59,6 +60,7 @@ export function useCurrentTeamMember() {
  */
 export function useTeamMembers() {
   const { organizationId, isReady } = useOrganization();
+  useRealtimeSubscription("team_members", ["team_members", "tv-dashboard"]);
 
   return useQuery({
     queryKey: ["team_members", organizationId],

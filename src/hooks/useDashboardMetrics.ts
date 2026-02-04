@@ -1,8 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { startOfMonth, endOfMonth } from "date-fns";
 import { useIsAdmin } from "./useUserRole";
 import { useCurrentTeamMember } from "./useTeamMembers";
+
+/** Intervalo do mês em UTC — igual ao usado na importação (metrics_period_at = 1º do mês 00:00 UTC). */
+function getMonthRangeUTC(month: number, year: number) {
+  const start = new Date(Date.UTC(year, month - 1, 1));
+  const end = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
+  return { startStr: start.toISOString(), endStr: end.toISOString() };
+}
 
 interface DashboardMetrics {
   totalLeads: number;
@@ -37,8 +43,7 @@ export function useDashboardMetrics(month?: number, year?: number) {
   const myId = currentTeamMember?.id ?? null;
   const filterByMe = !isAdmin && myId;
 
-  const startDate = startOfMonth(new Date(selectedYear, selectedMonth - 1));
-  const endDate = endOfMonth(new Date(selectedYear, selectedMonth - 1));
+  const { startStr, endStr } = getMonthRangeUTC(selectedMonth, selectedYear);
 
   return useQuery({
     queryKey: ["dashboard-metrics", selectedMonth, selectedYear, filterByMe, myId, organizationId],
@@ -59,48 +64,40 @@ export function useDashboardMetrics(month?: number, year?: number) {
           novosClientes: 0,
         };
       }
-      let leadsQuery = supabase
-        .from("leads")
-        .select("*", { count: "exact", head: true })
-        .eq("organization_id", organizationId)
-        .gte("created_at", startDate.toISOString())
-        .lte("created_at", endDate.toISOString());
+      // Leads: COALESCE(metrics_period_at, created_at) in range — duas queries
+      let leadsQ1 = supabase.from("leads").select("*", { count: "exact", head: true }).eq("organization_id", organizationId).not("metrics_period_at", "is", null).gte("metrics_period_at", startStr).lte("metrics_period_at", endStr);
+      let leadsQ2 = supabase.from("leads").select("*", { count: "exact", head: true }).eq("organization_id", organizationId).is("metrics_period_at", null).gte("created_at", startStr).lte("created_at", endStr);
       if (filterByMe) {
-        leadsQuery = leadsQuery.or(`sdr_id.eq.${myId},closer_id.eq.${myId}`);
+        leadsQ1 = leadsQ1.or(`sdr_id.eq.${myId},closer_id.eq.${myId}`);
+        leadsQ2 = leadsQ2.or(`sdr_id.eq.${myId},closer_id.eq.${myId}`);
       }
-      const { count: totalLeads } = await leadsQuery;
+      const [{ count: leadsCount1 }, { count: leadsCount2 }] = await Promise.all([leadsQ1, leadsQ2]);
+      const totalLeads = (leadsCount1 || 0) + (leadsCount2 || 0);
 
-      let confirmacaoQuery = supabase
-        .from("pipe_confirmacao")
-        .select("status, meeting_date, sdr_id, closer_id")
-        .eq("organization_id", organizationId)
-        .gte("created_at", startDate.toISOString())
-        .lte("created_at", endDate.toISOString());
+      // pipe_confirmacao: COALESCE(metrics_period_at, created_at) in range
+      let confQ1 = supabase.from("pipe_confirmacao").select("status, meeting_date, sdr_id, closer_id").eq("organization_id", organizationId).not("metrics_period_at", "is", null).gte("metrics_period_at", startStr).lte("metrics_period_at", endStr);
+      let confQ2 = supabase.from("pipe_confirmacao").select("status, meeting_date, sdr_id, closer_id").eq("organization_id", organizationId).is("metrics_period_at", null).gte("created_at", startStr).lte("created_at", endStr);
       if (filterByMe) {
-        confirmacaoQuery = confirmacaoQuery.or(`sdr_id.eq.${myId},closer_id.eq.${myId}`);
+        confQ1 = confQ1.or(`sdr_id.eq.${myId},closer_id.eq.${myId}`);
+        confQ2 = confQ2.or(`sdr_id.eq.${myId},closer_id.eq.${myId}`);
       }
-      const { data: confirmacaoData } = await confirmacaoQuery;
+      const [{ data: confData1 }, { data: confData2 }] = await Promise.all([confQ1, confQ2]);
+      const confirmacaoData = [...(confData1 || []), ...(confData2 || [])];
 
-      const reunioesMarcadas = confirmacaoData?.length || 0;
-      const reunioesComparecidas = confirmacaoData?.filter(
-        (c) => c.status === "compareceu"
-      ).length || 0;
-      const noShow = confirmacaoData?.filter(
-        (c) => c.status === "perdido"
-      ).length || 0;
+      const reunioesMarcadas = confirmacaoData.length;
+      const reunioesComparecidas = confirmacaoData.filter((c) => c.status === "compareceu").length;
+      const noShow = confirmacaoData.filter((c) => c.status === "perdido").length;
       const taxaNoShow = reunioesMarcadas > 0 ? (noShow / reunioesMarcadas) * 100 : 0;
 
-      let propostasQuery = supabase
-        .from("pipe_propostas")
-        .select("sale_value, product_type, status, closed_at")
-        .eq("organization_id", organizationId)
-        .eq("status", "vendido")
-        .gte("closed_at", startDate.toISOString())
-        .lte("closed_at", endDate.toISOString());
+      // pipe_propostas vendido: COALESCE(metrics_period_at, closed_at) in range
+      let propQ1 = supabase.from("pipe_propostas").select("sale_value, product_type, status, closed_at").eq("organization_id", organizationId).eq("status", "vendido").not("metrics_period_at", "is", null).gte("metrics_period_at", startStr).lte("metrics_period_at", endStr);
+      let propQ2 = supabase.from("pipe_propostas").select("sale_value, product_type, status, closed_at").eq("organization_id", organizationId).eq("status", "vendido").is("metrics_period_at", null).gte("closed_at", startStr).lte("closed_at", endStr);
       if (filterByMe) {
-        propostasQuery = propostasQuery.eq("closer_id", myId);
+        propQ1 = propQ1.eq("closer_id", myId);
+        propQ2 = propQ2.eq("closer_id", myId);
       }
-      const { data: propostasData } = await propostasQuery;
+      const [{ data: propData1 }, { data: propData2 }] = await Promise.all([propQ1, propQ2]);
+      const propostasData = [...(propData1 || []), ...(propData2 || [])];
 
       const vendasFechadas = propostasData || [];
       const vendaTotal = vendasFechadas.reduce((sum, v) => sum + (v.sale_value || 0), 0);
@@ -145,8 +142,7 @@ export function useConversionRates(month?: number, year?: number) {
   const { data: currentTeamMember } = useCurrentTeamMember();
   const organizationId = currentTeamMember?.organization_id ?? null;
 
-  const startDate = startOfMonth(new Date(selectedYear, selectedMonth - 1));
-  const endDate = endOfMonth(new Date(selectedYear, selectedMonth - 1));
+  const { startStr, endStr } = getMonthRangeUTC(selectedMonth, selectedYear);
 
   return useQuery({
     queryKey: ["conversion-rates", selectedMonth, selectedYear, organizationId],
@@ -161,19 +157,17 @@ export function useConversionRates(month?: number, year?: number) {
       const closers = teamMembers?.filter((m) => m.role === "closer") || [];
       const sdrs = teamMembers?.filter((m) => m.role === "sdr") || [];
 
-      const { data: confirmacaoData } = await supabase
-        .from("pipe_confirmacao")
-        .select("sdr_id, status")
-        .eq("organization_id", organizationId)
-        .gte("created_at", startDate.toISOString())
-        .lte("created_at", endDate.toISOString());
+      const [{ data: conf1 }, { data: conf2 }] = await Promise.all([
+        supabase.from("pipe_confirmacao").select("sdr_id, status").eq("organization_id", organizationId).not("metrics_period_at", "is", null).gte("metrics_period_at", startStr).lte("metrics_period_at", endStr),
+        supabase.from("pipe_confirmacao").select("sdr_id, status").eq("organization_id", organizationId).is("metrics_period_at", null).gte("created_at", startStr).lte("created_at", endStr),
+      ]);
+      const confirmacaoData = [...(conf1 || []), ...(conf2 || [])];
 
+      // Propostas: TODOS os leads no pipe (sem filtro de período) para taxa de conversão correta
       const { data: propostasData } = await supabase
         .from("pipe_propostas")
         .select("closer_id, status")
-        .eq("organization_id", organizationId)
-        .gte("created_at", startDate.toISOString())
-        .lte("created_at", endDate.toISOString());
+        .eq("organization_id", organizationId);
 
       // Calculate SDR conversion (reuniões marcadas -> comparecidas)
       const sdrRates: ConversionRate[] = sdrs.map((sdr) => {
@@ -190,10 +184,10 @@ export function useConversionRates(month?: number, year?: number) {
         };
       });
 
-      // Calculate Closer conversion (propostas -> vendidas)
+      // Calculate Closer conversion: TODOS no pipe X vendido
       const closerRates: ConversionRate[] = closers.map((closer) => {
-        const total = propostasData?.filter((p) => p.closer_id === closer.id).length || 0;
-        const vendidas = propostasData?.filter(
+        const total = (propostasData || []).filter((p) => p.closer_id === closer.id).length;
+        const vendidas = (propostasData || []).filter(
           (p) => p.closer_id === closer.id && p.status === "vendido"
         ).length || 0;
         return {
@@ -218,8 +212,7 @@ export function useFunnelData(month?: number, year?: number) {
   const { data: currentTeamMember } = useCurrentTeamMember();
   const organizationId = currentTeamMember?.organization_id ?? null;
 
-  const startDate = startOfMonth(new Date(selectedYear, selectedMonth - 1));
-  const endDate = endOfMonth(new Date(selectedYear, selectedMonth - 1));
+  const { startStr, endStr } = getMonthRangeUTC(selectedMonth, selectedYear);
 
   return useQuery({
     queryKey: ["funnel-data", selectedMonth, selectedYear, organizationId],
@@ -233,42 +226,34 @@ export function useFunnelData(month?: number, year?: number) {
           { label: "Vendas", value: 0, color: "hsl(var(--chart-5))" },
         ];
       }
-      const { count: totalLeads } = await supabase
-        .from("leads")
-        .select("*", { count: "exact", head: true })
-        .eq("organization_id", organizationId)
-        .gte("created_at", startDate.toISOString())
-        .lte("created_at", endDate.toISOString());
-
-      const { count: reunioesMarcadas } = await supabase
-        .from("pipe_confirmacao")
-        .select("*", { count: "exact", head: true })
-        .eq("organization_id", organizationId)
-        .gte("created_at", startDate.toISOString())
-        .lte("created_at", endDate.toISOString());
-
-      const { count: reunioesComparecidas } = await supabase
-        .from("pipe_confirmacao")
-        .select("*", { count: "exact", head: true })
-        .eq("organization_id", organizationId)
-        .eq("status", "compareceu")
-        .gte("created_at", startDate.toISOString())
-        .lte("created_at", endDate.toISOString());
-
-      const { count: propostas } = await supabase
-        .from("pipe_propostas")
-        .select("*", { count: "exact", head: true })
-        .eq("organization_id", organizationId)
-        .gte("created_at", startDate.toISOString())
-        .lte("created_at", endDate.toISOString());
-
-      const { count: vendas } = await supabase
-        .from("pipe_propostas")
-        .select("*", { count: "exact", head: true })
-        .eq("organization_id", organizationId)
-        .eq("status", "vendido")
-        .gte("closed_at", startDate.toISOString())
-        .lte("closed_at", endDate.toISOString());
+      const [
+        { count: leadsC1 },
+        { count: leadsC2 },
+        { count: reunC1 },
+        { count: reunC2 },
+        { count: compC1 },
+        { count: compC2 },
+        { count: propC1 },
+        { count: propC2 },
+        { count: vendC1 },
+        { count: vendC2 },
+      ] = await Promise.all([
+        supabase.from("leads").select("*", { count: "exact", head: true }).eq("organization_id", organizationId).not("metrics_period_at", "is", null).gte("metrics_period_at", startStr).lte("metrics_period_at", endStr),
+        supabase.from("leads").select("*", { count: "exact", head: true }).eq("organization_id", organizationId).is("metrics_period_at", null).gte("created_at", startStr).lte("created_at", endStr),
+        supabase.from("pipe_confirmacao").select("*", { count: "exact", head: true }).eq("organization_id", organizationId).not("metrics_period_at", "is", null).gte("metrics_period_at", startStr).lte("metrics_period_at", endStr),
+        supabase.from("pipe_confirmacao").select("*", { count: "exact", head: true }).eq("organization_id", organizationId).is("metrics_period_at", null).gte("created_at", startStr).lte("created_at", endStr),
+        supabase.from("pipe_confirmacao").select("*", { count: "exact", head: true }).eq("organization_id", organizationId).eq("status", "compareceu").not("metrics_period_at", "is", null).gte("metrics_period_at", startStr).lte("metrics_period_at", endStr),
+        supabase.from("pipe_confirmacao").select("*", { count: "exact", head: true }).eq("organization_id", organizationId).eq("status", "compareceu").is("metrics_period_at", null).gte("created_at", startStr).lte("created_at", endStr),
+        supabase.from("pipe_propostas").select("*", { count: "exact", head: true }).eq("organization_id", organizationId).not("metrics_period_at", "is", null).gte("metrics_period_at", startStr).lte("metrics_period_at", endStr),
+        supabase.from("pipe_propostas").select("*", { count: "exact", head: true }).eq("organization_id", organizationId).is("metrics_period_at", null).gte("created_at", startStr).lte("created_at", endStr),
+        supabase.from("pipe_propostas").select("*", { count: "exact", head: true }).eq("organization_id", organizationId).eq("status", "vendido").not("metrics_period_at", "is", null).gte("metrics_period_at", startStr).lte("metrics_period_at", endStr),
+        supabase.from("pipe_propostas").select("*", { count: "exact", head: true }).eq("organization_id", organizationId).eq("status", "vendido").is("metrics_period_at", null).gte("closed_at", startStr).lte("closed_at", endStr),
+      ]);
+      const totalLeads = (leadsC1 || 0) + (leadsC2 || 0);
+      const reunioesMarcadas = (reunC1 || 0) + (reunC2 || 0);
+      const reunioesComparecidas = (compC1 || 0) + (compC2 || 0);
+      const propostas = (propC1 || 0) + (propC2 || 0);
+      const vendas = (vendC1 || 0) + (vendC2 || 0);
 
       return [
         { label: "Leads", value: totalLeads || 0, color: "hsl(var(--primary))" },
@@ -289,8 +274,7 @@ export function useRankingData(month?: number, year?: number) {
   const { data: currentTeamMember } = useCurrentTeamMember();
   const organizationId = currentTeamMember?.organization_id ?? null;
 
-  const startDate = startOfMonth(new Date(selectedYear, selectedMonth - 1));
-  const endDate = endOfMonth(new Date(selectedYear, selectedMonth - 1));
+  const { startStr, endStr } = getMonthRangeUTC(selectedMonth, selectedYear);
 
   return useQuery({
     queryKey: ["ranking-data", selectedMonth, selectedYear, organizationId],
@@ -305,21 +289,17 @@ export function useRankingData(month?: number, year?: number) {
       const closers = teamMembers?.filter((m) => m.role === "closer") || [];
       const sdrs = teamMembers?.filter((m) => m.role === "sdr") || [];
 
-      const { data: sales } = await supabase
-        .from("pipe_propostas")
-        .select("closer_id, sale_value, status")
-        .eq("organization_id", organizationId)
-        .eq("status", "vendido")
-        .gte("closed_at", startDate.toISOString())
-        .lte("closed_at", endDate.toISOString());
+      const [{ data: sales1 }, { data: sales2 }] = await Promise.all([
+        supabase.from("pipe_propostas").select("closer_id, sale_value, status").eq("organization_id", organizationId).eq("status", "vendido").not("metrics_period_at", "is", null).gte("metrics_period_at", startStr).lte("metrics_period_at", endStr),
+        supabase.from("pipe_propostas").select("closer_id, sale_value, status").eq("organization_id", organizationId).eq("status", "vendido").is("metrics_period_at", null).gte("closed_at", startStr).lte("closed_at", endStr),
+      ]);
+      const sales = [...(sales1 || []), ...(sales2 || [])];
 
-      const { data: meetings } = await supabase
-        .from("pipe_confirmacao")
-        .select("sdr_id, status")
-        .eq("organization_id", organizationId)
-        .eq("status", "compareceu")
-        .gte("created_at", startDate.toISOString())
-        .lte("created_at", endDate.toISOString());
+      const [{ data: meetings1 }, { data: meetings2 }] = await Promise.all([
+        supabase.from("pipe_confirmacao").select("sdr_id, status").eq("organization_id", organizationId).eq("status", "compareceu").not("metrics_period_at", "is", null).gte("metrics_period_at", startStr).lte("metrics_period_at", endStr),
+        supabase.from("pipe_confirmacao").select("sdr_id, status").eq("organization_id", organizationId).eq("status", "compareceu").is("metrics_period_at", null).gte("created_at", startStr).lte("created_at", endStr),
+      ]);
+      const meetings = [...(meetings1 || []), ...(meetings2 || [])];
 
       const { data: goals } = await supabase
         .from("goals")
@@ -331,7 +311,7 @@ export function useRankingData(month?: number, year?: number) {
       // Calculate closer rankings
       const closerRanking = closers
         .map((closer) => {
-          const closerSales = sales?.filter((s) => s.closer_id === closer.id) || [];
+          const closerSales = sales.filter((s) => s.closer_id === closer.id);
           const totalValue = closerSales.reduce((sum, s) => sum + (s.sale_value || 0), 0);
           const goal = goals?.find((g) => g.team_member_id === closer.id && g.type === "vendas");
           const goalProgress = goal?.target_value 
@@ -352,7 +332,7 @@ export function useRankingData(month?: number, year?: number) {
       // Calculate SDR rankings (by meetings comparecidas)
       const sdrRanking = sdrs
         .map((sdr) => {
-          const sdrMeetings = meetings?.filter((m) => m.sdr_id === sdr.id) || [];
+          const sdrMeetings = meetings.filter((m) => m.sdr_id === sdr.id);
           const goal = goals?.find((g) => g.team_member_id === sdr.id && g.type === "reunioes");
           const goalProgress = goal?.target_value 
             ? (sdrMeetings.length / goal.target_value) * 100 

@@ -70,31 +70,23 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 const originLabels: Record<string, string> = {
-  remarketing: "Remarketing",
-  base_clientes: "Base de clientes",
-  parceiro: "Parceiro",
-  indicacao: "Indicação",
-  calendly: "Calendly",
-  quiz: "Quiz",
-  site: "Site",
-  organico: "Orgânico",
   whatsapp: "WhatsApp",
   meta_ads: "Meta Ads",
-  outro: "Outro",
+  outro: "Outros",
+  site: "Site",
+  remarketing: "Remarketing",
+  google_ads: "Google Ads",
+  cal: "Cal.com",
 };
 
 const originColors: Record<string, string> = {
-  remarketing: "bg-chart-1/10 text-chart-1 border-chart-1/20",
-  base_clientes: "bg-chart-2/10 text-chart-2 border-chart-2/20",
-  parceiro: "bg-chart-3/10 text-chart-3 border-chart-3/20",
-  indicacao: "bg-chart-4/10 text-chart-4 border-chart-4/20",
-  calendly: "bg-chart-5/10 text-chart-5 border-chart-5/20",
-  quiz: "bg-primary/10 text-primary border-primary/20",
-  site: "bg-success/10 text-success border-success/20",
-  organico: "bg-warning/10 text-warning border-warning/20",
   whatsapp: "bg-green-500/10 text-green-600 border-green-500/20",
   meta_ads: "bg-blue-500/10 text-blue-600 border-blue-500/20",
   outro: "bg-muted text-muted-foreground border-muted",
+  site: "bg-teal-500/10 text-teal-600 border-teal-500/20",
+  remarketing: "bg-orange-500/10 text-orange-600 border-orange-500/20",
+  google_ads: "bg-red-500/10 text-red-600 border-red-500/20",
+  cal: "bg-chart-1/10 text-chart-1 border-chart-1/20",
 };
 
 interface LeadFormData {

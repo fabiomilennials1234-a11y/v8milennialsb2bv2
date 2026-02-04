@@ -26,6 +26,7 @@ import Configuracoes from "./pages/Configuracoes";
 import TVDashboard from "./pages/TVDashboard";
 import Campanhas from "./pages/Campanhas";
 import CampanhaDetail from "./pages/CampanhaDetail";
+import Marketing from "./pages/Marketing";
 import Produtos from "./pages/Produtos";
 import Copilot from "./pages/Copilot";
 import ChatWhatsApp from "./pages/ChatWhatsApp";
@@ -124,6 +125,16 @@ function AppRoutes() {
           <ProtectedRoute>
             <LayoutWrapper>
               <CampanhaDetail />
+            </LayoutWrapper>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/marketing"
+        element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <Marketing />
             </LayoutWrapper>
           </ProtectedRoute>
         }

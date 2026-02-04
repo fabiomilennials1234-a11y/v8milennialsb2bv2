@@ -22,7 +22,7 @@ import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
-export type OriginFilter = "all" | "calendly" | "whatsapp" | "meta_ads" | "outro";
+export type OriginFilter = "all" | "whatsapp" | "meta_ads" | "outro" | "site" | "remarketing" | "google_ads" | "cal";
 export type TimeFilter = "all" | "today" | "tomorrow" | "week" | "overdue";
 export type UrgencyFilter = "all" | "imediato" | "1-mes" | "2-3-meses" | "6-meses";
 
@@ -54,10 +54,13 @@ interface ConfirmacaoFiltersProps {
 
 const originOptions: { value: OriginFilter; label: string; icon: string }[] = [
   { value: "all", label: "Todas origens", icon: "🌐" },
-  { value: "calendly", label: "Calendly", icon: "📅" },
   { value: "whatsapp", label: "WhatsApp", icon: "💬" },
   { value: "meta_ads", label: "Meta Ads", icon: "📱" },
-  { value: "outro", label: "Outro", icon: "📋" },
+  { value: "outro", label: "Outros", icon: "📋" },
+  { value: "site", label: "Site", icon: "🌐" },
+  { value: "remarketing", label: "Remarketing", icon: "🔄" },
+  { value: "google_ads", label: "Google Ads", icon: "🔍" },
+  { value: "cal", label: "Cal.com", icon: "📅" },
 ];
 
 const timeOptions: { value: TimeFilter; label: string; shortLabel: string }[] = [

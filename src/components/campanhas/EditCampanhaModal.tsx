@@ -17,10 +17,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useUpdateCampanha, type Campanha } from "@/hooks/useCampanhas";
+import { useUpdateCampanha, type Campanha, type LeadDistributionMode } from "@/hooks/useCampanhas";
 import { useCopilotAgents } from "@/hooks/useCopilotAgents";
+import { useTeamMembers } from "@/hooks/useTeamMembers";
 import { toast } from "sonner";
-import { Bot } from "lucide-react";
+import { Bot, Shuffle, User } from "lucide-react";
 
 interface EditCampanhaModalProps {
   open: boolean;
@@ -36,9 +37,12 @@ export function EditCampanhaModal({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [agentId, setAgentId] = useState<string | null>(null);
+  const [leadDistributionMode, setLeadDistributionMode] = useState<LeadDistributionMode>(null);
+  const [leadAssignedTo, setLeadAssignedTo] = useState<string | null>(null);
 
   const updateCampanha = useUpdateCampanha();
   const { data: agents } = useCopilotAgents();
+  const { data: teamMembers } = useTeamMembers();
 
   const outboundAgents =
     agents?.filter(
@@ -52,6 +56,8 @@ export function EditCampanhaModal({
       setName(campanha.name);
       setDescription(campanha.description ?? "");
       setAgentId(campanha.agent_id ?? null);
+      setLeadDistributionMode((campanha as any).lead_distribution_mode ?? null);
+      setLeadAssignedTo((campanha as any).lead_assigned_to ?? null);
     }
   }, [campanha, open]);
 
@@ -65,6 +71,8 @@ export function EditCampanhaModal({
         name: name.trim(),
         description: description.trim() || null,
         ...(campanha.campaign_type === "automatica" && { agent_id: agentId }),
+        lead_distribution_mode: leadDistributionMode,
+        lead_assigned_to: leadDistributionMode === "single" ? leadAssignedTo : null,
       });
       toast.success("Campanha atualizada");
       onOpenChange(false);
@@ -104,6 +112,51 @@ export function EditCampanhaModal({
               className="resize-none"
             />
           </div>
+          {/* Distribuição de leads */}
+          <div className="space-y-3 pt-4 border-t">
+            <Label className="flex items-center gap-2">
+              <Shuffle className="w-4 h-4" />
+              Distribuição de leads
+            </Label>
+            <Select
+              value={leadDistributionMode ?? "none"}
+              onValueChange={(v) => {
+                setLeadDistributionMode(v === "none" ? null : (v as LeadDistributionMode));
+                if (v !== "single") setLeadAssignedTo(null);
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Como distribuir leads" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Manual (definir na importação)</SelectItem>
+                <SelectItem value="random">Aleatório</SelectItem>
+                <SelectItem value="round_robin">Rotativo</SelectItem>
+                <SelectItem value="single">Pessoa específica</SelectItem>
+              </SelectContent>
+            </Select>
+            {leadDistributionMode === "single" && (
+              <Select value={leadAssignedTo ?? ""} onValueChange={(v) => setLeadAssignedTo(v || null)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o vendedor" />
+                </SelectTrigger>
+                <SelectContent>
+                  {teamMembers?.map((m) => (
+                    <SelectItem key={m.id} value={m.id}>
+                      <span className="flex items-center gap-2">
+                        <User className="w-3 h-3" />
+                        {m.name}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            <p className="text-xs text-muted-foreground">
+              Aplica a leads importados e integrações (Meta Ads, webhooks, etc.)
+            </p>
+          </div>
+
           {campanha.campaign_type === "automatica" && (
             <div className="space-y-2">
               <Label className="flex items-center gap-2">

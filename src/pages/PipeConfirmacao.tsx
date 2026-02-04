@@ -2,6 +2,14 @@ import { useState, useMemo, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { Plus, Calendar, Loader2, LayoutGrid, List, Settings2, Upload, FileDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,6 +33,7 @@ import { ExportLeadsModal } from "@/components/leads/ExportLeadsModal";
 import { AddMeetingModal } from "@/components/confirmacao/AddMeetingModal";
 import { ConfirmacaoDetailModal } from "@/components/confirmacao/ConfirmacaoDetailModal";
 import { ConfirmacaoStats } from "@/components/confirmacao/ConfirmacaoStats";
+import type { MetricsPeriod } from "@/hooks/usePipeMetrics";
 import { ConfirmacaoCard } from "@/components/confirmacao/ConfirmacaoCard";
 import { ConfirmacaoFilters, OriginFilter, TimeFilter, UrgencyFilter } from "@/components/confirmacao/ConfirmacaoFilters";
 import { MeetingTimeline } from "@/components/confirmacao/MeetingTimeline";
@@ -41,7 +50,7 @@ interface ConfirmacaoCardData extends DraggableItem {
   meetingDate?: string;
   meetingDateTime?: Date;
   rating: number;
-  origin: "calendly" | "whatsapp" | "meta_ads" | "outro";
+  origin: "whatsapp" | "meta_ads" | "outro" | "site" | "remarketing" | "google_ads" | "cal";
   sdr?: string;
   closer?: string;
   sdrId?: string | null;
@@ -143,6 +152,10 @@ export default function PipeConfirmacao() {
   const [pendingCompareceuItem, setPendingCompareceuItem] = useState<any>(null);
   const [isProcessingCompareceu, setIsProcessingCompareceu] = useState(false);
   const [deleteAllLeadsDialogOpen, setDeleteAllLeadsDialogOpen] = useState(false);
+  const [metricsPeriod, setMetricsPeriod] = useState<MetricsPeriod>("all");
+  const now = new Date();
+  const [selectedMetricsMonth, setSelectedMetricsMonth] = useState(now.getMonth() + 1);
+  const [selectedMetricsYear, setSelectedMetricsYear] = useState(now.getFullYear());
 
   const { data: pipeData, isLoading, refetch } = usePipeConfirmacao();
   const { data: pipelineStages = [] } = usePipelineStages("confirmacao");
@@ -201,6 +214,20 @@ export default function PipeConfirmacao() {
   useEffect(() => {
     autoUpdateStatuses();
   }, [pipeData?.length]); // Only run when data length changes to avoid infinite loops
+
+  // Dados para ConfirmacaoStats: "Geral" = todo o pipe; "Este mês" = filtrado por período em UTC (igual à importação)
+  const statsData = useMemo(() => {
+    if (!pipeData) return [];
+    if (metricsPeriod === "all") return pipeData;
+    const startMs = Date.UTC(selectedMetricsYear, selectedMetricsMonth - 1, 1);
+    const endMs = new Date(Date.UTC(selectedMetricsYear, selectedMetricsMonth, 0, 23, 59, 59, 999)).getTime();
+    return pipeData.filter((item: any) => {
+      const at = item.metrics_period_at
+        ? new Date(item.metrics_period_at).getTime()
+        : new Date(item.created_at).getTime();
+      return at >= startMs && at <= endMs;
+    });
+  }, [pipeData, metricsPeriod, selectedMetricsMonth, selectedMetricsYear]);
 
   const transformToCard = (item: any): ConfirmacaoCardData => {
     const lead = item.lead;
@@ -434,8 +461,48 @@ export default function PipeConfirmacao() {
       />
       <ExportLeadsModal open={isExportModalOpen} onOpenChange={setIsExportModalOpen} />
 
+      {/* Período das métricas: Este mês | Geral */}
+      <div className="flex flex-wrap items-center gap-3">
+        <Tabs value={metricsPeriod} onValueChange={(v) => setMetricsPeriod(v as MetricsPeriod)}>
+          <TabsList className="h-9">
+            <TabsTrigger value="all" className="gap-1.5 text-xs">Geral</TabsTrigger>
+            <TabsTrigger value="month" className="gap-1.5 text-xs">Este mês</TabsTrigger>
+          </TabsList>
+        </Tabs>
+        {metricsPeriod === "month" && (
+          <>
+            <Select value={String(selectedMetricsMonth)} onValueChange={(v) => setSelectedMetricsMonth(Number(v))}>
+              <SelectTrigger className="w-[140px] h-9">
+                <Calendar className="w-4 h-4 mr-2" />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {[1,2,3,4,5,6,7,8,9,10,11,12].map((m) => (
+                  <SelectItem key={m} value={String(m)}>
+                    {format(new Date(selectedMetricsYear, m - 1), "MMMM", { locale: ptBR })}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={String(selectedMetricsYear)} onValueChange={(v) => setSelectedMetricsYear(Number(v))}>
+              <SelectTrigger className="w-[100px] h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {[selectedMetricsYear - 2, selectedMetricsYear - 1, selectedMetricsYear, selectedMetricsYear + 1].map((y) => (
+                  <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </>
+        )}
+        <span className="text-xs text-muted-foreground">
+          {metricsPeriod === "all" ? "Métricas do pipe no geral" : `Métricas de ${format(new Date(selectedMetricsYear, selectedMetricsMonth - 1), "MMMM/yyyy", { locale: ptBR })}`}
+        </span>
+      </div>
+
       {/* Stats */}
-      <ConfirmacaoStats data={pipeData || []} />
+      <ConfirmacaoStats data={statsData} />
 
       {/* Filters */}
       <ConfirmacaoFilters

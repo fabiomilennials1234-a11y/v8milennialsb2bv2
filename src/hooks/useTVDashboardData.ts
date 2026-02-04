@@ -149,12 +149,14 @@ export function useTVDashboardData() {
         ? projetoSales.reduce((sum, p) => sum + (p.sale_value || 0), 0) / projetoSales.length 
         : 0;
       
-      // Conversion rate per closer
+      // Conversion rate: TODOS os leads no pipe X leads na etapa vendido
+      const totalNoPipe = propostasFiltradas.length;
+      const totalVendido = propostasFiltradas.filter(p => p.status === "vendido").length;
+      const taxaConversaoGeral = totalNoPipe > 0 ? (totalVendido / totalNoPipe) * 100 : 0;
+      
+      // Conversion rate per closer (também: todos no pipe do closer X vendido)
       const conversaoPorCloser = closers.map(closer => {
-        const closerProposals = propostasFiltradas.filter(p => 
-          p.closer_id === closer.id &&
-          new Date(p.created_at).getMonth() + 1 === currentMonth
-        );
+        const closerProposals = propostasFiltradas.filter(p => p.closer_id === closer.id);
         const closerSales = closerProposals.filter(p => p.status === "vendido").length;
         const rate = closerProposals.length > 0 ? (closerSales / closerProposals.length) * 100 : 0;
         
@@ -165,13 +167,6 @@ export function useTVDashboardData() {
           proposals: closerProposals.length
         };
       });
-      
-      // General conversion rate
-      const totalPropostas = propostasFiltradas.filter(p => 
-        new Date(p.created_at).getMonth() + 1 === currentMonth
-      ).length;
-      const totalVendas = currentMonthPropostas.length;
-      const taxaConversaoGeral = totalPropostas > 0 ? (totalVendas / totalPropostas) * 100 : 0;
       
       // No-show calculation (finalized leads only)
       const finalizedConfirmacoes = currentMonthConfirmacoes.filter(c => 
@@ -298,6 +293,7 @@ export function useTVDashboardData() {
       } as TVDashboardMetrics;
     },
     enabled: !!teamMembers && !!propostas && !!confirmacoes && !!whatsapp && (isAdmin !== undefined),
-    refetchInterval: 30000, // Refresh every 30 seconds for TV display
+    staleTime: 0, // Sempre considerar dados desatualizados para refetch imediato após realtime
+    refetchInterval: 5000, // Fallback: refresh a cada 5s caso realtime falhe
   });
 }

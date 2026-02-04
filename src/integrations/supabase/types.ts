@@ -280,7 +280,19 @@ export type Database = {
           description: string | null
           id: string
           individual_goal: number | null
+          investimento_cents: number | null
+          investimento_source: string | null
+          investimento_updated_at: string | null
           is_active: boolean | null
+          mkt_cadastro_origins: string[] | null
+          mkt_cadastro_tag_ids: string[] | null
+          mkt_call_origins: string[] | null
+          mkt_call_tag_ids: string[] | null
+          mkt_ativo: boolean | null
+          mkt_incluir_cadastro: boolean | null
+          mkt_incluir_call: boolean | null
+          mkt_investimento_cadastro_cents: number | null
+          mkt_investimento_call_cents: number | null
           name: string
           team_goal: number
           updated_at: string | null
@@ -292,7 +304,19 @@ export type Database = {
           description?: string | null
           id?: string
           individual_goal?: number | null
+          investimento_cents?: number | null
+          investimento_source?: string | null
+          investimento_updated_at?: string | null
           is_active?: boolean | null
+          mkt_cadastro_origins?: string[] | null
+          mkt_cadastro_tag_ids?: string[] | null
+          mkt_call_origins?: string[] | null
+          mkt_call_tag_ids?: string[] | null
+          mkt_ativo?: boolean | null
+          mkt_incluir_cadastro?: boolean | null
+          mkt_incluir_call?: boolean | null
+          mkt_investimento_cadastro_cents?: number | null
+          mkt_investimento_call_cents?: number | null
           name: string
           team_goal?: number
           updated_at?: string | null
@@ -304,7 +328,19 @@ export type Database = {
           description?: string | null
           id?: string
           individual_goal?: number | null
+          investimento_cents?: number | null
+          investimento_source?: string | null
+          investimento_updated_at?: string | null
           is_active?: boolean | null
+          mkt_cadastro_origins?: string[] | null
+          mkt_cadastro_tag_ids?: string[] | null
+          mkt_call_origins?: string[] | null
+          mkt_call_tag_ids?: string[] | null
+          mkt_ativo?: boolean | null
+          mkt_incluir_cadastro?: boolean | null
+          mkt_incluir_call?: boolean | null
+          mkt_investimento_cadastro_cents?: number | null
+          mkt_investimento_call_cents?: number | null
           name?: string
           team_goal?: number
           updated_at?: string | null
@@ -838,6 +874,7 @@ export type Database = {
           compromisso_date: string | null
           created_at: string
           email: string | null
+          metrics_period_at: string | null
           faturamento: string | null
           id: string
           name: string
@@ -863,6 +900,7 @@ export type Database = {
           email?: string | null
           faturamento?: string | null
           id?: string
+          metrics_period_at?: string | null
           name: string
           notes?: string | null
           origin?: Database["public"]["Enums"]["lead_origin"]
@@ -886,6 +924,7 @@ export type Database = {
           email?: string | null
           faturamento?: string | null
           id?: string
+          metrics_period_at?: string | null
           name?: string
           notes?: string | null
           origin?: Database["public"]["Enums"]["lead_origin"]
@@ -959,6 +998,7 @@ export type Database = {
           created_at: string
           id: string
           is_confirmed: boolean
+          metrics_period_at: string | null
           lead_id: string
           meeting_date: string | null
           notes: string | null
@@ -973,6 +1013,7 @@ export type Database = {
           is_confirmed?: boolean
           lead_id: string
           meeting_date?: string | null
+          metrics_period_at?: string | null
           notes?: string | null
           sdr_id?: string | null
           status?: Database["public"]["Enums"]["pipe_confirmacao_status"]
@@ -985,6 +1026,7 @@ export type Database = {
           is_confirmed?: boolean
           lead_id?: string
           meeting_date?: string | null
+          metrics_period_at?: string | null
           notes?: string | null
           sdr_id?: string | null
           status?: Database["public"]["Enums"]["pipe_confirmacao_status"]
@@ -1062,6 +1104,7 @@ export type Database = {
           contract_duration: number | null
           created_at: string
           id: string
+          metrics_period_at: string | null
           lead_id: string
           notes: string | null
           product_id: string | null
@@ -1079,6 +1122,7 @@ export type Database = {
           created_at?: string
           id?: string
           lead_id: string
+          metrics_period_at?: string | null
           notes?: string | null
           product_id?: string | null
           product_type?: Database["public"]["Enums"]["product_type"] | null
@@ -1095,6 +1139,7 @@ export type Database = {
           created_at?: string
           id?: string
           lead_id?: string
+          metrics_period_at?: string | null
           notes?: string | null
           product_id?: string | null
           product_type?: Database["public"]["Enums"]["product_type"] | null
@@ -1526,20 +1571,13 @@ export type Database = {
     Enums: {
       app_role: "admin" | "sdr" | "closer"
       lead_origin:
-        | "calendly"
         | "whatsapp"
         | "meta_ads"
         | "outro"
-        | "remarketing"
-        | "base_clientes"
-        | "parceiro"
-        | "indicacao"
-        | "quiz"
         | "site"
-        | "organico"
+        | "remarketing"
+        | "google_ads"
         | "cal"
-        | "ambos"
-        | "zydon"
       pipe_confirmacao_status:
         | "reuniao_marcada"
         | "confirmar_d5"
@@ -1696,20 +1734,13 @@ export const Constants = {
     Enums: {
       app_role: ["admin", "sdr", "closer"],
       lead_origin: [
-        "calendly",
         "whatsapp",
         "meta_ads",
         "outro",
-        "remarketing",
-        "base_clientes",
-        "parceiro",
-        "indicacao",
-        "quiz",
         "site",
-        "organico",
+        "remarketing",
+        "google_ads",
         "cal",
-        "ambos",
-        "zydon",
       ],
       pipe_confirmacao_status: [
         "reuniao_marcada",

@@ -53,17 +53,23 @@ interface LeadDetailModalProps {
 }
 
 const originLabels: Record<string, string> = {
-  calendly: "Calendly",
   whatsapp: "WhatsApp",
   meta_ads: "Meta Ads",
-  outro: "Outro",
+  outro: "Outros",
+  site: "Site",
+  remarketing: "Remarketing",
+  google_ads: "Google Ads",
+  cal: "Cal.com",
 };
 
 const originColors: Record<string, string> = {
-  calendly: "bg-chart-1/10 text-chart-1 border-chart-1/20",
   whatsapp: "bg-success/10 text-success border-success/20",
   meta_ads: "bg-chart-5/10 text-chart-5 border-chart-5/20",
   outro: "bg-muted text-muted-foreground border-muted",
+  site: "bg-teal-500/10 text-teal-600 border-teal-500/20",
+  remarketing: "bg-orange-500/10 text-orange-600 border-orange-500/20",
+  google_ads: "bg-red-500/10 text-red-600 border-red-500/20",
+  cal: "bg-chart-1/10 text-chart-1 border-chart-1/20",
 };
 
 function TimelineItem({ 
