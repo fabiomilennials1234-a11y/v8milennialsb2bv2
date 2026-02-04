@@ -4,6 +4,13 @@ import { toast } from "sonner";
 import { useOrganization } from "./useOrganization";
 import { useRealtimeSubscription } from "./useRealtimeSubscription";
 
+/** Intervalo do mês (dia 1 00:00 até último dia 23:59:59) para vincular metas ao mês. */
+function getMonthRange(month: number, year: number) {
+  const start = new Date(Date.UTC(year, month - 1, 1));
+  const end = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
+  return { startStr: start.toISOString(), endStr: end.toISOString() };
+}
+
 export interface Goal {
   id: string;
   name: string;
@@ -72,6 +79,7 @@ export function useIndividualGoals(month?: number, year?: number) {
   const selectedMonth = month ?? now.getMonth() + 1;
   const selectedYear = year ?? now.getFullYear();
   const { organizationId, isReady } = useOrganization();
+  const { startStr, endStr } = getMonthRange(selectedMonth, selectedYear);
 
   return useQuery({
     queryKey: ["individual-goals", selectedMonth, selectedYear, organizationId],
@@ -93,7 +101,45 @@ export function useIndividualGoals(month?: number, year?: number) {
 
       if (error) throw error;
 
-      // Combine with team member info
+      // Progresso vinculado ao mês: dia 1 até último dia do mês (não pipeline inteiro)
+      const [salesRes1, salesRes2, confRes1, confRes2] = await Promise.all([
+        supabase
+          .from("pipe_propostas")
+          .select("closer_id, sale_value")
+          .eq("organization_id", organizationId)
+          .eq("status", "vendido")
+          .not("metrics_period_at", "is", null)
+          .gte("metrics_period_at", startStr)
+          .lte("metrics_period_at", endStr),
+        supabase
+          .from("pipe_propostas")
+          .select("closer_id, sale_value")
+          .eq("organization_id", organizationId)
+          .eq("status", "vendido")
+          .is("metrics_period_at", null)
+          .gte("closed_at", startStr)
+          .lte("closed_at", endStr),
+        supabase
+          .from("pipe_confirmacao")
+          .select("sdr_id")
+          .eq("organization_id", organizationId)
+          .eq("status", "compareceu")
+          .not("metrics_period_at", "is", null)
+          .gte("metrics_period_at", startStr)
+          .lte("metrics_period_at", endStr),
+        supabase
+          .from("pipe_confirmacao")
+          .select("sdr_id")
+          .eq("organization_id", organizationId)
+          .eq("status", "compareceu")
+          .is("metrics_period_at", null)
+          .gte("meeting_date", startStr)
+          .lte("meeting_date", endStr),
+      ]);
+
+      const salesData = [...(salesRes1.data || []), ...(salesRes2.data || [])];
+      const confData = [...(confRes1.data || []), ...(confRes2.data || [])];
+
       const closers = teamMembers?.filter((m) => m.role === "closer") || [];
       const sdrs = teamMembers?.filter((m) => m.role === "sdr") || [];
 
@@ -101,14 +147,18 @@ export function useIndividualGoals(month?: number, year?: number) {
         const goal = goals?.find(
           (g) => g.team_member_id === closer.id && g.type === "vendas"
         );
+        const currentValue = salesData
+          .filter((s) => s.closer_id === closer.id)
+          .reduce((sum, s) => sum + (Number(s.sale_value) || 0), 0);
+        const targetValue = goal?.target_value || 0;
         return {
           id: closer.id,
           name: closer.name,
           role: "closer",
-          current: goal?.current_value || 0,
-          goal: goal?.target_value || 0,
-          percentage: goal?.target_value
-            ? Math.round((goal.current_value / goal.target_value) * 100)
+          current: currentValue,
+          goal: targetValue,
+          percentage: targetValue
+            ? Math.round((currentValue / targetValue) * 100)
             : 0,
         };
       });
@@ -117,14 +167,16 @@ export function useIndividualGoals(month?: number, year?: number) {
         const goal = goals?.find(
           (g) => g.team_member_id === sdr.id && g.type === "reunioes"
         );
+        const currentValue = confData.filter((c) => c.sdr_id === sdr.id).length;
+        const targetValue = goal?.target_value || 0;
         return {
           id: sdr.id,
           name: sdr.name,
           role: "sdr",
-          current: goal?.current_value || 0,
-          goal: goal?.target_value || 0,
-          percentage: goal?.target_value
-            ? Math.round((goal.current_value / goal.target_value) * 100)
+          current: currentValue,
+          goal: targetValue,
+          percentage: targetValue
+            ? Math.round((currentValue / targetValue) * 100)
             : 0,
         };
       });
