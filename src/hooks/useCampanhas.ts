@@ -210,6 +210,25 @@ export function useCampanhaStages(campanhaId: string | undefined) {
   });
 }
 
+/** Busca etapas de várias campanhas de uma vez (para referência de IDs em Configurações > Webhooks) */
+export function useAllCampanhaStages(campaignIds: string[]) {
+  return useQuery({
+    queryKey: ["campanha_stages_bulk", campaignIds.sort().join(",")],
+    queryFn: async () => {
+      if (campaignIds.length === 0) return [];
+      const { data, error } = await supabase
+        .from("campanha_stages")
+        .select("*")
+        .in("campanha_id", campaignIds)
+        .order("campanha_id")
+        .order("position", { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as CampanhaStage[];
+    },
+    enabled: campaignIds.length > 0,
+  });
+}
+
 // Hook to fetch campaign members
 export function useCampanhaMembers(campanhaId: string | undefined) {
   return useQuery({
