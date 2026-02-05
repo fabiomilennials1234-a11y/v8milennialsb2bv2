@@ -1180,11 +1180,18 @@ export function useImportLeads() {
       let memberIndex = 0;
       const processedPhones = new Set<string>(); // Track phones processed in this import
 
-      // Initialize distribution counter for all members
+      // Initialize distribution counter for all members; for round_robin, start from current campaign lead count so rotation continues
       if (autoDistribute && memberIds && memberIds.length > 0) {
         memberIds.forEach(id => {
           distribution[id] = 0;
         });
+        if (distributionMode === "round_robin") {
+          const { count } = await supabase
+            .from("campanha_leads")
+            .select("id", { count: "exact", head: true })
+            .eq("campanha_id", campanhaId);
+          memberIndex = count ?? 0;
+        }
       }
 
       for (let i = 0; i < parsedLeads.length; i += BATCH_SIZE) {

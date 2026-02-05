@@ -4,11 +4,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useAddCampanhaLead, CampanhaStage, CampanhaMember } from "@/hooks/useCampanhas";
+import { useAddCampanhaLead, useCampanha, CampanhaStage, CampanhaMember } from "@/hooks/useCampanhas";
 import { useLeads } from "@/hooks/useLeads";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Search, UserPlus } from "lucide-react";
+import { Search, UserPlus, Shuffle } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
+
+const AUTO_DISTRIBUTE_VALUE = "__auto__";
 
 interface AddLeadToCampanhaModalProps {
   open: boolean;
@@ -33,7 +36,10 @@ export function AddLeadToCampanhaModal({
   const [selectedSdrId, setSelectedSdrId] = useState<string>("");
 
   const { data: allLeads } = useLeads();
+  const { data: campanha } = useCampanha(campanhaId);
   const addLead = useAddCampanhaLead();
+  const canAutoDistribute =
+    campanha?.lead_distribution_mode === "round_robin" || campanha?.lead_distribution_mode === "random";
 
   // Filter leads that are not already in the campaign
   const availableLeads = allLeads?.filter(
@@ -51,11 +57,24 @@ export function AddLeadToCampanhaModal({
     }
 
     try {
+      let sdrId: string | undefined = selectedSdrId && selectedSdrId !== AUTO_DISTRIBUTE_VALUE ? selectedSdrId : undefined;
+      if (selectedSdrId === AUTO_DISTRIBUTE_VALUE) {
+        const { data: nextSdrId, error: rpcError } = await supabase.rpc("get_next_campaign_sdr", {
+          p_campaign_id: campanhaId,
+        });
+        if (rpcError) {
+          toast.error("Não foi possível distribuir automaticamente. Escolha um vendedor.");
+          console.error("[AddLeadToCampanha] get_next_campaign_sdr error:", rpcError);
+          return;
+        }
+        sdrId = nextSdrId ?? undefined;
+      }
+
       await addLead.mutateAsync({
         campanha_id: campanhaId,
         lead_id: selectedLeadId,
         stage_id: selectedStageId,
-        sdr_id: selectedSdrId || undefined,
+        sdr_id: sdrId,
       });
 
       toast.success("Lead adicionado à campanha!");
@@ -170,6 +189,14 @@ export function AddLeadToCampanhaModal({
                 <SelectValue placeholder="Selecione o vendedor (opcional)" />
               </SelectTrigger>
               <SelectContent>
+                {canAutoDistribute && (
+                  <SelectItem value={AUTO_DISTRIBUTE_VALUE}>
+                    <span className="flex items-center gap-2">
+                      <Shuffle className="w-3.5 h-3.5" />
+                      Distribuir automaticamente (conforme campanha)
+                    </span>
+                  </SelectItem>
+                )}
                 {members.map((member) => (
                   <SelectItem key={member.team_member_id} value={member.team_member_id}>
                     {member.team_member?.name}

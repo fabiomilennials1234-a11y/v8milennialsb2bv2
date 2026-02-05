@@ -17,11 +17,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useUpdateCampanha, type Campanha, type LeadDistributionMode } from "@/hooks/useCampanhas";
+import { useUpdateCampanha, useCampanhaMembers, type Campanha, type LeadDistributionMode } from "@/hooks/useCampanhas";
 import { useCopilotAgents } from "@/hooks/useCopilotAgents";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
 import { toast } from "sonner";
-import { Bot, Shuffle, User } from "lucide-react";
+import { AlertTriangle, Bot, Shuffle, User } from "lucide-react";
 
 interface EditCampanhaModalProps {
   open: boolean;
@@ -43,6 +43,9 @@ export function EditCampanhaModal({
   const updateCampanha = useUpdateCampanha();
   const { data: agents } = useCopilotAgents();
   const { data: teamMembers } = useTeamMembers();
+  const { data: campanhaMembers = [] } = useCampanhaMembers(campanha?.id);
+  const needsMembersForDistribution =
+    (leadDistributionMode === "round_robin" || leadDistributionMode === "random") && campanhaMembers.length === 0;
 
   const outboundAgents =
     agents?.filter(
@@ -151,6 +154,12 @@ export function EditCampanhaModal({
                   ))}
                 </SelectContent>
               </Select>
+            )}
+            {needsMembersForDistribution && (
+              <p className="text-sm text-amber-600 dark:text-amber-500 flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                Adicione membros à campanha para a distribuição rotativa ou aleatória funcionar.
+              </p>
             )}
             <p className="text-xs text-muted-foreground">
               Aplica a leads importados e integrações (Meta Ads, webhooks, etc.)

@@ -420,6 +420,9 @@ serve(async (req) => {
             }
           } else {
             const sdrId = await getCampaignLeadAssignment(supabase, campaign_id);
+            if (!sdrId) {
+              console.warn("[lead-webhook] No SDR assigned for campaign (distribution returned null). Check lead_distribution_mode and campanha_members:", campaign_id);
+            }
             const insertPayload: { campanha_id: string; lead_id: string; stage_id: string; notes?: string; sdr_id?: string } = {
               campanha_id: campaign_id,
               lead_id: leadId,

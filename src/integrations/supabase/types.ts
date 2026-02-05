@@ -1567,6 +1567,10 @@ export type Database = {
         Args: { p_team_member_ids: string[]; p_permissions: Json }
         Returns: undefined
       }
+      get_next_campaign_sdr: {
+        Args: { p_campaign_id: string }
+        Returns: string | null
+      }
     }
     Enums: {
       app_role: "admin" | "sdr" | "closer"

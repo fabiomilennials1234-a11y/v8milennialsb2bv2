@@ -837,6 +837,7 @@ export function useExtractLeadToPipe() {
       campanha_id,
       lead_id,
       target_pipe,
+      stage,
       organization_id,
       sdr_id,
       closer_id,
@@ -846,12 +847,18 @@ export function useExtractLeadToPipe() {
       campanha_id: string;
       lead_id: string;
       target_pipe: ExtractLeadToPipeTarget;
+      /** Etapa (status) do pipe para onde o lead deve ir. Ex: "novo", "reuniao_marcada", "marcar_compromisso" */
+      stage: string;
       organization_id: string;
       sdr_id?: string | null;
       closer_id?: string | null;
       campaign_name?: string;
     }) => {
       const notes = campaign_name ? `Campanha: ${campaign_name}` : undefined;
+      const stageVal = stage as "novo" | "abordado" | "respondeu" | "esfriou" | "agendado" |
+        "reuniao_marcada" | "confirmar_d5" | "confirmar_d3" | "confirmar_d2" | "confirmar_d1" |
+        "pre_confirmada" | "confirmacao_no_dia" | "confirmada_no_dia" | "remarcar" | "compareceu" | "perdido" |
+        "marcar_compromisso" | "reativar" | "compromisso_marcado" | "futuro" | "vendido";
 
       if (target_pipe === "pipe_whatsapp") {
         const { data: existing } = await supabase
@@ -864,7 +871,7 @@ export function useExtractLeadToPipe() {
             .from("pipe_whatsapp")
             .insert({
               lead_id,
-              status: "novo",
+              status: stageVal,
               sdr_id: sdr_id ?? null,
               organization_id,
               notes: notes ?? null,
@@ -876,10 +883,16 @@ export function useExtractLeadToPipe() {
             leadId: lead_id,
             assignedTo: sdr_id ?? null,
             pipeType: "whatsapp",
-            stage: "novo",
+            stage: stageVal,
             sourcePipeId: row.id,
             organizationId: organization_id,
           });
+        } else {
+          const { error: updateErr } = await supabase
+            .from("pipe_whatsapp")
+            .update({ status: stageVal, ...(notes && { notes }) })
+            .eq("id", existing.id);
+          if (updateErr) throw updateErr;
         }
       } else if (target_pipe === "pipe_confirmacao") {
         const { data: existing } = await supabase
@@ -892,7 +905,7 @@ export function useExtractLeadToPipe() {
             .from("pipe_confirmacao")
             .insert({
               lead_id,
-              status: "reuniao_marcada",
+              status: stageVal,
               sdr_id: sdr_id ?? null,
               organization_id,
               notes: notes ?? null,
@@ -904,10 +917,16 @@ export function useExtractLeadToPipe() {
             leadId: lead_id,
             assignedTo: sdr_id ?? closer_id ?? null,
             pipeType: "confirmacao",
-            stage: "reuniao_marcada",
+            stage: stageVal,
             sourcePipeId: row.id,
             organizationId: organization_id,
           });
+        } else {
+          const { error: updateErr } = await supabase
+            .from("pipe_confirmacao")
+            .update({ status: stageVal, ...(notes && { notes }) })
+            .eq("id", existing.id);
+          if (updateErr) throw updateErr;
         }
       } else {
         const { data: existing } = await supabase
@@ -920,7 +939,7 @@ export function useExtractLeadToPipe() {
             .from("pipe_propostas")
             .insert({
               lead_id,
-              status: "marcar_compromisso",
+              status: stageVal,
               closer_id: closer_id ?? null,
               organization_id,
               notes: notes ?? null,
@@ -932,10 +951,16 @@ export function useExtractLeadToPipe() {
             leadId: lead_id,
             assignedTo: closer_id ?? null,
             pipeType: "propostas",
-            stage: "marcar_compromisso",
+            stage: stageVal,
             sourcePipeId: row.id,
             organizationId: organization_id,
           });
+        } else {
+          const { error: updateErr } = await supabase
+            .from("pipe_propostas")
+            .update({ status: stageVal, ...(notes && { notes }) })
+            .eq("id", existing.id);
+          if (updateErr) throw updateErr;
         }
       }
 
