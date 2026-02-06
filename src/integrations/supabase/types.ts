@@ -272,6 +272,48 @@ export type Database = {
           },
         ]
       }
+      campanha_pipe_automations: {
+        Row: {
+          id: string
+          campanha_id: string
+          campanha_stage_id: string
+          target_pipe: string
+          pipe_stage: string
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          campanha_id: string
+          campanha_stage_id: string
+          target_pipe: string
+          pipe_stage: string
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          campanha_id?: string
+          campanha_stage_id?: string
+          target_pipe?: string
+          pipe_stage?: string
+          created_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campanha_pipe_automations_campanha_id_fkey"
+            columns: ["campanha_id"]
+            isOneToOne: false
+            referencedRelation: "campanhas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campanha_pipe_automations_campanha_stage_id_fkey"
+            columns: ["campanha_stage_id"]
+            isOneToOne: false
+            referencedRelation: "campanha_stages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       campanhas: {
         Row: {
           bonus_value: number | null

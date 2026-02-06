@@ -86,8 +86,22 @@ export function useDashboardMetrics(month?: number, year?: number) {
 
       const reunioesMarcadas = confirmacaoData.length;
       const reunioesComparecidas = confirmacaoData.filter((c) => c.status === "compareceu").length;
-      const noShow = confirmacaoData.filter((c) => c.status === "perdido").length;
-      const taxaNoShow = reunioesMarcadas > 0 ? (noShow / reunioesMarcadas) * 100 : 0;
+
+      // Taxa de no-show: apenas reuniões cuja data já passou e já têm desfecho (não inclui agendadas futuras)
+      const now = new Date();
+      const comDataPassada = confirmacaoData.filter(
+        (c) => c.meeting_date && new Date(c.meeting_date) <= now
+      );
+      const finalizadosDataPassada = comDataPassada.filter((c) =>
+        ["compareceu", "perdido", "remarcar"].includes(c.status)
+      );
+      const noShow = finalizadosDataPassada.filter(
+        (c) => c.status === "perdido" || c.status === "remarcar"
+      ).length;
+      const taxaNoShow =
+        finalizadosDataPassada.length > 0
+          ? Math.round((noShow / finalizadosDataPassada.length) * 100)
+          : 0;
 
       // pipe_propostas vendido: COALESCE(metrics_period_at, closed_at) in range; agregação por item (MRR/Projeto por product.type; unitário só no total)
       const propSelect = "sale_value, product_type, items:pipe_proposta_items(sale_value, product:products(type))";

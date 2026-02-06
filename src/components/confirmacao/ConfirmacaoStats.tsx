@@ -14,25 +14,32 @@ import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import { isToday, isTomorrow, isPast, isThisWeek, differenceInDays } from "date-fns";
+import { useConfirmacaoOverdueDays, isConfirmacaoOverdue } from "@/hooks/useOrganizationSettings";
 
 interface ConfirmacaoStatsProps {
   data: any[];
 }
 
 export function ConfirmacaoStats({ data }: ConfirmacaoStatsProps) {
+  const overdueDays = useConfirmacaoOverdueDays();
+
   if (!data || data.length === 0) {
     return null;
   }
 
   // Calculate comprehensive stats
   const today = new Date();
-  
+  // Atrasadas = X dias sem interação (updated_at), não por data da reunião; assim "remarcar" com atividade recente não entra
+  const overdue = data.filter((item) =>
+    isConfirmacaoOverdue(item.status, item.updated_at, overdueDays)
+  ).length;
+
   const stats = {
     // Reuniões por período
     today: data.filter(item => item.meeting_date && isToday(new Date(item.meeting_date))).length,
     tomorrow: data.filter(item => item.meeting_date && isTomorrow(new Date(item.meeting_date))).length,
     thisWeek: data.filter(item => item.meeting_date && isThisWeek(new Date(item.meeting_date), { locale: undefined })).length,
-    overdue: data.filter(item => item.meeting_date && isPast(new Date(item.meeting_date)) && !isToday(new Date(item.meeting_date)) && !["compareceu", "perdido"].includes(item.status)).length,
+    overdue,
     
     // Por status - usando is_confirmed para identificar confirmados
     confirmed: data.filter(item => item.is_confirmed === true || item.status === "compareceu").length,
@@ -45,11 +52,19 @@ export function ConfirmacaoStats({ data }: ConfirmacaoStatsProps) {
     total: data.length,
   };
 
-  // Cálculo de no-show: apenas leads finalizados (remarcar + compareceu + perdido)
-  const finalizados = stats.remarcar + stats.compareceu + stats.perdido;
-  const noShowCount = stats.remarcar + stats.perdido;
-  const noShowRate = finalizados > 0 ? Math.round((noShowCount / finalizados) * 100) : 0;
-  const showRate = finalizados > 0 ? Math.round((stats.compareceu / finalizados) * 100) : 0;
+  // Cálculo de no-show: apenas reuniões cuja data já passou e já têm desfecho (não inclui agendadas futuras)
+  const comDataPassada = data.filter(
+    (item) => item.meeting_date && isPast(new Date(item.meeting_date))
+  );
+  const finalizados = comDataPassada.filter((item) =>
+    ["remarcar", "compareceu", "perdido"].includes(item.status)
+  );
+  const totalFinalizados = finalizados.length;
+  const noShowCount = finalizados.filter(
+    (item) => item.status === "remarcar" || item.status === "perdido"
+  ).length;
+  const noShowRate = totalFinalizados > 0 ? Math.round((noShowCount / totalFinalizados) * 100) : 0;
+  const showRate = totalFinalizados > 0 ? Math.round((finalizados.filter((i) => i.status === "compareceu").length / totalFinalizados) * 100) : 0;
   
   const pendingRate = stats.total > 0 ? Math.round((stats.pending / stats.total) * 100) : 0;
 
@@ -91,20 +106,21 @@ export function ConfirmacaoStats({ data }: ConfirmacaoStatsProps) {
       icon: CalendarX,
       color: stats.overdue > 0 ? "text-destructive" : "text-success",
       bgColor: stats.overdue > 0 ? "bg-destructive/10" : "bg-success/10",
-      description: stats.overdue > 0 ? "Atenção necessária" : "Tudo em dia!",
+      description: stats.overdue > 0 ? `${overdueDays} dias sem interação` : "Tudo em dia!",
     },
   ];
 
+  const compareceuDataPassada = finalizados.filter((i) => i.status === "compareceu").length;
   const performanceCards = [
     {
       title: "Compareceram",
-      value: stats.compareceu,
+      value: compareceuDataPassada,
       percentage: showRate,
       icon: CheckCircle2,
       color: "text-success",
       bgColor: "bg-success/10",
       progressColor: "bg-success",
-      description: `${stats.compareceu} de ${finalizados} finalizados`,
+      description: `${compareceuDataPassada} de ${totalFinalizados} finalizados (data já passou)`,
     },
     {
       title: "No-Show",
@@ -218,7 +234,7 @@ export function ConfirmacaoStats({ data }: ConfirmacaoStatsProps) {
               <div>
                 <h3 className="font-semibold text-lg">Taxa de Comparecimento</h3>
                 <p className="text-sm text-muted-foreground">
-                  {stats.compareceu} de {finalizados} leads finalizados compareceram
+                  {stats.compareceu} de {totalFinalizados} reuniões (data já passou) compareceram
                 </p>
               </div>
             </div>

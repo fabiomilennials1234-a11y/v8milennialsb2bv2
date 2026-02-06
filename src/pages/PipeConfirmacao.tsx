@@ -38,6 +38,7 @@ import { ConfirmacaoCard } from "@/components/confirmacao/ConfirmacaoCard";
 import { ConfirmacaoFilters, OriginFilter, TimeFilter, UrgencyFilter } from "@/components/confirmacao/ConfirmacaoFilters";
 import { MeetingTimeline } from "@/components/confirmacao/MeetingTimeline";
 import { CompareceuModal } from "@/components/confirmacao/CompareceuModal";
+import { useConfirmacaoOverdueDays, isConfirmacaoOverdue } from "@/hooks/useOrganizationSettings";
 import { format, isToday, startOfWeek, endOfWeek, isWithinInterval, isTomorrow, isPast, startOfDay, differenceInCalendarDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
@@ -63,6 +64,8 @@ interface ConfirmacaoCardData extends DraggableItem {
   status?: string;
   confirmacaoId?: string;
   isConfirmed?: boolean;
+  updatedAt?: string | null;
+  overdueDays?: number;
 }
 
 // Calculate correct status based on meeting date using CALENDAR DAYS (not hours)
@@ -157,6 +160,7 @@ export default function PipeConfirmacao() {
   const [selectedMetricsMonth, setSelectedMetricsMonth] = useState(now.getMonth() + 1);
   const [selectedMetricsYear, setSelectedMetricsYear] = useState(now.getFullYear());
 
+  const overdueDays = useConfirmacaoOverdueDays();
   const { data: pipeData, isLoading, refetch } = usePipeConfirmacao();
   const { data: pipelineStages = [] } = usePipelineStages("confirmacao");
   const { data: teamMembers = [] } = useTeamMembers();
@@ -255,6 +259,8 @@ export default function PipeConfirmacao() {
       status: item.status,
       confirmacaoId: item.id,
       isConfirmed: item.is_confirmed || false,
+      updatedAt: item.updated_at,
+      overdueDays,
     };
   };
 
@@ -304,8 +310,8 @@ export default function PipeConfirmacao() {
             matchesTime = isTomorrow(new Date(item.meeting_date));
           } else if (timeFilter === "week" && item.meeting_date) {
             matchesTime = isWithinInterval(new Date(item.meeting_date), { start: weekStart, end: weekEnd });
-          } else if (timeFilter === "overdue" && item.meeting_date) {
-            matchesTime = isPast(new Date(item.meeting_date)) && !isToday(new Date(item.meeting_date));
+          } else if (timeFilter === "overdue") {
+            matchesTime = isConfirmacaoOverdue(item.status, item.updated_at, overdueDays);
           }
 
           const matchesStatus = selectedStatuses.length === 0 || selectedStatuses.includes(item.status);
@@ -326,7 +332,7 @@ export default function PipeConfirmacao() {
 
       return { ...col, items: columnItems };
     });
-  }, [pipeData, searchQuery, originFilter, urgencyFilter, timeFilter, selectedStatuses, selectedSdrId, selectedCloserId]);
+  }, [pipeData, searchQuery, originFilter, urgencyFilter, timeFilter, selectedStatuses, selectedSdrId, selectedCloserId, overdueDays]);
 
   const handleStatusChange = async (itemId: string, newStatus: string) => {
     const item = pipeData?.find(p => p.id === itemId);

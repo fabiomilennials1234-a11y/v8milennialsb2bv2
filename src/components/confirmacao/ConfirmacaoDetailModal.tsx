@@ -45,9 +45,10 @@ import {
   Pencil,
   UserCheck
 } from "lucide-react";
-import { format, formatDistanceToNow, isToday, isTomorrow, isPast, differenceInDays } from "date-fns";
+import { format, formatDistanceToNow, isToday, isTomorrow, differenceInDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
+import { useConfirmacaoOverdueDays, isConfirmacaoOverdue } from "@/hooks/useOrganizationSettings";
 import { useUpdatePipeConfirmacao, useDeletePipeConfirmacao, PipeConfirmacaoStatus, statusColumns } from "@/hooks/usePipeConfirmacao";
 import { useCreatePipeProposta } from "@/hooks/usePipePropostas";
 import { useLeadHistory, useCreateLeadHistory } from "@/hooks/useLeadHistory";
@@ -73,15 +74,27 @@ const originConfig: Record<string, { label: string; color: string; icon: string 
   cal: { label: "Cal.com", color: "bg-purple-500/10 text-purple-500 border-purple-500/20", icon: "📅" },
 };
 
-function getMeetingUrgency(meetingDate: Date | null) {
-  if (!meetingDate) return { label: "Sem data", color: "text-muted-foreground", urgency: "none" };
-  
-  const now = new Date();
-  const days = differenceInDays(meetingDate, now);
-  
-  if (isPast(meetingDate) && !isToday(meetingDate)) {
+function getMeetingUrgency(
+  meetingDate: Date | null,
+  status?: string,
+  updatedAt?: string | null,
+  overdueDays?: number
+) {
+  // Atrasada = X dias sem interação (configurável)
+  if (
+    overdueDays != null &&
+    overdueDays >= 1 &&
+    updatedAt != null &&
+    status != null &&
+    isConfirmacaoOverdue(status, updatedAt, overdueDays)
+  ) {
     return { label: "Atrasada", color: "text-destructive", urgency: "overdue" };
   }
+  if (!meetingDate) return { label: "Sem data", color: "text-muted-foreground", urgency: "none" };
+
+  const now = new Date();
+  const days = differenceInDays(meetingDate, now);
+
   if (isToday(meetingDate)) {
     return { label: "Hoje!", color: "text-warning", urgency: "today" };
   }
@@ -95,6 +108,7 @@ function getMeetingUrgency(meetingDate: Date | null) {
 }
 
 export function ConfirmacaoDetailModal({ open, onOpenChange, item, onSuccess }: ConfirmacaoDetailModalProps) {
+  const overdueDays = useConfirmacaoOverdueDays();
   const [isEditingMeeting, setIsEditingMeeting] = useState(false);
   const [isEditingOwners, setIsEditingOwners] = useState(false);
   const [editedNotes, setEditedNotes] = useState("");
@@ -145,7 +159,12 @@ export function ConfirmacaoDetailModal({ open, onOpenChange, item, onSuccess }: 
 
   const lead = item.lead;
   const meetingDate = item.meeting_date ? new Date(item.meeting_date) : null;
-  const urgency = getMeetingUrgency(meetingDate);
+  const urgency = getMeetingUrgency(
+    meetingDate,
+    item?.status,
+    item?.updated_at,
+    overdueDays
+  );
   const origin = originConfig[lead?.origin as keyof typeof originConfig] || originConfig.outro;
   const currentStatus = statusColumns.find(s => s.id === item.status);
 

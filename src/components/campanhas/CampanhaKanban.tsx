@@ -20,7 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { CampanhaStage, CampanhaLead, useUpdateCampanhaLead, useDeleteCampanhaLead } from "@/hooks/useCampanhas";
+import { CampanhaStage, CampanhaLead, useUpdateCampanhaLead, useDeleteCampanhaLead, useExtractLeadToPipe, type CampanhaPipeAutomation } from "@/hooks/useCampanhas";
 import { useDeleteLead } from "@/hooks/useLeads";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
 import { Phone, Mail, Building2, GripVertical, User, DollarSign, Star, Tag, Trash2, Edit2, Filter, MessageSquare, Save, X, Search } from "lucide-react";
@@ -43,6 +43,9 @@ interface CampanhaKanbanProps {
   campanhaId: string;
   stages: CampanhaStage[];
   leads: CampanhaLead[];
+  pipeAutomations?: CampanhaPipeAutomation[];
+  organizationId?: string;
+  campanhaName?: string;
   onMoveToConfirmacao: (lead: CampanhaLead) => void;
   onExtractToPipe?: (lead: CampanhaLead) => void;
 }
@@ -493,6 +496,9 @@ export function CampanhaKanban({
   campanhaId,
   stages,
   leads,
+  pipeAutomations = [],
+  organizationId,
+  campanhaName = "",
   onMoveToConfirmacao,
   onExtractToPipe,
 }: CampanhaKanbanProps) {
@@ -505,6 +511,7 @@ export function CampanhaKanban({
   const updateLead = useUpdateCampanhaLead();
   const deleteCampanhaLead = useDeleteCampanhaLead();
   const deleteLead = useDeleteLead();
+  const extractToPipe = useExtractLeadToPipe();
   const { data: teamMembers = [] } = useTeamMembers();
 
   // Get unique SDRs from campaign leads
@@ -591,8 +598,8 @@ export function CampanhaKanban({
       const lead = leads.find((l) => l.id === leadId);
       if (!lead || lead.stage_id === targetLead.stage_id) return;
 
-      // Get the target lead's stage to check if it's reunião marcada
       const targetLeadStage = stages.find((s) => s.id === targetLead.stage_id);
+      const automation = pipeAutomations.find((a) => a.campanha_stage_id === targetLead.stage_id);
 
       try {
         await updateLead.mutateAsync({
@@ -600,9 +607,23 @@ export function CampanhaKanban({
           campanha_id: campanhaId,
           stage_id: targetLead.stage_id,
         });
-        
-        // If moved to a "reunião marcada" stage, automatically trigger move to confirmação
-        if (targetLeadStage && isReuniaoMarcadaStage(targetLeadStage.name)) {
+
+        if (automation && organizationId) {
+          await extractToPipe.mutateAsync({
+            campanha_lead_id: lead.id,
+            campanha_id: campanhaId,
+            lead_id: lead.lead_id,
+            target_pipe: automation.target_pipe,
+            stage: automation.pipe_stage,
+            organization_id: organizationId,
+            sdr_id: lead.sdr_id ?? undefined,
+            closer_id: lead.lead?.closer_id ?? undefined,
+            campaign_name: campanhaName,
+          });
+          toast.success("Lead enviado para o pipe pela automação");
+        } else if (automation && !organizationId) {
+          toast.warning("Automação configurada mas organização não definida; lead permanece na campanha.");
+        } else if (targetLeadStage && isReuniaoMarcadaStage(targetLeadStage.name)) {
           onMoveToConfirmacao(lead);
         } else {
           toast.success("Lead movido com sucesso");
@@ -616,15 +637,31 @@ export function CampanhaKanban({
     const lead = leads.find((l) => l.id === leadId);
     if (!lead || lead.stage_id === targetStage.id) return;
 
+    const automation = pipeAutomations.find((a) => a.campanha_stage_id === targetStage.id);
+
     try {
       await updateLead.mutateAsync({
         id: leadId,
         campanha_id: campanhaId,
         stage_id: targetStage.id,
       });
-      
-      // If moved to a "reunião marcada" stage, automatically trigger move to confirmação
-      if (isReuniaoMarcadaStage(targetStage.name)) {
+
+      if (automation && organizationId) {
+        await extractToPipe.mutateAsync({
+          campanha_lead_id: lead.id,
+          campanha_id: campanhaId,
+          lead_id: lead.lead_id,
+          target_pipe: automation.target_pipe,
+          stage: automation.pipe_stage,
+          organization_id: organizationId,
+          sdr_id: lead.sdr_id ?? undefined,
+          closer_id: lead.lead?.closer_id ?? undefined,
+          campaign_name: campanhaName,
+        });
+        toast.success("Lead enviado para o pipe pela automação");
+      } else if (automation && !organizationId) {
+        toast.warning("Automação configurada mas organização não definida; lead permanece na campanha.");
+      } else if (isReuniaoMarcadaStage(targetStage.name)) {
         onMoveToConfirmacao(lead);
       } else {
         toast.success("Lead movido com sucesso");
@@ -677,7 +714,7 @@ export function CampanhaKanban({
         <div className="flex items-center gap-2">
           <Search className="w-4 h-4 text-muted-foreground" />
           <Input
-            placeholder="Buscar por nome ou empresa..."
+            placeholder="Filtrar por nome do lead"
             value={nameFilter}
             onChange={(e) => setNameFilter(e.target.value)}
             className="w-[220px] h-9"

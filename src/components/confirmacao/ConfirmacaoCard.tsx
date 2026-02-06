@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { openWhatsApp, formatPhoneForWhatsApp } from "@/lib/whatsapp";
 import { format, isToday, isTomorrow, isPast, differenceInHours, differenceInDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { isConfirmacaoOverdue } from "@/hooks/useOrganizationSettings";
 import { QuickAddDailyAction } from "./QuickAddDailyAction";
 import { MeetingCountdown } from "./MeetingCountdown";
 import { supabase } from "@/integrations/supabase/client";
@@ -50,6 +51,8 @@ interface ConfirmacaoCardProps {
     status?: string;
     confirmacaoId?: string;
     isConfirmed?: boolean;
+    updatedAt?: string | null;
+    overdueDays?: number;
   };
   onClick?: () => void;
   variant?: "default" | "compact" | "detailed";
@@ -72,23 +75,32 @@ const originConfig: Record<string, { label: string; color: string; icon: string 
   cal: { label: "Cal.com", color: "bg-purple-500/10 text-purple-500 border-purple-500/30", icon: "📅" },
 };
 
-function getMeetingIndicator(meetingDate: Date | null, status?: string) {
-  if (!meetingDate) return null;
-  
+function getMeetingIndicator(
+  meetingDate: Date | null,
+  status?: string,
+  updatedAt?: string | null,
+  overdueDays?: number
+) {
   if (["compareceu", "perdido"].includes(status || "")) return null;
-  
+  // Atrasada = X dias sem interação (configurável), não por data da reunião
+  if (
+    overdueDays != null &&
+    overdueDays >= 1 &&
+    updatedAt != null &&
+    isConfirmacaoOverdue(status ?? "", updatedAt, overdueDays)
+  ) {
+    return {
+      type: "overdue",
+      label: "Atrasada",
+      className: "bg-destructive/20 text-destructive border-destructive/30 animate-pulse",
+    };
+  }
+  if (!meetingDate) return null;
+
   const now = new Date();
   const hours = differenceInHours(meetingDate, now);
   const days = differenceInDays(meetingDate, now);
-  
-  if (isPast(meetingDate) && !isToday(meetingDate)) {
-    return { 
-      type: "overdue", 
-      label: "Atrasada", 
-      className: "bg-destructive/20 text-destructive border-destructive/30 animate-pulse" 
-    };
-  }
-  
+
   if (isToday(meetingDate)) {
     if (hours <= 2 && hours > 0) {
       return { 
@@ -126,7 +138,12 @@ function getMeetingIndicator(meetingDate: Date | null, status?: string) {
 export function ConfirmacaoCard({ card, onClick, variant = "default" }: ConfirmacaoCardProps) {
   const origin = originConfig[card.origin] || originConfig.outro;
   const meetingDate = card.meetingDateTime || (card.meetingDate ? new Date(card.meetingDate) : null);
-  const indicator = getMeetingIndicator(meetingDate, card.status);
+  const indicator = getMeetingIndicator(
+    meetingDate,
+    card.status,
+    card.updatedAt,
+    card.overdueDays
+  );
   const queryClient = useQueryClient();
   const [isUpdating, setIsUpdating] = useState(false);
   const [isConfirmadoNoDiaState, setIsConfirmadoNoDiaState] = useState(false);

@@ -148,6 +148,19 @@ export interface CampanhaStageInsert {
   is_reuniao_marcada?: boolean;
 }
 
+/** Regra: quando lead chega nesta etapa da campanha, enviar para o pipe na etapa indicada e remover da campanha */
+export type CampanhaPipeAutomationTarget = "pipe_whatsapp" | "pipe_confirmacao" | "pipe_propostas";
+
+export interface CampanhaPipeAutomation {
+  id: string;
+  campanha_id: string;
+  campanha_stage_id: string;
+  target_pipe: CampanhaPipeAutomationTarget;
+  pipe_stage: string;
+  created_at: string | null;
+  stage?: CampanhaStage;
+}
+
 export function useCampanhas() {
   const { organizationId, isReady } = useOrganization();
 
@@ -839,6 +852,64 @@ export function useRemoveCampanhaViewer() {
       queryClient.invalidateQueries({ queryKey: ["campanha_allowed_viewers", variables.campanha_id] });
       queryClient.invalidateQueries({ queryKey: ["campanhas"] });
       queryClient.invalidateQueries({ queryKey: ["campanha", variables.campanha_id] });
+    },
+  });
+}
+
+// --- Automações: ao mover lead para etapa X da campanha, enviar para pipe e remover da campanha ---
+
+export function useCampanhaPipeAutomations(campanhaId: string | undefined) {
+  return useQuery({
+    queryKey: ["campanha_pipe_automations", campanhaId],
+    queryFn: async () => {
+      if (!campanhaId) return [];
+      const { data, error } = await supabase
+        .from("campanha_pipe_automations")
+        .select(`
+          *,
+          stage:campanha_stages(id, name, color, position)
+        `)
+        .eq("campanha_id", campanhaId)
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as CampanhaPipeAutomation[];
+    },
+    enabled: !!campanhaId,
+  });
+}
+
+export function useCreateCampanhaPipeAutomation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: {
+      campanha_id: string;
+      campanha_stage_id: string;
+      target_pipe: CampanhaPipeAutomationTarget;
+      pipe_stage: string;
+    }) => {
+      const { data, error } = await supabase
+        .from("campanha_pipe_automations")
+        .insert(payload)
+        .select()
+        .single();
+      if (error) throw error;
+      return data as CampanhaPipeAutomation;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["campanha_pipe_automations", variables.campanha_id] });
+    },
+  });
+}
+
+export function useDeleteCampanhaPipeAutomation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, campanha_id }: { id: string; campanha_id: string }) => {
+      const { error } = await supabase.from("campanha_pipe_automations").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["campanha_pipe_automations", variables.campanha_id] });
     },
   });
 }

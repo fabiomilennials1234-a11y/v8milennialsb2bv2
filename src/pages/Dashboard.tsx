@@ -104,12 +104,11 @@ export default function Dashboard() {
     );
   }
 
-  const taxaNoShow = metrics?.reunioesMarcadas 
-    ? Math.round((metrics.noShow / metrics.reunioesMarcadas) * 100) 
-    : 0;
-  
-  const taxaComparecimento = metrics?.reunioesMarcadas 
-    ? Math.round((metrics.reunioesComparecidas / metrics.reunioesMarcadas) * 100) 
+  // Taxa de no-show: inteiro (ex.: 87%), sem decimais
+  const taxaNoShow = Math.round(metrics?.taxaNoShow ?? 0);
+
+  const taxaComparecimento = metrics?.reunioesMarcadas
+    ? Math.round((metrics.reunioesComparecidas / metrics.reunioesMarcadas) * 100)
     : 0;
 
   return (
@@ -198,7 +197,7 @@ export default function Dashboard() {
         <MetricCard
           title="Taxa de No-Show"
           value={`${taxaNoShow}%`}
-          subtitle={`${metrics?.noShow || 0} não compareceram`}
+          subtitle={`${metrics?.noShow ?? 0} não compareceram`}
           icon={XCircle}
         />
       </motion.div>

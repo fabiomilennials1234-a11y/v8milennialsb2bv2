@@ -51,6 +51,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useTags, useCreateTag, useUpdateTag, useDeleteTag, Tag as TagType } from "@/hooks/useTags";
 import { useIsAdmin } from "@/hooks/useUserRole";
+import { useOrganizationSettings } from "@/hooks/useOrganizationSettings";
 import { WhatsAppSettings } from "@/components/settings/WhatsAppSettings";
 import { GoogleCalendarSettings } from "@/components/settings/GoogleCalendarSettings";
 import { WebhookSettings } from "@/components/settings/WebhookSettings";
@@ -325,6 +326,66 @@ function NotificationSettings() {
   );
 }
 
+function ConfirmacaoOverdueSettings() {
+  const { settings, isAdmin, updateSettings, isUpdating } = useOrganizationSettings();
+  const [localDays, setLocalDays] = useState(settings.confirmacao_overdue_days);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    setLocalDays(settings.confirmacao_overdue_days);
+  }, [settings.confirmacao_overdue_days]);
+
+  const handleSave = async () => {
+    const value = Math.min(365, Math.max(1, Number(localDays) || 5));
+    try {
+      await updateSettings({ confirmacao_overdue_days: value });
+      setLocalDays(value);
+      setSaved(true);
+      toast.success("Configuração salva!");
+      setTimeout(() => setSaved(false), 2000);
+    } catch (e) {
+      toast.error("Erro ao salvar");
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h3 className="text-lg font-medium">Pipe de Confirmação</h3>
+        <p className="text-sm text-muted-foreground">
+          Quando um lead deve aparecer como &quot;Atrasada&quot; (dias sem interação)
+        </p>
+      </div>
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="grid gap-2">
+          <Label htmlFor="confirmacao-overdue-days">Dias sem interação para considerar atrasado</Label>
+          <Input
+            id="confirmacao-overdue-days"
+            type="number"
+            min={1}
+            max={365}
+            value={localDays}
+            onChange={(e) => setLocalDays(Number(e.target.value) || 5)}
+            disabled={!isAdmin}
+            className="w-24"
+          />
+        </div>
+        {isAdmin && (
+          <Button
+            onClick={handleSave}
+            disabled={isUpdating || localDays === settings.confirmacao_overdue_days}
+          >
+            {isUpdating ? "Salvando..." : saved ? "Salvo!" : "Salvar"}
+          </Button>
+        )}
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Leads que não tiverem nenhuma atualização (status, data, notas) há esse número de dias aparecem como &quot;Atrasadas&quot; no pipe. Itens em Remarcar com atividade recente não entram.
+      </p>
+    </div>
+  );
+}
+
 function GeneralSettings() {
   const { setTheme, resolvedTheme } = useTheme();
   const transition = useThemeTransition();
@@ -391,6 +452,10 @@ function GeneralSettings() {
           </div>
           <Switch defaultChecked />
         </div>
+      </div>
+
+      <div className="pt-6 border-t border-border">
+        <ConfirmacaoOverdueSettings />
       </div>
     </div>
   );

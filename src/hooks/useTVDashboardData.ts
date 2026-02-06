@@ -168,17 +168,18 @@ export function useTVDashboardData() {
         };
       });
       
-      // No-show calculation (finalized leads only)
-      const finalizedConfirmacoes = currentMonthConfirmacoes.filter(c => 
-        ["remarcar", "compareceu", "perdido"].includes(c.status)
-      );
+      // No-show: apenas reuniões cuja data já passou (não inclui agendadas futuras)
+      const finalizedConfirmacoes = currentMonthConfirmacoes.filter(c => {
+        const dataJaPassou = c.meeting_date && new Date(c.meeting_date) <= now;
+        return dataJaPassou && ["remarcar", "compareceu", "perdido"].includes(c.status);
+      });
       const noShowCount = finalizedConfirmacoes.filter(c => 
         c.status === "remarcar" || c.status === "perdido"
       ).length;
       const noShowGeral = finalizedConfirmacoes.length > 0 
         ? (noShowCount / finalizedConfirmacoes.length) * 100 
         : 0;
-      
+
       // No-show per closer
       const noShowPorCloser = closers.map(closer => {
         const closerConfirmacoes = finalizedConfirmacoes.filter(c => c.closer_id === closer.id);
@@ -188,7 +189,7 @@ export function useTVDashboardData() {
         const rate = closerConfirmacoes.length > 0 
           ? (closerNoShow / closerConfirmacoes.length) * 100 
           : 0;
-        
+
         return { name: closer.name, rate };
       });
       

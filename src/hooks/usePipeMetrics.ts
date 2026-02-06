@@ -245,10 +245,25 @@ export function usePipeConfirmacaoMetrics(
         };
       }
 
+      // Dias sem interação para considerar atrasado (configurável por organização)
+      const { data: orgRow } = await supabase
+        .from("organizations")
+        .select("confirmacao_overdue_days")
+        .eq("id", organizationId)
+        .single();
+      const overdueDays = Math.min(365, Math.max(1, orgRow?.confirmacao_overdue_days ?? 5));
+      const overdueLimit = new Date();
+      overdueLimit.setDate(overdueLimit.getDate() - overdueDays);
+
+      const isOverdue = (r: { status: string; updated_at?: string | null }) =>
+        !["compareceu", "perdido"].includes(r.status) &&
+        r.updated_at &&
+        new Date(r.updated_at) <= overdueLimit;
+
       if (period === "all") {
         const { data, error } = await supabase
           .from("pipe_confirmacao")
-          .select("status, meeting_date")
+          .select("status, meeting_date, updated_at")
           .eq("organization_id", organizationId);
 
         if (error) throw error;
@@ -262,21 +277,35 @@ export function usePipeConfirmacaoMetrics(
         const compareceu = list.filter((r) => r.status === "compareceu").length;
         const perdido = list.filter((r) => r.status === "perdido").length;
         const remarcar = list.filter((r) => r.status === "remarcar").length;
-        const finalizados = compareceu + perdido + remarcar;
-        const noShowCount = perdido + remarcar;
-        const noShowRate = finalizados > 0 ? Math.round((noShowCount / finalizados) * 100) : 0;
-        const showRate = finalizados > 0 ? Math.round((compareceu / finalizados) * 100) : 0;
+
+        // Taxa de no-show: apenas reuniões cuja data já passou (não inclui agendadas futuras)
+        const comDataPassada = list.filter(
+          (r) => r.meeting_date && new Date(r.meeting_date) <= today
+        );
+        const finalizadosDataPassada = comDataPassada.filter((r) =>
+          ["compareceu", "perdido", "remarcar"].includes(r.status)
+        );
+        const noShowCountDataPassada = finalizadosDataPassada.filter(
+          (r) => r.status === "perdido" || r.status === "remarcar"
+        ).length;
+        const noShowRate =
+          finalizadosDataPassada.length > 0
+            ? Math.round((noShowCountDataPassada / finalizadosDataPassada.length) * 100)
+            : 0;
+        const showRate =
+          finalizadosDataPassada.length > 0
+            ? Math.round(
+                (finalizadosDataPassada.filter((r) => r.status === "compareceu").length /
+                  finalizadosDataPassada.length) *
+                  100
+              )
+            : 0;
 
         return {
           total: list.length,
           today: list.filter((r) => r.meeting_date?.slice(0, 10) === todayStr).length,
           tomorrow: list.filter((r) => r.meeting_date?.slice(0, 10) === tomorrowStr).length,
-          overdue: list.filter(
-            (r) =>
-              r.meeting_date &&
-              new Date(r.meeting_date) < today &&
-              !["compareceu", "perdido"].includes(r.status)
-          ).length,
+          overdue: list.filter((r) => isOverdue(r)).length,
           compareceu,
           perdido,
           remarcar,
@@ -288,14 +317,14 @@ export function usePipeConfirmacaoMetrics(
       const [conf1, conf2] = await Promise.all([
         supabase
           .from("pipe_confirmacao")
-          .select("status, meeting_date")
+          .select("status, meeting_date, updated_at")
           .eq("organization_id", organizationId)
           .not("metrics_period_at", "is", null)
           .gte("metrics_period_at", startStr)
           .lte("metrics_period_at", endStr),
         supabase
           .from("pipe_confirmacao")
-          .select("status, meeting_date")
+          .select("status, meeting_date, updated_at")
           .eq("organization_id", organizationId)
           .is("metrics_period_at", null)
           .gte("created_at", startStr)
@@ -312,21 +341,35 @@ export function usePipeConfirmacaoMetrics(
       const compareceu = list.filter((r) => r.status === "compareceu").length;
       const perdido = list.filter((r) => r.status === "perdido").length;
       const remarcar = list.filter((r) => r.status === "remarcar").length;
-      const finalizados = compareceu + perdido + remarcar;
-      const noShowCount = perdido + remarcar;
-      const noShowRate = finalizados > 0 ? Math.round((noShowCount / finalizados) * 100) : 0;
-      const showRate = finalizados > 0 ? Math.round((compareceu / finalizados) * 100) : 0;
+
+      // Taxa de no-show: apenas reuniões cuja data já passou (não inclui agendadas futuras)
+      const comDataPassada = list.filter(
+        (r) => r.meeting_date && new Date(r.meeting_date) <= today
+      );
+      const finalizadosDataPassada = comDataPassada.filter((r) =>
+        ["compareceu", "perdido", "remarcar"].includes(r.status)
+      );
+      const noShowCountDataPassada = finalizadosDataPassada.filter(
+        (r) => r.status === "perdido" || r.status === "remarcar"
+      ).length;
+      const noShowRate =
+        finalizadosDataPassada.length > 0
+          ? Math.round((noShowCountDataPassada / finalizadosDataPassada.length) * 100)
+          : 0;
+      const showRate =
+        finalizadosDataPassada.length > 0
+          ? Math.round(
+              (finalizadosDataPassada.filter((r) => r.status === "compareceu").length /
+                finalizadosDataPassada.length) *
+                100
+            )
+          : 0;
 
       return {
         total: list.length,
         today: list.filter((r) => r.meeting_date?.slice(0, 10) === todayStr).length,
         tomorrow: list.filter((r) => r.meeting_date?.slice(0, 10) === tomorrowStr).length,
-        overdue: list.filter(
-          (r) =>
-            r.meeting_date &&
-            new Date(r.meeting_date) < today &&
-            !["compareceu", "perdido"].includes(r.status)
-        ).length,
+        overdue: list.filter((r) => isOverdue(r)).length,
         compareceu,
         perdido,
         remarcar,

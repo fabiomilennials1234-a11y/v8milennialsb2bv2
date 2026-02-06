@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { useCampanha, useCampanhaStages, useCampanhaLeads, useCampanhaMembers, useUpdateCampanhaMember, useDeleteCampanhaLead } from "@/hooks/useCampanhas";
+import { useCampanha, useCampanhaStages, useCampanhaLeads, useCampanhaMembers, useUpdateCampanhaMember, useDeleteCampanhaLead, useCampanhaPipeAutomations } from "@/hooks/useCampanhas";
 import { useCreatePipeConfirmacao } from "@/hooks/usePipeConfirmacao";
 import { useImportLeads } from "@/hooks/useImportLeads";
 import { useOrganization } from "@/hooks/useOrganization";
@@ -17,6 +17,7 @@ import { ManageStagesModal } from "@/components/campanhas/ManageStagesModal";
 import { EditCampanhaModal } from "@/components/campanhas/EditCampanhaModal";
 import { CampanhaViewersSection } from "@/components/campanhas/CampanhaViewersSection";
 import { ExtractToPipeModal } from "@/components/campanhas/ExtractToPipeModal";
+import { CampanhaPipeAutomationsSection } from "@/components/campanhas/CampanhaPipeAutomationsSection";
 import {
   Collapsible,
   CollapsibleContent,
@@ -49,6 +50,7 @@ export default function CampanhaDetail() {
   const { data: stages = [] } = useCampanhaStages(id);
   const { data: leads = [] } = useCampanhaLeads(id);
   const { data: members = [] } = useCampanhaMembers(id);
+  const { data: pipeAutomations = [] } = useCampanhaPipeAutomations(id);
   const [extractModalLead, setExtractModalLead] = useState<import("@/hooks/useCampanhas").CampanhaLead | null>(null);
   const createConfirmacao = useCreatePipeConfirmacao();
   const updateMember = useUpdateCampanhaMember();
@@ -321,6 +323,9 @@ export default function CampanhaDetail() {
         </CollapsibleContent>
       </Collapsible>
 
+      {/* Automações de envio para pipe */}
+      <CampanhaPipeAutomationsSection campanhaId={id!} stages={stages} />
+
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
@@ -355,6 +360,9 @@ export default function CampanhaDetail() {
             campanhaId={id!}
             stages={stages}
             leads={leads}
+            pipeAutomations={pipeAutomations}
+            organizationId={organizationId ?? undefined}
+            campanhaName={campanha?.name ?? ""}
             onMoveToConfirmacao={handleMoveToConfirmacao}
             onExtractToPipe={setExtractModalLead}
           />
