@@ -14,7 +14,9 @@ export interface MktFunnelData {
   custoPorLead: number;
   agendamentosCount: number;
   comparecimentosCount: number;
+  /** Custo por reunião marcada (inclui no-show). Investimento / agendamentosCount. */
   custoPorAgendamento: number;
+  /** Custo por reunião comparecida (exclui no-show). Investimento / comparecimentosCount. */
   custoPorComparecimento: number;
   pctAgendaramVsSóQuiz: string;
   pctCompareceramVsSóAgendaram: string;
@@ -211,7 +213,9 @@ export function useMktFunnel(originType: MktOriginType) {
     const investimentoReais = investimentoCents / 100;
     const leadsCount = leadsFiltered.length;
     const custoPorLead = leadsCount > 0 ? investimentoReais / leadsCount : 0;
+    // Custo por reunião (marcada); inclui no-show
     const custoPorAgendamento = agendamentosCount > 0 ? investimentoReais / agendamentosCount : 0;
+    // Custo por reunião comparecida; só quem compareceu
     const custoPorComparecimento =
       comparecimentosCount > 0 ? investimentoReais / comparecimentosCount : 0;
     const custoPorVenda = vendasCount > 0 ? investimentoReais / vendasCount : 0;

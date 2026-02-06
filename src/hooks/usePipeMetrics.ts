@@ -49,8 +49,41 @@ function getMonthRange(month: number, year: number) {
   return getMonthRangeUTC(month, year);
 }
 
+type SoldRow = {
+  sale_value: number | null;
+  product_type: string | null;
+  items?: Array<{ sale_value: number | null; product?: { type: string } | null }> | null;
+};
+
+/** Agrega vendidos por item: sold = total, mrr = só tipo mrr, projeto = só tipo projeto; unitário só em sold. */
+function aggregateSoldByItem(rows: SoldRow[]): { sold: number; mrr: number; projeto: number } {
+  let sold = 0;
+  let mrr = 0;
+  let projeto = 0;
+  for (const r of rows) {
+    const items = r.items?.filter((i) => i != null) ?? [];
+    if (items.length > 0) {
+      for (const item of items) {
+        const val = Number(item.sale_value) || 0;
+        sold += val;
+        const t = item.product?.type;
+        if (t === "mrr") mrr += val;
+        else if (t === "projeto") projeto += val;
+        // unitario: só em sold, já somado
+      }
+    } else {
+      const val = Number(r.sale_value) || 0;
+      sold += val;
+      if (r.product_type === "mrr") mrr += val;
+      else if (r.product_type === "projeto") projeto += val;
+    }
+  }
+  return { sold, mrr, projeto };
+}
+
 /**
  * Métricas do pipe de Propostas: vendido, MRR, projeto, pipeline ativo, taxa de conversão.
+ * Agregação por item: MRR/Projeto por product.type do item; unitário só em Vendas Total.
  * period "month" = apenas itens cujo período de métrica (ou closed_at) está no mês.
  * period "all" = totais históricos do pipe.
  */
@@ -81,32 +114,34 @@ export function usePipePropostasMetrics(
       }
 
       const activeStatuses = ["marcar_compromisso", "compromisso_marcado", "esfriou", "futuro"];
+      const soldSelect = `id, status, sale_value, product_type, items:pipe_proposta_items(sale_value, product:products(type))`;
 
       if (period === "all") {
-        const { data: allData, error } = await supabase
+        const { data: allData, error: allError } = await supabase
           .from("pipe_propostas")
           .select("status, sale_value, product_type")
           .eq("organization_id", organizationId);
 
-        if (error) throw error;
+        if (allError) throw allError;
 
-        const soldData = (allData || []).filter((r) => r.status === "vendido");
+        const { data: soldDataWithItems, error: soldError } = await supabase
+          .from("pipe_propostas")
+          .select(soldSelect)
+          .eq("organization_id", organizationId)
+          .eq("status", "vendido");
+
+        if (soldError) throw soldError;
+
         const lostData = (allData || []).filter((r) => r.status === "perdido");
         const inProgressData = (allData || []).filter((r) => activeStatuses.includes(r.status));
-
-        const sold = soldData.reduce((sum, r) => sum + (r.sale_value || 0), 0);
-        const mrr = soldData
-          .filter((r) => r.product_type === "mrr")
-          .reduce((sum, r) => sum + (r.sale_value || 0), 0);
-        const projeto = soldData
-          .filter((r) => r.product_type === "projeto")
-          .reduce((sum, r) => sum + (r.sale_value || 0), 0);
-        const closedCount = soldData.length + lostData.length;
-        const conversionRate = closedCount > 0 ? (soldData.length / closedCount) * 100 : 0;
+        const soldRows = (soldDataWithItems || []) as SoldRow[];
+        const { sold, mrr, projeto } = aggregateSoldByItem(soldRows);
+        const closedCount = soldRows.length + lostData.length;
+        const conversionRate = closedCount > 0 ? (soldRows.length / closedCount) * 100 : 0;
 
         return {
           sold,
-          soldCount: soldData.length,
+          soldCount: soldRows.length,
           mrr,
           projeto,
           inProgress: inProgressData.reduce((sum, r) => sum + (r.sale_value || 0), 0),
@@ -115,11 +150,11 @@ export function usePipePropostasMetrics(
         };
       }
 
-      // period === "month": vendidos no mês (COALESCE metrics_period_at, closed_at)
+      // period === "month": vendidos no mês (COALESCE metrics_period_at, closed_at), com items
       const [propQ1, propQ2, activeQ] = await Promise.all([
         supabase
           .from("pipe_propostas")
-          .select("sale_value, product_type, status")
+          .select(soldSelect)
           .eq("organization_id", organizationId)
           .eq("status", "vendido")
           .not("metrics_period_at", "is", null)
@@ -127,7 +162,7 @@ export function usePipePropostasMetrics(
           .lte("metrics_period_at", endStr),
         supabase
           .from("pipe_propostas")
-          .select("sale_value, product_type, status")
+          .select(soldSelect)
           .eq("organization_id", organizationId)
           .eq("status", "vendido")
           .is("metrics_period_at", null)
@@ -140,7 +175,9 @@ export function usePipePropostasMetrics(
           .in("status", activeStatuses),
       ]);
 
-      const soldData = [...(propQ1.data || []), ...(propQ2.data || [])];
+      const soldData = [...(propQ1.data || []), ...(propQ2.data || [])] as SoldRow[];
+      const { sold, mrr, projeto } = aggregateSoldByItem(soldData);
+
       const lostQ1 = await supabase
         .from("pipe_propostas")
         .select("id")
@@ -158,14 +195,6 @@ export function usePipePropostasMetrics(
         .gte("closed_at", startStr)
         .lte("closed_at", endStr);
       const lostCount = (lostQ1.data?.length || 0) + (lostQ2.data?.length || 0);
-
-      const sold = soldData.reduce((sum, r) => sum + (r.sale_value || 0), 0);
-      const mrr = soldData
-        .filter((r) => r.product_type === "mrr")
-        .reduce((sum, r) => sum + (r.sale_value || 0), 0);
-      const projeto = soldData
-        .filter((r) => r.product_type === "projeto")
-        .reduce((sum, r) => sum + (r.sale_value || 0), 0);
       const closedCount = soldData.length + lostCount;
       const conversionRate = closedCount > 0 ? (soldData.length / closedCount) * 100 : 0;
       const inProgressData = activeQ.data || [];

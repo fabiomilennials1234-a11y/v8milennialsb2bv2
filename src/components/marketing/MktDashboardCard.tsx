@@ -253,8 +253,8 @@ export function MktDashboardCard({
           <div className="space-y-1">
             {[
               { color: "bg-primary", label: "Custo por lead", value: formatCurrency(data.custoPorLead) },
-              { color: "bg-blue-500", label: "Custo por agendamento", value: formatCurrency(data.custoPorAgendamento) },
-              { color: "bg-amber-500", label: "Custo por comparecimento", value: formatCurrency(data.custoPorComparecimento) },
+              { color: "bg-blue-500", label: "Custo por reunião", subtitle: "reuniões marcadas, inclui no-show", value: formatCurrency(data.custoPorAgendamento) },
+              { color: "bg-amber-500", label: "Custo por reunião comparecida", subtitle: "só quem compareceu", value: formatCurrency(data.custoPorComparecimento) },
               { color: "bg-emerald-500", label: "Custo por venda", value: formatCurrency(data.custoPorVenda) },
               { color: "bg-muted-foreground", label: "Propostas (abertas / fechadas)", value: `${data.propostasAbertas} / ${data.propostasFechadas}` },
             ].map((item, index) => (
@@ -265,11 +265,16 @@ export function MktDashboardCard({
                   index < 4 && "border-b border-border"
                 )}
               >
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 min-w-0">
                   <div className={cn("w-2 h-2 rounded-full shrink-0", item.color)} />
-                  <span className="text-sm text-foreground">{item.label}</span>
+                  <div className="min-w-0">
+                    <span className="text-sm text-foreground">{item.label}</span>
+                    {"subtitle" in item && item.subtitle && (
+                      <p className="text-xs text-muted-foreground mt-0.5">{item.subtitle}</p>
+                    )}
+                  </div>
                 </div>
-                <span className="text-sm font-medium text-foreground">{item.value}</span>
+                <span className="text-sm font-medium text-foreground shrink-0 ml-2">{item.value}</span>
               </div>
             ))}
           </div>

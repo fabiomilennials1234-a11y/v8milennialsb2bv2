@@ -127,6 +127,16 @@ export function MktFunnelVisual({ data, variant, className }: MktFunnelVisualPro
               {data.agendamentosCount} agendamentos · {data.comparecimentosCount} compareceram
             </p>
           )}
+          {data.agendamentosCount > 0 && (
+            <p className="text-xs text-muted-foreground mt-1">
+              Custo por reunião: {formatCurrency(data.custoPorAgendamento)}
+            </p>
+          )}
+          {data.comparecimentosCount > 0 && (
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Custo por reunião comparecida: {formatCurrency(data.custoPorComparecimento)}
+            </p>
+          )}
         </div>
         <div className="rounded-lg border border-border bg-card p-3">
           <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-0.5">

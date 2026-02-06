@@ -89,32 +89,57 @@ export function useDashboardMetrics(month?: number, year?: number) {
       const noShow = confirmacaoData.filter((c) => c.status === "perdido").length;
       const taxaNoShow = reunioesMarcadas > 0 ? (noShow / reunioesMarcadas) * 100 : 0;
 
-      // pipe_propostas vendido: COALESCE(metrics_period_at, closed_at) in range
-      let propQ1 = supabase.from("pipe_propostas").select("sale_value, product_type, status, closed_at").eq("organization_id", organizationId).eq("status", "vendido").not("metrics_period_at", "is", null).gte("metrics_period_at", startStr).lte("metrics_period_at", endStr);
-      let propQ2 = supabase.from("pipe_propostas").select("sale_value, product_type, status, closed_at").eq("organization_id", organizationId).eq("status", "vendido").is("metrics_period_at", null).gte("closed_at", startStr).lte("closed_at", endStr);
+      // pipe_propostas vendido: COALESCE(metrics_period_at, closed_at) in range; agregação por item (MRR/Projeto por product.type; unitário só no total)
+      const propSelect = "sale_value, product_type, items:pipe_proposta_items(sale_value, product:products(type))";
+      let propQ1 = supabase.from("pipe_propostas").select(propSelect).eq("organization_id", organizationId).eq("status", "vendido").not("metrics_period_at", "is", null).gte("metrics_period_at", startStr).lte("metrics_period_at", endStr);
+      let propQ2 = supabase.from("pipe_propostas").select(propSelect).eq("organization_id", organizationId).eq("status", "vendido").is("metrics_period_at", null).gte("closed_at", startStr).lte("closed_at", endStr);
       if (filterByMe) {
         propQ1 = propQ1.eq("closer_id", myId);
         propQ2 = propQ2.eq("closer_id", myId);
       }
       const [{ data: propData1 }, { data: propData2 }] = await Promise.all([propQ1, propQ2]);
-      const propostasData = [...(propData1 || []), ...(propData2 || [])];
+      const vendasFechadas = [...(propData1 || []), ...(propData2 || [])] as Array<{ sale_value: number | null; product_type: string | null; items?: Array<{ sale_value: number | null; product?: { type: string } | null }> | null }>;
 
-      const vendasFechadas = propostasData || [];
-      const vendaTotal = vendasFechadas.reduce((sum, v) => sum + (v.sale_value || 0), 0);
-      const vendaMRR = vendasFechadas
-        .filter((v) => v.product_type === "mrr")
-        .reduce((sum, v) => sum + (v.sale_value || 0), 0);
-      const vendaProjeto = vendasFechadas
-        .filter((v) => v.product_type === "projeto")
-        .reduce((sum, v) => sum + (v.sale_value || 0), 0);
+      let vendaTotal = 0;
+      let vendaMRR = 0;
+      let vendaProjeto = 0;
+      let mrrProposalCount = 0;
+      let projetoProposalCount = 0;
+      for (const v of vendasFechadas) {
+        const items = v.items?.filter((i) => i != null) ?? [];
+        if (items.length > 0) {
+          let propTotal = 0;
+          let propMrr = 0;
+          let propProj = 0;
+          for (const it of items) {
+            const val = Number(it.sale_value) || 0;
+            propTotal += val;
+            const t = it.product?.type;
+            if (t === "mrr") propMrr += val;
+            else if (t === "projeto") propProj += val;
+          }
+          vendaTotal += propTotal;
+          vendaMRR += propMrr;
+          vendaProjeto += propProj;
+          if (propMrr > 0) mrrProposalCount += 1;
+          if (propProj > 0) projetoProposalCount += 1;
+        } else {
+          const val = Number(v.sale_value) || 0;
+          vendaTotal += val;
+          if (v.product_type === "mrr") {
+            vendaMRR += val;
+            mrrProposalCount += 1;
+          } else if (v.product_type === "projeto") {
+            vendaProjeto += val;
+            projetoProposalCount += 1;
+          }
+        }
+      }
 
       const novosClientes = vendasFechadas.length;
       const ticketMedio = novosClientes > 0 ? vendaTotal / novosClientes : 0;
-      
-      const mrrSales = vendasFechadas.filter((v) => v.product_type === "mrr");
-      const projetoSales = vendasFechadas.filter((v) => v.product_type === "projeto");
-      const ticketMedioMRR = mrrSales.length > 0 ? vendaMRR / mrrSales.length : 0;
-      const ticketMedioProjeto = projetoSales.length > 0 ? vendaProjeto / projetoSales.length : 0;
+      const ticketMedioMRR = mrrProposalCount > 0 ? vendaMRR / mrrProposalCount : 0;
+      const ticketMedioProjeto = projetoProposalCount > 0 ? vendaProjeto / projetoProposalCount : 0;
 
       return {
         totalLeads: totalLeads || 0,

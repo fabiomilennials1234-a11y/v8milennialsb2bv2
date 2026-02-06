@@ -105,11 +105,11 @@ export function MktDashboardDetailSheet({
                 <span className="font-semibold">{data.comparecimentosCount}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Custo por agendamento</span>
+                <span className="text-muted-foreground">Custo por reunião (reuniões marcadas)</span>
                 <span className="font-semibold">{formatCurrency(data.custoPorAgendamento)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Custo por comparecimento</span>
+                <span className="text-muted-foreground">Custo por reunião comparecida (só quem compareceu)</span>
                 <span className="font-semibold">{formatCurrency(data.custoPorComparecimento)}</span>
               </div>
               <div className="flex justify-between">

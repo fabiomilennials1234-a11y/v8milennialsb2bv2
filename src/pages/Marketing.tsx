@@ -60,9 +60,12 @@ export default function Marketing() {
   );
   const totalInvestimentoReais = centsToReais(totalInvestimentoCents);
 
+  const agendamentos = confirmacoes;
   const comparecimentos = confirmacoes.filter((c) => c.status === "compareceu");
   const vendas = propostas.filter((p) => p.status === "vendido");
   const custoPorReuniao =
+    agendamentos.length > 0 ? totalInvestimentoReais / agendamentos.length : 0;
+  const custoPorReuniaoComparecida =
     comparecimentos.length > 0 ? totalInvestimentoReais / comparecimentos.length : 0;
   const custoPorVenda = vendas.length > 0 ? totalInvestimentoReais / vendas.length : 0;
 
@@ -141,7 +144,7 @@ export default function Marketing() {
       ) : (
         <>
           {/* Investimento total + custos */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
@@ -156,15 +159,31 @@ export default function Marketing() {
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
-                  <Target className="w-4 h-4" />
-                  Custo por reunião (comparecimento)
+                  <Calendar className="w-4 h-4" />
+                  Custo por reunião
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <p className="text-2xl font-bold">{formatCurrency(custoPorReuniao)}</p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  {comparecimentos.length} comparecimentos
+                  reuniões marcadas (inclui no-show)
                 </p>
+                <p className="text-xs text-muted-foreground">{agendamentos.length} agendamentos</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
+                  <Target className="w-4 h-4" />
+                  Custo por reunião comparecida
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-2xl font-bold">{formatCurrency(custoPorReuniaoComparecida)}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  só quem compareceu
+                </p>
+                <p className="text-xs text-muted-foreground">{comparecimentos.length} comparecimentos</p>
               </CardContent>
             </Card>
             <Card>

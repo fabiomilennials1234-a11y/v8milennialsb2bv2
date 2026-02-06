@@ -466,7 +466,7 @@ export default function PipePropostas() {
     });
   }, [pipeData, searchTerm, filterCloser, filterProductType, filterPriority, filterCalor]);
 
-  // Calculate stats
+  // Calculate stats (Vendas Total / MRR Vendido / Projetos Vendidos por item quando houver items)
   const stats = useMemo(() => {
     if (!pipeData) return { 
       total: 0, 
@@ -482,21 +482,31 @@ export default function PipePropostas() {
     const activeStatuses: PipePropostasStatus[] = ["marcar_compromisso", "compromisso_marcado", "esfriou", "futuro"];
     const inProgressData = pipeData.filter(item => activeStatuses.includes(item.status));
     const soldData = pipeData.filter(item => item.status === "vendido");
-    const lostData = pipeData.filter(item => item.status === "perdido");
+
+    let sold = 0;
+    let mrr = 0;
+    let projeto = 0;
+    for (const item of soldData) {
+      const items = item.items?.filter((i: any) => i != null) ?? [];
+      if (items.length > 0) {
+        for (const it of items) {
+          const val = Number(it.sale_value) || 0;
+          sold += val;
+          const t = it.product?.type;
+          if (t === "mrr") mrr += val;
+          else if (t === "projeto") projeto += val;
+        }
+      } else {
+        const val = Number(item.sale_value) || 0;
+        sold += val;
+        if (item.product_type === "mrr") mrr += val;
+        else if (item.product_type === "projeto") projeto += val;
+      }
+    }
 
     const total = pipeData.reduce((sum, item) => sum + (item.sale_value || 0), 0);
-    const sold = soldData.reduce((sum, item) => sum + (item.sale_value || 0), 0);
     const inProgress = inProgressData.reduce((sum, item) => sum + (item.sale_value || 0), 0);
-    
-    const mrr = pipeData
-      .filter(item => item.product_type === "mrr" && activeStatuses.includes(item.status))
-      .reduce((sum, item) => sum + (item.sale_value || 0), 0);
-    
-    const projeto = pipeData
-      .filter(item => item.product_type === "projeto" && activeStatuses.includes(item.status))
-      .reduce((sum, item) => sum + (item.sale_value || 0), 0);
 
-    // Taxa de conversão = Leads vendido / TODOS os leads no pipe de propostas
     const totalNoPipe = pipeData.length;
     const conversionRate = totalNoPipe > 0 ? (soldData.length / totalNoPipe) * 100 : 0;
 
@@ -857,7 +867,7 @@ export default function PipePropostas() {
           className="glass-card p-4"
         >
           <div className="flex items-center justify-between mb-2">
-            <p className="text-xs text-muted-foreground">Vendido</p>
+            <p className="text-xs text-muted-foreground">Vendas Total</p>
             <TrendingUp className="w-4 h-4 text-success" />
           </div>
           <p className="text-xl font-bold text-success">{formatCurrency(displayStats.sold)}</p>
@@ -871,11 +881,11 @@ export default function PipePropostas() {
           className="glass-card p-4"
         >
           <div className="flex items-center justify-between mb-2">
-            <p className="text-xs text-muted-foreground">MRR Potencial</p>
+            <p className="text-xs text-muted-foreground">MRR Vendido</p>
             <ArrowUpRight className="w-4 h-4 text-chart-5" />
           </div>
           <p className="text-xl font-bold text-chart-5">{formatCurrency(displayStats.mrr)}</p>
-          <p className="text-xs text-muted-foreground">/mês</p>
+          <p className="text-xs text-muted-foreground">valor vendido /mês</p>
         </motion.div>
         
         <motion.div
@@ -885,11 +895,11 @@ export default function PipePropostas() {
           className="glass-card p-4"
         >
           <div className="flex items-center justify-between mb-2">
-            <p className="text-xs text-muted-foreground">Projetos</p>
+            <p className="text-xs text-muted-foreground">Projetos Vendidos</p>
             <Package className="w-4 h-4 text-primary" />
           </div>
           <p className="text-xl font-bold text-primary">{formatCurrency(displayStats.projeto)}</p>
-          <p className="text-xs text-muted-foreground">valor total</p>
+          <p className="text-xs text-muted-foreground">valor vendido</p>
         </motion.div>
         
         <motion.div
