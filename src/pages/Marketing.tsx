@@ -3,6 +3,13 @@ import { BarChart2, DollarSign, Target, Loader2, TrendingUp, ChevronDown, Calend
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   useCampanhas,
   useUpdateCampanha,
   useUpdateCampanhaMktConfig,
@@ -37,7 +44,15 @@ function reaisToCents(reais: number): number {
   return Math.round(reais * 100);
 }
 
+const MONTHS = [
+  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
+];
+
 export default function Marketing() {
+  const now = new Date();
+  const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1);
+  const [selectedYear, setSelectedYear] = useState(now.getFullYear());
   const [configCampanha, setConfigCampanha] = useState<Campanha | null>(null);
   const [popoverOpen, setPopoverOpen] = useState<string | null>(null);
 
@@ -125,16 +140,52 @@ export default function Marketing() {
   const isLoading =
     loadingCampanhas || loadingConfirmacao || loadingPropostas;
 
+  const years = [2024, 2025, 2026, 2027];
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold flex items-center gap-2">
-          <BarChart2 className="w-6 h-6 text-primary" />
-          Marketing
-        </h1>
-        <p className="text-muted-foreground">
-          Indicadores de investimento e custo por reunião/venda. Na divisão por campanha, configure por origem ou etiqueta quais leads contam para cada tipo (Call / Cadastro).
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold flex items-center gap-2">
+            <BarChart2 className="w-6 h-6 text-primary" />
+            Marketing
+          </h1>
+          <p className="text-muted-foreground">
+            Indicadores de investimento e custo por reunião/venda. Na divisão por campanha, configure por origem ou etiqueta quais leads contam para cada tipo (Call / Cadastro).
+          </p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <Select
+            value={selectedMonth.toString()}
+            onValueChange={(v) => setSelectedMonth(Number(v))}
+          >
+            <SelectTrigger className="w-[130px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {MONTHS.map((label, index) => (
+                <SelectItem key={index} value={(index + 1).toString()}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select
+            value={selectedYear.toString()}
+            onValueChange={(v) => setSelectedYear(Number(v))}
+          >
+            <SelectTrigger className="w-[90px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {years.map((y) => (
+                <SelectItem key={y} value={y.toString()}>
+                  {y}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {isLoading ? (
@@ -364,8 +415,8 @@ export default function Marketing() {
 
           {/* Cards MKT Cal e MKT Cadastro — só os tipos em uso */}
           <div className={hasCall && hasCadastro ? "grid grid-cols-1 lg:grid-cols-2 gap-4" : "space-y-4"}>
-            {hasCall && <MktCalCard />}
-            {hasCadastro && <MktCadastroCard />}
+            {hasCall && <MktCalCard month={selectedMonth} year={selectedYear} />}
+            {hasCadastro && <MktCadastroCard month={selectedMonth} year={selectedYear} />}
             {!hasCall && !hasCadastro && campanhasVinculadas.length > 0 && (
               <p className="text-sm text-muted-foreground">
                 Configure o tipo de marketing (Call e/ou Cadastro) nas campanhas acima para ver os dashboards.

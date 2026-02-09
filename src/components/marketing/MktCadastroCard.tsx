@@ -3,9 +3,14 @@ import { useMktFunnel } from "@/hooks/useMktFunnel";
 import { MktDashboardCard } from "./MktDashboardCard";
 import { MktDashboardDetailSheet } from "./MktDashboardDetailSheet";
 
-export function MktCadastroCard() {
+export interface MktCadastroCardProps {
+  month?: number;
+  year?: number;
+}
+
+export function MktCadastroCard({ month, year }: MktCadastroCardProps) {
   const [detailOpen, setDetailOpen] = useState(false);
-  const { data, isLoading } = useMktFunnel("cadastro_lp");
+  const { data, isLoading } = useMktFunnel("cadastro_lp", month, year);
 
   return (
     <>

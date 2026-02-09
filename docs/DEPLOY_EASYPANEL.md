@@ -95,3 +95,27 @@ Aguarde o build terminar (pode levar alguns minutos). Quando o status ficar verd
 | Deploy | Deploy / Redeploy e acessar a URL do App |
 
 Sim: você faz esse deploy **no EasyPanel** que você já tem; não precisa usar o painel da Hostinger para Docker nem fazer tudo manualmente por SSH, desde que o EasyPanel esteja rodando na sua VPS ou em outro servidor.
+
+---
+
+## Troubleshooting
+
+### Erro 429: Too Many Requests (GitHub)
+
+Se o deploy falhar com **429 Too Many Requests** e mensagem sobre "scraping GitHub", o GitHub está limitando as requisições (rate limit). Acontece quando a plataforma (EasyPanel, Hostinger, etc.) faz muitas chamadas ao GitHub em pouco tempo.
+
+**O que fazer:**
+
+1. **Esperar e tentar de novo**  
+   O limite do GitHub costuma resetar em cerca de 1 hora. Aguarde e clique em **Redeploy** / **Deploy** de novo.
+
+2. **Usar Personal Access Token (recomendado)**  
+   Conexões autenticadas têm limite bem maior (milhares de requisições/hora). No EasyPanel (ou na plataforma que faz o deploy):
+   - Vá em **Settings** / **Integrations** / **GitHub** (ou onde se configura a origem do código).
+   - Conecte usando um **Personal Access Token** do GitHub (classic), com escopo `repo`.
+   - Crie o token em: [GitHub → Settings → Developer settings → Personal access tokens](https://github.com/settings/tokens).
+
+   Depois de salvar o token na plataforma, rode o deploy novamente.
+
+3. **Evitar muitos deploys seguidos**  
+   Se estiver dando deploy manual várias vezes em pouco tempo, espere alguns minutos entre um e outro.

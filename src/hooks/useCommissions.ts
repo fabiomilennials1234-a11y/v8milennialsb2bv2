@@ -170,25 +170,34 @@ export function useCommissionSummary(teamMemberId: string, month: number, year: 
 
       if (memberError) throw memberError;
 
-      // Get closed sales for this month (scoped to organization)
-      const startDate = new Date(year, month - 1, 1);
-      const endDate = new Date(year, month, 0, 23, 59, 59);
+      // Intervalo do mês em UTC (alinhado ao dashboard)
+      const startStr = new Date(Date.UTC(year, month - 1, 1)).toISOString();
+      const endStr = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999)).toISOString();
 
-      const startIso = startDate.toISOString();
-      const endIso = endDate.toISOString();
-
-      // Só conta vendas fechadas neste mês: closed_at no período ou, se closed_at for null, updated_at no período
-      const { data: sales, error: salesError } = await supabase
-        .from("pipe_propostas")
-        .select("sale_value, product_type, closed_at, updated_at")
-        .eq("organization_id", organizationId)
-        .eq("closer_id", teamMemberId)
-        .eq("status", "vendido")
-        .or(
-          `and(closed_at.gte.${startIso},closed_at.lte.${endIso}),and(closed_at.is.null,updated_at.gte.${startIso},updated_at.lte.${endIso})`
-        );
-
-      if (salesError) throw salesError;
+      // Período: COALESCE(metrics_period_at, closed_at) no intervalo do mês
+      const [salesQ1, salesQ2] = await Promise.all([
+        supabase
+          .from("pipe_propostas")
+          .select("sale_value, product_type")
+          .eq("organization_id", organizationId)
+          .eq("closer_id", teamMemberId)
+          .eq("status", "vendido")
+          .not("metrics_period_at", "is", null)
+          .gte("metrics_period_at", startStr)
+          .lte("metrics_period_at", endStr),
+        supabase
+          .from("pipe_propostas")
+          .select("sale_value, product_type")
+          .eq("organization_id", organizationId)
+          .eq("closer_id", teamMemberId)
+          .eq("status", "vendido")
+          .is("metrics_period_at", null)
+          .gte("closed_at", startStr)
+          .lte("closed_at", endStr),
+      ]);
+      if (salesQ1.error) throw salesQ1.error;
+      if (salesQ2.error) throw salesQ2.error;
+      const sales = [...(salesQ1.data || []), ...(salesQ2.data || [])];
 
       // Calculate totals by product type
       let totalMRR = 0;
@@ -258,16 +267,28 @@ export function useCommissionSummary(teamMemberId: string, month: number, year: 
         // Meta de reuniões (quantidade)
         goalTarget = await fetchGoalTarget("reunioes");
 
-        // Contar reuniões comparecidas do SDR (scoped to organization)
-        const { data: confirmations } = await supabase
-          .from("pipe_confirmacao")
-          .select("id")
-          .eq("organization_id", organizationId)
-          .eq("sdr_id", teamMemberId)
-          .eq("status", "compareceu")
-          .gte("meeting_date", startDate.toISOString())
-          .lte("meeting_date", endDate.toISOString());
-
+        // Contar reuniões comparecidas do SDR: COALESCE(metrics_period_at, created_at) no intervalo (alinhado ao dashboard)
+        const [confQ1, confQ2] = await Promise.all([
+          supabase
+            .from("pipe_confirmacao")
+            .select("id")
+            .eq("organization_id", organizationId)
+            .eq("sdr_id", teamMemberId)
+            .eq("status", "compareceu")
+            .not("metrics_period_at", "is", null)
+            .gte("metrics_period_at", startStr)
+            .lte("metrics_period_at", endStr),
+          supabase
+            .from("pipe_confirmacao")
+            .select("id")
+            .eq("organization_id", organizationId)
+            .eq("sdr_id", teamMemberId)
+            .eq("status", "compareceu")
+            .is("metrics_period_at", null)
+            .gte("created_at", startStr)
+            .lte("created_at", endStr),
+        ]);
+        const confirmations = [...(confQ1.data || []), ...(confQ2.data || [])];
         goalCurrent = confirmations?.length || 0;
         goalProgress = goalTarget > 0 ? (goalCurrent / goalTarget) * 100 : 0;
       } else {

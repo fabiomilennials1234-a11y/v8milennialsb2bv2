@@ -68,7 +68,14 @@ function leadMatchesConfig(
   return !!matchOrigin || !!matchTag;
 }
 
-export function useMktFunnel(originType: MktOriginType) {
+/** Intervalo do mês em UTC (alinhado ao dashboard). */
+function getMonthRangeUTC(month: number, year: number) {
+  const start = new Date(Date.UTC(year, month - 1, 1));
+  const end = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
+  return { startStr: start.toISOString(), endStr: end.toISOString() };
+}
+
+export function useMktFunnel(originType: MktOriginType, month?: number, year?: number) {
   const { organizationId, isReady } = useOrganization();
   const { data: campanhas = [], isLoading: loadingCampanhas } = useCampanhas();
   const { data: confirmacoes = [], isLoading: loadingConfirmacao } = usePipeConfirmacao();
@@ -100,6 +107,30 @@ export function useMktFunnel(originType: MktOriginType) {
     loadingCampanhasWithLeads;
 
   const data = useMemo((): MktFunnelData | null => {
+    const startStr = month != null && year != null ? getMonthRangeUTC(month, year).startStr : null;
+    const endStr = month != null && year != null ? getMonthRangeUTC(month, year).endStr : null;
+
+    const inRange = (s: string | null | undefined) =>
+      s != null && startStr != null && endStr != null && s >= startStr && s <= endStr;
+
+    const leadsByPeriod =
+      startStr != null && endStr != null
+        ? leads.filter(
+            (l: { metrics_period_at?: string | null; created_at?: string }) =>
+              (l.metrics_period_at != null && inRange(l.metrics_period_at)) ||
+              (l.metrics_period_at == null && inRange(l.created_at))
+          )
+        : leads;
+
+    const confirmacoesByPeriod =
+      startStr != null && endStr != null
+        ? confirmacoes.filter(
+            (c: { metrics_period_at?: string | null; created_at?: string }) =>
+              (c.metrics_period_at != null && inRange(c.metrics_period_at)) ||
+              (c.metrics_period_at == null && inRange(c.created_at))
+          )
+        : confirmacoes;
+
     const incluirCall = (c: CampanhaWithLeads) => c.mkt_incluir_call !== false;
     const incluirCadastro = (c: CampanhaWithLeads) => c.mkt_incluir_cadastro !== false;
 
@@ -148,7 +179,7 @@ export function useMktFunnel(originType: MktOriginType) {
         });
       });
       investimentoCents = cents;
-      leadsFiltered = leads.filter((l) => callLeadIds.has(l.id));
+      leadsFiltered = leadsByPeriod.filter((l) => callLeadIds.has(l.id));
     } else if (useConfig && originType === "cadastro_lp") {
       const cadastroLeadIds = new Set<string>();
       let cents = 0;
@@ -178,9 +209,9 @@ export function useMktFunnel(originType: MktOriginType) {
         });
       });
       investimentoCents = cents;
-      leadsFiltered = leads.filter((l) => cadastroLeadIds.has(l.id));
+      leadsFiltered = leadsByPeriod.filter((l) => cadastroLeadIds.has(l.id));
     } else {
-      leadsFiltered = leads.filter((l) =>
+      leadsFiltered = leadsByPeriod.filter((l) =>
         matchOrigin((l as { origin?: string }).origin, originType)
       );
       investimentoCents = campanhas.reduce((sum, c) => {
@@ -190,7 +221,7 @@ export function useMktFunnel(originType: MktOriginType) {
     }
 
     const leadIdsSet = new Set(leadsFiltered.map((l) => l.id));
-    const confirmacoesFiltered = confirmacoes.filter((c) =>
+    const confirmacoesFiltered = confirmacoesByPeriod.filter((c) =>
       leadIdsSet.has((c as { lead_id: string }).lead_id)
     );
     const agendamentosCount = confirmacoesFiltered.length;
@@ -201,9 +232,13 @@ export function useMktFunnel(originType: MktOriginType) {
     const propostasFiltered = propostas.filter((p) =>
       leadIdsSet.has((p as { lead_id: string }).lead_id)
     );
-    const vendasCount = propostasFiltered.filter(
-      (p) => (p as { status?: string }).status === "vendido"
-    ).length;
+    const vendasInPeriod =
+      startStr != null && endStr != null
+        ? (p: { status?: string; metrics_period_at?: string | null; closed_at?: string | null }) =>
+            (p as { status?: string }).status === "vendido" &&
+            inRange((p as { metrics_period_at?: string | null; closed_at?: string }).metrics_period_at ?? (p as { closed_at?: string }).closed_at)
+        : (p: { status?: string }) => (p as { status?: string }).status === "vendido";
+    const vendasCount = propostasFiltered.filter(vendasInPeriod).length;
     const propostasFechadas = propostasFiltered.filter((p) => {
       const s = (p as { status?: string }).status;
       return s === "vendido" || s === "perdido";
@@ -261,6 +296,8 @@ export function useMktFunnel(originType: MktOriginType) {
     };
   }, [
     originType,
+    month,
+    year,
     campanhas,
     campanhasWithLeads,
     confirmacoes,

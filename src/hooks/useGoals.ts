@@ -133,8 +133,8 @@ export function useIndividualGoals(month?: number, year?: number) {
           .eq("organization_id", organizationId)
           .eq("status", "compareceu")
           .is("metrics_period_at", null)
-          .gte("meeting_date", startStr)
-          .lte("meeting_date", endStr),
+          .gte("created_at", startStr)
+          .lte("created_at", endStr),
       ]);
 
       const salesData = [...(salesRes1.data || []), ...(salesRes2.data || [])];

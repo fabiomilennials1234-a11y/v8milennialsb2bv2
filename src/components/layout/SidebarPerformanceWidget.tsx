@@ -16,31 +16,50 @@ function formatCurrency(value: number): string {
   }).format(value);
 }
 
+// Intervalo do mês em UTC (alinhado ao dashboard)
+function getMonthRangeUTC(month: number, year: number) {
+  const start = new Date(Date.UTC(year, month - 1, 1));
+  const end = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
+  return { startStr: start.toISOString(), endStr: end.toISOString() };
+}
+
 // Hook para buscar confirmações do SDR no mês atual (scoped to organization)
+// Período: COALESCE(metrics_period_at, created_at) no intervalo do mês (alinhado ao dashboard)
 function useSDRConfirmations(sdrId: string | undefined) {
   const { organizationId, isReady } = useOrganization();
   const now = new Date();
   const month = now.getMonth() + 1;
   const year = now.getFullYear();
+  const { startStr, endStr } = getMonthRangeUTC(month, year);
 
   return useQuery({
     queryKey: ["sdr_confirmations", sdrId, month, year, organizationId],
     queryFn: async () => {
       if (!sdrId || !organizationId) return { confirmed: 0, goal: 0 };
 
-      const startDate = new Date(year, month - 1, 1);
-      const endDate = new Date(year, month, 0, 23, 59, 59);
-
-      const { data: confirmations, error: confError } = await supabase
-        .from("pipe_confirmacao")
-        .select("id")
-        .eq("organization_id", organizationId)
-        .eq("sdr_id", sdrId)
-        .eq("status", "compareceu")
-        .gte("meeting_date", startDate.toISOString())
-        .lte("meeting_date", endDate.toISOString());
-
-      if (confError) throw confError;
+      const [q1, q2] = await Promise.all([
+        supabase
+          .from("pipe_confirmacao")
+          .select("id")
+          .eq("organization_id", organizationId)
+          .eq("sdr_id", sdrId)
+          .eq("status", "compareceu")
+          .not("metrics_period_at", "is", null)
+          .gte("metrics_period_at", startStr)
+          .lte("metrics_period_at", endStr),
+        supabase
+          .from("pipe_confirmacao")
+          .select("id")
+          .eq("organization_id", organizationId)
+          .eq("sdr_id", sdrId)
+          .eq("status", "compareceu")
+          .is("metrics_period_at", null)
+          .gte("created_at", startStr)
+          .lte("created_at", endStr),
+      ]);
+      if (q1.error) throw q1.error;
+      if (q2.error) throw q2.error;
+      const confirmations = [...(q1.data || []), ...(q2.data || [])];
 
       const { data: individualGoal } = await supabase
         .from("goals")
@@ -82,35 +101,42 @@ function useSDRConfirmations(sdrId: string | undefined) {
 }
 
 // Hook para buscar vendas do Closer no mês atual - SEMPRE em valor (R$), scoped to organization
+// Período: COALESCE(metrics_period_at, closed_at) no intervalo do mês (alinhado ao dashboard)
 function useCloserSales(closerId: string | undefined) {
   const { organizationId, isReady } = useOrganization();
   const now = new Date();
   const month = now.getMonth() + 1;
   const year = now.getFullYear();
+  const { startStr, endStr } = getMonthRangeUTC(month, year);
 
   return useQuery({
     queryKey: ["closer_sales_count", closerId, month, year, organizationId],
     queryFn: async () => {
       if (!closerId || !organizationId) return { salesValue: 0, salesCount: 0, goal: 0, goalName: "" };
 
-      const startDate = new Date(year, month - 1, 1);
-      const endDate = new Date(year, month, 0, 23, 59, 59);
-
-      const startIso = startDate.toISOString();
-      const endIso = endDate.toISOString();
-
-      // Só conta vendas fechadas neste mês: closed_at no período ou, se closed_at for null, updated_at no período
-      const { data: sales, error: salesError } = await supabase
-        .from("pipe_propostas")
-        .select("id, sale_value")
-        .eq("organization_id", organizationId)
-        .eq("closer_id", closerId)
-        .eq("status", "vendido")
-        .or(
-          `and(closed_at.gte.${startIso},closed_at.lte.${endIso}),and(closed_at.is.null,updated_at.gte.${startIso},updated_at.lte.${endIso})`
-        );
-
-      if (salesError) throw salesError;
+      const [salesQ1, salesQ2] = await Promise.all([
+        supabase
+          .from("pipe_propostas")
+          .select("id, sale_value")
+          .eq("organization_id", organizationId)
+          .eq("closer_id", closerId)
+          .eq("status", "vendido")
+          .not("metrics_period_at", "is", null)
+          .gte("metrics_period_at", startStr)
+          .lte("metrics_period_at", endStr),
+        supabase
+          .from("pipe_propostas")
+          .select("id, sale_value")
+          .eq("organization_id", organizationId)
+          .eq("closer_id", closerId)
+          .eq("status", "vendido")
+          .is("metrics_period_at", null)
+          .gte("closed_at", startStr)
+          .lte("closed_at", endStr),
+      ]);
+      if (salesQ1.error) throw salesQ1.error;
+      if (salesQ2.error) throw salesQ2.error;
+      const sales = [...(salesQ1.data || []), ...(salesQ2.data || [])];
 
       const salesCount = sales?.length || 0;
       const salesValue = (sales || []).reduce(
