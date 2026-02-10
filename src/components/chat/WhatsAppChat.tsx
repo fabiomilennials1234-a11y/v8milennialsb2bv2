@@ -48,12 +48,15 @@ import {
 } from "@/hooks/useWhatsAppChat";
 import { convertAudioBlobToMp3, preloadLamejs } from "@/lib/audioToMp3";
 import { useCanReplyOnInstanceByName } from "@/hooks/useWhatsAppInstanceAllowedMembers";
-import { useLeadByPhone } from "@/hooks/useWhatsAppLeadIntegration";
+import { useLeadByPhone, useCreateLeadFromWhatsApp } from "@/hooks/useWhatsAppLeadIntegration";
 import { LeadDetailContent } from "./LeadDetailContent";
 import {
-  Sheet,
-  SheetContent,
-} from "@/components/ui/sheet";
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -1133,9 +1136,13 @@ function ChatWindow({
         </Button>
         
         {/* Área clicável do contato */}
-        <button
-          onClick={onOpenLeadModal}
-          className="flex items-center gap-3 flex-1 text-left hover:bg-muted/50 -m-2 p-2 rounded-lg transition-colors min-w-0"
+        <div
+          role="button"
+          tabIndex={0}
+          className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer hover:bg-muted/50 -m-2 p-2 rounded-lg transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); onOpenLeadModal(); }}
+          onPointerDown={(e) => { e.stopPropagation(); onOpenLeadModal(); }}
+          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpenLeadModal(); } }}
         >
           <Avatar className="w-10 h-10 shrink-0 border-2 border-background shadow-sm">
             <AvatarFallback className={cn(
@@ -1160,7 +1167,21 @@ function ChatWindow({
             </p>
           </div>
           <UserCircle className="w-5 h-5 text-muted-foreground shrink-0" />
-        </button>
+        </div>
+
+        {/* Botão explícito para abrir painel do lead */}
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="shrink-0"
+          onClick={(e) => { e.stopPropagation(); onOpenLeadModal(); }}
+          onPointerDown={(e) => e.stopPropagation()}
+          title="Ver dados do lead e pipeline"
+        >
+          <UserCircle className="w-4 h-4 mr-1.5" />
+          Ver lead
+        </Button>
 
         {/* AI Toggle - sempre visível quando há lead; vendedores com acesso ao lead podem ativar/desativar o Copilot nesta conversa */}
         {hasLead && leadId && (
@@ -1452,7 +1473,8 @@ export function WhatsAppChat() {
   const effectiveInstanceId = selectedInstance?.id ?? selectedInstanceId;
 
   const { data: contacts = [], isLoading: contactsLoading } = useWhatsAppContacts(effectiveInstanceId);
-  const { data: selectedLead } = useLeadByPhone(selectedPhone);
+  const { data: selectedLead, isLoading: selectedLeadLoading } = useLeadByPhone(selectedPhone);
+  const createLeadFromWhatsApp = useCreateLeadFromWhatsApp();
 
   // Persistir e sincronizar instância selecionada
   useEffect(() => {
@@ -1492,6 +1514,15 @@ export function WhatsAppChat() {
 
   // Pegar pushName do contato selecionado
   const selectedContact = contacts.find((c) => c.phone_number === selectedPhone);
+
+  // Leads WhatsApp: ao selecionar uma conversa, criar lead e adicionar ao pipeline se ainda não existir
+  useEffect(() => {
+    if (!selectedPhone || selectedLead !== null || selectedLeadLoading || createLeadFromWhatsApp.isPending) return;
+    createLeadFromWhatsApp.mutate({
+      phone: selectedPhone,
+      pushName: selectedContact?.push_name ?? undefined,
+    });
+  }, [selectedPhone, selectedLead, selectedLeadLoading, selectedContact?.push_name, createLeadFromWhatsApp.isPending]);
 
   if (instancesLoading) {
     return (
@@ -1548,7 +1579,10 @@ export function WhatsAppChat() {
               onBack={() => setSelectedPhone(null)}
               instanceName={selectedInstance.instance_name}
               instanceId={selectedInstance.id}
-              onOpenLeadModal={() => setIsLeadPanelOpen(true)}
+              onOpenLeadModal={() => {
+                if (import.meta.env.DEV) console.log("[Chat] Abrindo painel do lead");
+                setIsLeadPanelOpen(true);
+              }}
               hasLead={!!(selectedLead || selectedContact?.lead_id)}
               leadId={selectedLead?.id ?? selectedContact?.lead_id ?? undefined}
               leadAiDisabled={selectedLead?.ai_disabled}
@@ -1567,21 +1601,29 @@ export function WhatsAppChat() {
         </div>
       </div>
 
-      {/* Painel lateral (abre/fecha) com dados do cliente e etapas/funis */}
+      {/* Wizard/Modal do lead (Informações → Pipeline → Campanhas) */}
       {selectedPhone && (
-        <Sheet open={isLeadPanelOpen} onOpenChange={setIsLeadPanelOpen}>
-          <SheetContent
-            side="right"
-            className="sm:max-w-md w-full flex flex-col overflow-hidden"
+        <Dialog open={isLeadPanelOpen} onOpenChange={setIsLeadPanelOpen}>
+          <DialogContent
+            className="max-w-2xl w-[calc(100vw-2rem)] max-h-[90vh] flex flex-col overflow-hidden p-0 gap-0"
+            aria-describedby="lead-wizard-desc"
           >
-            <LeadDetailContent
-              phoneNumber={selectedPhone}
-              pushName={selectedContact?.push_name}
-              onClose={() => setIsLeadPanelOpen(false)}
-              showHeader={true}
-            />
-          </SheetContent>
-        </Sheet>
+            <DialogHeader className="sr-only">
+              <DialogTitle>Lead — Informações, Pipeline e Campanhas</DialogTitle>
+              <DialogDescription id="lead-wizard-desc">
+                Dados do contato, etapa no pipe de qualificação e campanhas.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex flex-col flex-1 min-h-0 overflow-y-auto p-6 pt-14">
+              <LeadDetailContent
+                phoneNumber={selectedPhone}
+                pushName={selectedContact?.push_name}
+                onClose={() => setIsLeadPanelOpen(false)}
+                showHeader={true}
+              />
+            </div>
+          </DialogContent>
+        </Dialog>
       )}
     </>
   );

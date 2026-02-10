@@ -738,6 +738,7 @@ export default function Equipe() {
           <TableHeader>
             <TableRow>
               <TableHead>Nome</TableHead>
+              <TableHead className="font-mono text-xs">ID</TableHead>
               <TableHead>Email</TableHead>
               <TableHead>Função</TableHead>
               <TableHead>Status</TableHead>
@@ -751,13 +752,13 @@ export default function Equipe() {
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
                   Carregando...
                 </TableCell>
               </TableRow>
             ) : filteredMembers.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
                   Nenhum membro encontrado
                 </TableCell>
               </TableRow>
@@ -765,6 +766,9 @@ export default function Equipe() {
               filteredMembers.map((member) => (
                 <TableRow key={member.id}>
                   <TableCell className="font-medium">{member.name}</TableCell>
+                  <TableCell className="font-mono text-xs text-muted-foreground" title="ID do piloto (use no n8n round robin)">
+                    {member.id}
+                  </TableCell>
                   <TableCell>
                     {(member as any).email ? (
                       <span className="text-sm text-muted-foreground flex items-center gap-1">

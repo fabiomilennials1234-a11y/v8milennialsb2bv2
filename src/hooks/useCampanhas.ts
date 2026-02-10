@@ -55,6 +55,8 @@ export interface Campanha {
   // Investimento por tipo (Call e Cadastro) em centavos
   mkt_investimento_call_cents: number | null;
   mkt_investimento_cadastro_cents: number | null;
+  // Instância WhatsApp para disparos (semi e automática)
+  whatsapp_instance_id: string | null;
 }
 
 export interface CampanhaStage {
@@ -138,6 +140,8 @@ export interface CampanhaInsert {
   // Investimento MKT
   investimento_cents?: number | null;
   investimento_source?: "manual" | "api" | null;
+  // Instância WhatsApp para disparos
+  whatsapp_instance_id?: string | null;
 }
 
 export interface CampanhaStageInsert {
@@ -159,6 +163,29 @@ export interface CampanhaPipeAutomation {
   pipe_stage: string;
   created_at: string | null;
   stage?: CampanhaStage;
+}
+
+// --- Regras de envio (lead criado ou movido para etapa) ---
+export type CampanhaDispatchRuleTriggerType = "lead_created" | "lead_moved_to_stage";
+
+export interface CampanhaDispatchRule {
+  id: string;
+  campanha_id: string;
+  trigger_type: CampanhaDispatchRuleTriggerType;
+  campanha_stage_id: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  stage?: CampanhaStage;
+}
+
+export interface CampanhaDispatchRuleStep {
+  id: string;
+  rule_id: string;
+  template_id: string;
+  delay_minutes: number;
+  position: number;
+  template?: { id: string; name: string; content?: string; message_type?: string };
 }
 
 export function useCampanhas() {
@@ -333,6 +360,8 @@ export function useCreateCampanha() {
           // Distribuição de leads
           lead_distribution_mode: campanha.lead_distribution_mode ?? null,
           lead_assigned_to: campanha.lead_assigned_to ?? null,
+          // Instância WhatsApp (semi e automática)
+          whatsapp_instance_id: campanha.whatsapp_instance_id ?? null,
           // Organization
           organization_id: teamMember.organization_id,
         })
@@ -910,6 +939,204 @@ export function useDeleteCampanhaPipeAutomation() {
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["campanha_pipe_automations", variables.campanha_id] });
+    },
+  });
+}
+
+// --- Regras de envio por etapa (disparo de sequência de mensagens) ---
+
+export function useCampanhaDispatchRules(campanhaId: string | undefined) {
+  return useQuery({
+    queryKey: ["campanha_dispatch_rules", campanhaId],
+    queryFn: async () => {
+      if (!campanhaId) return [];
+      const { data, error } = await supabase
+        .from("campanha_dispatch_rules")
+        .select(`
+          *,
+          stage:campanha_stages(id, name, color, position)
+        `)
+        .eq("campanha_id", campanhaId)
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as CampanhaDispatchRule[];
+    },
+    enabled: !!campanhaId,
+  });
+}
+
+export function useCampanhaDispatchRuleSteps(ruleId: string | undefined) {
+  return useQuery({
+    queryKey: ["campanha_dispatch_rule_steps", ruleId],
+    queryFn: async () => {
+      if (!ruleId) return [];
+      const { data, error } = await supabase
+        .from("campanha_dispatch_rule_steps")
+        .select(`
+          *,
+          template:campaign_templates(id, name, content, message_type, audio_url)
+        `)
+        .eq("rule_id", ruleId)
+        .order("position", { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as CampanhaDispatchRuleStep[];
+    },
+    enabled: !!ruleId,
+  });
+}
+
+export function useCreateCampanhaDispatchRule() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: {
+      campanha_id: string;
+      trigger_type: CampanhaDispatchRuleTriggerType;
+      campanha_stage_id?: string | null;
+      is_active?: boolean;
+    }) => {
+      const { data, error } = await supabase
+        .from("campanha_dispatch_rules")
+        .insert({
+          campanha_id: payload.campanha_id,
+          trigger_type: payload.trigger_type,
+          campanha_stage_id: payload.trigger_type === "lead_moved_to_stage" ? payload.campanha_stage_id ?? null : null,
+          is_active: payload.is_active ?? true,
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      return data as CampanhaDispatchRule;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["campanha_dispatch_rules", variables.campanha_id] });
+    },
+  });
+}
+
+export function useUpdateCampanhaDispatchRule() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      campanha_id,
+      trigger_type,
+      campanha_stage_id,
+      is_active,
+    }: {
+      id: string;
+      campanha_id: string;
+      trigger_type?: CampanhaDispatchRuleTriggerType;
+      campanha_stage_id?: string | null;
+      is_active?: boolean;
+    }) => {
+      const updates: Record<string, unknown> = {};
+      if (trigger_type !== undefined) updates.trigger_type = trigger_type;
+      if (campanha_stage_id !== undefined) updates.campanha_stage_id = (trigger_type === "lead_moved_to_stage" ? campanha_stage_id : null) ?? null;
+      if (is_active !== undefined) updates.is_active = is_active;
+      const { data, error } = await supabase
+        .from("campanha_dispatch_rules")
+        .update(updates)
+        .eq("id", id)
+        .select()
+        .single();
+      if (error) throw error;
+      return data as CampanhaDispatchRule;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["campanha_dispatch_rules", variables.campanha_id] });
+    },
+  });
+}
+
+export function useDeleteCampanhaDispatchRule() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, campanha_id }: { id: string; campanha_id: string }) => {
+      const { error } = await supabase.from("campanha_dispatch_rules").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["campanha_dispatch_rules", variables.campanha_id] });
+      queryClient.invalidateQueries({ queryKey: ["campanha_dispatch_rule_steps"] });
+    },
+  });
+}
+
+export function useCreateCampanhaDispatchRuleStep() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: {
+      rule_id: string;
+      template_id: string;
+      delay_minutes?: number;
+      position: number;
+    }) => {
+      const { data, error } = await supabase
+        .from("campanha_dispatch_rule_steps")
+        .insert({
+          rule_id: payload.rule_id,
+          template_id: payload.template_id,
+          delay_minutes: payload.delay_minutes ?? 0,
+          position: payload.position,
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      return data as CampanhaDispatchRuleStep;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["campanha_dispatch_rule_steps", variables.rule_id] });
+      queryClient.invalidateQueries({ queryKey: ["campanha_dispatch_rules"] });
+    },
+  });
+}
+
+export function useUpdateCampanhaDispatchRuleStep() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      rule_id,
+      template_id,
+      delay_minutes,
+      position,
+    }: {
+      id: string;
+      rule_id: string;
+      template_id?: string;
+      delay_minutes?: number;
+      position?: number;
+    }) => {
+      const updates: Record<string, unknown> = {};
+      if (template_id !== undefined) updates.template_id = template_id;
+      if (delay_minutes !== undefined) updates.delay_minutes = delay_minutes;
+      if (position !== undefined) updates.position = position;
+      const { data, error } = await supabase
+        .from("campanha_dispatch_rule_steps")
+        .update(updates)
+        .eq("id", id)
+        .select()
+        .single();
+      if (error) throw error;
+      return data as CampanhaDispatchRuleStep;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["campanha_dispatch_rule_steps", variables.rule_id] });
+      queryClient.invalidateQueries({ queryKey: ["campanha_dispatch_rules"] });
+    },
+  });
+}
+
+export function useDeleteCampanhaDispatchRuleStep() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, rule_id }: { id: string; rule_id: string }) => {
+      const { error } = await supabase.from("campanha_dispatch_rule_steps").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["campanha_dispatch_rule_steps", variables.rule_id] });
+      queryClient.invalidateQueries({ queryKey: ["campanha_dispatch_rules"] });
     },
   });
 }

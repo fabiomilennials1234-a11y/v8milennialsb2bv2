@@ -3,7 +3,6 @@ import {
   User,
   Phone,
   Tag,
-  MessageSquare,
   Plus,
   Loader2,
   Target,
@@ -29,6 +28,7 @@ import {
   useLeadByPhone,
   usePipeWhatsappByLeadId,
   useCreateLeadFromWhatsApp,
+  useLinkLeadToWhatsApp,
   useUpdateLeadPipelineStatus,
 } from "@/hooks/useWhatsAppLeadIntegration";
 import { useUpdateLead } from "@/hooks/useLeads";
@@ -82,6 +82,7 @@ export function LeadDetailContent({
   const { data: campanhaStages = [] } = useCampanhaStages(selectedCampanhaId || undefined);
 
   const createLead = useCreateLeadFromWhatsApp();
+  const linkLeadToWhatsApp = useLinkLeadToWhatsApp();
   const updateLead = useUpdateLead();
   const updatePipeStatus = useUpdateLeadPipelineStatus();
 
@@ -164,6 +165,12 @@ export function LeadDetailContent({
       toast.error(error.message || "Erro ao atualizar status");
     }
   };
+
+  // Garantir que lead WhatsApp já no modal esteja no pipeline (só movimentação de etapas aqui)
+  useEffect(() => {
+    if (!lead?.id || pipeStatus !== null || pipeLoading || linkLeadToWhatsApp.isPending) return;
+    linkLeadToWhatsApp.mutate({ leadId: lead.id, phone: phoneNumber });
+  }, [lead?.id, phoneNumber, pipeStatus, pipeLoading, linkLeadToWhatsApp.isPending]);
 
   const handleAddToCampanha = async () => {
     if (!lead || !selectedCampanhaId || !campanhaStages.length) return;
@@ -418,7 +425,7 @@ export function LeadDetailContent({
             <TabsContent value="pipeline" className="mt-0 space-y-4">
               <div className="text-center pb-2">
                 <h4 className="font-medium">Pipeline de Qualificação</h4>
-                <p className="text-sm text-muted-foreground">Clique em um estágio para mover o lead</p>
+                <p className="text-sm text-muted-foreground">Mova o lead entre os estágios</p>
               </div>
 
               {pipeStatus ? (
@@ -467,12 +474,10 @@ export function LeadDetailContent({
                 </div>
               ) : (
                 <div className="text-center py-8">
-                  <MessageSquare className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50" />
-                  <p className="text-muted-foreground mb-4">Lead não está no pipeline de qualificação</p>
-                  <Button onClick={() => handleStageChange("novo")}>
-                    <Plus className="w-4 h-4 mr-2" />
-                    Adicionar ao Pipeline
-                  </Button>
+                  <Loader2 className="w-10 h-10 mx-auto mb-3 animate-spin text-muted-foreground" />
+                  <p className="text-muted-foreground text-sm">
+                    {lead ? "Adicionando ao pipeline..." : "Carregando lead..."}
+                  </p>
                 </div>
               )}
             </TabsContent>

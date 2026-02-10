@@ -20,6 +20,7 @@ import {
 import { useUpdateCampanha, useCampanhaMembers, type Campanha, type LeadDistributionMode } from "@/hooks/useCampanhas";
 import { useCopilotAgents } from "@/hooks/useCopilotAgents";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
+import { useWhatsAppInstances } from "@/hooks/useWhatsAppInstances";
 import { toast } from "sonner";
 import { AlertTriangle, Bot, Shuffle, User } from "lucide-react";
 
@@ -39,10 +40,12 @@ export function EditCampanhaModal({
   const [agentId, setAgentId] = useState<string | null>(null);
   const [leadDistributionMode, setLeadDistributionMode] = useState<LeadDistributionMode>(null);
   const [leadAssignedTo, setLeadAssignedTo] = useState<string | null>(null);
+  const [whatsappInstanceId, setWhatsappInstanceId] = useState<string | null>(null);
 
   const updateCampanha = useUpdateCampanha();
   const { data: agents } = useCopilotAgents();
   const { data: teamMembers } = useTeamMembers();
+  const { data: whatsappInstances = [] } = useWhatsAppInstances();
   const { data: campanhaMembers = [] } = useCampanhaMembers(campanha?.id);
   const needsMembersForDistribution =
     (leadDistributionMode === "round_robin" || leadDistributionMode === "random") && campanhaMembers.length === 0;
@@ -61,6 +64,7 @@ export function EditCampanhaModal({
       setAgentId(campanha.agent_id ?? null);
       setLeadDistributionMode((campanha as any).lead_distribution_mode ?? null);
       setLeadAssignedTo((campanha as any).lead_assigned_to ?? null);
+      setWhatsappInstanceId(campanha.whatsapp_instance_id ?? null);
     }
   }, [campanha, open]);
 
@@ -76,6 +80,7 @@ export function EditCampanhaModal({
         ...(campanha.campaign_type === "automatica" && { agent_id: agentId }),
         lead_distribution_mode: leadDistributionMode,
         lead_assigned_to: leadDistributionMode === "single" ? leadAssignedTo : null,
+        ...((campanha.campaign_type === "automatica" || campanha.campaign_type === "semi_automatica") && { whatsapp_instance_id: whatsappInstanceId }),
       });
       toast.success("Campanha atualizada");
       onOpenChange(false);
@@ -115,6 +120,28 @@ export function EditCampanhaModal({
               className="resize-none"
             />
           </div>
+          {(campanha.campaign_type === "automatica" || campanha.campaign_type === "semi_automatica") && (
+            <div className="space-y-2">
+              <Label>Instância WhatsApp (opcional)</Label>
+              <Select
+                value={whatsappInstanceId ?? "none"}
+                onValueChange={(v) => setWhatsappInstanceId(v === "none" ? null : v)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Usar primeira instância ativa" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Usar primeira instância ativa</SelectItem>
+                  {whatsappInstances.map((inst) => (
+                    <SelectItem key={inst.id} value={inst.id}>
+                      {inst.instance_name}
+                      {inst.phone_number ? ` (${inst.phone_number})` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           {/* Distribuição de leads */}
           <div className="space-y-3 pt-4 border-t">
             <Label className="flex items-center gap-2">

@@ -260,12 +260,13 @@ export async function getOrCreateLead(
 
   console.log("[lead-service] New lead created:", newLead.id);
 
-  // Create pipe_whatsapp entry for new leads
+  // Create pipe_whatsapp entry for new leads (organization_id required for RLS visibility)
   try {
     await supabase.from("pipe_whatsapp").insert({
       lead_id: newLead.id,
       status: "novo",
       sdr_id: sdrId || null,
+      organization_id: organizationId,
     });
   } catch (pipeError) {
     console.warn("[lead-service] Error creating pipe_whatsapp entry:", pipeError);

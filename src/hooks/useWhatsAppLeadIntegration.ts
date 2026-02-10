@@ -95,10 +95,11 @@ export function useCreateLeadFromWhatsApp() {
 
       const normalizedPhone = phone.replace(/\D/g, "");
 
-      // 1. Verificar se já existe lead com esse telefone
+      // 1. Verificar se já existe lead com esse telefone na mesma organização
       const { data: existingLead } = await supabase
         .from("leads")
         .select("id")
+        .eq("organization_id", teamMember.organization_id)
         .or(`phone.ilike.%${normalizedPhone}%,phone.ilike.%${normalizedPhone.slice(-9)}%`)
         .limit(1)
         .maybeSingle();
@@ -201,14 +202,20 @@ export function useLinkLeadToWhatsApp() {
         .eq("lead_id", leadId)
         .maybeSingle();
 
-      if (!existingPipe && teamMember?.id && teamMember?.organization_id) {
-        // Adicionar ao pipeline se não estiver
-        await supabase.from("pipe_whatsapp").insert({
+      if (!existingPipe) {
+        if (!teamMember?.id || !teamMember?.organization_id) {
+          throw new Error("Usuário não está vinculado a uma organização");
+        }
+        const { error: pipeError } = await supabase.from("pipe_whatsapp").insert({
           lead_id: leadId,
           status: "novo",
           sdr_id: teamMember.id,
           organization_id: teamMember.organization_id,
         });
+        if (pipeError) {
+          console.error("[WhatsApp Lead] Erro ao adicionar ao pipeline:", pipeError);
+          throw new Error(pipeError.message || "Falha ao inserir no pipeline");
+        }
       }
 
       // 3. Vincular lead_id nas mensagens
@@ -219,7 +226,7 @@ export function useLinkLeadToWhatsApp() {
 
       if (updateError) {
         console.error("[WhatsApp Lead] Erro ao vincular mensagens:", updateError);
-        throw updateError;
+        throw new Error(updateError.message || "Falha ao vincular mensagens");
       }
 
       return { leadId };
@@ -227,6 +234,7 @@ export function useLinkLeadToWhatsApp() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["leads"] });
       queryClient.invalidateQueries({ queryKey: ["pipe_whatsapp"] });
+      queryClient.invalidateQueries({ queryKey: ["pipe_whatsapp_by_lead"] });
       queryClient.invalidateQueries({ queryKey: ["whatsapp_contacts"] });
       queryClient.invalidateQueries({ queryKey: ["whatsapp_messages"] });
       queryClient.invalidateQueries({ queryKey: ["lead_by_phone"] });

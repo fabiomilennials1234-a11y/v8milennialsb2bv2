@@ -57,6 +57,9 @@ interface LeadWebhookPayload {
   // Destino opcional: colocar o lead direto em um pipe e/ou campanha (ex: n8n, campanha de ads)
   place_in_pipe?: PlaceInPipe;
   place_in_campaign?: PlaceInCampaign;
+
+  // Atribuição opcional (ex.: round robin do n8n) — team_member_id para SDR/Closer
+  assigned_user_id?: string;
 }
 
 serve(async (req) => {
@@ -177,6 +180,10 @@ serve(async (req) => {
         organization_id: organizationId,
         pipe_whatsapp: "novo",
       };
+      if (payload.assigned_user_id) {
+        insertData.sdr_id = payload.assigned_user_id;
+        insertData.closer_id = payload.assigned_user_id;
+      }
       const { data: newLead, error: createError } = await supabase
         .from("leads")
         .insert(insertData)
@@ -195,7 +202,8 @@ serve(async (req) => {
         await supabase.from("pipe_whatsapp").insert({
           lead_id: newLead.id,
           status: "novo",
-          sdr_id: null,
+          sdr_id: payload.assigned_user_id ?? null,
+          organization_id: organizationId,
         });
       } catch (pipeError) {
         console.warn("[lead-webhook] pipe_whatsapp insert failed:", pipeError);
@@ -232,6 +240,10 @@ serve(async (req) => {
     if (rating !== undefined && rating !== "") {
       const r = Number(rating);
       if (!Number.isNaN(r) && r >= 0 && r <= 10) updateData.rating = r;
+    }
+    if (payload.assigned_user_id) {
+      updateData.sdr_id = payload.assigned_user_id;
+      updateData.closer_id = payload.assigned_user_id;
     }
 
     if (Object.keys(updateData).length > 0) {
@@ -419,7 +431,7 @@ serve(async (req) => {
               console.log("[lead-webhook] Lead placed in campaign:", campaign_id, "stage:", stage_id);
             }
           } else {
-            const sdrId = await getCampaignLeadAssignment(supabase, campaign_id);
+            const sdrId = payload.assigned_user_id ?? await getCampaignLeadAssignment(supabase, campaign_id);
             if (!sdrId) {
               console.warn("[lead-webhook] No SDR assigned for campaign (distribution returned null). Check lead_distribution_mode and campanha_members:", campaign_id);
             }
@@ -439,6 +451,17 @@ serve(async (req) => {
             } else {
               placedInCampaign = true;
               console.log("[lead-webhook] Lead placed in campaign:", campaign_id, "stage:", stage_id);
+              if (sdrId) {
+                const { error: leadUpdateErr } = await supabase
+                  .from("leads")
+                  .update({ sdr_id: sdrId, closer_id: sdrId })
+                  .eq("id", leadId);
+                if (leadUpdateErr) {
+                  console.warn("[lead-webhook] leads sdr_id/closer_id update failed:", leadUpdateErr);
+                } else {
+                  console.log("[lead-webhook] Lead assigned SDR/Closer:", sdrId);
+                }
+              }
             }
           }
         }

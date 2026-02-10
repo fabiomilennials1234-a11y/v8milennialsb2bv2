@@ -18,6 +18,7 @@ import { EditCampanhaModal } from "@/components/campanhas/EditCampanhaModal";
 import { CampanhaViewersSection } from "@/components/campanhas/CampanhaViewersSection";
 import { ExtractToPipeModal } from "@/components/campanhas/ExtractToPipeModal";
 import { CampanhaPipeAutomationsSection } from "@/components/campanhas/CampanhaPipeAutomationsSection";
+import { CampanhaDispatchRulesSection } from "@/components/campanhas/CampanhaDispatchRulesSection";
 import {
   Collapsible,
   CollapsibleContent,
@@ -325,6 +326,9 @@ export default function CampanhaDetail() {
 
       {/* Automações de envio para pipe */}
       <CampanhaPipeAutomationsSection campanhaId={id!} stages={stages} />
+
+      {/* Regras de envio por etapa (sequência de mensagens) */}
+      <CampanhaDispatchRulesSection campanhaId={id!} stages={stages} />
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>

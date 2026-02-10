@@ -1286,6 +1286,13 @@ export function useImportLeads() {
                   sdr_id: assignedSdrId,
                 });
 
+                if (assignedSdrId) {
+                  await supabase
+                    .from("leads")
+                    .update({ sdr_id: assignedSdrId, closer_id: assignedSdrId })
+                    .eq("id", existingLead.id);
+                }
+
                 // Add tag if not exists
                 const { data: existingTagLink } = await supabase
                   .from("lead_tags")
@@ -1355,6 +1362,13 @@ export function useImportLeads() {
               stage_id: stageIdForLead,
               sdr_id: assignedSdrId,
             });
+
+            if (assignedSdrId) {
+              await supabase
+                .from("leads")
+                .update({ sdr_id: assignedSdrId, closer_id: assignedSdrId })
+                .eq("id", newLead.id);
+            }
 
             // Add tag
             await supabase.from("lead_tags").insert({

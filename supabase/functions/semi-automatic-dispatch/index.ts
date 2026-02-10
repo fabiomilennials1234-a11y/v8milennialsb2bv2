@@ -59,7 +59,7 @@ Deno.serve(async (req) => {
       .select(`
         *,
         template:campaign_templates(id, name, content, message_type, audio_url, available_variables),
-        campanha:campanhas(id, name, organization_id)
+        campanha:campanhas(id, name, organization_id, whatsapp_instance_id)
       `)
       .eq("status", "scheduled")
       .lte("scheduled_at", new Date().toISOString());
@@ -149,14 +149,28 @@ async function processBatch(
     .update({ status: "processing", started_at: new Date().toISOString() })
     .eq("id", batch.id);
 
-  // Buscar instância WhatsApp ativa da organização
-  const { data: whatsappInstance } = await supabase
-    .from("whatsapp_instances")
-    .select("id, instance_name")
-    .eq("organization_id", organizationId)
-    .eq("status", "open")
-    .limit(1)
-    .single();
+  // Instância WhatsApp: usar a vinculada à campanha se existir; senão primeira ativa da organização
+  let whatsappInstance: { id: string; instance_name: string } | null = null;
+  const campaignInstanceId = batch.campanha?.whatsapp_instance_id;
+
+  if (campaignInstanceId) {
+    const { data: inst } = await supabase
+      .from("whatsapp_instances")
+      .select("id, instance_name")
+      .eq("id", campaignInstanceId)
+      .single();
+    whatsappInstance = inst ? { id: inst.id, instance_name: inst.instance_name } : null;
+  }
+
+  if (!whatsappInstance) {
+    const { data: instList } = await supabase
+      .from("whatsapp_instances")
+      .select("id, instance_name")
+      .eq("organization_id", organizationId)
+      .or("status.eq.open,status.eq.connected")
+      .limit(1);
+    whatsappInstance = instList?.[0] ?? null;
+  }
 
   if (!whatsappInstance) {
     console.error("[semi-automatic-dispatch] No active WhatsApp instance");

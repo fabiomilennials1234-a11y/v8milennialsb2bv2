@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { useCreateCampanha, type CampaignType, type AutoConfig, type LeadDistributionMode } from "@/hooks/useCampanhas";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
+import { useWhatsAppInstances } from "@/hooks/useWhatsAppInstances";
 import { toast } from "sonner";
 import {
   Plus, X, GripVertical, Target, Users, Calendar, DollarSign,
@@ -110,6 +111,9 @@ export function CreateCampanhaModal({ open, onOpenChange }: CreateCampanhaModalP
   // Semi-automatic mode config
   const [selectedTemplateIds, setSelectedTemplateIds] = useState<string[]>([]);
 
+  // Instância WhatsApp (semi e automática)
+  const [selectedWhatsAppInstanceId, setSelectedWhatsAppInstanceId] = useState<string | null>(null);
+
   // Basic info
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -128,6 +132,7 @@ export function CreateCampanhaModal({ open, onOpenChange }: CreateCampanhaModalP
 
   const createCampanha = useCreateCampanha();
   const { data: teamMembers } = useTeamMembers();
+  const { data: whatsappInstances = [] } = useWhatsAppInstances();
 
   // Calculate steps based on campaign type
   const getStepsForType = (type: CampaignType): WizardStep[] => {
@@ -253,6 +258,7 @@ export function CreateCampanhaModal({ open, onOpenChange }: CreateCampanhaModalP
           })),
         memberIds: selectedMembers,
         templateIds: campaignType === "semi_automatica" ? selectedTemplateIds : undefined,
+        whatsapp_instance_id: (campaignType === "semi_automatica" || campaignType === "automatica") ? selectedWhatsAppInstanceId : null,
       });
 
       toast.success("Campanha criada com sucesso!");
@@ -285,6 +291,7 @@ export function CreateCampanhaModal({ open, onOpenChange }: CreateCampanhaModalP
     setSelectedMembers([]);
     setLeadDistributionMode(null);
     setLeadAssignedTo(null);
+    setSelectedWhatsAppInstanceId(null);
   };
 
   const renderStepContent = () => {
@@ -357,20 +364,70 @@ export function CreateCampanhaModal({ open, onOpenChange }: CreateCampanhaModalP
       case "config":
         if (campaignType === "automatica") {
           return (
-            <AgentSelectorStep
-              selectedAgentId={selectedAgentId}
-              onAgentSelect={setSelectedAgentId}
-              autoConfig={autoConfig}
-              onAutoConfigChange={setAutoConfig}
-            />
+            <div className="space-y-6">
+              <AgentSelectorStep
+                selectedAgentId={selectedAgentId}
+                onAgentSelect={setSelectedAgentId}
+                autoConfig={autoConfig}
+                onAutoConfigChange={setAutoConfig}
+              />
+              <div className="space-y-2">
+                <Label>Instância WhatsApp (opcional)</Label>
+                <Select
+                  value={selectedWhatsAppInstanceId ?? "none"}
+                  onValueChange={(v) => setSelectedWhatsAppInstanceId(v === "none" ? null : v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Usar primeira instância ativa da organização" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Usar primeira instância ativa</SelectItem>
+                    {whatsappInstances.map((inst) => (
+                      <SelectItem key={inst.id} value={inst.id}>
+                        {inst.instance_name}
+                        {inst.phone_number ? ` (${inst.phone_number})` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Se não escolher, os disparos usarão a primeira instância ativa da organização.
+                </p>
+              </div>
+            </div>
           );
         }
         if (campaignType === "semi_automatica") {
           return (
-            <TemplateSelectorStep
-              selectedTemplateIds={selectedTemplateIds}
-              onTemplatesChange={setSelectedTemplateIds}
-            />
+            <div className="space-y-6">
+              <TemplateSelectorStep
+                selectedTemplateIds={selectedTemplateIds}
+                onTemplatesChange={setSelectedTemplateIds}
+              />
+              <div className="space-y-2">
+                <Label>Instância WhatsApp (opcional)</Label>
+                <Select
+                  value={selectedWhatsAppInstanceId ?? "none"}
+                  onValueChange={(v) => setSelectedWhatsAppInstanceId(v === "none" ? null : v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Usar primeira instância ativa da organização" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Usar primeira instância ativa</SelectItem>
+                    {whatsappInstances.map((inst) => (
+                      <SelectItem key={inst.id} value={inst.id}>
+                        {inst.instance_name}
+                        {inst.phone_number ? ` (${inst.phone_number})` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Se não escolher, os disparos usarão a primeira instância ativa da organização.
+                </p>
+              </div>
+            </div>
           );
         }
         return null;
