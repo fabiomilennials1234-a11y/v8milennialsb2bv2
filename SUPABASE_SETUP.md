@@ -125,6 +125,9 @@ supabase db push
 # Settings → Database → Migrations → Run migrations
 ```
 
+**Erro "Could not find the table 'public.campanha_dispatch_rules' in the schema cache":**  
+Siga o guia [supabase/MIGRATIONS_CAMPANHA_DISPATCH_RULES.md](supabase/MIGRATIONS_CAMPANHA_DISPATCH_RULES.md) para verificar/aplicar as migrations das regras de envio e recarregar o schema.
+
 ## Troubleshooting
 
 ### Erro: "Invalid API key"

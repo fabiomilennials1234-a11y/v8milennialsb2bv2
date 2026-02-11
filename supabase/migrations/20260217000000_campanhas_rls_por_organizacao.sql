@@ -12,6 +12,7 @@ DROP POLICY IF EXISTS "Campanhas visíveis para team members" ON public.campanha
 DROP POLICY IF EXISTS "Apenas admins podem gerenciar campanhas" ON public.campanhas;
 
 -- SELECT: usuário só vê campanhas das organizações em que é membro
+DROP POLICY IF EXISTS "campanhas_select_organization" ON public.campanhas;
 CREATE POLICY "campanhas_select_organization"
   ON public.campanhas FOR SELECT
   TO authenticated
@@ -22,6 +23,7 @@ CREATE POLICY "campanhas_select_organization"
   );
 
 -- INSERT: apenas admins podem criar campanha, e só na sua organização
+DROP POLICY IF EXISTS "campanhas_insert_organization_admin" ON public.campanhas;
 CREATE POLICY "campanhas_insert_organization_admin"
   ON public.campanhas FOR INSERT
   TO authenticated
@@ -33,6 +35,7 @@ CREATE POLICY "campanhas_insert_organization_admin"
   );
 
 -- UPDATE: apenas admins podem atualizar, e só campanhas da sua organização
+DROP POLICY IF EXISTS "campanhas_update_organization_admin" ON public.campanhas;
 CREATE POLICY "campanhas_update_organization_admin"
   ON public.campanhas FOR UPDATE
   TO authenticated
@@ -49,6 +52,7 @@ CREATE POLICY "campanhas_update_organization_admin"
   );
 
 -- DELETE: apenas admins podem excluir, e só campanhas da sua organização
+DROP POLICY IF EXISTS "campanhas_delete_organization_admin" ON public.campanhas;
 CREATE POLICY "campanhas_delete_organization_admin"
   ON public.campanhas FOR DELETE
   TO authenticated
@@ -67,6 +71,7 @@ DROP POLICY IF EXISTS "Stages visíveis para team members" ON public.campanha_st
 DROP POLICY IF EXISTS "Apenas admins podem gerenciar stages" ON public.campanha_stages;
 
 -- SELECT: só stages de campanhas da organização do usuário
+DROP POLICY IF EXISTS "campanha_stages_select_organization" ON public.campanha_stages;
 CREATE POLICY "campanha_stages_select_organization"
   ON public.campanha_stages FOR SELECT
   TO authenticated
@@ -80,6 +85,7 @@ CREATE POLICY "campanha_stages_select_organization"
   );
 
 -- INSERT/UPDATE/DELETE: apenas admins, e só em campanhas da sua organização
+DROP POLICY IF EXISTS "campanha_stages_insert_organization_admin" ON public.campanha_stages;
 CREATE POLICY "campanha_stages_insert_organization_admin"
   ON public.campanha_stages FOR INSERT
   TO authenticated
@@ -93,6 +99,7 @@ CREATE POLICY "campanha_stages_insert_organization_admin"
     )
   );
 
+DROP POLICY IF EXISTS "campanha_stages_update_organization_admin" ON public.campanha_stages;
 CREATE POLICY "campanha_stages_update_organization_admin"
   ON public.campanha_stages FOR UPDATE
   TO authenticated
@@ -106,6 +113,7 @@ CREATE POLICY "campanha_stages_update_organization_admin"
     )
   );
 
+DROP POLICY IF EXISTS "campanha_stages_delete_organization_admin" ON public.campanha_stages;
 CREATE POLICY "campanha_stages_delete_organization_admin"
   ON public.campanha_stages FOR DELETE
   TO authenticated
@@ -127,6 +135,7 @@ DROP POLICY IF EXISTS "Members visíveis para team members" ON public.campanha_m
 DROP POLICY IF EXISTS "Apenas admins podem gerenciar members" ON public.campanha_members;
 
 -- SELECT: só members de campanhas da organização do usuário
+DROP POLICY IF EXISTS "campanha_members_select_organization" ON public.campanha_members;
 CREATE POLICY "campanha_members_select_organization"
   ON public.campanha_members FOR SELECT
   TO authenticated
@@ -140,6 +149,7 @@ CREATE POLICY "campanha_members_select_organization"
   );
 
 -- INSERT/UPDATE/DELETE: apenas admins, e só em campanhas da sua organização
+DROP POLICY IF EXISTS "campanha_members_insert_organization_admin" ON public.campanha_members;
 CREATE POLICY "campanha_members_insert_organization_admin"
   ON public.campanha_members FOR INSERT
   TO authenticated
@@ -153,6 +163,7 @@ CREATE POLICY "campanha_members_insert_organization_admin"
     )
   );
 
+DROP POLICY IF EXISTS "campanha_members_update_organization_admin" ON public.campanha_members;
 CREATE POLICY "campanha_members_update_organization_admin"
   ON public.campanha_members FOR UPDATE
   TO authenticated
@@ -166,6 +177,7 @@ CREATE POLICY "campanha_members_update_organization_admin"
     )
   );
 
+DROP POLICY IF EXISTS "campanha_members_delete_organization_admin" ON public.campanha_members;
 CREATE POLICY "campanha_members_delete_organization_admin"
   ON public.campanha_members FOR DELETE
   TO authenticated

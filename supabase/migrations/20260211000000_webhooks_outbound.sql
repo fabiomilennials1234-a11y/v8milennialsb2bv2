@@ -6,7 +6,7 @@
 -- 1. TABELA webhooks
 -- =====================================================
 
-CREATE TABLE public.webhooks (
+CREATE TABLE IF NOT EXISTS public.webhooks (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
@@ -28,6 +28,7 @@ CREATE INDEX IF NOT EXISTS idx_webhooks_organization_active ON public.webhooks(o
 ALTER TABLE public.webhooks ENABLE ROW LEVEL SECURITY;
 
 -- Membros da org podem ler; apenas admins podem inserir/atualizar/deletar
+DROP POLICY IF EXISTS "webhooks_select_own_org" ON public.webhooks;
 CREATE POLICY "webhooks_select_own_org"
   ON public.webhooks FOR SELECT
   USING (
@@ -36,6 +37,7 @@ CREATE POLICY "webhooks_select_own_org"
     )
   );
 
+DROP POLICY IF EXISTS "webhooks_insert_admin" ON public.webhooks;
 CREATE POLICY "webhooks_insert_admin"
   ON public.webhooks FOR INSERT
   WITH CHECK (
@@ -46,6 +48,7 @@ CREATE POLICY "webhooks_insert_admin"
     )
   );
 
+DROP POLICY IF EXISTS "webhooks_update_admin" ON public.webhooks;
 CREATE POLICY "webhooks_update_admin"
   ON public.webhooks FOR UPDATE
   USING (
@@ -56,6 +59,7 @@ CREATE POLICY "webhooks_update_admin"
     )
   );
 
+DROP POLICY IF EXISTS "webhooks_delete_admin" ON public.webhooks;
 CREATE POLICY "webhooks_delete_admin"
   ON public.webhooks FOR DELETE
   USING (
@@ -77,7 +81,7 @@ CREATE TRIGGER update_webhooks_updated_at
 -- 2. TABELA webhook_delivery_logs
 -- =====================================================
 
-CREATE TABLE public.webhook_delivery_logs (
+CREATE TABLE IF NOT EXISTS public.webhook_delivery_logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   webhook_id UUID NOT NULL REFERENCES public.webhooks(id) ON DELETE CASCADE,
   event TEXT NOT NULL,
@@ -96,6 +100,7 @@ CREATE INDEX IF NOT EXISTS idx_webhook_delivery_logs_webhook_delivered
 ALTER TABLE public.webhook_delivery_logs ENABLE ROW LEVEL SECURITY;
 
 -- Mesmo escopo: membros da org do webhook podem ler
+DROP POLICY IF EXISTS "webhook_delivery_logs_select_own_org" ON public.webhook_delivery_logs;
 CREATE POLICY "webhook_delivery_logs_select_own_org"
   ON public.webhook_delivery_logs FOR SELECT
   USING (
@@ -113,7 +118,7 @@ CREATE POLICY "webhook_delivery_logs_select_own_org"
 -- 3. TABELA webhook_deliveries (fila)
 -- =====================================================
 
-CREATE TABLE public.webhook_deliveries (
+CREATE TABLE IF NOT EXISTS public.webhook_deliveries (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   webhook_id UUID NOT NULL REFERENCES public.webhooks(id) ON DELETE CASCADE,
   event TEXT NOT NULL,

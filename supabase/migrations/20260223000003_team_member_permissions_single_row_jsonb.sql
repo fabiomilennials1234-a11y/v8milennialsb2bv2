@@ -51,6 +51,8 @@ END $$;
 
 -- 3) Garantir uma única linha por (team_member_id, resource_key, action_key)
 ALTER TABLE public.team_member_permissions
+  DROP CONSTRAINT IF EXISTS team_member_permissions_unique_slot;
+ALTER TABLE public.team_member_permissions
   ADD CONSTRAINT team_member_permissions_unique_slot
   UNIQUE (team_member_id, resource_key, action_key);
 

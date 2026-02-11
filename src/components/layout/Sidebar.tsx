@@ -45,11 +45,11 @@ interface NavItemWithChildren extends NavItem {
   children?: NavItem[];
 }
 
-// Subitens do menu Funis
+// Subitens do menu Funis (ordem: Qualificação > Confirmação > Propostas)
 const funisSubItems: NavItem[] = [
   { label: "Qualificação", icon: MessageSquare, path: "/pipe-whatsapp" },
-  { label: "Propostas", icon: Kanban, path: "/pipe-propostas" },
   { label: "Confirmação", icon: Calendar, path: "/pipe-confirmacao" },
+  { label: "Propostas", icon: Kanban, path: "/pipe-propostas" },
 ];
 
 const navItems: NavItemWithChildren[] = [
@@ -75,7 +75,7 @@ const bottomNavItems: NavItem[] = [
   { label: "Pitstop", icon: Settings, path: "/configuracoes" },
 ];
 
-const FUNIS_PATHS = ["/pipe-whatsapp", "/pipe-propostas", "/pipe-confirmacao", "/funis"] as const;
+const FUNIS_PATHS = ["/pipe-whatsapp", "/pipe-confirmacao", "/pipe-propostas", "/funis"] as const;
 
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);

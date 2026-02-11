@@ -952,10 +952,7 @@ export function useCampanhaDispatchRules(campanhaId: string | undefined) {
       if (!campanhaId) return [];
       const { data, error } = await supabase
         .from("campanha_dispatch_rules")
-        .select(`
-          *,
-          stage:campanha_stages(id, name, color, position)
-        `)
+        .select("*")
         .eq("campanha_id", campanhaId)
         .order("created_at", { ascending: true });
       if (error) throw error;
@@ -1076,7 +1073,7 @@ export function useCreateCampanhaDispatchRuleStep() {
         .insert({
           rule_id: payload.rule_id,
           template_id: payload.template_id,
-          delay_minutes: payload.delay_minutes ?? 0,
+          delay_minutes: Math.max(0, Math.floor(Number(payload.delay_minutes) || 0)),
           position: payload.position,
         })
         .select()

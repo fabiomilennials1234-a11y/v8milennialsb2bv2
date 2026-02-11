@@ -22,6 +22,7 @@ CREATE INDEX IF NOT EXISTS idx_whatsapp_instance_allowed_members_member
 ALTER TABLE public.whatsapp_instance_allowed_members ENABLE ROW LEVEL SECURITY;
 
 -- Qualquer membro da org pode ler (para saber se pode responder)
+DROP POLICY IF EXISTS "allowed_members_select_own_org" ON public.whatsapp_instance_allowed_members;
 CREATE POLICY "allowed_members_select_own_org"
   ON public.whatsapp_instance_allowed_members FOR SELECT
   USING (
@@ -34,6 +35,7 @@ CREATE POLICY "allowed_members_select_own_org"
   );
 
 -- Apenas admin pode inserir/atualizar/deletar
+DROP POLICY IF EXISTS "allowed_members_insert_admin" ON public.whatsapp_instance_allowed_members;
 CREATE POLICY "allowed_members_insert_admin"
   ON public.whatsapp_instance_allowed_members FOR INSERT
   WITH CHECK (
@@ -45,6 +47,7 @@ CREATE POLICY "allowed_members_insert_admin"
     )
   );
 
+DROP POLICY IF EXISTS "allowed_members_update_admin" ON public.whatsapp_instance_allowed_members;
 CREATE POLICY "allowed_members_update_admin"
   ON public.whatsapp_instance_allowed_members FOR UPDATE
   USING (
@@ -56,6 +59,7 @@ CREATE POLICY "allowed_members_update_admin"
     )
   );
 
+DROP POLICY IF EXISTS "allowed_members_delete_admin" ON public.whatsapp_instance_allowed_members;
 CREATE POLICY "allowed_members_delete_admin"
   ON public.whatsapp_instance_allowed_members FOR DELETE
   USING (

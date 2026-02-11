@@ -33,6 +33,7 @@ CREATE INDEX IF NOT EXISTS idx_org_role_permissions_org_role
 ALTER TABLE public.organization_role_permissions ENABLE ROW LEVEL SECURITY;
 
 -- Apenas membros da org podem ler; apenas admins podem alterar
+DROP POLICY IF EXISTS "org_role_permissions_select_own_org" ON public.organization_role_permissions;
 CREATE POLICY "org_role_permissions_select_own_org"
   ON public.organization_role_permissions FOR SELECT
   USING (
@@ -41,6 +42,7 @@ CREATE POLICY "org_role_permissions_select_own_org"
     )
   );
 
+DROP POLICY IF EXISTS "org_role_permissions_insert_admin" ON public.organization_role_permissions;
 CREATE POLICY "org_role_permissions_insert_admin"
   ON public.organization_role_permissions FOR INSERT
   WITH CHECK (
@@ -51,6 +53,7 @@ CREATE POLICY "org_role_permissions_insert_admin"
     )
   );
 
+DROP POLICY IF EXISTS "org_role_permissions_update_admin" ON public.organization_role_permissions;
 CREATE POLICY "org_role_permissions_update_admin"
   ON public.organization_role_permissions FOR UPDATE
   USING (
@@ -61,6 +64,7 @@ CREATE POLICY "org_role_permissions_update_admin"
     )
   );
 
+DROP POLICY IF EXISTS "org_role_permissions_delete_admin" ON public.organization_role_permissions;
 CREATE POLICY "org_role_permissions_delete_admin"
   ON public.organization_role_permissions FOR DELETE
   USING (

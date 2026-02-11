@@ -19,7 +19,7 @@ CREATE INDEX IF NOT EXISTS idx_campanhas_whatsapp_instance ON public.campanhas(w
 -- 2. REGRAS DE ENVIO (trigger_type + stage)
 -- ============================================
 
-CREATE TABLE public.campanha_dispatch_rules (
+CREATE TABLE IF NOT EXISTS public.campanha_dispatch_rules (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   campanha_id UUID NOT NULL REFERENCES public.campanhas(id) ON DELETE CASCADE,
   trigger_type TEXT NOT NULL CHECK (trigger_type IN ('lead_created', 'lead_moved_to_stage')),
@@ -37,17 +37,17 @@ COMMENT ON TABLE public.campanha_dispatch_rules IS 'Regras de envio: ao criar le
 COMMENT ON COLUMN public.campanha_dispatch_rules.trigger_type IS 'lead_created = ao adicionar lead; lead_moved_to_stage = ao mover para etapa específica.';
 COMMENT ON COLUMN public.campanha_dispatch_rules.campanha_stage_id IS 'Obrigatório quando trigger_type = lead_moved_to_stage.';
 
-CREATE UNIQUE INDEX idx_campanha_dispatch_rules_unique
+CREATE UNIQUE INDEX IF NOT EXISTS idx_campanha_dispatch_rules_unique
   ON public.campanha_dispatch_rules(campanha_id, trigger_type, COALESCE(campanha_stage_id::text, ''));
 
-CREATE INDEX idx_campanha_dispatch_rules_campanha ON public.campanha_dispatch_rules(campanha_id);
-CREATE INDEX idx_campanha_dispatch_rules_active ON public.campanha_dispatch_rules(campanha_id, is_active) WHERE is_active = true;
+CREATE INDEX IF NOT EXISTS idx_campanha_dispatch_rules_campanha ON public.campanha_dispatch_rules(campanha_id);
+CREATE INDEX IF NOT EXISTS idx_campanha_dispatch_rules_active ON public.campanha_dispatch_rules(campanha_id, is_active) WHERE is_active = true;
 
 -- ============================================
 -- 3. PASSOS DA SEQUÊNCIA (template + delay)
 -- ============================================
 
-CREATE TABLE public.campanha_dispatch_rule_steps (
+CREATE TABLE IF NOT EXISTS public.campanha_dispatch_rule_steps (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   rule_id UUID NOT NULL REFERENCES public.campanha_dispatch_rules(id) ON DELETE CASCADE,
   template_id UUID NOT NULL REFERENCES public.campaign_templates(id) ON DELETE CASCADE,
@@ -58,13 +58,13 @@ CREATE TABLE public.campanha_dispatch_rule_steps (
 COMMENT ON TABLE public.campanha_dispatch_rule_steps IS 'Cada passo da sequência: template a enviar e delay em minutos em relação ao passo anterior (0 = imediato).';
 COMMENT ON COLUMN public.campanha_dispatch_rule_steps.delay_minutes IS 'Minutos de espera após o passo anterior antes de enviar este (0 = enviar junto com o primeiro).';
 
-CREATE INDEX idx_campanha_dispatch_rule_steps_rule ON public.campanha_dispatch_rule_steps(rule_id);
+CREATE INDEX IF NOT EXISTS idx_campanha_dispatch_rule_steps_rule ON public.campanha_dispatch_rule_steps(rule_id);
 
 -- ============================================
 -- 4. FILA DE MENSAGENS AGENDADAS
 -- ============================================
 
-CREATE TABLE public.scheduled_campaign_messages (
+CREATE TABLE IF NOT EXISTS public.scheduled_campaign_messages (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   campanha_id UUID NOT NULL REFERENCES public.campanhas(id) ON DELETE CASCADE,
   rule_id UUID NOT NULL REFERENCES public.campanha_dispatch_rules(id) ON DELETE CASCADE,
@@ -82,12 +82,12 @@ CREATE TABLE public.scheduled_campaign_messages (
 
 COMMENT ON TABLE public.scheduled_campaign_messages IS 'Fila de envios agendados pelas regras de campanha (lead criado ou movido para etapa).';
 
-CREATE INDEX idx_scheduled_campaign_messages_worker
+CREATE INDEX IF NOT EXISTS idx_scheduled_campaign_messages_worker
   ON public.scheduled_campaign_messages(status, scheduled_at)
   WHERE status = 'scheduled';
 
-CREATE INDEX idx_scheduled_campaign_messages_campanha ON public.scheduled_campaign_messages(campanha_id);
-CREATE INDEX idx_scheduled_campaign_messages_rule_lead ON public.scheduled_campaign_messages(rule_id, campanha_lead_id);
+CREATE INDEX IF NOT EXISTS idx_scheduled_campaign_messages_campanha ON public.scheduled_campaign_messages(campanha_id);
+CREATE INDEX IF NOT EXISTS idx_scheduled_campaign_messages_rule_lead ON public.scheduled_campaign_messages(rule_id, campanha_lead_id);
 
 -- ============================================
 -- 5. RLS
@@ -98,6 +98,7 @@ ALTER TABLE public.campanha_dispatch_rule_steps ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.scheduled_campaign_messages ENABLE ROW LEVEL SECURITY;
 
 -- campanha_dispatch_rules: usuários veem/gerenciam por organização da campanha
+DROP POLICY IF EXISTS "campanha_dispatch_rules_select" ON public.campanha_dispatch_rules;
 CREATE POLICY "campanha_dispatch_rules_select"
   ON public.campanha_dispatch_rules FOR SELECT TO authenticated
   USING (
@@ -109,6 +110,7 @@ CREATE POLICY "campanha_dispatch_rules_select"
     )
   );
 
+DROP POLICY IF EXISTS "campanha_dispatch_rules_insert" ON public.campanha_dispatch_rules;
 CREATE POLICY "campanha_dispatch_rules_insert"
   ON public.campanha_dispatch_rules FOR INSERT TO authenticated
   WITH CHECK (
@@ -121,6 +123,7 @@ CREATE POLICY "campanha_dispatch_rules_insert"
     )
   );
 
+DROP POLICY IF EXISTS "campanha_dispatch_rules_update" ON public.campanha_dispatch_rules;
 CREATE POLICY "campanha_dispatch_rules_update"
   ON public.campanha_dispatch_rules FOR UPDATE TO authenticated
   USING (
@@ -140,6 +143,7 @@ CREATE POLICY "campanha_dispatch_rules_update"
     )
   );
 
+DROP POLICY IF EXISTS "campanha_dispatch_rules_delete" ON public.campanha_dispatch_rules;
 CREATE POLICY "campanha_dispatch_rules_delete"
   ON public.campanha_dispatch_rules FOR DELETE TO authenticated
   USING (
@@ -152,11 +156,12 @@ CREATE POLICY "campanha_dispatch_rules_delete"
   );
 
 -- campanha_dispatch_rule_steps: via rule -> campanha
+DROP POLICY IF EXISTS "campanha_dispatch_rule_steps_select" ON public.campanha_dispatch_rule_steps;
 CREATE POLICY "campanha_dispatch_rule_steps_select"
   ON public.campanha_dispatch_rule_steps FOR SELECT TO authenticated
   USING (
     rule_id IN (
-      SELECT id FROM public.campanha_dispatch_rules r
+      SELECT r.id FROM public.campanha_dispatch_rules r
       JOIN public.campanhas c ON c.id = r.campanha_id
       WHERE c.organization_id IN (
         SELECT organization_id FROM public.team_members WHERE user_id = auth.uid()
@@ -164,12 +169,13 @@ CREATE POLICY "campanha_dispatch_rule_steps_select"
     )
   );
 
+DROP POLICY IF EXISTS "campanha_dispatch_rule_steps_insert" ON public.campanha_dispatch_rule_steps;
 CREATE POLICY "campanha_dispatch_rule_steps_insert"
   ON public.campanha_dispatch_rule_steps FOR INSERT TO authenticated
   WITH CHECK (
     public.is_user_admin()
     AND rule_id IN (
-      SELECT id FROM public.campanha_dispatch_rules r
+      SELECT r.id FROM public.campanha_dispatch_rules r
       JOIN public.campanhas c ON c.id = r.campanha_id
       WHERE c.organization_id IN (
         SELECT organization_id FROM public.team_members WHERE user_id = auth.uid()
@@ -177,11 +183,12 @@ CREATE POLICY "campanha_dispatch_rule_steps_insert"
     )
   );
 
+DROP POLICY IF EXISTS "campanha_dispatch_rule_steps_update" ON public.campanha_dispatch_rule_steps;
 CREATE POLICY "campanha_dispatch_rule_steps_update"
   ON public.campanha_dispatch_rule_steps FOR UPDATE TO authenticated
   USING (
     rule_id IN (
-      SELECT id FROM public.campanha_dispatch_rules r
+      SELECT r.id FROM public.campanha_dispatch_rules r
       JOIN public.campanhas c ON c.id = r.campanha_id
       WHERE c.organization_id IN (
         SELECT organization_id FROM public.team_members WHERE user_id = auth.uid()
@@ -189,11 +196,12 @@ CREATE POLICY "campanha_dispatch_rule_steps_update"
     )
   );
 
+DROP POLICY IF EXISTS "campanha_dispatch_rule_steps_delete" ON public.campanha_dispatch_rule_steps;
 CREATE POLICY "campanha_dispatch_rule_steps_delete"
   ON public.campanha_dispatch_rule_steps FOR DELETE TO authenticated
   USING (
     rule_id IN (
-      SELECT id FROM public.campanha_dispatch_rules r
+      SELECT r.id FROM public.campanha_dispatch_rules r
       JOIN public.campanhas c ON c.id = r.campanha_id
       WHERE c.organization_id IN (
         SELECT organization_id FROM public.team_members WHERE user_id = auth.uid()
@@ -202,6 +210,7 @@ CREATE POLICY "campanha_dispatch_rule_steps_delete"
   );
 
 -- scheduled_campaign_messages: leitura para org; escrita apenas via service role (worker)
+DROP POLICY IF EXISTS "scheduled_campaign_messages_select" ON public.scheduled_campaign_messages;
 CREATE POLICY "scheduled_campaign_messages_select"
   ON public.scheduled_campaign_messages FOR SELECT TO authenticated
   USING (
@@ -213,6 +222,7 @@ CREATE POLICY "scheduled_campaign_messages_select"
     )
   );
 
+DROP POLICY IF EXISTS "scheduled_campaign_messages_service_role" ON public.scheduled_campaign_messages;
 CREATE POLICY "scheduled_campaign_messages_service_role"
   ON public.scheduled_campaign_messages FOR ALL TO service_role
   USING (true)

@@ -41,6 +41,15 @@ Processar leads de uma campanha, aplicar regras de atribuição de SDRs, atualiz
   - **UPDATE** de `stage_id` em `campanha_leads`: para regras com `trigger_type = 'lead_moved_to_stage'` e `campanha_stage_id = NEW.stage_id`, mesma lógica. Idempotência: não insere se já existir mensagem (agendada ou enviada) para o mesmo `(campanha_lead_id, rule_id)`.
 - **Worker** (Edge Function `campaign-rule-dispatch`): consulta `scheduled_campaign_messages` com `status = 'scheduled'` e `scheduled_at <= NOW()`; envia via Evolution API (texto/áudio, substituição de variáveis); atualiza status e `outbound_dispatch_log`; respeita rate limit por organização/instância.
 - UI: na tela de detalhe da campanha, seção "Regras de envio por etapa" (CRUD de regras e passos; templates vinculados à campanha; etapas da campanha para gatilho "movido para etapa").
+- **RLS e permissões:** SELECT em `campanha_dispatch_rules` e `campanha_dispatch_rule_steps` permitido para `authenticated` da mesma organização (via campanha). INSERT, UPDATE e DELETE exigem `public.is_user_admin()` — apenas administradores podem criar/editar/remover regras. Usuários não admin (ex.: "Chefe de Equipe" sem role admin) recebem 403; a UI exibe mensagem: "Sem permissão para criar regras de envio. Apenas administradores podem criar regras."
+
+## Checklist: envio automático por cron (regras por etapa)
+Para que as mensagens agendadas sejam processadas automaticamente a cada minuto:
+- Migrations aplicadas: `20260301000000_campanhas_whatsapp_instance_and_dispatch_rules.sql`, `20260301010000_campanha_leads_dispatch_rules_trigger.sql`, `20260310000000_campaign_rule_dispatch_cron.sql`.
+- Em `cron_config`: `campaign_rule_dispatch_url` = `https://<PROJECT_REF>.supabase.co/functions/v1/campaign-rule-dispatch`; se usar secret, `cron_secret` igual ao valor definido em Edge Function Secrets como `CRON_SECRET`.
+- Secrets da Edge Function: `EVOLUTION_API_URL`, `EVOLUTION_API_KEY`; opcional `CRON_SECRET` para proteger chamadas do cron.
+- Extensões pg_cron e pg_net habilitadas no projeto (Supabase Dashboard → Database → Extensions).
+- **Disparo manual:** Na UI, seção "Regras de envio por etapa", botão "Processar fila agora" (requer usuário admin). A função aceita `x-cron-secret` (cron) ou JWT de admin (UI).
 
 ## Aprendizados
 (Atualizado automaticamente pelo sistema)

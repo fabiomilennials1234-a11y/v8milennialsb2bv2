@@ -25,6 +25,7 @@ CREATE INDEX IF NOT EXISTS idx_team_member_org_permissions_team_member
 ALTER TABLE public.team_member_org_permissions ENABLE ROW LEVEL SECURITY;
 
 -- Ver: membros da mesma org; inserir/atualizar/deletar: apenas admin da org
+DROP POLICY IF EXISTS "team_member_org_permissions_select_own_org" ON public.team_member_org_permissions;
 CREATE POLICY "team_member_org_permissions_select_own_org"
   ON public.team_member_org_permissions FOR SELECT
   USING (
@@ -36,6 +37,7 @@ CREATE POLICY "team_member_org_permissions_select_own_org"
     )
   );
 
+DROP POLICY IF EXISTS "team_member_org_permissions_insert_admin" ON public.team_member_org_permissions;
 CREATE POLICY "team_member_org_permissions_insert_admin"
   ON public.team_member_org_permissions FOR INSERT
   WITH CHECK (
@@ -49,6 +51,7 @@ CREATE POLICY "team_member_org_permissions_insert_admin"
     )
   );
 
+DROP POLICY IF EXISTS "team_member_org_permissions_update_admin" ON public.team_member_org_permissions;
 CREATE POLICY "team_member_org_permissions_update_admin"
   ON public.team_member_org_permissions FOR UPDATE
   USING (
@@ -62,6 +65,7 @@ CREATE POLICY "team_member_org_permissions_update_admin"
     )
   );
 
+DROP POLICY IF EXISTS "team_member_org_permissions_delete_admin" ON public.team_member_org_permissions;
 CREATE POLICY "team_member_org_permissions_delete_admin"
   ON public.team_member_org_permissions FOR DELETE
   USING (
@@ -104,10 +108,12 @@ $$;
 COMMENT ON FUNCTION public.user_has_org_permission IS 'Admin sempre true. Senão: se existir team_member_org_permissions para o membro, usa; caso contrário usa organization_role_permissions por role.';
 
 -- Master pode ver/gerenciar team_member_org_permissions
+DROP POLICY IF EXISTS "master_select_all_team_member_org_permissions" ON public.team_member_org_permissions;
 CREATE POLICY "master_select_all_team_member_org_permissions"
   ON public.team_member_org_permissions FOR SELECT
   USING (public.is_master_user());
 
+DROP POLICY IF EXISTS "master_all_team_member_org_permissions" ON public.team_member_org_permissions;
 CREATE POLICY "master_all_team_member_org_permissions"
   ON public.team_member_org_permissions FOR ALL
   USING (public.is_master_user());

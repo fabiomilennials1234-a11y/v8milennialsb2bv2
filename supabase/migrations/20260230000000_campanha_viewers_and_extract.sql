@@ -20,6 +20,7 @@ COMMENT ON TABLE public.campanha_allowed_viewers IS 'Usuários (team_members) co
 ALTER TABLE public.campanha_allowed_viewers ENABLE ROW LEVEL SECURITY;
 
 -- SELECT: ver viewers da campanha se o usuário puder ver a campanha (será checado via campanhas)
+DROP POLICY IF EXISTS "campanha_allowed_viewers_select" ON public.campanha_allowed_viewers;
 CREATE POLICY "campanha_allowed_viewers_select"
   ON public.campanha_allowed_viewers FOR SELECT
   TO authenticated
@@ -33,6 +34,7 @@ CREATE POLICY "campanha_allowed_viewers_select"
   );
 
 -- INSERT/DELETE: apenas admins da org da campanha
+DROP POLICY IF EXISTS "campanha_allowed_viewers_insert" ON public.campanha_allowed_viewers;
 CREATE POLICY "campanha_allowed_viewers_insert"
   ON public.campanha_allowed_viewers FOR INSERT
   TO authenticated
@@ -46,6 +48,7 @@ CREATE POLICY "campanha_allowed_viewers_insert"
     )
   );
 
+DROP POLICY IF EXISTS "campanha_allowed_viewers_delete" ON public.campanha_allowed_viewers;
 CREATE POLICY "campanha_allowed_viewers_delete"
   ON public.campanha_allowed_viewers FOR DELETE
   TO authenticated

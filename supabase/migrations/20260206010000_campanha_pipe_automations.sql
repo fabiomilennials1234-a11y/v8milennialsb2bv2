@@ -1,7 +1,7 @@
 -- Automações de envio: quando lead chega em uma etapa da campanha, sai da campanha e entra em uma etapa de um pipe.
 -- Uma regra por etapa da campanha (única por campanha_id + campanha_stage_id).
 
-CREATE TABLE public.campanha_pipe_automations (
+CREATE TABLE IF NOT EXISTS public.campanha_pipe_automations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   campanha_id UUID NOT NULL REFERENCES public.campanhas(id) ON DELETE CASCADE,
   campanha_stage_id UUID NOT NULL REFERENCES public.campanha_stages(id) ON DELETE CASCADE,
@@ -11,12 +11,13 @@ CREATE TABLE public.campanha_pipe_automations (
   UNIQUE(campanha_id, campanha_stage_id)
 );
 
-CREATE INDEX idx_campanha_pipe_automations_campanha ON public.campanha_pipe_automations(campanha_id);
-CREATE INDEX idx_campanha_pipe_automations_stage ON public.campanha_pipe_automations(campanha_stage_id);
+CREATE INDEX IF NOT EXISTS idx_campanha_pipe_automations_campanha ON public.campanha_pipe_automations(campanha_id);
+CREATE INDEX IF NOT EXISTS idx_campanha_pipe_automations_stage ON public.campanha_pipe_automations(campanha_stage_id);
 
 ALTER TABLE public.campanha_pipe_automations ENABLE ROW LEVEL SECURITY;
 
 -- SELECT: usuário vê automações de campanhas da sua organização
+DROP POLICY IF EXISTS "campanha_pipe_automations_select_organization" ON public.campanha_pipe_automations;
 CREATE POLICY "campanha_pipe_automations_select_organization"
   ON public.campanha_pipe_automations FOR SELECT
   TO authenticated
@@ -30,6 +31,7 @@ CREATE POLICY "campanha_pipe_automations_select_organization"
   );
 
 -- INSERT: apenas admins, e só para campanhas da organização
+DROP POLICY IF EXISTS "campanha_pipe_automations_insert_organization_admin" ON public.campanha_pipe_automations;
 CREATE POLICY "campanha_pipe_automations_insert_organization_admin"
   ON public.campanha_pipe_automations FOR INSERT
   TO authenticated
@@ -44,6 +46,7 @@ CREATE POLICY "campanha_pipe_automations_insert_organization_admin"
   );
 
 -- UPDATE: apenas admins, mesma organização
+DROP POLICY IF EXISTS "campanha_pipe_automations_update_organization_admin" ON public.campanha_pipe_automations;
 CREATE POLICY "campanha_pipe_automations_update_organization_admin"
   ON public.campanha_pipe_automations FOR UPDATE
   TO authenticated
@@ -66,6 +69,7 @@ CREATE POLICY "campanha_pipe_automations_update_organization_admin"
   );
 
 -- DELETE: apenas admins, mesma organização
+DROP POLICY IF EXISTS "campanha_pipe_automations_delete_organization_admin" ON public.campanha_pipe_automations;
 CREATE POLICY "campanha_pipe_automations_delete_organization_admin"
   ON public.campanha_pipe_automations FOR DELETE
   TO authenticated

@@ -19,6 +19,7 @@ COMMENT ON TABLE public.cron_config IS 'Config para jobs cron (ex: webhook_worke
 -- RLS: apenas service role pode ler/escrever (usuários não acessam)
 ALTER TABLE public.cron_config ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "cron_config_service_role_only" ON public.cron_config;
 CREATE POLICY "cron_config_service_role_only"
   ON public.cron_config FOR ALL
   USING (false)

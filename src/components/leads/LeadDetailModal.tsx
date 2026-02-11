@@ -92,6 +92,7 @@ function TimelineItem({
       case "meeting_missed": return <XCircle className="w-3.5 h-3.5 text-destructive" />;
       case "proposal_created": return <DollarSign className="w-3.5 h-3.5" />;
       case "sale_closed": return <Zap className="w-3.5 h-3.5 text-primary" />;
+      case "message_sent": return <MessageSquare className="w-3.5 h-3.5" />;
       default: return <Clock className="w-3.5 h-3.5" />;
     }
   };
@@ -105,6 +106,7 @@ function TimelineItem({
       case "meeting_missed": return "Não compareceu";
       case "proposal_created": return "Proposta criada";
       case "sale_closed": return "Venda fechada";
+      case "message_sent": return "Mensagem enviada";
       default: return action;
     }
   };

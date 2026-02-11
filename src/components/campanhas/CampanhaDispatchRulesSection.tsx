@@ -25,8 +25,10 @@ import {
   type CampanhaDispatchRuleTriggerType,
 } from "@/hooks/useCampanhas";
 import { useCampanhaTemplates, type CampanhaTemplate } from "@/hooks/useCampaignTemplates";
-import { Send, ChevronDown, Plus, Trash2, Loader2, ListOrdered } from "lucide-react";
+import { Send, ChevronDown, Plus, Trash2, Loader2, ListOrdered, Play } from "lucide-react";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { useQueryClient } from "@tanstack/react-query";
 
 const TRIGGER_LABELS: Record<CampanhaDispatchRuleTriggerType, string> = {
   lead_created: "Ao adicionar lead na campanha",
@@ -41,13 +43,15 @@ interface CampanhaDispatchRulesSectionProps {
 export function CampanhaDispatchRulesSection({ campanhaId, stages }: CampanhaDispatchRulesSectionProps) {
   const [open, setOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  const [processingQueue, setProcessingQueue] = useState(false);
   const [triggerType, setTriggerType] = useState<CampanhaDispatchRuleTriggerType>("lead_created");
   const [selectedStageId, setSelectedStageId] = useState<string>("");
   const [steps, setSteps] = useState<{ template_id: string; delay_minutes: number }[]>([
     { template_id: "", delay_minutes: 0 },
   ]);
+  const queryClient = useQueryClient();
 
-  const { data: rules = [], isLoading } = useCampanhaDispatchRules(campanhaId);
+  const { data: rules = [], isLoading, isError, error: queryError } = useCampanhaDispatchRules(campanhaId);
   const { data: templates = [] } = useCampanhaTemplates(campanhaId);
   const createRule = useCreateCampanhaDispatchRule();
   const createStep = useCreateCampanhaDispatchRuleStep();
@@ -86,10 +90,11 @@ export function CampanhaDispatchRulesSection({ campanhaId, stages }: CampanhaDis
         is_active: true,
       });
       for (let i = 0; i < validSteps.length; i++) {
+        const delay = Number(validSteps[i].delay_minutes);
         await createStep.mutateAsync({
           rule_id: rule.id,
           template_id: validSteps[i].template_id,
-          delay_minutes: validSteps[i].delay_minutes,
+          delay_minutes: Number.isFinite(delay) && delay >= 0 ? delay : 0,
           position: i,
         });
       }
@@ -98,9 +103,19 @@ export function CampanhaDispatchRulesSection({ campanhaId, stages }: CampanhaDis
       setTriggerType("lead_created");
       setSelectedStageId("");
       setSteps([{ template_id: "", delay_minutes: 0 }]);
-    } catch (e) {
+    } catch (e: unknown) {
       console.error(e);
-      toast.error("Erro ao criar regra");
+      const err = e as { code?: string; message?: string };
+      const msg = err?.message ?? "";
+      if (err?.code === "PGRST116" || err?.code === "42P01" || msg.includes("does not exist") || msg.includes("relation")) {
+        toast.error("Tabela de regras não encontrada. Execute as migrations do Supabase (campanhas_whatsapp_instance_and_dispatch_rules).");
+      } else if (err?.code === "42501" || msg.toLowerCase().includes("row-level security") || msg.toLowerCase().includes("permission")) {
+        toast.error("Sem permissão para criar regras de envio. Apenas administradores podem criar regras.");
+      } else if (msg) {
+        toast.error(msg);
+      } else {
+        toast.error("Erro ao criar regra");
+      }
     }
   };
 
@@ -114,6 +129,33 @@ export function CampanhaDispatchRulesSection({ campanhaId, stages }: CampanhaDis
   };
 
   const getStageName = (stageId: string) => stages.find((s) => s.id === stageId)?.name ?? stageId;
+
+  const handleProcessQueue = async () => {
+    setProcessingQueue(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("campaign-rule-dispatch", {});
+      if (error) {
+        toast.error(error.message || "Erro ao processar fila");
+        return;
+      }
+      const result = data as { processed?: number; sent?: number; failed?: number; message?: string } | null;
+      if (result?.processed === 0) {
+        toast.info(result?.message || "Nenhuma mensagem pendente");
+      } else if (result?.processed != null) {
+        toast.success(
+          `Processado: ${result.processed} | Enviadas: ${result.sent ?? 0} | Falhas: ${result.failed ?? 0}`
+        );
+        queryClient.invalidateQueries({ queryKey: ["dispatch_log", campanhaId] });
+      } else {
+        toast.success("Fila processada");
+        queryClient.invalidateQueries({ queryKey: ["dispatch_log", campanhaId] });
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao processar fila");
+    } finally {
+      setProcessingQueue(false);
+    }
+  };
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
@@ -137,6 +179,12 @@ export function CampanhaDispatchRulesSection({ campanhaId, stages }: CampanhaDis
               <Loader2 className="w-4 h-4 animate-spin" />
               Carregando…
             </div>
+          ) : isError ? (
+            <p className="text-sm text-destructive">
+              {(queryError as { message?: string })?.message?.includes("does not exist") || (queryError as { message?: string })?.message?.includes("relation")
+                ? "Tabela de regras não encontrada. Execute as migrations do Supabase (campanhas_whatsapp_instance_and_dispatch_rules)."
+                : (queryError as Error)?.message ?? "Erro ao carregar regras."}
+            </p>
           ) : (
             <>
               <ul className="space-y-2">
@@ -155,12 +203,29 @@ export function CampanhaDispatchRulesSection({ campanhaId, stages }: CampanhaDis
                   ))
                 )}
               </ul>
-              {!addOpen ? (
-                <Button type="button" variant="outline" size="sm" onClick={() => setAddOpen(true)}>
-                  <Plus className="w-4 h-4 mr-2" />
-                  Adicionar regra de envio
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleProcessQueue}
+                  disabled={processingQueue}
+                >
+                  {processingQueue ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Play className="w-4 h-4 mr-2" />
+                  )}
+                  Processar fila agora
                 </Button>
-              ) : (
+                {!addOpen ? (
+                  <Button type="button" variant="outline" size="sm" onClick={() => setAddOpen(true)}>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Adicionar regra de envio
+                  </Button>
+                ) : null}
+              </div>
+              {addOpen ? (
                 <div className="space-y-4 rounded-md border border-dashed p-3">
                   <div className="grid gap-2">
                     <Label>Gatilho</Label>
@@ -222,10 +287,13 @@ export function CampanhaDispatchRulesSection({ campanhaId, stages }: CampanhaDis
                         <Input
                           type="number"
                           min={0}
-                          placeholder="Delay (min)"
+                          placeholder="0"
                           className="w-20"
-                          value={step.delay_minutes || ""}
-                          onChange={(e) => handleStepChange(index, "delay_minutes", e.target.value)}
+                          value={step.delay_minutes === 0 ? "" : step.delay_minutes}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            handleStepChange(index, "delay_minutes", v === "" ? 0 : Number(v));
+                          }}
                         />
                         <span className="text-xs text-muted-foreground">min</span>
                         <Button
@@ -277,7 +345,7 @@ export function CampanhaDispatchRulesSection({ campanhaId, stages }: CampanhaDis
                     </Button>
                   </div>
                 </div>
-              )}
+              ) : null}
             </>
           )}
         </div>

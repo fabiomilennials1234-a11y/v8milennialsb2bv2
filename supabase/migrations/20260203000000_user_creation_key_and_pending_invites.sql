@@ -40,6 +40,7 @@ COMMENT ON TABLE public.pending_org_invites IS 'Emails pré-cadastrados por admi
 ALTER TABLE public.pending_org_invites ENABLE ROW LEVEL SECURITY;
 
 -- Apenas membros da org (admins) podem ver/inserir; service_role para Edge Functions
+DROP POLICY IF EXISTS "pending_org_invites_select_own_org" ON public.pending_org_invites;
 CREATE POLICY "pending_org_invites_select_own_org"
   ON public.pending_org_invites FOR SELECT
   USING (
@@ -49,6 +50,7 @@ CREATE POLICY "pending_org_invites_select_own_org"
     )
   );
 
+DROP POLICY IF EXISTS "pending_org_invites_insert_admin" ON public.pending_org_invites;
 CREATE POLICY "pending_org_invites_insert_admin"
   ON public.pending_org_invites FOR INSERT
   WITH CHECK (
@@ -59,6 +61,7 @@ CREATE POLICY "pending_org_invites_insert_admin"
     )
   );
 
+DROP POLICY IF EXISTS "pending_org_invites_delete_admin" ON public.pending_org_invites;
 CREATE POLICY "pending_org_invites_delete_admin"
   ON public.pending_org_invites FOR DELETE
   USING (
@@ -70,6 +73,7 @@ CREATE POLICY "pending_org_invites_delete_admin"
   );
 
 -- Service role precisa ler e deletar (Edge Function attach-to-org-by-pending-invite)
+DROP POLICY IF EXISTS "pending_org_invites_service_role" ON public.pending_org_invites;
 CREATE POLICY "pending_org_invites_service_role"
   ON public.pending_org_invites FOR ALL
   USING (auth.role() = 'service_role')

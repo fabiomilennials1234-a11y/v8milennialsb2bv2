@@ -3,6 +3,9 @@
 -- Admins veem tudo, usuários veem apenas onde são responsáveis, itens sem responsável são visíveis para todos
 -- Date: 2026-01-28
 
+-- Remove registro pré-existente para permitir que o CLI insira ao final (evita duplicate key)
+DELETE FROM supabase_migrations.schema_migrations WHERE version = '20260128000000';
+
 -- =====================================================
 -- PARTE 1: ADICIONAR CAMPOS FALTANTES
 -- =====================================================
@@ -101,6 +104,7 @@ DROP POLICY IF EXISTS "Users can update leads in their organization" ON public.l
 DROP POLICY IF EXISTS "Users can delete leads in their organization" ON public.leads;
 
 -- SELECT: Admins veem tudo, usuários veem apenas onde são responsáveis OU sem responsável
+DROP POLICY IF EXISTS "leads_select_by_responsibility" ON public.leads;
 CREATE POLICY "leads_select_by_responsibility"
   ON public.leads FOR SELECT
   USING (
@@ -120,6 +124,7 @@ CREATE POLICY "leads_select_by_responsibility"
   );
 
 -- INSERT: Qualquer usuário da organização pode criar leads
+DROP POLICY IF EXISTS "leads_insert_organization" ON public.leads;
 CREATE POLICY "leads_insert_organization"
   ON public.leads FOR INSERT
   WITH CHECK (
@@ -129,6 +134,7 @@ CREATE POLICY "leads_insert_organization"
   );
 
 -- UPDATE: Admins podem atualizar qualquer lead da org. Usuários só os seus ou sem responsável.
+DROP POLICY IF EXISTS "leads_update_by_responsibility" ON public.leads;
 CREATE POLICY "leads_update_by_responsibility"
   ON public.leads FOR UPDATE
   USING (
@@ -157,6 +163,7 @@ CREATE POLICY "leads_update_by_responsibility"
   );
 
 -- DELETE: Apenas admins podem deletar
+DROP POLICY IF EXISTS "leads_delete_admin_only" ON public.leads;
 CREATE POLICY "leads_delete_admin_only"
   ON public.leads FOR DELETE
   USING (
@@ -175,6 +182,7 @@ DROP POLICY IF EXISTS "Pipe confirmação visível para autenticados" ON public.
 DROP POLICY IF EXISTS "Team members podem gerenciar pipe confirmação" ON public.pipe_confirmacao;
 
 -- SELECT: Admins veem tudo, usuários veem apenas onde são responsáveis OU sem responsável
+DROP POLICY IF EXISTS "pipe_confirmacao_select_by_responsibility" ON public.pipe_confirmacao;
 CREATE POLICY "pipe_confirmacao_select_by_responsibility"
   ON public.pipe_confirmacao FOR SELECT
   USING (
@@ -191,6 +199,7 @@ CREATE POLICY "pipe_confirmacao_select_by_responsibility"
   );
 
 -- INSERT: Qualquer usuário da organização pode criar reuniões
+DROP POLICY IF EXISTS "pipe_confirmacao_insert_organization" ON public.pipe_confirmacao;
 CREATE POLICY "pipe_confirmacao_insert_organization"
   ON public.pipe_confirmacao FOR INSERT
   WITH CHECK (
@@ -200,6 +209,7 @@ CREATE POLICY "pipe_confirmacao_insert_organization"
   );
 
 -- UPDATE: Admins podem atualizar qualquer reunião da org. Usuários só as suas ou sem responsável.
+DROP POLICY IF EXISTS "pipe_confirmacao_update_by_responsibility" ON public.pipe_confirmacao;
 CREATE POLICY "pipe_confirmacao_update_by_responsibility"
   ON public.pipe_confirmacao FOR UPDATE
   USING (
@@ -228,6 +238,7 @@ CREATE POLICY "pipe_confirmacao_update_by_responsibility"
   );
 
 -- DELETE: Apenas admins podem deletar reuniões
+DROP POLICY IF EXISTS "pipe_confirmacao_delete_admin_only" ON public.pipe_confirmacao;
 CREATE POLICY "pipe_confirmacao_delete_admin_only"
   ON public.pipe_confirmacao FOR DELETE
   USING (
@@ -246,6 +257,7 @@ DROP POLICY IF EXISTS "Pipe propostas visível para autenticados" ON public.pipe
 DROP POLICY IF EXISTS "Team members podem gerenciar pipe propostas" ON public.pipe_propostas;
 
 -- SELECT: Admins veem tudo, usuários veem apenas onde são closer_id OU sem responsável
+DROP POLICY IF EXISTS "pipe_propostas_select_by_responsibility" ON public.pipe_propostas;
 CREATE POLICY "pipe_propostas_select_by_responsibility"
   ON public.pipe_propostas FOR SELECT
   USING (
@@ -262,6 +274,7 @@ CREATE POLICY "pipe_propostas_select_by_responsibility"
   );
 
 -- INSERT: Qualquer usuário da organização pode criar propostas
+DROP POLICY IF EXISTS "pipe_propostas_insert_organization" ON public.pipe_propostas;
 CREATE POLICY "pipe_propostas_insert_organization"
   ON public.pipe_propostas FOR INSERT
   WITH CHECK (
@@ -271,6 +284,7 @@ CREATE POLICY "pipe_propostas_insert_organization"
   );
 
 -- UPDATE: Admins podem atualizar qualquer proposta da org. Usuários só as suas ou sem responsável.
+DROP POLICY IF EXISTS "pipe_propostas_update_by_responsibility" ON public.pipe_propostas;
 CREATE POLICY "pipe_propostas_update_by_responsibility"
   ON public.pipe_propostas FOR UPDATE
   USING (
@@ -299,6 +313,7 @@ CREATE POLICY "pipe_propostas_update_by_responsibility"
   );
 
 -- DELETE: Apenas admins podem deletar propostas
+DROP POLICY IF EXISTS "pipe_propostas_delete_admin_only" ON public.pipe_propostas;
 CREATE POLICY "pipe_propostas_delete_admin_only"
   ON public.pipe_propostas FOR DELETE
   USING (
@@ -317,6 +332,7 @@ DROP POLICY IF EXISTS "Pipe whatsapp visível para autenticados" ON public.pipe_
 DROP POLICY IF EXISTS "Team members podem gerenciar pipe whatsapp" ON public.pipe_whatsapp;
 
 -- SELECT: Admins veem tudo, usuários veem apenas onde são sdr_id OU sem responsável
+DROP POLICY IF EXISTS "pipe_whatsapp_select_by_responsibility" ON public.pipe_whatsapp;
 CREATE POLICY "pipe_whatsapp_select_by_responsibility"
   ON public.pipe_whatsapp FOR SELECT
   USING (
@@ -333,6 +349,7 @@ CREATE POLICY "pipe_whatsapp_select_by_responsibility"
   );
 
 -- INSERT: Qualquer usuário da organização pode criar whatsapp leads
+DROP POLICY IF EXISTS "pipe_whatsapp_insert_organization" ON public.pipe_whatsapp;
 CREATE POLICY "pipe_whatsapp_insert_organization"
   ON public.pipe_whatsapp FOR INSERT
   WITH CHECK (
@@ -342,6 +359,7 @@ CREATE POLICY "pipe_whatsapp_insert_organization"
   );
 
 -- UPDATE: Admins podem atualizar qualquer whatsapp lead da org. Usuários só os seus ou sem responsável.
+DROP POLICY IF EXISTS "pipe_whatsapp_update_by_responsibility" ON public.pipe_whatsapp;
 CREATE POLICY "pipe_whatsapp_update_by_responsibility"
   ON public.pipe_whatsapp FOR UPDATE
   USING (
@@ -370,6 +388,7 @@ CREATE POLICY "pipe_whatsapp_update_by_responsibility"
   );
 
 -- DELETE: Apenas admins podem deletar whatsapp leads
+DROP POLICY IF EXISTS "pipe_whatsapp_delete_admin_only" ON public.pipe_whatsapp;
 CREATE POLICY "pipe_whatsapp_delete_admin_only"
   ON public.pipe_whatsapp FOR DELETE
   USING (
@@ -388,6 +407,7 @@ DROP POLICY IF EXISTS "Leads visíveis para team members" ON public.campanha_lea
 DROP POLICY IF EXISTS "Team members podem gerenciar campanha leads" ON public.campanha_leads;
 
 -- SELECT: Admins veem tudo, usuários veem apenas onde são sdr_id OU sem responsável
+DROP POLICY IF EXISTS "campanha_leads_select_by_responsibility" ON public.campanha_leads;
 CREATE POLICY "campanha_leads_select_by_responsibility"
   ON public.campanha_leads FOR SELECT
   USING (
@@ -407,6 +427,7 @@ CREATE POLICY "campanha_leads_select_by_responsibility"
   );
 
 -- INSERT: Qualquer usuário da organização pode criar campanha leads
+DROP POLICY IF EXISTS "campanha_leads_insert_organization" ON public.campanha_leads;
 CREATE POLICY "campanha_leads_insert_organization"
   ON public.campanha_leads FOR INSERT
   WITH CHECK (
@@ -419,6 +440,7 @@ CREATE POLICY "campanha_leads_insert_organization"
   );
 
 -- UPDATE: Admins podem atualizar qualquer campanha lead da org. Usuários só os seus ou sem responsável.
+DROP POLICY IF EXISTS "campanha_leads_update_by_responsibility" ON public.campanha_leads;
 CREATE POLICY "campanha_leads_update_by_responsibility"
   ON public.campanha_leads FOR UPDATE
   USING (
@@ -453,6 +475,7 @@ CREATE POLICY "campanha_leads_update_by_responsibility"
   );
 
 -- DELETE: Apenas admins podem deletar campanha leads
+DROP POLICY IF EXISTS "campanha_leads_delete_admin_only" ON public.campanha_leads;
 CREATE POLICY "campanha_leads_delete_admin_only"
   ON public.campanha_leads FOR DELETE
   USING (
@@ -475,6 +498,7 @@ DROP POLICY IF EXISTS "Service role can manage conversations" ON public.conversa
 DROP POLICY IF EXISTS "service_role_conversations_all" ON public.conversations;
 
 -- SELECT: Admins veem tudo, usuários veem apenas onde são assigned_to OU sem responsável
+DROP POLICY IF EXISTS "conversations_select_by_responsibility" ON public.conversations;
 CREATE POLICY "conversations_select_by_responsibility"
   ON public.conversations FOR SELECT
   USING (
@@ -491,6 +515,7 @@ CREATE POLICY "conversations_select_by_responsibility"
   );
 
 -- INSERT: Admins e service role podem inserir conversas
+DROP POLICY IF EXISTS "conversations_insert_admin_service" ON public.conversations;
 CREATE POLICY "conversations_insert_admin_service"
   ON public.conversations FOR INSERT
   WITH CHECK (
@@ -505,6 +530,7 @@ CREATE POLICY "conversations_insert_admin_service"
   );
 
 -- UPDATE: Admins podem atualizar qualquer conversa da org. Usuários só as suas ou sem responsável.
+DROP POLICY IF EXISTS "conversations_update_by_responsibility" ON public.conversations;
 CREATE POLICY "conversations_update_by_responsibility"
   ON public.conversations FOR UPDATE
   USING (
@@ -537,6 +563,7 @@ CREATE POLICY "conversations_update_by_responsibility"
   );
 
 -- Service role mantém acesso total
+DROP POLICY IF EXISTS "conversations_service_role_full_access" ON public.conversations;
 CREATE POLICY "conversations_service_role_full_access"
   ON public.conversations FOR ALL
   USING (auth.role() = 'service_role')
@@ -552,6 +579,7 @@ DROP POLICY IF EXISTS "Service role can manage messages" ON public.conversation_
 DROP POLICY IF EXISTS "service_role_conv_messages_all" ON public.conversation_messages;
 
 -- SELECT: Baseado na conversa associada (seguir regras da conversation)
+DROP POLICY IF EXISTS "conversation_messages_select_by_conversation" ON public.conversation_messages;
 CREATE POLICY "conversation_messages_select_by_conversation"
   ON public.conversation_messages FOR SELECT
   USING (
@@ -571,6 +599,7 @@ CREATE POLICY "conversation_messages_select_by_conversation"
   );
 
 -- Service role mantém acesso total
+DROP POLICY IF EXISTS "conversation_messages_service_role_full_access" ON public.conversation_messages;
 CREATE POLICY "conversation_messages_service_role_full_access"
   ON public.conversation_messages FOR ALL
   USING (auth.role() = 'service_role')
@@ -588,6 +617,7 @@ DROP POLICY IF EXISTS "Service role full access" ON public.whatsapp_messages;
 DROP POLICY IF EXISTS "Service role full access whatsapp messages" ON public.whatsapp_messages;
 
 -- SELECT: Admins veem tudo, usuários veem apenas onde são assigned_to OU sem responsável
+DROP POLICY IF EXISTS "whatsapp_messages_select_by_responsibility" ON public.whatsapp_messages;
 CREATE POLICY "whatsapp_messages_select_by_responsibility"
   ON public.whatsapp_messages FOR SELECT
   USING (
@@ -604,6 +634,7 @@ CREATE POLICY "whatsapp_messages_select_by_responsibility"
   );
 
 -- INSERT: Admins e service role podem inserir mensagens
+DROP POLICY IF EXISTS "whatsapp_messages_insert_admin_service" ON public.whatsapp_messages;
 CREATE POLICY "whatsapp_messages_insert_admin_service"
   ON public.whatsapp_messages FOR INSERT
   WITH CHECK (
@@ -618,6 +649,7 @@ CREATE POLICY "whatsapp_messages_insert_admin_service"
   );
 
 -- UPDATE: Admins podem atualizar qualquer mensagem da org. Usuários só as suas ou sem responsável.
+DROP POLICY IF EXISTS "whatsapp_messages_update_by_responsibility" ON public.whatsapp_messages;
 CREATE POLICY "whatsapp_messages_update_by_responsibility"
   ON public.whatsapp_messages FOR UPDATE
   USING (
@@ -650,6 +682,7 @@ CREATE POLICY "whatsapp_messages_update_by_responsibility"
   );
 
 -- Service role mantém acesso total
+DROP POLICY IF EXISTS "whatsapp_messages_service_role_full_access" ON public.whatsapp_messages;
 CREATE POLICY "whatsapp_messages_service_role_full_access"
   ON public.whatsapp_messages FOR ALL
   USING (auth.role() = 'service_role')
@@ -663,6 +696,10 @@ CREATE POLICY "whatsapp_messages_service_role_full_access"
 DROP POLICY IF EXISTS "Lead history visível para autenticados" ON public.lead_history;
 DROP POLICY IF EXISTS "Team members podem gerenciar lead history" ON public.lead_history;
 DROP POLICY IF EXISTS "lead_history_via_lead" ON public.lead_history;
+DROP POLICY IF EXISTS "lead_history_select_by_lead" ON public.lead_history;
+DROP POLICY IF EXISTS "lead_history_insert_organization" ON public.lead_history;
+DROP POLICY IF EXISTS "lead_history_update_by_lead" ON public.lead_history;
+DROP POLICY IF EXISTS "lead_history_delete_admin_only" ON public.lead_history;
 
 CREATE POLICY "lead_history_select_by_lead"
   ON public.lead_history FOR SELECT
@@ -727,6 +764,10 @@ CREATE POLICY "lead_history_delete_admin_only"
 DROP POLICY IF EXISTS "Lead tags visíveis para autenticados" ON public.lead_tags;
 DROP POLICY IF EXISTS "Team members podem gerenciar lead tags" ON public.lead_tags;
 DROP POLICY IF EXISTS "lead_tags_via_lead" ON public.lead_tags;
+DROP POLICY IF EXISTS "lead_tags_select_by_lead" ON public.lead_tags;
+DROP POLICY IF EXISTS "lead_tags_insert_organization" ON public.lead_tags;
+DROP POLICY IF EXISTS "lead_tags_update_by_lead" ON public.lead_tags;
+DROP POLICY IF EXISTS "lead_tags_delete_by_lead" ON public.lead_tags;
 
 CREATE POLICY "lead_tags_select_by_lead"
   ON public.lead_tags FOR SELECT
@@ -796,6 +837,10 @@ CREATE POLICY "lead_tags_delete_by_lead"
 -- Lead Custom Field Values: seguir regras do lead associado
 DROP POLICY IF EXISTS "Users can view values for their org leads" ON public.lead_custom_field_values;
 DROP POLICY IF EXISTS "Users can manage values for their org leads" ON public.lead_custom_field_values;
+DROP POLICY IF EXISTS "lead_custom_field_values_select_by_lead" ON public.lead_custom_field_values;
+DROP POLICY IF EXISTS "lead_custom_field_values_insert_organization" ON public.lead_custom_field_values;
+DROP POLICY IF EXISTS "lead_custom_field_values_update_by_lead" ON public.lead_custom_field_values;
+DROP POLICY IF EXISTS "lead_custom_field_values_delete_by_lead" ON public.lead_custom_field_values;
 
 CREATE POLICY "lead_custom_field_values_select_by_lead"
   ON public.lead_custom_field_values FOR SELECT

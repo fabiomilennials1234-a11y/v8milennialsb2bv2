@@ -6,6 +6,7 @@ DROP POLICY IF EXISTS "Products visíveis para autenticados" ON public.products;
 DROP POLICY IF EXISTS "Apenas admins podem gerenciar products" ON public.products;
 
 -- SELECT: only rows whose organization_id is one of the user's organizations
+DROP POLICY IF EXISTS "products_select_own_org" ON public.products;
 CREATE POLICY "products_select_own_org"
 ON public.products FOR SELECT
 USING (
@@ -15,6 +16,7 @@ USING (
 );
 
 -- INSERT: only allow inserting with organization_id in user's organizations
+DROP POLICY IF EXISTS "products_insert_own_org" ON public.products;
 CREATE POLICY "products_insert_own_org"
 ON public.products FOR INSERT
 WITH CHECK (
@@ -24,6 +26,7 @@ WITH CHECK (
 );
 
 -- UPDATE: only rows in user's orgs; cannot change organization_id to another org
+DROP POLICY IF EXISTS "products_update_own_org" ON public.products;
 CREATE POLICY "products_update_own_org"
 ON public.products FOR UPDATE
 USING (
@@ -38,6 +41,7 @@ WITH CHECK (
 );
 
 -- DELETE: only rows in user's orgs
+DROP POLICY IF EXISTS "products_delete_own_org" ON public.products;
 CREATE POLICY "products_delete_own_org"
 ON public.products FOR DELETE
 USING (

@@ -192,6 +192,90 @@ export type Database = {
           },
         ]
       }
+      campanha_dispatch_rule_steps: {
+        Row: {
+          id: string
+          rule_id: string
+          template_id: string
+          delay_minutes: number
+          position: number
+        }
+        Insert: {
+          id?: string
+          rule_id: string
+          template_id: string
+          delay_minutes?: number
+          position?: number
+        }
+        Update: {
+          id?: string
+          rule_id?: string
+          template_id?: string
+          delay_minutes?: number
+          position?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campanha_dispatch_rule_steps_rule_id_fkey"
+            columns: ["rule_id"]
+            isOneToOne: false
+            referencedRelation: "campanha_dispatch_rules"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campanha_dispatch_rule_steps_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "campaign_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      campanha_dispatch_rules: {
+        Row: {
+          id: string
+          campanha_id: string
+          trigger_type: string
+          campanha_stage_id: string | null
+          is_active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          campanha_id: string
+          trigger_type: string
+          campanha_stage_id?: string | null
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          campanha_id?: string
+          trigger_type?: string
+          campanha_stage_id?: string | null
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campanha_dispatch_rules_campanha_id_fkey"
+            columns: ["campanha_id"]
+            isOneToOne: false
+            referencedRelation: "campanhas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campanha_dispatch_rules_campanha_stage_id_fkey"
+            columns: ["campanha_stage_id"]
+            isOneToOne: false
+            referencedRelation: "campanha_stages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       campanha_members: {
         Row: {
           bonus_earned: boolean | null
@@ -338,6 +422,7 @@ export type Database = {
           name: string
           team_goal: number
           updated_at: string | null
+          whatsapp_instance_id: string | null
         }
         Insert: {
           bonus_value?: number | null
@@ -362,6 +447,7 @@ export type Database = {
           name: string
           team_goal?: number
           updated_at?: string | null
+          whatsapp_instance_id?: string | null
         }
         Update: {
           bonus_value?: number | null
@@ -386,6 +472,7 @@ export type Database = {
           name?: string
           team_goal?: number
           updated_at?: string | null
+          whatsapp_instance_id?: string | null
         }
         Relationships: []
       }
@@ -1335,6 +1422,94 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      scheduled_campaign_messages: {
+        Row: {
+          id: string
+          campanha_id: string
+          rule_id: string
+          campanha_lead_id: string
+          lead_id: string
+          template_id: string
+          whatsapp_instance_id: string | null
+          scheduled_at: string
+          status: string
+          sent_at: string | null
+          error_message: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          campanha_id: string
+          rule_id: string
+          campanha_lead_id: string
+          lead_id: string
+          template_id: string
+          whatsapp_instance_id?: string | null
+          scheduled_at: string
+          status?: string
+          sent_at?: string | null
+          error_message?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          campanha_id?: string
+          rule_id?: string
+          campanha_lead_id?: string
+          lead_id?: string
+          template_id?: string
+          whatsapp_instance_id?: string | null
+          scheduled_at?: string
+          status?: string
+          sent_at?: string | null
+          error_message?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scheduled_campaign_messages_campanha_id_fkey"
+            columns: ["campanha_id"]
+            isOneToOne: false
+            referencedRelation: "campanhas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scheduled_campaign_messages_rule_id_fkey"
+            columns: ["rule_id"]
+            isOneToOne: false
+            referencedRelation: "campanha_dispatch_rules"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scheduled_campaign_messages_campanha_lead_id_fkey"
+            columns: ["campanha_lead_id"]
+            isOneToOne: false
+            referencedRelation: "campanha_leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scheduled_campaign_messages_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scheduled_campaign_messages_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "campaign_templates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scheduled_campaign_messages_whatsapp_instance_id_fkey"
+            columns: ["whatsapp_instance_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_instances"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       tags: {
         Row: {
