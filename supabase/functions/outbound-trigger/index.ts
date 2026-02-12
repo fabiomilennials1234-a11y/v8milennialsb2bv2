@@ -1,17 +1,15 @@
 /**
  * Outbound Trigger - Disparo Automático de Primeira Mensagem
- * 
+ *
  * Verifica se existe agente configurado para o lead e dispara
  * a primeira mensagem de acordo com os gatilhos de ativação.
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { getCorsHeaders } from "../_shared/cors.ts";
+import { withSecurityHeaders } from "../_shared/security-headers.ts";
+import { sendOutboundDispatch } from "../_shared/outbound-sender.ts";
 
 interface OutboundTriggerPayload {
   lead_id: string;
@@ -43,7 +41,7 @@ interface OutboundConfig {
 }
 
 serve(async (req) => {
-  // CORS
+  const corsHeaders = withSecurityHeaders(getCorsHeaders(req.headers.get("origin")));
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
@@ -276,7 +274,7 @@ serve(async (req) => {
     // Se delay é 0, enviar imediatamente
     if (outboundConfig.delayMinutes === 0) {
       console.log("[outbound-trigger] Sending immediately (no delay)");
-      await sendOutboundMessage(supabase, dispatch.id, payload.organization_id);
+      await sendOutboundDispatch(supabase, dispatch.id, payload.organization_id);
     }
 
     return new Response(
@@ -368,170 +366,3 @@ function replaceVariables(template: string, variables: Record<string, string>): 
   return result.trim();
 }
 
-/**
- * Envia a mensagem de outbound via WhatsApp
- */
-async function sendOutboundMessage(supabase: any, dispatchId: string, organizationId: string) {
-  try {
-    // Buscar dispatch com dados relacionados
-    const { data: dispatch, error: fetchError } = await supabase
-      .from("outbound_dispatch_log")
-      .select(`
-        *,
-        lead:leads(phone, name),
-        agent:copilot_agents(whatsapp_instance_id)
-      `)
-      .eq("id", dispatchId)
-      .single();
-
-    if (fetchError || !dispatch) {
-      console.error("[outbound-trigger] Dispatch not found:", fetchError);
-      return;
-    }
-
-    if (!dispatch.lead?.phone) {
-      console.error("[outbound-trigger] Lead has no phone");
-      await supabase
-        .from("outbound_dispatch_log")
-        .update({ status: "failed", error_message: "Lead has no phone" })
-        .eq("id", dispatchId);
-      return;
-    }
-
-    // Buscar instância WhatsApp
-    let instanceName = null;
-    
-    if (dispatch.agent?.whatsapp_instance_id) {
-      const { data: instance } = await supabase
-        .from("whatsapp_instances")
-        .select("instance_name")
-        .eq("id", dispatch.agent.whatsapp_instance_id)
-        .single();
-      instanceName = instance?.instance_name;
-    }
-
-    if (!instanceName) {
-      // Buscar primeira instância ativa da organização
-      const { data: instance } = await supabase
-        .from("whatsapp_instances")
-        .select("instance_name")
-        .eq("organization_id", organizationId)
-        .eq("status", "open")
-        .limit(1)
-        .single();
-      instanceName = instance?.instance_name;
-    }
-
-    if (!instanceName) {
-      console.error("[outbound-trigger] No WhatsApp instance found");
-      await supabase
-        .from("outbound_dispatch_log")
-        .update({ status: "failed", error_message: "No WhatsApp instance available" })
-        .eq("id", dispatchId);
-      return;
-    }
-
-    // Enviar mensagem via Evolution API
-    const evolutionUrl = Deno.env.get("EVOLUTION_API_URL");
-    const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
-
-    if (!evolutionUrl || !evolutionKey) {
-      console.error("[outbound-trigger] Evolution API not configured");
-      await supabase
-        .from("outbound_dispatch_log")
-        .update({ status: "failed", error_message: "Evolution API not configured" })
-        .eq("id", dispatchId);
-      return;
-    }
-
-    // Formatar telefone
-    let phone = dispatch.lead.phone.replace(/\D/g, "");
-    if (!phone.startsWith("55")) {
-      phone = "55" + phone;
-    }
-
-    const sendResponse = await fetch(`${evolutionUrl}/message/sendText/${instanceName}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "apikey": evolutionKey,
-      },
-      body: JSON.stringify({
-        number: phone,
-        text: dispatch.message_content,
-      }),
-    });
-
-    if (!sendResponse.ok) {
-      const errorText = await sendResponse.text();
-      console.error("[outbound-trigger] Failed to send message:", errorText);
-      await supabase
-        .from("outbound_dispatch_log")
-        .update({ status: "failed", error_message: errorText })
-        .eq("id", dispatchId);
-      return;
-    }
-
-    const sendResult = await sendResponse.json();
-    console.log("[outbound-trigger] Message sent successfully:", sendResult);
-
-    // Atualizar dispatch como enviado
-    await supabase
-      .from("outbound_dispatch_log")
-      .update({
-        status: "sent",
-        message_id: sendResult.key?.id,
-        sent_at: new Date().toISOString(),
-      })
-      .eq("id", dispatchId);
-
-    // Atualizar estágio do lead para "abordado"
-    await supabase
-      .from("leads")
-      .update({ pipe_whatsapp: "abordado" })
-      .eq("id", dispatch.lead_id);
-
-    // Sincronizar tabela pipe_whatsapp para o Kanban refletir a mudança
-    const { data: existingPipe } = await supabase
-      .from("pipe_whatsapp")
-      .select("id")
-      .eq("lead_id", dispatch.lead_id)
-      .eq("organization_id", organizationId)
-      .maybeSingle();
-    if (existingPipe) {
-      await supabase
-        .from("pipe_whatsapp")
-        .update({ status: "abordado" })
-        .eq("id", existingPipe.id);
-    } else {
-      await supabase.from("pipe_whatsapp").insert({
-        lead_id: dispatch.lead_id,
-        organization_id: organizationId,
-        status: "abordado",
-      });
-    }
-
-    // Salvar mensagem no histórico de conversa
-    await supabase
-      .from("whatsapp_messages")
-      .insert({
-        organization_id: organizationId,
-        instance_name: instanceName,
-        remote_jid: phone + "@s.whatsapp.net",
-        from_me: true,
-        message_type: "conversation",
-        content: dispatch.message_content,
-        timestamp: new Date().toISOString(),
-        status: "sent",
-      });
-
-    console.log("[outbound-trigger] Outbound message sent to:", dispatch.lead.name);
-
-  } catch (error) {
-    console.error("[outbound-trigger] Error sending message:", error);
-    await supabase
-      .from("outbound_dispatch_log")
-      .update({ status: "failed", error_message: String(error) })
-      .eq("id", dispatchId);
-  }
-}

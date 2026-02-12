@@ -1788,6 +1788,31 @@ export type Database = {
         Args: { p_campaign_id: string }
         Returns: string | null
       }
+      get_ranking_data: {
+        Args: { p_month: number; p_year: number }
+        Returns: {
+          closerRanking: Array<{
+            id: string
+            name: string | null
+            value: number
+            conversions: number
+            goal: number
+            goalProgress: number
+            position: number
+            role: "Closer"
+          }>
+          sdrRanking: Array<{
+            id: string
+            name: string | null
+            value: number
+            meetings: number
+            goal: number
+            goalProgress: number
+            position: number
+            role: "SDR"
+          }>
+        }
+      }
     }
     Enums: {
       app_role: "admin" | "sdr" | "closer"

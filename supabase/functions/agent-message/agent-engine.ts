@@ -1271,7 +1271,36 @@ export class AgentEngine {
     }
 
     // =====================================================
-    // 4. CONTEXTO DA CONVERSA
+    // 4.1 REGRAS DA ETAPA ATUAL (Kanban) - contexto por stage
+    // =====================================================
+    const kanbanRules = capabilities?.copilot_agent_kanban_rules;
+    const currentStage = leadData?.pipe_whatsapp?.trim();
+    if (kanbanRules && Array.isArray(kanbanRules) && kanbanRules.length > 0 && currentStage) {
+      const rule = kanbanRules.find(
+        (r: { pipe_type?: string; stage_name?: string }) =>
+          r?.pipe_type === 'whatsapp' && r?.stage_name === currentStage
+      );
+      if (rule) {
+        sections.push("# REGRAS DA ETAPA ATUAL (Kanban)");
+        sections.push("");
+        sections.push(`Você está conversando com um lead na etapa "${rule.stage_name}" do funil WhatsApp.`);
+        sections.push("");
+        if (rule.goal) sections.push(`**Objetivo desta etapa:** ${rule.goal}`);
+        if (rule.behavior) sections.push(`**Comportamento esperado:** ${rule.behavior}`);
+        if (rule.allowed_actions && Array.isArray(rule.allowed_actions) && rule.allowed_actions.length > 0) {
+          sections.push(`**Ações permitidas:** ${rule.allowed_actions.join(", ")}`);
+        }
+        if (rule.forbidden_actions && Array.isArray(rule.forbidden_actions) && rule.forbidden_actions.length > 0) {
+          sections.push(`**Ações proibidas:** ${rule.forbidden_actions.join(", ")}`);
+        }
+        sections.push("");
+        sections.push("Siga rigorosamente estas regras ao decidir sua próxima resposta.");
+        sections.push("");
+      }
+    }
+
+    // =====================================================
+    // 5. CONTEXTO DA CONVERSA
     // =====================================================
     sections.push("# CONTEXTO DA CONVERSA");
     sections.push("");
@@ -1283,7 +1312,7 @@ export class AgentEngine {
     sections.push("Baseado no estado atual, nas capabilities ativas, nos dados do lead e no contexto coletado, decida a próxima melhor ação.");
 
     // =====================================================
-    // 5. INSTRUÇÕES FINAIS
+    // 6. INSTRUÇÕES FINAIS
     // =====================================================
     sections.push("");
     sections.push("# INSTRUÇÕES FINAIS");

@@ -78,6 +78,8 @@ interface ProposalCard extends DraggableItem {
   commitmentDate?: Date;
   leadId?: string;
   items: ProposalItem[];
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 import { openWhatsApp, formatPhoneForWhatsApp } from "@/lib/whatsapp";
@@ -382,6 +384,8 @@ export default function PipePropostas() {
       commitmentDate: item.commitment_date ? new Date(item.commitment_date) : undefined,
       leadId: lead?.id,
       items: itemsForCard,
+      createdAt: item.created_at,
+      updatedAt: item.updated_at,
     };
   };
 
@@ -402,7 +406,7 @@ export default function PipePropostas() {
     return stagesToColumns(pipelineStages);
   }, [pipelineStages]);
 
-  // Organize data by status columns with calor sorting
+  // Organize data by status columns (recent first; compromisso_marcado by commitment date)
   const columns = useMemo((): KanbanColumn<ProposalCard>[] => {
     if (!pipeData) return statusColumns.map(col => ({ ...col, items: [] }));
 
@@ -448,16 +452,15 @@ export default function PipePropostas() {
           return matchesSearch && matchesCloser && matchesType && matchesPriority && matchesCalor;
         })
         .map(transformToCard)
-        // Sort: compromisso_marcado by commitment date (closest first), others by calor
-        .sort((a, b) => {
+        .toSorted((a, b) => {
           if (col.id === "compromisso_marcado") {
-            // Sort by commitment date - closest meetings first
             const dateA = a.commitmentDate ? a.commitmentDate.getTime() : Infinity;
             const dateB = b.commitmentDate ? b.commitmentDate.getTime() : Infinity;
             return dateA - dateB;
           }
-          // Default: sort by calor (highest first)
-          return b.calor - a.calor;
+          const timeA = new Date(a.updatedAt || a.createdAt || 0).getTime();
+          const timeB = new Date(b.updatedAt || b.createdAt || 0).getTime();
+          return timeB - timeA;
         });
       return {
         ...col,

@@ -46,10 +46,23 @@ Processar leads de uma campanha, aplicar regras de atribuição de SDRs, atualiz
 ## Checklist: envio automático por cron (regras por etapa)
 Para que as mensagens agendadas sejam processadas automaticamente a cada minuto:
 - Migrations aplicadas: `20260301000000_campanhas_whatsapp_instance_and_dispatch_rules.sql`, `20260301010000_campanha_leads_dispatch_rules_trigger.sql`, `20260310000000_campaign_rule_dispatch_cron.sql`.
-- Em `cron_config`: `campaign_rule_dispatch_url` = `https://<PROJECT_REF>.supabase.co/functions/v1/campaign-rule-dispatch`; se usar secret, `cron_secret` igual ao valor definido em Edge Function Secrets como `CRON_SECRET`.
+- Execute o script `supabase/scripts/setup_campaign_rule_dispatch_cron.sql` no SQL Editor, substituindo `PROJECT_REF` e `cron_secret` pelos valores do seu projeto.
+- Em `cron_config`: `campaign_rule_dispatch_url` = `https://<PROJECT_REF>.supabase.co/functions/v1/campaign-rule-dispatch`; `cron_secret` igual ao valor definido em Edge Function Secrets como `CRON_SECRET`.
 - Secrets da Edge Function: `EVOLUTION_API_URL`, `EVOLUTION_API_KEY`; opcional `CRON_SECRET` para proteger chamadas do cron.
 - Extensões pg_cron e pg_net habilitadas no projeto (Supabase Dashboard → Database → Extensions).
 - **Disparo manual:** Na UI, seção "Regras de envio por etapa", botão "Processar fila agora" (requer usuário admin). A função aceita `x-cron-secret` (cron) ou JWT de admin (UI).
+
+## Alternativas sem pg_cron (Free Tier ou extensões indisponíveis)
+Se pg_cron ou pg_net não estiverem disponíveis, use um cron externo para chamar a Edge Function a cada minuto:
+- **n8n:** Schedule Trigger (`*/1 * * * *`) + HTTP Request (POST com header `x-cron-secret`)
+- **GitHub Actions:** Workflow com `schedule: '* * * * *'` e step que faz POST na URL da função
+- **Vercel Cron:** Se o app estiver na Vercel, criar rota API protegida que invoca a função
+- Instruções detalhadas em `supabase/functions/campaign-rule-dispatch/README.md`
+
+## Edição de regras na UI
+- Cada regra exibe botão de editar (ícone lápis) e excluir.
+- Ao editar: modal com gatilho, etapa (quando aplicável) e sequência de passos (template + delay).
+- Salvando: atualiza a regra, remove passos antigos e cria os novos (idempotente).
 
 ## Aprendizados
 (Atualizado automaticamente pelo sistema)

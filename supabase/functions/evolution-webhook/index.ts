@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { getOrCreateLead, associateMessagesToLead } from "../_shared/lead-service.ts";
 
 /**
@@ -455,7 +456,7 @@ import {
 } from "../_shared/auth.ts";
 
 Deno.serve(async (req) => {
-  const corsHeaders = getCorsHeaders(req.headers.get("origin"));
+  const corsHeaders = withSecurityHeaders(getCorsHeaders(req.headers.get("origin")));
 
   // Handle CORS preflight
   if (req.method === "OPTIONS") {

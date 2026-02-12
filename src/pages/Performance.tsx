@@ -42,7 +42,7 @@ import { TopThreePodium } from "@/components/gamification/LeaderboardCard";
 import { ProgressRing, MiniProgressRing } from "@/components/gamification/ProgressRing";
 import { AchievementBadge, BadgeType } from "@/components/gamification/AchievementBadge";
 import { CelebrationEffect } from "@/components/gamification/CelebrationEffect";
-import { useTeamGoals, useIndividualGoals, useGoals, useCreateGoal, useUpdateGoal, Goal } from "@/hooks/useGoals";
+import { useTeamGoals, useGoals, useCreateGoal, useUpdateGoal, Goal } from "@/hooks/useGoals";
 import { useAwards, useCreateAward, useUpdateAward, useDeleteAward, Award as AwardType } from "@/hooks/useAwards";
 import { useDashboardMetrics, useRankingData } from "@/hooks/useDashboardMetrics";
 import { useTeamMembers, type TeamMember } from "@/hooks/useTeamMembers";
@@ -620,7 +620,6 @@ export default function Performance() {
   const { isAdmin } = useIsAdmin();
   const { organizationId } = useOrganization();
   const { data: teamGoals, isLoading: goalsLoading } = useTeamGoals(selectedMonth, selectedYear);
-  const { data: individualGoals, isLoading: individualLoading } = useIndividualGoals(selectedMonth, selectedYear);
   const { data: allGoals = [] } = useGoals(selectedMonth, selectedYear);
   const { data: metrics, isLoading: metricsLoading } = useDashboardMetrics(selectedMonth, selectedYear);
   const { data: rankingData, isLoading: rankingLoading } = useRankingData(selectedMonth, selectedYear);
@@ -639,6 +638,31 @@ export default function Performance() {
   // Calculated data
   const closers: RankingUser[] = rankingData?.closerRanking || [];
   const sdrs: RankingUser[] = rankingData?.sdrRanking || [];
+
+  // Metas cards: dados públicos da organização via RPC (SECURITY DEFINER) — todos veem metas e vendas de todos
+  const closerGoals = useMemo(() =>
+    closers.map((c) => ({
+      id: c.id,
+      name: c.name ?? "",
+      role: "closer" as const,
+      current: c.value,
+      goal: c.goal ?? 0,
+      percentage: c.goalProgress,
+    })),
+    [closers]
+  );
+  const sdrGoals = useMemo(() =>
+    sdrs.map((s) => ({
+      id: s.id,
+      name: s.name ?? "",
+      role: "sdr" as const,
+      current: s.meetings ?? 0,
+      goal: s.goal ?? 0,
+      percentage: s.goalProgress,
+    })),
+    [sdrs]
+  );
+
   const podiumUsers = closers.slice(0, 3).map(c => ({
     id: c.id,
     name: c.name,
@@ -708,7 +732,7 @@ export default function Performance() {
   const teamGoalsFiltered = allGoals.filter(g => !g.team_member_id);
   const individualGoalsFiltered = allGoals.filter(g => g.team_member_id);
 
-  const isLoading = goalsLoading || metricsLoading || rankingLoading || awardsLoading || individualLoading;
+  const isLoading = goalsLoading || metricsLoading || rankingLoading || awardsLoading;
 
   // Handlers
   const handleSaveGoal = async (data: GoalFormData) => {
@@ -1071,10 +1095,10 @@ export default function Performance() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                {individualLoading ? (
+                {rankingLoading ? (
                   Array(3).fill(0).map((_, i) => <Skeleton key={i} className="h-20" />)
-                ) : individualGoals?.closerGoals && individualGoals.closerGoals.length > 0 ? (
-                  individualGoals.closerGoals
+                ) : closerGoals.length > 0 ? (
+                  closerGoals
                     .sort((a, b) => b.percentage - a.percentage)
                     .map((vendedor, index) => {
                       const position = index + 1;
@@ -1153,10 +1177,10 @@ export default function Performance() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                {individualLoading ? (
+                {rankingLoading ? (
                   Array(3).fill(0).map((_, i) => <Skeleton key={i} className="h-20" />)
-                ) : individualGoals?.sdrGoals && individualGoals.sdrGoals.length > 0 ? (
-                  individualGoals.sdrGoals
+                ) : sdrGoals.length > 0 ? (
+                  sdrGoals
                     .sort((a, b) => b.percentage - a.percentage)
                     .map((sdr, index) => {
                       const position = index + 1;

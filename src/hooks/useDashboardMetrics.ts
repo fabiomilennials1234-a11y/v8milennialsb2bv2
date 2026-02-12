@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useIsAdmin } from "./useUserRole";
 import { useCurrentTeamMember } from "./useTeamMembers";
+import { useRealtimeSubscription } from "./useRealtimeSubscription";
 
 /** Intervalo do mês em UTC — igual ao usado na importação (metrics_period_at = 1º do mês 00:00 UTC). */
 function getMonthRangeUTC(month: number, year: number) {
@@ -306,6 +307,7 @@ export function useFunnelData(month?: number, year?: number) {
   });
 }
 
+/** Ranking do pódio — sempre busca dados frescos (staleTime: 0) para refletir atualizações da RPC. */
 export function useRankingData(month?: number, year?: number) {
   const now = new Date();
   const selectedMonth = month ?? now.getMonth() + 1;
@@ -313,83 +315,50 @@ export function useRankingData(month?: number, year?: number) {
   const { data: currentTeamMember } = useCurrentTeamMember();
   const organizationId = currentTeamMember?.organization_id ?? null;
 
-  const { startStr, endStr } = getMonthRangeUTC(selectedMonth, selectedYear);
+  useRealtimeSubscription("pipe_propostas", ["ranking-data"]);
+  useRealtimeSubscription("pipe_confirmacao", ["ranking-data"]);
+  useRealtimeSubscription("goals", ["ranking-data"]);
 
   return useQuery({
     queryKey: ["ranking-data", selectedMonth, selectedYear, organizationId],
     queryFn: async () => {
-      if (!organizationId) return { closerRanking: [], sdrRanking: [] };
-      const { data: teamMembers } = await supabase
-        .from("team_members")
-        .select("id, name, role")
-        .eq("organization_id", organizationId)
-        .eq("is_active", true);
+      const { data, error } = await supabase.rpc("get_ranking_data", {
+        p_month: selectedMonth,
+        p_year: selectedYear,
+      });
 
-      const closers = teamMembers?.filter((m) => m.role === "closer") || [];
-      const sdrs = teamMembers?.filter((m) => m.role === "sdr") || [];
+      if (error) {
+        console.error("[useRankingData] RPC error:", error);
+        return { closerRanking: [], sdrRanking: [] };
+      }
 
-      const [{ data: sales1 }, { data: sales2 }] = await Promise.all([
-        supabase.from("pipe_propostas").select("closer_id, sale_value, status").eq("organization_id", organizationId).eq("status", "vendido").not("metrics_period_at", "is", null).gte("metrics_period_at", startStr).lte("metrics_period_at", endStr),
-        supabase.from("pipe_propostas").select("closer_id, sale_value, status").eq("organization_id", organizationId).eq("status", "vendido").is("metrics_period_at", null).gte("closed_at", startStr).lte("closed_at", endStr),
-      ]);
-      const sales = [...(sales1 || []), ...(sales2 || [])];
+      const raw = Array.isArray(data) && data.length > 0 ? data[0] : data;
 
-      const [{ data: meetings1 }, { data: meetings2 }] = await Promise.all([
-        supabase.from("pipe_confirmacao").select("sdr_id, status").eq("organization_id", organizationId).eq("status", "compareceu").not("metrics_period_at", "is", null).gte("metrics_period_at", startStr).lte("metrics_period_at", endStr),
-        supabase.from("pipe_confirmacao").select("sdr_id, status").eq("organization_id", organizationId).eq("status", "compareceu").is("metrics_period_at", null).gte("created_at", startStr).lte("created_at", endStr),
-      ]);
-      const meetings = [...(meetings1 || []), ...(meetings2 || [])];
-
-      const { data: goals } = await supabase
-        .from("goals")
-        .select("team_member_id, target_value, current_value, type")
-        .eq("organization_id", organizationId)
-        .eq("month", selectedMonth)
-        .eq("year", selectedYear);
-
-      // Calculate closer rankings
-      const closerRanking = closers
-        .map((closer) => {
-          const closerSales = sales.filter((s) => s.closer_id === closer.id);
-          const totalValue = closerSales.reduce((sum, s) => sum + (s.sale_value || 0), 0);
-          const goal = goals?.find((g) => g.team_member_id === closer.id && g.type === "vendas");
-          const goalProgress = goal?.target_value 
-            ? (totalValue / goal.target_value) * 100 
-            : 0;
-          
-          return {
-            id: closer.id,
-            name: closer.name,
-            value: totalValue,
-            conversions: closerSales.length,
-            goalProgress: Math.round(goalProgress),
-          };
-        })
-        .sort((a, b) => b.value - a.value)
-        .map((item, index) => ({ ...item, position: index + 1, role: "Closer" as const }));
-
-      // Calculate SDR rankings (by meetings comparecidas)
-      const sdrRanking = sdrs
-        .map((sdr) => {
-          const sdrMeetings = meetings.filter((m) => m.sdr_id === sdr.id);
-          const goal = goals?.find((g) => g.team_member_id === sdr.id && g.type === "reunioes");
-          const goalProgress = goal?.target_value 
-            ? (sdrMeetings.length / goal.target_value) * 100 
-            : 0;
-          
-          return {
-            id: sdr.id,
-            name: sdr.name,
-            value: 0,
-            meetings: sdrMeetings.length,
-            goalProgress: Math.round(goalProgress),
-          };
-        })
-        .sort((a, b) => (b.meetings || 0) - (a.meetings || 0))
-        .map((item, index) => ({ ...item, position: index + 1, role: "SDR" as const }));
-
-      return { closerRanking, sdrRanking };
+      return {
+        closerRanking: (raw?.closerRanking ?? []) as Array<{
+          id: string;
+          name: string | null;
+          value: number;
+          conversions: number;
+          goal: number;
+          goalProgress: number;
+          position: number;
+          role: "Closer";
+        }>,
+        sdrRanking: (raw?.sdrRanking ?? []) as Array<{
+          id: string;
+          name: string | null;
+          value: number;
+          meetings: number;
+          goal: number;
+          goalProgress: number;
+          position: number;
+          role: "SDR";
+        }>,
+      };
     },
     enabled: !!organizationId,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 }

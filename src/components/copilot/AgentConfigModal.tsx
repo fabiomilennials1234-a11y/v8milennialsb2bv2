@@ -26,6 +26,7 @@ import {
   Unlink,
   BarChart3,
   Clock,
+  LayoutList,
 } from "lucide-react";
 import {
   Dialog,
@@ -62,6 +63,7 @@ import { PIPE_TYPES, PIPE_STAGES } from "@/types/copilot";
 import { AgentMetricsTab } from "./AgentMetricsTab";
 import { AgentTasksTab } from "./AgentTasksTab";
 import { AgentFollowupRulesTab } from "./AgentFollowupRulesTab";
+import { AgentKanbanRulesTab } from "./AgentKanbanRulesTab";
 
 interface AgentConfigModalProps {
   agent: CopilotAgentWithRelations | null;
@@ -232,7 +234,7 @@ export function AgentConfigModal({
         </DialogHeader>
 
         <Tabs defaultValue="overview" className="flex-1">
-          <TabsList className={`grid w-full ${agent.template_type === 'followup' ? 'grid-cols-6' : 'grid-cols-5'}`}>
+          <TabsList className={`grid w-full ${agent.template_type === 'followup' ? 'grid-cols-7' : 'grid-cols-6'}`}>
             <TabsTrigger value="overview" className="flex items-center gap-2">
               <Settings className="w-4 h-4" />
               <span className="hidden sm:inline">Visão Geral</span>
@@ -257,6 +259,11 @@ export function AgentConfigModal({
               <BarChart3 className="w-4 h-4" />
               <span className="hidden sm:inline">Revisão</span>
               <span className="sm:hidden">Rev</span>
+            </TabsTrigger>
+            <TabsTrigger value="kanban" className="flex items-center gap-2">
+              <LayoutList className="w-4 h-4" />
+              <span className="hidden sm:inline">Regras</span>
+              <span className="sm:hidden">Regras</span>
             </TabsTrigger>
             {agent.template_type === 'followup' && (
               <TabsTrigger value="followup" className="flex items-center gap-2">
@@ -877,6 +884,11 @@ export function AgentConfigModal({
                   <AgentTasksTab agentId={agent.id} />
                 </TabsContent>
               </Tabs>
+            </TabsContent>
+
+            {/* Tab: Regras por Etapa (Kanban) */}
+            <TabsContent value="kanban" className="space-y-4 px-1">
+              <AgentKanbanRulesTab agentId={agent.id} />
             </TabsContent>
 
             {/* Tab: Follow-up Rules (apenas para agentes do tipo "followup") */}

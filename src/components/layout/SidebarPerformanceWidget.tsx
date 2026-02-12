@@ -191,37 +191,37 @@ interface SidebarPerformanceWidgetProps {
 
 export function SidebarPerformanceWidget({ collapsed }: SidebarPerformanceWidgetProps) {
   const { data: currentMember, isLoading: memberLoading } = useCurrentTeamMember();
-  
+
   // Use role from team_member instead of user_roles table
   const memberRole = currentMember?.role;
-  
+
   const now = new Date();
   const month = now.getMonth() + 1;
   const year = now.getFullYear();
-  
+
   // Agora usado tanto para SDR quanto para Closer
   const { data: commissionSummary, isLoading: commissionLoading } = useCommissionSummary(
     currentMember?.id || "",
     month,
     year
   );
-  
+
   const { data: sdrData, isLoading: sdrLoading } = useSDRConfirmations(
     memberRole === "sdr" ? currentMember?.id : undefined
   );
-  
+
   const { data: closerSales, isLoading: closerSalesLoading } = useCloserSales(
     memberRole === "closer" ? currentMember?.id : undefined
   );
-  
+
   // Admin não vê o widget
   if (memberRole === "admin") return null;
-  
+
   // Se não tem membro associado, não mostra
   if (!currentMember && !memberLoading) return null;
-  
+
   const isLoading = memberLoading || commissionLoading || sdrLoading || closerSalesLoading;
-  
+
   if (isLoading) {
     return (
       <div className="p-3 border-t border-sidebar-border">
@@ -232,12 +232,12 @@ export function SidebarPerformanceWidget({ collapsed }: SidebarPerformanceWidget
       </div>
     );
   }
-  
+
   // Widget para SDR
   if (memberRole === "sdr" && sdrData && commissionSummary) {
     const percentage = sdrData.goal > 0 ? (sdrData.confirmed / sdrData.goal) * 100 : 0;
     const isOnTrack = percentage >= 50;
-    
+
     return (
       <div className="p-3 border-t border-sidebar-border space-y-2">
         {/* Ganhos do mês para SDR */}
@@ -280,8 +280,8 @@ export function SidebarPerformanceWidget({ collapsed }: SidebarPerformanceWidget
             animate={{ scale: 1, opacity: 1 }}
             transition={{ delay: 0.1 }}
             className={`rounded-lg p-3 bg-gradient-to-br ${
-              isOnTrack 
-                ? "from-emerald-500/20 to-emerald-600/10 border border-emerald-500/30" 
+              isOnTrack
+                ? "from-emerald-500/20 to-emerald-600/10 border border-emerald-500/30"
                 : "from-amber-500/20 to-amber-600/10 border border-amber-500/30"
             }`}
           >
@@ -326,7 +326,7 @@ export function SidebarPerformanceWidget({ collapsed }: SidebarPerformanceWidget
       </div>
     );
   }
-  
+
   // Widget para Closer - SEMPRE em valor (R$)
   if (memberRole === "closer" && commissionSummary && closerSales) {
     const percentage = closerSales.goal > 0 ? (closerSales.salesValue / closerSales.goal) * 100 : 0;
@@ -421,6 +421,6 @@ export function SidebarPerformanceWidget({ collapsed }: SidebarPerformanceWidget
       </div>
     );
   }
-  
+
   return null;
 }

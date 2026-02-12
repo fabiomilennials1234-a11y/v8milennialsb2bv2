@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { getOrCreateLead, normalizePhoneForSearch } from "../_shared/lead-service.ts";
 import { OpenRouterClient } from "./openrouter-client.ts";
 import { AgentEngine } from "./agent-engine.ts";
@@ -9,7 +10,7 @@ import { AgentEngine } from "./agent-engine.ts";
  * Twilio/WhatsApp → /agent-message
  */
 Deno.serve(async (req) => {
-  const corsHeaders = getCorsHeaders(req.headers.get("origin"));
+  const corsHeaders = withSecurityHeaders(getCorsHeaders(req.headers.get("origin")));
 
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
