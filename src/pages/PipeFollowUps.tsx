@@ -34,6 +34,7 @@ import { AcoesDoDia } from "@/components/followups/AcoesDoDia";
 import { useFollowUps, useCompleteFollowUp, useArchiveFollowUp, useArchiveManyFollowUps, type FollowUp } from "@/hooks/useFollowUps";
 import { useTeamMembers, useCurrentTeamMember } from "@/hooks/useTeamMembers";
 import { useUserRole } from "@/hooks/useUserRole";
+import { useLogLeadAction } from "@/hooks/useLogLeadAction";
 import { cn } from "@/lib/utils";
 
 export default function PipeFollowUps() {
@@ -53,6 +54,7 @@ export default function PipeFollowUps() {
     : userRole?.role === "admin"
       ? "all"
       : currentTeamMember?.id ?? "all";
+  const logAction = useLogLeadAction();
   const completeFollowUp = useCompleteFollowUp();
   const archiveFollowUp = useArchiveFollowUp();
   const archiveManyFollowUps = useArchiveManyFollowUps();
@@ -127,7 +129,11 @@ export default function PipeFollowUps() {
   }, [filteredFollowUps]);
 
   const handleComplete = (id: string) => {
+    const fup = followUps?.find(f => f.id === id);
     completeFollowUp.mutate(id);
+    if (fup) {
+      logAction({ leadId: fup.lead_id, action: "followup_completed", description: `Follow-up concluído: ${fup.title}` });
+    }
   };
 
   const handleArchive = (id: string) => {

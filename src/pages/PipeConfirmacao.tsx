@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { Plus, Calendar, Loader2, LayoutGrid, List, Settings2, Upload, FileDown } from "lucide-react";
+import { Plus, Calendar, Loader2, LayoutGrid, List, Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -23,13 +23,11 @@ import {
 import { DraggableKanbanBoard, DraggableItem, KanbanColumn } from "@/components/kanban/DraggableKanbanBoard";
 import { usePipeConfirmacao, useUpdatePipeConfirmacao, PipeConfirmacaoStatus } from "@/hooks/usePipeConfirmacao";
 import { usePipelineStages, stagesToColumns } from "@/hooks/usePipelineStages";
-import { ManagePipelineStagesModal } from "@/components/pipelines/ManagePipelineStagesModal";
+import { PipeSettingsDialog } from "@/components/pipelines/PipeSettingsDialog";
 import { useDeleteAllLeadsInPipe } from "@/hooks/useLeads";
 import { useCreatePipeProposta } from "@/hooks/usePipePropostas";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
 import { LeadModal } from "@/components/leads/LeadModal";
-import { ImportLeadsFunnelModal } from "@/components/leads/ImportLeadsFunnelModal";
-import { ExportLeadsModal } from "@/components/leads/ExportLeadsModal";
 import { AddMeetingModal } from "@/components/confirmacao/AddMeetingModal";
 import { ConfirmacaoDetailModal } from "@/components/confirmacao/ConfirmacaoDetailModal";
 import { ConfirmacaoStats } from "@/components/confirmacao/ConfirmacaoStats";
@@ -41,6 +39,7 @@ import { CompareceuModal } from "@/components/confirmacao/CompareceuModal";
 import { useConfirmacaoOverdueDays, isConfirmacaoOverdue } from "@/hooks/useOrganizationSettings";
 import { format, isToday, startOfWeek, endOfWeek, isWithinInterval, isTomorrow, isPast, startOfDay, differenceInCalendarDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { useLogLeadAction } from "@/hooks/useLogLeadAction";
 import { toast } from "sonner";
 
 interface ConfirmacaoCardData extends DraggableItem {
@@ -142,10 +141,8 @@ export default function PipeConfirmacao() {
   const [selectedCloserId, setSelectedCloserId] = useState<string>("all");
   const [isLeadModalOpen, setIsLeadModalOpen] = useState(false);
   const [isMeetingModalOpen, setIsMeetingModalOpen] = useState(false);
-  const [isImportFunnelOpen, setIsImportFunnelOpen] = useState(false);
-  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
-  const [isStagesModalOpen, setIsStagesModalOpen] = useState(false);
   const [editingLead, setEditingLead] = useState<any>(null);
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [viewMode, setViewMode] = useState<"kanban" | "timeline">("kanban");
@@ -167,6 +164,7 @@ export default function PipeConfirmacao() {
   const updatePipeConfirmacao = useUpdatePipeConfirmacao();
   const createPipeProposta = useCreatePipeProposta();
   const deleteAllLeadsInPipe = useDeleteAllLeadsInPipe("confirmacao");
+  const logAction = useLogLeadAction();
 
   // Transform team members for filter
   const teamMemberOptions = useMemo(() => 
@@ -342,6 +340,8 @@ export default function PipeConfirmacao() {
     const item = pipeData?.find(p => p.id === itemId);
     if (!item) return;
 
+    const stageLabel = statusColumns.find(c => c.id === newStatus)?.title || newStatus;
+
     // If moving to compareceu, open modal to select SDR/Closer
     if (newStatus === "compareceu") {
       setPendingCompareceuItem(item);
@@ -350,12 +350,13 @@ export default function PipeConfirmacao() {
     }
 
     try {
-      await updatePipeConfirmacao.mutateAsync({ 
-        id: itemId, 
+      await updatePipeConfirmacao.mutateAsync({
+        id: itemId,
         status: newStatus as PipeConfirmacaoStatus,
         leadId: item.lead_id,
         assignedTo: item.sdr_id || item.closer_id,
       });
+      logAction({ leadId: item.lead_id, action: "stage_changed", description: `Etapa alterada para "${stageLabel}" no Pipe Confirmação` });
       toast.success("Status atualizado!");
     } catch (error) {
       toast.error("Erro ao atualizar status");
@@ -384,6 +385,7 @@ export default function PipeConfirmacao() {
         status: "marcar_compromisso",
       });
 
+      logAction({ leadId: pendingCompareceuItem.lead_id, action: "meeting_attended", description: `Lead compareceu à reunião e movido para Gestão de Propostas` });
       toast.success("Lead movido para Gestão de Propostas!");
       setIsCompareceuModalOpen(false);
       setPendingCompareceuItem(null);
@@ -445,17 +447,9 @@ export default function PipeConfirmacao() {
               <List className="w-4 h-4" />
             </Button>
           </div>
-          <Button size="sm" variant="outline" onClick={() => setIsStagesModalOpen(true)}>
+          <Button size="sm" variant="outline" onClick={() => setIsSettingsOpen(true)}>
             <Settings2 className="w-4 h-4 mr-2" />
-            Etapas
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => setIsImportFunnelOpen(true)}>
-            <Upload className="w-4 h-4 mr-2" />
-            Importar
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => setIsExportModalOpen(true)}>
-            <FileDown className="w-4 h-4 mr-2" />
-            Exportar
+            Configurações
           </Button>
           <Button size="sm" className="gradient-gold" onClick={() => setIsMeetingModalOpen(true)}>
             <Plus className="w-4 h-4 mr-2" />
@@ -464,12 +458,12 @@ export default function PipeConfirmacao() {
         </div>
       </div>
 
-      <ImportLeadsFunnelModal
-        open={isImportFunnelOpen}
-        onOpenChange={setIsImportFunnelOpen}
-        destination="confirmacao"
+      <PipeSettingsDialog
+        open={isSettingsOpen}
+        onOpenChange={setIsSettingsOpen}
+        pipeType="confirmacao"
+        stages={pipelineStages}
       />
-      <ExportLeadsModal open={isExportModalOpen} onOpenChange={setIsExportModalOpen} />
 
       {/* Período das métricas: Este mês | Geral */}
       <div className="flex flex-wrap items-center gap-3">
@@ -589,13 +583,6 @@ export default function PipeConfirmacao() {
         currentSdrId={pendingCompareceuItem?.sdr_id}
         currentCloserId={pendingCompareceuItem?.closer_id}
         isLoading={isProcessingCompareceu}
-      />
-
-      <ManagePipelineStagesModal
-        open={isStagesModalOpen}
-        onOpenChange={setIsStagesModalOpen}
-        pipelineType="confirmacao"
-        stages={pipelineStages}
       />
 
       {/* Delete ALL leads from THIS stage (Confirmação) confirmation */}

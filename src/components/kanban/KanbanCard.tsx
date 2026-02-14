@@ -7,6 +7,7 @@ import { ScheduleFollowUpButton } from "@/components/followups/ScheduleFollowUpB
 import { LeadScoreBadge } from "@/components/leads/LeadScoreBadge";
 import { useLeadScoresMap } from "@/hooks/useLeadScore";
 import { useToggleLeadAI } from "@/hooks/useLeads";
+import { useLogLeadAction } from "@/hooks/useLogLeadAction";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
@@ -62,6 +63,7 @@ export function KanbanCard({ lead, onClick }: KanbanCardProps) {
   const scoresMap = useLeadScoresMap();
   const leadScore = lead.leadId ? scoresMap.get(lead.leadId) : null;
   const toggleAIMutation = useToggleLeadAI();
+  const logAction = useLogLeadAction();
   const [optimisticAiDisabled, setOptimisticAiDisabled] = useState<Record<string, boolean>>({});
   
   // Usar estado otimista se disponível, senão usar o valor do lead
@@ -199,13 +201,15 @@ export function KanbanCard({ lead, onClick }: KanbanCardProps) {
                     { leadId: lead.leadId, disabled: !checked },
                     {
                       onSuccess: () => {
+                        if (lead.leadId) {
+                          logAction({ leadId: lead.leadId, action: "ai_toggled", description: checked ? "IA Copilot ativada" : "IA Copilot desativada" });
+                        }
                         toast({
                           title: checked ? "IA ativada" : "IA desativada",
-                          description: checked 
+                          description: checked
                             ? "O Copilot voltará a responder mensagens deste lead."
                             : "O Copilot não responderá mais mensagens deste lead.",
                         });
-                        // Resetar estado otimista após sucesso
                         setOptimisticAiDisabled(prev => {
                           const newState = { ...prev };
                           delete newState[lead.leadId!];

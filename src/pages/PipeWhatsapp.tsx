@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { motion } from "framer-motion";
-import { Search, Plus, Zap, User, Building2, Star, Phone, Loader2, Globe, Trash2, MoreVertical, Target, MessageCircle, Mail, Calendar, DollarSign, Clock, Briefcase, Settings2, Type, Bot, Upload, FileDown } from "lucide-react";
+import { Search, Plus, Zap, User, Building2, Star, Phone, Loader2, Globe, Trash2, MoreVertical, Target, MessageCircle, Mail, Calendar, DollarSign, Clock, Briefcase, Settings2, Bot } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -37,23 +37,15 @@ import { DraggableKanbanBoard, DraggableItem, KanbanColumn } from "@/components/
 import { usePipeWhatsapp, useUpdatePipeWhatsapp, useDeletePipeWhatsapp } from "@/hooks/usePipeWhatsapp";
 import { usePipeWhatsappMetrics, type MetricsPeriod } from "@/hooks/usePipeMetrics";
 import { usePipelineStages, stagesToColumns } from "@/hooks/usePipelineStages";
-import { ManagePipelineStagesModal } from "@/components/pipelines/ManagePipelineStagesModal";
+import { PipeSettingsDialog } from "@/components/pipelines/PipeSettingsDialog";
 import { useCreatePipeConfirmacao } from "@/hooks/usePipeConfirmacao";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
 import { useDeleteLead, useDeleteAllLeadsInPipe, useToggleLeadAI } from "@/hooks/useLeads";
 import { useUserRole } from "@/hooks/useUserRole";
+import { useLogLeadAction } from "@/hooks/useLogLeadAction";
 import { useCreateAcaoDoDia } from "@/hooks/useAcoesDoDia";
 import { LeadModal } from "@/components/leads/LeadModal";
 import { CreateOpportunityModal } from "@/components/kanban/CreateOpportunityModal";
-import { ImportLeadsFunnelModal } from "@/components/leads/ImportLeadsFunnelModal";
-import { ExportLeadsModal } from "@/components/leads/ExportLeadsModal";
-import { CustomFieldsManager } from "@/components/leads/CustomFieldsManager";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { formatDistanceToNow, format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -468,10 +460,7 @@ export default function PipeWhatsapp() {
   const [filterOrigin, setFilterOrigin] = useState("all");
   const [isLeadModalOpen, setIsLeadModalOpen] = useState(false);
   const [isOpportunityModalOpen, setIsOpportunityModalOpen] = useState(false);
-  const [isStagesModalOpen, setIsStagesModalOpen] = useState(false);
-  const [isCustomFieldsModalOpen, setIsCustomFieldsModalOpen] = useState(false);
-  const [isImportFunnelOpen, setIsImportFunnelOpen] = useState(false);
-  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [editingLead, setEditingLead] = useState<any>(null);
   const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; pipeId: string; leadId: string } | null>(null);
   const [deleteAllLeadsDialogOpen, setDeleteAllLeadsDialogOpen] = useState(false);
@@ -495,6 +484,7 @@ export default function PipeWhatsapp() {
   const deleteAllLeadsInPipe = useDeleteAllLeadsInPipe("whatsapp");
   const createPipeConfirmacao = useCreatePipeConfirmacao();
   const createAcaoDoDia = useCreateAcaoDoDia();
+  const logAction = useLogLeadAction();
 
   const isAdmin = userRole?.role === "admin";
 
@@ -615,13 +605,17 @@ export default function PipeWhatsapp() {
     const item = pipeData?.find(p => p.id === itemId);
     if (!item) return;
 
+    const stageLabel = statusColumns.find(c => c.id === newStatus)?.title || newStatus;
+
     try {
-      await updatePipeWhatsapp.mutateAsync({ 
-        id: itemId, 
+      await updatePipeWhatsapp.mutateAsync({
+        id: itemId,
         status: newStatus as PipeWhatsappStatus,
         leadId: item.lead_id,
         sdrId: item.sdr_id,
       });
+
+      logAction({ leadId: item.lead_id, action: "stage_changed", description: `Etapa alterada para "${stageLabel}" no Funil WhatsApp` });
 
       // If moved to "agendado", automatically create entry in pipe_confirmacao
       if (newStatus === "agendado") {
@@ -699,21 +693,9 @@ export default function PipeWhatsapp() {
         </div>
 
         <div className="flex items-center gap-3">
-          <Button size="sm" variant="outline" onClick={() => setIsCustomFieldsModalOpen(true)}>
-            <Type className="w-4 h-4 mr-2" />
-            Campos
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => setIsStagesModalOpen(true)}>
+          <Button size="sm" variant="outline" onClick={() => setIsSettingsOpen(true)}>
             <Settings2 className="w-4 h-4 mr-2" />
-            Etapas
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => setIsImportFunnelOpen(true)}>
-            <Upload className="w-4 h-4 mr-2" />
-            Importar
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => setIsExportModalOpen(true)}>
-            <FileDown className="w-4 h-4 mr-2" />
-            Exportar
+            Configurações
           </Button>
           <Button size="sm" variant="outline" onClick={() => { setEditingLead(null); setIsLeadModalOpen(true); }}>
             <Plus className="w-4 h-4 mr-2" />
@@ -871,13 +853,13 @@ export default function PipeWhatsapp() {
         )}
       />
 
-      {/* Import Leads Funnel Modal */}
-      <ImportLeadsFunnelModal
-        open={isImportFunnelOpen}
-        onOpenChange={setIsImportFunnelOpen}
-        destination="qualificacao"
+      {/* Pipe Settings Dialog */}
+      <PipeSettingsDialog
+        open={isSettingsOpen}
+        onOpenChange={setIsSettingsOpen}
+        pipeType="whatsapp"
+        stages={pipelineStages}
       />
-      <ExportLeadsModal open={isExportModalOpen} onOpenChange={setIsExportModalOpen} />
 
       {/* Create Opportunity Modal */}
       <CreateOpportunityModal
@@ -951,26 +933,6 @@ export default function PipeWhatsapp() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Manage Stages Modal */}
-      <ManagePipelineStagesModal
-        open={isStagesModalOpen}
-        onOpenChange={setIsStagesModalOpen}
-        pipelineType="whatsapp"
-        stages={pipelineStages}
-      />
-      
-      {/* Custom Fields Modal */}
-      <Dialog open={isCustomFieldsModalOpen} onOpenChange={setIsCustomFieldsModalOpen}>
-        <DialogContent className="sm:max-w-[600px]">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Type className="w-5 h-5 text-primary" />
-              Campos Personalizados
-            </DialogTitle>
-          </DialogHeader>
-          <CustomFieldsManager />
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

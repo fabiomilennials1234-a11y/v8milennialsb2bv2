@@ -51,7 +51,8 @@ import { cn } from "@/lib/utils";
 import { useConfirmacaoOverdueDays, isConfirmacaoOverdue } from "@/hooks/useOrganizationSettings";
 import { useUpdatePipeConfirmacao, useDeletePipeConfirmacao, PipeConfirmacaoStatus, statusColumns } from "@/hooks/usePipeConfirmacao";
 import { useCreatePipeProposta } from "@/hooks/usePipePropostas";
-import { useLeadHistory, useCreateLeadHistory } from "@/hooks/useLeadHistory";
+import { useLeadHistory } from "@/hooks/useLeadHistory";
+import { useLogLeadAction } from "@/hooks/useLogLeadAction";
 import { useDeleteLead } from "@/hooks/useLeads";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
 import { CompareceuModal } from "./CompareceuModal";
@@ -133,7 +134,7 @@ export function ConfirmacaoDetailModal({ open, onOpenChange, item, onSuccess }: 
   const deleteLead = useDeleteLead();
   const createPipeProposta = useCreatePipeProposta();
   const { data: leadHistory, isLoading: historyLoading } = useLeadHistory(item?.lead_id);
-  const createLeadHistory = useCreateLeadHistory();
+  const logAction = useLogLeadAction();
   const { data: teamMembers } = useTeamMembers();
 
   const sdrs = teamMembers?.filter(m => m.role === "sdr" && m.is_active) || [];
@@ -207,25 +208,12 @@ export function ConfirmacaoDetailModal({ open, onOpenChange, item, onSuccess }: 
       // Salvar primeiro a reunião (data, horário, status, observações) para garantir que funcione mesmo se lead_history falhar por RLS
       await updatePipeConfirmacao.mutateAsync(updates);
 
-      // Histórico é opcional: se falhar (ex.: RLS em lead_history), não bloqueia o salvamento da reunião
-      try {
-        if (editedNotes !== item.notes) {
-          await createLeadHistory.mutateAsync({
-            lead_id: item.lead_id,
-            action: "Observação atualizada",
-            description: editedNotes || "Observação removida",
-          });
-        }
-        if (editedStatus !== item.status) {
-          const newStatusLabel = statusColumns.find((s) => s.id === editedStatus)?.title;
-          await createLeadHistory.mutateAsync({
-            lead_id: item.lead_id,
-            action: "Status alterado",
-            description: `Status alterado para "${newStatusLabel}"`,
-          });
-        }
-      } catch (historyError) {
-        console.warn("Histórico do lead não foi registrado (RLS ou permissão):", historyError);
+      if (editedNotes !== item.notes) {
+        logAction({ leadId: item.lead_id, action: "note_added", description: editedNotes || "Observação removida" });
+      }
+      if (editedStatus !== item.status) {
+        const newStatusLabel = statusColumns.find((s) => s.id === editedStatus)?.title;
+        logAction({ leadId: item.lead_id, action: "stage_changed", description: `Status alterado para "${newStatusLabel}" na Confirmação` });
       }
 
       toast.success("Reunião atualizada com sucesso!");
@@ -265,11 +253,7 @@ export function ConfirmacaoDetailModal({ open, onOpenChange, item, onSuccess }: 
         status: "marcar_compromisso",
       });
 
-      await createLeadHistory.mutateAsync({
-        lead_id: item.lead_id,
-        action: "Compareceu à reunião",
-        description: "Lead compareceu e foi movido para Gestão de Propostas",
-      });
+      logAction({ leadId: item.lead_id, action: "meeting_attended", description: "Lead compareceu e foi movido para Gestão de Propostas" });
 
       toast.success("Lead movido para Gestão de Propostas!");
       setIsCompareceuModalOpen(false);
@@ -285,23 +269,14 @@ export function ConfirmacaoDetailModal({ open, onOpenChange, item, onSuccess }: 
   const handleSaveOwners = async () => {
     setIsSavingOwners(true);
     try {
-      // history
       if (editedSdrId !== item.sdr_id) {
         const sdrName = getMemberName(editedSdrId) || "Nenhum";
-        await createLeadHistory.mutateAsync({
-          lead_id: item.lead_id,
-          action: "SDR alterado",
-          description: `SDR alterado para "${sdrName}"`,
-        });
+        logAction({ leadId: item.lead_id, action: "sdr_assigned", description: `SDR alterado para "${sdrName}"` });
       }
 
       if (editedCloserId !== item.closer_id) {
         const closerName = getMemberName(editedCloserId) || "Nenhum";
-        await createLeadHistory.mutateAsync({
-          lead_id: item.lead_id,
-          action: "Closer alterado",
-          description: `Closer alterado para "${closerName}"`,
-        });
+        logAction({ leadId: item.lead_id, action: "closer_assigned", description: `Closer alterado para "${closerName}"` });
       }
 
       await updatePipeConfirmacao.mutateAsync({
@@ -327,11 +302,7 @@ export function ConfirmacaoDetailModal({ open, onOpenChange, item, onSuccess }: 
     
     setIsAddingNote(true);
     try {
-      await createLeadHistory.mutateAsync({
-        lead_id: item.lead_id,
-        action: "Nota adicionada",
-        description: newNote,
-      });
+      logAction({ leadId: item.lead_id, action: "note_added", description: newNote });
       
       // Also update the pipe_confirmacao notes
       const updatedNotes = item.notes 
@@ -365,11 +336,7 @@ export function ConfirmacaoDetailModal({ open, onOpenChange, item, onSuccess }: 
     try {
       const newStatusLabel = statusColumns.find(s => s.id === newStatus)?.title;
       
-      await createLeadHistory.mutateAsync({
-        lead_id: item.lead_id,
-        action: "Status alterado",
-        description: `Status alterado para "${newStatusLabel}"`,
-      });
+      logAction({ leadId: item.lead_id, action: "stage_changed", description: `Status alterado para "${newStatusLabel}" na Confirmação` });
 
       await updatePipeConfirmacao.mutateAsync({
         id: item.id,
@@ -386,6 +353,7 @@ export function ConfirmacaoDetailModal({ open, onOpenChange, item, onSuccess }: 
 
   const handleDeleteMeeting = async () => {
     try {
+      logAction({ leadId: item.lead_id, action: "meeting_deleted", description: "Reunião de confirmação removida" });
       await deletePipeConfirmacao.mutateAsync(item.id);
       toast.success("Reunião excluída com sucesso!");
       onOpenChange(false);

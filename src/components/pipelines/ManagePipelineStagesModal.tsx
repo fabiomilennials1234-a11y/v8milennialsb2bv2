@@ -265,12 +265,15 @@ function SortableStageItem({
   );
 }
 
-export function ManagePipelineStagesModal({
-  open,
-  onOpenChange,
+interface ManagePipelineStagesContentProps {
+  pipelineType: PipelineType;
+  stages: PipelineStage[];
+}
+
+export function ManagePipelineStagesContent({
   pipelineType,
   stages,
-}: ManagePipelineStagesModalProps) {
+}: ManagePipelineStagesContentProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editColor, setEditColor] = useState("");
@@ -411,16 +414,7 @@ export function ManagePipelineStagesModal({
 
   return (
     <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Gerenciar Etapas - {pipelineName}</DialogTitle>
-            <DialogDescription>
-              Crie, edite, reordene ou remova etapas do funil. Arraste para reordenar.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 mt-4">
+          <div className="space-y-4">
             {/* Lista de etapas */}
             <DndContext
               sensors={sensors}
@@ -552,8 +546,6 @@ export function ManagePipelineStagesModal({
               </Button>
             )}
           </div>
-        </DialogContent>
-      </Dialog>
 
       {/* Confirmação de exclusão */}
       <AlertDialog open={!!deleteStageId} onOpenChange={() => setDeleteStageId(null)}>
@@ -585,5 +577,26 @@ export function ManagePipelineStagesModal({
         </AlertDialogContent>
       </AlertDialog>
     </>
+  );
+}
+
+export function ManagePipelineStagesModal({
+  open,
+  onOpenChange,
+  pipelineType,
+  stages,
+}: ManagePipelineStagesModalProps) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Gerenciar Etapas - {getPipelineTypeName(pipelineType)}</DialogTitle>
+          <DialogDescription>
+            Crie, edite, reordene ou remova etapas do funil. Arraste para reordenar.
+          </DialogDescription>
+        </DialogHeader>
+        <ManagePipelineStagesContent pipelineType={pipelineType} stages={stages} />
+      </DialogContent>
+    </Dialog>
   );
 }

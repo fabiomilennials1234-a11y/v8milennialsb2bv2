@@ -416,8 +416,10 @@ Deno.serve(async (req) => {
       // Create history entry with closer info
       await supabase.from("lead_history").insert({
         lead_id: existingLead.id,
-        action: "Reunião agendada via Cal.com",
-        description: `Lead unificado - reunião agendada para ${startTime}${closerId ? ` - Closer atribuído automaticamente` : ''}${organizerName ? ` (Organizador: ${organizerName})` : ''}`,
+        action: "meeting_scheduled",
+        description: `Sistema: Reunião agendada via Cal.com para ${startTime}${closerId ? ` - Closer atribuído automaticamente` : ''}${organizerName ? ` (Organizador: ${organizerName})` : ''}`,
+        created_by: null,
+        organization_id: targetOrganizationId,
       });
 
       return new Response(
@@ -488,8 +490,10 @@ Deno.serve(async (req) => {
       // Create history entry with closer info
       await supabase.from("lead_history").insert({
         lead_id: newLead.id,
-        action: "Lead criado via Cal.com",
-        description: `Novo lead criado a partir de agendamento Cal.com - reunião para ${startTime}${closerId ? ` - Closer atribuído automaticamente` : ''}${organizerName ? ` (Organizador: ${organizerName})` : ''}`,
+        action: "lead_created",
+        description: `Sistema: Lead criado via Cal.com com reunião para ${startTime}${closerId ? ` - Closer atribuído automaticamente` : ''}${organizerName ? ` (Organizador: ${organizerName})` : ''}`,
+        created_by: null,
+        organization_id: targetOrganizationId,
       });
 
       return new Response(

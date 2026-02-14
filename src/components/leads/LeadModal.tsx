@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Star, Building, Phone, Mail, User, Tag, Plus, Type, Hash, Calendar, List, ToggleLeft, MessageSquare, PhoneCall } from "lucide-react";
+import { Star, Building, Phone, Mail, User, Tag, Plus, Type, Hash, Calendar, List, ToggleLeft, MessageSquare, PhoneCall, Clock, History, UserPlus, UserCheck, ArrowRight, Edit2, FileText, CheckCircle, XCircle, CalendarX, DollarSign, TrendingUp, Trash2, Package, ListTodo, CheckSquare, Bot, Loader2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import {
   Dialog,
@@ -23,12 +23,17 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useTeamMembers, useCurrentTeamMember } from "@/hooks/useTeamMembers";
 import { useCreateLead, useUpdateLead } from "@/hooks/useLeads";
+import { useLogLeadAction } from "@/hooks/useLogLeadAction";
 import {
   useLeadCustomFields,
   useLeadCustomFieldValues,
   useSaveCustomFieldValue,
   type CustomField,
 } from "@/hooks/useLeadCustomFields";
+import { useLeadHistory } from "@/hooks/useLeadHistory";
+import { cn } from "@/lib/utils";
+import { formatDistanceToNow } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
 
 const originLabels: Record<string, string> = {
@@ -63,6 +68,52 @@ interface FormData {
   notes: string;
   sdr_id: string | null;
   closer_id: string | null;
+}
+
+const ACTION_CONFIG: Record<string, { icon: React.ReactNode; label: string; color: string }> = {
+  lead_created: { icon: <UserPlus className="w-3.5 h-3.5" />, label: "Lead criado", color: "bg-blue-500/20 text-blue-600" },
+  stage_changed: { icon: <ArrowRight className="w-3.5 h-3.5" />, label: "Etapa alterada", color: "bg-yellow-500/20 text-yellow-600" },
+  sdr_assigned: { icon: <UserCheck className="w-3.5 h-3.5" />, label: "SDR atribuído", color: "bg-green-500/20 text-green-600" },
+  closer_assigned: { icon: <UserCheck className="w-3.5 h-3.5" />, label: "Closer atribuído", color: "bg-green-500/20 text-green-600" },
+  field_updated: { icon: <Edit2 className="w-3.5 h-3.5" />, label: "Campo atualizado", color: "bg-muted text-muted-foreground" },
+  note_added: { icon: <FileText className="w-3.5 h-3.5" />, label: "Nota adicionada", color: "bg-muted text-muted-foreground" },
+  meeting_scheduled: { icon: <Calendar className="w-3.5 h-3.5" />, label: "Reunião agendada", color: "bg-blue-500/20 text-blue-600" },
+  meeting_attended: { icon: <CheckCircle className="w-3.5 h-3.5" />, label: "Compareceu", color: "bg-green-500/20 text-green-600" },
+  meeting_missed: { icon: <XCircle className="w-3.5 h-3.5" />, label: "Não compareceu", color: "bg-red-500/20 text-red-600" },
+  meeting_deleted: { icon: <CalendarX className="w-3.5 h-3.5" />, label: "Reunião removida", color: "bg-red-500/20 text-red-600" },
+  proposal_created: { icon: <DollarSign className="w-3.5 h-3.5" />, label: "Proposta criada", color: "bg-purple-500/20 text-purple-600" },
+  proposal_status_changed: { icon: <TrendingUp className="w-3.5 h-3.5" />, label: "Status da proposta", color: "bg-yellow-500/20 text-yellow-600" },
+  proposal_deleted: { icon: <Trash2 className="w-3.5 h-3.5" />, label: "Proposta removida", color: "bg-red-500/20 text-red-600" },
+  product_linked: { icon: <Package className="w-3.5 h-3.5" />, label: "Produto vinculado", color: "bg-purple-500/20 text-purple-600" },
+  followup_created: { icon: <ListTodo className="w-3.5 h-3.5" />, label: "Tarefa criada", color: "bg-blue-500/20 text-blue-600" },
+  followup_completed: { icon: <CheckSquare className="w-3.5 h-3.5" />, label: "Tarefa concluída", color: "bg-green-500/20 text-green-600" },
+  ai_toggled: { icon: <Bot className="w-3.5 h-3.5" />, label: "IA Copilot", color: "bg-primary/20 text-primary" },
+  copilot_interaction: { icon: <Bot className="w-3.5 h-3.5" />, label: "Copilot atendeu", color: "bg-primary/20 text-primary" },
+};
+
+const FALLBACK_CONFIG = { icon: <Clock className="w-3.5 h-3.5" />, label: "", color: "bg-muted text-muted-foreground" };
+
+function TimelineItem({ action, description, date, isLast }: { action: string; description?: string; date: string; isLast?: boolean }) {
+  const config = ACTION_CONFIG[action] || FALLBACK_CONFIG;
+  const displayLabel = config.label || action;
+
+  return (
+    <div className="flex gap-3">
+      <div className="flex flex-col items-center">
+        <div className={cn("w-8 h-8 rounded-full flex items-center justify-center", config.color)}>
+          {config.icon}
+        </div>
+        {!isLast && <div className="w-px flex-1 bg-border mt-2" />}
+      </div>
+      <div className="flex-1 pb-6">
+        <p className="font-medium text-sm">{displayLabel}</p>
+        {description && <p className="text-sm text-muted-foreground mt-0.5">{description}</p>}
+        <p className="text-xs text-muted-foreground mt-1">
+          {formatDistanceToNow(new Date(date), { addSuffix: true, locale: ptBR })}
+        </p>
+      </div>
+    </div>
+  );
 }
 
 function StarRating({ rating, onRate }: { rating: number; onRate: (r: number) => void }) {
@@ -115,11 +166,14 @@ export function LeadModal({
   
   // Estado para campos personalizados
   const [customValues, setCustomValues] = useState<Record<string, string>>({});
+  const [historyLimit, setHistoryLimit] = useState(50);
 
   const { data: teamMembers = [] } = useTeamMembers();
+  const { data: history, isLoading: historyLoading } = useLeadHistory(lead?.id || null);
   const { data: currentTeamMember, refetch: refetchTeamMember, isLoading: isLoadingTeamMember, isFetching: isFetchingTeamMember } = useCurrentTeamMember();
   const createLead = useCreateLead();
   const updateLead = useUpdateLead();
+  const logAction = useLogLeadAction();
   
   // Hooks para campos personalizados
   const { data: customFields = [] } = useLeadCustomFields();
@@ -200,12 +254,35 @@ export function LeadModal({
       };
 
       let leadId = lead?.id;
-      
+
       if (isEditing) {
         await updateLead.mutateAsync({ id: lead.id, ...payload });
+        // Log field changes
+        const changes: string[] = [];
+        if (formData.name !== lead.name) changes.push("nome");
+        if (formData.company !== (lead.company || "")) changes.push("empresa");
+        if (formData.email !== (lead.email || "")) changes.push("email");
+        if (formData.phone !== (lead.phone || "")) changes.push("telefone");
+        if (formData.rating !== (lead.rating || 5)) changes.push("rating");
+        if (formData.segment !== (lead.segment || "")) changes.push("segmento");
+        if (formData.notes !== (lead.notes || "")) changes.push("observações");
+        if (formData.sdr_id !== (lead.sdr_id || null)) changes.push("SDR");
+        if (formData.closer_id !== (lead.closer_id || null)) changes.push("Closer");
+        if (changes.length > 0) {
+          logAction({ leadId: lead.id, action: "field_updated", description: `Campos atualizados: ${changes.join(", ")}` });
+        }
+        if (formData.sdr_id !== (lead.sdr_id || null)) {
+          const sdrName = teamMembers.find(m => m.id === formData.sdr_id)?.name || "Nenhum";
+          logAction({ leadId: lead.id, action: "sdr_assigned", description: `SDR alterado para "${sdrName}"` });
+        }
+        if (formData.closer_id !== (lead.closer_id || null)) {
+          const closerName = teamMembers.find(m => m.id === formData.closer_id)?.name || "Nenhum";
+          logAction({ leadId: lead.id, action: "closer_assigned", description: `Closer alterado para "${closerName}"` });
+        }
       } else {
         const newLead = await createLead.mutateAsync(payload);
         leadId = newLead.id;
+        logAction({ leadId: newLead.id, action: "lead_created", description: `Lead "${formData.name}" criado` });
       }
       
       // Salvar campos personalizados
@@ -274,13 +351,19 @@ export function LeadModal({
         </DialogHeader>
 
         <Tabs defaultValue="info" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className={cn("grid w-full", isEditing ? "grid-cols-4" : "grid-cols-3")}>
             <TabsTrigger value="info">Informações</TabsTrigger>
             <TabsTrigger value="details">Detalhes</TabsTrigger>
             <TabsTrigger value="custom" className="gap-1">
               <Plus className="w-3 h-3" />
               Personalizado
             </TabsTrigger>
+            {isEditing && (
+              <TabsTrigger value="history" className="gap-1">
+                <History className="w-3 h-3" />
+                Histórico
+              </TabsTrigger>
+            )}
           </TabsList>
 
           <TabsContent value="info" className="space-y-4 mt-4">
@@ -572,6 +655,45 @@ export function LeadModal({
               </ScrollArea>
             )}
           </TabsContent>
+
+          {isEditing && (
+            <TabsContent value="history" className="mt-4">
+              <ScrollArea className="h-[320px] pr-4">
+                {historyLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                  </div>
+                ) : history && history.length > 0 ? (
+                  <div className="space-y-0">
+                    {history.slice(0, historyLimit).map((item, index) => (
+                      <TimelineItem
+                        key={item.id}
+                        action={item.action}
+                        description={item.description || undefined}
+                        date={item.created_at}
+                        isLast={index === Math.min(history.length, historyLimit) - 1}
+                      />
+                    ))}
+                    {history.length > historyLimit && (
+                      <button
+                        onClick={() => setHistoryLimit((prev) => prev + 50)}
+                        className="w-full text-center text-sm text-primary hover:underline py-2"
+                      >
+                        Carregar mais ({history.length - historyLimit} restantes)
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <History className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
+                    <p className="text-sm text-muted-foreground">
+                      Nenhum histórico registrado.
+                    </p>
+                  </div>
+                )}
+              </ScrollArea>
+            </TabsContent>
+          )}
         </Tabs>
 
         <div className="flex justify-end gap-2 pt-4 border-t">

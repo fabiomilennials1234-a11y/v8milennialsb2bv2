@@ -26,6 +26,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useCreateFollowUp } from "@/hooks/useFollowUps";
+import { useLogLeadAction } from "@/hooks/useLogLeadAction";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
 import { cn } from "@/lib/utils";
 
@@ -56,6 +57,7 @@ export function ScheduleFollowUpModal({
 
   const { data: teamMembers } = useTeamMembers();
   const createFollowUp = useCreateFollowUp();
+  const logAction = useLogLeadAction();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -71,6 +73,8 @@ export function ScheduleFollowUpModal({
       source_pipe: sourcePipe,
       source_pipe_id: sourcePipeId,
     });
+
+    logAction({ leadId, action: "followup_created", description: `Tarefa criada: "${title}"` });
 
     // Reset form
     setTitle("");

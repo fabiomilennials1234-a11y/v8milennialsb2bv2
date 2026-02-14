@@ -1,9 +1,9 @@
 import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { 
-  Search, Filter, Plus, Calendar, User, Building2, Star, 
+import {
+  Search, Filter, Plus, Calendar, User, Building2, Star,
   DollarSign, Clock, Tag, Loader2, TrendingUp, Package,
-  ArrowUpRight, Percent, BarChart3, Target, Flame, MessageCircle, Settings2, Upload, FileDown
+  ArrowUpRight, Percent, BarChart3, Target, Flame, MessageCircle, Settings2
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -31,11 +31,9 @@ import { usePipePropostas, useUpdatePipeProposta, PipePropostasStatus } from "@/
 import { usePipePropostasMetrics, type MetricsPeriod } from "@/hooks/usePipeMetrics";
 import { useDeleteAllLeadsInPipe } from "@/hooks/useLeads";
 import { usePipelineStages, stagesToColumns } from "@/hooks/usePipelineStages";
-import { ManagePipelineStagesModal } from "@/components/pipelines/ManagePipelineStagesModal";
+import { PipeSettingsDialog } from "@/components/pipelines/PipeSettingsDialog";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
 import { CreateProposalModal } from "@/components/proposals/CreateProposalModal";
-import { ImportLeadsFunnelModal } from "@/components/leads/ImportLeadsFunnelModal";
-import { ExportLeadsModal } from "@/components/leads/ExportLeadsModal";
 import { ProposalDetailModal } from "@/components/proposals/ProposalDetailModal";
 import { FunnelChart } from "@/components/dashboard/FunnelChart";
 import { CalorSlider, CalorBadge } from "@/components/proposals/CalorSlider";
@@ -46,6 +44,7 @@ import { CalorAnalyticsChart } from "@/components/proposals/CalorAnalyticsChart"
 import { ProductAnalyticsChart } from "@/components/proposals/ProductAnalyticsChart";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { useLogLeadAction } from "@/hooks/useLogLeadAction";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -287,10 +286,8 @@ export default function PipePropostas() {
   const [filterPriority, setFilterPriority] = useState("all");
   const [filterCalor, setFilterCalor] = useState("all");
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [isImportFunnelOpen, setIsImportFunnelOpen] = useState(false);
-  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
-  const [isStagesModalOpen, setIsStagesModalOpen] = useState(false);
   const [selectedProposta, setSelectedProposta] = useState<any>(null);
   const [viewMode, setViewMode] = useState<"kanban" | "analytics">("kanban");
   const [analyticsTab, setAnalyticsTab] = useState<"propostas" | "produtos">("propostas");
@@ -314,6 +311,7 @@ export default function PipePropostas() {
   const { data: teamMembers } = useTeamMembers();
   const updatePipeProposta = useUpdatePipeProposta();
   const deleteAllLeadsInPipe = useDeleteAllLeadsInPipe("propostas");
+  const logAction = useLogLeadAction();
   const { data: metricsByPeriod } = usePipePropostasMetrics(
     metricsPeriod,
     metricsPeriod === "month" ? selectedMetricsMonth : undefined,
@@ -682,6 +680,9 @@ export default function PipePropostas() {
 
       await updatePipeProposta.mutateAsync(updates);
 
+      const stageLabel = statusColumns.find(c => c.id === newStatus)?.title || newStatus;
+      logAction({ leadId, action: "proposal_status_changed", description: `Etapa alterada para "${stageLabel}" no Pipe Propostas` });
+
       if (newStatus === "vendido") {
         toast.success("🎉 Venda fechada com sucesso!");
       } else if (newStatus === "perdido") {
@@ -785,17 +786,9 @@ export default function PipePropostas() {
               </TabsTrigger>
             </TabsList>
           </Tabs>
-          <Button variant="outline" className="gap-2" onClick={() => setIsStagesModalOpen(true)}>
+          <Button variant="outline" className="gap-2" onClick={() => setIsSettingsOpen(true)}>
             <Settings2 className="w-4 h-4" />
-            Etapas
-          </Button>
-          <Button variant="outline" className="gap-2" onClick={() => setIsImportFunnelOpen(true)}>
-            <Upload className="w-4 h-4" />
-            Importar
-          </Button>
-          <Button variant="outline" className="gap-2" onClick={() => setIsExportModalOpen(true)}>
-            <FileDown className="w-4 h-4" />
-            Exportar
+            Configurações
           </Button>
           <Button className="gap-2" onClick={() => setIsCreateModalOpen(true)}>
             <Plus className="w-4 h-4" />
@@ -804,12 +797,12 @@ export default function PipePropostas() {
         </div>
       </div>
 
-      <ImportLeadsFunnelModal
-        open={isImportFunnelOpen}
-        onOpenChange={setIsImportFunnelOpen}
-        destination="propostas"
+      <PipeSettingsDialog
+        open={isSettingsOpen}
+        onOpenChange={setIsSettingsOpen}
+        pipeType="propostas"
+        stages={pipelineStages}
       />
-      <ExportLeadsModal open={isExportModalOpen} onOpenChange={setIsExportModalOpen} />
 
       {/* Período das métricas: Este mês | Geral */}
       <div className="flex flex-wrap items-center gap-3">
@@ -1230,14 +1223,6 @@ export default function PipePropostas() {
         onConfirm={handleCommitmentDateConfirm}
         onCancel={handleCommitmentDateCancel}
         leadName={pendingStatusChange?.leadName || "Lead"}
-      />
-
-      {/* Manage Stages Modal */}
-      <ManagePipelineStagesModal
-        open={isStagesModalOpen}
-        onOpenChange={setIsStagesModalOpen}
-        pipelineType="propostas"
-        stages={pipelineStages}
       />
 
       {/* Delete ALL leads from THIS stage (Propostas) confirmation */}

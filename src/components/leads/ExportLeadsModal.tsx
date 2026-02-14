@@ -18,12 +18,11 @@ const EXPORT_LIMITS = [
 
 type ExportFormat = "csv" | "xlsx";
 
-interface ExportLeadsModalProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
+interface ExportLeadsContentProps {
+  onDone?: () => void;
 }
 
-export function ExportLeadsModal({ open, onOpenChange }: ExportLeadsModalProps) {
+export function ExportLeadsContent({ onDone }: ExportLeadsContentProps) {
   const [format, setFormat] = useState<ExportFormat>("xlsx");
   const [limit, setLimit] = useState<number>(5000);
   const { exportLeads, isExporting } = useExportLeads();
@@ -35,13 +34,87 @@ export function ExportLeadsModal({ open, onOpenChange }: ExportLeadsModalProps) 
         limit: limit === 50000 ? 50_000 : limit,
       });
       toast.success(`${count} leads exportados com sucesso.`);
-      onOpenChange(false);
+      onDone?.();
     } catch (e) {
       console.error("Export error:", e);
       toast.error("Erro ao exportar. Tente novamente.");
     }
   };
 
+  return (
+    <div className="space-y-6 py-2">
+      <div className="space-y-3">
+        <Label>Formato</Label>
+        <RadioGroup
+          value={format}
+          onValueChange={(v) => setFormat(v as ExportFormat)}
+          className="flex gap-4"
+        >
+          <div className="flex items-center gap-2">
+            <RadioGroupItem value="xlsx" id="fmt-xlsx" />
+            <Label htmlFor="fmt-xlsx" className="flex items-center gap-2 font-normal cursor-pointer">
+              <FileSpreadsheet className="w-4 h-4 text-green-600" />
+              Excel (.xlsx)
+            </Label>
+          </div>
+          <div className="flex items-center gap-2">
+            <RadioGroupItem value="csv" id="fmt-csv" />
+            <Label htmlFor="fmt-csv" className="flex items-center gap-2 font-normal cursor-pointer">
+              <FileText className="w-4 h-4 text-muted-foreground" />
+              CSV
+            </Label>
+          </div>
+        </RadioGroup>
+      </div>
+      <div className="space-y-3">
+        <Label>Quantidade (os mais recentes)</Label>
+        <RadioGroup
+          value={String(limit)}
+          onValueChange={(v) => setLimit(Number(v))}
+          className="grid grid-cols-1 gap-2"
+        >
+          {EXPORT_LIMITS.map((opt) => (
+            <div key={opt.value} className="flex items-center gap-2">
+              <RadioGroupItem value={String(opt.value)} id={`limit-${opt.value}`} />
+              <Label htmlFor={`limit-${opt.value}`} className="font-normal cursor-pointer">
+                {opt.label}
+              </Label>
+            </div>
+          ))}
+        </RadioGroup>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        O arquivo inclui todos os dados: lead (nome, empresa, contato, prioridade, origem, UTMs, datas),
+        etapa e datas de cada pipe (WhatsApp, Confirmação, Propostas), valores, SDR/Closer e notas.
+      </p>
+      <div className="flex justify-end gap-2 pt-2">
+        <Button variant="outline" onClick={() => onDone?.()} disabled={isExporting}>
+          Cancelar
+        </Button>
+        <Button onClick={handleExport} disabled={isExporting}>
+          {isExporting ? (
+            <>
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              Exportando...
+            </>
+          ) : (
+            <>
+              <FileDown className="w-4 h-4 mr-2" />
+              Exportar
+            </>
+          )}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+interface ExportLeadsModalProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+export function ExportLeadsModal({ open, onOpenChange }: ExportLeadsModalProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
@@ -51,70 +124,7 @@ export function ExportLeadsModal({ open, onOpenChange }: ExportLeadsModalProps) 
             Exportar leads
           </DialogTitle>
         </DialogHeader>
-        <div className="space-y-6 py-2">
-          <div className="space-y-3">
-            <Label>Formato</Label>
-            <RadioGroup
-              value={format}
-              onValueChange={(v) => setFormat(v as ExportFormat)}
-              className="flex gap-4"
-            >
-              <div className="flex items-center gap-2">
-                <RadioGroupItem value="xlsx" id="fmt-xlsx" />
-                <Label htmlFor="fmt-xlsx" className="flex items-center gap-2 font-normal cursor-pointer">
-                  <FileSpreadsheet className="w-4 h-4 text-green-600" />
-                  Excel (.xlsx)
-                </Label>
-              </div>
-              <div className="flex items-center gap-2">
-                <RadioGroupItem value="csv" id="fmt-csv" />
-                <Label htmlFor="fmt-csv" className="flex items-center gap-2 font-normal cursor-pointer">
-                  <FileText className="w-4 h-4 text-muted-foreground" />
-                  CSV
-                </Label>
-              </div>
-            </RadioGroup>
-          </div>
-          <div className="space-y-3">
-            <Label>Quantidade (os mais recentes)</Label>
-            <RadioGroup
-              value={String(limit)}
-              onValueChange={(v) => setLimit(Number(v))}
-              className="grid grid-cols-1 gap-2"
-            >
-              {EXPORT_LIMITS.map((opt) => (
-                <div key={opt.value} className="flex items-center gap-2">
-                  <RadioGroupItem value={String(opt.value)} id={`limit-${opt.value}`} />
-                  <Label htmlFor={`limit-${opt.value}`} className="font-normal cursor-pointer">
-                    {opt.label}
-                  </Label>
-                </div>
-              ))}
-            </RadioGroup>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            O arquivo inclui todos os dados: lead (nome, empresa, contato, prioridade, origem, UTMs, datas),
-            etapa e datas de cada pipe (WhatsApp, Confirmação, Propostas), valores, SDR/Closer e notas.
-          </p>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isExporting}>
-              Cancelar
-            </Button>
-            <Button onClick={handleExport} disabled={isExporting}>
-              {isExporting ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Exportando...
-                </>
-              ) : (
-                <>
-                  <FileDown className="w-4 h-4 mr-2" />
-                  Exportar
-                </>
-              )}
-            </Button>
-          </div>
-        </div>
+        <ExportLeadsContent onDone={() => onOpenChange(false)} />
       </DialogContent>
     </Dialog>
   );

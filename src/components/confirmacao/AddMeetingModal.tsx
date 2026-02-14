@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { useLeads } from "@/hooks/useLeads";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
 import { useCreatePipeConfirmacao, PipeConfirmacaoStatus } from "@/hooks/usePipeConfirmacao";
+import { useLogLeadAction } from "@/hooks/useLogLeadAction";
 import { toast } from "sonner";
 
 interface AddMeetingModalProps {
@@ -36,6 +37,7 @@ export function AddMeetingModal({ open, onOpenChange, onSuccess }: AddMeetingMod
   const { data: leads, isLoading: leadsLoading } = useLeads();
   const { data: teamMembers, isLoading: membersLoading } = useTeamMembers();
   const createPipeConfirmacao = useCreatePipeConfirmacao();
+  const logAction = useLogLeadAction();
 
   const sdrs = teamMembers?.filter(m => m.role === "sdr" && m.is_active) || [];
   const closers = teamMembers?.filter(m => m.role === "closer" && m.is_active) || [];
@@ -97,6 +99,11 @@ export function AddMeetingModal({ open, onOpenChange, onSuccess }: AddMeetingMod
         status,
       });
 
+      logAction({
+        leadId: selectedLeadId,
+        action: "meeting_scheduled",
+        description: `Reunião agendada para ${format(meetingDateTime, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}`,
+      });
       toast.success("Reunião adicionada com sucesso!");
       onOpenChange(false);
       onSuccess?.();

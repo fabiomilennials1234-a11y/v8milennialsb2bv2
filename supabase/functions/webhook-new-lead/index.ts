@@ -291,8 +291,9 @@ Deno.serve(async (req) => {
 
       await supabase.from("lead_history").insert({
         lead_id: existingLead.id,
-        action: "Lead unificado",
-        description: `Lead duplicado detectado (${deduplicationDescription}). Dados mesclados automaticamente.`,
+        action: "lead_created",
+        description: `Sistema: Lead duplicado detectado (${deduplicationDescription}). Dados mesclados automaticamente.`,
+        created_by: null,
       });
 
       return new Response(
@@ -363,8 +364,9 @@ Deno.serve(async (req) => {
       // Create history entry for confirmacao
       await supabase.from("lead_history").insert({
         lead_id: lead.id,
-        action: "Lead criado via integração",
-        description: `Lead ${name} adicionado automaticamente no pipe de confirmação com reunião marcada para ${lead.compromisso_date}`,
+        action: "lead_created",
+        description: `Sistema: Lead ${name} adicionado automaticamente no pipe de confirmação com reunião marcada para ${lead.compromisso_date}`,
+        created_by: null,
       });
 
       return new Response(
@@ -397,8 +399,9 @@ Deno.serve(async (req) => {
     // Create history entry
     await supabase.from("lead_history").insert({
       lead_id: lead.id,
-      action: "Lead criado via integração",
-      description: `Lead ${name} adicionado automaticamente via webhook`,
+      action: "lead_created",
+      description: `Sistema: Lead ${name} adicionado automaticamente via webhook`,
+      created_by: null,
     });
 
     return new Response(

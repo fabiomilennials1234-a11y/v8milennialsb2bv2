@@ -74,17 +74,15 @@ interface PreviewLead {
 
 type Step = "upload" | "map_columns" | "preview" | "importing" | "complete";
 
-interface ImportLeadsFunnelModalProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
+interface ImportLeadsFunnelContentProps {
   destination: FunnelDestination;
+  onDone?: () => void;
 }
 
-export function ImportLeadsFunnelModal({
-  open,
-  onOpenChange,
+export function ImportLeadsFunnelContent({
   destination,
-}: ImportLeadsFunnelModalProps) {
+  onDone,
+}: ImportLeadsFunnelContentProps) {
   const [step, setStep] = useState<Step>("upload");
   const [file, setFile] = useState<File | null>(null);
   const [previewLeads, setPreviewLeads] = useState<PreviewLead[]>([]);
@@ -201,21 +199,12 @@ export function ImportLeadsFunnelModal({
     setSelectedCloserId("");
     setSelectedMetricsPeriod("current");
     resetImport();
-    onOpenChange(false);
+    onDone?.();
   };
 
   const memberOptions = (members || []).map((m) => ({ id: m.id, name: m.name || "" }));
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <FileSpreadsheet className="w-5 h-5 text-primary" />
-            Importar Leads — {DESTINATION_LABELS[destination]}
-          </DialogTitle>
-        </DialogHeader>
-
         <AnimatePresence mode="wait">
           {step === "upload" && (
             <motion.div
@@ -542,6 +531,30 @@ export function ImportLeadsFunnelModal({
             </motion.div>
           )}
         </AnimatePresence>
+  );
+}
+
+interface ImportLeadsFunnelModalProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  destination: FunnelDestination;
+}
+
+export function ImportLeadsFunnelModal({
+  open,
+  onOpenChange,
+  destination,
+}: ImportLeadsFunnelModalProps) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <FileSpreadsheet className="w-5 h-5 text-primary" />
+            Importar Leads — {DESTINATION_LABELS[destination]}
+          </DialogTitle>
+        </DialogHeader>
+        <ImportLeadsFunnelContent destination={destination} onDone={() => onOpenChange(false)} />
       </DialogContent>
     </Dialog>
   );

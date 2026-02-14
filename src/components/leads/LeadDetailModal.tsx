@@ -3,17 +3,21 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   X,
   User,
+  UserPlus,
+  UserCheck,
   Building2,
   Mail,
   Phone,
   Star,
   Calendar,
+  CalendarX,
   Tag,
   MessageSquare,
   Clock,
   TrendingUp,
   DollarSign,
   CheckCircle,
+  CheckSquare,
   XCircle,
   History,
   Edit2,
@@ -21,6 +25,11 @@ import {
   Zap,
   Bot,
   PhoneCall,
+  Package,
+  FileText,
+  ListTodo,
+  Trash2,
+  Loader2,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import {
@@ -38,6 +47,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { useQuery } from "@tanstack/react-query";
 import { useToggleLeadAI } from "@/hooks/useLeads";
+import { useLogLeadAction } from "@/hooks/useLogLeadAction";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { format, formatDistanceToNow } from "date-fns";
@@ -72,55 +82,53 @@ const originColors: Record<string, string> = {
   cal: "bg-chart-1/10 text-chart-1 border-chart-1/20",
 };
 
-function TimelineItem({ 
-  action, 
-  description, 
-  date, 
-  isLast 
-}: { 
-  action: string; 
-  description?: string; 
+const ACTION_CONFIG: Record<string, { icon: React.ReactNode; label: string; color: string }> = {
+  lead_created: { icon: <UserPlus className="w-3.5 h-3.5" />, label: "Lead criado", color: "bg-blue-500/20 text-blue-600" },
+  stage_changed: { icon: <ArrowRight className="w-3.5 h-3.5" />, label: "Etapa alterada", color: "bg-yellow-500/20 text-yellow-600" },
+  sdr_assigned: { icon: <UserCheck className="w-3.5 h-3.5" />, label: "SDR atribuído", color: "bg-green-500/20 text-green-600" },
+  closer_assigned: { icon: <UserCheck className="w-3.5 h-3.5" />, label: "Closer atribuído", color: "bg-green-500/20 text-green-600" },
+  field_updated: { icon: <Edit2 className="w-3.5 h-3.5" />, label: "Campo atualizado", color: "bg-muted text-muted-foreground" },
+  note_added: { icon: <FileText className="w-3.5 h-3.5" />, label: "Nota adicionada", color: "bg-muted text-muted-foreground" },
+  meeting_scheduled: { icon: <Calendar className="w-3.5 h-3.5" />, label: "Reunião agendada", color: "bg-blue-500/20 text-blue-600" },
+  meeting_attended: { icon: <CheckCircle className="w-3.5 h-3.5" />, label: "Compareceu", color: "bg-green-500/20 text-green-600" },
+  meeting_missed: { icon: <XCircle className="w-3.5 h-3.5" />, label: "Não compareceu", color: "bg-red-500/20 text-red-600" },
+  meeting_deleted: { icon: <CalendarX className="w-3.5 h-3.5" />, label: "Reunião removida", color: "bg-red-500/20 text-red-600" },
+  proposal_created: { icon: <DollarSign className="w-3.5 h-3.5" />, label: "Proposta criada", color: "bg-purple-500/20 text-purple-600" },
+  proposal_status_changed: { icon: <TrendingUp className="w-3.5 h-3.5" />, label: "Status da proposta", color: "bg-yellow-500/20 text-yellow-600" },
+  proposal_deleted: { icon: <Trash2 className="w-3.5 h-3.5" />, label: "Proposta removida", color: "bg-red-500/20 text-red-600" },
+  product_linked: { icon: <Package className="w-3.5 h-3.5" />, label: "Produto vinculado", color: "bg-purple-500/20 text-purple-600" },
+  followup_created: { icon: <ListTodo className="w-3.5 h-3.5" />, label: "Tarefa criada", color: "bg-blue-500/20 text-blue-600" },
+  followup_completed: { icon: <CheckSquare className="w-3.5 h-3.5" />, label: "Tarefa concluída", color: "bg-green-500/20 text-green-600" },
+  ai_toggled: { icon: <Bot className="w-3.5 h-3.5" />, label: "IA Copilot", color: "bg-primary/20 text-primary" },
+  copilot_interaction: { icon: <Bot className="w-3.5 h-3.5" />, label: "Copilot atendeu", color: "bg-primary/20 text-primary" },
+};
+
+const FALLBACK_CONFIG = { icon: <Clock className="w-3.5 h-3.5" />, label: "", color: "bg-muted text-muted-foreground" };
+
+function TimelineItem({
+  action,
+  description,
+  date,
+  isLast
+}: {
+  action: string;
+  description?: string;
   date: string;
   isLast?: boolean;
 }) {
-  const getIcon = () => {
-    switch (action) {
-      case "lead_created": return <User className="w-3.5 h-3.5" />;
-      case "status_changed": return <TrendingUp className="w-3.5 h-3.5" />;
-      case "meeting_scheduled": return <Calendar className="w-3.5 h-3.5" />;
-      case "meeting_attended": return <CheckCircle className="w-3.5 h-3.5 text-success" />;
-      case "meeting_missed": return <XCircle className="w-3.5 h-3.5 text-destructive" />;
-      case "proposal_created": return <DollarSign className="w-3.5 h-3.5" />;
-      case "sale_closed": return <Zap className="w-3.5 h-3.5 text-primary" />;
-      case "message_sent": return <MessageSquare className="w-3.5 h-3.5" />;
-      default: return <Clock className="w-3.5 h-3.5" />;
-    }
-  };
-
-  const getActionLabel = () => {
-    switch (action) {
-      case "lead_created": return "Lead criado";
-      case "status_changed": return "Status alterado";
-      case "meeting_scheduled": return "Reunião agendada";
-      case "meeting_attended": return "Compareceu na reunião";
-      case "meeting_missed": return "Não compareceu";
-      case "proposal_created": return "Proposta criada";
-      case "sale_closed": return "Venda fechada";
-      case "message_sent": return "Mensagem enviada";
-      default: return action;
-    }
-  };
+  const config = ACTION_CONFIG[action] || FALLBACK_CONFIG;
+  const displayLabel = config.label || action;
 
   return (
     <div className="flex gap-3">
       <div className="flex flex-col items-center">
-        <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
-          {getIcon()}
+        <div className={cn("w-8 h-8 rounded-full flex items-center justify-center", config.color)}>
+          {config.icon}
         </div>
         {!isLast && <div className="w-px flex-1 bg-border mt-2" />}
       </div>
       <div className="flex-1 pb-6">
-        <p className="font-medium text-sm">{getActionLabel()}</p>
+        <p className="font-medium text-sm">{displayLabel}</p>
         {description && (
           <p className="text-sm text-muted-foreground mt-0.5">{description}</p>
         )}
@@ -166,6 +174,7 @@ function StatCard({ label, value, icon: Icon, variant = "default" }: {
 export function LeadDetailModal({ open, onOpenChange, leadId, onEdit }: LeadDetailModalProps) {
   const { toast } = useToast();
   const toggleAIMutation = useToggleLeadAI();
+  const logAction = useLogLeadAction();
   const [optimisticAiDisabled, setOptimisticAiDisabled] = useState<boolean | null>(null);
   
   const { data: lead, isLoading } = useQuery({
@@ -192,17 +201,19 @@ export function LeadDetailModal({ open, onOpenChange, leadId, onEdit }: LeadDeta
     enabled: !!leadId && open,
   });
 
-  const { data: history } = useQuery({
+  const [historyLimit, setHistoryLimit] = useState(50);
+
+  const { data: history, isLoading: historyLoading } = useQuery({
     queryKey: ["lead-history", leadId],
     queryFn: async () => {
       if (!leadId) return [];
-      
+
       const { data, error } = await supabase
         .from("lead_history")
         .select("*")
         .eq("lead_id", leadId)
         .order("created_at", { ascending: false });
-      
+
       if (error) throw error;
       return data;
     },
@@ -352,13 +363,13 @@ export function LeadDetailModal({ open, onOpenChange, leadId, onEdit }: LeadDeta
                                 { leadId: lead.id, disabled: !checked },
                                 {
                                   onSuccess: () => {
+                                    logAction({ leadId: lead.id, action: "ai_toggled", description: checked ? "IA Copilot ativada" : "IA Copilot desativada" });
                                     toast({
                                       title: checked ? "IA ativada" : "IA desativada",
-                                      description: checked 
+                                      description: checked
                                         ? "O Copilot voltará a responder mensagens deste lead."
                                         : "O Copilot não responderá mais mensagens deste lead.",
                                     });
-                                    // Resetar estado otimista após sucesso
                                     setOptimisticAiDisabled(null);
                                   },
                                   onError: () => {
@@ -676,17 +687,29 @@ export function LeadDetailModal({ open, onOpenChange, leadId, onEdit }: LeadDeta
                 </TabsContent>
 
                 <TabsContent value="history" className="p-6 pt-4 m-0">
-                  {history && history.length > 0 ? (
+                  {historyLoading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : history && history.length > 0 ? (
                     <div className="space-y-0">
-                      {history.map((item, index) => (
+                      {history.slice(0, historyLimit).map((item, index) => (
                         <TimelineItem
                           key={item.id}
                           action={item.action}
                           description={item.description || undefined}
                           date={item.created_at}
-                          isLast={index === history.length - 1}
+                          isLast={index === Math.min(history.length, historyLimit) - 1}
                         />
                       ))}
+                      {history.length > historyLimit && (
+                        <button
+                          onClick={() => setHistoryLimit((prev) => prev + 50)}
+                          className="w-full text-center text-sm text-primary hover:underline py-2"
+                        >
+                          Carregar mais ({history.length - historyLimit} restantes)
+                        </button>
+                      )}
                     </div>
                   ) : (
                     <div className="text-center py-8">

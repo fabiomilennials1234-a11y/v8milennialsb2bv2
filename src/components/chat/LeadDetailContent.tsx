@@ -33,6 +33,7 @@ import {
   type LeadDestination,
 } from "@/hooks/useWhatsAppLeadIntegration";
 import { useUpdateLead } from "@/hooks/useLeads";
+import { useLogLeadAction } from "@/hooks/useLogLeadAction";
 import { useCampanhas, useCampanhaStages } from "@/hooks/useCampanhas";
 import { useTeamMembers, useCurrentTeamMember } from "@/hooks/useTeamMembers";
 import { supabase } from "@/integrations/supabase/client";
@@ -113,6 +114,7 @@ export function LeadDetailContent({
   const linkLeadToWhatsApp = useLinkLeadToWhatsApp();
   const updateLead = useUpdateLead();
   const updatePipeStatus = useUpdateLeadPipelineStatus();
+  const logAction = useLogLeadAction();
 
   const activeCampanhas = campanhas.filter((c) => c.is_active);
 
@@ -163,6 +165,7 @@ export function LeadDetailContent({
         });
       }
 
+      logAction({ leadId: result.leadId, action: "lead_created", description: `Lead "${formData.name || pushName}" criado via WhatsApp` });
       toast.success("Lead criado com sucesso!");
       refetchLead();
       setIsCreating(false);
@@ -182,6 +185,7 @@ export function LeadDetailContent({
         rating: formData.rating || null,
         notes: formData.notes || null,
       });
+      logAction({ leadId: lead.id, action: "field_updated", description: "Dados do lead atualizados via chat" });
       toast.success("Lead atualizado!");
     } catch (error: any) {
       toast.error(error.message || "Erro ao atualizar");
@@ -196,7 +200,9 @@ export function LeadDetailContent({
         leadId: lead.id,
         status: newStatus as any,
       });
-      toast.success(`Lead movido para ${pipelineStages.find((s) => s.id === newStatus)?.title}`);
+      const stageName = pipelineStages.find((s) => s.id === newStatus)?.title;
+      logAction({ leadId: lead.id, action: "stage_changed", description: `Movido para "${stageName}" no WhatsApp SDR` });
+      toast.success(`Lead movido para ${stageName}`);
     } catch (error: any) {
       toast.error(error.message || "Erro ao atualizar status");
     }

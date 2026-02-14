@@ -29,7 +29,8 @@ import {
 } from "@/components/ui/select";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
 import { useUpdatePipeProposta, useDeletePipeProposta, PipePropostasStatus, statusColumns } from "@/hooks/usePipePropostas";
-import { useLeadHistory, useCreateLeadHistory } from "@/hooks/useLeadHistory";
+import { useLeadHistory } from "@/hooks/useLeadHistory";
+import { useLogLeadAction } from "@/hooks/useLogLeadAction";
 import { useDeleteLead } from "@/hooks/useLeads";
 import { useActiveProducts } from "@/hooks/useProducts";
 import { 
@@ -106,7 +107,7 @@ export function ProposalDetailModal({
   const deleteProposta = useDeletePipeProposta();
   const deleteLead = useDeleteLead();
   const { data: leadHistory, isLoading: historyLoading } = useLeadHistory(proposta?.lead_id);
-  const createLeadHistory = useCreateLeadHistory();
+  const logAction = useLogLeadAction();
   const createItem = useCreatePipePropostaItem();
   const updateItem = useUpdatePipePropostaItem();
   const deleteItem = useDeletePipePropostaItem();
@@ -209,22 +210,14 @@ export function ProposalDetailModal({
     }
 
     try {
-      // Add history entries for significant changes
+      // Log history entries for significant changes
       if (formData.status !== proposta.status) {
         const newStatusLabel = statusColumns.find(s => s.id === formData.status)?.title;
-        await createLeadHistory.mutateAsync({
-          lead_id: proposta.lead_id,
-          action: "Status da proposta alterado",
-          description: `Status alterado para "${newStatusLabel}"`,
-        });
+        logAction({ leadId: proposta.lead_id, action: "proposal_status_changed", description: `Status alterado para "${newStatusLabel}"` });
       }
 
       if (formData.notes !== proposta.notes && formData.notes) {
-        await createLeadHistory.mutateAsync({
-          lead_id: proposta.lead_id,
-          action: "Observação da proposta atualizada",
-          description: formData.notes,
-        });
+        logAction({ leadId: proposta.lead_id, action: "note_added", description: formData.notes });
       }
 
       // Calculate total value and determine product type
@@ -241,6 +234,8 @@ export function ProposalDetailModal({
       // Update/Create items
       for (const item of validItems) {
         if (item.isNew || item.id === "legacy") {
+          const productName = products.find(p => p.id === item.product_id)?.name || "Produto";
+          logAction({ leadId: proposta.lead_id, action: "product_linked", description: `Produto "${productName}" vinculado à proposta` });
           await createItem.mutateAsync({
             pipe_proposta_id: proposta.id,
             product_id: item.product_id,
@@ -289,11 +284,7 @@ export function ProposalDetailModal({
     
     setIsAddingNote(true);
     try {
-      await createLeadHistory.mutateAsync({
-        lead_id: proposta.lead_id,
-        action: "Nota adicionada na proposta",
-        description: newNote,
-      });
+      logAction({ leadId: proposta.lead_id, action: "note_added", description: newNote });
       
       // Also update the proposta notes
       const updatedNotes = formData.notes 
@@ -318,6 +309,7 @@ export function ProposalDetailModal({
 
   const handleDeleteProposta = async () => {
     try {
+      logAction({ leadId: proposta.lead_id, action: "proposal_deleted", description: "Proposta removida" });
       await deleteProposta.mutateAsync(proposta.id);
       toast.success("Proposta excluída!");
       onOpenChange(false);
