@@ -43,14 +43,35 @@ Processar leads de uma campanha, aplicar regras de atribuição de SDRs, atualiz
 - UI: na tela de detalhe da campanha, seção "Regras de envio por etapa" (CRUD de regras e passos; templates vinculados à campanha; etapas da campanha para gatilho "movido para etapa").
 - **RLS e permissões:** SELECT em `campanha_dispatch_rules` e `campanha_dispatch_rule_steps` permitido para `authenticated` da mesma organização (via campanha). INSERT, UPDATE e DELETE exigem `public.is_user_admin()` — apenas administradores podem criar/editar/remover regras. Usuários não admin (ex.: "Chefe de Equipe" sem role admin) recebem 403; a UI exibe mensagem: "Sem permissão para criar regras de envio. Apenas administradores podem criar regras."
 
-## Checklist: envio automático por cron (regras por etapa)
-Para que as mensagens agendadas sejam processadas automaticamente a cada minuto:
-- Migrations aplicadas: `20260301000000_campanhas_whatsapp_instance_and_dispatch_rules.sql`, `20260301010000_campanha_leads_dispatch_rules_trigger.sql`, `20260310000000_campaign_rule_dispatch_cron.sql`.
+## Isolamento por campanha
+Cada campanha é processada de forma **independente e isolada**. Nenhuma ação em Campanha A afeta Campanha B.
+- **Edge Function** (`campaign-rule-dispatch`): aceita `campanha_id` opcional no body JSON.
+  - Com `campanha_id`: processa apenas mensagens daquela campanha (UI button, pg_net trigger).
+  - Sem `campanha_id`: descobre campanhas distintas com mensagens pendentes e processa cada uma separadamente (pg_cron).
+- **Benefícios**: instância WhatsApp quebrada em uma campanha não bloqueia outras; rate limit isolado; erros contidos por campanha.
+- Verificação de status da instância: se a instância da campanha está `disconnected`, faz fallback para primeira instância `connected`/`open` da organização.
+
+## Disparo imediato via pg_net (principal)
+Quando um lead é inserido ou movido de etapa em `campanha_leads`, o trigger PL/pgSQL:
+1. Agenda mensagens em `scheduled_campaign_messages` (conforme regras ativas)
+2. **Chama a Edge Function `campaign-rule-dispatch` via `pg_net.http_post()`** com `body = { campanha_id }` para processamento imediato e isolado (segundos)
+- `pg_net` é assíncrono: enfileira o HTTP POST e retorna sem bloquear a transação
+- URL e secret lidos de `cron_config` (mesmas chaves do pg_cron)
+- Body inclui `campanha_id` para garantir isolamento (apenas essa campanha é processada)
+- Envolvido em `EXCEPTION WHEN OTHERS` para não quebrar inserts se pg_net falhar
+- Migration: `20260317000000_trigger_immediate_dispatch_via_pgnet.sql`
+- **Verificação:** Execute `supabase/scripts/verify_immediate_dispatch_setup.sql` no SQL Editor para checar se tudo está correto
+
+## Checklist: envio automático (regras por etapa)
+Para que as mensagens sejam disparadas automaticamente:
+- Migrations aplicadas: `20260301000000_campanhas_whatsapp_instance_and_dispatch_rules.sql`, `20260301010000_campanha_leads_dispatch_rules_trigger.sql`, `20260310000000_campaign_rule_dispatch_cron.sql`, **`20260317000000_trigger_immediate_dispatch_via_pgnet.sql`**.
 - Execute o script `supabase/scripts/setup_campaign_rule_dispatch_cron.sql` no SQL Editor, substituindo `PROJECT_REF` e `cron_secret` pelos valores do seu projeto.
 - Em `cron_config`: `campaign_rule_dispatch_url` = `https://<PROJECT_REF>.supabase.co/functions/v1/campaign-rule-dispatch`; `cron_secret` igual ao valor definido em Edge Function Secrets como `CRON_SECRET`.
 - Secrets da Edge Function: `EVOLUTION_API_URL`, `EVOLUTION_API_KEY`; opcional `CRON_SECRET` para proteger chamadas do cron.
 - Extensões pg_cron e pg_net habilitadas no projeto (Supabase Dashboard → Database → Extensions).
-- **Disparo manual:** Na UI, seção "Regras de envio por etapa", botão "Processar fila agora" (requer usuário admin). A função aceita `x-cron-secret` (cron) ou JWT de admin (UI).
+- **Disparo imediato (pg_net):** Ao inserir/mover lead, o trigger chama a Edge Function com `campanha_id` no body. Isolado por campanha. Sem delay.
+- **Disparo por cron (fallback):** pg_cron a cada minuto, sem `campanha_id` → Edge Function descobre campanhas distintas e processa cada uma isoladamente.
+- **Disparo manual:** Na UI, botão "Processar fila agora" envia `campanha_id` → processa apenas aquela campanha. Requer usuário admin.
 
 ## Alternativas sem pg_cron (Free Tier ou extensões indisponíveis)
 Se pg_cron ou pg_net não estiverem disponíveis, use um cron externo para chamar a Edge Function a cada minuto:

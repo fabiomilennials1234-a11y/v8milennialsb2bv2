@@ -198,7 +198,9 @@ export function CampanhaDispatchRulesSection({ campanhaId, stages }: CampanhaDis
   const handleProcessQueue = async () => {
     setProcessingQueue(true);
     try {
-      const { data, error } = await supabase.functions.invoke("campaign-rule-dispatch", {});
+      const { data, error } = await supabase.functions.invoke("campaign-rule-dispatch", {
+        body: { campanha_id: campanhaId },
+      });
       if (error) {
         toast.error(error.message || "Erro ao processar fila");
         return;
