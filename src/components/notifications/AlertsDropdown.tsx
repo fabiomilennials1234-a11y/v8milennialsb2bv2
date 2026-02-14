@@ -6,9 +6,9 @@ import {
   Clock,
   AlertTriangle,
   CheckCircle,
-  X,
   ChevronRight,
   Zap,
+  UserPlus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -18,9 +18,10 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/hooks/useOrganization";
+import { useAuth } from "@/contexts/AuthContext";
 import { formatDistanceToNow, isToday, isBefore, addHours } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -28,12 +29,13 @@ import { useNavigate } from "react-router-dom";
 
 interface Alert {
   id: string;
-  type: "meeting_today" | "follow_up_due" | "meeting_soon" | "overdue";
+  type: "meeting_today" | "follow_up_due" | "meeting_soon" | "overdue" | "transfer_to_human";
   title: string;
   description: string;
   time: Date;
   link?: string;
   priority: "low" | "medium" | "high";
+  notificationId?: string; // Para marcar como lida ao clicar
 }
 
 const ALERTS_VIEWED_KEY = "v8-alerts-viewed-ids";
@@ -63,6 +65,8 @@ function addViewedIds(ids: string[]) {
 
 export function AlertsDropdown() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
   const { organizationId, isReady } = useOrganization();
   const [open, setOpen] = useState(false);
   const [viewedIds, setViewedIds] = useState<Set<string>>(() => getViewedIds());
@@ -72,9 +76,9 @@ export function AlertsDropdown() {
   }, []);
 
   const { data: alerts = [] } = useQuery({
-    queryKey: ["user-alerts", organizationId],
+    queryKey: ["user-alerts", organizationId, user?.id],
     queryFn: async (): Promise<Alert[]> => {
-      if (!organizationId) return [];
+      if (!organizationId || !user?.id) return [];
       const now = new Date();
       const alerts: Alert[] = [];
 
@@ -172,6 +176,28 @@ export function AlertsDropdown() {
         }
       });
 
+      // Notificações (transfer_to_human)
+      const { data: unreadNotifs } = await supabase
+        .from("notifications")
+        .select("id, type, title, description, lead_id, created_at")
+        .eq("user_id", user.id)
+        .is("read_at", null)
+        .order("created_at", { ascending: false })
+        .limit(10);
+
+      unreadNotifs?.forEach((n) => {
+        alerts.push({
+          id: `notification-${n.id}`,
+          type: "transfer_to_human",
+          title: n.title || "Lead precisa de atendimento humano",
+          description: n.description || "",
+          time: new Date(n.created_at),
+          link: n.link || "/pipe-whatsapp",
+          priority: "high",
+          notificationId: n.id,
+        });
+      });
+
       // Sort by priority and time
       return alerts.sort((a, b) => {
         const priorityOrder = { high: 0, medium: 1, low: 2 };
@@ -181,7 +207,7 @@ export function AlertsDropdown() {
         return a.time.getTime() - b.time.getTime();
       });
     },
-    enabled: isReady && !!organizationId,
+    enabled: isReady && !!organizationId && !!user?.id,
     refetchInterval: 60000, // Refresh every minute
   });
 
@@ -212,6 +238,10 @@ export function AlertsDropdown() {
         return <Clock className="w-4 h-4 text-warning" />;
       case "overdue":
         return <AlertTriangle className="w-4 h-4 text-destructive" />;
+      case "transfer_to_human":
+        return <UserPlus className="w-4 h-4 text-destructive" />;
+      default:
+        return <Bell className="w-4 h-4 text-muted-foreground" />;
     }
   };
 
@@ -225,10 +255,21 @@ export function AlertsDropdown() {
         return "bg-warning/10";
       case "overdue":
         return "bg-destructive/10";
+      case "transfer_to_human":
+        return "bg-red-500/10";
+      default:
+        return "bg-muted/50";
     }
   };
 
-  const handleAlertClick = (alert: Alert) => {
+  const handleAlertClick = async (alert: Alert) => {
+    if (alert.notificationId) {
+      await supabase
+        .from("notifications")
+        .update({ read_at: new Date().toISOString() })
+        .eq("id", alert.notificationId);
+      queryClient.invalidateQueries({ queryKey: ["user-alerts"] });
+    }
     if (alert.link) {
       navigate(alert.link);
       setOpen(false);

@@ -1,7 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
-import { getOrCreateLead, associateMessagesToLead } from "../_shared/lead-service.ts";
+import { findLeadByPhoneOrEmail, associateMessagesToLead } from "../_shared/lead-service.ts";
 
 /**
  * Evolution API Webhook Receiver
@@ -818,7 +818,7 @@ async function handleMessagesUpsert(
       // Se for mensagem recebida, processar com IA (se tiver agente vinculado)
       if (direction === "incoming" && messageText) {
         // Primeiro associar a um lead
-        await associateMessageToLeadCentralized(supabase, instance.organization_id, phoneNumber, msg.pushName);
+        await associateMessageToExistingLead(supabase, instance.organization_id, phoneNumber);
 
         // Verificar se tem agente vinculado à instância
         // @ts-ignore - copilot_agents vem do join
@@ -963,7 +963,7 @@ async function handleMessagesUpsert(
         }
       } else if (direction === "incoming") {
         // Mensagem sem texto (mídia), apenas associar ao lead
-        await associateMessageToLeadCentralized(supabase, instance.organization_id, phoneNumber, msg.pushName);
+        await associateMessageToExistingLead(supabase, instance.organization_id, phoneNumber);
       }
     } catch (error) {
       console.error("[Evolution Webhook] Error processing message:", error);
@@ -1019,33 +1019,27 @@ async function handleMessagesUpdate(
 }
 
 /**
- * Associa mensagem a um lead existente ou cria um novo
- * Usa o serviço centralizado lead-service para busca/criação
+ * Associa mensagem a um lead EXISTENTE (não cria novo).
+ * Leads devem ser criados manualmente pelo atendente no chat.
  */
-async function associateMessageToLeadCentralized(
+async function associateMessageToExistingLead(
   supabase: ReturnType<typeof createClient>,
   organizationId: string,
   phoneNumber: string,
-  pushName?: string
 ) {
-  // Usar serviço centralizado para buscar ou criar lead
-  const result = await getOrCreateLead(supabase, {
-    organizationId,
-    phone: phoneNumber,
-    pushName,
-    origin: 'whatsapp',
-  });
+  // Buscar lead existente (nunca cria novo)
+  const lead = await findLeadByPhoneOrEmail(supabase, organizationId, phoneNumber);
 
-  if (result?.lead) {
+  if (lead) {
     // Associar mensagens não vinculadas a este lead
-    await associateMessagesToLead(supabase, organizationId, phoneNumber, result.lead.id);
+    await associateMessagesToLead(supabase, organizationId, phoneNumber, lead.id);
 
-    console.log("[Evolution Webhook] Lead resolved:", {
-      leadId: result.lead.id,
-      created: result.created,
-      source: result.source
+    console.log("[Evolution Webhook] Lead found and messages associated:", {
+      leadId: lead.id,
     });
   }
+  // Se não encontrou lead, mensagens ficam com lead_id = NULL
+  // O atendente criará o lead manualmente pelo chat quando desejar
 }
 
 /**

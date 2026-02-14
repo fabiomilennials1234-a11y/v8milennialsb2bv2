@@ -414,6 +414,125 @@ async function handleUpdateCrm(supabase: any, data: any, tenantId: string | null
   };
 }
 
+/** Campos padrão editáveis na tabela leads (whitelist) */
+const UPDATE_LEAD_STANDARD_FIELDS = ['company', 'segment', 'urgency', 'faturamento', 'rating'] as const;
+
+// Handler para UPDATE_LEAD (atualiza leads no CRM v8: campos padrão, custom fields, notas)
+async function handleUpdateLead(supabase: any, data: any, tenantId: string | null) {
+  const { lead_id, updates } = data;
+
+  if (!lead_id || !tenantId) {
+    return { success: false, error: "lead_id e tenant_id são obrigatórios" };
+  }
+
+  if (!updates || typeof updates !== 'object' || Object.keys(updates).length === 0) {
+    return { success: false, error: "updates deve ser um objeto com pelo menos um campo" };
+  }
+
+  // Verificar que o lead pertence à organização
+  const { data: lead, error: fetchError } = await supabase
+    .from("leads")
+    .select("id, organization_id, notes")
+    .eq("id", lead_id)
+    .eq("organization_id", tenantId)
+    .maybeSingle();
+
+  if (fetchError || !lead) {
+    return { success: false, error: "Lead não encontrado ou não pertence à organização" };
+  }
+
+  // Carregar custom fields da organização
+  const { data: customFields } = await supabase
+    .from("lead_custom_fields")
+    .select("id, field_name")
+    .eq("organization_id", tenantId);
+
+  const customFieldMap = new Map((customFields || []).map((f: { id: string; field_name: string }) => [f.field_name, f.id]));
+
+  const leadUpdates: Record<string, unknown> = {};
+  const customFieldUpdates: { field_id: string; value: string }[] = [];
+  const notesToAppend: string[] = [];
+
+  const now = new Date();
+  const datePrefix = `[IA - ${now.getDate().toString().padStart(2, '0')}/${(now.getMonth() + 1).toString().padStart(2, '0')}/${now.getFullYear()} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}]`;
+
+  for (const [key, rawValue] of Object.entries(updates)) {
+    if (rawValue === null || rawValue === undefined) continue;
+    const strVal = String(rawValue).trim();
+    if (strVal === '') continue;
+
+    const sanitized = sanitizeString(strVal, 2000) ?? '';
+
+    if (UPDATE_LEAD_STANDARD_FIELDS.includes(key as typeof UPDATE_LEAD_STANDARD_FIELDS[number])) {
+      if (key === 'rating') {
+        const num = parseInt(sanitized, 10);
+        if (!isNaN(num) && num >= 0 && num <= 10) {
+          leadUpdates[key] = num;
+        }
+      } else {
+        leadUpdates[key] = sanitized;
+      }
+    } else if (customFieldMap.has(key)) {
+      customFieldUpdates.push({ field_id: customFieldMap.get(key)!, value: sanitized });
+    } else {
+      notesToAppend.push(`${datePrefix} ${key}: ${sanitized}`);
+    }
+  }
+
+  // Atualizar campos padrão em leads
+  if (Object.keys(leadUpdates).length > 0) {
+    const { error: updateError } = await supabase
+      .from("leads")
+      .update(leadUpdates)
+      .eq("id", lead_id)
+      .eq("organization_id", tenantId);
+
+    if (updateError) {
+      return { success: false, error: "Erro ao atualizar lead", details: updateError.message };
+    }
+  }
+
+  // Append informações extras em notes
+  if (notesToAppend.length > 0) {
+    const newNotes = notesToAppend.join('\n');
+    const updatedNotes = lead.notes ? `${lead.notes}\n\n${newNotes}` : newNotes;
+    const { error: notesError } = await supabase
+      .from("leads")
+      .update({ notes: sanitizeString(updatedNotes, 5000) ?? updatedNotes })
+      .eq("id", lead_id)
+      .eq("organization_id", tenantId);
+
+    if (notesError) {
+      return { success: false, error: "Erro ao atualizar notas", details: notesError.message };
+    }
+  }
+
+  // Atualizar lead_custom_field_values
+  for (const cf of customFieldUpdates) {
+    const { error: cfError } = await supabase
+      .from("lead_custom_field_values")
+      .upsert(
+        {
+          lead_id,
+          field_id: cf.field_id,
+          value: cf.value,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "lead_id,field_id" }
+      );
+
+    if (cfError) {
+      return { success: false, error: `Erro ao atualizar campo personalizado ${cf.field_id}`, details: cfError.message };
+    }
+  }
+
+  return {
+    success: true,
+    message: "Lead atualizado com sucesso",
+    lead_id,
+  };
+}
+
 // Handler para TRANSFER_HUMAN
 async function handleTransferHuman(supabase: any, data: any, tenantId: string | null) {
   const { lead_id, reason } = data;
@@ -421,6 +540,15 @@ async function handleTransferHuman(supabase: any, data: any, tenantId: string | 
   if (!lead_id) {
     return { success: false, error: "lead_id é obrigatório" };
   }
+
+  // Desligar IA no lead (redundância: agent-engine também faz via executeAutomationActions)
+  await supabase
+    .from("leads")
+    .update({
+      ai_disabled: true,
+      ai_disabled_at: new Date().toISOString(),
+    })
+    .eq("id", lead_id);
 
   // Atualizar conversation state para WAITING_HUMAN
   const { data: conversation } = await supabase
@@ -458,6 +586,8 @@ async function routeAction(
       return await handleCreateLead(supabase, data, tenantId);
     case "UPDATE_CRM":
       return await handleUpdateCrm(supabase, data, tenantId);
+    case "UPDATE_LEAD":
+      return await handleUpdateLead(supabase, data, tenantId);
     case "TRANSFER_HUMAN":
       return await handleTransferHuman(supabase, data, tenantId);
     default:

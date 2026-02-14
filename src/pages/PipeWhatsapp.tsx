@@ -533,24 +533,28 @@ export default function PipeWhatsapp() {
   };
 
   // Filter function for items
+  // Filters out "ghost leads" where RLS blocks the lead data (lead relation is null)
   const filterItems = (item: any) => {
     const lead = item.lead;
-    
+
+    // Hide ghost leads (RLS blocked the lead data for this user)
+    if (!lead) return false;
+
     // Search filter
-    const matchesSearch = searchTerm === "" || 
+    const matchesSearch = searchTerm === "" ||
       lead?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       lead?.company?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       lead?.phone?.includes(searchTerm);
-    
+
     // SDR filter
     const matchesSdr = filterSdr === "all" || item.sdr_id === filterSdr;
 
     // Closer filter (lead.closer_id)
     const matchesCloser = filterCloser === "all" || lead?.closer_id === filterCloser;
-    
+
     // Origin filter
     const matchesOrigin = filterOrigin === "all" || lead?.origin === filterOrigin;
-    
+
     return matchesSearch && matchesSdr && matchesCloser && matchesOrigin;
   };
 
@@ -586,7 +590,7 @@ export default function PipeWhatsapp() {
     });
   }, [pipeData, pipelineStages, statusColumns, searchTerm, filterSdr, filterCloser, filterOrigin]);
 
-  // Calculate stats based on FILTERED data
+  // Calculate stats based on FILTERED data (excludes ghost leads)
   const stats = useMemo(() => {
     if (!pipeData) return { total: 0, abordado: 0, respondeu: 0, scheduled: 0, pending: 0 };
 

@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/accordion";
 import { Zap, CheckCircle, XCircle, UserPlus, Plus, X, ArrowRightCircle } from "lucide-react";
 import { useState } from "react";
+import { useTeamMembers } from "@/hooks/useTeamMembers";
 import type { CopilotWizardData } from "@/types/copilot";
 import {
   PIPE_CONFIRMACAO_STAGES,
@@ -87,6 +88,7 @@ function ActionSection({
 }: ActionSectionProps) {
   const { control, watch, setValue } = useFormContext<CopilotWizardData>();
   const [newTag, setNewTag] = useState("");
+  const { data: teamMembers = [] } = useTeamMembers();
 
   const tags = watch(`automationActions.${prefix}.addTags`) || [];
   const sendMessage = watch(`automationActions.${prefix}.sendMessage`);
@@ -265,16 +267,29 @@ function ActionSection({
           name={`automationActions.${prefix}.notifyUserId`}
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Notificar usuário (ID)</FormLabel>
-              <FormControl>
-                <Input
-                  placeholder="ID do usuário ou deixe vazio"
-                  {...field}
-                  value={field.value || ""}
-                />
-              </FormControl>
+              <FormLabel>Notificar usuário</FormLabel>
+              <Select
+                onValueChange={(value) => field.onChange(value === "__none__" ? null : value)}
+                value={field.value || "__none__"}
+              >
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione um membro da equipe" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem value="__none__">Não notificar</SelectItem>
+                  {teamMembers
+                    .filter((tm) => tm.user_id)
+                    .map((tm) => (
+                      <SelectItem key={tm.id} value={tm.user_id!}>
+                        {tm.name || "Sem nome"}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
               <FormDescription>
-                ID do SDR/Closer a ser notificado (deixe vazio para não notificar)
+                Usuário que receberá notificação no sino quando esta ação for disparada
               </FormDescription>
               <FormMessage />
             </FormItem>

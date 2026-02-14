@@ -6,12 +6,11 @@
  */
 
 import { useState, useEffect, useCallback } from "react";
-import { LayoutList, Save, Loader2, Plus, X, Info } from "lucide-react";
+import { LayoutList, Save, Loader2, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Card,
   CardContent,
@@ -52,68 +51,52 @@ const createEmptyRule = (stage: { value: string; label: string }): KanbanRuleFor
   forbidden_actions: [],
 });
 
+/** Ações disponíveis para o agente - valor técnico e label amigável */
+const AVAILABLE_ACTIONS = [
+  { value: "schedule_meeting", label: "Agendar reunião" },
+  { value: "create_lead", label: "Criar lead no CRM" },
+  { value: "update_lead", label: "Atualizar lead no CRM" },
+  { value: "update_crm", label: "Atualizar CRM externo" },
+  { value: "transfer_to_human", label: "Transferir para humano" },
+] as const;
+
 interface AgentKanbanRulesTabProps {
   agentId: string;
 }
 
-function TagsInput({
-  tags,
+function ActionsMultiSelect({
+  selected,
   onChange,
-  placeholder,
 }: {
-  tags: string[];
-  onChange: (tags: string[]) => void;
-  placeholder: string;
+  selected: string[];
+  onChange: (values: string[]) => void;
 }) {
-  const [input, setInput] = useState("");
-
-  const addTag = useCallback(() => {
-    const trimmed = input.trim();
-    if (trimmed && !tags.includes(trimmed)) {
-      onChange([...tags, trimmed]);
-      setInput("");
-    }
-  }, [input, tags, onChange]);
-
-  const removeTag = useCallback(
-    (tag: string) => {
-      onChange(tags.filter((t) => t !== tag));
+  const toggle = useCallback(
+    (value: string) => {
+      if (selected.includes(value)) {
+        onChange(selected.filter((v) => v !== value));
+      } else {
+        onChange([...selected, value]);
+      }
     },
-    [tags, onChange]
+    [selected, onChange]
   );
 
   return (
-    <div className="space-y-2">
-      <div className="flex gap-2">
-        <Input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder={placeholder}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              addTag();
-            }
-          }}
-        />
-        <Button type="button" variant="outline" size="icon" onClick={addTag}>
-          <Plus className="w-4 h-4" />
-        </Button>
-      </div>
-      {tags.length > 0 ? (
-        <div className="flex flex-wrap gap-2">
-          {tags.map((tag) => (
-            <Badge
-              key={tag}
-              variant="secondary"
-              className="cursor-pointer"
-              onClick={() => removeTag(tag)}
-            >
-              {tag} <X className="w-3 h-3 ml-1" />
-            </Badge>
-          ))}
-        </div>
-      ) : null}
+    <div className="grid gap-2 sm:grid-cols-2">
+      {AVAILABLE_ACTIONS.map(({ value, label }) => (
+        <label
+          key={value}
+          className="flex items-center gap-2 rounded-md border p-3 cursor-pointer hover:bg-muted/50 transition-colors"
+        >
+          <Checkbox
+            checked={selected.includes(value)}
+            onCheckedChange={() => toggle(value)}
+          />
+          <span className="text-sm font-medium">{label}</span>
+          <span className="text-xs text-muted-foreground ml-1">({value})</span>
+        </label>
+      ))}
     </div>
   );
 }
@@ -179,18 +162,22 @@ function StageCollapsible({
           </div>
           <div className="space-y-2">
             <Label>Ações permitidas</Label>
-            <TagsInput
-              tags={rule.allowed_actions || []}
+            <p className="text-xs text-muted-foreground">
+              Selecione as ações que a IA pode executar nesta etapa
+            </p>
+            <ActionsMultiSelect
+              selected={rule.allowed_actions || []}
               onChange={(arr) => onUpdate({ allowed_actions: arr })}
-              placeholder="Ex.: schedule_meeting, transfer_to_human"
             />
           </div>
           <div className="space-y-2">
             <Label>Ações proibidas</Label>
-            <TagsInput
-              tags={rule.forbidden_actions || []}
+            <p className="text-xs text-muted-foreground">
+              Selecione as ações que a IA não deve executar nesta etapa
+            </p>
+            <ActionsMultiSelect
+              selected={rule.forbidden_actions || []}
               onChange={(arr) => onUpdate({ forbidden_actions: arr })}
-              placeholder="Ex.: create_lead, update_crm"
             />
           </div>
         </div>

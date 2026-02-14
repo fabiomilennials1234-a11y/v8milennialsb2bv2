@@ -74,6 +74,75 @@ export function useTeamGoals(month?: number, year?: number) {
   });
 }
 
+/**
+ * Sincroniza a meta de equipe (faturamento) com a soma das metas individuais de vendas dos closers.
+ * Chamada após criar, atualizar ou excluir metas individuais de vendas.
+ */
+export async function syncTeamFaturamentoGoal(
+  month: number,
+  year: number,
+  organizationId: string
+): Promise<void> {
+  const { data: closers } = await supabase
+    .from("team_members")
+    .select("id")
+    .eq("organization_id", organizationId)
+    .eq("role", "closer")
+    .eq("is_active", true);
+
+  const closerIds = closers?.map((c) => c.id) ?? [];
+  if (closerIds.length === 0) return;
+
+  const { data: vendasGoals } = await supabase
+    .from("goals")
+    .select("target_value")
+    .eq("organization_id", organizationId)
+    .eq("month", month)
+    .eq("year", year)
+    .eq("type", "vendas")
+    .in("team_member_id", closerIds);
+
+  const soma = (vendasGoals ?? []).reduce(
+    (acc, g) => acc + Number(g.target_value || 0),
+    0
+  );
+
+  const { data: existingTeamGoal } = await supabase
+    .from("goals")
+    .select("id")
+    .eq("organization_id", organizationId)
+    .eq("month", month)
+    .eq("year", year)
+    .eq("type", "faturamento")
+    .is("team_member_id", null)
+    .maybeSingle();
+
+  if (existingTeamGoal) {
+    await supabase
+      .from("goals")
+      .update({
+        target_value: soma,
+        name: "Faturamento",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", existingTeamGoal.id)
+      .eq("organization_id", organizationId);
+  } else {
+    await supabase.from("goals").insert([
+      {
+        organization_id: organizationId,
+        name: "Faturamento",
+        type: "faturamento",
+        target_value: soma,
+        current_value: 0,
+        month,
+        year,
+        team_member_id: null,
+      },
+    ]);
+  }
+}
+
 export function useIndividualGoals(month?: number, year?: number) {
   const now = new Date();
   const selectedMonth = month ?? now.getMonth() + 1;
@@ -202,12 +271,17 @@ export function useCreateGoal() {
         .single();
 
       if (error) throw error;
+
+      if (data.team_member_id && data.type === "vendas") {
+        await syncTeamFaturamentoGoal(data.month, data.year, organizationId);
+      }
       return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["goals"] });
       queryClient.invalidateQueries({ queryKey: ["team-goals"] });
       queryClient.invalidateQueries({ queryKey: ["individual-goals"] });
+      queryClient.invalidateQueries({ queryKey: ["tv-dashboard"] });
       toast.success("Meta criada com sucesso!");
     },
     onError: (error) => {
@@ -233,12 +307,18 @@ export function useUpdateGoal() {
         .single();
 
       if (error) throw error;
+
+      // Sincroniza meta de equipe em qualquer atualização de meta individual (ex: vendas→reunioes remove da soma)
+      if (data.team_member_id) {
+        await syncTeamFaturamentoGoal(data.month, data.year, organizationId);
+      }
       return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["goals"] });
       queryClient.invalidateQueries({ queryKey: ["team-goals"] });
       queryClient.invalidateQueries({ queryKey: ["individual-goals"] });
+      queryClient.invalidateQueries({ queryKey: ["tv-dashboard"] });
       toast.success("Meta atualizada com sucesso!");
     },
     onError: (error) => {

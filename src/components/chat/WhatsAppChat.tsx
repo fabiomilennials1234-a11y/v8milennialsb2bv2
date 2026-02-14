@@ -26,6 +26,9 @@ import {
   Download,
   File,
   Bot,
+  Plus,
+  Users,
+  Filter,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -156,9 +159,10 @@ function MessageStatusIcon({ status }: { status: string }) {
   }
 }
 
-/** Nome de exibição do contato: prioriza lead (CRM) para evitar troca de nomes */
+/** Nome de exibição do contato: prioriza push_name incoming (nome real do WhatsApp) sobre lead_name
+ *  pois leads antigos podem ter sido criados com o nome do SDR por bug anterior */
 function contactDisplayName(c: ChatContact): string {
-  return (c.lead_name || c.push_name || c.phone_number || "").trim() || "Contato";
+  return (c.push_name || c.lead_name || c.phone_number || "").trim() || "Contato";
 }
 
 function ContactList({
@@ -171,6 +175,8 @@ function ContactList({
   instances,
   selectedInstanceId,
   onSelectInstance,
+  showOnlyWithLead,
+  onToggleShowOnlyWithLead,
 }: {
   contacts: ChatContact[];
   selectedPhone: string | null;
@@ -181,13 +187,17 @@ function ContactList({
   instances?: WhatsAppInstanceForUser[];
   selectedInstanceId?: string | null;
   onSelectInstance?: (instanceId: string) => void;
+  showOnlyWithLead: boolean;
+  onToggleShowOnlyWithLead: () => void;
 }) {
-  const filteredContacts = contacts.filter(
-    (c) =>
+  const filteredContacts = contacts.filter((c) => {
+    if (showOnlyWithLead && !c.lead_id) return false;
+    return (
       c.phone_number.includes(searchQuery) ||
       c.push_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       c.lead_name?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+    );
+  });
 
   return (
     <div className="flex flex-col h-full min-h-0 border-r border-border/60 bg-muted/20">
@@ -223,9 +233,25 @@ function ContactList({
             className="pl-9 h-9 bg-background"
           />
         </div>
-        <p className="text-xs text-muted-foreground mt-2">
-          Total: {filteredContacts.length}
-        </p>
+        <div className="flex items-center justify-between mt-2">
+          <p className="text-xs text-muted-foreground">
+            Total: {filteredContacts.length}
+          </p>
+          <button
+            type="button"
+            onClick={onToggleShowOnlyWithLead}
+            className={cn(
+              "flex items-center gap-1.5 text-xs px-2 py-1 rounded-md transition-colors",
+              showOnlyWithLead
+                ? "bg-primary/15 text-primary font-medium"
+                : "text-muted-foreground hover:bg-muted"
+            )}
+            title={showOnlyWithLead ? "Mostrando apenas com lead" : "Clique para filtrar só com lead"}
+          >
+            <Filter className="w-3 h-3" />
+            {showOnlyWithLead ? "Com lead" : "Todos"}
+          </button>
+        </div>
       </div>
 
       <ScrollArea className="flex-1 min-h-0">
@@ -268,8 +294,13 @@ function ContactList({
                     </Avatar>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2">
-                        <span className="font-semibold text-foreground truncate text-sm">
+                        <span className="font-semibold text-foreground truncate text-sm flex items-center gap-1.5">
                           {displayName}
+                          {!contact.lead_id && (
+                            <span className="text-[10px] font-normal text-muted-foreground/70 bg-muted px-1 py-0.5 rounded leading-none shrink-0">
+                              Novo
+                            </span>
+                          )}
                         </span>
                         <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0">
                           {formatContactTime(contact.last_message_time)}
@@ -1156,8 +1187,8 @@ function ChatWindow({
             <div className="flex items-center gap-2 flex-wrap">
               <h3 className="font-semibold truncate text-foreground">{contactName}</h3>
               {!hasLead && (
-                <Badge variant="outline" className="text-xs shrink-0 text-muted-foreground">
-                  + Criar Lead
+                <Badge variant="secondary" className="text-xs shrink-0 text-amber-700 bg-amber-100 dark:text-amber-300 dark:bg-amber-900/40 border-0">
+                  Sem lead
                 </Badge>
               )}
             </div>
@@ -1169,18 +1200,27 @@ function ChatWindow({
           <UserCircle className="w-5 h-5 text-muted-foreground shrink-0" />
         </div>
 
-        {/* Botão explícito para abrir painel do lead */}
+        {/* Botão para ver ou criar lead */}
         <Button
           type="button"
-          variant="ghost"
+          variant={hasLead ? "ghost" : "outline"}
           size="sm"
-          className="shrink-0"
+          className={cn("shrink-0", !hasLead && "border-primary text-primary hover:bg-primary/10")}
           onClick={(e) => { e.stopPropagation(); onOpenLeadModal(); }}
           onPointerDown={(e) => e.stopPropagation()}
-          title="Ver dados do lead e pipeline"
+          title={hasLead ? "Ver dados do lead e pipeline" : "Criar lead para este contato"}
         >
-          <UserCircle className="w-4 h-4 mr-1.5" />
-          Ver lead
+          {hasLead ? (
+            <>
+              <UserCircle className="w-4 h-4 mr-1.5" />
+              Ver lead
+            </>
+          ) : (
+            <>
+              <Plus className="w-4 h-4 mr-1.5" />
+              Criar Lead
+            </>
+          )}
         </Button>
 
         {/* AI Toggle - sempre visível quando há lead; vendedores com acesso ao lead podem ativar/desativar o Copilot nesta conversa */}
@@ -1461,6 +1501,7 @@ export function WhatsAppChat() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [showOnlyWithLead, setShowOnlyWithLead] = useState(false);
   const [isLeadPanelOpen, setIsLeadPanelOpen] = useState(false);
 
   const { data: instances = [], isLoading: instancesLoading } = useWhatsAppInstancesForUser();
@@ -1515,14 +1556,7 @@ export function WhatsAppChat() {
   // Pegar pushName do contato selecionado
   const selectedContact = contacts.find((c) => c.phone_number === selectedPhone);
 
-  // Leads WhatsApp: ao selecionar uma conversa, criar lead e adicionar ao pipeline se ainda não existir
-  useEffect(() => {
-    if (!selectedPhone || selectedLead !== null || selectedLeadLoading || createLeadFromWhatsApp.isPending) return;
-    createLeadFromWhatsApp.mutate({
-      phone: selectedPhone,
-      pushName: selectedContact?.push_name ?? undefined,
-    });
-  }, [selectedPhone, selectedLead, selectedLeadLoading, selectedContact?.push_name, createLeadFromWhatsApp.isPending]);
+  // Lead creation is now manual — no auto-creation when selecting a conversation
 
   if (instancesLoading) {
     return (
@@ -1568,6 +1602,8 @@ export function WhatsAppChat() {
             instances={instances}
             selectedInstanceId={effectiveInstanceId}
             onSelectInstance={setSelectedInstanceId}
+            showOnlyWithLead={showOnlyWithLead}
+            onToggleShowOnlyWithLead={() => setShowOnlyWithLead((v) => !v)}
           />
         </div>
 

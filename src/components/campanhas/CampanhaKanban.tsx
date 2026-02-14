@@ -530,8 +530,9 @@ export function CampanhaKanban({
     (s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
   // Filter leads by SDR and by name
+  // Also filter out "ghost leads" where RLS blocks the lead data (lead relation is null)
   const filteredLeads = useMemo(() => {
-    let list = leads;
+    let list = leads.filter((l) => l.lead != null);
     if (sdrFilter !== "all") {
       if (sdrFilter === "none") list = list.filter((l) => !l.sdr_id);
       else list = list.filter((l) => l.sdr_id === sdrFilter);

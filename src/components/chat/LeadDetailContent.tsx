@@ -30,14 +30,33 @@ import {
   useCreateLeadFromWhatsApp,
   useLinkLeadToWhatsApp,
   useUpdateLeadPipelineStatus,
+  type LeadDestination,
 } from "@/hooks/useWhatsAppLeadIntegration";
 import { useUpdateLead } from "@/hooks/useLeads";
 import { useCampanhas, useCampanhaStages } from "@/hooks/useCampanhas";
+import { useTeamMembers, useCurrentTeamMember } from "@/hooks/useTeamMembers";
 import { supabase } from "@/integrations/supabase/client";
-import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+
+const originOptions = [
+  { value: "whatsapp", label: "WhatsApp" },
+  { value: "meta_ads", label: "Meta Ads" },
+  { value: "google_ads", label: "Google Ads" },
+  { value: "site", label: "Site" },
+  { value: "remarketing", label: "Remarketing" },
+  { value: "cal", label: "Calendário" },
+  { value: "outro", label: "Outro" },
+];
+
+const destinationOptions = [
+  { value: "qualificacao", label: "Pipe de Qualificação" },
+  { value: "confirmacao", label: "Pipe de Confirmação" },
+  { value: "propostas", label: "Pipe de Propostas" },
+  { value: "campanha", label: "Campanha" },
+  { value: "none", label: "Nenhum" },
+];
 
 const pipelineStages = [
   { id: "novo", title: "Novo", color: "#6366f1", icon: "🆕" },
@@ -66,6 +85,12 @@ export function LeadDetailContent({
   const [selectedCampanhaId, setSelectedCampanhaId] = useState<string | null>(null);
   const [isAddingToCampanha, setIsAddingToCampanha] = useState(false);
 
+  // Campos de criação: destino e metadados
+  const [createOrigin, setCreateOrigin] = useState("whatsapp");
+  const [createSdrId, setCreateSdrId] = useState<string>("");
+  const [createDestination, setCreateDestination] = useState<LeadDestination>("qualificacao");
+  const [createCampanhaId, setCreateCampanhaId] = useState<string>("");
+
   const [formData, setFormData] = useState({
     name: "",
     company: "",
@@ -76,10 +101,13 @@ export function LeadDetailContent({
 
   const queryClient = useQueryClient();
   const { data: teamMember } = useCurrentTeamMember();
+  const { data: teamMembers = [] } = useTeamMembers();
   const { data: lead, isLoading: leadLoading, refetch: refetchLead } = useLeadByPhone(phoneNumber);
   const { data: pipeStatus, isLoading: pipeLoading } = usePipeWhatsappByLeadId(lead?.id || null);
   const { data: campanhas = [] } = useCampanhas();
-  const { data: campanhaStages = [] } = useCampanhaStages(selectedCampanhaId || undefined);
+  const { data: campanhaStages = [] } = useCampanhaStages(
+    (createDestination === "campanha" ? createCampanhaId : selectedCampanhaId) || undefined
+  );
 
   const createLead = useCreateLeadFromWhatsApp();
   const linkLeadToWhatsApp = useLinkLeadToWhatsApp();
@@ -107,14 +135,22 @@ export function LeadDetailContent({
         notes: "",
       });
       setIsCreating(true);
+      // Default SDR to current user
+      if (teamMember?.id && !createSdrId) {
+        setCreateSdrId(teamMember.id);
+      }
     }
-  }, [lead, leadLoading, pushName]);
+  }, [lead, leadLoading, pushName, teamMember?.id]);
 
   const handleCreateLead = async () => {
     try {
       const result = await createLead.mutateAsync({
         phone: phoneNumber,
         pushName: formData.name || pushName,
+        origin: createOrigin,
+        sdrId: createSdrId || undefined,
+        destination: createDestination,
+        campanhaId: createDestination === "campanha" ? createCampanhaId : undefined,
       });
 
       if (result.isNew && (formData.company || formData.email || formData.notes)) {
@@ -166,11 +202,7 @@ export function LeadDetailContent({
     }
   };
 
-  // Garantir que lead WhatsApp já no modal esteja no pipeline (só movimentação de etapas aqui)
-  useEffect(() => {
-    if (!lead?.id || pipeStatus !== null || pipeLoading || linkLeadToWhatsApp.isPending) return;
-    linkLeadToWhatsApp.mutate({ leadId: lead.id, phone: phoneNumber });
-  }, [lead?.id, phoneNumber, pipeStatus, pipeLoading, linkLeadToWhatsApp.isPending]);
+  // Pipeline linking is now handled during lead creation with destination choice
 
   const handleAddToCampanha = async () => {
     if (!lead || !selectedCampanhaId || !campanhaStages.length) return;
@@ -294,6 +326,77 @@ export function LeadDetailContent({
                 rows={3}
               />
             </div>
+
+            <Separator />
+
+            <div className="grid gap-2">
+              <Label htmlFor="origin">Origem *</Label>
+              <Select value={createOrigin} onValueChange={setCreateOrigin}>
+                <SelectTrigger id="origin">
+                  <SelectValue placeholder="Selecione a origem" />
+                </SelectTrigger>
+                <SelectContent>
+                  {originOptions.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="responsible">Responsável</Label>
+              <Select value={createSdrId} onValueChange={setCreateSdrId}>
+                <SelectTrigger id="responsible">
+                  <SelectValue placeholder="Selecione o responsável" />
+                </SelectTrigger>
+                <SelectContent>
+                  {teamMembers.map((member: any) => (
+                    <SelectItem key={member.id} value={member.id}>
+                      {member.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="destination">Destino</Label>
+              <Select value={createDestination} onValueChange={(v) => setCreateDestination(v as LeadDestination)}>
+                <SelectTrigger id="destination">
+                  <SelectValue placeholder="Selecione o destino" />
+                </SelectTrigger>
+                <SelectContent>
+                  {destinationOptions.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {createDestination === "campanha" && (
+              <div className="grid gap-2">
+                <Label htmlFor="create-campanha">Campanha</Label>
+                <Select value={createCampanhaId} onValueChange={setCreateCampanhaId}>
+                  <SelectTrigger id="create-campanha">
+                    <SelectValue placeholder="Selecione a campanha..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {activeCampanhas.map((campanha) => (
+                      <SelectItem key={campanha.id} value={campanha.id}>
+                        <div className="flex items-center gap-2">
+                          <Target className="w-4 h-4" />
+                          {campanha.name}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
 
           <div className="flex gap-2 pt-4">
@@ -305,7 +408,7 @@ export function LeadDetailContent({
             <Button
               className={onClose ? "flex-1" : "w-full"}
               onClick={handleCreateLead}
-              disabled={createLead.isPending || !formData.name}
+              disabled={createLead.isPending || !formData.name || (createDestination === "campanha" && !createCampanhaId)}
             >
               {createLead.isPending ? (
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -473,11 +576,27 @@ export function LeadDetailContent({
                   </div>
                 </div>
               ) : (
-                <div className="text-center py-8">
-                  <Loader2 className="w-10 h-10 mx-auto mb-3 animate-spin text-muted-foreground" />
+                <div className="text-center py-8 space-y-3">
+                  <Target className="w-10 h-10 mx-auto text-muted-foreground/50" />
                   <p className="text-muted-foreground text-sm">
-                    {lead ? "Adicionando ao pipeline..." : "Carregando lead..."}
+                    Lead não está no pipeline de qualificação.
                   </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      if (!lead) return;
+                      linkLeadToWhatsApp.mutate({ leadId: lead.id, phone: phoneNumber });
+                    }}
+                    disabled={linkLeadToWhatsApp.isPending}
+                  >
+                    {linkLeadToWhatsApp.isPending ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <Plus className="w-4 h-4 mr-2" />
+                    )}
+                    Adicionar ao pipeline
+                  </Button>
                 </div>
               )}
             </TabsContent>

@@ -74,8 +74,10 @@ export function usePipeWhatsappByLeadId(leadId: string | null) {
   });
 }
 
+export type LeadDestination = "qualificacao" | "confirmacao" | "propostas" | "campanha" | "none";
+
 /**
- * Cria lead automaticamente a partir do contato WhatsApp
+ * Cria lead manualmente a partir do contato WhatsApp com destino configurável
  */
 export function useCreateLeadFromWhatsApp() {
   const queryClient = useQueryClient();
@@ -85,15 +87,25 @@ export function useCreateLeadFromWhatsApp() {
     mutationFn: async ({
       phone,
       pushName,
+      origin,
+      sdrId,
+      destination,
+      campanhaId,
     }: {
       phone: string;
       pushName?: string | null;
+      origin?: string;
+      sdrId?: string;
+      destination?: LeadDestination;
+      campanhaId?: string;
     }) => {
       if (!teamMember?.organization_id) {
         throw new Error("Usuário não está vinculado a uma organização");
       }
 
       const normalizedPhone = phone.replace(/\D/g, "");
+      const effectiveSdrId = sdrId || teamMember.id;
+      const effectiveDestination = destination || "qualificacao";
 
       // 1. Verificar se já existe lead com esse telefone na mesma organização
       const { data: existingLead } = await supabase
@@ -113,9 +125,9 @@ export function useCreateLeadFromWhatsApp() {
       const leadData: TablesInsert<"leads"> = {
         name: pushName || `WhatsApp ${normalizedPhone.slice(-4)}`,
         phone: normalizedPhone,
-        origin: "whatsapp",
-        sdr_id: teamMember.id,
-        notes: `Lead criado automaticamente via WhatsApp`,
+        origin: origin || "whatsapp",
+        sdr_id: effectiveSdrId,
+        notes: `Lead criado via WhatsApp`,
         organization_id: teamMember.organization_id,
       };
 
@@ -132,18 +144,59 @@ export function useCreateLeadFromWhatsApp() {
 
       console.log("[WhatsApp Lead] Novo lead criado:", newLead.id);
 
-      // 3. Adicionar ao Pipeline WhatsApp (etapa "novo")
-      const { error: pipeError } = await supabase.from("pipe_whatsapp").insert({
-        lead_id: newLead.id,
-        status: "novo",
-        sdr_id: teamMember.id,
-        organization_id: teamMember.organization_id,
-      });
+      // 3. Inserir no destino escolhido
+      if (effectiveDestination === "qualificacao") {
+        const { error: pipeError } = await supabase.from("pipe_whatsapp").insert({
+          lead_id: newLead.id,
+          status: "novo",
+          sdr_id: effectiveSdrId,
+          organization_id: teamMember.organization_id,
+        });
+        if (pipeError) {
+          console.error("[WhatsApp Lead] Erro ao adicionar ao pipeline qualificação:", pipeError);
+        }
+      } else if (effectiveDestination === "confirmacao") {
+        const { error: pipeError } = await supabase.from("pipe_confirmacao").insert({
+          lead_id: newLead.id,
+          status: "pre_confirmacao",
+          sdr_id: effectiveSdrId,
+          organization_id: teamMember.organization_id,
+        });
+        if (pipeError) {
+          console.error("[WhatsApp Lead] Erro ao adicionar ao pipeline confirmação:", pipeError);
+        }
+      } else if (effectiveDestination === "propostas") {
+        const { error: pipeError } = await supabase.from("pipe_propostas").insert({
+          lead_id: newLead.id,
+          status: "proposta_enviada",
+          closer_id: effectiveSdrId,
+          organization_id: teamMember.organization_id,
+        });
+        if (pipeError) {
+          console.error("[WhatsApp Lead] Erro ao adicionar ao pipeline propostas:", pipeError);
+        }
+      } else if (effectiveDestination === "campanha" && campanhaId) {
+        // Buscar primeira etapa da campanha
+        const { data: stages } = await supabase
+          .from("campanha_stages")
+          .select("id, position")
+          .eq("campanha_id", campanhaId)
+          .order("position", { ascending: true })
+          .limit(1);
 
-      if (pipeError) {
-        console.error("[WhatsApp Lead] Erro ao adicionar ao pipeline:", pipeError);
-        // Não falha a operação, apenas loga
+        if (stages && stages.length > 0) {
+          const { error: campError } = await supabase.from("campanha_leads").insert({
+            campanha_id: campanhaId,
+            lead_id: newLead.id,
+            stage_id: stages[0].id,
+            sdr_id: effectiveSdrId,
+          });
+          if (campError) {
+            console.error("[WhatsApp Lead] Erro ao adicionar à campanha:", campError);
+          }
+        }
       }
+      // destination === "none" → no pipe/campaign insertion
 
       // 4. Vincular lead_id nas mensagens existentes desse número
       const { error: updateError } = await supabase
@@ -161,6 +214,9 @@ export function useCreateLeadFromWhatsApp() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["leads"] });
       queryClient.invalidateQueries({ queryKey: ["pipe_whatsapp"] });
+      queryClient.invalidateQueries({ queryKey: ["pipe_confirmacao"] });
+      queryClient.invalidateQueries({ queryKey: ["pipe_propostas"] });
+      queryClient.invalidateQueries({ queryKey: ["campanha_leads"] });
       queryClient.invalidateQueries({ queryKey: ["whatsapp_contacts"] });
       queryClient.invalidateQueries({ queryKey: ["lead_by_phone"] });
     },

@@ -295,7 +295,11 @@ export default function PipeConfirmacao() {
         .filter(item => item.status === col.id)
         .filter(item => {
           const lead = item.lead;
-          const matchesSearch = searchQuery === "" || 
+
+          // Hide ghost leads (RLS blocked the lead data for this user)
+          if (!lead) return false;
+
+          const matchesSearch = searchQuery === "" ||
             lead?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
             lead?.company?.toLowerCase().includes(searchQuery.toLowerCase());
           

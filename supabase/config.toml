@@ -46,3 +46,7 @@ verify_jwt = false
 # stream-media: proxy de áudio do Storage; GET sem JWT para <audio> ou fetch com token no front
 [functions.stream-media]
 verify_jwt = false
+
+# process-followup-automations: chamado por pg_cron; autenticação via x-cron-secret
+[functions.process-followup-automations]
+verify_jwt = false

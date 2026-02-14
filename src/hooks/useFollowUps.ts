@@ -33,6 +33,8 @@ export interface FollowUp {
   };
 }
 
+export type TriggerType = "stage_change" | "no_response_from_team" | "no_response_from_lead" | "not_confirmed";
+
 export interface FollowUpAutomation {
   id: string;
   pipe_type: "whatsapp" | "confirmacao" | "propostas";
@@ -44,6 +46,13 @@ export interface FollowUpAutomation {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  trigger_type: TriggerType;
+  trigger_delay_hours: number;
+  trigger_delay_minutes: number;
+  max_triggers_per_lead: number;
+  copilot_can_handle: boolean;
+  organization_id: string | null;
+  filter_stages: string[] | null;
 }
 
 export function useFollowUps(filters?: {
@@ -105,15 +114,28 @@ export function useFollowUps(filters?: {
   });
 }
 
-export function useFollowUpAutomations() {
+export function useFollowUpAutomations(triggerType?: TriggerType) {
+  const { organizationId } = useOrganization();
+
   return useQuery({
-    queryKey: ["follow_up_automations"],
+    queryKey: ["follow_up_automations", triggerType, organizationId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("follow_up_automations")
         .select("*")
         .order("pipe_type", { ascending: true })
         .order("stage", { ascending: true });
+
+      if (triggerType) {
+        query = query.eq("trigger_type", triggerType);
+      }
+
+      // Para regras baseadas em tempo, filtrar por organização
+      if (triggerType && triggerType !== "stage_change" && organizationId) {
+        query = query.eq("organization_id", organizationId);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
       return data as unknown as FollowUpAutomation[];
@@ -342,6 +364,7 @@ export function useDeleteFollowUp() {
 export function useCreateFollowUpAutomation() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { organizationId } = useOrganization();
 
   return useMutation({
     mutationFn: async (automation: {
@@ -352,10 +375,23 @@ export function useCreateFollowUpAutomation() {
       days_offset?: number;
       priority?: "low" | "normal" | "high" | "urgent";
       is_active?: boolean;
+      trigger_type?: TriggerType;
+      trigger_delay_hours?: number;
+      trigger_delay_minutes?: number;
+      max_triggers_per_lead?: number;
+      copilot_can_handle?: boolean;
+      filter_stages?: string[];
     }) => {
+      const payload = {
+        ...automation,
+        // Para regras baseadas em tempo, incluir organization_id
+        ...(automation.trigger_type && automation.trigger_type !== "stage_change"
+          ? { organization_id: organizationId }
+          : {}),
+      };
       const { data, error } = await supabase
         .from("follow_up_automations")
-        .insert(automation)
+        .insert(payload)
         .select()
         .single();
 

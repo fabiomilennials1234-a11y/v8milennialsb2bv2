@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Target, Plus, Edit2, Trash2, Save, Calendar, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -30,8 +30,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useGoals, useCreateGoal, useUpdateGoal, Goal } from "@/hooks/useGoals";
+import { useGoals, useCreateGoal, useUpdateGoal, syncTeamFaturamentoGoal, Goal } from "@/hooks/useGoals";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
+import { useQueryClient } from "@tanstack/react-query";
 import { useIsAdmin } from "@/hooks/useUserRole";
 import { useOrganization } from "@/hooks/useOrganization";
 import { supabase } from "@/integrations/supabase/client";
@@ -70,6 +71,7 @@ export default function GestaoMetas() {
   const [editingGoal, setEditingGoal] = useState<Goal | null>(null);
   const [deleteGoalId, setDeleteGoalId] = useState<string | null>(null);
 
+  const queryClient = useQueryClient();
   const { isAdmin, isLoading: adminLoading } = useIsAdmin();
   const { organizationId } = useOrganization();
   const { data: goals = [], isLoading: goalsLoading } = useGoals(selectedMonth, selectedYear);
@@ -90,6 +92,43 @@ export default function GestaoMetas() {
 
   const teamGoals = goals.filter(g => !g.team_member_id);
   const individualGoals = goals.filter(g => g.team_member_id);
+
+  // Sincroniza meta de equipe quando houver metas de vendas E valor estiver desatualizado
+  useEffect(() => {
+    if (!organizationId || goalsLoading || !goals.length) return;
+    const individualVendas = goals.filter(
+      (g) => g.team_member_id && g.type === "vendas"
+    );
+    const soma = individualVendas.reduce(
+      (s, g) => s + Number(g.target_value || 0),
+      0
+    );
+    const teamFaturamento = goals.find(
+      (g) => !g.team_member_id && g.type === "faturamento"
+    );
+    const teamValue = teamFaturamento ? Number(teamFaturamento.target_value ?? 0) : null;
+    const precisaSync =
+      individualVendas.length > 0 &&
+      (teamValue === null || Math.abs(teamValue - soma) > 0.01);
+
+    if (precisaSync) {
+      syncTeamFaturamentoGoal(selectedMonth, selectedYear, organizationId).then(
+        () => {
+          queryClient.invalidateQueries({ queryKey: ["goals"] });
+          queryClient.invalidateQueries({ queryKey: ["team-goals"] });
+          queryClient.invalidateQueries({ queryKey: ["individual-goals"] });
+          queryClient.invalidateQueries({ queryKey: ["tv-dashboard"] });
+        }
+      );
+    }
+  }, [
+    goals,
+    goalsLoading,
+    organizationId,
+    selectedMonth,
+    selectedYear,
+    queryClient,
+  ]);
 
   const handleOpenDialog = (goal?: Goal) => {
     if (goal) {
@@ -145,6 +184,10 @@ export default function GestaoMetas() {
   const handleDeleteGoal = async () => {
     if (!deleteGoalId || !organizationId) return;
 
+    const goalToDelete = goals.find((g) => g.id === deleteGoalId);
+    const wasIndividualVendas =
+      goalToDelete?.team_member_id && goalToDelete?.type === "vendas";
+
     try {
       const { error } = await supabase
         .from("goals")
@@ -152,6 +195,19 @@ export default function GestaoMetas() {
         .eq("id", deleteGoalId)
         .eq("organization_id", organizationId);
       if (error) throw error;
+
+      if (wasIndividualVendas && goalToDelete) {
+        await syncTeamFaturamentoGoal(
+          goalToDelete.month,
+          goalToDelete.year,
+          organizationId
+        );
+      }
+
+      queryClient.invalidateQueries({ queryKey: ["goals"] });
+      queryClient.invalidateQueries({ queryKey: ["team-goals"] });
+      queryClient.invalidateQueries({ queryKey: ["individual-goals"] });
+      queryClient.invalidateQueries({ queryKey: ["tv-dashboard"] });
       toast.success("Meta excluída com sucesso!");
       setDeleteGoalId(null);
     } catch (error: unknown) {

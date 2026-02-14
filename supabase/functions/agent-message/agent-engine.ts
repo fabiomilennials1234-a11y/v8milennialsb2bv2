@@ -1,5 +1,6 @@
 import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { OpenRouterClient } from "./openrouter-client.ts";
+import { sanitizeString } from "../_shared/validation.ts";
 
 // Interface para contexto resumido da conversa
 interface ConversationContextSummary {
@@ -78,7 +79,9 @@ export class AgentEngine {
 
     // 5. Build Tools (based on capabilities)
     console.log('[AgentEngine] Step 5: Building tools...');
-    const tools = this.buildDynamicTools(capabilities);
+    const orgCustomFields = await this.loadOrgCustomFields();
+    const pipelineStages = capabilities.can_qualify_lead ? await this.loadPipelineStages() : [];
+    const tools = this.buildDynamicTools(capabilities, orgCustomFields, pipelineStages);
 
     // 6. Call LLM via OpenRouter
     console.log('[AgentEngine] Step 6: Getting conversation history...');
@@ -125,6 +128,14 @@ export class AgentEngine {
     // 8. Execute Action (via n8n se necessário)
     let executionResult = null;
     if (actionToExecute) {
+      // Injetar lead_id para ações que precisam
+      const needsLeadId = ['SCHEDULE_MEETING', 'TRANSFER_HUMAN', 'UPDATE_LEAD', 'QUALIFY_LEAD', 'DISQUALIFY_LEAD', 'ADVANCE_STAGE'];
+      if (this.currentLeadId && needsLeadId.includes(actionToExecute.action)) {
+        actionToExecute = {
+          ...actionToExecute,
+          params: { ...actionToExecute.params, lead_id: this.currentLeadId },
+        };
+      }
       console.log('[AgentEngine] Step 9: Executing action:', actionToExecute.action);
       try {
         executionResult = await this.executeAction(actionToExecute);
@@ -183,9 +194,9 @@ export class AgentEngine {
       let actionType = null;
 
       // Mapear estados para ações
-      const qualifiedStates = ['QUALIFIED', 'MEETING_SCHEDULED', 'CLOSED_WON'];
+      const qualifiedStates = ['QUALIFIED', 'SCHEDULED', 'MEETING_SCHEDULED', 'CLOSED_WON'];
       const disqualifiedStates = ['DISQUALIFIED', 'NOT_INTERESTED', 'NO_FIT', 'CLOSED_LOST'];
-      const needHumanStates = ['NEED_HUMAN', 'ESCALATED', 'COMPLEX_ISSUE'];
+      const needHumanStates = ['NEED_HUMAN', 'ESCALATED', 'COMPLEX_ISSUE', 'WAITING_HUMAN'];
 
       if (qualifiedStates.includes(currentState)) {
         actionConfig = automationActions.onQualify;
@@ -227,6 +238,12 @@ export class AgentEngine {
 
       // Executar ações configuradas
       const updates: Record<string, any> = {};
+
+      // Desligar IA quando transferir para humano
+      if (actionType === 'need_human') {
+        updates.ai_disabled = true;
+        updates.ai_disabled_at = new Date().toISOString();
+      }
 
       // Mover para etapa
       if (actionConfig.moveToStage) {
@@ -285,9 +302,31 @@ export class AgentEngine {
       }
 
       // Notificar usuário (se configurado)
-      if (actionConfig.notifyUserId) {
-        // TODO: Implementar sistema de notificações
-        console.log('[AgentEngine] Should notify user:', actionConfig.notifyUserId);
+      if (actionConfig.notifyUserId && actionType === 'need_human') {
+        try {
+          const { data: lead } = await this.supabase
+            .from('leads')
+            .select('name, company')
+            .eq('id', leadId)
+            .single();
+
+          const leadLabel = lead?.name
+            ? (lead.company ? `${lead.name} - ${lead.company}` : lead.name)
+            : 'Lead';
+
+          await this.supabase.from('notifications').insert({
+            organization_id: this.organizationId,
+            user_id: actionConfig.notifyUserId,
+            type: 'transfer_to_human',
+            title: 'Lead precisa de atendimento humano',
+            description: `${leadLabel} solicitou transferência para um especialista.`,
+            lead_id: leadId,
+            link: '/pipe-whatsapp',
+          });
+          console.log('[AgentEngine] Notification created for user:', actionConfig.notifyUserId);
+        } catch (notifErr) {
+          console.warn('[AgentEngine] Failed to create notification:', notifErr);
+        }
       }
 
       // Mover para outro pipe (Confirmação ou Propostas)
@@ -385,6 +424,11 @@ export class AgentEngine {
 
       const currentStage = lead?.pipe_whatsapp;
       let newStage: string | null = null;
+
+      // advance_stage já atualizou o pipeline em executeAction - não aplicar regras fixas
+      if (actionToExecute?.action === 'ADVANCE_STAGE') {
+        return;
+      }
 
       // Se agendou reunião, vai direto para 'agendado'
       if (actionToExecute?.action === 'SCHEDULE_MEETING') {
@@ -567,6 +611,52 @@ export class AgentEngine {
     } catch (e) {
       console.error('[AgentEngine] Failed to load lead data:', e);
       return null;
+    }
+  }
+
+  /**
+   * Load custom fields da organização (para descrição da tool update_lead)
+   */
+  private async loadOrgCustomFields(): Promise<{ field_name: string }[]> {
+    try {
+      const { data, error } = await this.supabase
+        .from('lead_custom_fields')
+        .select('field_name')
+        .eq('organization_id', this.organizationId)
+        .order('display_order', { ascending: true });
+
+      if (error) {
+        console.warn('[AgentEngine] Error loading org custom fields:', error.message);
+        return [];
+      }
+      return data || [];
+    } catch (e) {
+      console.warn('[AgentEngine] Failed to load org custom fields:', e);
+      return [];
+    }
+  }
+
+  /**
+   * Carrega etapas do pipeline WhatsApp para a organização (pipeline_stages)
+   */
+  private async loadPipelineStages(): Promise<{ stage_key: string; name: string }[]> {
+    try {
+      const { data, error } = await this.supabase
+        .from('pipeline_stages')
+        .select('stage_key, name')
+        .eq('organization_id', this.organizationId)
+        .eq('pipeline_type', 'whatsapp')
+        .eq('is_active', true)
+        .order('position', { ascending: true });
+
+      if (error) {
+        console.warn('[AgentEngine] Error loading pipeline stages:', error.message);
+        return [];
+      }
+      return data || [];
+    } catch (e) {
+      console.warn('[AgentEngine] Failed to load pipeline stages:', e);
+      return [];
     }
   }
 
@@ -1042,6 +1132,17 @@ export class AgentEngine {
         }
       }
 
+      if (capabilities.can_qualify_lead) {
+        sections.push("# MOVIMENTAÇÃO DE FUNIL (FERRAMENTAS)");
+        sections.push("");
+        sections.push("Use as ferramentas qualify_lead, disqualify_lead e advance_stage para mover o lead no funil:");
+        sections.push("- qualify_lead: quando o lead reuniu os critérios obrigatórios e está pronto (ex: agendou ou demonstrou fit)");
+        sections.push("- disqualify_lead: quando o lead não se encaixa (sem necessidade, fora do perfil, sem orçamento, desistiu)");
+        sections.push("- advance_stage: quando o lead progrediu na jornada (ex: respondeu → qualificado, ou qualquer outra transição de etapa)");
+        sections.push("Essencial: movimente o lead conforme a conversa evolui. Não deixe leads qualificados ou desqualificados sem usar a ferramenta.");
+        sections.push("");
+      }
+
       if (availability.mode) {
         sections.push("# DISPONIBILIDADE");
         sections.push("");
@@ -1151,6 +1252,9 @@ export class AgentEngine {
     if (capabilities.can_update_crm) {
       sections.push("- Atualizar CRM externo do cliente");
     }
+    if (capabilities.can_update_lead) {
+      sections.push("- Atualizar informações do lead no CRM (empresa, segmento, campos personalizados, notas) usando update_lead");
+    }
     if (capabilities.can_create_lead) {
       sections.push("- Criar novos leads no sistema");
     }
@@ -1163,6 +1267,7 @@ export class AgentEngine {
     if (!capabilities.can_qualify_lead) sections.push("- Qualificar leads");
     if (!capabilities.can_schedule_meeting) sections.push("- Agendar reuniões");
     if (!capabilities.can_update_crm) sections.push("- Atualizar CRM");
+    if (!capabilities.can_update_lead) sections.push("- Atualizar lead no CRM");
     if (!capabilities.can_create_lead) sections.push("- Criar novos leads");
     sections.push("");
 
@@ -1333,7 +1438,11 @@ export class AgentEngine {
   /**
    * Build Dynamic Tools (baseado em capabilities)
    */
-  private buildDynamicTools(capabilities: any) {
+  private buildDynamicTools(
+    capabilities: any,
+    orgCustomFields: { field_name: string }[] = [],
+    pipelineStages: { stage_key: string; name: string }[] = []
+  ) {
     const tools: any[] = [];
 
     if (capabilities.can_schedule_meeting) {
@@ -1378,6 +1487,66 @@ export class AgentEngine {
             value: { type: 'string' },
           },
           required: ['field', 'value'],
+        },
+      });
+    }
+
+    if (capabilities.can_update_lead) {
+      const customNames = orgCustomFields.length > 0
+        ? orgCustomFields.map((f) => f.field_name).join(', ')
+        : 'nenhum';
+      tools.push({
+        name: 'update_lead',
+        description: `Atualiza informações do lead no CRM v8. Campos padrão: company, segment, urgency, faturamento, rating. Campos personalizados disponíveis: ${customNames}. Qualquer outra informação (ex: preferência, orçamento) vai para notas/observações do lead.`,
+        input_schema: {
+          type: 'object',
+          properties: {
+            updates: {
+              type: 'object',
+              description: 'Objeto chave-valor. Ex: {"company": "Acme", "segment": "B2B", "Preferência de horário": "manhã"}',
+              additionalProperties: { type: 'string' },
+            },
+          },
+          required: ['updates'],
+        },
+      });
+    }
+
+    if (capabilities.can_qualify_lead) {
+      tools.push({
+        name: 'qualify_lead',
+        description: 'Marca o lead como qualificado quando reuniu os critérios necessários (necessidade, volume, urgência, orçamento etc.)',
+        input_schema: {
+          type: 'object',
+          properties: {
+            reason: { type: 'string', description: 'Breve justificativa da qualificação (opcional)' },
+          },
+          required: [],
+        },
+      });
+      tools.push({
+        name: 'disqualify_lead',
+        description: 'Marca o lead como desqualificado quando não se encaixa (sem necessidade, fora do perfil, sem orçamento etc.)',
+        input_schema: {
+          type: 'object',
+          properties: {
+            reason: { type: 'string', description: 'Motivo da desqualificação (opcional)' },
+          },
+          required: [],
+        },
+      });
+      const stageKeys = pipelineStages.length > 0
+        ? pipelineStages.map((s) => s.stage_key).join(', ')
+        : 'novo, abordado, respondeu, esfriou, agendado';
+      tools.push({
+        name: 'advance_stage',
+        description: `Avança o lead para outra etapa do funil. Etapas disponíveis: ${stageKeys}. Use quando o lead progredir na jornada.`,
+        input_schema: {
+          type: 'object',
+          properties: {
+            target_stage: { type: 'string', description: `Etapa de destino (um de: ${stageKeys})` },
+          },
+          required: ['target_stage'],
         },
       });
     }
@@ -1545,7 +1714,11 @@ export class AgentEngine {
       'schedule_meeting': 'SCHEDULE_MEETING',
       'create_lead': 'CREATE_LEAD',
       'update_crm': 'UPDATE_CRM',
+      'update_lead': 'UPDATE_LEAD',
       'transfer_to_human': 'TRANSFER_HUMAN',
+      'qualify_lead': 'QUALIFY_LEAD',
+      'disqualify_lead': 'DISQUALIFY_LEAD',
+      'advance_stage': 'ADVANCE_STAGE',
     };
     return mapping[toolName] || 'UNKNOWN';
   }
@@ -1556,55 +1729,200 @@ export class AgentEngine {
   private determineNextState(currentState: string, toolName: string): string {
     if (toolName === 'schedule_meeting') return 'SCHEDULED';
     if (toolName === 'transfer_to_human') return 'WAITING_HUMAN';
+    if (toolName === 'qualify_lead') return 'QUALIFIED';
+    if (toolName === 'disqualify_lead') return 'DISQUALIFIED';
+    if (toolName === 'advance_stage') return currentState; // pipeline atualizado em executeAction
     if (currentState === 'NEW_LEAD') return 'QUALIFYING';
     return currentState;
   }
 
   /**
-   * Execute Action via n8n (ou webhook-orchestrator)
-   * Se não tiver webhook configurado, apenas loga a ação e retorna
+   * Execute Action internamente (sem webhook) - toda lógica roda dentro do sistema
    */
   private async executeAction(action: any) {
-    const n8nWebhookUrl = Deno.env.get("N8N_INTERNAL_EXECUTOR_WEBHOOK");
-    
-    // Se não tiver n8n configurado, apenas logar a ação (não quebrar)
-    if (!n8nWebhookUrl) {
-      console.log('[AgentEngine] No N8N_INTERNAL_EXECUTOR_WEBHOOK configured, skipping action execution');
-      console.log('[AgentEngine] Action would be:', action);
-      return { 
-        status: 'skipped', 
-        reason: 'No webhook configured',
-        action: action.action,
-        params: action.params 
-      };
-    }
+    const tenantId = action.tenant_id || this.organizationId;
+    const params = action.params || {};
 
     try {
-      const response = await fetch(n8nWebhookUrl, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'X-API-Key': Deno.env.get("WEBHOOK_API_KEY") || '',
-        },
-        body: JSON.stringify({
-          action: action.action,
-          data: action.params,
-          tenant_id: action.tenant_id,
-          api_key: Deno.env.get("WEBHOOK_API_KEY"),
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('[AgentEngine] Action execution failed:', response.status, errorText);
-        return { status: 'failed', error: errorText, statusCode: response.status };
+      switch (action.action) {
+        case 'SCHEDULE_MEETING':
+          return await this.executeScheduleMeeting(params, tenantId);
+        case 'CREATE_LEAD':
+          return await this.executeCreateLead(params, tenantId);
+        case 'UPDATE_CRM':
+          return await this.executeUpdateCrm(params, tenantId);
+        case 'UPDATE_LEAD':
+          return await this.executeUpdateLead(params, tenantId);
+        case 'TRANSFER_HUMAN':
+          return await this.executeTransferHuman(params, tenantId);
+        case 'QUALIFY_LEAD':
+        case 'DISQUALIFY_LEAD':
+          return { success: true, message: `Ação ${action.action} - processada via executeAutomationActions` };
+        case 'ADVANCE_STAGE':
+          return await this.executeAdvanceStage(params, tenantId);
+        default:
+          console.warn('[AgentEngine] Action não suportada:', action.action);
+          return { success: false, error: `Ação não suportada: ${action.action}` };
       }
-
-      return await response.json();
-    } catch (fetchError) {
-      console.error('[AgentEngine] Action fetch error:', fetchError);
-      return { status: 'error', error: String(fetchError) };
+    } catch (err) {
+      console.error('[AgentEngine] executeAction error:', err);
+      return { success: false, error: String(err), status: 'error' };
     }
+  }
+
+  private async executeScheduleMeeting(params: any, tenantId: string) {
+    const { lead_id, preferred_date } = params;
+    if (!lead_id || !preferred_date) {
+      return { success: false, error: 'lead_id e preferred_date são obrigatórios' };
+    }
+
+    await this.supabase.from('leads').update({ compromisso_date: preferred_date }).eq('id', lead_id);
+
+    const { data: existing } = await this.supabase
+      .from('pipe_confirmacao')
+      .select('id')
+      .eq('lead_id', lead_id)
+      .maybeSingle();
+
+    if (existing) {
+      await this.supabase.from('pipe_confirmacao').update({
+        status: 'reuniao_marcada',
+        meeting_date: preferred_date,
+      }).eq('id', existing.id);
+    } else {
+      await this.supabase.from('pipe_confirmacao').insert({
+        lead_id,
+        organization_id: tenantId,
+        status: 'reuniao_marcada',
+        meeting_date: preferred_date,
+      });
+    }
+
+    return { success: true, message: 'Reunião agendada', meeting_date: preferred_date };
+  }
+
+  private async executeCreateLead(params: any, tenantId: string) {
+    const { name, email, phone, company } = params;
+    if (!name || !tenantId) {
+      return { success: false, error: 'name e tenant_id são obrigatórios' };
+    }
+
+    const { data: lead, error } = await this.supabase
+      .from('leads')
+      .insert({ name, email, phone, company, origin: 'web', organization_id: tenantId })
+      .select()
+      .single();
+
+    if (error) return { success: false, error: error.message };
+    return { success: true, message: 'Lead criado', lead_id: lead.id };
+  }
+
+  private async executeUpdateCrm(_params: any, _tenantId: string) {
+    return { success: true, message: 'UPDATE_CRM - integração externa (placeholder interno)' };
+  }
+
+  private async executeUpdateLead(params: any, tenantId: string) {
+    const { lead_id, updates } = params;
+    if (!lead_id || !updates || typeof updates !== 'object' || Object.keys(updates).length === 0) {
+      return { success: false, error: 'lead_id e updates são obrigatórios' };
+    }
+
+    const UPDATE_LEAD_STANDARD_FIELDS = ['company', 'segment', 'urgency', 'faturamento', 'rating'];
+
+    const { data: lead } = await this.supabase.from('leads').select('id, notes').eq('id', lead_id).eq('organization_id', tenantId).maybeSingle();
+    if (!lead) return { success: false, error: 'Lead não encontrado' };
+
+    const { data: customFields } = await this.supabase.from('lead_custom_fields').select('id, field_name').eq('organization_id', tenantId);
+    const customFieldMap = new Map((customFields || []).map((f: { id: string; field_name: string }) => [f.field_name, f.id]));
+
+    const leadUpdates: Record<string, unknown> = {};
+    const customFieldUpdates: { field_id: string; value: string }[] = [];
+    const notesToAppend: string[] = [];
+    const now = new Date();
+    const datePrefix = `[IA - ${now.getDate().toString().padStart(2, '0')}/${(now.getMonth() + 1).toString().padStart(2, '0')}/${now.getFullYear()} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}]`;
+
+    for (const [key, rawValue] of Object.entries(updates)) {
+      if (rawValue == null) continue;
+      const strVal = String(rawValue).trim();
+      if (strVal === '') continue;
+      const sanitized = sanitizeString(strVal, 2000) ?? '';
+
+      if (UPDATE_LEAD_STANDARD_FIELDS.includes(key)) {
+        if (key === 'rating') {
+          const num = parseInt(sanitized, 10);
+          if (!isNaN(num) && num >= 0 && num <= 10) leadUpdates[key] = num;
+        } else {
+          leadUpdates[key] = sanitized;
+        }
+      } else if (customFieldMap.has(key)) {
+        customFieldUpdates.push({ field_id: customFieldMap.get(key)!, value: sanitized });
+      } else {
+        notesToAppend.push(`${datePrefix} ${key}: ${sanitized}`);
+      }
+    }
+
+    if (Object.keys(leadUpdates).length > 0) {
+      await this.supabase.from('leads').update(leadUpdates).eq('id', lead_id).eq('organization_id', tenantId);
+    }
+    if (notesToAppend.length > 0) {
+      const newNotes = notesToAppend.join('\n');
+      const updatedNotes = lead.notes ? `${lead.notes}\n\n${newNotes}` : newNotes;
+      await this.supabase.from('leads').update({ notes: sanitizeString(updatedNotes, 5000) ?? updatedNotes }).eq('id', lead_id).eq('organization_id', tenantId);
+    }
+    for (const cf of customFieldUpdates) {
+      await this.supabase.from('lead_custom_field_values').upsert(
+        { lead_id, field_id: cf.field_id, value: cf.value, updated_at: new Date().toISOString() },
+        { onConflict: 'lead_id,field_id' }
+      );
+    }
+
+    return { success: true, message: 'Lead atualizado', lead_id };
+  }
+
+  private async executeTransferHuman(params: any, _tenantId: string) {
+    const { lead_id } = params;
+    if (!lead_id) return { success: false, error: 'lead_id é obrigatório' };
+
+    await this.supabase.from('leads').update({
+      ai_disabled: true,
+      ai_disabled_at: new Date().toISOString(),
+    }).eq('id', lead_id);
+
+    const { data: conversation } = await this.supabase.from('conversations').select('id').eq('lead_id', lead_id).maybeSingle();
+    if (conversation) {
+      await this.supabase.from('conversations').update({ state: 'WAITING_HUMAN' }).eq('id', conversation.id);
+    }
+
+    return { success: true, message: 'Conversa transferida para humano' };
+  }
+
+  private async executeAdvanceStage(params: any, tenantId: string) {
+    const { lead_id, target_stage } = params;
+    if (!lead_id || !target_stage) {
+      return { success: false, error: 'lead_id e target_stage são obrigatórios' };
+    }
+
+    const { data: stages } = await this.supabase
+      .from('pipeline_stages')
+      .select('stage_key')
+      .eq('organization_id', tenantId)
+      .eq('pipeline_type', 'whatsapp')
+      .eq('is_active', true);
+
+    const validKeys = (stages || []).map((s: { stage_key: string }) => s.stage_key);
+    const stageKeys = validKeys.length > 0 ? validKeys : ['novo', 'abordado', 'respondeu', 'esfriou', 'agendado'];
+
+    const normalizedStage = String(target_stage).trim().toLowerCase();
+    if (!stageKeys.some((k: string) => k.toLowerCase() === normalizedStage)) {
+      return { success: false, error: `Etapa inválida. Use um de: ${stageKeys.join(', ')}` };
+    }
+
+    const finalStage = stageKeys.find((k: string) => k.toLowerCase() === normalizedStage) || normalizedStage;
+
+    await this.supabase.from('leads').update({ pipe_whatsapp: finalStage }).eq('id', lead_id);
+    await this.upsertPipeWhatsapp(lead_id, tenantId, finalStage);
+
+    return { success: true, message: `Lead movido para ${finalStage}`, target_stage: finalStage };
   }
 
   /**

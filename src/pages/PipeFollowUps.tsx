@@ -32,25 +32,33 @@ import { FollowUpCard } from "@/components/followups/FollowUpCard";
 import { AutomationSettings } from "@/components/followups/AutomationSettings";
 import { AcoesDoDia } from "@/components/followups/AcoesDoDia";
 import { useFollowUps, useCompleteFollowUp, useArchiveFollowUp, useArchiveManyFollowUps, type FollowUp } from "@/hooks/useFollowUps";
-import { useTeamMembers } from "@/hooks/useTeamMembers";
+import { useTeamMembers, useCurrentTeamMember } from "@/hooks/useTeamMembers";
 import { useUserRole } from "@/hooks/useUserRole";
 import { cn } from "@/lib/utils";
 
 export default function PipeFollowUps() {
   const [search, setSearch] = useState("");
-  const [selectedMember, setSelectedMember] = useState<string>("all");
+  const [selectedMember, setSelectedMember] = useState<string | null>(null);
   const [dateFilter, setDateFilter] = useState<"today" | "overdue" | "upcoming" | "all">("today");
   const [showCompleted, setShowCompleted] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
 
   const { data: userRole } = useUserRole();
   const { data: teamMembers } = useTeamMembers();
+  const { data: currentTeamMember } = useCurrentTeamMember();
+
+  // Auto-filtrar: Admin vê "Todos", SDR/Closer vê apenas suas tarefas por padrão
+  const effectiveSelectedMember = selectedMember !== null
+    ? selectedMember
+    : userRole?.role === "admin"
+      ? "all"
+      : currentTeamMember?.id ?? "all";
   const completeFollowUp = useCompleteFollowUp();
   const archiveFollowUp = useArchiveFollowUp();
   const archiveManyFollowUps = useArchiveManyFollowUps();
 
   const { data: followUps, isLoading } = useFollowUps({
-    assignedTo: selectedMember === "all" ? undefined : selectedMember,
+    assignedTo: effectiveSelectedMember === "all" ? undefined : effectiveSelectedMember,
     showCompleted,
     showArchived,
     dateFilter: dateFilter === "all" ? undefined : dateFilter,
@@ -266,7 +274,7 @@ export default function PipeFollowUps() {
             />
           </div>
 
-          <Select value={selectedMember} onValueChange={setSelectedMember}>
+          <Select value={effectiveSelectedMember} onValueChange={setSelectedMember}>
             <SelectTrigger className="w-[180px]">
               <User className="w-4 h-4 mr-2" />
               <SelectValue placeholder="Filtrar por..." />

@@ -145,7 +145,7 @@ export function useWhatsAppContacts(instanceId: string | null) {
         if (!existing) {
           contactsMap.set(key, {
             phone_number: msg.phone_number,
-            push_name: msg.push_name,
+            push_name: msg.direction === "incoming" ? msg.push_name : null,
             last_message: msg.content,
             last_message_time: msg.timestamp,
             last_message_direction: msg.direction === "incoming" || msg.direction === "outgoing" ? msg.direction : null,
@@ -164,7 +164,9 @@ export function useWhatsAppContacts(instanceId: string | null) {
             existing.lead_id = existing.lead_id || msg.lead_id;
             existing.lead_name = existing.lead_name || leadName;
           }
-          existing.push_name = existing.push_name || msg.push_name;
+          if (msg.direction === "incoming" && msg.push_name) {
+            existing.push_name = existing.push_name || msg.push_name;
+          }
         }
       }
 

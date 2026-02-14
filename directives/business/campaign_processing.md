@@ -82,8 +82,24 @@ Se pg_cron ou pg_net não estiverem disponíveis, use um cron externo para chama
 
 ## Edição de regras na UI
 - Cada regra exibe botão de editar (ícone lápis) e excluir.
-- Ao editar: modal com gatilho, etapa (quando aplicável) e sequência de passos (template + delay).
+- Ao editar: modal com gatilho, etapa (quando aplicável) e sequência de passos polimórficos.
 - Salvando: atualiza a regra, remove passos antigos e cria os novos (idempotente).
+
+## Steps polimórficos (action_type)
+Cada step de uma regra tem um `action_type` que define a ação:
+- **send_template**: envia template via WhatsApp (existente, campo `template_id` obrigatório).
+- **wait_response**: pausa a sequência até o lead enviar qualquer mensagem WhatsApp. Campos: `wait_timeout_minutes` (default 1440 = 24h), `timeout_action` (continue/change_stage/send_template/cancel_sequence), `timeout_target_stage_id`, `timeout_template_id`.
+- **change_stage**: move o lead para outra etapa da campanha. Campo: `target_stage_id`.
+- **assign_sdr**: atribui SDR ao lead. Campos: `sdr_assignment_mode` (specific/round_robin), `target_sdr_id` (quando mode=specific).
+- **cancel_sequence**: cancela todas as mensagens pendentes dessa regra para o lead.
+
+### Barreira de espera (wait_response)
+O trigger de `campanha_leads` agenda steps até encontrar um `wait_response` (inclusive). Steps após a barreira **não** são agendados até o lead responder ou timeout estourar.
+- **Resposta detectada**: trigger em `whatsapp_messages` (AFTER INSERT, direction='incoming') busca entradas com `status='waiting_response'` para o lead. Se encontrar, marca como `response_received` e agenda próximos steps.
+- **Timeout**: o worker (cron/pg_net) detecta `waiting_response` com `wait_timeout_at <= NOW()` e executa a ação timeout configurada.
+- **Status novos em `scheduled_campaign_messages`**: `waiting_response`, `response_received`, `timed_out`, `executed`.
+- **Função helper PL/pgSQL**: `schedule_rule_steps_from_position(p_campanha_id, p_rule_id, p_campanha_lead_id, p_lead_id, p_whatsapp_instance_id, p_from_position)` — usada por ambos os triggers.
+- **Migration**: `20260318000000_dispatch_rule_steps_polymorphic_actions.sql`.
 
 ## Aprendizados
 (Atualizado automaticamente pelo sistema)

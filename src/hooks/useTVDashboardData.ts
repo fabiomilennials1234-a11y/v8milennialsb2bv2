@@ -93,14 +93,18 @@ export function useTVDashboardData() {
         ? (teamMembers?.filter(m => m.role === "sdr" && m.is_active) || [])
         : (currentTeamMember && currentTeamMember.role === "sdr" ? [currentTeamMember] : []);
       
-      // Meta: admin vê meta da equipe; não-admin vê meta individual
+      // Meta: admin vê soma das metas individuais dos closers (fonte canônica); não-admin vê meta individual
+      const somaMetasClosers =
+        individualGoals?.closerGoals?.reduce((s, g) => s + (g.goal || 0), 0) ?? 0;
       const salesGoal = teamGoals?.find(g => g.type === "faturamento" || g.name.toLowerCase().includes("faturamento"));
       const myGoal = myId && individualGoals?.closerGoals
         ? individualGoals.closerGoals.find(g => g.id === myId)
         : myId && individualGoals?.sdrGoals
           ? individualGoals.sdrGoals.find(g => g.id === myId)
           : null;
-      const metaVendasMes = isAdmin ? (salesGoal?.target_value || 0) : (myGoal?.goal ?? 0);
+      const metaVendasMes = isAdmin
+        ? (individualGoals?.closerGoals?.length ? somaMetasClosers : (salesGoal?.target_value || 0))
+        : (myGoal?.goal ?? 0);
       
       // Filter proposals for current month (já filtradas por usuário se não admin)
       const currentMonthPropostas = propostasFiltradas.filter(p => {

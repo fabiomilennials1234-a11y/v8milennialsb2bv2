@@ -415,9 +415,12 @@ export default function PipePropostas() {
         .filter(item => item.status === col.id)
         .filter(item => {
           const lead = item.lead;
-          
+
+          // Hide ghost leads (RLS blocked the lead data for this user)
+          if (!lead) return false;
+
           // Search filter
-          const matchesSearch = searchTerm === "" || 
+          const matchesSearch = searchTerm === "" ||
             lead?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
             lead?.company?.toLowerCase().includes(searchTerm.toLowerCase());
           
