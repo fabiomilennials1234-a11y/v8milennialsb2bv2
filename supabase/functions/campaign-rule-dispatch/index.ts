@@ -305,6 +305,30 @@ async function processCampaignQueue(
           sent_at: new Date().toISOString(),
         });
 
+        // --- Sync with chat: insert into whatsapp_messages so it appears in conversation ---
+        try {
+          const phone = lead.phone!.replace(/\D/g, "").replace(/^(?!55)/, "55");
+          const { error: chatErr } = await supabase.from("whatsapp_messages").insert({
+            organization_id: campanha.organization_id,
+            instance_id: instance.id,
+            message_id: sendResult.messageId || `campaign_${row.id}_${Date.now()}`,
+            remote_jid: `${phone}@s.whatsapp.net`,
+            phone_number: phone,
+            direction: "outgoing",
+            message_type: isAudio ? "audio" : "text",
+            content: isAudio ? null : messageContent,
+            media_url: isAudio ? template.audio_url : null,
+            status: "sent",
+            lead_id: lead.id,
+            timestamp: new Date().toISOString(),
+          });
+          if (chatErr && !chatErr.message?.includes("duplicate")) {
+            console.warn("[campaign-rule-dispatch] whatsapp_messages insert failed:", chatErr);
+          }
+        } catch (chatSyncErr) {
+          console.warn("[campaign-rule-dispatch] chat sync error:", chatSyncErr);
+        }
+
         try {
           const { error: rlErr } = await supabase.rpc("increment_whatsapp_rate_limit", {
             p_organization_id: campanha.organization_id,

@@ -26,7 +26,7 @@ import {
   type CampanhaDispatchRuleTriggerType,
 } from "@/hooks/useCampanhas";
 import { useCampanhaTemplates, type CampanhaTemplate } from "@/hooks/useCampaignTemplates";
-import { Send, ChevronDown, Plus, Trash2, Loader2, ListOrdered, Play, Pencil } from "lucide-react";
+import { Send, ChevronDown, Plus, Trash2, Loader2, ListOrdered, Play, Pencil, CheckCircle2, Clock, XCircle } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -35,7 +35,7 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 const TRIGGER_LABELS: Record<CampanhaDispatchRuleTriggerType, string> = {
   lead_created: "Ao adicionar lead na campanha",
@@ -65,6 +65,26 @@ export function CampanhaDispatchRulesSection({ campanhaId, stages }: CampanhaDis
   const updateRule = useUpdateCampanhaDispatchRule();
   const deleteRule = useDeleteCampanhaDispatchRule();
   const [editingRule, setEditingRule] = useState<CampanhaDispatchRule | null>(null);
+
+  // --- Dispatch metrics ---
+  const { data: dispatchMetrics } = useQuery({
+    queryKey: ["dispatch_metrics", campanhaId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("scheduled_campaign_messages")
+        .select("status")
+        .eq("campanha_id", campanhaId);
+      if (error) throw error;
+      const counts = { scheduled: 0, sent: 0, failed: 0 };
+      for (const row of data || []) {
+        if (row.status === "scheduled") counts.scheduled++;
+        else if (row.status === "sent") counts.sent++;
+        else if (row.status === "failed") counts.failed++;
+      }
+      return counts;
+    },
+    enabled: !!campanhaId,
+  });
 
   const handleAddStep = () => {
     setSteps((prev) => [...prev, { template_id: "", delay_minutes: 0 }]);
@@ -213,9 +233,11 @@ export function CampanhaDispatchRulesSection({ campanhaId, stages }: CampanhaDis
           `Processado: ${result.processed} | Enviadas: ${result.sent ?? 0} | Falhas: ${result.failed ?? 0}`
         );
         queryClient.invalidateQueries({ queryKey: ["dispatch_log", campanhaId] });
+        queryClient.invalidateQueries({ queryKey: ["dispatch_metrics", campanhaId] });
       } else {
         toast.success("Fila processada");
         queryClient.invalidateQueries({ queryKey: ["dispatch_log", campanhaId] });
+        queryClient.invalidateQueries({ queryKey: ["dispatch_metrics", campanhaId] });
       }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Erro ao processar fila");
@@ -293,6 +315,33 @@ export function CampanhaDispatchRulesSection({ campanhaId, stages }: CampanhaDis
                   </Button>
                 ) : null}
               </div>
+
+              {/* Dispatch Metrics */}
+              {dispatchMetrics && (dispatchMetrics.sent > 0 || dispatchMetrics.scheduled > 0 || dispatchMetrics.failed > 0) && (
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="flex items-center gap-2 rounded-lg border bg-background p-3">
+                    <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />
+                    <div>
+                      <p className="text-lg font-semibold leading-none">{dispatchMetrics.sent}</p>
+                      <p className="text-xs text-muted-foreground">Enviadas</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 rounded-lg border bg-background p-3">
+                    <Clock className="w-4 h-4 text-yellow-500 shrink-0" />
+                    <div>
+                      <p className="text-lg font-semibold leading-none">{dispatchMetrics.scheduled}</p>
+                      <p className="text-xs text-muted-foreground">Pendentes</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 rounded-lg border bg-background p-3">
+                    <XCircle className="w-4 h-4 text-red-500 shrink-0" />
+                    <div>
+                      <p className="text-lg font-semibold leading-none">{dispatchMetrics.failed}</p>
+                      <p className="text-xs text-muted-foreground">Falharam</p>
+                    </div>
+                  </div>
+                </div>
+              )}
               {addOpen ? (
                 <div className="space-y-4 rounded-md border border-dashed p-3">
                   <div className="grid gap-2">
