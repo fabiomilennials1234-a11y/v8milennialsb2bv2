@@ -167,6 +167,9 @@ export interface CampanhaPipeAutomation {
 
 // --- Regras de envio (lead criado ou movido para etapa) ---
 export type CampanhaDispatchRuleTriggerType = "lead_created" | "lead_moved_to_stage";
+export type CampanhaDispatchRuleStepActionType = "send_template" | "wait_response" | "change_stage" | "assign_sdr" | "cancel_sequence";
+export type CampanhaDispatchRuleTimeoutAction = "continue" | "change_stage" | "send_template" | "cancel_sequence";
+export type SdrAssignmentMode = "specific" | "round_robin";
 
 export interface CampanhaDispatchRule {
   id: string;
@@ -182,9 +185,21 @@ export interface CampanhaDispatchRule {
 export interface CampanhaDispatchRuleStep {
   id: string;
   rule_id: string;
-  template_id: string;
+  action_type: CampanhaDispatchRuleStepActionType;
+  template_id: string | null;
   delay_minutes: number;
   position: number;
+  // wait_response fields
+  wait_timeout_minutes: number | null;
+  timeout_action: CampanhaDispatchRuleTimeoutAction | null;
+  timeout_target_stage_id: string | null;
+  timeout_template_id: string | null;
+  // change_stage fields
+  target_stage_id: string | null;
+  // assign_sdr fields
+  sdr_assignment_mode: SdrAssignmentMode | null;
+  target_sdr_id: string | null;
+  // joined
   template?: { id: string; name: string; content?: string; message_type?: string };
 }
 
@@ -1064,18 +1079,36 @@ export function useCreateCampanhaDispatchRuleStep() {
   return useMutation({
     mutationFn: async (payload: {
       rule_id: string;
-      template_id: string;
+      action_type?: CampanhaDispatchRuleStepActionType;
+      template_id?: string | null;
       delay_minutes?: number;
       position: number;
+      wait_timeout_minutes?: number | null;
+      timeout_action?: CampanhaDispatchRuleTimeoutAction | null;
+      timeout_target_stage_id?: string | null;
+      timeout_template_id?: string | null;
+      target_stage_id?: string | null;
+      sdr_assignment_mode?: SdrAssignmentMode | null;
+      target_sdr_id?: string | null;
     }) => {
+      const insertData: Record<string, unknown> = {
+        rule_id: payload.rule_id,
+        action_type: payload.action_type || "send_template",
+        delay_minutes: Math.max(0, Math.floor(Number(payload.delay_minutes) || 0)),
+        position: payload.position,
+      };
+      if (payload.template_id) insertData.template_id = payload.template_id;
+      if (payload.wait_timeout_minutes != null) insertData.wait_timeout_minutes = payload.wait_timeout_minutes;
+      if (payload.timeout_action) insertData.timeout_action = payload.timeout_action;
+      if (payload.timeout_target_stage_id) insertData.timeout_target_stage_id = payload.timeout_target_stage_id;
+      if (payload.timeout_template_id) insertData.timeout_template_id = payload.timeout_template_id;
+      if (payload.target_stage_id) insertData.target_stage_id = payload.target_stage_id;
+      if (payload.sdr_assignment_mode) insertData.sdr_assignment_mode = payload.sdr_assignment_mode;
+      if (payload.target_sdr_id) insertData.target_sdr_id = payload.target_sdr_id;
+
       const { data, error } = await supabase
         .from("campanha_dispatch_rule_steps")
-        .insert({
-          rule_id: payload.rule_id,
-          template_id: payload.template_id,
-          delay_minutes: Math.max(0, Math.floor(Number(payload.delay_minutes) || 0)),
-          position: payload.position,
-        })
+        .insert(insertData)
         .select()
         .single();
       if (error) throw error;

@@ -24,9 +24,16 @@ import {
   type CampanhaStage,
   type CampanhaDispatchRule,
   type CampanhaDispatchRuleTriggerType,
+  type CampanhaDispatchRuleStepActionType,
+  type CampanhaDispatchRuleTimeoutAction,
+  type SdrAssignmentMode,
 } from "@/hooks/useCampanhas";
 import { useCampanhaTemplates, type CampanhaTemplate } from "@/hooks/useCampaignTemplates";
-import { Send, ChevronDown, Plus, Trash2, Loader2, ListOrdered, Play, Pencil, CheckCircle2, Clock, XCircle } from "lucide-react";
+import { useTeamMembers } from "@/hooks/useTeamMembers";
+import {
+  Send, ChevronDown, Plus, Trash2, Loader2, ListOrdered, Play, Pencil,
+  CheckCircle2, Clock, XCircle, MessageSquare, ArrowRightLeft, UserPlus, Ban, Hourglass,
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -42,6 +49,58 @@ const TRIGGER_LABELS: Record<CampanhaDispatchRuleTriggerType, string> = {
   lead_moved_to_stage: "Ao mover lead para etapa",
 };
 
+const ACTION_LABELS: Record<CampanhaDispatchRuleStepActionType, string> = {
+  send_template: "Enviar template",
+  wait_response: "Esperar resposta",
+  change_stage: "Mudar etapa",
+  assign_sdr: "Atribuir SDR",
+  cancel_sequence: "Cancelar sequência",
+};
+
+const ACTION_ICONS: Record<CampanhaDispatchRuleStepActionType, typeof Send> = {
+  send_template: MessageSquare,
+  wait_response: Hourglass,
+  change_stage: ArrowRightLeft,
+  assign_sdr: UserPlus,
+  cancel_sequence: Ban,
+};
+
+const TIMEOUT_ACTION_LABELS: Record<CampanhaDispatchRuleTimeoutAction, string> = {
+  continue: "Continuar sequência",
+  change_stage: "Mudar etapa",
+  send_template: "Enviar template",
+  cancel_sequence: "Cancelar sequência",
+};
+
+// Step state used locally in the form
+interface StepFormState {
+  action_type: CampanhaDispatchRuleStepActionType;
+  template_id: string;
+  delay_minutes: number;
+  wait_timeout_minutes: number;
+  timeout_action: CampanhaDispatchRuleTimeoutAction;
+  timeout_target_stage_id: string;
+  timeout_template_id: string;
+  target_stage_id: string;
+  sdr_assignment_mode: SdrAssignmentMode;
+  target_sdr_id: string;
+}
+
+function defaultStep(): StepFormState {
+  return {
+    action_type: "send_template",
+    template_id: "",
+    delay_minutes: 0,
+    wait_timeout_minutes: 1440,
+    timeout_action: "continue",
+    timeout_target_stage_id: "",
+    timeout_template_id: "",
+    target_stage_id: "",
+    sdr_assignment_mode: "specific",
+    target_sdr_id: "",
+  };
+}
+
 interface CampanhaDispatchRulesSectionProps {
   campanhaId: string;
   stages: CampanhaStage[];
@@ -53,13 +112,12 @@ export function CampanhaDispatchRulesSection({ campanhaId, stages }: CampanhaDis
   const [processingQueue, setProcessingQueue] = useState(false);
   const [triggerType, setTriggerType] = useState<CampanhaDispatchRuleTriggerType>("lead_created");
   const [selectedStageId, setSelectedStageId] = useState<string>("");
-  const [steps, setSteps] = useState<{ template_id: string; delay_minutes: number }[]>([
-    { template_id: "", delay_minutes: 0 },
-  ]);
+  const [steps, setSteps] = useState<StepFormState[]>([defaultStep()]);
   const queryClient = useQueryClient();
 
   const { data: rules = [], isLoading, isError, error: queryError } = useCampanhaDispatchRules(campanhaId);
   const { data: templates = [] } = useCampanhaTemplates(campanhaId);
+  const { data: teamMembers = [] } = useTeamMembers();
   const createRule = useCreateCampanhaDispatchRule();
   const createStep = useCreateCampanhaDispatchRuleStep();
   const updateRule = useUpdateCampanhaDispatchRule();
@@ -75,30 +133,39 @@ export function CampanhaDispatchRulesSection({ campanhaId, stages }: CampanhaDis
         .select("status")
         .eq("campanha_id", campanhaId);
       if (error) throw error;
-      const counts = { scheduled: 0, sent: 0, failed: 0 };
+      const counts = { scheduled: 0, sent: 0, failed: 0, waiting_response: 0, executed: 0 };
       for (const row of data || []) {
         if (row.status === "scheduled") counts.scheduled++;
         else if (row.status === "sent") counts.sent++;
         else if (row.status === "failed") counts.failed++;
+        else if (row.status === "waiting_response") counts.waiting_response++;
+        else if (row.status === "executed") counts.executed++;
       }
       return counts;
     },
     enabled: !!campanhaId,
   });
 
-  const handleAddStep = () => {
-    setSteps((prev) => [...prev, { template_id: "", delay_minutes: 0 }]);
-  };
+  const handleAddStep = () => setSteps((prev) => [...prev, defaultStep()]);
 
   const handleRemoveStep = (index: number) => {
     if (steps.length <= 1) return;
     setSteps((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const handleStepChange = (index: number, field: "template_id" | "delay_minutes", value: string | number) => {
-    setSteps((prev) =>
-      prev.map((s, i) => (i === index ? { ...s, [field]: field === "delay_minutes" ? Number(value) || 0 : value } : s))
-    );
+  const handleStepChange = (index: number, updates: Partial<StepFormState>) => {
+    setSteps((prev) => prev.map((s, i) => (i === index ? { ...s, ...updates } : s)));
+  };
+
+  const isStepValid = (step: StepFormState) => {
+    switch (step.action_type) {
+      case "send_template": return !!step.template_id;
+      case "wait_response": return step.wait_timeout_minutes > 0;
+      case "change_stage": return !!step.target_stage_id;
+      case "assign_sdr": return step.sdr_assignment_mode === "round_robin" || !!step.target_sdr_id;
+      case "cancel_sequence": return true;
+      default: return false;
+    }
   };
 
   const handleAddRule = async () => {
@@ -106,9 +173,9 @@ export function CampanhaDispatchRulesSection({ campanhaId, stages }: CampanhaDis
       toast.error("Selecione a etapa para o gatilho 'Ao mover para etapa'");
       return;
     }
-    const validSteps = steps.filter((s) => s.template_id);
+    const validSteps = steps.filter(isStepValid);
     if (validSteps.length === 0) {
-      toast.error("Adicione pelo menos um passo com template");
+      toast.error("Adicione pelo menos um passo válido");
       return;
     }
     try {
@@ -119,26 +186,31 @@ export function CampanhaDispatchRulesSection({ campanhaId, stages }: CampanhaDis
         is_active: true,
       });
       for (let i = 0; i < validSteps.length; i++) {
-        const delay = Number(validSteps[i].delay_minutes);
         await createStep.mutateAsync({
           rule_id: rule.id,
-          template_id: validSteps[i].template_id,
-          delay_minutes: Number.isFinite(delay) && delay >= 0 ? delay : 0,
+          action_type: validSteps[i].action_type,
+          template_id: validSteps[i].action_type === "send_template" ? validSteps[i].template_id : null,
+          delay_minutes: validSteps[i].delay_minutes,
           position: i,
+          wait_timeout_minutes: validSteps[i].action_type === "wait_response" ? validSteps[i].wait_timeout_minutes : null,
+          timeout_action: validSteps[i].action_type === "wait_response" ? validSteps[i].timeout_action : null,
+          timeout_target_stage_id: validSteps[i].timeout_action === "change_stage" ? validSteps[i].timeout_target_stage_id : null,
+          timeout_template_id: validSteps[i].timeout_action === "send_template" ? validSteps[i].timeout_template_id : null,
+          target_stage_id: validSteps[i].action_type === "change_stage" ? validSteps[i].target_stage_id : null,
+          sdr_assignment_mode: validSteps[i].action_type === "assign_sdr" ? validSteps[i].sdr_assignment_mode : null,
+          target_sdr_id: validSteps[i].sdr_assignment_mode === "specific" ? validSteps[i].target_sdr_id : null,
         });
       }
       toast.success("Regra de envio criada");
       setAddOpen(false);
       setTriggerType("lead_created");
       setSelectedStageId("");
-      setSteps([{ template_id: "", delay_minutes: 0 }]);
+      setSteps([defaultStep()]);
     } catch (e: unknown) {
       console.error(e);
       const err = e as { code?: string; message?: string };
       const msg = err?.message ?? "";
-      if (err?.code === "PGRST116" || err?.code === "42P01" || msg.includes("does not exist") || msg.includes("relation")) {
-        toast.error("Tabela de regras não encontrada. Execute as migrations do Supabase (campanhas_whatsapp_instance_and_dispatch_rules).");
-      } else if (err?.code === "42501" || msg.toLowerCase().includes("row-level security") || msg.toLowerCase().includes("permission")) {
+      if (err?.code === "42501" || msg.toLowerCase().includes("row-level security") || msg.toLowerCase().includes("permission")) {
         toast.error("Sem permissão para criar regras de envio. Apenas administradores podem criar regras.");
       } else if (msg) {
         toast.error(msg);
@@ -157,31 +229,27 @@ export function CampanhaDispatchRulesSection({ campanhaId, stages }: CampanhaDis
     }
   };
 
-  const handleEdit = (r: CampanhaDispatchRule) => {
-    setEditingRule(r);
-  };
-
   const handleSaveEdit = async (
     ruleId: string,
-    triggerType: CampanhaDispatchRuleTriggerType,
-    selectedStageId: string,
-    editSteps: { template_id: string; delay_minutes: number }[]
+    trigType: CampanhaDispatchRuleTriggerType,
+    stageId: string,
+    editSteps: StepFormState[]
   ) => {
-    if (triggerType === "lead_moved_to_stage" && !selectedStageId) {
+    if (trigType === "lead_moved_to_stage" && !stageId) {
       toast.error("Selecione a etapa para o gatilho 'Ao mover para etapa'");
       return;
     }
-    const validSteps = editSteps.filter((s) => s.template_id);
+    const validSteps = editSteps.filter(isStepValid);
     if (validSteps.length === 0) {
-      toast.error("Adicione pelo menos um passo com template");
+      toast.error("Adicione pelo menos um passo válido");
       return;
     }
     try {
       await updateRule.mutateAsync({
         id: ruleId,
         campanha_id: campanhaId,
-        trigger_type: triggerType,
-        campanha_stage_id: triggerType === "lead_moved_to_stage" ? selectedStageId : null,
+        trigger_type: trigType,
+        campanha_stage_id: trigType === "lead_moved_to_stage" ? stageId : null,
       });
       const { error: deleteError } = await supabase
         .from("campanha_dispatch_rule_steps")
@@ -189,12 +257,19 @@ export function CampanhaDispatchRulesSection({ campanhaId, stages }: CampanhaDis
         .eq("rule_id", ruleId);
       if (deleteError) throw deleteError;
       for (let i = 0; i < validSteps.length; i++) {
-        const delay = Number(validSteps[i].delay_minutes);
         await createStep.mutateAsync({
           rule_id: ruleId,
-          template_id: validSteps[i].template_id,
-          delay_minutes: Number.isFinite(delay) && delay >= 0 ? delay : 0,
+          action_type: validSteps[i].action_type,
+          template_id: validSteps[i].action_type === "send_template" ? validSteps[i].template_id : null,
+          delay_minutes: validSteps[i].delay_minutes,
           position: i,
+          wait_timeout_minutes: validSteps[i].action_type === "wait_response" ? validSteps[i].wait_timeout_minutes : null,
+          timeout_action: validSteps[i].action_type === "wait_response" ? validSteps[i].timeout_action : null,
+          timeout_target_stage_id: validSteps[i].timeout_action === "change_stage" ? validSteps[i].timeout_target_stage_id : null,
+          timeout_template_id: validSteps[i].timeout_action === "send_template" ? validSteps[i].timeout_template_id : null,
+          target_stage_id: validSteps[i].action_type === "change_stage" ? validSteps[i].target_stage_id : null,
+          sdr_assignment_mode: validSteps[i].action_type === "assign_sdr" ? validSteps[i].sdr_assignment_mode : null,
+          target_sdr_id: validSteps[i].sdr_assignment_mode === "specific" ? validSteps[i].target_sdr_id : null,
         });
       }
       toast.success("Regra atualizada");
@@ -225,20 +300,18 @@ export function CampanhaDispatchRulesSection({ campanhaId, stages }: CampanhaDis
         toast.error(error.message || "Erro ao processar fila");
         return;
       }
-      const result = data as { processed?: number; sent?: number; failed?: number; message?: string } | null;
-      if (result?.processed === 0) {
+      const result = data as { processed?: number; sent?: number; failed?: number; actions_executed?: number; message?: string } | null;
+      if (result?.processed === 0 && !result?.actions_executed) {
         toast.info(result?.message || "Nenhuma mensagem pendente");
       } else if (result?.processed != null) {
         toast.success(
-          `Processado: ${result.processed} | Enviadas: ${result.sent ?? 0} | Falhas: ${result.failed ?? 0}`
+          `Enviadas: ${result.sent ?? 0} | Ações: ${result.actions_executed ?? 0} | Falhas: ${result.failed ?? 0}`
         );
-        queryClient.invalidateQueries({ queryKey: ["dispatch_log", campanhaId] });
-        queryClient.invalidateQueries({ queryKey: ["dispatch_metrics", campanhaId] });
       } else {
         toast.success("Fila processada");
-        queryClient.invalidateQueries({ queryKey: ["dispatch_log", campanhaId] });
-        queryClient.invalidateQueries({ queryKey: ["dispatch_metrics", campanhaId] });
       }
+      queryClient.invalidateQueries({ queryKey: ["dispatch_log", campanhaId] });
+      queryClient.invalidateQueries({ queryKey: ["dispatch_metrics", campanhaId] });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Erro ao processar fila");
     } finally {
@@ -261,17 +334,16 @@ export function CampanhaDispatchRulesSection({ campanhaId, stages }: CampanhaDis
       <CollapsibleContent>
         <div className="rounded-lg border bg-muted/30 p-4 mt-2 space-y-4">
           <p className="text-xs text-muted-foreground">
-            Mensagens disparadas automaticamente quando um lead é adicionado à campanha ou movido para uma etapa. Configure a sequência de templates e o delay entre cada envio.
+            Automações disparadas quando um lead é adicionado ou movido de etapa. Configure sequências com templates, espera de resposta, mudança de etapa, atribuição de SDR e mais.
           </p>
           {isLoading ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              Carregando…
+              <Loader2 className="w-4 h-4 animate-spin" /> Carregando…
             </div>
           ) : isError ? (
             <p className="text-sm text-destructive">
-              {(queryError as { message?: string })?.message?.includes("does not exist") || (queryError as { message?: string })?.message?.includes("relation")
-                ? "Tabela de regras não encontrada. Execute as migrations do Supabase (campanhas_whatsapp_instance_and_dispatch_rules)."
+              {(queryError as { message?: string })?.message?.includes("does not exist")
+                ? "Tabela de regras não encontrada. Execute as migrations."
                 : (queryError as Error)?.message ?? "Erro ao carregar regras."}
             </p>
           ) : (
@@ -286,193 +358,68 @@ export function CampanhaDispatchRulesSection({ campanhaId, stages }: CampanhaDis
                       rule={r}
                       stages={stages}
                       getStageName={getStageName}
-                      onEdit={() => handleEdit(r)}
+                      onEdit={() => setEditingRule(r)}
                       onDelete={() => handleDelete(r)}
                       isDeleting={deleteRule.isPending}
                     />
                   ))
                 )}
               </ul>
+
               <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={handleProcessQueue}
-                  disabled={processingQueue}
-                >
-                  {processingQueue ? (
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  ) : (
-                    <Play className="w-4 h-4 mr-2" />
-                  )}
+                <Button type="button" variant="secondary" size="sm" onClick={handleProcessQueue} disabled={processingQueue}>
+                  {processingQueue ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Play className="w-4 h-4 mr-2" />}
                   Processar fila agora
                 </Button>
-                {!addOpen ? (
+                {!addOpen && (
                   <Button type="button" variant="outline" size="sm" onClick={() => setAddOpen(true)}>
-                    <Plus className="w-4 h-4 mr-2" />
-                    Adicionar regra de envio
+                    <Plus className="w-4 h-4 mr-2" /> Adicionar regra
                   </Button>
-                ) : null}
+                )}
               </div>
 
               {/* Dispatch Metrics */}
-              {dispatchMetrics && (dispatchMetrics.sent > 0 || dispatchMetrics.scheduled > 0 || dispatchMetrics.failed > 0) && (
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="flex items-center gap-2 rounded-lg border bg-background p-3">
-                    <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />
-                    <div>
-                      <p className="text-lg font-semibold leading-none">{dispatchMetrics.sent}</p>
-                      <p className="text-xs text-muted-foreground">Enviadas</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 rounded-lg border bg-background p-3">
-                    <Clock className="w-4 h-4 text-yellow-500 shrink-0" />
-                    <div>
-                      <p className="text-lg font-semibold leading-none">{dispatchMetrics.scheduled}</p>
-                      <p className="text-xs text-muted-foreground">Pendentes</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 rounded-lg border bg-background p-3">
-                    <XCircle className="w-4 h-4 text-red-500 shrink-0" />
-                    <div>
-                      <p className="text-lg font-semibold leading-none">{dispatchMetrics.failed}</p>
-                      <p className="text-xs text-muted-foreground">Falharam</p>
-                    </div>
-                  </div>
+              {dispatchMetrics && (dispatchMetrics.sent > 0 || dispatchMetrics.scheduled > 0 || dispatchMetrics.failed > 0 || dispatchMetrics.waiting_response > 0 || dispatchMetrics.executed > 0) && (
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                  <MetricCard icon={CheckCircle2} color="text-green-500" value={dispatchMetrics.sent} label="Enviadas" />
+                  <MetricCard icon={Clock} color="text-yellow-500" value={dispatchMetrics.scheduled} label="Pendentes" />
+                  <MetricCard icon={Hourglass} color="text-blue-500" value={dispatchMetrics.waiting_response} label="Aguardando" />
+                  <MetricCard icon={ArrowRightLeft} color="text-purple-500" value={dispatchMetrics.executed} label="Ações" />
+                  <MetricCard icon={XCircle} color="text-red-500" value={dispatchMetrics.failed} label="Falharam" />
                 </div>
               )}
-              {addOpen ? (
-                <div className="space-y-4 rounded-md border border-dashed p-3">
-                  <div className="grid gap-2">
-                    <Label>Gatilho</Label>
-                    <Select
-                      value={triggerType}
-                      onValueChange={(v) => {
-                        setTriggerType(v as CampanhaDispatchRuleTriggerType);
-                        setSelectedStageId("");
-                      }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="lead_created">{TRIGGER_LABELS.lead_created}</SelectItem>
-                        <SelectItem value="lead_moved_to_stage">{TRIGGER_LABELS.lead_moved_to_stage}</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  {triggerType === "lead_moved_to_stage" && (
-                    <div className="grid gap-2">
-                      <Label>Etapa da campanha</Label>
-                      <Select value={selectedStageId} onValueChange={setSelectedStageId}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione a etapa" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {stages.map((s) => (
-                            <SelectItem key={s.id} value={s.id}>
-                              {s.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
-                  <div className="space-y-2">
-                    <Label className="flex items-center gap-2">
-                      <ListOrdered className="w-4 h-4" />
-                      Sequência de mensagens
-                    </Label>
-                    {steps.map((step, index) => (
-                      <div key={index} className="flex items-center gap-2 flex-wrap">
-                        <Select
-                          value={step.template_id}
-                          onValueChange={(v) => handleStepChange(index, "template_id", v)}
-                        >
-                          <SelectTrigger className="flex-1 min-w-[180px]">
-                            <SelectValue placeholder="Template" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {templates.map((t) => (
-                              <SelectItem key={t.template_id} value={t.template_id}>
-                                {(t as CampanhaTemplate).template?.name ?? t.template_id}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <Input
-                          type="number"
-                          min={0}
-                          placeholder="0"
-                          className="w-20"
-                          value={step.delay_minutes === 0 ? "" : step.delay_minutes}
-                          onChange={(e) => {
-                            const v = e.target.value;
-                            handleStepChange(index, "delay_minutes", v === "" ? 0 : Number(v));
-                          }}
-                        />
-                        <span className="text-xs text-muted-foreground">min</span>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-destructive"
-                          onClick={() => handleRemoveStep(index)}
-                          disabled={steps.length <= 1}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    ))}
-                    <Button type="button" variant="ghost" size="sm" onClick={handleAddStep}>
-                      <Plus className="w-4 h-4 mr-1" />
-                      Adicionar passo
-                    </Button>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setAddOpen(false);
-                        setTriggerType("lead_created");
-                        setSelectedStageId("");
-                        setSteps([{ template_id: "", delay_minutes: 0 }]);
-                      }}
-                    >
-                      Cancelar
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={handleAddRule}
-                      disabled={
-                        createRule.isPending ||
-                        createStep.isPending ||
-                        (triggerType === "lead_moved_to_stage" && !selectedStageId) ||
-                        steps.every((s) => !s.template_id)
-                      }
-                    >
-                      {(createRule.isPending || createStep.isPending) && (
-                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                      )}
-                      Salvar regra
-                    </Button>
-                  </div>
-                </div>
-              ) : null}
-              {editingRule ? (
+
+              {addOpen && (
+                <RuleForm
+                  triggerType={triggerType}
+                  setTriggerType={(v) => { setTriggerType(v); setSelectedStageId(""); }}
+                  selectedStageId={selectedStageId}
+                  setSelectedStageId={setSelectedStageId}
+                  steps={steps}
+                  setSteps={setSteps}
+                  stages={stages}
+                  templates={templates}
+                  teamMembers={teamMembers}
+                  onAddStep={handleAddStep}
+                  onRemoveStep={handleRemoveStep}
+                  onStepChange={handleStepChange}
+                  onCancel={() => { setAddOpen(false); setSteps([defaultStep()]); setTriggerType("lead_created"); setSelectedStageId(""); }}
+                  onSave={handleAddRule}
+                  isSaving={createRule.isPending || createStep.isPending}
+                />
+              )}
+
+              {editingRule && (
                 <EditRuleModal
                   rule={editingRule}
                   stages={stages}
                   templates={templates}
+                  teamMembers={teamMembers}
                   onClose={() => setEditingRule(null)}
                   onSave={handleSaveEdit}
                   isSaving={updateRule.isPending || createStep.isPending}
                 />
-              ) : null}
+              )}
             </>
           )}
         </div>
@@ -481,13 +428,26 @@ export function CampanhaDispatchRulesSection({ campanhaId, stages }: CampanhaDis
   );
 }
 
+// ============================
+// Metric Card
+// ============================
+function MetricCard({ icon: Icon, color, value, label }: { icon: typeof Send; color: string; value: number; label: string }) {
+  return (
+    <div className="flex items-center gap-2 rounded-lg border bg-background p-2.5">
+      <Icon className={`w-4 h-4 ${color} shrink-0`} />
+      <div>
+        <p className="text-base font-semibold leading-none">{value}</p>
+        <p className="text-[11px] text-muted-foreground">{label}</p>
+      </div>
+    </div>
+  );
+}
+
+// ============================
+// Rule Row (list item)
+// ============================
 function RuleRow({
-  rule,
-  stages,
-  getStageName,
-  onEdit,
-  onDelete,
-  isDeleting,
+  rule, stages, getStageName, onEdit, onDelete, isDeleting,
 }: {
   rule: CampanhaDispatchRule;
   stages: CampanhaStage[];
@@ -497,38 +457,25 @@ function RuleRow({
   isDeleting: boolean;
 }) {
   const { data: ruleSteps = [] } = useCampanhaDispatchRuleSteps(rule.id);
-  const label =
-    rule.trigger_type === "lead_created"
-      ? TRIGGER_LABELS.lead_created
-      : `${TRIGGER_LABELS.lead_moved_to_stage}: ${rule.campanha_stage_id ? getStageName(rule.campanha_stage_id) : "—"}`;
+  const label = rule.trigger_type === "lead_created"
+    ? TRIGGER_LABELS.lead_created
+    : `${TRIGGER_LABELS.lead_moved_to_stage}: ${rule.campanha_stage_id ? getStageName(rule.campanha_stage_id) : "—"}`;
+
+  const stepSummary = ruleSteps.map((s) => ACTION_LABELS[s.action_type as CampanhaDispatchRuleStepActionType] || s.action_type);
+
   return (
     <li className="flex items-center justify-between gap-2 rounded-md border bg-card px-3 py-2 text-sm">
-      <div>
+      <div className="min-w-0">
         <span className="text-muted-foreground">{label}</span>
         <span className="ml-2 text-muted-foreground">
-          — {ruleSteps.length} mensagem(ns) na sequência
+          — {ruleSteps.length} passo(s): {stepSummary.join(" → ")}
         </span>
       </div>
-      <div className="flex items-center gap-1">
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8"
-          onClick={onEdit}
-          aria-label="Editar regra"
-        >
+      <div className="flex items-center gap-1 shrink-0">
+        <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={onEdit}>
           <Pencil className="w-4 h-4" />
         </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 text-destructive hover:text-destructive"
-          onClick={onDelete}
-          disabled={isDeleting}
-          aria-label="Excluir regra"
-        >
+        <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={onDelete} disabled={isDeleting}>
           <Trash2 className="w-4 h-4" />
         </Button>
       </div>
@@ -536,32 +483,251 @@ function RuleRow({
   );
 }
 
-interface EditRuleModalProps {
+// ============================
+// Step Editor Row
+// ============================
+function StepEditorRow({
+  step, index, stages, templates, teamMembers, onChange, onRemove, canRemove,
+}: {
+  step: StepFormState;
+  index: number;
+  stages: CampanhaStage[];
+  templates: CampanhaTemplate[];
+  teamMembers: { id: string; name: string; role?: string }[];
+  onChange: (updates: Partial<StepFormState>) => void;
+  onRemove: () => void;
+  canRemove: boolean;
+}) {
+  const Icon = ACTION_ICONS[step.action_type] || MessageSquare;
+
+  return (
+    <div className="rounded-md border border-dashed p-3 space-y-2">
+      <div className="flex items-center gap-2">
+        <Icon className="w-4 h-4 text-muted-foreground shrink-0" />
+        <Select value={step.action_type} onValueChange={(v) => onChange({ action_type: v as CampanhaDispatchRuleStepActionType })}>
+          <SelectTrigger className="flex-1">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {(Object.keys(ACTION_LABELS) as CampanhaDispatchRuleStepActionType[]).map((at) => (
+              <SelectItem key={at} value={at}>{ACTION_LABELS[at]}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Input
+          type="number" min={0} placeholder="0" className="w-20"
+          value={step.delay_minutes === 0 ? "" : step.delay_minutes}
+          onChange={(e) => onChange({ delay_minutes: e.target.value === "" ? 0 : Number(e.target.value) })}
+        />
+        <span className="text-xs text-muted-foreground whitespace-nowrap">min delay</span>
+        <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={onRemove} disabled={!canRemove}>
+          <Trash2 className="w-4 h-4" />
+        </Button>
+      </div>
+
+      {/* send_template fields */}
+      {step.action_type === "send_template" && (
+        <Select value={step.template_id} onValueChange={(v) => onChange({ template_id: v })}>
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder="Selecione o template" />
+          </SelectTrigger>
+          <SelectContent>
+            {templates.map((t) => (
+              <SelectItem key={t.template_id} value={t.template_id}>
+                {(t as CampanhaTemplate).template?.name ?? t.template_id}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
+
+      {/* wait_response fields */}
+      {step.action_type === "wait_response" && (
+        <div className="space-y-2 pl-6">
+          <div className="flex items-center gap-2">
+            <Label className="text-xs whitespace-nowrap">Timeout:</Label>
+            <Input
+              type="number" min={1} className="w-20"
+              value={step.wait_timeout_minutes}
+              onChange={(e) => onChange({ wait_timeout_minutes: Number(e.target.value) || 1440 })}
+            />
+            <span className="text-xs text-muted-foreground">min ({Math.round(step.wait_timeout_minutes / 60)}h)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Label className="text-xs whitespace-nowrap">Se não responder:</Label>
+            <Select value={step.timeout_action} onValueChange={(v) => onChange({ timeout_action: v as CampanhaDispatchRuleTimeoutAction })}>
+              <SelectTrigger className="flex-1">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(Object.keys(TIMEOUT_ACTION_LABELS) as CampanhaDispatchRuleTimeoutAction[]).map((ta) => (
+                  <SelectItem key={ta} value={ta}>{TIMEOUT_ACTION_LABELS[ta]}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {step.timeout_action === "change_stage" && (
+            <Select value={step.timeout_target_stage_id} onValueChange={(v) => onChange({ timeout_target_stage_id: v })}>
+              <SelectTrigger><SelectValue placeholder="Etapa destino (timeout)" /></SelectTrigger>
+              <SelectContent>
+                {stages.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          )}
+          {step.timeout_action === "send_template" && (
+            <Select value={step.timeout_template_id} onValueChange={(v) => onChange({ timeout_template_id: v })}>
+              <SelectTrigger><SelectValue placeholder="Template (timeout)" /></SelectTrigger>
+              <SelectContent>
+                {templates.map((t) => (
+                  <SelectItem key={t.template_id} value={t.template_id}>
+                    {(t as CampanhaTemplate).template?.name ?? t.template_id}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
+      )}
+
+      {/* change_stage fields */}
+      {step.action_type === "change_stage" && (
+        <Select value={step.target_stage_id} onValueChange={(v) => onChange({ target_stage_id: v })}>
+          <SelectTrigger><SelectValue placeholder="Etapa destino" /></SelectTrigger>
+          <SelectContent>
+            {stages.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      )}
+
+      {/* assign_sdr fields */}
+      {step.action_type === "assign_sdr" && (
+        <div className="space-y-2 pl-6">
+          <Select value={step.sdr_assignment_mode} onValueChange={(v) => onChange({ sdr_assignment_mode: v as SdrAssignmentMode })}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="specific">SDR específico</SelectItem>
+              <SelectItem value="round_robin">Round-robin (distribuir)</SelectItem>
+            </SelectContent>
+          </Select>
+          {step.sdr_assignment_mode === "specific" && (
+            <Select value={step.target_sdr_id} onValueChange={(v) => onChange({ target_sdr_id: v })}>
+              <SelectTrigger><SelectValue placeholder="Selecione o SDR" /></SelectTrigger>
+              <SelectContent>
+                {teamMembers.map((m) => (
+                  <SelectItem key={m.id} value={m.id}>{m.name}{m.role ? ` (${m.role})` : ""}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
+      )}
+
+      {/* cancel_sequence - no extra fields */}
+      {step.action_type === "cancel_sequence" && (
+        <p className="text-xs text-muted-foreground pl-6">Cancela todas as mensagens pendentes desta regra para o lead.</p>
+      )}
+    </div>
+  );
+}
+
+// ============================
+// Rule Form (used in add and edit)
+// ============================
+function RuleForm({
+  triggerType, setTriggerType, selectedStageId, setSelectedStageId,
+  steps, setSteps, stages, templates, teamMembers,
+  onAddStep, onRemoveStep, onStepChange,
+  onCancel, onSave, isSaving,
+}: {
+  triggerType: CampanhaDispatchRuleTriggerType;
+  setTriggerType: (v: CampanhaDispatchRuleTriggerType) => void;
+  selectedStageId: string;
+  setSelectedStageId: (v: string) => void;
+  steps: StepFormState[];
+  setSteps: React.Dispatch<React.SetStateAction<StepFormState[]>>;
+  stages: CampanhaStage[];
+  templates: CampanhaTemplate[];
+  teamMembers: { id: string; name: string; role?: string }[];
+  onAddStep: () => void;
+  onRemoveStep: (i: number) => void;
+  onStepChange: (i: number, updates: Partial<StepFormState>) => void;
+  onCancel: () => void;
+  onSave: () => void;
+  isSaving: boolean;
+}) {
+  return (
+    <div className="space-y-4 rounded-md border border-dashed p-3">
+      <div className="grid gap-2">
+        <Label>Gatilho</Label>
+        <Select value={triggerType} onValueChange={(v) => setTriggerType(v as CampanhaDispatchRuleTriggerType)}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="lead_created">{TRIGGER_LABELS.lead_created}</SelectItem>
+            <SelectItem value="lead_moved_to_stage">{TRIGGER_LABELS.lead_moved_to_stage}</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      {triggerType === "lead_moved_to_stage" && (
+        <div className="grid gap-2">
+          <Label>Etapa da campanha</Label>
+          <Select value={selectedStageId} onValueChange={setSelectedStageId}>
+            <SelectTrigger><SelectValue placeholder="Selecione a etapa" /></SelectTrigger>
+            <SelectContent>
+              {stages.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+      <div className="space-y-2">
+        <Label className="flex items-center gap-2">
+          <ListOrdered className="w-4 h-4" /> Sequência de ações
+        </Label>
+        {steps.map((step, index) => (
+          <StepEditorRow
+            key={index}
+            step={step}
+            index={index}
+            stages={stages}
+            templates={templates}
+            teamMembers={teamMembers}
+            onChange={(updates) => onStepChange(index, updates)}
+            onRemove={() => onRemoveStep(index)}
+            canRemove={steps.length > 1}
+          />
+        ))}
+        <Button type="button" variant="ghost" size="sm" onClick={onAddStep}>
+          <Plus className="w-4 h-4 mr-1" /> Adicionar passo
+        </Button>
+      </div>
+      <div className="flex gap-2">
+        <Button type="button" variant="outline" size="sm" onClick={onCancel}>Cancelar</Button>
+        <Button type="button" size="sm" onClick={onSave} disabled={isSaving}>
+          {isSaving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+          Salvar regra
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ============================
+// Edit Rule Modal
+// ============================
+function EditRuleModal({
+  rule, stages, templates, teamMembers, onClose, onSave, isSaving,
+}: {
   rule: CampanhaDispatchRule;
   stages: CampanhaStage[];
   templates: CampanhaTemplate[];
+  teamMembers: { id: string; name: string; role?: string }[];
   onClose: () => void;
-  onSave: (
-    ruleId: string,
-    triggerType: CampanhaDispatchRuleTriggerType,
-    selectedStageId: string,
-    steps: { template_id: string; delay_minutes: number }[]
-  ) => Promise<void>;
+  onSave: (ruleId: string, triggerType: CampanhaDispatchRuleTriggerType, selectedStageId: string, steps: StepFormState[]) => Promise<void>;
   isSaving: boolean;
-}
-
-function EditRuleModal({
-  rule,
-  stages,
-  templates,
-  onClose,
-  onSave,
-  isSaving,
-}: EditRuleModalProps) {
+}) {
   const { data: ruleSteps = [], isLoading: loadingSteps } = useCampanhaDispatchRuleSteps(rule.id);
   const [triggerType, setTriggerType] = useState<CampanhaDispatchRuleTriggerType>(rule.trigger_type);
   const [selectedStageId, setSelectedStageId] = useState<string>(rule.campanha_stage_id ?? "");
-  const [steps, setSteps] = useState<{ template_id: string; delay_minutes: number }[]>([]);
+  const [steps, setSteps] = useState<StepFormState[]>([]);
 
   useEffect(() => {
     if (ruleSteps.length > 0) {
@@ -569,155 +735,57 @@ function EditRuleModal({
         ruleSteps
           .sort((a, b) => a.position - b.position)
           .map((s) => ({
-            template_id: s.template_id,
+            action_type: (s.action_type as CampanhaDispatchRuleStepActionType) || "send_template",
+            template_id: s.template_id || "",
             delay_minutes: s.delay_minutes ?? 0,
+            wait_timeout_minutes: s.wait_timeout_minutes ?? 1440,
+            timeout_action: (s.timeout_action as CampanhaDispatchRuleTimeoutAction) || "continue",
+            timeout_target_stage_id: s.timeout_target_stage_id || "",
+            timeout_template_id: s.timeout_template_id || "",
+            target_stage_id: s.target_stage_id || "",
+            sdr_assignment_mode: (s.sdr_assignment_mode as SdrAssignmentMode) || "specific",
+            target_sdr_id: s.target_sdr_id || "",
           }))
       );
     } else {
-      setSteps([{ template_id: "", delay_minutes: 0 }]);
+      setSteps([defaultStep()]);
     }
   }, [ruleSteps]);
 
-  const handleAddStep = () => {
-    setSteps((prev) => [...prev, { template_id: "", delay_minutes: 0 }]);
-  };
-
-  const handleRemoveStep = (index: number) => {
-    if (steps.length <= 1) return;
-    setSteps((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  const handleStepChange = (index: number, field: "template_id" | "delay_minutes", value: string | number) => {
-    setSteps((prev) =>
-      prev.map((s, i) =>
-        i === index ? { ...s, [field]: field === "delay_minutes" ? Number(value) || 0 : value } : s
-      )
-    );
-  };
-
-  const handleSubmit = async () => {
-    await onSave(rule.id, triggerType, selectedStageId, steps);
+  const handleAddStep = () => setSteps((prev) => [...prev, defaultStep()]);
+  const handleRemoveStep = (i: number) => { if (steps.length > 1) setSteps((prev) => prev.filter((_, idx) => idx !== i)); };
+  const handleStepChange = (i: number, updates: Partial<StepFormState>) => {
+    setSteps((prev) => prev.map((s, idx) => (idx === i ? { ...s, ...updates } : s)));
   };
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Editar regra de envio</DialogTitle>
         </DialogHeader>
         {loadingSteps ? (
           <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
-            <Loader2 className="w-4 h-4 animate-spin" />
-            Carregando…
+            <Loader2 className="w-4 h-4 animate-spin" /> Carregando…
           </div>
         ) : (
-          <div className="space-y-4 pt-2">
-            <div className="grid gap-2">
-              <Label>Gatilho</Label>
-              <Select
-                value={triggerType}
-                onValueChange={(v) => {
-                  setTriggerType(v as CampanhaDispatchRuleTriggerType);
-                  setSelectedStageId(v === "lead_moved_to_stage" ? selectedStageId : "");
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="lead_created">{TRIGGER_LABELS.lead_created}</SelectItem>
-                  <SelectItem value="lead_moved_to_stage">{TRIGGER_LABELS.lead_moved_to_stage}</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {triggerType === "lead_moved_to_stage" && (
-              <div className="grid gap-2">
-                <Label>Etapa da campanha</Label>
-                <Select value={selectedStageId} onValueChange={setSelectedStageId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione a etapa" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {stages.map((s) => (
-                      <SelectItem key={s.id} value={s.id}>
-                        {s.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-            <div className="space-y-2">
-              <Label className="flex items-center gap-2">
-                <ListOrdered className="w-4 h-4" />
-                Sequência de mensagens
-              </Label>
-              {steps.map((step, index) => (
-                <div key={index} className="flex items-center gap-2 flex-wrap">
-                  <Select
-                    value={step.template_id}
-                    onValueChange={(v) => handleStepChange(index, "template_id", v)}
-                  >
-                    <SelectTrigger className="flex-1 min-w-[180px]">
-                      <SelectValue placeholder="Template" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {templates.map((t) => (
-                        <SelectItem key={t.template_id} value={t.template_id}>
-                          {(t as CampanhaTemplate).template?.name ?? t.template_id}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Input
-                    type="number"
-                    min={0}
-                    placeholder="0"
-                    className="w-20"
-                    value={step.delay_minutes === 0 ? "" : step.delay_minutes}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      handleStepChange(index, "delay_minutes", v === "" ? 0 : Number(v));
-                    }}
-                  />
-                  <span className="text-xs text-muted-foreground">min</span>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-destructive"
-                    onClick={() => handleRemoveStep(index)}
-                    disabled={steps.length <= 1}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </div>
-              ))}
-              <Button type="button" variant="ghost" size="sm" onClick={handleAddStep}>
-                <Plus className="w-4 h-4 mr-1" />
-                Adicionar passo
-              </Button>
-            </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <Button type="button" variant="outline" onClick={onClose}>
-                Cancelar
-              </Button>
-              <Button
-                type="button"
-                onClick={handleSubmit}
-                disabled={
-                  isSaving ||
-                  (triggerType === "lead_moved_to_stage" && !selectedStageId) ||
-                  steps.every((s) => !s.template_id)
-                }
-              >
-                {isSaving ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : null}
-                Salvar alterações
-              </Button>
-            </div>
-          </div>
+          <RuleForm
+            triggerType={triggerType}
+            setTriggerType={(v) => { setTriggerType(v); setSelectedStageId(v === "lead_moved_to_stage" ? selectedStageId : ""); }}
+            selectedStageId={selectedStageId}
+            setSelectedStageId={setSelectedStageId}
+            steps={steps}
+            setSteps={setSteps}
+            stages={stages}
+            templates={templates}
+            teamMembers={teamMembers}
+            onAddStep={handleAddStep}
+            onRemoveStep={handleRemoveStep}
+            onStepChange={handleStepChange}
+            onCancel={onClose}
+            onSave={() => onSave(rule.id, triggerType, selectedStageId, steps)}
+            isSaving={isSaving}
+          />
         )}
       </DialogContent>
     </Dialog>

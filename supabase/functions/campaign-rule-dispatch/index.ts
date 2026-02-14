@@ -7,12 +7,14 @@
  * - Com body { campanha_id }: processa apenas essa campanha (UI button, pg_net trigger)
  * - Sem campanha_id: descobre campanhas com mensagens pendentes e processa cada uma separadamente (pg_cron)
  *
- * Fluxo por campanha:
- * 1. Buscar scheduled_campaign_messages com status = 'scheduled' e scheduled_at <= NOW()
- * 2. Para cada linha: obter lead, template, instância (da linha ou fallback org)
- * 3. Enviar via Evolution API (substituir variáveis, texto/áudio)
- * 4. Atualizar scheduled_campaign_messages e outbound_dispatch_log
- * 5. Respeitar rate limit
+ * Action types suportados:
+ * - send_template: envia mensagem via Evolution API (texto/áudio)
+ * - wait_response: transita para waiting_response; lead responde → trigger PG agenda próximos steps
+ * - change_stage: move lead para outra etapa da campanha
+ * - assign_sdr: atribui SDR (fixo ou round_robin)
+ * - cancel_sequence: cancela todos os steps pendentes dessa regra para esse lead
+ *
+ * Também processa timeouts de wait_response vencidos.
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -35,6 +37,8 @@ interface ProcessResult {
   processed: number;
   sent: number;
   failed: number;
+  actions_executed: number;
+  timeouts_processed: number;
   error?: string;
 }
 
@@ -92,7 +96,6 @@ Deno.serve(async (req) => {
 
   try {
     if (campanhaId) {
-      // === Single campaign mode (UI button / pg_net trigger) ===
       console.log("[campaign-rule-dispatch] Single campaign mode:", campanhaId);
       const result = await processCampaignQueue(supabase, campanhaId);
       return new Response(
@@ -100,25 +103,23 @@ Deno.serve(async (req) => {
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     } else {
-      // === All campaigns mode (pg_cron) - isolated per campaign ===
       console.log("[campaign-rule-dispatch] Multi-campaign mode (isolated)");
 
-      // Get distinct campaign IDs with pending messages
-      const { data: pending, error: pendingErr } = await supabase
+      // Get distinct campaign IDs with pending messages (scheduled OR waiting_response with expired timeout)
+      const { data: pendingScheduled } = await supabase
         .from("scheduled_campaign_messages")
         .select("campanha_id")
         .eq("status", "scheduled")
         .lte("scheduled_at", new Date().toISOString());
 
-      if (pendingErr) {
-        console.error("[campaign-rule-dispatch] Error fetching pending campaigns:", pendingErr);
-        return new Response(
-          JSON.stringify({ error: "Failed to fetch pending campaigns", details: pendingErr.message }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
+      const { data: pendingTimeouts } = await supabase
+        .from("scheduled_campaign_messages")
+        .select("campanha_id")
+        .eq("status", "waiting_response")
+        .lte("wait_timeout_at", new Date().toISOString());
 
-      const uniqueCampaignIds = [...new Set((pending || []).map((r) => r.campanha_id))];
+      const allPending = [...(pendingScheduled || []), ...(pendingTimeouts || [])];
+      const uniqueCampaignIds = [...new Set(allPending.map((r) => r.campanha_id))];
 
       if (uniqueCampaignIds.length === 0) {
         return new Response(
@@ -127,12 +128,10 @@ Deno.serve(async (req) => {
         );
       }
 
-      console.log("[campaign-rule-dispatch] Found", uniqueCampaignIds.length, "campaign(s) with pending messages");
+      console.log("[campaign-rule-dispatch] Found", uniqueCampaignIds.length, "campaign(s) with pending work");
 
       const results: ProcessResult[] = [];
-      let totalSent = 0;
-      let totalFailed = 0;
-      let totalProcessed = 0;
+      let totalSent = 0, totalFailed = 0, totalProcessed = 0;
 
       for (const cId of uniqueCampaignIds) {
         const result = await processCampaignQueue(supabase, cId);
@@ -173,6 +172,12 @@ async function processCampaignQueue(
   supabase: SupabaseClient,
   campanhaId: string
 ): Promise<ProcessResult> {
+  let sent = 0, failed = 0, actionsExecuted = 0, timeoutsProcessed = 0;
+
+  // --- 1. Process expired wait_response timeouts ---
+  timeoutsProcessed = await processExpiredTimeouts(supabase, campanhaId);
+
+  // --- 2. Process scheduled items (all action types) ---
   const { data: rows, error: fetchError } = await supabase
     .from("scheduled_campaign_messages")
     .select(`
@@ -184,6 +189,14 @@ async function processCampaignQueue(
       template_id,
       whatsapp_instance_id,
       scheduled_at,
+      action_type,
+      target_stage_id,
+      sdr_assignment_mode,
+      target_sdr_id,
+      timeout_action,
+      timeout_target_stage_id,
+      timeout_template_id,
+      step_position,
       campanhas(id, organization_id),
       leads(id, name, company, phone, email, origin, segment),
       campaign_templates(id, name, content, message_type, audio_url, available_variables)
@@ -191,198 +204,363 @@ async function processCampaignQueue(
     .eq("campanha_id", campanhaId)
     .eq("status", "scheduled")
     .lte("scheduled_at", new Date().toISOString())
+    .order("scheduled_at", { ascending: true })
     .limit(BATCH_SIZE);
 
   if (fetchError) {
     console.error(`[campaign-rule-dispatch][${campanhaId}] Error fetching queue:`, fetchError);
-    return { campanha_id: campanhaId, processed: 0, sent: 0, failed: 0, error: fetchError.message };
+    return { campanha_id: campanhaId, processed: 0, sent: 0, failed: 0, actions_executed: 0, timeouts_processed: timeoutsProcessed, error: fetchError.message };
   }
 
   if (!rows || rows.length === 0) {
-    return { campanha_id: campanhaId, processed: 0, sent: 0, failed: 0 };
+    return { campanha_id: campanhaId, processed: 0, sent: 0, failed: 0, actions_executed: actionsExecuted, timeouts_processed: timeoutsProcessed };
   }
 
-  console.log(`[campaign-rule-dispatch][${campanhaId}] Processing ${rows.length} message(s)`);
-
-  let sent = 0;
-  let failed = 0;
+  console.log(`[campaign-rule-dispatch][${campanhaId}] Processing ${rows.length} item(s)`);
 
   for (const row of rows) {
     try {
+      const actionType = (row as any).action_type || "send_template";
       const campanha = (row as any).campanhas as { id: string; organization_id: string } | null;
       const lead = (row as any).leads as { id: string; name?: string; company?: string; phone?: string; email?: string; origin?: string; segment?: string } | null;
-      const template = (row as any).campaign_templates as { id: string; name?: string; content?: string; message_type?: string; audio_url?: string } | null;
 
-      if (!campanha?.organization_id || !lead || !template) {
-        await markFailed(supabase, row.id, "Missing campanha, lead or template");
+      if (!campanha?.organization_id || !lead) {
+        await markFailed(supabase, row.id, "Missing campanha or lead");
         failed++;
         continue;
       }
 
-      if (!lead.phone) {
-        await markFailed(supabase, row.id, "Lead has no phone");
-        failed++;
-        continue;
-      }
-
-      // --- Instance lookup with status check + fallback ---
-      let instance: { id: string; instance_name: string } | null = null;
-      if (row.whatsapp_instance_id) {
-        const { data: inst } = await supabase
-          .from("whatsapp_instances")
-          .select("id, instance_name, status")
-          .eq("id", row.whatsapp_instance_id)
-          .single();
-        if (inst && (inst.status === "connected" || inst.status === "open")) {
-          instance = { id: inst.id, instance_name: inst.instance_name };
+      // =========================
+      // ACTION: send_template
+      // =========================
+      if (actionType === "send_template") {
+        const template = (row as any).campaign_templates as { id: string; name?: string; content?: string; message_type?: string; audio_url?: string } | null;
+        if (!template) {
+          await markFailed(supabase, row.id, "Missing template");
+          failed++;
+          continue;
         }
-      }
-      if (!instance) {
-        const { data: instList } = await supabase
-          .from("whatsapp_instances")
-          .select("id, instance_name")
-          .eq("organization_id", campanha.organization_id)
-          .or("status.eq.open,status.eq.connected")
-          .limit(1);
-        instance = instList?.[0] ?? null;
-      }
+        if (!lead.phone) {
+          await markFailed(supabase, row.id, "Lead has no phone");
+          failed++;
+          continue;
+        }
 
-      if (!instance) {
-        await markFailed(supabase, row.id, "No active WhatsApp instance");
-        failed++;
-        continue;
-      }
+        const instance = await resolveInstance(supabase, row.whatsapp_instance_id, campanha.organization_id);
+        if (!instance) {
+          await markFailed(supabase, row.id, "No active WhatsApp instance");
+          failed++;
+          continue;
+        }
 
-      // --- Rate limit check ---
-      const { data: rateCheck } = await supabase.rpc("check_whatsapp_rate_limit", {
-        p_organization_id: campanha.organization_id,
-        p_instance_id: instance.id,
-      });
-      if (rateCheck?.[0] && !rateCheck[0].can_send) {
-        console.log(`[campaign-rule-dispatch][${campanhaId}] Rate limit exceeded, stopping campaign`);
-        break;
-      }
+        // Rate limit check
+        const { data: rateCheck } = await supabase.rpc("check_whatsapp_rate_limit", {
+          p_organization_id: campanha.organization_id,
+          p_instance_id: instance.id,
+        });
+        if (rateCheck?.[0] && !rateCheck[0].can_send) {
+          console.log(`[campaign-rule-dispatch][${campanhaId}] Rate limit exceeded, stopping campaign`);
+          break;
+        }
 
-      // --- Build message ---
-      const isAudio = template.message_type === "audio" && template.audio_url && String(template.audio_url).trim().length > 0;
-      const timeVars = getTimeBasedVariables();
-      const messageContent = isAudio ? "[Áudio]" : replaceVariables(template.content || "", {
-        nome: lead.name || "você",
-        empresa: lead.company || "",
-        email: lead.email || "",
-        telefone: lead.phone || "",
-        origem: lead.origin || "",
-        segmento: lead.segment || "",
-        faturamento: "",
-        saudacao: timeVars.saudacao,
-        data: timeVars.data,
-        hora: timeVars.hora,
-      });
-
-      // --- Send ---
-      let sendResult: { success: boolean; messageId?: string; error?: string };
-      if (isAudio) {
-        sendResult = await sendWhatsAppAudio(instance.instance_name, lead.phone, template.audio_url!);
-      } else {
-        sendResult = await sendWhatsAppMessage(instance.instance_name, lead.phone, messageContent);
-      }
-
-      if (sendResult.success) {
-        await supabase.from("scheduled_campaign_messages").update({
-          status: "sent",
-          sent_at: new Date().toISOString(),
-          error_message: null,
-        }).eq("id", row.id);
-
-        await supabase.from("outbound_dispatch_log").insert({
-          organization_id: campanha.organization_id,
-          lead_id: lead.id,
-          campanha_id: row.campanha_id,
-          template_id: row.template_id,
-          status: "sent",
-          message_content: messageContent,
-          message_id: sendResult.messageId,
-          sent_at: new Date().toISOString(),
+        const isAudio = template.message_type === "audio" && template.audio_url && String(template.audio_url).trim().length > 0;
+        const timeVars = getTimeBasedVariables();
+        const messageContent = isAudio ? "[Áudio]" : replaceVariables(template.content || "", {
+          nome: lead.name || "você",
+          empresa: lead.company || "",
+          email: lead.email || "",
+          telefone: lead.phone || "",
+          origem: lead.origin || "",
+          segmento: lead.segment || "",
+          faturamento: "",
+          saudacao: timeVars.saudacao,
+          data: timeVars.data,
+          hora: timeVars.hora,
         });
 
-        // --- Sync with chat: insert into whatsapp_messages so it appears in conversation ---
-        try {
-          const phone = lead.phone!.replace(/\D/g, "").replace(/^(?!55)/, "55");
-          const { error: chatErr } = await supabase.from("whatsapp_messages").insert({
-            organization_id: campanha.organization_id,
-            instance_id: instance.id,
-            message_id: sendResult.messageId || `campaign_${row.id}_${Date.now()}`,
-            remote_jid: `${phone}@s.whatsapp.net`,
-            phone_number: phone,
-            direction: "outgoing",
-            message_type: isAudio ? "audio" : "text",
-            content: isAudio ? null : messageContent,
-            media_url: isAudio ? template.audio_url : null,
+        let sendResult: { success: boolean; messageId?: string; error?: string };
+        if (isAudio) {
+          sendResult = await sendWhatsAppAudio(instance.instance_name, lead.phone, template.audio_url!);
+        } else {
+          sendResult = await sendWhatsAppMessage(instance.instance_name, lead.phone, messageContent);
+        }
+
+        if (sendResult.success) {
+          await supabase.from("scheduled_campaign_messages").update({
             status: "sent",
+            sent_at: new Date().toISOString(),
+            error_message: null,
+          }).eq("id", row.id);
+
+          await supabase.from("outbound_dispatch_log").insert({
+            organization_id: campanha.organization_id,
             lead_id: lead.id,
-            timestamp: new Date().toISOString(),
+            campanha_id: row.campanha_id,
+            template_id: row.template_id,
+            status: "sent",
+            message_content: messageContent,
+            message_id: sendResult.messageId,
+            sent_at: new Date().toISOString(),
           });
-          if (chatErr && !chatErr.message?.includes("duplicate")) {
-            console.warn("[campaign-rule-dispatch] whatsapp_messages insert failed:", chatErr);
+
+          // Sync with chat
+          try {
+            const phone = lead.phone!.replace(/\D/g, "").replace(/^(?!55)/, "55");
+            const { error: chatErr } = await supabase.from("whatsapp_messages").insert({
+              organization_id: campanha.organization_id,
+              instance_id: instance.id,
+              message_id: sendResult.messageId || `campaign_${row.id}_${Date.now()}`,
+              remote_jid: `${phone}@s.whatsapp.net`,
+              phone_number: phone,
+              direction: "outgoing",
+              message_type: isAudio ? "audio" : "text",
+              content: isAudio ? null : messageContent,
+              media_url: isAudio ? template.audio_url : null,
+              status: "sent",
+              lead_id: lead.id,
+              timestamp: new Date().toISOString(),
+            });
+            if (chatErr && !chatErr.message?.includes("duplicate")) {
+              console.warn("[campaign-rule-dispatch] whatsapp_messages insert failed:", chatErr);
+            }
+          } catch (chatSyncErr) {
+            console.warn("[campaign-rule-dispatch] chat sync error:", chatSyncErr);
           }
-        } catch (chatSyncErr) {
-          console.warn("[campaign-rule-dispatch] chat sync error:", chatSyncErr);
-        }
 
-        try {
-          const { error: rlErr } = await supabase.rpc("increment_whatsapp_rate_limit", {
-            p_organization_id: campanha.organization_id,
-            p_instance_id: instance.id,
+          try {
+            const { error: rlErr } = await supabase.rpc("increment_whatsapp_rate_limit", {
+              p_organization_id: campanha.organization_id,
+              p_instance_id: instance.id,
+            });
+            if (rlErr) console.warn("[campaign-rule-dispatch] increment_whatsapp_rate_limit failed:", rlErr);
+          } catch (e) {
+            console.warn("[campaign-rule-dispatch] increment_whatsapp_rate_limit error:", e);
+          }
+
+          try {
+            await supabase.rpc("increment", {
+              table_name: "campaign_templates",
+              row_id: template.id,
+              column_name: "times_used",
+            });
+          } catch (_) { /* ignore */ }
+
+          try {
+            await supabase.from("lead_history").insert({
+              lead_id: lead.id,
+              organization_id: campanha.organization_id,
+              action: "message_sent",
+              description: `Mensagem enviada via campanha: ${template.name || "template"}`,
+            });
+          } catch (_) { /* ignore */ }
+
+          sent++;
+          console.log(`[campaign-rule-dispatch][${campanhaId}] Sent to:`, lead.name, lead.phone);
+        } else {
+          await markFailed(supabase, row.id, sendResult.error ?? "Send failed");
+          await supabase.from("outbound_dispatch_log").insert({
+            organization_id: campanha.organization_id,
+            lead_id: lead.id,
+            campanha_id: row.campanha_id,
+            template_id: row.template_id,
+            status: "failed",
+            message_content: messageContent,
+            error_message: sendResult.error,
           });
-          if (rlErr) console.warn("[campaign-rule-dispatch] increment_whatsapp_rate_limit failed:", rlErr);
-        } catch (e) {
-          console.warn("[campaign-rule-dispatch] increment_whatsapp_rate_limit error:", e);
+          failed++;
         }
 
+        // Delay between sends
+        const { data: org } = await supabase.from("organizations").select("whatsapp_rate_limit").eq("id", campanha.organization_id).single();
+        const rateLimit = org?.whatsapp_rate_limit || {};
+        const minDelay = rateLimit.delay_min_ms ?? DEFAULT_DELAY_MIN_MS;
+        const maxDelay = rateLimit.delay_max_ms ?? DEFAULT_DELAY_MAX_MS;
+        await randomDelay(minDelay, maxDelay);
+
+      // =========================
+      // ACTION: wait_response
+      // =========================
+      } else if (actionType === "wait_response") {
+        const waitTimeoutMinutes = (row as any).wait_timeout_minutes ?? 1440;
+        const now = new Date();
+        const timeoutAt = new Date(now.getTime() + waitTimeoutMinutes * 60 * 1000);
+
+        await supabase.from("scheduled_campaign_messages").update({
+          status: "waiting_response",
+          waiting_since: now.toISOString(),
+          wait_timeout_at: timeoutAt.toISOString(),
+        }).eq("id", row.id);
+
+        actionsExecuted++;
+        console.log(`[campaign-rule-dispatch][${campanhaId}] Wait response started for lead ${lead.name}, timeout at ${timeoutAt.toISOString()}`);
+
         try {
-          await supabase.rpc("increment", {
-            table_name: "campaign_templates",
-            row_id: template.id,
-            column_name: "times_used",
+          await supabase.from("lead_history").insert({
+            lead_id: lead.id,
+            organization_id: campanha.organization_id,
+            action: "campaign_wait_response",
+            description: `Aguardando resposta do lead (timeout: ${waitTimeoutMinutes}min)`,
           });
         } catch (_) { /* ignore */ }
 
-        try {
-          const { error: histErr } = await supabase.from("lead_history").insert({
-            lead_id: lead.id,
-            organization_id: campanha.organization_id,
-            action: "message_sent",
-            description: `Mensagem enviada via campanha: ${template.name || "template"}`,
-          });
-          if (histErr) console.warn("[campaign-rule-dispatch] lead_history insert failed:", histErr);
-        } catch (err) {
-          console.warn("[campaign-rule-dispatch] lead_history error:", err);
+      // =========================
+      // ACTION: change_stage
+      // =========================
+      } else if (actionType === "change_stage") {
+        const targetStageId = (row as any).target_stage_id;
+        if (!targetStageId) {
+          await markFailed(supabase, row.id, "No target_stage_id for change_stage action");
+          failed++;
+          continue;
         }
 
-        sent++;
-        console.log(`[campaign-rule-dispatch][${campanhaId}] Sent to:`, lead.name, lead.phone);
-      } else {
-        await markFailed(supabase, row.id, sendResult.error ?? "Send failed");
+        const { error: stageErr } = await supabase
+          .from("campanha_leads")
+          .update({ stage_id: targetStageId })
+          .eq("id", row.campanha_lead_id);
 
-        await supabase.from("outbound_dispatch_log").insert({
-          organization_id: campanha.organization_id,
-          lead_id: lead.id,
-          campanha_id: row.campanha_id,
-          template_id: row.template_id,
-          status: "failed",
-          message_content: messageContent,
-          error_message: sendResult.error,
-        });
+        if (stageErr) {
+          await markFailed(supabase, row.id, `change_stage failed: ${stageErr.message}`);
+          failed++;
+        } else {
+          await supabase.from("scheduled_campaign_messages").update({
+            status: "executed",
+            sent_at: new Date().toISOString(),
+          }).eq("id", row.id);
 
-        failed++;
+          // Get stage name for history
+          const { data: stageData } = await supabase
+            .from("campanha_stages")
+            .select("name")
+            .eq("id", targetStageId)
+            .single();
+
+          try {
+            await supabase.from("lead_history").insert({
+              lead_id: lead.id,
+              organization_id: campanha.organization_id,
+              action: "campaign_stage_change",
+              description: `Etapa alterada automaticamente para: ${stageData?.name || targetStageId}`,
+            });
+          } catch (_) { /* ignore */ }
+
+          actionsExecuted++;
+          console.log(`[campaign-rule-dispatch][${campanhaId}] Changed stage for lead ${lead.name} to ${stageData?.name || targetStageId}`);
+        }
+
+      // =========================
+      // ACTION: assign_sdr
+      // =========================
+      } else if (actionType === "assign_sdr") {
+        const mode = (row as any).sdr_assignment_mode || "specific";
+        let sdrId: string | null = (row as any).target_sdr_id || null;
+
+        if (mode === "round_robin") {
+          // Find SDR with least leads in this campaign
+          const { data: sdrs } = await supabase
+            .from("team_members")
+            .select("id, name")
+            .eq("organization_id", campanha.organization_id)
+            .in("role", ["admin", "sdr", "member"]);
+
+          if (sdrs && sdrs.length > 0) {
+            // Count leads per SDR in this campaign
+            const { data: sdrCounts } = await supabase
+              .from("campanha_leads")
+              .select("sdr_id")
+              .eq("campanha_id", campanhaId)
+              .not("sdr_id", "is", null);
+
+            const countMap: Record<string, number> = {};
+            for (const s of sdrs) countMap[s.id] = 0;
+            for (const cl of sdrCounts || []) {
+              if (cl.sdr_id && countMap[cl.sdr_id] !== undefined) {
+                countMap[cl.sdr_id]++;
+              }
+            }
+
+            // Pick SDR with lowest count
+            let minCount = Infinity;
+            for (const s of sdrs) {
+              if ((countMap[s.id] ?? 0) < minCount) {
+                minCount = countMap[s.id] ?? 0;
+                sdrId = s.id;
+              }
+            }
+          }
+        }
+
+        if (!sdrId) {
+          await markFailed(supabase, row.id, "No SDR available for assignment");
+          failed++;
+          continue;
+        }
+
+        const { error: sdrErr } = await supabase
+          .from("campanha_leads")
+          .update({ sdr_id: sdrId })
+          .eq("id", row.campanha_lead_id);
+
+        if (sdrErr) {
+          await markFailed(supabase, row.id, `assign_sdr failed: ${sdrErr.message}`);
+          failed++;
+        } else {
+          await supabase.from("scheduled_campaign_messages").update({
+            status: "executed",
+            sent_at: new Date().toISOString(),
+          }).eq("id", row.id);
+
+          const { data: sdrData } = await supabase
+            .from("team_members")
+            .select("name")
+            .eq("id", sdrId)
+            .single();
+
+          try {
+            await supabase.from("lead_history").insert({
+              lead_id: lead.id,
+              organization_id: campanha.organization_id,
+              action: "campaign_sdr_assigned",
+              description: `SDR atribuído automaticamente: ${sdrData?.name || sdrId} (${mode})`,
+            });
+          } catch (_) { /* ignore */ }
+
+          actionsExecuted++;
+          console.log(`[campaign-rule-dispatch][${campanhaId}] Assigned SDR ${sdrData?.name || sdrId} to lead ${lead.name} (${mode})`);
+        }
+
+      // =========================
+      // ACTION: cancel_sequence
+      // =========================
+      } else if (actionType === "cancel_sequence") {
+        // Cancel all remaining scheduled messages for this lead+rule
+        const { data: cancelled } = await supabase
+          .from("scheduled_campaign_messages")
+          .update({ status: "cancelled" })
+          .eq("campanha_lead_id", row.campanha_lead_id)
+          .eq("rule_id", row.rule_id)
+          .eq("status", "scheduled")
+          .neq("id", row.id)
+          .select("id");
+
+        // Mark this action itself as executed
+        await supabase.from("scheduled_campaign_messages").update({
+          status: "executed",
+          sent_at: new Date().toISOString(),
+        }).eq("id", row.id);
+
+        try {
+          await supabase.from("lead_history").insert({
+            lead_id: lead.id,
+            organization_id: campanha.organization_id,
+            action: "campaign_sequence_cancelled",
+            description: `Sequência cancelada automaticamente (${cancelled?.length ?? 0} mensagens pendentes canceladas)`,
+          });
+        } catch (_) { /* ignore */ }
+
+        actionsExecuted++;
+        console.log(`[campaign-rule-dispatch][${campanhaId}] Cancelled sequence for lead ${lead.name}, ${cancelled?.length ?? 0} items cancelled`);
       }
-
-      // --- Delay between sends ---
-      const { data: org } = await supabase.from("organizations").select("whatsapp_rate_limit").eq("id", campanha.organization_id).single();
-      const rateLimit = org?.whatsapp_rate_limit || {};
-      const minDelay = rateLimit.delay_min_ms ?? DEFAULT_DELAY_MIN_MS;
-      const maxDelay = rateLimit.delay_max_ms ?? DEFAULT_DELAY_MAX_MS;
-      await randomDelay(minDelay, maxDelay);
     } catch (rowError) {
       console.error(`[campaign-rule-dispatch][${campanhaId}] Row error:`, row.id, rowError);
       try {
@@ -392,13 +570,182 @@ async function processCampaignQueue(
     }
   }
 
-  console.log(`[campaign-rule-dispatch][${campanhaId}] Done: ${sent} sent, ${failed} failed`);
-  return { campanha_id: campanhaId, processed: rows.length, sent, failed };
+  const totalProcessed = rows.length;
+  console.log(`[campaign-rule-dispatch][${campanhaId}] Done: ${sent} sent, ${actionsExecuted} actions, ${failed} failed, ${timeoutsProcessed} timeouts`);
+  return { campanha_id: campanhaId, processed: totalProcessed, sent, failed, actions_executed: actionsExecuted, timeouts_processed: timeoutsProcessed };
+}
+
+// ============================================================
+// Process expired wait_response timeouts for a campaign
+// ============================================================
+async function processExpiredTimeouts(
+  supabase: SupabaseClient,
+  campanhaId: string
+): Promise<number> {
+  const { data: expired, error } = await supabase
+    .from("scheduled_campaign_messages")
+    .select(`
+      id, campanha_id, rule_id, campanha_lead_id, lead_id,
+      whatsapp_instance_id, step_position,
+      timeout_action, timeout_target_stage_id, timeout_template_id,
+      campanhas(id, organization_id),
+      leads(id, name, phone)
+    `)
+    .eq("campanha_id", campanhaId)
+    .eq("status", "waiting_response")
+    .lte("wait_timeout_at", new Date().toISOString())
+    .limit(BATCH_SIZE);
+
+  if (error || !expired || expired.length === 0) return 0;
+
+  let count = 0;
+  for (const row of expired) {
+    try {
+      const campanha = (row as any).campanhas as { id: string; organization_id: string } | null;
+      const lead = (row as any).leads as { id: string; name?: string; phone?: string } | null;
+      const timeoutAction = row.timeout_action || "continue";
+
+      // Mark as timed_out
+      await supabase.from("scheduled_campaign_messages").update({
+        status: "timed_out",
+        sent_at: new Date().toISOString(),
+      }).eq("id", row.id);
+
+      if (campanha && lead) {
+        try {
+          await supabase.from("lead_history").insert({
+            lead_id: lead.id,
+            organization_id: campanha.organization_id,
+            action: "campaign_wait_timeout",
+            description: `Timeout de espera de resposta atingido. Ação: ${timeoutAction}`,
+          });
+        } catch (_) { /* ignore */ }
+      }
+
+      // Execute timeout action
+      if (timeoutAction === "change_stage" && row.timeout_target_stage_id) {
+        await supabase
+          .from("campanha_leads")
+          .update({ stage_id: row.timeout_target_stage_id })
+          .eq("id", row.campanha_lead_id);
+        console.log(`[campaign-rule-dispatch][${campanhaId}] Timeout: changed stage for lead ${lead?.name}`);
+
+      } else if (timeoutAction === "send_template" && row.timeout_template_id && lead?.phone) {
+        // Send the timeout template
+        const { data: tmpl } = await supabase
+          .from("campaign_templates")
+          .select("id, name, content, message_type, audio_url")
+          .eq("id", row.timeout_template_id)
+          .single();
+
+        if (tmpl && campanha) {
+          const instance = await resolveInstance(supabase, row.whatsapp_instance_id, campanha.organization_id);
+          if (instance) {
+            const isAudio = tmpl.message_type === "audio" && tmpl.audio_url;
+            const timeVars = getTimeBasedVariables();
+            const content = isAudio ? "[Áudio]" : replaceVariables(tmpl.content || "", {
+              nome: lead.name || "você", empresa: "", email: "", telefone: lead.phone || "",
+              origem: "", segmento: "", faturamento: "",
+              saudacao: timeVars.saudacao, data: timeVars.data, hora: timeVars.hora,
+            });
+
+            const result = isAudio
+              ? await sendWhatsAppAudio(instance.instance_name, lead.phone, tmpl.audio_url!)
+              : await sendWhatsAppMessage(instance.instance_name, lead.phone, content);
+
+            if (result.success) {
+              // Sync with chat
+              try {
+                const phone = lead.phone!.replace(/\D/g, "").replace(/^(?!55)/, "55");
+                await supabase.from("whatsapp_messages").insert({
+                  organization_id: campanha.organization_id,
+                  instance_id: instance.id,
+                  message_id: result.messageId || `timeout_${row.id}_${Date.now()}`,
+                  remote_jid: `${phone}@s.whatsapp.net`,
+                  phone_number: phone,
+                  direction: "outgoing",
+                  message_type: isAudio ? "audio" : "text",
+                  content: isAudio ? null : content,
+                  media_url: isAudio ? tmpl.audio_url : null,
+                  status: "sent",
+                  lead_id: lead.id,
+                  timestamp: new Date().toISOString(),
+                });
+              } catch (_) { /* ignore */ }
+            }
+            console.log(`[campaign-rule-dispatch][${campanhaId}] Timeout: sent template to lead ${lead.name}`);
+          }
+        }
+
+      } else if (timeoutAction === "cancel_sequence") {
+        // Cancel all remaining for this lead+rule
+        await supabase
+          .from("scheduled_campaign_messages")
+          .update({ status: "cancelled" })
+          .eq("campanha_lead_id", row.campanha_lead_id)
+          .eq("rule_id", row.rule_id)
+          .eq("status", "scheduled");
+        console.log(`[campaign-rule-dispatch][${campanhaId}] Timeout: cancelled sequence for lead ${lead?.name}`);
+
+      } else if (timeoutAction === "continue") {
+        // Schedule next steps after the wait_response position
+        const nextPos = (row.step_position ?? 0) + 1;
+        const { data: whatsappInst } = await supabase
+          .from("campanhas")
+          .select("whatsapp_instance_id")
+          .eq("id", row.campanha_id)
+          .single();
+
+        try {
+          await supabase.rpc("schedule_rule_steps_from_position", {
+            p_campanha_id: row.campanha_id,
+            p_rule_id: row.rule_id,
+            p_campanha_lead_id: row.campanha_lead_id,
+            p_lead_id: row.lead_id,
+            p_whatsapp_instance_id: row.whatsapp_instance_id || whatsappInst?.whatsapp_instance_id,
+            p_from_position: nextPos,
+          });
+        } catch (rpcErr) {
+          console.warn(`[campaign-rule-dispatch][${campanhaId}] schedule_rule_steps_from_position failed:`, rpcErr);
+        }
+        console.log(`[campaign-rule-dispatch][${campanhaId}] Timeout: continuing sequence from pos ${nextPos} for lead ${lead?.name}`);
+      }
+
+      count++;
+    } catch (err) {
+      console.error(`[campaign-rule-dispatch][${campanhaId}] Timeout processing error:`, err);
+    }
+  }
+  return count;
 }
 
 // ============================================================
 // Helper functions
 // ============================================================
+
+async function resolveInstance(
+  supabase: SupabaseClient,
+  instanceId: string | null,
+  organizationId: string
+): Promise<{ id: string; instance_name: string } | null> {
+  if (instanceId) {
+    const { data: inst } = await supabase
+      .from("whatsapp_instances")
+      .select("id, instance_name, status")
+      .eq("id", instanceId)
+      .single();
+    if (inst && (inst.status === "connected" || inst.status === "open")) {
+      return { id: inst.id, instance_name: inst.instance_name };
+    }
+  }
+  const { data: instList } = await supabase
+    .from("whatsapp_instances")
+    .select("id, instance_name")
+    .eq("organization_id", organizationId)
+    .or("status.eq.open,status.eq.connected")
+    .limit(1);
+  return instList?.[0] ?? null;
+}
 
 async function markFailed(supabase: SupabaseClient, id: string, errorMessage: string) {
   await supabase.from("scheduled_campaign_messages").update({
