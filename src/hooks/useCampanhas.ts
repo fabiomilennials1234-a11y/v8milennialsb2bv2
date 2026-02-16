@@ -986,7 +986,7 @@ export function useCampanhaDispatchRuleSteps(ruleId: string | undefined) {
         .from("campanha_dispatch_rule_steps")
         .select(`
           *,
-          template:campaign_templates(id, name, content, message_type, audio_url)
+          template:campaign_templates!template_id(id, name, content, message_type, audio_url)
         `)
         .eq("rule_id", ruleId)
         .order("position", { ascending: true });

@@ -187,38 +187,33 @@ export function PipeDispatchRulesSection({ pipeType, stages }: PipeDispatchRules
         is_active: true,
       });
       for (let i = 0; i < validSteps.length; i++) {
+        const s = validSteps[i];
         await createStep.mutateAsync({
           rule_id: rule.id,
-          action_type: validSteps[i].action_type,
-          template_id: validSteps[i].action_type === "send_template" ? validSteps[i].template_id : null,
-          delay_minutes: validSteps[i].delay_minutes,
+          action_type: s.action_type,
+          template_id: s.action_type === "send_template" ? s.template_id : null,
+          delay_minutes: s.delay_minutes,
           position: i,
-          wait_timeout_minutes: validSteps[i].action_type === "wait_response" ? validSteps[i].wait_timeout_minutes : null,
-          timeout_action: validSteps[i].action_type === "wait_response" ? validSteps[i].timeout_action : null,
-          timeout_target_stage_id: validSteps[i].timeout_action === "change_stage" ? validSteps[i].timeout_target_stage_id : null,
-          timeout_template_id: validSteps[i].timeout_action === "send_template" ? validSteps[i].timeout_template_id : null,
-          target_stage_id: validSteps[i].action_type === "change_stage" ? validSteps[i].target_stage_id : null,
-          sdr_assignment_mode: validSteps[i].action_type === "assign_sdr" ? validSteps[i].sdr_assignment_mode : null,
-          target_sdr_id: validSteps[i].sdr_assignment_mode === "specific" ? validSteps[i].target_sdr_id : null,
+          wait_timeout_minutes: s.action_type === "wait_response" ? s.wait_timeout_minutes : null,
+          timeout_action: s.action_type === "wait_response" ? s.timeout_action : null,
+          timeout_target_stage_id: s.timeout_action === "change_stage" ? s.timeout_target_stage_id : null,
+          timeout_template_id: s.timeout_action === "send_template" ? s.timeout_template_id : null,
+          target_stage_id: s.action_type === "change_stage" ? s.target_stage_id : null,
+          sdr_assignment_mode: s.action_type === "assign_sdr" ? s.sdr_assignment_mode : null,
+          target_sdr_id: s.sdr_assignment_mode === "specific" ? s.target_sdr_id : null,
         });
       }
-      toast.success("Regra de envio criada");
+      toast.success("Regra de envio criada com " + validSteps.length + " passo(s)");
       setAddOpen(false);
       setTriggerType("lead_added");
       setSelectedStageId("");
       setSelectedInstanceId("");
       setSteps([defaultStep()]);
     } catch (e: unknown) {
-      console.error(e);
-      const err = e as { code?: string; message?: string };
-      const msg = err?.message ?? "";
-      if (err?.code === "42501" || msg.toLowerCase().includes("row-level security") || msg.toLowerCase().includes("permission")) {
-        toast.error("Sem permissão para criar regras de envio. Apenas administradores podem criar regras.");
-      } else if (msg) {
-        toast.error(msg);
-      } else {
-        toast.error("Erro ao criar regra");
-      }
+      console.error("Erro ao criar regra de envio:", e);
+      const msg = (e as { message?: string })?.message ?? "";
+      toast.error(msg ? `Erro: ${msg}` : "Erro ao criar regra de envio");
+      queryClient.invalidateQueries({ queryKey: ["pipe_dispatch_rules"] });
     }
   };
 
@@ -248,6 +243,7 @@ export function PipeDispatchRulesSection({ pipeType, stages }: PipeDispatchRules
       return;
     }
     try {
+      // 1. Atualizar a regra
       await updateRule.mutateAsync({
         id: ruleId,
         pipe_type: pipeType,
@@ -255,40 +251,38 @@ export function PipeDispatchRulesSection({ pipeType, stages }: PipeDispatchRules
         pipeline_stage_id: trigType === "lead_moved_to_stage" ? stageId : null,
         whatsapp_instance_id: instanceId || null,
       });
+      // 2. Deletar steps antigos
       const { error: deleteError } = await supabase
         .from("pipe_dispatch_rule_steps")
         .delete()
         .eq("rule_id", ruleId);
       if (deleteError) throw deleteError;
+      // 3. Criar novos steps
       for (let i = 0; i < validSteps.length; i++) {
+        const s = validSteps[i];
         await createStep.mutateAsync({
           rule_id: ruleId,
-          action_type: validSteps[i].action_type,
-          template_id: validSteps[i].action_type === "send_template" ? validSteps[i].template_id : null,
-          delay_minutes: validSteps[i].delay_minutes,
+          action_type: s.action_type,
+          template_id: s.action_type === "send_template" ? s.template_id : null,
+          delay_minutes: s.delay_minutes,
           position: i,
-          wait_timeout_minutes: validSteps[i].action_type === "wait_response" ? validSteps[i].wait_timeout_minutes : null,
-          timeout_action: validSteps[i].action_type === "wait_response" ? validSteps[i].timeout_action : null,
-          timeout_target_stage_id: validSteps[i].timeout_action === "change_stage" ? validSteps[i].timeout_target_stage_id : null,
-          timeout_template_id: validSteps[i].timeout_action === "send_template" ? validSteps[i].timeout_template_id : null,
-          target_stage_id: validSteps[i].action_type === "change_stage" ? validSteps[i].target_stage_id : null,
-          sdr_assignment_mode: validSteps[i].action_type === "assign_sdr" ? validSteps[i].sdr_assignment_mode : null,
-          target_sdr_id: validSteps[i].sdr_assignment_mode === "specific" ? validSteps[i].target_sdr_id : null,
+          wait_timeout_minutes: s.action_type === "wait_response" ? s.wait_timeout_minutes : null,
+          timeout_action: s.action_type === "wait_response" ? s.timeout_action : null,
+          timeout_target_stage_id: s.timeout_action === "change_stage" ? s.timeout_target_stage_id : null,
+          timeout_template_id: s.timeout_action === "send_template" ? s.timeout_template_id : null,
+          target_stage_id: s.action_type === "change_stage" ? s.target_stage_id : null,
+          sdr_assignment_mode: s.action_type === "assign_sdr" ? s.sdr_assignment_mode : null,
+          target_sdr_id: s.sdr_assignment_mode === "specific" ? s.target_sdr_id : null,
         });
       }
-      toast.success("Regra atualizada");
+      queryClient.invalidateQueries({ queryKey: ["pipe_dispatch_rule_steps", ruleId] });
+      toast.success("Regra atualizada com " + validSteps.length + " passo(s)");
       setEditingRule(null);
     } catch (e: unknown) {
-      console.error(e);
-      const err = e as { code?: string; message?: string };
-      const msg = err?.message ?? "";
-      if (err?.code === "23505") {
-        toast.error("Já existe uma regra com esse gatilho e etapa.");
-      } else if (msg) {
-        toast.error(msg);
-      } else {
-        toast.error("Erro ao atualizar regra");
-      }
+      console.error("Erro ao atualizar regra:", e);
+      queryClient.invalidateQueries({ queryKey: ["pipe_dispatch_rule_steps", ruleId] });
+      const msg = (e as { message?: string })?.message ?? "";
+      toast.error(msg ? `Erro: ${msg}` : "Erro ao atualizar regra");
     }
   };
 

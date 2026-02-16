@@ -59,6 +59,7 @@ export default function PipeFollowUps() {
   const archiveFollowUp = useArchiveFollowUp();
   const archiveManyFollowUps = useArchiveManyFollowUps();
 
+  // Query filtrada para exibição da lista
   const { data: followUps, isLoading } = useFollowUps({
     assignedTo: effectiveSelectedMember === "all" ? undefined : effectiveSelectedMember,
     showCompleted,
@@ -66,16 +67,23 @@ export default function PipeFollowUps() {
     dateFilter: dateFilter === "all" ? undefined : dateFilter,
   });
 
-  // Stats
+  // Query sem filtro de data para calcular stats reais
+  const { data: allFollowUps } = useFollowUps({
+    assignedTo: effectiveSelectedMember === "all" ? undefined : effectiveSelectedMember,
+    showCompleted: true,
+    showArchived: false,
+  });
+
+  // Stats calculados a partir de TODOS os follow-ups (sem filtro de data)
   const stats = useMemo(() => {
-    if (!followUps) return { overdue: 0, today: 0, upcoming: 0, completed: 0 };
-    
+    if (!allFollowUps) return { overdue: 0, today: 0, upcoming: 0, completed: 0 };
+
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    return followUps.reduce((acc, fup) => {
+    return allFollowUps.reduce((acc, fup) => {
       if (fup.completed_at) {
         acc.completed++;
       } else {
@@ -90,7 +98,7 @@ export default function PipeFollowUps() {
       }
       return acc;
     }, { overdue: 0, today: 0, upcoming: 0, completed: 0 });
-  }, [followUps]);
+  }, [allFollowUps]);
 
   // Filter by search
   const filteredFollowUps = useMemo(() => {
