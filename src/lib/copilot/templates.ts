@@ -164,13 +164,13 @@ export const AGENT_TEMPLATES: AgentTemplate[] = [
   },
 
   // =====================================================
-  // TEMPLATE: AGENDADOR
+  // TEMPLATE: CONFIRMADOR DE REUNIÕES
   // =====================================================
   {
     type: "agendador",
-    name: "Agendador de Reuniões",
+    name: "Confirmador de Reuniões",
     description:
-      "Otimiza agendamento de compromissos e confirmações com máxima eficiência.",
+      "Maximiza taxa de comparecimento com confirmações inteligentes ao longo do funil D-5 a D-0.",
     icon: Calendar,
     presetData: {
       templateType: "agendador",
@@ -180,28 +180,29 @@ export const AGENT_TEMPLATES: AgentTemplate[] = [
         energy: "moderada",
       },
       skills: [
-        "Agendar compromissos",
-        "Confirmar informações",
-        "Fazer perguntas estratégicas",
+        "Confirmar presença em reuniões",
+        "Reagendar compromissos",
+        "Enviar lembretes estratégicos",
+        "Identificar risco de no-show",
         "Direcionar para próxima etapa",
       ],
       allowedTopics: [
-        "Disponibilidade de horários",
         "Confirmação de reunião",
+        "Data e horário da reunião",
         "Reagendamento",
-        "Preparação para reunião",
-        "Informações logísticas",
         "Link da reunião",
         "Participantes",
+        "Preparação para reunião",
+        "Informações logísticas",
       ],
       forbiddenTopics: [
         "Discussões comerciais profundas",
         "Negociação de termos",
         "Qualificação detalhada",
-        "Detalhes técnicos",
+        "Detalhes técnicos do produto",
       ],
       mainObjective:
-        "Garantir agendamento eficiente e comparecimento em reuniões, com confirmações estratégicas e lembretes no momento certo para maximizar taxa de presença.",
+        "Garantir o comparecimento em reuniões já agendadas através de confirmações progressivas (D-5 a D-0), reagendando quando necessário e maximizando a taxa de presença.",
       faqs: [],
       kanbanRules: [],
     },

@@ -699,7 +699,7 @@ Se quiser, podemos reagendar pra outro momento."`,
     {
       name: "Confirmação D-5",
       triggerType: "scheduled",
-      triggerDelayHours: -120, // 5 dias antes (negativo = antes do evento)
+      triggerDelayHours: 120, // 5 dias antes da reunião (processador deve calcular: data_reunião - delay)
       triggerDelayMinutes: 0,
       maxFollowups: 1,
       followupStyle: "direct",
@@ -709,7 +709,7 @@ Se quiser, podemos reagendar pra outro momento."`,
     {
       name: "Lembrete D-1",
       triggerType: "scheduled",
-      triggerDelayHours: -24,
+      triggerDelayHours: 24, // 1 dia antes da reunião
       triggerDelayMinutes: 0,
       maxFollowups: 1,
       followupStyle: "direct",
@@ -719,7 +719,7 @@ Se quiser, podemos reagendar pra outro momento."`,
     {
       name: "Check D-0",
       triggerType: "scheduled",
-      triggerDelayHours: -2,
+      triggerDelayHours: 2, // 2 horas antes da reunião
       triggerDelayMinutes: 0,
       maxFollowups: 1,
       followupStyle: "direct",

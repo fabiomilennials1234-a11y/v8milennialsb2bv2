@@ -29,6 +29,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Badge } from "@/components/ui/badge";
 import { PIPE_STAGES } from "@/types/copilot";
 import {
   useAgentKanbanRules,

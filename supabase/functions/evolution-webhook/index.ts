@@ -1,7 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
-import { findLeadByPhoneOrEmail, associateMessagesToLead } from "../_shared/lead-service.ts";
+import { findLeadByPhoneOrEmail, associateMessagesToLead, getOrCreateLead } from "../_shared/lead-service.ts";
 
 /**
  * Evolution API Webhook Receiver
@@ -514,7 +514,8 @@ Deno.serve(async (req) => {
           is_active,
           is_default,
           availability,
-          response_delay_seconds
+          response_delay_seconds,
+          attend_unknown_contacts
         )
       `)
       .eq("instance_name", payload.instance)
@@ -679,7 +680,7 @@ async function handleMessagesUpsert(
     organization_id: string; 
     instance_name: string;
     copilot_agent_id?: string | null;
-    copilot_agents?: { id: string; name: string; is_active: boolean; is_default: boolean } | null;
+    copilot_agents?: { id: string; name: string; is_active: boolean; is_default: boolean; attend_unknown_contacts?: boolean } | null;
   },
   data: Record<string, unknown>
 ) {
@@ -817,13 +818,41 @@ async function handleMessagesUpsert(
 
       // Se for mensagem recebida, processar com IA (se tiver agente vinculado)
       if (direction === "incoming" && messageText) {
-        // Primeiro associar a um lead
+        // Primeiro tentar associar a um lead existente
         await associateMessageToExistingLead(supabase, instance.organization_id, phoneNumber);
 
         // Verificar se tem agente vinculado à instância
         // @ts-ignore - copilot_agents vem do join
         const hasAgent = instance.copilot_agent_id && instance.copilot_agents?.is_active;
-        
+
+        // Se tem agente ativo com attend_unknown_contacts, criar shadow lead se não existe
+        if (hasAgent) {
+          // @ts-ignore - attend_unknown_contacts vem do join
+          const attendUnknown = instance.copilot_agents?.attend_unknown_contacts === true;
+
+          if (attendUnknown) {
+            // Verificar se já tem lead para este telefone
+            const existingLead = await findLeadByPhoneOrEmail(supabase, instance.organization_id, phoneNumber);
+
+            if (!existingLead) {
+              // Criar shadow lead — invisível nos pipes, mas permite o copilot atender
+              console.log("[Evolution Webhook] Creating shadow lead for unknown contact:", phoneNumber);
+              const shadowResult = await getOrCreateLead(supabase, {
+                organizationId: instance.organization_id,
+                phone: phoneNumber,
+                pushName: msg.pushName || null,
+                isShadow: true,
+              });
+
+              if (shadowResult?.lead) {
+                // Associar mensagens ao shadow lead recém-criado
+                await associateMessagesToLead(supabase, instance.organization_id, phoneNumber, shadowResult.lead.id);
+                console.log("[Evolution Webhook] Shadow lead created:", shadowResult.lead.id);
+              }
+            }
+          }
+        }
+
         if (hasAgent) {
           // Verificar disponibilidade
           // @ts-ignore - availability vem do join
@@ -1020,7 +1049,8 @@ async function handleMessagesUpdate(
 
 /**
  * Associa mensagem a um lead EXISTENTE (não cria novo).
- * Leads devem ser criados manualmente pelo atendente no chat.
+ * Leads podem ser criados manualmente pelo atendente no chat,
+ * ou como shadow leads pelo copilot (quando attend_unknown_contacts = true).
  */
 async function associateMessageToExistingLead(
   supabase: ReturnType<typeof createClient>,

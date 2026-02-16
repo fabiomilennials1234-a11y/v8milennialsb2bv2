@@ -37,6 +37,8 @@ export interface GetOrCreateLeadParams {
   pushName?: string | null;
   origin?: string;
   sdrId?: string | null;
+  /** Se true, cria shadow lead (invisível nos pipes até ser promovido) */
+  isShadow?: boolean;
 }
 
 /**
@@ -108,7 +110,7 @@ export async function getOrCreateLead(
   supabase: SupabaseClient,
   params: GetOrCreateLeadParams
 ): Promise<GetOrCreateLeadResult | null> {
-  const { organizationId, phone, email, name, pushName, origin, sdrId } = params;
+  const { organizationId, phone, email, name, pushName, origin, sdrId, isShadow } = params;
 
   // Validate required fields
   if (!organizationId) {
@@ -192,10 +194,15 @@ export async function getOrCreateLead(
     phone: phone || null, // Save original phone format
     // normalized_phone will be auto-filled by trigger
     email: email || null,
-    origin: origin || "whatsapp",
+    origin: isShadow ? "shadow_copilot" : (origin || "whatsapp"),
     organization_id: organizationId,
-    pipe_whatsapp: "novo",
+    is_shadow: isShadow || false,
   };
+
+  // Shadow leads não entram em nenhum pipe até serem promovidos
+  if (!isShadow) {
+    insertData.pipe_whatsapp = "novo";
+  }
 
   // Add sdr_id if provided
   if (sdrId) {
@@ -261,16 +268,21 @@ export async function getOrCreateLead(
   console.log("[lead-service] New lead created:", newLead.id);
 
   // Create pipe_whatsapp entry for new leads (organization_id required for RLS visibility)
-  try {
-    await supabase.from("pipe_whatsapp").insert({
-      lead_id: newLead.id,
-      status: "novo",
-      sdr_id: sdrId || null,
-      organization_id: organizationId,
-    });
-  } catch (pipeError) {
-    console.warn("[lead-service] Error creating pipe_whatsapp entry:", pipeError);
-    // Don't fail the whole operation if pipe creation fails
+  // Shadow leads não entram em pipe até serem promovidos
+  if (!isShadow) {
+    try {
+      await supabase.from("pipe_whatsapp").insert({
+        lead_id: newLead.id,
+        status: "novo",
+        sdr_id: sdrId || null,
+        organization_id: organizationId,
+      });
+    } catch (pipeError) {
+      console.warn("[lead-service] Error creating pipe_whatsapp entry:", pipeError);
+      // Don't fail the whole operation if pipe creation fails
+    }
+  } else {
+    console.log("[lead-service] Shadow lead created, skipping pipe_whatsapp entry");
   }
 
   return { lead: newLead, created: true, source: "created" };
@@ -347,5 +359,86 @@ export async function associateMessagesToLead(
     console.error("[lead-service] Error associating messages to lead:", error);
   } else {
     console.log("[lead-service] Messages associated to lead:", leadId);
+  }
+}
+
+/**
+ * Promove um shadow lead para lead real.
+ * Remove a flag is_shadow e insere no pipe correto.
+ *
+ * @param supabase - Supabase client instance
+ * @param leadId - ID do shadow lead
+ * @param organizationId - Organization ID
+ * @param destination - Pipe e stage de destino
+ * @param sdrId - SDR responsável (opcional)
+ */
+export async function promoveShadowLead(
+  supabase: SupabaseClient,
+  leadId: string,
+  organizationId: string,
+  destination: { pipe?: string | null; stage: string },
+  sdrId?: string | null
+): Promise<boolean> {
+  try {
+    // 1. Verificar se é realmente shadow
+    const { data: lead } = await supabase
+      .from("leads")
+      .select("id, is_shadow")
+      .eq("id", leadId)
+      .single();
+
+    if (!lead || !lead.is_shadow) {
+      console.log("[lead-service] Lead is not shadow, skipping promotion:", leadId);
+      return false;
+    }
+
+    // 2. Remover flag shadow
+    const { error: updateError } = await supabase
+      .from("leads")
+      .update({
+        is_shadow: false,
+        origin: "whatsapp", // Atualiza de 'shadow_copilot' para 'whatsapp'
+      })
+      .eq("id", leadId);
+
+    if (updateError) {
+      console.error("[lead-service] Error promoting shadow lead:", updateError);
+      return false;
+    }
+
+    // 3. Inserir no pipe correto
+    const pipeType = destination.pipe || "whatsapp";
+
+    if (pipeType === "confirmacao") {
+      await supabase.from("pipe_confirmacao").insert({
+        lead_id: leadId,
+        organization_id: organizationId,
+        status: destination.stage,
+      });
+    } else if (pipeType === "propostas") {
+      await supabase.from("pipe_propostas").insert({
+        lead_id: leadId,
+        organization_id: organizationId,
+        status: destination.stage,
+      });
+    } else {
+      await supabase.from("pipe_whatsapp").insert({
+        lead_id: leadId,
+        organization_id: organizationId,
+        status: destination.stage,
+        sdr_id: sdrId || null,
+      });
+    }
+
+    console.log("[lead-service] Shadow lead promoted:", {
+      leadId,
+      pipe: pipeType,
+      stage: destination.stage,
+    });
+
+    return true;
+  } catch (error) {
+    console.error("[lead-service] Error promoting shadow lead:", error);
+    return false;
   }
 }

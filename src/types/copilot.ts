@@ -173,6 +173,9 @@ export interface CopilotWizardData {
 
   // Step 18: Regras de Follow-up
   followupRules: FollowupRule[];
+
+  // Configuração: Atender contatos sem lead (shadow leads)
+  attendUnknownContacts: boolean;
 }
 
 // =====================================================

@@ -1,6 +1,7 @@
 import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { OpenRouterClient } from "./openrouter-client.ts";
 import { sanitizeString } from "../_shared/validation.ts";
+import { promoveShadowLead } from "../_shared/lead-service.ts";
 
 // Interface para contexto resumido da conversa
 interface ConversationContextSummary {
@@ -235,6 +236,26 @@ export class AgentEngine {
       }
 
       console.log('[AgentEngine] Executing automation action:', actionType);
+
+      // Promover shadow lead antes de executar ações de automação
+      // Shadow leads precisam ser promovidos para aparecer nos pipes
+      if (actionType === 'qualify' || actionType === 'disqualify') {
+        const moveToPipe = actionConfig.moveToPipe;
+        const destination = moveToPipe && moveToPipe.stage
+          ? { pipe: moveToPipe.pipe, stage: moveToPipe.stage }
+          : { pipe: 'whatsapp', stage: actionConfig.moveToStage || (actionType === 'qualify' ? 'respondeu' : 'esfriou') };
+
+        const promoted = await promoveShadowLead(
+          this.supabase,
+          leadId,
+          this.organizationId,
+          destination
+        );
+
+        if (promoted) {
+          console.log('[AgentEngine] Shadow lead promoted to real lead:', { leadId, destination });
+        }
+      }
 
       // Executar ações configuradas
       const updates: Record<string, any> = {};
@@ -1383,7 +1404,7 @@ export class AgentEngine {
     if (kanbanRules && Array.isArray(kanbanRules) && kanbanRules.length > 0 && currentStage) {
       const rule = kanbanRules.find(
         (r: { pipe_type?: string; stage_name?: string }) =>
-          r?.pipe_type === 'whatsapp' && r?.stage_name === currentStage
+          r?.pipe_type === 'whatsapp' && r?.stage_name?.toLowerCase() === currentStage?.toLowerCase()
       );
       if (rule) {
         sections.push("# REGRAS DA ETAPA ATUAL (Kanban)");
@@ -1545,6 +1566,40 @@ export class AgentEngine {
           type: 'object',
           properties: {
             target_stage: { type: 'string', description: `Etapa de destino (um de: ${stageKeys})` },
+          },
+          required: ['target_stage'],
+        },
+      });
+    }
+
+    // Confirmador de reuniões: confirmar presença e mover entre etapas do pipe confirmação
+    if (capabilities.can_schedule_meeting) {
+      tools.push({
+        name: 'confirm_meeting',
+        description: 'Confirma a presença do lead na reunião. Marca como pré-confirmado ou confirmado no pipe de Confirmação. Use quando o lead disser que vai comparecer.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            confirmation_type: {
+              type: 'string',
+              enum: ['pre_confirmed', 'confirmed'],
+              description: 'Tipo de confirmação: pre_confirmed (pré-confirmado, antes do dia) ou confirmed (confirmado no dia)',
+            },
+          },
+          required: ['confirmation_type'],
+        },
+      });
+      tools.push({
+        name: 'advance_confirmation_stage',
+        description: 'Move o lead para outra etapa do funil de confirmação. Etapas: reuniao_marcada, confirmar_d5, confirmar_d3, confirmar_d1, confirmacao_no_dia, remarcar, compareceu, perdido. Use para avançar ou reagendar no pipe de confirmação.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            target_stage: {
+              type: 'string',
+              enum: ['reuniao_marcada', 'confirmar_d5', 'confirmar_d3', 'confirmar_d1', 'confirmacao_no_dia', 'remarcar', 'compareceu', 'perdido'],
+              description: 'Etapa de destino no pipe de confirmação',
+            },
           },
           required: ['target_stage'],
         },
@@ -1719,6 +1774,8 @@ export class AgentEngine {
       'qualify_lead': 'QUALIFY_LEAD',
       'disqualify_lead': 'DISQUALIFY_LEAD',
       'advance_stage': 'ADVANCE_STAGE',
+      'confirm_meeting': 'CONFIRM_MEETING',
+      'advance_confirmation_stage': 'ADVANCE_CONFIRMATION_STAGE',
     };
     return mapping[toolName] || 'UNKNOWN';
   }
@@ -1731,7 +1788,9 @@ export class AgentEngine {
     if (toolName === 'transfer_to_human') return 'WAITING_HUMAN';
     if (toolName === 'qualify_lead') return 'QUALIFIED';
     if (toolName === 'disqualify_lead') return 'DISQUALIFIED';
-    if (toolName === 'advance_stage') return currentState; // pipeline atualizado em executeAction
+    if (toolName === 'advance_stage') return currentState;
+    if (toolName === 'confirm_meeting') return 'QUALIFIED'; // Confirmação dispara onQualify automation
+    if (toolName === 'advance_confirmation_stage') return currentState;
     if (currentState === 'NEW_LEAD') return 'QUALIFYING';
     return currentState;
   }
@@ -1757,9 +1816,17 @@ export class AgentEngine {
           return await this.executeTransferHuman(params, tenantId);
         case 'QUALIFY_LEAD':
         case 'DISQUALIFY_LEAD':
-          return { success: true, message: `Ação ${action.action} - processada via executeAutomationActions` };
+          // A qualificação real acontece via state machine:
+          // processLLMResponse seta nextState = 'QUALIFIED'/'DISQUALIFIED'
+          // executeAutomationActions dispara onQualify/onDisqualify com base no state
+          console.log(`[AgentEngine] ${action.action} - será processada via state machine em executeAutomationActions`);
+          return { success: true, message: `Ação ${action.action} registrada - automação será executada via state machine` };
         case 'ADVANCE_STAGE':
           return await this.executeAdvanceStage(params, tenantId);
+        case 'CONFIRM_MEETING':
+          return await this.executeConfirmMeeting(params, tenantId);
+        case 'ADVANCE_CONFIRMATION_STAGE':
+          return await this.executeAdvanceConfirmationStage(params, tenantId);
         default:
           console.warn('[AgentEngine] Action não suportada:', action.action);
           return { success: false, error: `Ação não suportada: ${action.action}` };
@@ -1923,6 +1990,89 @@ export class AgentEngine {
     await this.upsertPipeWhatsapp(lead_id, tenantId, finalStage);
 
     return { success: true, message: `Lead movido para ${finalStage}`, target_stage: finalStage };
+  }
+
+  /**
+   * Confirma presença do lead na reunião
+   * Atualiza is_confirmed no pipe_confirmacao e opcionalmente move para próxima etapa
+   */
+  private async executeConfirmMeeting(params: any, tenantId: string) {
+    const lead_id = params.lead_id || this.currentLeadId;
+    const confirmationType = params.confirmation_type || 'pre_confirmed';
+
+    if (!lead_id) {
+      return { success: false, error: 'lead_id é obrigatório' };
+    }
+
+    const { data: existing } = await this.supabase
+      .from('pipe_confirmacao')
+      .select('id, status')
+      .eq('lead_id', lead_id)
+      .maybeSingle();
+
+    if (!existing) {
+      return { success: false, error: 'Lead não encontrado no pipe de confirmação' };
+    }
+
+    // Marcar como confirmado
+    await this.supabase
+      .from('pipe_confirmacao')
+      .update({ is_confirmed: true })
+      .eq('id', existing.id);
+
+    // Se for confirmação no dia, mover para etapa adequada
+    if (confirmationType === 'confirmed') {
+      await this.supabase
+        .from('pipe_confirmacao')
+        .update({ status: 'confirmacao_no_dia' })
+        .eq('id', existing.id);
+
+      console.log('[AgentEngine] Reunião confirmada no dia para lead:', lead_id);
+      return { success: true, message: 'Reunião confirmada no dia', confirmation_type: 'confirmed' };
+    }
+
+    console.log('[AgentEngine] Reunião pré-confirmada para lead:', lead_id);
+    return { success: true, message: 'Reunião pré-confirmada', confirmation_type: 'pre_confirmed' };
+  }
+
+  /**
+   * Move o lead entre etapas do pipe de confirmação
+   */
+  private async executeAdvanceConfirmationStage(params: any, tenantId: string) {
+    const lead_id = params.lead_id || this.currentLeadId;
+    const targetStage = params.target_stage;
+
+    if (!lead_id || !targetStage) {
+      return { success: false, error: 'lead_id e target_stage são obrigatórios' };
+    }
+
+    const validStages = [
+      'reuniao_marcada', 'confirmar_d5', 'confirmar_d3', 'confirmar_d1',
+      'confirmacao_no_dia', 'remarcar', 'compareceu', 'perdido',
+    ];
+
+    const normalizedStage = String(targetStage).trim().toLowerCase();
+    if (!validStages.includes(normalizedStage)) {
+      return { success: false, error: `Etapa inválida. Use um de: ${validStages.join(', ')}` };
+    }
+
+    const { data: existing } = await this.supabase
+      .from('pipe_confirmacao')
+      .select('id')
+      .eq('lead_id', lead_id)
+      .maybeSingle();
+
+    if (!existing) {
+      return { success: false, error: 'Lead não encontrado no pipe de confirmação' };
+    }
+
+    await this.supabase
+      .from('pipe_confirmacao')
+      .update({ status: normalizedStage })
+      .eq('id', existing.id);
+
+    console.log('[AgentEngine] Lead movido para', normalizedStage, 'no pipe confirmação');
+    return { success: true, message: `Lead movido para ${normalizedStage} no pipe de confirmação`, target_stage: normalizedStage };
   }
 
   /**

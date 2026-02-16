@@ -55,7 +55,10 @@ export function useUpsertKanbanRules(agentId: string) {
     mutationFn: async (rules: KanbanRuleForm[]) => {
       const toInsert = rules.filter(
         (r) =>
-          (r.goal && r.goal.trim()) || (r.behavior && r.behavior.trim())
+          (r.goal && r.goal.trim()) ||
+          (r.behavior && r.behavior.trim()) ||
+          (r.allowed_actions && r.allowed_actions.length > 0) ||
+          (r.forbidden_actions && r.forbidden_actions.length > 0)
       );
 
       const { error: deleteError } = await supabase

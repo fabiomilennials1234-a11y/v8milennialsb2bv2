@@ -37,6 +37,8 @@ export function useLeads() {
         `)
         // SECURITY: Filter by organization_id
         .eq("organization_id", organizationId)
+        // Shadow leads não aparecem na listagem até serem promovidos
+        .or("is_shadow.is.null,is_shadow.eq.false")
         .order("created_at", { ascending: false });
       
       if (error) throw error;

@@ -110,14 +110,76 @@ export function useCreateLeadFromWhatsApp() {
       // 1. Verificar se já existe lead com esse telefone na mesma organização
       const { data: existingLead } = await supabase
         .from("leads")
-        .select("id")
+        .select("id, is_shadow")
         .eq("organization_id", teamMember.organization_id)
         .or(`phone.ilike.%${normalizedPhone}%,phone.ilike.%${normalizedPhone.slice(-9)}%`)
         .limit(1)
         .maybeSingle();
 
-      if (existingLead) {
+      if (existingLead && !existingLead.is_shadow) {
+        // Lead real já existe — retornar sem criar
         console.log("[WhatsApp Lead] Lead já existe:", existingLead.id);
+        return { leadId: existingLead.id, isNew: false };
+      }
+
+      if (existingLead?.is_shadow) {
+        // Shadow lead encontrado — promover para lead real
+        console.log("[WhatsApp Lead] Promovendo shadow lead:", existingLead.id);
+
+        // Atualizar shadow lead com dados completos
+        await supabase
+          .from("leads")
+          .update({
+            is_shadow: false,
+            name: pushName || `WhatsApp ${normalizedPhone.slice(-4)}`,
+            origin: origin || "whatsapp",
+            sdr_id: sdrId || teamMember.id,
+            notes: "Lead criado via WhatsApp (promovido de shadow)",
+          })
+          .eq("id", existingLead.id);
+
+        // Inserir no pipe correto (mesmo fluxo de um lead novo, abaixo)
+        const effectiveSdrIdForShadow = sdrId || teamMember.id;
+
+        if (effectiveDestination === "qualificacao") {
+          await supabase.from("pipe_whatsapp").insert({
+            lead_id: existingLead.id,
+            status: "novo",
+            sdr_id: effectiveSdrIdForShadow,
+            organization_id: teamMember.organization_id,
+          });
+        } else if (effectiveDestination === "confirmacao") {
+          await supabase.from("pipe_confirmacao").insert({
+            lead_id: existingLead.id,
+            status: "pre_confirmacao",
+            sdr_id: effectiveSdrIdForShadow,
+            organization_id: teamMember.organization_id,
+          });
+        } else if (effectiveDestination === "propostas") {
+          await supabase.from("pipe_propostas").insert({
+            lead_id: existingLead.id,
+            status: "proposta_enviada",
+            closer_id: effectiveSdrIdForShadow,
+            organization_id: teamMember.organization_id,
+          });
+        } else if (effectiveDestination === "campanha" && campanhaId) {
+          const { data: stages } = await supabase
+            .from("campanha_stages")
+            .select("id, position")
+            .eq("campanha_id", campanhaId)
+            .order("position", { ascending: true })
+            .limit(1);
+
+          if (stages && stages.length > 0) {
+            await supabase.from("campanha_leads").insert({
+              campanha_id: campanhaId,
+              lead_id: existingLead.id,
+              stage_id: stages[0].id,
+              sdr_id: effectiveSdrIdForShadow,
+            });
+          }
+        }
+
         return { leadId: existingLead.id, isNew: false };
       }
 
