@@ -23,12 +23,16 @@ import {
   Bot,
   GitBranch,
   BarChart2,
+  Lock,
 } from "lucide-react";
 import logoDark from "@/assets/logo-light.png";
 import v8Logo from "@/assets/v8-logo.png";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useWhatsAppContacts, useWhatsAppMessagesRealtime } from "@/hooks/useWhatsAppChat";
+import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
+import { SIDEBAR_FEATURE_MAP, type FeatureKey } from "@/lib/feature-registry";
+import { UpgradeModal } from "@/components/shared/UpgradeModal";
 import { Button } from "@/components/ui/button";
 import { AlertsDropdown } from "@/components/notifications/AlertsDropdown";
 import { SidebarPerformanceWidget } from "./SidebarPerformanceWidget";
@@ -81,11 +85,27 @@ export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const [hovered, setHovered] = useState(false);
   const [expandedMenus, setExpandedMenus] = useState<string[]>([]);
+  const [upgradeModal, setUpgradeModal] = useState<{ open: boolean; label: string; description?: string }>({ open: false, label: "" });
   const location = useLocation();
   const isOnFunisPage = FUNIS_PATHS.some((p) => location.pathname.startsWith(p));
   const open = isOnFunisPage ? !collapsed : !collapsed || hovered;
   const { user, signOut } = useAuth();
   const { data: userRole } = useUserRole();
+  const { hasFeature } = useOrgFeatures();
+
+  /** Verifica se um nav item está bloqueado pela feature flag */
+  const isLocked = (path: string): boolean => {
+    const featureKey = SIDEBAR_FEATURE_MAP[path];
+    if (!featureKey) return false;
+    return !hasFeature(featureKey);
+  };
+
+  /** Abre modal de upgrade para uma feature bloqueada */
+  const handleLockedClick = (e: React.MouseEvent, label: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setUpgradeModal({ open: true, label, description: `O módulo "${label}" não está disponível no seu plano atual.` });
+  };
 
   // Subscription realtime ativa em qualquer página para atualizar contagem de não lidas
   useWhatsAppMessagesRealtime(null);
@@ -178,10 +198,31 @@ export function Sidebar() {
 
       {/* Main Navigation */}
       <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-        {navItems.map((item) => (
+        {navItems.map((item) => {
+          const locked = isLocked(item.path);
+
+          return (
           <div key={item.path}>
             {item.children ? (
               // Item com submenu
+              locked ? (
+                // Bloqueado — mostra com cadeado
+                <button
+                  onClick={(e) => handleLockedClick(e, item.label)}
+                  className="sidebar-item w-full opacity-50 cursor-not-allowed"
+                >
+                  <item.icon className="w-5 h-5 flex-shrink-0" />
+                  <span
+                    className={cn(
+                      "overflow-hidden whitespace-nowrap flex-1 text-left text-sm min-w-0 transition-opacity duration-400 ease-out",
+                      open ? "opacity-100" : "opacity-0"
+                    )}
+                  >
+                    {item.label}
+                  </span>
+                  {open && <Lock className="w-4 h-4 text-amber-500 flex-shrink-0" />}
+                </button>
+              ) : (
               <>
                 <button
                   onClick={() => toggleMenu(item.label)}
@@ -234,8 +275,26 @@ export function Sidebar() {
                   </div>
                 </div>
               </>
+              )
+            ) : locked ? (
+              // Item simples bloqueado — mostra com cadeado
+              <button
+                onClick={(e) => handleLockedClick(e, item.label)}
+                className="sidebar-item w-full opacity-50 cursor-not-allowed"
+              >
+                <item.icon className="w-5 h-5 flex-shrink-0" />
+                <span
+                  className={cn(
+                    "overflow-hidden whitespace-nowrap flex-1 text-left text-sm min-w-0 transition-opacity duration-400 ease-out",
+                    open ? "opacity-100" : "opacity-0"
+                  )}
+                >
+                  {item.label}
+                </span>
+                {open && <Lock className="w-4 h-4 text-amber-500 flex-shrink-0" />}
+              </button>
             ) : (
-              // Item simples
+              // Item simples desbloqueado
               <NavLink
                 to={item.path}
                 className={`sidebar-item ${
@@ -268,7 +327,8 @@ export function Sidebar() {
               </NavLink>
             )}
           </div>
-        ))}
+          );
+        })}
         
         {/* Admin Navigation */}
         {userRole?.role === "admin" && (
@@ -278,25 +338,45 @@ export function Sidebar() {
                 <span className="text-xs text-sidebar-foreground/50 uppercase font-medium">Admin</span>
               </div>
             )}
-            {adminNavItems.map((item) => (
-              <NavLink
-                key={item.path}
-                to={item.path}
-                className={`sidebar-item ${
-                  isActive(item.path) ? "sidebar-item-active" : ""
-                }`}
-              >
-                <item.icon className="w-5 h-5 flex-shrink-0" />
-                <span
-                  className={cn(
-                    "overflow-hidden whitespace-nowrap flex-1 text-sm min-w-0 transition-opacity duration-400 ease-out group-hover/sidebar:translate-x-0.5 transition-transform",
-                    open ? "opacity-100" : "opacity-0"
-                  )}
+            {adminNavItems.map((item) => {
+              const adminLocked = isLocked(item.path);
+              return adminLocked ? (
+                <button
+                  key={item.path}
+                  onClick={(e) => handleLockedClick(e, item.label)}
+                  className="sidebar-item w-full opacity-50 cursor-not-allowed"
                 >
-                  {item.label}
-                </span>
-              </NavLink>
-            ))}
+                  <item.icon className="w-5 h-5 flex-shrink-0" />
+                  <span
+                    className={cn(
+                      "overflow-hidden whitespace-nowrap flex-1 text-left text-sm min-w-0 transition-opacity duration-400 ease-out",
+                      open ? "opacity-100" : "opacity-0"
+                    )}
+                  >
+                    {item.label}
+                  </span>
+                  {open && <Lock className="w-4 h-4 text-amber-500 flex-shrink-0" />}
+                </button>
+              ) : (
+                <NavLink
+                  key={item.path}
+                  to={item.path}
+                  className={`sidebar-item ${
+                    isActive(item.path) ? "sidebar-item-active" : ""
+                  }`}
+                >
+                  <item.icon className="w-5 h-5 flex-shrink-0" />
+                  <span
+                    className={cn(
+                      "overflow-hidden whitespace-nowrap flex-1 text-sm min-w-0 transition-opacity duration-400 ease-out group-hover/sidebar:translate-x-0.5 transition-transform",
+                      open ? "opacity-100" : "opacity-0"
+                    )}
+                  >
+                    {item.label}
+                  </span>
+                </NavLink>
+              );
+            })}
           </>
         )}
       </nav>
@@ -354,6 +434,13 @@ export function Sidebar() {
           )}
         </div>
       </div>
+      {/* Upgrade Modal */}
+      <UpgradeModal
+        open={upgradeModal.open}
+        onOpenChange={(v) => setUpgradeModal((prev) => ({ ...prev, open: v }))}
+        featureLabel={upgradeModal.label}
+        featureDescription={upgradeModal.description}
+      />
     </aside>
   );
 }

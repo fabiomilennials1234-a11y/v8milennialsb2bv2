@@ -9,17 +9,19 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { useCreateCampanha, type CampaignType, type AutoConfig, type LeadDistributionMode } from "@/hooks/useCampanhas";
+import { useCreateCampanha, type CampaignType, type AutoConfig, type LeadDistributionMode, type CampanhaMemberRole } from "@/hooks/useCampanhas";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
 import { useWhatsAppInstances } from "@/hooks/useWhatsAppInstances";
 import { toast } from "sonner";
 import {
   Plus, X, GripVertical, Target, Users, Calendar, DollarSign,
   Bot, FileText, Kanban, ChevronLeft, ChevronRight, Check,
-  Zap, Clock, MousePointer, Shuffle, User
+  Zap, Clock, MousePointer, Shuffle, User, Lock
 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
+import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
+import { CAMPAIGN_TYPE_FEATURE_MAP } from "@/lib/feature-registry";
 import { AgentSelectorStep } from "./AgentSelectorStep";
 import { TemplateSelectorStep } from "./TemplateSelectorStep";
 
@@ -126,13 +128,19 @@ export function CreateCampanhaModal({ open, onOpenChange }: CreateCampanhaModalP
   const [stages, setStages] = useState<StageInput[]>(defaultStages);
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
 
-  // Distribuição de leads (importação, Meta Ads, integrações)
+  // Distribuição de leads SDR (importação, Meta Ads, integrações)
   const [leadDistributionMode, setLeadDistributionMode] = useState<LeadDistributionMode>(null);
   const [leadAssignedTo, setLeadAssignedTo] = useState<string | null>(null);
+  // Distribuição de Closers
+  const [closerDistributionMode, setCloserDistributionMode] = useState<LeadDistributionMode>(null);
+  const [closerAssignedTo, setCloserAssignedTo] = useState<string | null>(null);
+  // Papel de cada membro na campanha (SDR ou Closer)
+  const [memberRoles, setMemberRoles] = useState<Record<string, CampanhaMemberRole>>({});
 
   const createCampanha = useCreateCampanha();
   const { data: teamMembers } = useTeamMembers();
   const { data: whatsappInstances = [] } = useWhatsAppInstances();
+  const { canCreateCampaign } = useOrgFeatures();
 
   // Calculate steps based on campaign type
   const getStepsForType = (type: CampaignType): WizardStep[] => {
@@ -248,6 +256,8 @@ export function CreateCampanhaModal({ open, onOpenChange }: CreateCampanhaModalP
         auto_config: campaignType === "automatica" ? autoConfig : null,
         lead_distribution_mode: leadDistributionMode || null,
         lead_assigned_to: leadDistributionMode === "single" ? leadAssignedTo : null,
+        closer_distribution_mode: closerDistributionMode || null,
+        closer_assigned_to: closerDistributionMode === "single" ? closerAssignedTo : null,
         stages: stages
           .filter((s) => s.name.trim())
           .map((s, index) => ({
@@ -257,6 +267,7 @@ export function CreateCampanhaModal({ open, onOpenChange }: CreateCampanhaModalP
             is_reuniao_marcada: s.is_reuniao_marcada,
           })),
         memberIds: selectedMembers,
+        memberRoles,
         templateIds: campaignType === "semi_automatica" ? selectedTemplateIds : undefined,
         whatsapp_instance_id: (campaignType === "semi_automatica" || campaignType === "automatica") ? selectedWhatsAppInstanceId : null,
       });
@@ -291,6 +302,9 @@ export function CreateCampanhaModal({ open, onOpenChange }: CreateCampanhaModalP
     setSelectedMembers([]);
     setLeadDistributionMode(null);
     setLeadAssignedTo(null);
+    setCloserDistributionMode(null);
+    setCloserAssignedTo(null);
+    setMemberRoles({});
     setSelectedWhatsAppInstanceId(null);
   };
 
@@ -310,49 +324,70 @@ export function CreateCampanhaModal({ open, onOpenChange }: CreateCampanhaModalP
               {CAMPAIGN_MODES.map((mode) => {
                 const Icon = mode.icon;
                 const isSelected = campaignType === mode.type;
+                const isLocked = !canCreateCampaign(mode.type);
 
                 return (
                   <Card
                     key={mode.type}
                     className={cn(
-                      "cursor-pointer transition-all hover:shadow-md",
-                      isSelected && "ring-2 ring-primary shadow-md",
+                      "transition-all",
+                      isLocked
+                        ? "opacity-60 cursor-not-allowed"
+                        : "cursor-pointer hover:shadow-md",
+                      isSelected && !isLocked && "ring-2 ring-primary shadow-md",
                       mode.bgColor
                     )}
-                    onClick={() => handleModeSelect(mode.type)}
+                    onClick={() => !isLocked && handleModeSelect(mode.type)}
                   >
                     <CardContent className="p-4 flex items-start gap-4">
                       <div className={cn(
                         "w-12 h-12 rounded-lg flex items-center justify-center shrink-0",
-                        isSelected ? "bg-primary text-primary-foreground" : "bg-card shadow-sm border border-border"
+                        isLocked
+                          ? "bg-muted text-muted-foreground"
+                          : isSelected
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-card shadow-sm border border-border"
                       )}>
-                        <Icon className={cn("w-6 h-6", !isSelected && mode.color)} />
+                        <Icon className={cn("w-6 h-6", !isSelected && !isLocked && mode.color)} />
                       </div>
 
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <span className="font-semibold">{mode.title}</span>
-                          {mode.badge && (
+                          {isLocked ? (
+                            <Badge variant="outline" className="text-amber-600 border-amber-300 dark:text-amber-400 dark:border-amber-700">
+                              <Lock className="w-3 h-3 mr-1" />
+                              Upgrade
+                            </Badge>
+                          ) : mode.badge ? (
                             <Badge className={mode.badgeColor}>
                               {mode.badge}
                             </Badge>
-                          )}
+                          ) : null}
                         </div>
                         <p className="text-sm text-muted-foreground mt-1">
                           {mode.description}
                         </p>
-                        <div className="flex flex-wrap gap-2 mt-3">
-                          {mode.features.map((feature, i) => (
-                            <Badge key={i} variant="outline" className="text-xs">
-                              {feature}
-                            </Badge>
-                          ))}
-                        </div>
+                        {isLocked ? (
+                          <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">
+                            Disponível em planos superiores. Fale com nosso comercial para desbloquear.
+                          </p>
+                        ) : (
+                          <div className="flex flex-wrap gap-2 mt-3">
+                            {mode.features.map((feature, i) => (
+                              <Badge key={i} variant="outline" className="text-xs">
+                                {feature}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
                       </div>
 
-                      {isSelected && (
+                      {isLocked ? (
+                        <Lock className="w-5 h-5 text-amber-500 shrink-0" />
+                      ) : isSelected ? (
                         <Check className="w-5 h-5 text-primary shrink-0" />
-                      )}
+                      ) : null}
                     </CardContent>
                   </Card>
                 );
@@ -599,12 +634,12 @@ export function CreateCampanhaModal({ open, onOpenChange }: CreateCampanhaModalP
               </p>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 max-h-[280px] overflow-y-auto">
+            <div className="space-y-2 max-h-[280px] overflow-y-auto">
               {teamMembers?.map((member) => (
-                <label
+                <div
                   key={member.id}
                   className={cn(
-                    "flex items-center gap-2 p-3 rounded-lg cursor-pointer transition-colors",
+                    "flex items-center gap-2 p-3 rounded-lg transition-colors",
                     "hover:bg-muted/50",
                     selectedMembers.includes(member.id) && "bg-primary/5 border border-primary/20"
                   )}
@@ -613,11 +648,25 @@ export function CreateCampanhaModal({ open, onOpenChange }: CreateCampanhaModalP
                     checked={selectedMembers.includes(member.id)}
                     onCheckedChange={() => handleMemberToggle(member.id)}
                   />
-                  <div>
+                  <div className="flex-1 min-w-0">
                     <span className="text-sm font-medium">{member.name}</span>
                     <span className="text-xs text-muted-foreground capitalize ml-2">({member.role})</span>
                   </div>
-                </label>
+                  {selectedMembers.includes(member.id) && (
+                    <Select
+                      value={memberRoles[member.id] || "sdr"}
+                      onValueChange={(v) => setMemberRoles((prev) => ({ ...prev, [member.id]: v as CampanhaMemberRole }))}
+                    >
+                      <SelectTrigger className="w-[110px] h-8 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="sdr">SDR</SelectItem>
+                        <SelectItem value="closer">Closer</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
               ))}
             </div>
 
@@ -630,14 +679,14 @@ export function CreateCampanhaModal({ open, onOpenChange }: CreateCampanhaModalP
               </div>
             )}
 
-            {/* Distribuição automática de leads */}
+            {/* Distribuição automática de leads - SDR */}
             <div className="space-y-3 pt-4 border-t mt-4">
               <h3 className="font-semibold flex items-center gap-2">
                 <Shuffle className="w-4 h-4" />
-                Distribuição de Leads
+                Distribuição de SDRs
               </h3>
               <p className="text-xs text-muted-foreground">
-                Quando leads forem importados ou chegarem via integrações (Meta Ads, etc.), como atribuir ao vendedor?
+                Quando leads forem importados ou chegarem via integrações, como atribuir o SDR?
               </p>
               <div className="space-y-2">
                 <label className="flex items-center gap-2 p-3 rounded-lg border cursor-pointer hover:bg-muted/50">
@@ -690,10 +739,88 @@ export function CreateCampanhaModal({ open, onOpenChange }: CreateCampanhaModalP
                       onValueChange={(v) => setLeadAssignedTo(v || null)}
                     >
                       <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Selecione o vendedor" />
+                        <SelectValue placeholder="Selecione o SDR" />
                       </SelectTrigger>
                       <SelectContent>
-                        {teamMembers?.filter((m) => selectedMembers.includes(m.id)).map((m) => (
+                        {teamMembers?.filter((m) => selectedMembers.includes(m.id) && (memberRoles[m.id] || "sdr") === "sdr").map((m) => (
+                          <SelectItem key={m.id} value={m.id}>
+                            <span className="flex items-center gap-2">
+                              <User className="w-3 h-3" />
+                              {m.name}
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Distribuição automática de leads - Closer */}
+            <div className="space-y-3 pt-4 border-t mt-4">
+              <h3 className="font-semibold flex items-center gap-2">
+                <Shuffle className="w-4 h-4" />
+                Distribuição de Closers
+              </h3>
+              <p className="text-xs text-muted-foreground">
+                Como atribuir o Closer responsável por fechar o negócio?
+              </p>
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 p-3 rounded-lg border cursor-pointer hover:bg-muted/50">
+                  <input
+                    type="radio"
+                    name="closerDistribution"
+                    checked={closerDistributionMode === null}
+                    onChange={() => { setCloserDistributionMode(null); setCloserAssignedTo(null); }}
+                    className="rounded-full"
+                  />
+                  <span className="text-sm">Manual</span>
+                  <span className="text-xs text-muted-foreground">— definir manualmente</span>
+                </label>
+                <label className="flex items-center gap-2 p-3 rounded-lg border cursor-pointer hover:bg-muted/50">
+                  <input
+                    type="radio"
+                    name="closerDistribution"
+                    checked={closerDistributionMode === "random"}
+                    onChange={() => setCloserDistributionMode("random")}
+                    className="rounded-full"
+                  />
+                  <span className="text-sm">Aleatório</span>
+                  <span className="text-xs text-muted-foreground">— distribui entre closers da campanha</span>
+                </label>
+                <label className="flex items-center gap-2 p-3 rounded-lg border cursor-pointer hover:bg-muted/50">
+                  <input
+                    type="radio"
+                    name="closerDistribution"
+                    checked={closerDistributionMode === "round_robin"}
+                    onChange={() => setCloserDistributionMode("round_robin")}
+                    className="rounded-full"
+                  />
+                  <span className="text-sm">Rotativo</span>
+                  <span className="text-xs text-muted-foreground">— alterna entre os closers</span>
+                </label>
+                <label className="flex items-center gap-2 p-3 rounded-lg border cursor-pointer hover:bg-muted/50">
+                  <input
+                    type="radio"
+                    name="closerDistribution"
+                    checked={closerDistributionMode === "single"}
+                    onChange={() => setCloserDistributionMode("single")}
+                    className="rounded-full"
+                  />
+                  <span className="text-sm">Pessoa específica</span>
+                </label>
+                {closerDistributionMode === "single" && (
+                  <div className="ml-6 pl-4 border-l">
+                    <Select
+                      value={closerAssignedTo ?? ""}
+                      onValueChange={(v) => setCloserAssignedTo(v || null)}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Selecione o closer" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {teamMembers?.filter((m) => selectedMembers.includes(m.id) && memberRoles[m.id] === "closer").map((m) => (
                           <SelectItem key={m.id} value={m.id}>
                             <span className="flex items-center gap-2">
                               <User className="w-3 h-3" />

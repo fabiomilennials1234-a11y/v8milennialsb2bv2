@@ -315,10 +315,10 @@ function KanbanCardItem({ lead, isReuniao, onMoveToConfirmacao, onExtractToPipe,
                 <span className="truncate max-w-[70px]">SDR: {lead.sdr.name}</span>
               </div>
             )}
-            {leadData?.closer && (
+            {lead.closer && (
               <div className="flex items-center gap-1 text-muted-foreground">
                 <User className="w-3 h-3" />
-                <span className="truncate max-w-[70px]">Closer: {leadData.closer.name}</span>
+                <span className="truncate max-w-[70px]">Closer: {lead.closer.name}</span>
               </div>
             )}
           </div>
@@ -507,6 +507,7 @@ export function CampanhaKanban({
   const [editLeadId, setEditLeadId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<CampanhaLead | null>(null);
   const [sdrFilter, setSdrFilter] = useState<string>("all");
+  const [closerFilter, setCloserFilter] = useState<string>("all");
   const [nameFilter, setNameFilter] = useState("");
   const updateLead = useUpdateCampanhaLead();
   const deleteCampanhaLead = useDeleteCampanhaLead();
@@ -525,6 +526,17 @@ export function CampanhaKanban({
     return Array.from(sdrMap.values());
   }, [leads]);
 
+  // Get unique Closers from campaign leads
+  const closers = useMemo(() => {
+    const closerMap = new Map<string, { id: string; name: string }>();
+    leads.forEach((l) => {
+      if (l.closer) {
+        closerMap.set(l.closer.id, l.closer);
+      }
+    });
+    return Array.from(closerMap.values());
+  }, [leads]);
+
   // Normaliza texto para busca (sem acentos, minúsculo)
   const normalizeForSearch = (s: string) =>
     (s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -537,6 +549,10 @@ export function CampanhaKanban({
       if (sdrFilter === "none") list = list.filter((l) => !l.sdr_id);
       else list = list.filter((l) => l.sdr_id === sdrFilter);
     }
+    if (closerFilter !== "all") {
+      if (closerFilter === "none") list = list.filter((l) => !l.closer_id);
+      else list = list.filter((l) => l.closer_id === closerFilter);
+    }
     const search = nameFilter.trim();
     if (search) {
       const norm = normalizeForSearch(search);
@@ -547,7 +563,7 @@ export function CampanhaKanban({
       });
     }
     return list;
-  }, [leads, sdrFilter, nameFilter]);
+  }, [leads, sdrFilter, closerFilter, nameFilter]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -618,7 +634,7 @@ export function CampanhaKanban({
             stage: automation.pipe_stage,
             organization_id: organizationId,
             sdr_id: lead.sdr_id ?? undefined,
-            closer_id: lead.lead?.closer_id ?? undefined,
+            closer_id: lead.closer_id ?? lead.lead?.closer_id ?? undefined,
             campaign_name: campanhaName,
           });
           toast.success("Lead enviado para o pipe pela automação");
@@ -656,7 +672,7 @@ export function CampanhaKanban({
           stage: automation.pipe_stage,
           organization_id: organizationId,
           sdr_id: lead.sdr_id ?? undefined,
-          closer_id: lead.lead?.closer_id ?? undefined,
+          closer_id: lead.closer_id ?? lead.lead?.closer_id ?? undefined,
           campaign_name: campanhaName,
         });
         toast.success("Lead enviado para o pipe pela automação");
@@ -739,12 +755,35 @@ export function CampanhaKanban({
             ))}
           </SelectContent>
         </Select>
-        {(sdrFilter !== "all" || nameFilter.trim()) && (
+        {closers.length > 0 && (
+          <>
+            <div className="flex items-center gap-2">
+              <Filter className="w-4 h-4 text-muted-foreground" />
+              <span className="text-sm font-medium">Closer:</span>
+            </div>
+            <Select value={closerFilter} onValueChange={setCloserFilter}>
+              <SelectTrigger className="w-[200px] h-9">
+                <SelectValue placeholder="Todos os closers" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os closers</SelectItem>
+                <SelectItem value="none">Sem closer atribuído</SelectItem>
+                {closers.map((closer) => (
+                  <SelectItem key={closer.id} value={closer.id}>
+                    {closer.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </>
+        )}
+        {(sdrFilter !== "all" || closerFilter !== "all" || nameFilter.trim()) && (
           <Button
             variant="ghost"
             size="sm"
             onClick={() => {
               setSdrFilter("all");
+              setCloserFilter("all");
               setNameFilter("");
             }}
           >

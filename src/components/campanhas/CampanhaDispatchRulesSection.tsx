@@ -104,9 +104,10 @@ function defaultStep(): StepFormState {
 interface CampanhaDispatchRulesSectionProps {
   campanhaId: string;
   stages: CampanhaStage[];
+  embedded?: boolean;
 }
 
-export function CampanhaDispatchRulesSection({ campanhaId, stages }: CampanhaDispatchRulesSectionProps) {
+export function CampanhaDispatchRulesSection({ campanhaId, stages, embedded }: CampanhaDispatchRulesSectionProps) {
   const [open, setOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [processingQueue, setProcessingQueue] = useState(false);
@@ -135,7 +136,7 @@ export function CampanhaDispatchRulesSection({ campanhaId, stages }: CampanhaDis
       if (error) throw error;
       const counts = { scheduled: 0, sent: 0, failed: 0, waiting_response: 0, executed: 0 };
       for (const row of data || []) {
-        if (row.status === "scheduled") counts.scheduled++;
+        if (row.status === "scheduled" || row.status === "processing") counts.scheduled++;
         else if (row.status === "sent") counts.sent++;
         else if (row.status === "failed") counts.failed++;
         else if (row.status === "waiting_response") counts.waiting_response++;
@@ -313,6 +314,104 @@ export function CampanhaDispatchRulesSection({ campanhaId, stages }: CampanhaDis
     }
   };
 
+  const innerContent = (
+    <>
+      <p className="text-xs text-muted-foreground">
+        Automações disparadas quando um lead é adicionado ou movido de etapa. Configure sequências com templates, espera de resposta, mudança de etapa, atribuição de SDR e mais.
+      </p>
+      {isLoading ? (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="w-4 h-4 animate-spin" /> Carregando…
+        </div>
+      ) : isError ? (
+        <p className="text-sm text-destructive">
+          {(queryError as { message?: string })?.message?.includes("does not exist")
+            ? "Tabela de regras não encontrada. Execute as migrations."
+            : (queryError as Error)?.message ?? "Erro ao carregar regras."}
+        </p>
+      ) : (
+        <>
+          <ul className="space-y-2">
+            {rules.length === 0 ? (
+              <li className="text-sm text-muted-foreground">Nenhuma regra de envio configurada.</li>
+            ) : (
+              rules.map((r) => (
+                <RuleRow
+                  key={r.id}
+                  rule={r}
+                  stages={stages}
+                  getStageName={getStageName}
+                  onEdit={() => setEditingRule(r)}
+                  onDelete={() => handleDelete(r)}
+                  isDeleting={deleteRule.isPending}
+                />
+              ))
+            )}
+          </ul>
+
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="secondary" size="sm" onClick={handleProcessQueue} disabled={processingQueue}>
+              {processingQueue ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Play className="w-4 h-4 mr-2" />}
+              Processar fila agora
+            </Button>
+            {!addOpen && (
+              <Button type="button" variant="outline" size="sm" onClick={() => setAddOpen(true)}>
+                <Plus className="w-4 h-4 mr-2" /> Adicionar regra
+              </Button>
+            )}
+          </div>
+
+          {/* Dispatch Metrics */}
+          {dispatchMetrics && (dispatchMetrics.sent > 0 || dispatchMetrics.scheduled > 0 || dispatchMetrics.failed > 0 || dispatchMetrics.waiting_response > 0 || dispatchMetrics.executed > 0) && (
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+              <MetricCard icon={CheckCircle2} color="text-green-500" value={dispatchMetrics.sent} label="Enviadas" />
+              <MetricCard icon={Clock} color="text-yellow-500" value={dispatchMetrics.scheduled} label="Pendentes" />
+              <MetricCard icon={Hourglass} color="text-blue-500" value={dispatchMetrics.waiting_response} label="Aguardando" />
+              <MetricCard icon={ArrowRightLeft} color="text-purple-500" value={dispatchMetrics.executed} label="Ações" />
+              <MetricCard icon={XCircle} color="text-red-500" value={dispatchMetrics.failed} label="Falharam" />
+            </div>
+          )}
+
+          {addOpen && (
+            <RuleForm
+              triggerType={triggerType}
+              setTriggerType={(v) => { setTriggerType(v); setSelectedStageId(""); }}
+              selectedStageId={selectedStageId}
+              setSelectedStageId={setSelectedStageId}
+              steps={steps}
+              setSteps={setSteps}
+              stages={stages}
+              templates={templates}
+              teamMembers={teamMembers}
+              onAddStep={handleAddStep}
+              onRemoveStep={handleRemoveStep}
+              onStepChange={handleStepChange}
+              onCancel={() => { setAddOpen(false); setSteps([defaultStep()]); setTriggerType("lead_created"); setSelectedStageId(""); }}
+              onSave={handleAddRule}
+              isSaving={createRule.isPending || createStep.isPending}
+            />
+          )}
+
+          {editingRule && (
+            <EditRuleModal
+              rule={editingRule}
+              stages={stages}
+              templates={templates}
+              teamMembers={teamMembers}
+              onClose={() => setEditingRule(null)}
+              onSave={handleSaveEdit}
+              isSaving={updateRule.isPending || createStep.isPending}
+            />
+          )}
+        </>
+      )}
+    </>
+  );
+
+  if (embedded) {
+    return <div className="space-y-4">{innerContent}</div>;
+  }
+
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
       <CollapsibleTrigger asChild>
@@ -327,95 +426,7 @@ export function CampanhaDispatchRulesSection({ campanhaId, stages }: CampanhaDis
       </CollapsibleTrigger>
       <CollapsibleContent>
         <div className="rounded-lg border bg-muted/30 p-4 mt-2 space-y-4">
-          <p className="text-xs text-muted-foreground">
-            Automações disparadas quando um lead é adicionado ou movido de etapa. Configure sequências com templates, espera de resposta, mudança de etapa, atribuição de SDR e mais.
-          </p>
-          {isLoading ? (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="w-4 h-4 animate-spin" /> Carregando…
-            </div>
-          ) : isError ? (
-            <p className="text-sm text-destructive">
-              {(queryError as { message?: string })?.message?.includes("does not exist")
-                ? "Tabela de regras não encontrada. Execute as migrations."
-                : (queryError as Error)?.message ?? "Erro ao carregar regras."}
-            </p>
-          ) : (
-            <>
-              <ul className="space-y-2">
-                {rules.length === 0 ? (
-                  <li className="text-sm text-muted-foreground">Nenhuma regra de envio configurada.</li>
-                ) : (
-                  rules.map((r) => (
-                    <RuleRow
-                      key={r.id}
-                      rule={r}
-                      stages={stages}
-                      getStageName={getStageName}
-                      onEdit={() => setEditingRule(r)}
-                      onDelete={() => handleDelete(r)}
-                      isDeleting={deleteRule.isPending}
-                    />
-                  ))
-                )}
-              </ul>
-
-              <div className="flex flex-wrap gap-2">
-                <Button type="button" variant="secondary" size="sm" onClick={handleProcessQueue} disabled={processingQueue}>
-                  {processingQueue ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Play className="w-4 h-4 mr-2" />}
-                  Processar fila agora
-                </Button>
-                {!addOpen && (
-                  <Button type="button" variant="outline" size="sm" onClick={() => setAddOpen(true)}>
-                    <Plus className="w-4 h-4 mr-2" /> Adicionar regra
-                  </Button>
-                )}
-              </div>
-
-              {/* Dispatch Metrics */}
-              {dispatchMetrics && (dispatchMetrics.sent > 0 || dispatchMetrics.scheduled > 0 || dispatchMetrics.failed > 0 || dispatchMetrics.waiting_response > 0 || dispatchMetrics.executed > 0) && (
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-                  <MetricCard icon={CheckCircle2} color="text-green-500" value={dispatchMetrics.sent} label="Enviadas" />
-                  <MetricCard icon={Clock} color="text-yellow-500" value={dispatchMetrics.scheduled} label="Pendentes" />
-                  <MetricCard icon={Hourglass} color="text-blue-500" value={dispatchMetrics.waiting_response} label="Aguardando" />
-                  <MetricCard icon={ArrowRightLeft} color="text-purple-500" value={dispatchMetrics.executed} label="Ações" />
-                  <MetricCard icon={XCircle} color="text-red-500" value={dispatchMetrics.failed} label="Falharam" />
-                </div>
-              )}
-
-              {addOpen && (
-                <RuleForm
-                  triggerType={triggerType}
-                  setTriggerType={(v) => { setTriggerType(v); setSelectedStageId(""); }}
-                  selectedStageId={selectedStageId}
-                  setSelectedStageId={setSelectedStageId}
-                  steps={steps}
-                  setSteps={setSteps}
-                  stages={stages}
-                  templates={templates}
-                  teamMembers={teamMembers}
-                  onAddStep={handleAddStep}
-                  onRemoveStep={handleRemoveStep}
-                  onStepChange={handleStepChange}
-                  onCancel={() => { setAddOpen(false); setSteps([defaultStep()]); setTriggerType("lead_created"); setSelectedStageId(""); }}
-                  onSave={handleAddRule}
-                  isSaving={createRule.isPending || createStep.isPending}
-                />
-              )}
-
-              {editingRule && (
-                <EditRuleModal
-                  rule={editingRule}
-                  stages={stages}
-                  templates={templates}
-                  teamMembers={teamMembers}
-                  onClose={() => setEditingRule(null)}
-                  onSave={handleSaveEdit}
-                  isSaving={updateRule.isPending || createStep.isPending}
-                />
-              )}
-            </>
-          )}
+          {innerContent}
         </div>
       </CollapsibleContent>
     </Collapsible>

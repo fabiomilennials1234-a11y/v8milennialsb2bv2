@@ -17,6 +17,7 @@ import { QualificationStep } from "../wizard-steps/QualificationStep";
 import { ExamplesStep } from "../wizard-steps/ExamplesStep";
 import { AvailabilityStep } from "../wizard-steps/AvailabilityStep";
 import { ObjectiveStep } from "../wizard-steps/ObjectiveStep";
+import { ObjectiveCompositeStep } from "../wizard-steps/ObjectiveCompositeStep";
 import { OperationModeStep } from "../wizard-steps/OperationModeStep";
 import { ActivationTriggersStep } from "../wizard-steps/ActivationTriggersStep";
 import { OutboundConfigStep } from "../wizard-steps/OutboundConfigStep";
@@ -26,6 +27,9 @@ import { MeetingConfirmationStep } from "../wizard-steps/MeetingConfirmationStep
 import { FollowupActionsStep } from "../wizard-steps/FollowupActionsStep";
 import { ConfirmationFunnelStep } from "../wizard-steps/ConfirmationFunnelStep";
 import { ConfirmerActionsStep } from "../wizard-steps/ConfirmerActionsStep";
+import { CustomInstructionsStep } from "../wizard-steps/CustomInstructionsStep";
+import { KnowledgeBaseStep } from "../wizard-steps/KnowledgeBaseStep";
+import { AgentCapabilitiesStep } from "../wizard-steps/AgentCapabilitiesStep";
 import type { StepRegistryEntry } from "./types";
 
 export const STEP_REGISTRY: Record<string, StepRegistryEntry> = {
@@ -89,6 +93,11 @@ export const STEP_REGISTRY: Record<string, StepRegistryEntry> = {
     title: "Objetivo",
     fieldToValidate: "mainObjective",
   },
+  objectiveComposite: {
+    component: ObjectiveCompositeStep,
+    title: "Objetivo",
+    fieldToValidate: "objectiveComposite",
+  },
   operationMode: {
     component: OperationModeStep,
     title: "Modo BDR",
@@ -133,5 +142,20 @@ export const STEP_REGISTRY: Record<string, StepRegistryEntry> = {
     component: ConfirmerActionsStep,
     title: "Ações",
     fieldToValidate: "automationActions",
+  },
+  customInstructions: {
+    component: CustomInstructionsStep,
+    title: "Instruções",
+    fieldToValidate: "customInstructions",
+  },
+  knowledgeBase: {
+    component: KnowledgeBaseStep,
+    title: "Documentos",
+    fieldToValidate: "knowledgeBaseFiles",
+  },
+  capabilities: {
+    component: AgentCapabilitiesStep,
+    title: "Capacidades",
+    fieldToValidate: "canQualifyLead",
   },
 };

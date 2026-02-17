@@ -177,7 +177,25 @@ async function processCampaignQueue(
   // --- 1. Process expired wait_response timeouts ---
   timeoutsProcessed = await processExpiredTimeouts(supabase, campanhaId);
 
-  // --- 2. Process scheduled items (all action types) ---
+  // --- 2. Atomically claim scheduled items (prevents concurrent processing) ---
+  const { data: claimedRows, error: claimError } = await supabase.rpc(
+    "claim_campaign_dispatch_batch",
+    { p_campanha_id: campanhaId, p_limit: BATCH_SIZE }
+  );
+
+  if (claimError) {
+    console.error(`[campaign-rule-dispatch][${campanhaId}] Error claiming batch:`, claimError);
+    return { campanha_id: campanhaId, processed: 0, sent: 0, failed: 0, actions_executed: 0, timeouts_processed: timeoutsProcessed, error: claimError.message };
+  }
+
+  if (!claimedRows || claimedRows.length === 0) {
+    return { campanha_id: campanhaId, processed: 0, sent: 0, failed: 0, actions_executed: actionsExecuted, timeouts_processed: timeoutsProcessed };
+  }
+
+  const claimedIds = claimedRows.map((r: { claimed_id: string }) => r.claimed_id);
+  console.log(`[campaign-rule-dispatch][${campanhaId}] Claimed ${claimedIds.length} item(s)`);
+
+  // --- 3. Fetch full data for claimed rows ---
   const { data: rows, error: fetchError } = await supabase
     .from("scheduled_campaign_messages")
     .select(`
@@ -199,16 +217,17 @@ async function processCampaignQueue(
       step_position,
       campanhas(id, organization_id),
       leads(id, name, company, phone, email, origin, segment),
-      campaign_templates(id, name, content, message_type, audio_url, available_variables)
+      campaign_templates!template_id(id, name, content, message_type, audio_url, available_variables)
     `)
-    .eq("campanha_id", campanhaId)
-    .eq("status", "scheduled")
-    .lte("scheduled_at", new Date().toISOString())
-    .order("scheduled_at", { ascending: true })
-    .limit(BATCH_SIZE);
+    .in("id", claimedIds)
+    .order("scheduled_at", { ascending: true });
 
   if (fetchError) {
-    console.error(`[campaign-rule-dispatch][${campanhaId}] Error fetching queue:`, fetchError);
+    console.error(`[campaign-rule-dispatch][${campanhaId}] Error fetching claimed rows:`, fetchError);
+    // Reset claimed rows back to 'scheduled' so they can be retried
+    await supabase.from("scheduled_campaign_messages")
+      .update({ status: "scheduled" })
+      .in("id", claimedIds);
     return { campanha_id: campanhaId, processed: 0, sent: 0, failed: 0, actions_executed: 0, timeouts_processed: timeoutsProcessed, error: fetchError.message };
   }
 
@@ -234,7 +253,7 @@ async function processCampaignQueue(
       // ACTION: send_template
       // =========================
       if (actionType === "send_template") {
-        const template = (row as any).campaign_templates as { id: string; name?: string; content?: string; message_type?: string; audio_url?: string } | null;
+        const template = (row as any).campaign_templates as { id: string; name?: string; content?: string; message_type?: string; audio_url?: string; image_url?: string; document_url?: string; file_name?: string } | null;
         if (!template) {
           await markFailed(supabase, row.id, "Missing template");
           failed++;
@@ -264,8 +283,11 @@ async function processCampaignQueue(
         }
 
         const isAudio = template.message_type === "audio" && template.audio_url && String(template.audio_url).trim().length > 0;
+        const isImage = template.message_type === "image" && template.image_url && String(template.image_url).trim().length > 0;
+        const isDocument = template.message_type === "document" && template.document_url && String(template.document_url).trim().length > 0;
+        const isMedia = isAudio || isImage || isDocument;
         const timeVars = getTimeBasedVariables();
-        const messageContent = isAudio ? "[Áudio]" : replaceVariables(template.content || "", {
+        const leadVars = {
           nome: lead.name || "você",
           empresa: lead.company || "",
           email: lead.email || "",
@@ -276,11 +298,17 @@ async function processCampaignQueue(
           saudacao: timeVars.saudacao,
           data: timeVars.data,
           hora: timeVars.hora,
-        });
+        };
+        const messageContent = isAudio ? "[Áudio]" : isImage ? (template.content ? replaceVariables(template.content, leadVars) : "") : isDocument ? (template.content ? replaceVariables(template.content, leadVars) : "") : replaceVariables(template.content || "", leadVars);
 
         let sendResult: { success: boolean; messageId?: string; error?: string };
         if (isAudio) {
           sendResult = await sendWhatsAppAudio(instance.instance_name, lead.phone, template.audio_url!);
+        } else if (isImage) {
+          sendResult = await sendWhatsAppMedia(instance.instance_name, lead.phone, "image", template.image_url!, { caption: messageContent || undefined });
+        } else if (isDocument) {
+          const resolvedFileName = template.file_name ? replaceVariables(template.file_name, leadVars) : undefined;
+          sendResult = await sendWhatsAppMedia(instance.instance_name, lead.phone, "document", template.document_url!, { caption: messageContent || undefined, fileName: resolvedFileName });
         } else {
           sendResult = await sendWhatsAppMessage(instance.instance_name, lead.phone, messageContent);
         }
@@ -313,9 +341,9 @@ async function processCampaignQueue(
               remote_jid: `${phone}@s.whatsapp.net`,
               phone_number: phone,
               direction: "outgoing",
-              message_type: isAudio ? "audio" : "text",
-              content: isAudio ? null : messageContent,
-              media_url: isAudio ? template.audio_url : null,
+              message_type: isAudio ? "audio" : isImage ? "image" : isDocument ? "document" : "text",
+              content: isMedia && !messageContent ? null : messageContent,
+              media_url: isAudio ? template.audio_url : isImage ? template.image_url : isDocument ? template.document_url : null,
               status: "sent",
               lead_id: lead.id,
               timestamp: new Date().toISOString(),
@@ -456,14 +484,18 @@ async function processCampaignQueue(
         let sdrId: string | null = (row as any).target_sdr_id || null;
 
         if (mode === "round_robin") {
-          // Find SDR with least leads in this campaign
-          const { data: sdrs } = await supabase
-            .from("team_members")
-            .select("id, name")
-            .eq("organization_id", campanha.organization_id)
-            .in("role", ["admin", "sdr", "member"]);
+          // Find SDR with least leads in this campaign (from campanha_members with role = 'sdr')
+          const { data: sdrMembers } = await supabase
+            .from("campanha_members")
+            .select("team_member_id, team_member:team_members(id, name)")
+            .eq("campanha_id", campanhaId)
+            .eq("role", "sdr");
 
-          if (sdrs && sdrs.length > 0) {
+          const sdrs = (sdrMembers || [])
+            .filter((m: any) => m.team_member)
+            .map((m: any) => ({ id: m.team_member_id, name: m.team_member?.name }));
+
+          if (sdrs.length > 0) {
             // Count leads per SDR in this campaign
             const { data: sdrCounts } = await supabase
               .from("campanha_leads")
@@ -819,6 +851,42 @@ async function sendWhatsAppAudio(
       method: "POST",
       headers: { "Content-Type": "application/json", apikey: EVOLUTION_API_KEY },
       body: JSON.stringify({ number: phone, audio: audioUrl }),
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      return { success: false, error: `HTTP ${response.status}: ${errorText}` };
+    }
+    const result = await response.json();
+    return { success: true, messageId: result.key?.id };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+async function sendWhatsAppMedia(
+  instanceName: string,
+  phoneNumber: string,
+  mediaType: "image" | "document",
+  mediaUrl: string,
+  options?: { caption?: string; fileName?: string }
+): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY) {
+    return { success: false, error: "Evolution API not configured" };
+  }
+  try {
+    let phone = phoneNumber.replace(/\D/g, "");
+    if (!phone.startsWith("55")) phone = "55" + phone;
+    const body: Record<string, unknown> = {
+      number: phone,
+      mediatype: mediaType,
+      media: mediaUrl,
+    };
+    if (options?.caption) body.caption = options.caption;
+    if (options?.fileName) body.fileName = options.fileName;
+    const response = await fetch(`${EVOLUTION_API_URL}/message/sendMedia/${instanceName}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: EVOLUTION_API_KEY },
+      body: JSON.stringify(body),
     });
     if (!response.ok) {
       const errorText = await response.text();

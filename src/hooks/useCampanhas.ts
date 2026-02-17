@@ -57,6 +57,9 @@ export interface Campanha {
   mkt_investimento_cadastro_cents: number | null;
   // Instância WhatsApp para disparos (semi e automática)
   whatsapp_instance_id: string | null;
+  // Distribuição de Closers (independente da SDR)
+  closer_distribution_mode: LeadDistributionMode;
+  closer_assigned_to: string | null;
 }
 
 export interface CampanhaStage {
@@ -69,10 +72,13 @@ export interface CampanhaStage {
   created_at: string;
 }
 
+export type CampanhaMemberRole = "sdr" | "closer";
+
 export interface CampanhaMember {
   id: string;
   campanha_id: string;
   team_member_id: string;
+  role: CampanhaMemberRole;
   meetings_count: number;
   bonus_earned: boolean;
   created_at: string;
@@ -89,6 +95,7 @@ export interface CampanhaLead {
   lead_id: string;
   stage_id: string;
   sdr_id: string | null;
+  closer_id: string | null;
   notes: string | null;
   created_at: string;
   updated_at: string;
@@ -120,6 +127,10 @@ export interface CampanhaLead {
     id: string;
     name: string;
   };
+  closer?: {
+    id: string;
+    name: string;
+  };
   stage?: CampanhaStage;
 }
 
@@ -134,9 +145,12 @@ export interface CampanhaInsert {
   campaign_type?: CampaignType;
   agent_id?: string | null;
   auto_config?: AutoConfig | null;
-  // Distribuição de leads
+  // Distribuição de leads (SDR)
   lead_distribution_mode?: LeadDistributionMode;
   lead_assigned_to?: string | null;
+  // Distribuição de Closers
+  closer_distribution_mode?: LeadDistributionMode;
+  closer_assigned_to?: string | null;
   // Investimento MKT
   investimento_cents?: number | null;
   investimento_source?: "manual" | "api" | null;
@@ -324,6 +338,7 @@ export function useCampanhaLeads(campanhaId: string | undefined) {
             lead_tags(tag:tags(id, name, color))
           ),
           sdr:team_members!campanha_leads_sdr_id_fkey(id, name),
+          closer:team_members!campanha_leads_closer_id_fkey(id, name),
           stage:campanha_stages(*)
         `)
         .eq("campanha_id", campanhaId)
@@ -344,6 +359,7 @@ export function useCreateCampanha() {
     mutationFn: async (campanha: CampanhaInsert & {
       stages: Omit<CampanhaStageInsert, "campanha_id">[];
       memberIds: string[];
+      memberRoles?: Record<string, CampanhaMemberRole>; // memberId -> 'sdr' | 'closer'
       templateIds?: string[]; // Para SEMI-AUTOMÁTICA
     }) => {
       // Buscar organization_id do usuário
@@ -372,9 +388,12 @@ export function useCreateCampanha() {
           campaign_type: campanha.campaign_type || 'manual',
           agent_id: campanha.agent_id || null,
           auto_config: campanha.auto_config || null,
-          // Distribuição de leads
+          // Distribuição de leads (SDR)
           lead_distribution_mode: campanha.lead_distribution_mode ?? null,
           lead_assigned_to: campanha.lead_assigned_to ?? null,
+          // Distribuição de Closers
+          closer_distribution_mode: campanha.closer_distribution_mode ?? null,
+          closer_assigned_to: campanha.closer_assigned_to ?? null,
           // Instância WhatsApp (semi e automática)
           whatsapp_instance_id: campanha.whatsapp_instance_id ?? null,
           // Organization
@@ -399,11 +418,12 @@ export function useCreateCampanha() {
         if (stagesError) throw stagesError;
       }
 
-      // Add members
+      // Add members (with role: sdr or closer)
       if (campanha.memberIds.length > 0) {
         const members = campanha.memberIds.map((memberId) => ({
           campanha_id: newCampanha.id,
           team_member_id: memberId,
+          role: campanha.memberRoles?.[memberId] || "sdr",
         }));
 
         const { error: membersError } = await supabase
@@ -609,7 +629,7 @@ export function useAddCampanhaLead() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (data: { campanha_id: string; lead_id: string; stage_id: string; sdr_id?: string }) => {
+    mutationFn: async (data: { campanha_id: string; lead_id: string; stage_id: string; sdr_id?: string; closer_id?: string }) => {
       const { data: newLead, error } = await supabase
         .from("campanha_leads")
         .insert(data)
@@ -630,7 +650,7 @@ export function useUpdateCampanhaLead() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ id, campanha_id, ...updates }: { id: string; campanha_id: string; stage_id?: string; sdr_id?: string; notes?: string }) => {
+    mutationFn: async ({ id, campanha_id, ...updates }: { id: string; campanha_id: string; stage_id?: string; sdr_id?: string; closer_id?: string; notes?: string }) => {
       const { data, error } = await supabase
         .from("campanha_leads")
         .update(updates)
@@ -643,6 +663,7 @@ export function useUpdateCampanhaLead() {
             lead_tags(tag:tags(id, name, color))
           ),
           sdr:team_members!campanha_leads_sdr_id_fkey(id, name),
+          closer:team_members!campanha_leads_closer_id_fkey(id, name),
           stage:campanha_stages(*)
         `)
         .single();
@@ -704,15 +725,20 @@ export function useDeleteCampanhaLead() {
   });
 }
 
-// Hook to update member meetings count
+// Hook to update member meetings count and/or role
 export function useUpdateCampanhaMember() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ campanha_id, team_member_id, meetings_count, bonus_earned }: { campanha_id: string; team_member_id: string; meetings_count?: number; bonus_earned?: boolean }) => {
+    mutationFn: async ({ campanha_id, team_member_id, meetings_count, bonus_earned, role }: { campanha_id: string; team_member_id: string; meetings_count?: number; bonus_earned?: boolean; role?: CampanhaMemberRole }) => {
+      const updates: Record<string, unknown> = {};
+      if (meetings_count !== undefined) updates.meetings_count = meetings_count;
+      if (bonus_earned !== undefined) updates.bonus_earned = bonus_earned;
+      if (role !== undefined) updates.role = role;
+
       const { data, error } = await supabase
         .from("campanha_members")
-        .update({ meetings_count, bonus_earned })
+        .update(updates)
         .eq("campanha_id", campanha_id)
         .eq("team_member_id", team_member_id)
         .select()

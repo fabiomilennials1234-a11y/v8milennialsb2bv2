@@ -41,7 +41,7 @@ As Edge Functions usam variáveis de ambiente do Supabase. Configure no dashboar
 ```bash
 # OpenRouter (para Agent Engine)
 OPENROUTER_API_KEY=sk-or-v1-...
-OPENROUTER_DEFAULT_MODEL=anthropic/claude-3.5-sonnet
+OPENROUTER_DEFAULT_MODEL=openai/gpt-4o-mini
 OPENROUTER_REFERER_URL=https://v8millennials.com
 
 # Webhook API Key (para webhook-orchestrator)
@@ -66,7 +66,7 @@ supabase link --project-ref jsjsmuncfkbsbzqzqhfq
 # Configurar secrets
 supabase secrets set OPENROUTER_API_KEY=sk-or-v1-...
 supabase secrets set WEBHOOK_API_KEY=sua-api-key-secreta
-supabase secrets set OPENROUTER_DEFAULT_MODEL=anthropic/claude-3.5-sonnet
+supabase secrets set OPENROUTER_DEFAULT_MODEL=openai/gpt-4o-mini
 ```
 
 ## Verificar Conexão

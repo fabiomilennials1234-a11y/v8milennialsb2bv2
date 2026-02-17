@@ -18,11 +18,13 @@ import { useForm, FormProvider } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronLeft, ChevronRight, Check, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Check, X, Eye, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { Badge } from "@/components/ui/badge";
 import { useCreateCopilotAgent } from "@/hooks/useCopilotAgents";
+import { useUploadAgentDocument } from "@/hooks/useAgentDocuments";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import type { CopilotWizardData } from "@/types/copilot";
@@ -30,6 +32,16 @@ import type { CopilotWizardData } from "@/types/copilot";
 import { TemplateStep } from "./wizard-steps/TemplateStep";
 import { getWizardConfig, STEP_REGISTRY } from "./wizard-configs";
 import type { WizardTypeConfig } from "./wizard-configs";
+import { PromptPreviewSheet } from "./PromptPreviewSheet";
+import { mapWizardDataToAgentPreview } from "@/lib/copilot/prompt-utils";
+import { generatePrompt } from "@/hooks/useCopilotPromptBuilder";
+import {
+  computePromptQuality,
+  getQualityColor,
+  getQualityBgColor,
+  getQualityLabel,
+} from "@/lib/copilot/prompt-quality";
+import { STEP_TIPS } from "@/lib/copilot/step-tips";
 
 // Schema de validação (permissivo - validação por step é feita via config)
 const wizardSchema = z.object({
@@ -51,11 +63,11 @@ const wizardSchema = z.object({
   ),
   businessContext: z.object({
     companyName: z.string().min(2, "Informe o nome da empresa"),
-    productSummary: z.string().min(10, "Descreva o produto/serviço"),
-    idealCustomerProfile: z.string().min(10, "Descreva o ICP"),
+    productSummary: z.string().min(30, "Descreva o produto/serviço com mais detalhes (mín. 30 chars)"),
+    idealCustomerProfile: z.string().min(30, "Descreva o ICP com mais detalhes (mín. 30 chars)"),
     serviceRegion: z.string().optional().or(z.literal("")),
-    valueProps: z.string().min(10, "Informe os diferenciais principais"),
-    customerPains: z.string().min(10, "Informe as dores que resolve"),
+    valueProps: z.string().min(30, "Informe os diferenciais com mais detalhes (mín. 30 chars)"),
+    customerPains: z.string().min(20, "Informe as dores que resolve (mín. 20 chars)"),
     socialProof: z.string().optional().or(z.literal("")),
     pricingPolicy: z.string().optional().or(z.literal("")),
     commercialTerms: z.string().optional().or(z.literal("")),
@@ -98,6 +110,23 @@ const wizardSchema = z.object({
     .string()
     .min(10, "Descreva o objetivo com mais detalhes")
     .max(500, "Objetivo muito longo (máximo 500 caracteres)"),
+  objectiveComposite: z.object({
+    mission: z.string().min(20, "Missão deve ter pelo menos 20 caracteres"),
+    success_criteria: z.string().min(10, "Critério de sucesso deve ter pelo menos 10 caracteres"),
+    limits: z.string().optional().or(z.literal("")),
+  }),
+  customInstructions: z.string().max(2000, "Máximo 2000 caracteres").optional().or(z.literal("")),
+  knowledgeBaseFiles: z.array(z.any()).optional().default([]),
+  canQualifyLead: z.boolean().default(true),
+  canScheduleMeeting: z.boolean().default(true),
+  canSendFollowup: z.boolean().default(true),
+  canUpdateCrm: z.boolean().default(false),
+  canAnswerFaq: z.boolean().default(true),
+  canCreateLead: z.boolean().default(true),
+  canTransferHuman: z.boolean().default(true),
+  canMoveCards: z.boolean().default(false),
+  maxConversationTurns: z.number().min(5).max(50).default(20),
+  responseDelayMs: z.number().min(0).max(5000).default(1000),
   kanbanRules: z.array(z.any()),
   followupRules: z.array(z.any()).optional().default([]),
   attendUnknownContacts: z.boolean().optional().default(false),
@@ -232,6 +261,19 @@ const BASE_DEFAULTS: CopilotWizardData = {
   },
   responseDelaySeconds: 0,
   mainObjective: "",
+  objectiveComposite: { mission: "", success_criteria: "", limits: "" },
+  customInstructions: "",
+  knowledgeBaseFiles: [],
+  canQualifyLead: true,
+  canScheduleMeeting: true,
+  canSendFollowup: true,
+  canUpdateCrm: false,
+  canAnswerFaq: true,
+  canCreateLead: true,
+  canTransferHuman: true,
+  canMoveCards: false,
+  maxConversationTurns: 20,
+  responseDelayMs: 1000,
   kanbanRules: [],
   followupRules: [],
   attendUnknownContacts: false,
@@ -302,8 +344,10 @@ function resolveSteps(config: WizardTypeConfig) {
 export function CopilotWizard() {
   const [currentStep, setCurrentStep] = useState(0);
   const [activeConfig, setActiveConfig] = useState<WizardTypeConfig | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const navigate = useNavigate();
   const createAgent = useCreateCopilotAgent();
+  const uploadDocument = useUploadAgentDocument();
 
   const methods = useForm<CopilotWizardData>({
     resolver: zodResolver(wizardSchema),
@@ -361,6 +405,40 @@ export function CopilotWizard() {
       setCurrentStep(Math.max(0, resolvedSteps.length - 1));
     }
   }, [resolvedSteps.length, currentStep]);
+
+  // Observar dados do formulário para quality score
+  const watchedData = watch();
+
+  // Quality score computado a partir dos dados do form
+  const quality = useMemo(
+    () => computePromptQuality(watchedData),
+    [watchedData]
+  );
+
+  // Gerar preview do prompt sob demanda
+  const previewPrompt = useMemo(() => {
+    if (!previewOpen) return "";
+    try {
+      const { agent, faqs } = mapWizardDataToAgentPreview(watchedData as CopilotWizardData);
+      const kanbanRules = (watchedData.kanbanRules || []).map((r: any) => ({
+        id: `kr-${r.stageName}`,
+        agent_id: "preview",
+        pipe_type: r.pipeType || "whatsapp",
+        stage_name: r.stageName || "",
+        goal: r.goal || "",
+        behavior: r.behavior || "",
+        allowed_actions: r.allowedActions || [],
+        forbidden_actions: r.forbiddenActions || [],
+        position: 0,
+        created_at: new Date().toISOString(),
+      }));
+      const result = generatePrompt(agent, faqs, kanbanRules);
+      return result?.systemPrompt || "(Prompt vazio — preencha mais campos)";
+    } catch (err) {
+      console.error("[PromptPreview] Erro ao gerar preview:", err);
+      return `(Erro ao gerar preview: ${err instanceof Error ? err.message : String(err)})`;
+    }
+  }, [previewOpen, watchedData]);
 
   const totalSteps = resolvedSteps.length;
   const progress = totalSteps > 0 ? ((currentStep + 1) / totalSteps) * 100 : 0;
@@ -426,7 +504,11 @@ export function CopilotWizard() {
         skills: data.skills || [],
         allowed_topics: data.allowedTopics || [],
         forbidden_topics: data.forbiddenTopics || [],
-        main_objective: data.mainObjective,
+        main_objective: data.objectiveComposite?.mission || data.mainObjective,
+        objective_composite: data.objectiveComposite?.mission
+          ? data.objectiveComposite
+          : null,
+        custom_instructions: data.customInstructions || null,
         business_context: data.businessContext || {},
         conversation_style: data.conversationStyle || {},
         qualification_rules: data.qualification || {},
@@ -453,29 +535,45 @@ export function CopilotWizard() {
         agentPayload.automation_actions = data.automationActions;
       }
 
-      // Auto-setar capabilities baseado no tipo
-      if (activeConfig?.suggestedCapabilities) {
-        const caps = activeConfig.suggestedCapabilities;
-        agentPayload.can_qualify_lead = caps.can_qualify_lead;
-        agentPayload.can_schedule_meeting = caps.can_schedule_meeting;
-        agentPayload.can_send_followup = caps.can_send_followup;
-        agentPayload.can_update_crm = caps.can_update_crm;
-        agentPayload.can_answer_faq = caps.can_answer_faq;
-        agentPayload.can_create_lead = caps.can_create_lead;
-        agentPayload.can_transfer_human = caps.can_transfer_human;
-      }
+      // Capabilities escolhidas pelo usuário no wizard
+      agentPayload.can_qualify_lead = data.canQualifyLead ?? true;
+      agentPayload.can_schedule_meeting = data.canScheduleMeeting ?? true;
+      agentPayload.can_send_followup = data.canSendFollowup ?? true;
+      agentPayload.can_update_crm = data.canUpdateCrm ?? false;
+      agentPayload.can_answer_faq = data.canAnswerFaq ?? true;
+      agentPayload.can_create_lead = data.canCreateLead ?? true;
+      agentPayload.can_transfer_human = data.canTransferHuman ?? true;
+      agentPayload.can_move_cards = data.canMoveCards ?? false;
+      agentPayload.max_conversation_turns = data.maxConversationTurns ?? 20;
+      agentPayload.response_delay_ms = data.responseDelayMs ?? 1000;
 
       // Filtrar regras desativadas pelo usuário no funil de confirmação
       const activeKanbanRules = (data.kanbanRules || [])
         .filter((r: any) => !r._disabled)
         .map(({ _disabled, ...rule }: any) => rule);
 
-      await createAgent.mutateAsync({
+      const createdAgent = await createAgent.mutateAsync({
         agent: agentPayload,
         faqs: data.faqs || [],
         kanbanRules: activeKanbanRules,
         followupRules: data.followupRules || [],
       });
+
+      // Upload de documentos da knowledge base (se houver)
+      const filesToUpload = data.knowledgeBaseFiles || [];
+      if (filesToUpload.length > 0 && createdAgent?.id && createdAgent?.organization_id) {
+        for (const file of filesToUpload) {
+          try {
+            await uploadDocument.mutateAsync({
+              agentId: createdAgent.id,
+              organizationId: createdAgent.organization_id,
+              file,
+            });
+          } catch (uploadErr) {
+            console.error("Erro ao enviar documento:", uploadErr);
+          }
+        }
+      }
 
       setTimeout(() => {
         try {
@@ -494,7 +592,9 @@ export function CopilotWizard() {
         errorMessage = error;
       }
 
-      if (errorMessage.includes("activation_triggers") || errorMessage.includes("column")) {
+      if (errorMessage.includes("unique_agent_name_per_org")) {
+        errorMessage = "Já existe um agente com este nome na sua organização. Escolha um nome diferente.";
+      } else if (errorMessage.includes("activation_triggers") || errorMessage.includes("column")) {
         errorMessage = "Coluna não encontrada no banco. Execute a migration pendente.";
       }
 
@@ -562,15 +662,23 @@ export function CopilotWizard() {
           </p>
         </motion.div>
 
-        {/* Progress */}
+        {/* Progress + Quality Badge */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium">
               Etapa {currentStep + 1} de {totalSteps}
             </span>
-            <span className="text-sm text-muted-foreground">
-              {currentStepData?.title || ""}
-            </span>
+            <div className="flex items-center gap-3">
+              <Badge
+                variant="outline"
+                className={`${getQualityBgColor(quality.level)} ${getQualityColor(quality.level)} border text-xs`}
+              >
+                {getQualityLabel(quality.level)} ({quality.score}%)
+              </Badge>
+              <span className="text-sm text-muted-foreground">
+                {currentStepData?.title || ""}
+              </span>
+            </div>
           </div>
           <Progress value={progress} className="h-2" />
         </div>
@@ -611,7 +719,7 @@ export function CopilotWizard() {
         {/* Form Content */}
         <FormProvider {...methods}>
           <form onSubmit={(e) => e.preventDefault()}>
-            <Card className="p-8 mb-6">
+            <Card className="p-8 mb-4">
               <AnimatePresence mode="wait">
                 <motion.div
                   key={`${activeConfig.type}-${currentStep}`}
@@ -630,6 +738,21 @@ export function CopilotWizard() {
                 </motion.div>
               </AnimatePresence>
             </Card>
+
+            {/* Step Tip */}
+            {currentStepData && STEP_TIPS[currentStepData.id] && (
+              <div className="mb-6 rounded-lg border border-blue-500/20 bg-blue-500/5 px-4 py-3 flex items-start gap-3">
+                <Info className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-sm font-medium text-blue-500">
+                    {STEP_TIPS[currentStepData.id].title}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {STEP_TIPS[currentStepData.id].body}
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* Navigation Buttons */}
             <div className="flex justify-between">
@@ -666,34 +789,52 @@ export function CopilotWizard() {
                 )}
               </div>
 
-              {isLastStep ? (
+              <div className="flex gap-2">
                 <Button
                   type="button"
-                  disabled={createAgent.isPending}
-                  onClick={() => handleSubmit(onSubmit)()}
-                  className="bg-millennials-yellow hover:bg-millennials-yellow/90 text-black"
+                  variant="outline"
+                  onClick={() => setPreviewOpen(true)}
                 >
-                  {createAgent.isPending ? (
-                    "Criando..."
-                  ) : (
-                    <>
-                      Criar Copilot
-                      <Check className="w-4 h-4 ml-2" />
-                    </>
-                  )}
+                  <Eye className="w-4 h-4 mr-2" />
+                  Preview
                 </Button>
-              ) : (
-                <Button
-                  type="button"
-                  onClick={handleNext}
-                  className="bg-millennials-yellow hover:bg-millennials-yellow/90 text-black"
-                >
-                  Próximo
-                  <ChevronRight className="w-4 h-4 ml-2" />
-                </Button>
-              )}
+
+                {isLastStep ? (
+                  <Button
+                    type="button"
+                    disabled={createAgent.isPending}
+                    onClick={() => handleSubmit(onSubmit)()}
+                    className="bg-millennials-yellow hover:bg-millennials-yellow/90 text-black"
+                  >
+                    {createAgent.isPending ? (
+                      "Criando..."
+                    ) : (
+                      <>
+                        Criar Copilot
+                        <Check className="w-4 h-4 ml-2" />
+                      </>
+                    )}
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    onClick={handleNext}
+                    className="bg-millennials-yellow hover:bg-millennials-yellow/90 text-black"
+                  >
+                    Próximo
+                    <ChevronRight className="w-4 h-4 ml-2" />
+                  </Button>
+                )}
+              </div>
             </div>
           </form>
+
+          {/* Prompt Preview Sheet */}
+          <PromptPreviewSheet
+            open={previewOpen}
+            onOpenChange={setPreviewOpen}
+            promptText={previewPrompt}
+          />
         </FormProvider>
       </div>
     </div>

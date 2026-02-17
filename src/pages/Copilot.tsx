@@ -50,6 +50,8 @@ import {
 } from "@/hooks/useCopilotAgents";
 import { useCopilotSubscription } from "@/hooks/useCopilotSubscription";
 import { useCanManageCopilot } from "@/hooks/useUserRole";
+import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
+import { toast } from "sonner";
 import { AgentConfigModal } from "@/components/copilot/AgentConfigModal";
 import type { CopilotAgentWithRelations } from "@/types/copilot";
 
@@ -66,6 +68,7 @@ export default function Copilot() {
   const [agentToDelete, setAgentToDelete] = useState<string | null>(null);
   const [selectedAgent, setSelectedAgent] = useState<CopilotAgentWithRelations | null>(null);
   const [configModalOpen, setConfigModalOpen] = useState(false);
+  const { checkLimit } = useOrgFeatures();
 
   const handleOpenConfig = (agent: CopilotAgentWithRelations) => {
     setSelectedAgent(agent);
@@ -76,6 +79,12 @@ export default function Copilot() {
     // Admins e closers sempre têm acesso; outros precisam de assinatura ativa
     if (!canManageCopilot && !hasAccess) {
       navigate("/configuracoes");
+      return;
+    }
+    // Verificar limite de agentes pelo plano
+    const maxAgents = checkLimit("max_copilot_agents");
+    if (maxAgents !== -1 && (agents?.length ?? 0) >= maxAgents) {
+      toast.error(`Limite de ${maxAgents} agente(s) atingido. Faça upgrade do plano para criar mais.`);
       return;
     }
     navigate("/copilot/novo");

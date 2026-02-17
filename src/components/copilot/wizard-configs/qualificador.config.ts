@@ -16,6 +16,10 @@ export const QUALIFICADOR_CONFIG: WizardTypeConfig = {
     "qualification",
     "examples",
     "availability",
+    "objectiveComposite",
+    "capabilities",
+    "knowledgeBase",
+    "customInstructions",
     "automationActions",
   ],
   defaults: {
@@ -58,6 +62,17 @@ export const QUALIFICADOR_CONFIG: WizardTypeConfig = {
       optionalFields: ["Tamanho da equipe", "Ferramentas atuais"],
       notes: "",
     },
+    knowledgeBaseFiles: [],
+    canQualifyLead: true,
+    canScheduleMeeting: false,
+    canSendFollowup: false,
+    canUpdateCrm: false,
+    canAnswerFaq: true,
+    canCreateLead: false,
+    canTransferHuman: true,
+    canMoveCards: false,
+    maxConversationTurns: 20,
+    responseDelayMs: 1000,
   },
   suggestedKanbanRules: [
     {

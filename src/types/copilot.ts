@@ -62,6 +62,20 @@ export type FollowupStyle = "direct" | "value" | "curiosity" | "breakup";
 export type LeadTemperature = "cold" | "warm" | "hot";
 
 // =====================================================
+// OBJECTIVE COMPOSITE
+// =====================================================
+
+/**
+ * Objetivo estruturado em 3 partes — substitui o main_objective (string única)
+ * Mapeia para a coluna JSONB objective_composite no banco
+ */
+export interface ObjectiveComposite {
+  mission: string;           // O que o agente deve fazer
+  success_criteria: string;  // Quando a interação é considerada bem-sucedida
+  limits: string;            // O que o agente NÃO deve fazer
+}
+
+// =====================================================
 // WIZARD FORM DATA
 // =====================================================
 
@@ -150,6 +164,7 @@ export interface CopilotWizardData {
 
   // Step 13: Main Objective & Kanban Rules
   mainObjective: string;
+  objectiveComposite: ObjectiveComposite;
   kanbanRules: Array<{
     pipeType: string;
     stageName: string;
@@ -173,6 +188,24 @@ export interface CopilotWizardData {
 
   // Step 18: Regras de Follow-up
   followupRules: FollowupRule[];
+
+  // Step 19: Instruções personalizadas do usuário
+  customInstructions: string;
+
+  // Step 20: Base de Conhecimento (RAG)
+  knowledgeBaseFiles: File[];
+
+  // Step 21: Capacidades / Permissões do Agente
+  canQualifyLead: boolean;
+  canScheduleMeeting: boolean;
+  canSendFollowup: boolean;
+  canUpdateCrm: boolean;
+  canAnswerFaq: boolean;
+  canCreateLead: boolean;
+  canTransferHuman: boolean;
+  canMoveCards: boolean;
+  maxConversationTurns: number;
+  responseDelayMs: number;
 
   // Configuração: Atender contatos sem lead (shadow leads)
   attendUnknownContacts: boolean;

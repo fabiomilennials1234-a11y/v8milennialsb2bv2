@@ -16,6 +16,11 @@ import type { AgentTemplateType, FollowupRule, IntentDetectionRule } from "@/typ
 // INTERFACES
 // =====================================================
 
+export interface FaqSeed {
+  question: string;
+  hint?: string; // dica para ajudar o usuário a preencher a resposta
+}
+
 export interface TemplatePromptConfig {
   type: AgentTemplateType;
   basePrompt: string;
@@ -26,6 +31,10 @@ export interface TemplatePromptConfig {
   intentDetection: IntentDetectionRule[];
   fewShotExamples: Array<{ lead: string; agent: string; context?: string }>;
   defaultFollowupRules?: Partial<FollowupRule>[];
+  /** Perguntas seed pré-populadas no wizard — usuário preenche as respostas */
+  faqSeeds?: FaqSeed[];
+  /** Instruções finais específicas para este template */
+  finalInstructions?: string[];
 }
 
 // =====================================================
@@ -170,6 +179,21 @@ Avalie internamente se o lead é ideal:
       lead: "Somos uma empresa pequena, só eu e meu sócio.",
       agent: "Entendi! Nesse momento, nossa solução talvez seja muito robusta pro tamanho de vocês. Mas posso te indicar algumas alternativas mais adequadas, se quiser. E quando crescerem, a gente conversa de novo!",
     },
+  ],
+
+  faqSeeds: [
+    { question: "Qual o diferencial da solução em relação aos concorrentes?", hint: "Compare funcionalidades-chave, não fale mal dos concorrentes" },
+    { question: "Quanto custa o serviço/produto?", hint: "Explique a política de preço ou direcione para o comercial" },
+    { question: "Vocês atendem empresas do meu segmento?", hint: "Liste segmentos atendidos e cases relevantes" },
+    { question: "Qual o prazo de implementação?", hint: "Informe o tempo médio e o que influencia" },
+  ],
+
+  finalInstructions: [
+    "Foque em descobrir a dor antes de qualquer coisa — sem dor, não qualifique",
+    "Use a metodologia BANT na ordem: Need > Authority > Budget > Timeline",
+    "Nunca faça mais de 1 pergunta por mensagem — mantenha o ritmo de WhatsApp",
+    "Ao qualificar, use a ferramenta qualify_lead; ao desqualificar, use disqualify_lead",
+    "Encerre com elegância quando o lead não tem fit — deixe a porta aberta",
   ],
 };
 
@@ -323,6 +347,21 @@ Você consegue me passar o contato ou prefere encaminhar essa conversa?"
       lead: "Pode ser quinta às 14h.",
       agent: "Perfeito! Anotado: quinta, 14h. Vou te mandar o convite com o link. Só pra preparar melhor a conversa: qual é a principal coisa que você gostaria de resolver em [área]?",
     },
+  ],
+
+  faqSeeds: [
+    { question: "Como funciona a reunião/demo?", hint: "Explique duração, formato e o que será abordado" },
+    { question: "Preciso me preparar de alguma forma?", hint: "Diga se há material prévio ou só comparecer" },
+    { question: "Posso trazer mais alguém da equipe?", hint: "Incentive a presença de decisores" },
+    { question: "Qual o próximo passo após a reunião?", hint: "Explique o funil comercial resumidamente" },
+  ],
+
+  finalInstructions: [
+    "Seu foco principal é agendar reuniões qualificadas — toda conversa deve caminhar para isso",
+    "Supere objeções de agenda com propostas de horários específicos (evite 'quando fica bom?')",
+    "Use técnicas SPIN para criar urgência sem pressionar",
+    "Ao agendar, confirme data/hora e envie convite — nunca termine sem confirmação",
+    "Após 3 tentativas sem resposta, faça breakup message e mova para esfriou",
   ],
 };
 
@@ -529,6 +568,20 @@ Exemplo BOM (contextualizado):
       priority: 4,
     },
   ],
+
+  faqSeeds: [
+    { question: "Por que estão entrando em contato novamente?", hint: "Explique que é um follow-up de valor, não spam" },
+    { question: "O que mudou desde a última conversa?", hint: "Mencione novidades, cases ou melhorias recentes" },
+    { question: "Não tenho interesse no momento", hint: "Responda com empatia e deixe a porta aberta" },
+  ],
+
+  finalInstructions: [
+    "Nunca envie mais de 3 follow-ups sem resposta — respeite o silêncio do lead",
+    "Cada follow-up deve agregar valor novo (case, dado, novidade) — nunca repita a mesma abordagem",
+    "Adapte o tom baseado na temperatura do lead: frio = leve, morno = consultivo, quente = direto",
+    "Use o contexto da conversa anterior para personalizar — referência o último assunto discutido",
+    "Se o lead disser explicitamente que não quer mais contato, encerre e registre",
+  ],
 };
 
 // =====================================================
@@ -726,6 +779,21 @@ Se quiser, podemos reagendar pra outro momento."`,
       useLastContext: false,
       priority: 3,
     },
+  ],
+
+  faqSeeds: [
+    { question: "Posso remarcar a reunião?", hint: "Responda com flexibilidade e ofereça opções" },
+    { question: "Qual o link da reunião?", hint: "Explique como o link é enviado (email, whatsapp, etc.)" },
+    { question: "Quem vai participar da reunião?", hint: "Descreva quem estará presente e o papel de cada um" },
+    { question: "Quanto tempo dura a reunião?", hint: "Informe duração e formato (presencial, online, etc.)" },
+  ],
+
+  finalInstructions: [
+    "Seu único foco é garantir que o lead compareça — não qualifique nem venda",
+    "Siga o funil de confirmação rigorosamente: D-5, D-3, D-1, Dia",
+    "Se o lead quiser remarcar, facilite imediatamente — não crie atrito",
+    "Reenvie dados da reunião (link, hora) sempre que solicitado",
+    "Se não houver resposta após D-1, alerte o time humano",
   ],
 };
 
@@ -931,6 +999,21 @@ Vou parar de enviar mensagens. Abraço!"`,
       useLastContext: false,
       priority: 3,
     },
+  ],
+
+  faqSeeds: [
+    { question: "Por que estão me procurando?", hint: "Explique de forma personalizada como encontrou o lead" },
+    { question: "Quem é a empresa de vocês?", hint: "Pitch elevator de 2-3 linhas com prova social" },
+    { question: "Não tenho tempo agora", hint: "Ofereça uma conversa rápida de 5 min ou reagende" },
+    { question: "Me envie material por email", hint: "Envie e use como gancho para retomar contato" },
+  ],
+
+  finalInstructions: [
+    "Cada mensagem deve ser personalizada — mencione algo específico do lead ou da empresa",
+    "Primeira abordagem: gere curiosidade, não tente vender. Termine com pergunta aberta",
+    "Máximo 2 tentativas de contato inicial sem resposta — na 3a faça breakup",
+    "Se o lead demonstrar interesse, mude o foco para agendar uma conversa exploratória",
+    "Nunca envie mensagens genéricas tipo 'olá, tudo bem?' — sempre agregue valor",
   ],
 };
 

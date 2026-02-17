@@ -1116,7 +1116,9 @@ export function useImportLeads() {
     /** Etapas da campanha (id, name) para mapear coluna Etapa da planilha → stage_id. Se informado, cada lead usa a etapa da coluna Etapa quando existir. */
     campaignStages?: { id: string; name: string }[],
     /** Modo de distribuição quando autoDistribute: round_robin (padrão) ou random */
-    distributionMode?: "round_robin" | "random"
+    distributionMode?: "round_robin" | "random",
+    closerMemberIds?: string[],
+    closerDistributionMode?: "round_robin" | "random"
   ): Promise<ImportResult> => {
     setIsImporting(true);
     setProgress(0);
@@ -1194,9 +1196,22 @@ export function useImportLeads() {
         }
       }
 
+      // Initialize closer distribution
+      let closerIndex = 0;
+      if (closerMemberIds && closerMemberIds.length > 0) {
+        if (closerDistributionMode === "round_robin") {
+          const { count } = await supabase
+            .from("campanha_leads")
+            .select("id", { count: "exact", head: true })
+            .eq("campanha_id", campanhaId)
+            .not("closer_id", "is", null);
+          closerIndex = count ?? 0;
+        }
+      }
+
       for (let i = 0; i < parsedLeads.length; i += BATCH_SIZE) {
         const batch = parsedLeads.slice(i, i + BATCH_SIZE);
-        
+
         for (const lead of batch) {
           const formattedPhone = lead.phone ? formatPhone(lead.phone) : undefined;
           const stageIdForLead =
@@ -1278,18 +1293,33 @@ export function useImportLeads() {
                   assignedSdrId = sdrId;
                 }
 
+                // Determine Closer for this lead
+                let assignedCloserId: string | null = null;
+                if (closerMemberIds && closerMemberIds.length > 0) {
+                  if (closerDistributionMode === "random") {
+                    assignedCloserId = closerMemberIds[Math.floor(Math.random() * closerMemberIds.length)];
+                  } else {
+                    assignedCloserId = closerMemberIds[closerIndex % closerMemberIds.length];
+                    closerIndex++;
+                  }
+                }
+
                 // Add to campaign
                 await supabase.from("campanha_leads").insert({
                   campanha_id: campanhaId,
                   lead_id: existingLead.id,
                   stage_id: stageIdForLead,
                   sdr_id: assignedSdrId,
+                  closer_id: assignedCloserId,
                 });
 
-                if (assignedSdrId) {
+                if (assignedSdrId || assignedCloserId) {
+                  const leadUpdates: Record<string, string> = {};
+                  if (assignedSdrId) leadUpdates.sdr_id = assignedSdrId;
+                  if (assignedCloserId) leadUpdates.closer_id = assignedCloserId;
                   await supabase
                     .from("leads")
-                    .update({ sdr_id: assignedSdrId, closer_id: assignedSdrId })
+                    .update(leadUpdates)
                     .eq("id", existingLead.id);
                 }
 
@@ -1355,18 +1385,33 @@ export function useImportLeads() {
               assignedSdrId = sdrId;
             }
 
-                // Add to campaign
+            // Determine Closer for this lead
+            let assignedCloserId: string | null = null;
+            if (closerMemberIds && closerMemberIds.length > 0) {
+              if (closerDistributionMode === "random") {
+                assignedCloserId = closerMemberIds[Math.floor(Math.random() * closerMemberIds.length)];
+              } else {
+                assignedCloserId = closerMemberIds[closerIndex % closerMemberIds.length];
+                closerIndex++;
+              }
+            }
+
+            // Add to campaign
             await supabase.from("campanha_leads").insert({
               campanha_id: campanhaId,
               lead_id: newLead.id,
               stage_id: stageIdForLead,
               sdr_id: assignedSdrId,
+              closer_id: assignedCloserId,
             });
 
-            if (assignedSdrId) {
+            if (assignedSdrId || assignedCloserId) {
+              const leadUpdates: Record<string, string> = {};
+              if (assignedSdrId) leadUpdates.sdr_id = assignedSdrId;
+              if (assignedCloserId) leadUpdates.closer_id = assignedCloserId;
               await supabase
                 .from("leads")
-                .update({ sdr_id: assignedSdrId, closer_id: assignedSdrId })
+                .update(leadUpdates)
                 .eq("id", newLead.id);
             }
 

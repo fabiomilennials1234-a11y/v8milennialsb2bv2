@@ -70,13 +70,17 @@ export class AgentEngine {
     console.log('[AgentEngine] Step 2.6: Loading conversation context...');
     this.conversationContext = await this.loadConversationContext(leadId);
 
+    // 2.7. Load Knowledge Base Document Summaries
+    console.log('[AgentEngine] Step 2.7: Loading knowledge base documents...');
+    const documentSummaries = await this.loadDocumentSummaries(capabilities.id);
+
     // 3. Update Short-Term Memory
     console.log('[AgentEngine] Step 3: Adding message to memory...');
     await this.addMessageToMemory(conversation.id, 'user', userMessage);
 
     // 4. Build Dynamic Prompt
     console.log('[AgentEngine] Step 4: Building prompt...');
-    const systemPrompt = this.buildDynamicPrompt(capabilities, conversation, leadData);
+    const systemPrompt = this.buildDynamicPrompt(capabilities, conversation, leadData, documentSummaries);
 
     // 5. Build Tools (based on capabilities)
     console.log('[AgentEngine] Step 5: Building tools...');
@@ -530,6 +534,32 @@ export class AgentEngine {
       .maybeSingle();
 
     return data;
+  }
+
+  /**
+   * Load Knowledge Base Document Summaries
+   * Busca resumos prontos dos documentos do agente para injetar no prompt
+   */
+  private async loadDocumentSummaries(agentId: string): Promise<Array<{file_name: string; summary: string}>> {
+    try {
+      const { data, error } = await this.supabase
+        .from('copilot_agent_documents')
+        .select('file_name, summary')
+        .eq('agent_id', agentId)
+        .eq('status', 'ready')
+        .not('summary', 'is', null);
+
+      if (error) {
+        console.warn('[AgentEngine] Error loading document summaries:', error.message);
+        return [];
+      }
+
+      console.log('[AgentEngine] Document summaries loaded:', data?.length || 0);
+      return data || [];
+    } catch (e) {
+      console.warn('[AgentEngine] Failed to load document summaries:', e);
+      return [];
+    }
   }
 
   /**
@@ -1026,7 +1056,7 @@ export class AgentEngine {
    * 3. Adiciona capabilities dinâmicas (feature flags) ao final
    * 4. Adiciona dados do lead para contexto personalizado
    */
-  private buildDynamicPrompt(capabilities: any, conversation: any, leadData?: any): string {
+  private buildDynamicPrompt(capabilities: any, conversation: any, leadData?: any, documentSummaries?: Array<{file_name: string; summary: string}>): string {
     const sections: string[] = [];
 
     // =====================================================
@@ -1069,10 +1099,28 @@ export class AgentEngine {
       sections.push(`Nível de energia: ${capabilities.personality_energy || 'moderada'}`);
       sections.push("");
 
+      // Objetivo: usa objective_composite se disponível, senão fallback para main_objective
       sections.push("# OBJETIVO PRINCIPAL");
       sections.push("");
-      sections.push(capabilities.main_objective || 'Qualificar leads e agendar reuniões');
-      sections.push("");
+      const objectiveComposite = capabilities.objective_composite as { mission?: string; success_criteria?: string; limits?: string } | null;
+      if (objectiveComposite && objectiveComposite.mission) {
+        sections.push("## Missão");
+        sections.push(objectiveComposite.mission);
+        sections.push("");
+        if (objectiveComposite.success_criteria) {
+          sections.push("## Critério de Sucesso");
+          sections.push(objectiveComposite.success_criteria);
+          sections.push("");
+        }
+        if (objectiveComposite.limits) {
+          sections.push("## Limites");
+          sections.push(objectiveComposite.limits);
+          sections.push("");
+        }
+      } else {
+        sections.push(capabilities.main_objective || 'Qualificar leads e agendar reuniões');
+        sections.push("");
+      }
 
       if (Object.keys(businessContext).length > 0) {
         sections.push("# CONTEXTO DO NEGÓCIO");
@@ -1249,6 +1297,33 @@ export class AgentEngine {
           sections.push("");
         });
       }
+
+      // Instruções personalizadas do usuário
+      const customInstructions = (capabilities.custom_instructions as string) || "";
+      if (customInstructions.trim()) {
+        sections.push("# INSTRUÇÕES PERSONALIZADAS");
+        sections.push("");
+        sections.push(customInstructions.trim());
+        sections.push("");
+      }
+    }
+
+    // =====================================================
+    // 1.5 KNOWLEDGE BASE (document summaries — runtime injection)
+    // =====================================================
+    if (documentSummaries && documentSummaries.length > 0) {
+      sections.push("");
+      sections.push("# BASE DE CONHECIMENTO CORPORATIVO");
+      sections.push("");
+      sections.push("Use as informações abaixo como fonte de referência para responder perguntas do lead. Estas foram extraídas de documentos oficiais da empresa.");
+      sections.push("");
+      documentSummaries.forEach((doc, index) => {
+        sections.push(`## Documento ${index + 1}: ${doc.file_name}`);
+        sections.push(doc.summary);
+        sections.push("");
+      });
+      sections.push("**IMPORTANTE:** Quando usar informações dos documentos, não mencione 'segundo o documento' — fale como se fosse conhecimento natural da empresa.");
+      sections.push("");
     }
 
     // =====================================================

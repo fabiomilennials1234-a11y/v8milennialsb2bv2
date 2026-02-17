@@ -13,7 +13,7 @@ Adicione as seguintes variáveis de ambiente no Supabase:
 OPENROUTER_API_KEY=sk-or-v1-...  # Sua chave da API OpenRouter
 
 # Opcional
-OPENROUTER_DEFAULT_MODEL=anthropic/claude-3.5-sonnet  # Modelo padrão se não especificado no banco
+OPENROUTER_DEFAULT_MODEL=openai/gpt-4o-mini  # Modelo padrão se não especificado no banco
 OPENROUTER_REFERER_URL=https://v8millennials.com  # URL de referência (opcional)
 ```
 
@@ -22,7 +22,7 @@ OPENROUTER_REFERER_URL=https://v8millennials.com  # URL de referência (opcional
 Você pode usar qualquer modelo suportado pelo OpenRouter. Exemplos:
 
 ### Claude (Anthropic)
-- `anthropic/claude-3.5-sonnet` (recomendado)
+- `openai/gpt-4o-mini` (recomendado)
 - `anthropic/claude-3-opus`
 - `anthropic/claude-3-sonnet`
 
@@ -52,7 +52,7 @@ SET llm_model = 'openai/gpt-4-turbo'
 WHERE id = 'agent-id';
 ```
 
-Se não especificado, usa o `OPENROUTER_DEFAULT_MODEL` ou `anthropic/claude-3.5-sonnet`.
+Se não especificado, usa o `OPENROUTER_DEFAULT_MODEL` ou `openai/gpt-4o-mini`.
 
 ## Como Obter API Key
 
@@ -75,7 +75,7 @@ Headers:
 
 Body:
 {
-  "model": "anthropic/claude-3.5-sonnet",
+  "model": "openai/gpt-4o-mini",
   "messages": [
     { "role": "system", "content": "..." },
     { "role": "user", "content": "..." }

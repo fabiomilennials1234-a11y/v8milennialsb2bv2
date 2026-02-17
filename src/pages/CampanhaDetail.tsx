@@ -9,22 +9,19 @@ import { useImportLeads } from "@/hooks/useImportLeads";
 import { useOrganization } from "@/hooks/useOrganization";
 import { CampanhaKanban } from "@/components/campanhas/CampanhaKanban";
 import { CampanhaAnalytics } from "@/components/campanhas/CampanhaAnalytics";
-import { CampanhaAutomaticaPanel } from "@/components/campanhas/CampanhaAutomaticaPanel";
-import { CampanhaSemiAutomaticaPanel } from "@/components/campanhas/CampanhaSemiAutomaticaPanel";
+import { CampanhaDisparosTab } from "@/components/campanhas/CampanhaDisparosTab";
 import { AddLeadToCampanhaModal } from "@/components/campanhas/AddLeadToCampanhaModal";
 import { ImportLeadsModal } from "@/components/campanhas/ImportLeadsModal";
 import { ManageStagesModal } from "@/components/campanhas/ManageStagesModal";
 import { EditCampanhaModal } from "@/components/campanhas/EditCampanhaModal";
 import { CampanhaViewersSection } from "@/components/campanhas/CampanhaViewersSection";
 import { ExtractToPipeModal } from "@/components/campanhas/ExtractToPipeModal";
-import { CampanhaPipeAutomationsSection } from "@/components/campanhas/CampanhaPipeAutomationsSection";
-import { CampanhaDispatchRulesSection } from "@/components/campanhas/CampanhaDispatchRulesSection";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { ArrowLeft, Plus, BarChart3, Kanban, Loader2, Upload, Wrench, Settings2, Bot, Zap, Copy, Link2, Pencil, Users } from "lucide-react";
+import { ArrowLeft, Plus, BarChart3, Kanban, Loader2, Upload, Wrench, Settings2, Bot, Zap, Copy, Link2, Pencil, Users, Send } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -324,12 +321,6 @@ export default function CampanhaDetail() {
         </CollapsibleContent>
       </Collapsible>
 
-      {/* Automações de envio para pipe */}
-      <CampanhaPipeAutomationsSection campanhaId={id!} stages={stages} />
-
-      {/* Regras de envio por etapa (sequência de mensagens) */}
-      <CampanhaDispatchRulesSection campanhaId={id!} stages={stages} />
-
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
@@ -338,20 +329,10 @@ export default function CampanhaDetail() {
             Kanban
           </TabsTrigger>
 
-          {/* Conditional tabs based on campaign type */}
-          {campanha.campaign_type === "automatica" && (
-            <TabsTrigger value="automation" className="gap-2">
-              <Bot className="w-4 h-4" />
-              Automação
-            </TabsTrigger>
-          )}
-
-          {campanha.campaign_type === "semi_automatica" && (
-            <TabsTrigger value="dispatch" className="gap-2">
-              <Zap className="w-4 h-4" />
-              Disparos
-            </TabsTrigger>
-          )}
+          <TabsTrigger value="disparos" className="gap-2">
+            <Send className="w-4 h-4" />
+            Disparos
+          </TabsTrigger>
 
           <TabsTrigger value="analytics" className="gap-2">
             <BarChart3 className="w-4 h-4" />
@@ -372,19 +353,9 @@ export default function CampanhaDetail() {
           />
         </TabsContent>
 
-        {/* Automation Panel for AUTOMATICA campaigns */}
-        {campanha.campaign_type === "automatica" && (
-          <TabsContent value="automation" className="mt-4">
-            <CampanhaAutomaticaPanel campanha={campanha} />
-          </TabsContent>
-        )}
-
-        {/* Dispatch Panel for SEMI_AUTOMATICA campaigns */}
-        {campanha.campaign_type === "semi_automatica" && (
-          <TabsContent value="dispatch" className="mt-4">
-            <CampanhaSemiAutomaticaPanel campanha={campanha} />
-          </TabsContent>
-        )}
+        <TabsContent value="disparos" className="mt-4">
+          <CampanhaDisparosTab campanha={campanha} stages={stages} />
+        </TabsContent>
 
         <TabsContent value="analytics" className="mt-4">
           <CampanhaAnalytics

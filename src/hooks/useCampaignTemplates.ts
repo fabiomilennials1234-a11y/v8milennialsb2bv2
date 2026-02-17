@@ -6,7 +6,7 @@ import { useOrganization } from "./useOrganization";
 // Types
 // ============================================
 
-export type CampaignTemplateMessageType = "text" | "audio";
+export type CampaignTemplateMessageType = "text" | "audio" | "image" | "document";
 
 export interface CampaignTemplate {
   id: string;
@@ -15,6 +15,9 @@ export interface CampaignTemplate {
   content: string;
   message_type?: CampaignTemplateMessageType;
   audio_url?: string | null;
+  image_url?: string | null;
+  document_url?: string | null;
+  file_name?: string | null;
   available_variables: string[];
   times_used: number;
   is_active: boolean;
@@ -27,6 +30,9 @@ export interface CampaignTemplateInsert {
   content: string;
   message_type?: CampaignTemplateMessageType;
   audio_url?: string | null;
+  image_url?: string | null;
+  document_url?: string | null;
+  file_name?: string | null;
   available_variables?: string[];
 }
 
@@ -120,6 +126,52 @@ export async function uploadCampaignTemplateAudio(
 
   const { data: urlData } = supabase.storage.from("media").getPublicUrl(data.path);
   if (!urlData?.publicUrl) throw new Error("Erro ao obter URL do áudio");
+  return urlData.publicUrl;
+}
+
+/**
+ * Faz upload de imagem de template de campanha para o Storage e retorna URL pública
+ */
+export async function uploadCampaignTemplateImage(
+  file: File | Blob,
+  organizationId: string
+): Promise<string> {
+  const ext = file instanceof File
+    ? file.name.split(".").pop() || "jpg"
+    : file.type.includes("png") ? "png" : file.type.includes("webp") ? "webp" : "jpg";
+  const path = `campaign-templates/${organizationId}/images/${crypto.randomUUID()}.${ext}`;
+
+  const { data, error } = await supabase.storage.from("media").upload(path, file, {
+    contentType: file.type || "image/jpeg",
+    upsert: false,
+  });
+
+  if (error) throw new Error(`Erro ao enviar imagem: ${error.message}`);
+
+  const { data: urlData } = supabase.storage.from("media").getPublicUrl(data.path);
+  if (!urlData?.publicUrl) throw new Error("Erro ao obter URL da imagem");
+  return urlData.publicUrl;
+}
+
+/**
+ * Faz upload de documento de template de campanha para o Storage e retorna URL pública
+ */
+export async function uploadCampaignTemplateDocument(
+  file: File,
+  organizationId: string
+): Promise<string> {
+  const ext = file.name.split(".").pop() || "pdf";
+  const path = `campaign-templates/${organizationId}/documents/${crypto.randomUUID()}.${ext}`;
+
+  const { data, error } = await supabase.storage.from("media").upload(path, file, {
+    contentType: file.type || "application/pdf",
+    upsert: false,
+  });
+
+  if (error) throw new Error(`Erro ao enviar documento: ${error.message}`);
+
+  const { data: urlData } = supabase.storage.from("media").getPublicUrl(data.path);
+  if (!urlData?.publicUrl) throw new Error("Erro ao obter URL do documento");
   return urlData.publicUrl;
 }
 

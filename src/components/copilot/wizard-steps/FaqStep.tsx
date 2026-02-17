@@ -2,8 +2,10 @@
  * Step 7: Perguntas Frequentes
  *
  * Array de FAQs (pergunta + resposta) para o agente usar como base.
+ * Quando o template tem faqSeeds, pré-popula com as perguntas (resposta vazia).
  */
 
+import { useEffect, useRef } from "react";
 import { useFormContext, useFieldArray } from "react-hook-form";
 import {
   FormField,
@@ -18,14 +20,30 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Plus, Trash2 } from "lucide-react";
-import type { CopilotWizardData } from "@/types/copilot";
+import type { CopilotWizardData, AgentTemplateType } from "@/types/copilot";
+import { getTemplatePromptConfig } from "@/lib/copilot/template-prompts";
 
 export function FaqStep() {
-  const { control } = useFormContext<CopilotWizardData>();
+  const { control, watch } = useFormContext<CopilotWizardData>();
   const { fields, append, remove } = useFieldArray({
     control,
     name: "faqs",
   });
+  const templateType = watch("templateType") as AgentTemplateType;
+  const seededRef = useRef(false);
+
+  // Pré-popular com faqSeeds do template quando o campo está vazio
+  useEffect(() => {
+    if (seededRef.current || fields.length > 0) return;
+
+    const config = getTemplatePromptConfig(templateType);
+    if (config?.faqSeeds && config.faqSeeds.length > 0) {
+      config.faqSeeds.forEach((seed) => {
+        append({ question: seed.question, answer: "" });
+      });
+      seededRef.current = true;
+    }
+  }, [templateType, fields.length, append]);
 
   const handleAddFaq = () => {
     if (fields.length < 20) {
@@ -59,58 +77,65 @@ export function FaqStep() {
           </div>
         ) : (
           <>
-            {fields.map((field, index) => (
-              <Card key={field.id} className="p-4">
-                <div className="flex items-start justify-between mb-3">
-                  <h3 className="font-semibold">FAQ {index + 1}</h3>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => remove(index)}
-                  >
-                    <Trash2 className="w-4 h-4 text-destructive" />
-                  </Button>
-                </div>
+            {fields.map((field, index) => {
+              // Verificar se essa FAQ veio de uma seed (para mostrar hint como placeholder)
+              const config = getTemplatePromptConfig(templateType);
+              const seed = config?.faqSeeds?.[index];
+              const answerPlaceholder = seed?.hint || "Ex: O prazo padrão é de 5 dias úteis após confirmação...";
 
-                <div className="space-y-3">
-                  <FormField
-                    control={control}
-                    name={`faqs.${index}.question`}
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Pergunta</FormLabel>
-                        <FormControl>
-                          <Input
-                            placeholder="Ex: Qual o prazo de entrega?"
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+              return (
+                <Card key={field.id} className="p-4">
+                  <div className="flex items-start justify-between mb-3">
+                    <h3 className="font-semibold">FAQ {index + 1}</h3>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => remove(index)}
+                    >
+                      <Trash2 className="w-4 h-4 text-destructive" />
+                    </Button>
+                  </div>
 
-                  <FormField
-                    control={control}
-                    name={`faqs.${index}.answer`}
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Resposta</FormLabel>
-                        <FormControl>
-                          <Textarea
-                            placeholder="Ex: O prazo padrão é de 5 dias úteis após confirmação..."
-                            {...field}
-                            rows={3}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-              </Card>
-            ))}
+                  <div className="space-y-3">
+                    <FormField
+                      control={control}
+                      name={`faqs.${index}.question`}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Pergunta</FormLabel>
+                          <FormControl>
+                            <Input
+                              placeholder="Ex: Qual o prazo de entrega?"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={control}
+                      name={`faqs.${index}.answer`}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Resposta</FormLabel>
+                          <FormControl>
+                            <Textarea
+                              placeholder={answerPlaceholder}
+                              {...field}
+                              rows={3}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </Card>
+              );
+            })}
 
             {fields.length < 20 && (
               <Button

@@ -40,6 +40,7 @@ export function AddLeadToCampanhaModal({
   const addLead = useAddCampanhaLead();
   const canAutoDistribute =
     campanha?.lead_distribution_mode === "round_robin" || campanha?.lead_distribution_mode === "random";
+  const sdrMembers = members.filter((m) => m.role === "sdr");
 
   // Filter leads that are not already in the campaign
   const availableLeads = allLeads?.filter(
@@ -70,11 +71,21 @@ export function AddLeadToCampanhaModal({
         sdrId = nextSdrId ?? undefined;
       }
 
+      // Resolve closer via campaign distribution
+      let closerId: string | undefined = undefined;
+      if (campanha?.closer_distribution_mode) {
+        const { data: nextCloserId } = await supabase.rpc("get_next_campaign_closer", {
+          p_campaign_id: campanhaId,
+        });
+        if (nextCloserId) closerId = nextCloserId;
+      }
+
       await addLead.mutateAsync({
         campanha_id: campanhaId,
         lead_id: selectedLeadId,
         stage_id: selectedStageId,
         sdr_id: sdrId,
+        closer_id: closerId,
       });
 
       toast.success("Lead adicionado à campanha!");
@@ -197,7 +208,7 @@ export function AddLeadToCampanhaModal({
                     </span>
                   </SelectItem>
                 )}
-                {members.map((member) => (
+                {(sdrMembers.length > 0 ? sdrMembers : members).map((member) => (
                   <SelectItem key={member.team_member_id} value={member.team_member_id}>
                     {member.team_member?.name}
                   </SelectItem>

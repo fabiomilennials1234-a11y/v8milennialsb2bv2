@@ -17,12 +17,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useUpdateCampanha, useCampanhaMembers, type Campanha, type LeadDistributionMode } from "@/hooks/useCampanhas";
+import { useUpdateCampanha, useCampanhaMembers, useUpdateCampanhaMember, type Campanha, type LeadDistributionMode, type CampanhaMemberRole } from "@/hooks/useCampanhas";
 import { useCopilotAgents } from "@/hooks/useCopilotAgents";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
 import { useWhatsAppInstances } from "@/hooks/useWhatsAppInstances";
 import { toast } from "sonner";
-import { AlertTriangle, Bot, Shuffle, User } from "lucide-react";
+import { AlertTriangle, Bot, Shuffle, User, Users } from "lucide-react";
 
 interface EditCampanhaModalProps {
   open: boolean;
@@ -40,15 +40,22 @@ export function EditCampanhaModal({
   const [agentId, setAgentId] = useState<string | null>(null);
   const [leadDistributionMode, setLeadDistributionMode] = useState<LeadDistributionMode>(null);
   const [leadAssignedTo, setLeadAssignedTo] = useState<string | null>(null);
+  const [closerDistributionMode, setCloserDistributionMode] = useState<LeadDistributionMode>(null);
+  const [closerAssignedTo, setCloserAssignedTo] = useState<string | null>(null);
   const [whatsappInstanceId, setWhatsappInstanceId] = useState<string | null>(null);
 
   const updateCampanha = useUpdateCampanha();
+  const updateMember = useUpdateCampanhaMember();
   const { data: agents } = useCopilotAgents();
   const { data: teamMembers } = useTeamMembers();
   const { data: whatsappInstances = [] } = useWhatsAppInstances();
   const { data: campanhaMembers = [] } = useCampanhaMembers(campanha?.id);
-  const needsMembersForDistribution =
-    (leadDistributionMode === "round_robin" || leadDistributionMode === "random") && campanhaMembers.length === 0;
+  const sdrMembers = campanhaMembers.filter((m) => m.role === "sdr");
+  const closerMembers = campanhaMembers.filter((m) => m.role === "closer");
+  const needsSdrMembers =
+    (leadDistributionMode === "round_robin" || leadDistributionMode === "random") && sdrMembers.length === 0;
+  const needsCloserMembers =
+    (closerDistributionMode === "round_robin" || closerDistributionMode === "random") && closerMembers.length === 0;
 
   const outboundAgents =
     agents?.filter(
@@ -62,8 +69,10 @@ export function EditCampanhaModal({
       setName(campanha.name);
       setDescription(campanha.description ?? "");
       setAgentId(campanha.agent_id ?? null);
-      setLeadDistributionMode((campanha as any).lead_distribution_mode ?? null);
-      setLeadAssignedTo((campanha as any).lead_assigned_to ?? null);
+      setLeadDistributionMode(campanha.lead_distribution_mode ?? null);
+      setLeadAssignedTo(campanha.lead_assigned_to ?? null);
+      setCloserDistributionMode(campanha.closer_distribution_mode ?? null);
+      setCloserAssignedTo(campanha.closer_assigned_to ?? null);
       setWhatsappInstanceId(campanha.whatsapp_instance_id ?? null);
     }
   }, [campanha, open]);
@@ -80,6 +89,8 @@ export function EditCampanhaModal({
         ...(campanha.campaign_type === "automatica" && { agent_id: agentId }),
         lead_distribution_mode: leadDistributionMode,
         lead_assigned_to: leadDistributionMode === "single" ? leadAssignedTo : null,
+        closer_distribution_mode: closerDistributionMode,
+        closer_assigned_to: closerDistributionMode === "single" ? closerAssignedTo : null,
         ...((campanha.campaign_type === "automatica" || campanha.campaign_type === "semi_automatica") && { whatsapp_instance_id: whatsappInstanceId }),
       });
       toast.success("Campanha atualizada");
@@ -94,7 +105,7 @@ export function EditCampanhaModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-[480px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Editar campanha</DialogTitle>
         </DialogHeader>
@@ -142,11 +153,51 @@ export function EditCampanhaModal({
               </Select>
             </div>
           )}
-          {/* Distribuição de leads */}
+          {/* Membros da Campanha - Role Management */}
+          {campanhaMembers.length > 0 && (
+            <div className="space-y-3 pt-4 border-t">
+              <Label className="flex items-center gap-2">
+                <Users className="w-4 h-4" />
+                Membros da Campanha — Papel
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Defina quem é SDR e quem é Closer. A distribuição automática usa esses papéis.
+              </p>
+              <div className="space-y-2">
+                {campanhaMembers.map((m) => (
+                  <div key={m.team_member_id} className="flex items-center gap-2">
+                    <span className="text-sm flex-1 truncate">
+                      {m.team_member?.name}
+                    </span>
+                    <Select
+                      value={m.role}
+                      onValueChange={(v) => {
+                        updateMember.mutate({
+                          campanha_id: campanha!.id,
+                          team_member_id: m.team_member_id,
+                          role: v as CampanhaMemberRole,
+                        });
+                      }}
+                    >
+                      <SelectTrigger className="w-[120px] h-8">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="sdr">SDR</SelectItem>
+                        <SelectItem value="closer">Closer</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Distribuição de SDRs */}
           <div className="space-y-3 pt-4 border-t">
             <Label className="flex items-center gap-2">
               <Shuffle className="w-4 h-4" />
-              Distribuição de leads
+              Distribuição de SDRs
             </Label>
             <Select
               value={leadDistributionMode ?? "none"}
@@ -156,7 +207,7 @@ export function EditCampanhaModal({
               }}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Como distribuir leads" />
+                <SelectValue placeholder="Como distribuir SDRs" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">Manual (definir na importação)</SelectItem>
@@ -168,10 +219,18 @@ export function EditCampanhaModal({
             {leadDistributionMode === "single" && (
               <Select value={leadAssignedTo ?? ""} onValueChange={(v) => setLeadAssignedTo(v || null)}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Selecione o vendedor" />
+                  <SelectValue placeholder="Selecione o SDR" />
                 </SelectTrigger>
                 <SelectContent>
-                  {teamMembers?.map((m) => (
+                  {sdrMembers.map((m) => (
+                    <SelectItem key={m.team_member_id} value={m.team_member_id}>
+                      <span className="flex items-center gap-2">
+                        <User className="w-3 h-3" />
+                        {m.team_member?.name}
+                      </span>
+                    </SelectItem>
+                  ))}
+                  {sdrMembers.length === 0 && teamMembers?.map((m) => (
                     <SelectItem key={m.id} value={m.id}>
                       <span className="flex items-center gap-2">
                         <User className="w-3 h-3" />
@@ -182,15 +241,68 @@ export function EditCampanhaModal({
                 </SelectContent>
               </Select>
             )}
-            {needsMembersForDistribution && (
+            {needsSdrMembers && (
               <p className="text-sm text-amber-600 dark:text-amber-500 flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 shrink-0" />
-                Adicione membros à campanha para a distribuição rotativa ou aleatória funcionar.
+                Adicione membros com papel SDR para a distribuição funcionar.
               </p>
             )}
-            <p className="text-xs text-muted-foreground">
-              Aplica a leads importados e integrações (Meta Ads, webhooks, etc.)
-            </p>
+          </div>
+
+          {/* Distribuição de Closers */}
+          <div className="space-y-3 pt-4 border-t">
+            <Label className="flex items-center gap-2">
+              <Shuffle className="w-4 h-4" />
+              Distribuição de Closers
+            </Label>
+            <Select
+              value={closerDistributionMode ?? "none"}
+              onValueChange={(v) => {
+                setCloserDistributionMode(v === "none" ? null : (v as LeadDistributionMode));
+                if (v !== "single") setCloserAssignedTo(null);
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Como distribuir Closers" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Manual</SelectItem>
+                <SelectItem value="random">Aleatório</SelectItem>
+                <SelectItem value="round_robin">Rotativo</SelectItem>
+                <SelectItem value="single">Pessoa específica</SelectItem>
+              </SelectContent>
+            </Select>
+            {closerDistributionMode === "single" && (
+              <Select value={closerAssignedTo ?? ""} onValueChange={(v) => setCloserAssignedTo(v || null)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o Closer" />
+                </SelectTrigger>
+                <SelectContent>
+                  {closerMembers.map((m) => (
+                    <SelectItem key={m.team_member_id} value={m.team_member_id}>
+                      <span className="flex items-center gap-2">
+                        <User className="w-3 h-3" />
+                        {m.team_member?.name}
+                      </span>
+                    </SelectItem>
+                  ))}
+                  {closerMembers.length === 0 && teamMembers?.map((m) => (
+                    <SelectItem key={m.id} value={m.id}>
+                      <span className="flex items-center gap-2">
+                        <User className="w-3 h-3" />
+                        {m.name}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            {needsCloserMembers && (
+              <p className="text-sm text-amber-600 dark:text-amber-500 flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                Adicione membros com papel Closer para a distribuição funcionar.
+              </p>
+            )}
           </div>
 
           {campanha.campaign_type === "automatica" && (

@@ -1330,6 +1330,66 @@ export type Database = {
           },
         ]
       }
+      copilot_agent_documents: {
+        Row: {
+          id: string
+          agent_id: string
+          organization_id: string
+          file_name: string
+          file_path: string
+          file_size: number | null
+          mime_type: string | null
+          status: string | null
+          summary: string | null
+          error_message: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          agent_id: string
+          organization_id: string
+          file_name: string
+          file_path: string
+          file_size?: number | null
+          mime_type?: string | null
+          status?: string | null
+          summary?: string | null
+          error_message?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          agent_id?: string
+          organization_id?: string
+          file_name?: string
+          file_path?: string
+          file_size?: number | null
+          mime_type?: string | null
+          status?: string | null
+          summary?: string | null
+          error_message?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "copilot_agent_documents_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "copilot_agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "copilot_agent_documents_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       copilot_agent_followup_rules: {
         Row: {
           agent_id: string
@@ -1501,6 +1561,7 @@ export type Database = {
           conversation_style: Json | null
           created_at: string
           created_by: string
+          custom_instructions: string | null
           few_shot_examples: Json | null
           forbidden_topics: string[] | null
           human_transfer_triggers: string[] | null
@@ -1513,12 +1574,14 @@ export type Database = {
           max_conversation_turns: number | null
           move_rules: Json | null
           name: string
+          objective_composite: Json | null
           operation_mode: string | null
           organization_id: string
           outbound_config: Json | null
           personality_energy: Database["public"]["Enums"]["agent_energy"]
           personality_style: Database["public"]["Enums"]["agent_style"]
           personality_tone: Database["public"]["Enums"]["agent_tone"]
+          prompt_hash: string | null
           qualification_rules: Json | null
           response_delay_ms: number | null
           response_delay_seconds: number | null
@@ -1529,6 +1592,7 @@ export type Database = {
           template_type: Database["public"]["Enums"]["agent_template_type"]
           updated_at: string
           whatsapp_instance_id: string | null
+          wizard_version: number | null
         }
         Insert: {
           activation_triggers?: Json | null
@@ -1555,6 +1619,7 @@ export type Database = {
           conversation_style?: Json | null
           created_at?: string
           created_by: string
+          custom_instructions?: string | null
           few_shot_examples?: Json | null
           forbidden_topics?: string[] | null
           human_transfer_triggers?: string[] | null
@@ -1567,12 +1632,14 @@ export type Database = {
           max_conversation_turns?: number | null
           move_rules?: Json | null
           name: string
+          objective_composite?: Json | null
           operation_mode?: string | null
           organization_id: string
           outbound_config?: Json | null
           personality_energy?: Database["public"]["Enums"]["agent_energy"]
           personality_style?: Database["public"]["Enums"]["agent_style"]
           personality_tone?: Database["public"]["Enums"]["agent_tone"]
+          prompt_hash?: string | null
           qualification_rules?: Json | null
           response_delay_ms?: number | null
           response_delay_seconds?: number | null
@@ -1583,6 +1650,7 @@ export type Database = {
           template_type?: Database["public"]["Enums"]["agent_template_type"]
           updated_at?: string
           whatsapp_instance_id?: string | null
+          wizard_version?: number | null
         }
         Update: {
           activation_triggers?: Json | null
@@ -1609,6 +1677,7 @@ export type Database = {
           conversation_style?: Json | null
           created_at?: string
           created_by?: string
+          custom_instructions?: string | null
           few_shot_examples?: Json | null
           forbidden_topics?: string[] | null
           human_transfer_triggers?: string[] | null
@@ -1621,12 +1690,14 @@ export type Database = {
           max_conversation_turns?: number | null
           move_rules?: Json | null
           name?: string
+          objective_composite?: Json | null
           operation_mode?: string | null
           organization_id?: string
           outbound_config?: Json | null
           personality_energy?: Database["public"]["Enums"]["agent_energy"]
           personality_style?: Database["public"]["Enums"]["agent_style"]
           personality_tone?: Database["public"]["Enums"]["agent_tone"]
+          prompt_hash?: string | null
           qualification_rules?: Json | null
           response_delay_ms?: number | null
           response_delay_seconds?: number | null
@@ -1637,6 +1708,7 @@ export type Database = {
           template_type?: Database["public"]["Enums"]["agent_template_type"]
           updated_at?: string
           whatsapp_instance_id?: string | null
+          wizard_version?: number | null
         }
         Relationships: [
           {

@@ -2,8 +2,10 @@
  * Step 11: Exemplos de conversa (few-shot)
  *
  * Ajuda a deixar o agente mais humano com exemplos reais.
+ * Inclui botão "Gerar com IA" que chama edge function.
  */
 
+import { useState } from "react";
 import { useFormContext, useFieldArray } from "react-hook-form";
 import {
   FormField,
@@ -16,19 +18,78 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Plus, Trash2, MessageSquareText } from "lucide-react";
+import { Plus, Trash2, MessageSquareText, Sparkles, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 import type { CopilotWizardData } from "@/types/copilot";
 
 export function ExamplesStep() {
-  const { control } = useFormContext<CopilotWizardData>();
+  const { control, watch } = useFormContext<CopilotWizardData>();
   const { fields, append, remove } = useFieldArray({
     control,
     name: "examples",
   });
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  const businessContext = watch("businessContext");
+  const templateType = watch("templateType");
+  const personality = watch("personality");
+
+  const canGenerate =
+    businessContext?.productSummary &&
+    businessContext.productSummary.length >= 20;
 
   const handleAddExample = () => {
     if (fields.length < 10) {
       append({ lead: "", agent: "" });
+    }
+  };
+
+  const handleGenerateWithAI = async () => {
+    if (!canGenerate) {
+      toast.error("Preencha o campo 'Produto/Serviço' no Contexto do Negócio (min. 20 caracteres)");
+      return;
+    }
+
+    setIsGenerating(true);
+    try {
+      const { data, error } = await supabase.functions.invoke(
+        "generate-agent-examples",
+        {
+          body: {
+            businessContext: {
+              companyName: businessContext.companyName,
+              productSummary: businessContext.productSummary,
+              idealCustomerProfile: businessContext.idealCustomerProfile,
+              valueProps: businessContext.valueProps,
+              customerPains: businessContext.customerPains,
+            },
+            templateType,
+            personality,
+          },
+        }
+      );
+
+      if (error) throw error;
+
+      const examples = data?.examples as Array<{ lead: string; agent: string }>;
+      if (examples && examples.length > 0) {
+        examples.forEach((ex) => {
+          if (fields.length < 10) {
+            append({ lead: ex.lead, agent: ex.agent });
+          }
+        });
+        toast.success(`${examples.length} exemplos gerados com IA!`);
+      } else {
+        toast.error("Nenhum exemplo foi gerado. Tente novamente.");
+      }
+    } catch (error: any) {
+      console.error("Erro ao gerar exemplos:", error);
+      toast.error("Erro ao gerar exemplos", {
+        description: error?.message || "Tente novamente em alguns segundos.",
+      });
+    } finally {
+      setIsGenerating(false);
     }
   };
 
@@ -43,6 +104,31 @@ export function ExamplesStep() {
           Adicione exemplos curtos para calibrar o tom do agente.
         </p>
       </div>
+
+      <Button
+        type="button"
+        variant="outline"
+        onClick={handleGenerateWithAI}
+        disabled={isGenerating || !canGenerate}
+        className="w-full border-dashed"
+      >
+        {isGenerating ? (
+          <>
+            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            Gerando exemplos...
+          </>
+        ) : (
+          <>
+            <Sparkles className="w-4 h-4 mr-2" />
+            Gerar com IA
+          </>
+        )}
+      </Button>
+      {!canGenerate && (
+        <p className="text-xs text-muted-foreground text-center -mt-3">
+          Preencha o campo "Produto/Serviço" no Contexto do Negócio para habilitar
+        </p>
+      )}
 
       <div className="space-y-4">
         {fields.length === 0 ? (

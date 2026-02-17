@@ -173,7 +173,25 @@ async function processPipeQueue(
   // --- 1. Process expired wait_response timeouts ---
   timeoutsProcessed = await processExpiredTimeouts(supabase, pipeType);
 
-  // --- 2. Process scheduled items ---
+  // --- 2. Atomically claim scheduled items (prevents concurrent processing) ---
+  const { data: claimedRows, error: claimError } = await supabase.rpc(
+    "claim_pipe_dispatch_batch",
+    { p_pipe_type: pipeType, p_limit: BATCH_SIZE }
+  );
+
+  if (claimError) {
+    console.error(`[pipe-rule-dispatch][${pipeType}] Error claiming batch:`, claimError);
+    return { pipe_type: pipeType, processed: 0, sent: 0, failed: 0, actions_executed: 0, timeouts_processed: timeoutsProcessed, error: claimError.message };
+  }
+
+  if (!claimedRows || claimedRows.length === 0) {
+    return { pipe_type: pipeType, processed: 0, sent: 0, failed: 0, actions_executed: actionsExecuted, timeouts_processed: timeoutsProcessed };
+  }
+
+  const claimedIds = claimedRows.map((r: { claimed_id: string }) => r.claimed_id);
+  console.log(`[pipe-rule-dispatch][${pipeType}] Claimed ${claimedIds.length} item(s)`);
+
+  // --- 3. Fetch full data for claimed rows ---
   const { data: rows, error: fetchError } = await supabase
     .from("scheduled_pipe_messages")
     .select(`
@@ -195,16 +213,17 @@ async function processPipeQueue(
       timeout_template_id,
       step_position,
       leads(id, name, company, phone, email, origin, segment),
-      campaign_templates(id, name, content, message_type, audio_url, available_variables)
+      campaign_templates!template_id(id, name, content, message_type, audio_url, available_variables)
     `)
-    .eq("pipe_type", pipeType)
-    .eq("status", "scheduled")
-    .lte("scheduled_at", new Date().toISOString())
-    .order("scheduled_at", { ascending: true })
-    .limit(BATCH_SIZE);
+    .in("id", claimedIds)
+    .order("scheduled_at", { ascending: true });
 
   if (fetchError) {
-    console.error(`[pipe-rule-dispatch][${pipeType}] Error fetching queue:`, fetchError);
+    console.error(`[pipe-rule-dispatch][${pipeType}] Error fetching claimed rows:`, fetchError);
+    // Reset claimed rows back to 'scheduled' so they can be retried
+    await supabase.from("scheduled_pipe_messages")
+      .update({ status: "scheduled" })
+      .in("id", claimedIds);
     return { pipe_type: pipeType, processed: 0, sent: 0, failed: 0, actions_executed: 0, timeouts_processed: timeoutsProcessed, error: fetchError.message };
   }
 

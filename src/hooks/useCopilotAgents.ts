@@ -9,7 +9,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
-import { generatePrompt, saveCopilotSystemPrompt } from "./useCopilotPromptBuilder";
+import { generatePrompt, saveCopilotSystemPrompt, regenerateAndSavePrompt, computePromptHash } from "./useCopilotPromptBuilder";
 import type {
   CopilotAgent,
   CopilotAgentInsert,
@@ -261,17 +261,20 @@ export function useCreateCopilotAgent() {
         .select("*")
         .eq("agent_id", agent.id);
 
-      // 5. Gerar e salvar o system prompt
+      // 5. Gerar e salvar o system prompt (com hash)
       const promptResult = generatePrompt(
         agent,
         createdFaqs || [],
         createdRules || []
       );
 
+      const promptHash = computePromptHash(agent, createdFaqs || []);
+
       await saveCopilotSystemPrompt(
         agent.id,
         promptResult.systemPrompt,
-        promptResult.metadata.version
+        promptResult.metadata.version,
+        promptHash
       );
 
       return agent as CopilotAgent;
@@ -297,9 +300,11 @@ export function useCreateCopilotAgent() {
         errorMessage = error.message;
       }
       
-      // Se for erro de coluna não encontrada, dar instrução específica
-      if (errorMessage.includes("activation_triggers") || 
-          errorMessage.includes("column") || 
+      // Erros específicos com mensagens amigáveis
+      if (errorMessage.includes("unique_agent_name_per_org")) {
+        errorMessage = "Já existe um agente com este nome na sua organização. Escolha um nome diferente.";
+      } else if (errorMessage.includes("activation_triggers") ||
+          errorMessage.includes("column") ||
           errorMessage.includes("Could not find")) {
         errorMessage = "Coluna não encontrada no banco. Execute o script FIX_COPILOT_COLUMNS.sql no Supabase SQL Editor.";
       }
@@ -313,13 +318,15 @@ export function useCreateCopilotAgent() {
 }
 
 /**
- * Atualiza um agente existente
+ * Atualiza um agente existente.
+ * Após salvar os campos, busca FAQs e regenera o system_prompt automaticamente.
  */
 export function useUpdateCopilotAgent() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async ({ id, ...updates }: UpdateAgentPayload) => {
+      // 1. Salvar os campos atualizados
       const { data, error } = await supabase
         .from("copilot_agents")
         .update(updates)
@@ -328,7 +335,23 @@ export function useUpdateCopilotAgent() {
         .single();
 
       if (error) throw error;
-      return data as CopilotAgent;
+
+      const agent = data as CopilotAgent;
+
+      // 2. Buscar FAQs para incluir no prompt regenerado
+      const { data: faqs } = await supabase
+        .from("copilot_agent_faqs")
+        .select("*")
+        .eq("agent_id", id);
+
+      // 3. Regenerar e salvar o prompt (com hash — só regenera se algo mudou)
+      try {
+        await regenerateAndSavePrompt(agent, faqs || []);
+      } catch (promptError) {
+        console.error("Erro ao regenerar prompt (agente salvo, prompt não atualizado):", promptError);
+      }
+
+      return agent;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["copilot_agents"] });

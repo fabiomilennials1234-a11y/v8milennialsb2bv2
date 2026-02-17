@@ -74,6 +74,7 @@ export function ImportLeadsModal({
   const { parseCSV, importLeads, resetImport, isImporting, progress, result } = useImportLeads();
   const { data: customFields = [] } = useLeadCustomFields();
   const customFieldNames = customFields.map((f) => f.field_name);
+  const sdrMembers = members.filter((m) => m.role === "sdr");
 
   // Set default stage to first stage (Lead)
   const defaultStage = stages.find(s => s.position === 0) || stages[0];
@@ -145,16 +146,20 @@ export function ImportLeadsModal({
     setStep("importing");
 
     try {
-      const memberIds = members.map(m => m.team_member_id);
+      const sdrMemberIds = sdrMembers.length > 0 ? sdrMembers.map(m => m.team_member_id) : members.map(m => m.team_member_id);
+      const closerMemberIds = members.filter(m => m.role === "closer").map(m => m.team_member_id);
+      const closerDistMode = campanha?.closer_distribution_mode as "round_robin" | "random" | undefined;
       await importLeads(
         file,
         campanhaId,
         selectedStageId,
         autoDistribute ? undefined : (selectedSdrId === "none" ? undefined : selectedSdrId || undefined),
         autoDistribute,
-        autoDistribute ? memberIds : undefined,
+        autoDistribute ? sdrMemberIds : undefined,
         stages.map((s) => ({ id: s.id, name: s.name })),
-        autoDistribute ? distributionMode : undefined
+        autoDistribute ? distributionMode : undefined,
+        closerMemberIds.length > 0 ? closerMemberIds : undefined,
+        closerDistMode === "round_robin" || closerDistMode === "random" ? closerDistMode : undefined
       );
       setStep("complete");
     } catch (error) {
@@ -399,7 +404,7 @@ export function ImportLeadsModal({
                     <div>
                       <Label className="font-medium">Distribuição Automática</Label>
                       <p className="text-xs text-muted-foreground">
-                        Distribuir leads igualmente entre {members.length} vendedores
+                        Distribuir leads igualmente entre {sdrMembers.length > 0 ? sdrMembers.length : members.length} SDRs
                       </p>
                     </div>
                   </div>

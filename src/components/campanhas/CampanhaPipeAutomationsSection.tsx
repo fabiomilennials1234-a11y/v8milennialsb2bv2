@@ -39,9 +39,10 @@ const PIPE_OPTIONS: {
 interface CampanhaPipeAutomationsSectionProps {
   campanhaId: string;
   stages: CampanhaStage[];
+  embedded?: boolean;
 }
 
-export function CampanhaPipeAutomationsSection({ campanhaId, stages }: CampanhaPipeAutomationsSectionProps) {
+export function CampanhaPipeAutomationsSection({ campanhaId, stages, embedded }: CampanhaPipeAutomationsSectionProps) {
   const [open, setOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [selectedCampanhaStageId, setSelectedCampanhaStageId] = useState<string>("");
@@ -96,6 +97,177 @@ export function CampanhaPipeAutomationsSection({ campanhaId, stages }: CampanhaP
   const getPipeLabel = (target: CampanhaPipeAutomationTarget) =>
     PIPE_OPTIONS.find((o) => o.target === target)?.label ?? target;
 
+  const innerContent = (
+    <>
+      <p className="text-xs text-muted-foreground">
+        Quando um lead for movido para uma etapa que tiver regra abaixo, ele sairá da campanha e entrará na etapa escolhida do pipe.
+      </p>
+      {isLoading ? (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="w-4 h-4 animate-spin" />
+          Carregando…
+        </div>
+      ) : (
+        <>
+          <ul className="space-y-2">
+            {automations.length === 0 ? (
+              <li className="text-sm text-muted-foreground">Nenhuma automação configurada.</li>
+            ) : (
+              automations.map((a) => (
+                <li
+                  key={a.id}
+                  className="flex items-center justify-between gap-2 rounded-md border bg-card px-3 py-2 text-sm"
+                >
+                  <span className="text-muted-foreground">
+                    Quando chegar em <strong className="text-foreground">{getStageName(a.campanha_stage_id)}</strong>
+                    {" → "}
+                    enviar para <strong className="text-foreground">{getPipeLabel(a.target_pipe)}</strong>
+                    {" "}na etapa <strong className="text-foreground">{a.pipe_stage}</strong>
+                  </span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-destructive hover:text-destructive"
+                    onClick={() => handleDelete(a)}
+                    disabled={deleteAutomation.isPending}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </li>
+              ))
+            )}
+          </ul>
+          {stagesWithoutAutomation.length === 0 && stages.length > 0 ? (
+            <p className="text-xs text-muted-foreground">Todas as etapas já possuem uma automação.</p>
+          ) : stages.length > 0 && (
+            <>
+              {!addOpen ? (
+                <Button type="button" variant="outline" size="sm" onClick={() => setAddOpen(true)}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Adicionar automação
+                </Button>
+              ) : (
+                <div className="space-y-3 rounded-md border border-dashed p-3">
+                  <div className="grid gap-2">
+                    <Label>Etapa da campanha</Label>
+                    <Select
+                      value={selectedCampanhaStageId}
+                      onValueChange={(v) => {
+                        setSelectedCampanhaStageId(v);
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione a etapa" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {stagesWithoutAutomation.map((s) => (
+                          <SelectItem key={s.id} value={s.id}>
+                            {s.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Pipe destino</Label>
+                    <Select
+                      value={selectedPipe}
+                      onValueChange={(v) => {
+                        setSelectedPipe(v as CampanhaPipeAutomationTarget);
+                        setSelectedPipeStage("");
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione o pipe" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PIPE_OPTIONS.map(({ target, label, icon: Icon }) => (
+                          <SelectItem key={target} value={target}>
+                            <span className="flex items-center gap-2">
+                              <Icon className="w-4 h-4 shrink-0" />
+                              {label}
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {selectedPipe && (
+                    <div className="grid gap-2">
+                      <Label>Etapa no pipe</Label>
+                      <Select
+                        value={selectedPipeStage}
+                        onValueChange={setSelectedPipeStage}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione a etapa no pipe" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {pipelineStages.map((s) => {
+                            const key = s.stage_key ?? s.id;
+                            return (
+                              <SelectItem key={key} value={key}>
+                                <span className="flex items-center gap-2">
+                                  {s.color && (
+                                    <span
+                                      className="w-2.5 h-2.5 rounded-full shrink-0"
+                                      style={{ backgroundColor: s.color }}
+                                    />
+                                  )}
+                                  {s.name}
+                                </span>
+                              </SelectItem>
+                            );
+                          })}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setAddOpen(false);
+                        setSelectedCampanhaStageId("");
+                        setSelectedPipe("");
+                        setSelectedPipeStage("");
+                      }}
+                    >
+                      Cancelar
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={handleAdd}
+                      disabled={
+                        !selectedCampanhaStageId ||
+                        !selectedPipe ||
+                        !selectedPipeStage ||
+                        createAutomation.isPending
+                      }
+                    >
+                      {createAutomation.isPending ? (
+                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                      ) : null}
+                      Salvar automação
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </>
+      )}
+    </>
+  );
+
+  if (embedded) {
+    return <div className="space-y-4">{innerContent}</div>;
+  }
+
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
       <CollapsibleTrigger asChild>
@@ -110,168 +282,7 @@ export function CampanhaPipeAutomationsSection({ campanhaId, stages }: CampanhaP
       </CollapsibleTrigger>
       <CollapsibleContent>
         <div className="rounded-lg border bg-muted/30 p-4 mt-2 space-y-4">
-          <p className="text-xs text-muted-foreground">
-            Quando um lead for movido para uma etapa que tiver regra abaixo, ele sairá da campanha e entrará na etapa escolhida do pipe.
-          </p>
-          {isLoading ? (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              Carregando…
-            </div>
-          ) : (
-            <>
-              <ul className="space-y-2">
-                {automations.length === 0 ? (
-                  <li className="text-sm text-muted-foreground">Nenhuma automação configurada.</li>
-                ) : (
-                  automations.map((a) => (
-                    <li
-                      key={a.id}
-                      className="flex items-center justify-between gap-2 rounded-md border bg-card px-3 py-2 text-sm"
-                    >
-                      <span className="text-muted-foreground">
-                        Quando chegar em <strong className="text-foreground">{getStageName(a.campanha_stage_id)}</strong>
-                        {" → "}
-                        enviar para <strong className="text-foreground">{getPipeLabel(a.target_pipe)}</strong>
-                        {" "}na etapa <strong className="text-foreground">{a.pipe_stage}</strong>
-                      </span>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-destructive hover:text-destructive"
-                        onClick={() => handleDelete(a)}
-                        disabled={deleteAutomation.isPending}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </li>
-                  ))
-                )}
-              </ul>
-              {stagesWithoutAutomation.length === 0 && stages.length > 0 ? (
-                <p className="text-xs text-muted-foreground">Todas as etapas já possuem uma automação.</p>
-              ) : stages.length > 0 && (
-                <>
-                  {!addOpen ? (
-                    <Button type="button" variant="outline" size="sm" onClick={() => setAddOpen(true)}>
-                      <Plus className="w-4 h-4 mr-2" />
-                      Adicionar automação
-                    </Button>
-                  ) : (
-                    <div className="space-y-3 rounded-md border border-dashed p-3">
-                      <div className="grid gap-2">
-                        <Label>Etapa da campanha</Label>
-                        <Select
-                          value={selectedCampanhaStageId}
-                          onValueChange={(v) => {
-                            setSelectedCampanhaStageId(v);
-                          }}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecione a etapa" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {stagesWithoutAutomation.map((s) => (
-                              <SelectItem key={s.id} value={s.id}>
-                                {s.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="grid gap-2">
-                        <Label>Pipe destino</Label>
-                        <Select
-                          value={selectedPipe}
-                          onValueChange={(v) => {
-                            setSelectedPipe(v as CampanhaPipeAutomationTarget);
-                            setSelectedPipeStage("");
-                          }}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecione o pipe" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {PIPE_OPTIONS.map(({ target, label, icon: Icon }) => (
-                              <SelectItem key={target} value={target}>
-                                <span className="flex items-center gap-2">
-                                  <Icon className="w-4 h-4 shrink-0" />
-                                  {label}
-                                </span>
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      {selectedPipe && (
-                        <div className="grid gap-2">
-                          <Label>Etapa no pipe</Label>
-                          <Select
-                            value={selectedPipeStage}
-                            onValueChange={setSelectedPipeStage}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Selecione a etapa no pipe" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {pipelineStages.map((s) => {
-                                const key = s.stage_key ?? s.id;
-                                return (
-                                  <SelectItem key={key} value={key}>
-                                    <span className="flex items-center gap-2">
-                                      {s.color && (
-                                        <span
-                                          className="w-2.5 h-2.5 rounded-full shrink-0"
-                                          style={{ backgroundColor: s.color }}
-                                        />
-                                      )}
-                                      {s.name}
-                                    </span>
-                                  </SelectItem>
-                                );
-                              })}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      )}
-                      <div className="flex gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setAddOpen(false);
-                            setSelectedCampanhaStageId("");
-                            setSelectedPipe("");
-                            setSelectedPipeStage("");
-                          }}
-                        >
-                          Cancelar
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          onClick={handleAdd}
-                          disabled={
-                            !selectedCampanhaStageId ||
-                            !selectedPipe ||
-                            !selectedPipeStage ||
-                            createAutomation.isPending
-                          }
-                        >
-                          {createAutomation.isPending ? (
-                            <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                          ) : null}
-                          Salvar automação
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-            </>
-          )}
+          {innerContent}
         </div>
       </CollapsibleContent>
     </Collapsible>

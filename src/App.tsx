@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { OrgFeaturesProvider } from "@/contexts/OrgFeaturesContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { useAutoAdminAssignment } from "@/hooks/useAutoAdminAssignment";
@@ -82,7 +83,11 @@ function EnvMissingScreen() {
 // Wrapper for pages that need the main layout
 function LayoutWrapper({ children }: { children: React.ReactNode }) {
   useAutoAdminAssignment();
-  return <MainLayout>{children}</MainLayout>;
+  return (
+    <OrgFeaturesProvider>
+      <MainLayout>{children}</MainLayout>
+    </OrgFeaturesProvider>
+  );
 }
 
 // Auth route that redirects to dashboard if already logged in
