@@ -6,7 +6,7 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Settings2, Layers, Type, Upload, FileDown, Send } from "lucide-react";
+import { Settings2, Layers, Type, Upload, FileDown, Send, Shuffle } from "lucide-react";
 import { type PipelineType, type PipelineStage } from "@/hooks/usePipelineStages";
 import { type FunnelDestination } from "@/hooks/useImportLeads";
 import { ManagePipelineStagesContent } from "./ManagePipelineStagesModal";
@@ -14,6 +14,7 @@ import { CustomFieldsManager } from "@/components/leads/CustomFieldsManager";
 import { ImportLeadsFunnelContent } from "@/components/leads/ImportLeadsFunnelModal";
 import { ExportLeadsContent } from "@/components/leads/ExportLeadsModal";
 import { PipeDispatchRulesSection } from "./PipeDispatchRulesSection";
+import { PipeDistributionSection } from "./PipeDistributionSection";
 
 const PIPE_LABELS: Record<PipelineType, string> = {
   whatsapp: "Qualificação",
@@ -53,7 +54,7 @@ export function PipeSettingsDialog({
         </DialogHeader>
 
         <Tabs defaultValue={defaultTab} className="flex-1 overflow-hidden flex flex-col">
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="etapas" className="gap-1.5 text-xs">
               <Layers className="w-3.5 h-3.5" />
               Etapas
@@ -61,6 +62,10 @@ export function PipeSettingsDialog({
             <TabsTrigger value="campos" className="gap-1.5 text-xs">
               <Type className="w-3.5 h-3.5" />
               Campos
+            </TabsTrigger>
+            <TabsTrigger value="distribuicao" className="gap-1.5 text-xs">
+              <Shuffle className="w-3.5 h-3.5" />
+              Distribuição
             </TabsTrigger>
             <TabsTrigger value="importar" className="gap-1.5 text-xs">
               <Upload className="w-3.5 h-3.5" />
@@ -86,6 +91,10 @@ export function PipeSettingsDialog({
 
             <TabsContent value="campos" className="mt-0">
               <CustomFieldsManager />
+            </TabsContent>
+
+            <TabsContent value="distribuicao" className="mt-0">
+              <PipeDistributionSection pipeType={pipeType} />
             </TabsContent>
 
             <TabsContent value="importar" className="mt-0">

@@ -170,6 +170,20 @@ async function processPipeQueue(
 ): Promise<ProcessResult> {
   let sent = 0, failed = 0, actionsExecuted = 0, timeoutsProcessed = 0;
 
+  // --- 0. Reset stale "processing" items (stuck from crashed/timed-out runs) ---
+  const STALE_MINUTES = 5;
+  const staleThreshold = new Date(Date.now() - STALE_MINUTES * 60 * 1000).toISOString();
+  const { data: staleReset } = await supabase
+    .from("scheduled_pipe_messages")
+    .update({ status: "scheduled", scheduled_at: new Date().toISOString() })
+    .eq("pipe_type", pipeType)
+    .eq("status", "processing")
+    .lt("scheduled_at", staleThreshold)
+    .select("id");
+  if (staleReset && staleReset.length > 0) {
+    console.log(`[pipe-rule-dispatch][${pipeType}] Reset ${staleReset.length} stale processing item(s)`);
+  }
+
   // --- 1. Process expired wait_response timeouts ---
   timeoutsProcessed = await processExpiredTimeouts(supabase, pipeType);
 

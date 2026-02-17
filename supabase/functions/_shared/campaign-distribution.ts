@@ -47,7 +47,8 @@ export async function getCampaignLeadAssignment(
     .from("campanha_members")
     .select("team_member_id")
     .eq("campanha_id", campaignId)
-    .eq("role", "sdr");
+    .eq("role", "sdr")
+    .order("team_member_id");
 
   if (membersError || !members || members.length === 0) {
     console.warn("[campaign-distribution] No SDR members in campaign:", campaignId);
@@ -62,12 +63,31 @@ export async function getCampaignLeadAssignment(
   }
 
   if (mode === "round_robin") {
-    const { count } = await supabase
+    // "Least loaded" algorithm: pick SDR with fewest leads in this campaign.
+    // More reliable than count-based modulo — self-correcting and batch-safe.
+    const { data: sdrCounts } = await supabase
       .from("campanha_leads")
-      .select("id", { count: "exact", head: true })
-      .eq("campanha_id", campaignId);
-    const nextIndex = (count || 0) % memberIds.length;
-    return memberIds[nextIndex];
+      .select("sdr_id")
+      .eq("campanha_id", campaignId)
+      .not("sdr_id", "is", null);
+
+    const countMap: Record<string, number> = {};
+    for (const id of memberIds) countMap[id] = 0;
+    for (const cl of sdrCounts || []) {
+      if (cl.sdr_id && countMap[cl.sdr_id] !== undefined) {
+        countMap[cl.sdr_id]++;
+      }
+    }
+
+    let minCount = Infinity;
+    let chosen: string | null = null;
+    for (const id of memberIds) {
+      if (countMap[id] < minCount) {
+        minCount = countMap[id];
+        chosen = id;
+      }
+    }
+    return chosen;
   }
 
   return null;
@@ -104,7 +124,8 @@ export async function getCampaignCloserAssignment(
     .from("campanha_members")
     .select("team_member_id")
     .eq("campanha_id", campaignId)
-    .eq("role", "closer");
+    .eq("role", "closer")
+    .order("team_member_id");
 
   if (membersError || !members || members.length === 0) {
     console.warn("[campaign-distribution] No Closer members in campaign:", campaignId);
@@ -119,13 +140,30 @@ export async function getCampaignCloserAssignment(
   }
 
   if (mode === "round_robin") {
-    const { count } = await supabase
+    // "Least loaded" algorithm: pick Closer with fewest leads in this campaign.
+    const { data: closerCounts } = await supabase
       .from("campanha_leads")
-      .select("id", { count: "exact", head: true })
+      .select("closer_id")
       .eq("campanha_id", campaignId)
       .not("closer_id", "is", null);
-    const nextIndex = (count || 0) % memberIds.length;
-    return memberIds[nextIndex];
+
+    const countMap: Record<string, number> = {};
+    for (const id of memberIds) countMap[id] = 0;
+    for (const cl of closerCounts || []) {
+      if (cl.closer_id && countMap[cl.closer_id] !== undefined) {
+        countMap[cl.closer_id]++;
+      }
+    }
+
+    let minCount = Infinity;
+    let chosen: string | null = null;
+    for (const id of memberIds) {
+      if (countMap[id] < minCount) {
+        minCount = countMap[id];
+        chosen = id;
+      }
+    }
+    return chosen;
   }
 
   return null;

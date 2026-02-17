@@ -20,6 +20,7 @@ const corsHeaders = {
 interface PlaceInPipe {
   pipe: "whatsapp" | "confirmacao" | "propostas";
   stage: string; // ex: "novo", "abordado", "reuniao_marcada", "marcar_compromisso"
+  meeting_date?: string; // ISO 8601 — salva no pipe (meeting_date) e no lead (compromisso_date)
 }
 
 // Destino opcional: colocar o lead em uma campanha em uma etapa específica
@@ -150,8 +151,9 @@ serve(async (req) => {
 
     let result: Awaited<ReturnType<typeof getOrCreateLead>>;
 
-    // Padrão: sempre criar novo lead. Só busca por telefone/email quando o cliente envia update_existing_if_match === true.
-    const shouldDeduplicate = payload.update_existing_if_match === true;
+    // Padrão: sempre criar novo lead. Só busca por telefone/email quando o cliente envia update_existing_if_match = true.
+    // Aceita boolean true ou string "true" (n8n body fields envia como string).
+    const shouldDeduplicate = payload.update_existing_if_match === true || payload.update_existing_if_match === "true";
     if (shouldDeduplicate) {
       result = await getOrCreateLead(supabase, {
         organizationId,
@@ -245,6 +247,9 @@ serve(async (req) => {
       updateData.sdr_id = payload.assigned_user_id;
       updateData.closer_id = payload.assigned_user_id;
     }
+    if (payload.place_in_pipe?.meeting_date) {
+      updateData.compromisso_date = payload.place_in_pipe.meeting_date;
+    }
 
     if (Object.keys(updateData).length > 0) {
       await supabase
@@ -328,8 +333,37 @@ serve(async (req) => {
 
     // Colocar lead em um pipe (funil) em etapa específica (ex: n8n, campanha de ads)
     if (payload.place_in_pipe?.pipe && payload.place_in_pipe?.stage) {
-      const { pipe, stage } = payload.place_in_pipe;
+      const { pipe, stage, meeting_date } = payload.place_in_pipe;
       const stageVal = stage as string;
+
+      // Helper: auto-distribuir SDR/Closer após inserir novo registro no pipe
+      const autoDistributePipe = async (pipeTable: string, pipeTypeName: string) => {
+        try {
+          const { data: sdrId } = await supabase.rpc("get_next_pipe_sdr", {
+            p_pipe_type: pipeTypeName,
+            p_organization_id: organizationId,
+          });
+          const pipeUpdate: Record<string, unknown> = {};
+          if (sdrId) pipeUpdate.sdr_id = sdrId;
+
+          if (pipeTypeName !== "whatsapp") {
+            const { data: closerId } = await supabase.rpc("get_next_pipe_closer", {
+              p_pipe_type: pipeTypeName,
+              p_organization_id: organizationId,
+            });
+            if (closerId) pipeUpdate.closer_id = closerId;
+          }
+
+          if (Object.keys(pipeUpdate).length > 0) {
+            await supabase.from(pipeTable).update(pipeUpdate)
+              .eq("lead_id", leadId)
+              .eq("organization_id", organizationId);
+            console.log(`[lead-webhook] Auto-distributed in ${pipeTable}:`, pipeUpdate);
+          }
+        } catch (e) {
+          console.warn(`[lead-webhook] Auto-distribute failed for ${pipeTable}:`, e);
+        }
+      };
 
       if (pipe === "whatsapp") {
         const { data: existing } = await supabase
@@ -346,6 +380,7 @@ serve(async (req) => {
             organization_id: organizationId,
             status: stageVal,
           });
+          await autoDistributePipe("pipe_whatsapp", "whatsapp");
         }
         console.log("[lead-webhook] Lead placed in pipe_whatsapp stage:", stageVal);
       } else if (pipe === "confirmacao") {
@@ -356,13 +391,18 @@ serve(async (req) => {
           .eq("organization_id", organizationId)
           .maybeSingle();
         if (existing) {
-          await supabase.from("pipe_confirmacao").update({ status: stageVal }).eq("id", existing.id);
+          const updatePayload: Record<string, unknown> = { status: stageVal };
+          if (meeting_date) updatePayload.meeting_date = meeting_date;
+          await supabase.from("pipe_confirmacao").update(updatePayload).eq("id", existing.id);
         } else {
-          await supabase.from("pipe_confirmacao").insert({
+          const insertPayload: Record<string, unknown> = {
             lead_id: leadId,
             organization_id: organizationId,
             status: stageVal,
-          });
+          };
+          if (meeting_date) insertPayload.meeting_date = meeting_date;
+          await supabase.from("pipe_confirmacao").insert(insertPayload);
+          await autoDistributePipe("pipe_confirmacao", "confirmacao");
         }
         console.log("[lead-webhook] Lead placed in pipe_confirmacao stage:", stageVal);
       } else if (pipe === "propostas") {
@@ -373,13 +413,18 @@ serve(async (req) => {
           .eq("organization_id", organizationId)
           .maybeSingle();
         if (existing) {
-          await supabase.from("pipe_propostas").update({ status: stageVal }).eq("id", existing.id);
+          const updatePayload: Record<string, unknown> = { status: stageVal };
+          if (meeting_date) updatePayload.meeting_date = meeting_date;
+          await supabase.from("pipe_propostas").update(updatePayload).eq("id", existing.id);
         } else {
-          await supabase.from("pipe_propostas").insert({
+          const insertPayload: Record<string, unknown> = {
             lead_id: leadId,
             organization_id: organizationId,
             status: stageVal,
-          });
+          };
+          if (meeting_date) insertPayload.meeting_date = meeting_date;
+          await supabase.from("pipe_propostas").insert(insertPayload);
+          await autoDistributePipe("pipe_propostas", "propostas");
         }
         console.log("[lead-webhook] Lead placed in pipe_propostas stage:", stageVal);
       }

@@ -40,6 +40,9 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useOrganization } from "@/hooks/useOrganization";
+import { cn } from "@/lib/utils";
+import { usePipeQueueItems, useRetryDispatchItems } from "@/hooks/useDispatchQueueItems";
+import { DispatchQueueSheet } from "@/components/shared/DispatchQueueSheet";
 
 const TRIGGER_LABELS: Record<PipeDispatchRuleTriggerType, string> = {
   lead_added: "Ao adicionar lead no funil",
@@ -121,6 +124,14 @@ export function PipeDispatchRulesSection({ pipeType, stages }: PipeDispatchRules
   const updateRule = useUpdatePipeDispatchRule();
   const deleteRule = useDeletePipeDispatchRule();
   const [editingRule, setEditingRule] = useState<PipeDispatchRule | null>(null);
+  const [queueSheetStatus, setQueueSheetStatus] = useState<string | null>(null);
+
+  // Queue items for the detail sheet
+  const { data: queueItems = [], isLoading: queueLoading } = usePipeQueueItems(organizationId, pipeType, queueSheetStatus);
+  const retryMutation = useRetryDispatchItems("scheduled_pipe_messages", [
+    ["pipe_dispatch_metrics", organizationId, pipeType],
+    ["pipe_queue_items", organizationId, pipeType, queueSheetStatus],
+  ]);
 
   // --- Dispatch metrics ---
   const { data: dispatchMetrics } = useQuery({
@@ -367,13 +378,27 @@ export function PipeDispatchRulesSection({ pipeType, stages }: PipeDispatchRules
           {/* Dispatch Metrics */}
           {dispatchMetrics && (dispatchMetrics.sent > 0 || dispatchMetrics.scheduled > 0 || dispatchMetrics.failed > 0 || dispatchMetrics.waiting_response > 0 || dispatchMetrics.executed > 0) && (
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-              <MetricCard icon={CheckCircle2} color="text-green-500" value={dispatchMetrics.sent} label="Enviadas" />
-              <MetricCard icon={Clock} color="text-yellow-500" value={dispatchMetrics.scheduled} label="Pendentes" />
-              <MetricCard icon={Hourglass} color="text-blue-500" value={dispatchMetrics.waiting_response} label="Aguardando" />
-              <MetricCard icon={ArrowRightLeft} color="text-purple-500" value={dispatchMetrics.executed} label="Ações" />
-              <MetricCard icon={XCircle} color="text-red-500" value={dispatchMetrics.failed} label="Falharam" />
+              <MetricCard icon={CheckCircle2} color="text-green-500" value={dispatchMetrics.sent} label="Enviadas" onClick={() => setQueueSheetStatus("sent")} />
+              <MetricCard icon={Clock} color="text-yellow-500" value={dispatchMetrics.scheduled} label="Pendentes" onClick={() => setQueueSheetStatus("scheduled")} />
+              <MetricCard icon={Hourglass} color="text-blue-500" value={dispatchMetrics.waiting_response} label="Aguardando" onClick={() => setQueueSheetStatus("waiting_response")} />
+              <MetricCard icon={ArrowRightLeft} color="text-purple-500" value={dispatchMetrics.executed} label="Ações" onClick={() => setQueueSheetStatus("executed")} />
+              <MetricCard icon={XCircle} color="text-red-500" value={dispatchMetrics.failed} label="Falharam" onClick={() => setQueueSheetStatus("failed")} />
             </div>
           )}
+
+          {/* Queue detail sheet */}
+          <DispatchQueueSheet
+            open={!!queueSheetStatus}
+            onOpenChange={(open) => !open && setQueueSheetStatus(null)}
+            title={`Funil — Disparos`}
+            statusFilter={queueSheetStatus ?? "scheduled"}
+            items={queueItems}
+            isLoading={queueLoading}
+            onRetry={(ids) => retryMutation.mutate(ids)}
+            isRetrying={retryMutation.isPending}
+            onProcessQueue={handleProcessQueue}
+            isProcessing={processingQueue}
+          />
 
           {addOpen && (
             <RuleForm
@@ -419,9 +444,15 @@ export function PipeDispatchRulesSection({ pipeType, stages }: PipeDispatchRules
 // ============================
 // Metric Card
 // ============================
-function MetricCard({ icon: Icon, color, value, label }: { icon: typeof Send; color: string; value: number; label: string }) {
+function MetricCard({ icon: Icon, color, value, label, onClick }: { icon: typeof Send; color: string; value: number; label: string; onClick?: () => void }) {
   return (
-    <div className="flex items-center gap-2 rounded-lg border bg-background p-2.5">
+    <div
+      className={cn(
+        "flex items-center gap-2 rounded-lg border bg-background p-2.5",
+        onClick && "cursor-pointer hover:border-primary/50 transition-colors"
+      )}
+      onClick={onClick}
+    >
       <Icon className={`w-4 h-4 ${color} shrink-0`} />
       <div>
         <p className="text-base font-semibold leading-none">{value}</p>

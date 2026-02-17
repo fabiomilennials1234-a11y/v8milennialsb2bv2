@@ -174,6 +174,20 @@ async function processCampaignQueue(
 ): Promise<ProcessResult> {
   let sent = 0, failed = 0, actionsExecuted = 0, timeoutsProcessed = 0;
 
+  // --- 0. Reset stale "processing" items (stuck from crashed/timed-out runs) ---
+  const STALE_MINUTES = 5;
+  const staleThreshold = new Date(Date.now() - STALE_MINUTES * 60 * 1000).toISOString();
+  const { data: staleReset } = await supabase
+    .from("scheduled_campaign_messages")
+    .update({ status: "scheduled", scheduled_at: new Date().toISOString() })
+    .eq("campanha_id", campanhaId)
+    .eq("status", "processing")
+    .lt("scheduled_at", staleThreshold)
+    .select("id");
+  if (staleReset && staleReset.length > 0) {
+    console.log(`[campaign-rule-dispatch][${campanhaId}] Reset ${staleReset.length} stale processing item(s)`);
+  }
+
   // --- 1. Process expired wait_response timeouts ---
   timeoutsProcessed = await processExpiredTimeouts(supabase, campanhaId);
 
@@ -483,40 +497,47 @@ async function processCampaignQueue(
         const mode = (row as any).sdr_assignment_mode || "specific";
         let sdrId: string | null = (row as any).target_sdr_id || null;
 
-        if (mode === "round_robin") {
-          // Find SDR with least leads in this campaign (from campanha_members with role = 'sdr')
+        if (mode === "round_robin" || mode === "random") {
+          // Find SDR members in this campaign
           const { data: sdrMembers } = await supabase
             .from("campanha_members")
             .select("team_member_id, team_member:team_members(id, name)")
             .eq("campanha_id", campanhaId)
-            .eq("role", "sdr");
+            .eq("role", "sdr")
+            .order("team_member_id");
 
           const sdrs = (sdrMembers || [])
             .filter((m: any) => m.team_member)
             .map((m: any) => ({ id: m.team_member_id, name: m.team_member?.name }));
 
           if (sdrs.length > 0) {
-            // Count leads per SDR in this campaign
-            const { data: sdrCounts } = await supabase
-              .from("campanha_leads")
-              .select("sdr_id")
-              .eq("campanha_id", campanhaId)
-              .not("sdr_id", "is", null);
+            if (mode === "random") {
+              // Random: pick a random SDR from the pool
+              const idx = Math.floor(Math.random() * sdrs.length);
+              sdrId = sdrs[idx].id;
+            } else {
+              // Round robin: pick SDR with fewest leads (least loaded)
+              const { data: sdrCounts } = await supabase
+                .from("campanha_leads")
+                .select("sdr_id")
+                .eq("campanha_id", campanhaId)
+                .not("sdr_id", "is", null);
 
-            const countMap: Record<string, number> = {};
-            for (const s of sdrs) countMap[s.id] = 0;
-            for (const cl of sdrCounts || []) {
-              if (cl.sdr_id && countMap[cl.sdr_id] !== undefined) {
-                countMap[cl.sdr_id]++;
+              const countMap: Record<string, number> = {};
+              for (const s of sdrs) countMap[s.id] = 0;
+              for (const cl of sdrCounts || []) {
+                if (cl.sdr_id && countMap[cl.sdr_id] !== undefined) {
+                  countMap[cl.sdr_id]++;
+                }
               }
-            }
 
-            // Pick SDR with lowest count
-            let minCount = Infinity;
-            for (const s of sdrs) {
-              if ((countMap[s.id] ?? 0) < minCount) {
-                minCount = countMap[s.id] ?? 0;
-                sdrId = s.id;
+              // Pick SDR with lowest count
+              let minCount = Infinity;
+              for (const s of sdrs) {
+                if ((countMap[s.id] ?? 0) < minCount) {
+                  minCount = countMap[s.id] ?? 0;
+                  sdrId = s.id;
+                }
               }
             }
           }
