@@ -172,12 +172,22 @@ const handler = async (req: Request) => {
           corsHeaders
         );
       }
-      const { data: adminCheck } = await supabase
+      // Checar admin via user_roles OU team_members.role (consistente com has_role corrigido)
+      const { data: adminCheckRole } = await supabase
         .from("user_roles")
         .select("role")
         .eq("user_id", userIdFromAuth!)
+        .eq("role", "admin")
         .maybeSingle();
-      if (adminCheck?.role !== "admin") {
+      const { data: adminCheckTm } = await supabase
+        .from("team_members")
+        .select("id, role")
+        .eq("user_id", userIdFromAuth!)
+        .eq("organization_id", organizationId)
+        .eq("role", "admin")
+        .eq("is_active", true)
+        .maybeSingle();
+      if (!adminCheckRole && !adminCheckTm) {
         return jsonResponse(
           { success: false, error: "Forbidden", message: "Apenas administradores podem remover membros" },
           403,
@@ -196,6 +206,7 @@ const handler = async (req: Request) => {
           403,
           corsHeaders
         );
+      }
     }
 
     // ----- Buscar o membro a remover -----

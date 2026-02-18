@@ -201,9 +201,16 @@ export default function Equipe() {
       toast.success("Membro atualizado com sucesso!");
       setIsDialogOpen(false);
       setEditingMember(null);
-    } catch (error) {
-      toast.error("Erro ao salvar membro");
-      console.error(error);
+    } catch (error: any) {
+      const msg = error?.message || "";
+      if (msg.includes("new row violates") || msg.includes("permission") || msg.includes("policy")) {
+        toast.error("Sem permissão para editar. Verifique se você é admin.");
+      } else if (msg.includes("Row not found") || msg.includes("0 rows")) {
+        toast.error("Não foi possível atualizar. Verifique suas permissões de admin.");
+      } else {
+        toast.error("Erro ao salvar membro: " + (msg || "erro desconhecido"));
+      }
+      console.error("[Equipe] handleSubmitEdit error:", error);
     }
   };
 
@@ -415,7 +422,7 @@ export default function Equipe() {
                   <Input
                     id="name"
                     value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
                     placeholder="Nome completo"
                   />
                 </div>
@@ -427,7 +434,7 @@ export default function Equipe() {
                       id="email"
                       type="email"
                       value={formData.email}
-                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                      onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
                       placeholder="email@exemplo.com"
                       className="pl-9"
                     />
@@ -440,7 +447,7 @@ export default function Equipe() {
                   <Label htmlFor="role">Função</Label>
                   <Select
                     value={formData.role}
-                    onValueChange={(value: TeamRole) => setFormData({ ...formData, role: value })}
+                    onValueChange={(value: TeamRole) => setFormData(prev => ({ ...prev, role: value }))}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Selecione a função" />
@@ -459,7 +466,7 @@ export default function Equipe() {
                       type="number"
                       min="0"
                       value={formData.ote_base}
-                      onChange={(e) => setFormData({ ...formData, ote_base: e.target.value === "" ? 0 : Number(e.target.value) })}
+                      onChange={(e) => setFormData(prev => ({ ...prev, ote_base: e.target.value === "" ? 0 : Number(e.target.value) }))}
                     />
                   </div>
                   <div className="grid gap-2">
@@ -469,7 +476,7 @@ export default function Equipe() {
                       type="number"
                       min="0"
                       value={formData.ote_bonus}
-                      onChange={(e) => setFormData({ ...formData, ote_bonus: e.target.value === "" ? 0 : Number(e.target.value) })}
+                      onChange={(e) => setFormData(prev => ({ ...prev, ote_bonus: e.target.value === "" ? 0 : Number(e.target.value) }))}
                     />
                   </div>
                 </div>
@@ -482,7 +489,7 @@ export default function Equipe() {
                       min="0"
                       step="0.1"
                       value={formData.commission_mrr_percent}
-                      onChange={(e) => setFormData({ ...formData, commission_mrr_percent: e.target.value === "" ? 0 : Number(e.target.value) })}
+                      onChange={(e) => setFormData(prev => ({ ...prev, commission_mrr_percent: e.target.value === "" ? 0 : Number(e.target.value) }))}
                     />
                   </div>
                   <div className="grid gap-2">
@@ -493,7 +500,7 @@ export default function Equipe() {
                       min="0"
                       step="0.1"
                       value={formData.commission_projeto_percent}
-                      onChange={(e) => setFormData({ ...formData, commission_projeto_percent: e.target.value === "" ? 0 : Number(e.target.value) })}
+                      onChange={(e) => setFormData(prev => ({ ...prev, commission_projeto_percent: e.target.value === "" ? 0 : Number(e.target.value) }))}
                     />
                   </div>
                 </div>
@@ -501,7 +508,7 @@ export default function Equipe() {
                   <Label htmlFor="user_id">Vincular ao Usuário</Label>
                   <Select
                     value={formData.user_id || "none"}
-                    onValueChange={(value) => setFormData({ ...formData, user_id: value === "none" ? null : value })}
+                    onValueChange={(value) => setFormData(prev => ({ ...prev, user_id: value === "none" ? null : value }))}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Selecione um usuário" />
@@ -524,7 +531,7 @@ export default function Equipe() {
                   <Switch
                     id="is_active"
                     checked={formData.is_active}
-                    onCheckedChange={(checked) => setFormData({ ...formData, is_active: checked })}
+                    onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_active: checked }))}
                   />
                 </div>
                 <div className="space-y-3 border-t pt-4">

@@ -227,14 +227,22 @@ serve(async (req) => {
           corsHeaders
         );
       }
-      // Verificar se o usuário é admin da organização
-      const { data: adminCheck } = await supabase
+      // Checar admin via user_roles OU team_members.role (consistente com has_role corrigido)
+      const { data: adminCheckRole } = await supabase
         .from("user_roles")
         .select("role")
         .eq("user_id", userIdFromAuth!)
+        .eq("role", "admin")
         .maybeSingle();
-      const isAdmin = adminCheck?.role === "admin";
-      if (!isAdmin) {
+      const { data: adminCheckTm } = await supabase
+        .from("team_members")
+        .select("id, role")
+        .eq("user_id", userIdFromAuth!)
+        .eq("organization_id", organizationId)
+        .eq("role", "admin")
+        .eq("is_active", true)
+        .maybeSingle();
+      if (!adminCheckRole && !adminCheckTm) {
         return jsonResponse(
           { success: false, error: "Forbidden", message: "Apenas administradores podem criar usuários" },
           403,
