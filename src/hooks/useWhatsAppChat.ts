@@ -328,28 +328,79 @@ export function useSendWhatsAppMessage() {
       if (data?.error) throw new Error(data.error);
 
       // Salvar mensagem no banco localmente (com instance_id para aparecer no inbox correto)
+      const messageId = data?.key?.id || `local_${Date.now()}`;
+      const timestamp = new Date().toISOString();
       const { error: insertError } = await supabase.from("whatsapp_messages").insert({
-        organization_id: teamMember?.organization_id,
+        organization_id: teamMember.organization_id,
         instance_id: instanceId || null,
-        message_id: data?.key?.id || `local_${Date.now()}`,
+        message_id: messageId,
         remote_jid: `${formattedNumber}@s.whatsapp.net`,
-        phone_number: formattedNumber,
+        phone_number: phoneNumber,
         direction: "outgoing",
         message_type: "text",
         content: message,
         status: "sent",
-        timestamp: new Date().toISOString(),
+        timestamp,
       });
 
       if (insertError && !insertError.message?.includes("duplicate")) {
         console.error("Error saving outgoing message:", insertError);
+        // Não bloquear: o webhook send.message também salva como fallback
       }
 
-      return data;
+      return { ...data, _localMessage: { phoneNumber, message, instanceId, messageId, timestamp } };
     },
-    onSuccess: (_, variables) => {
+    onMutate: async (variables) => {
+      const orgId = teamMember?.organization_id;
+      const phone = variables.phoneNumber;
+      const instId = variables.instanceId;
+
+      // Cancelar refetches pendentes para não sobrescrever o optimistic update
+      await queryClient.cancelQueries({ queryKey: ["whatsapp_messages", orgId, phone, instId] });
+
+      const previousMessages = queryClient.getQueryData<WhatsAppMessage[]>(
+        ["whatsapp_messages", orgId, phone, instId]
+      );
+
+      // Optimistic update: adicionar mensagem imediatamente na UI
+      const optimisticMsg: WhatsAppMessage = {
+        id: `optimistic_${Date.now()}`,
+        organization_id: orgId || "",
+        instance_id: instId || null,
+        message_id: `optimistic_${Date.now()}`,
+        remote_jid: `${phone}@s.whatsapp.net`,
+        phone_number: phone,
+        direction: "outgoing",
+        message_type: "text",
+        content: variables.message,
+        media_url: null,
+        push_name: null,
+        status: "pending",
+        lead_id: null,
+        timestamp: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+      };
+
+      queryClient.setQueryData<WhatsAppMessage[]>(
+        ["whatsapp_messages", orgId, phone, instId],
+        (old) => [...(old || []), optimisticMsg]
+      );
+
+      return { previousMessages };
+    },
+    onError: (_err, variables, context) => {
+      // Reverter optimistic update em caso de erro
+      if (context?.previousMessages) {
+        queryClient.setQueryData(
+          ["whatsapp_messages", teamMember?.organization_id, variables.phoneNumber, variables.instanceId],
+          context.previousMessages
+        );
+      }
+    },
+    onSettled: (_, __, variables) => {
+      // Sempre refetch após completar (sucesso ou erro) para sincronizar com o banco
       queryClient.invalidateQueries({
-        queryKey: ["whatsapp_messages", teamMember?.organization_id, variables.phoneNumber.replace(/\D/g, "")],
+        queryKey: ["whatsapp_messages", teamMember?.organization_id, variables.phoneNumber, variables.instanceId],
       });
       queryClient.invalidateQueries({
         queryKey: ["whatsapp_contacts"],
@@ -483,11 +534,11 @@ export function useSendWhatsAppMedia() {
 
       // Salvar mensagem no banco (com instance_id para aparecer no inbox correto)
       const { error: insertError } = await supabase.from("whatsapp_messages").insert({
-        organization_id: teamMember?.organization_id,
+        organization_id: teamMember.organization_id,
         instance_id: instanceId || null,
         message_id: data?.key?.id || `local_${Date.now()}`,
         remote_jid: `${formattedNumber}@s.whatsapp.net`,
-        phone_number: formattedNumber,
+        phone_number: phoneNumber,
         direction: "outgoing",
         message_type: mediaType,
         content: caption || null,
@@ -498,13 +549,59 @@ export function useSendWhatsAppMedia() {
 
       if (insertError && !insertError.message?.includes("duplicate")) {
         console.error("Error saving outgoing media message:", insertError);
+        // Não bloquear: o webhook send.message também salva como fallback
       }
 
       return data;
     },
-    onSuccess: (_, variables) => {
+    onMutate: async (variables) => {
+      const orgId = teamMember?.organization_id;
+      const phone = variables.phoneNumber;
+      const instId = variables.instanceId;
+
+      await queryClient.cancelQueries({ queryKey: ["whatsapp_messages", orgId, phone, instId] });
+
+      const previousMessages = queryClient.getQueryData<WhatsAppMessage[]>(
+        ["whatsapp_messages", orgId, phone, instId]
+      );
+
+      // Optimistic update: adicionar mídia imediatamente na UI
+      const optimisticMsg: WhatsAppMessage = {
+        id: `optimistic_${Date.now()}`,
+        organization_id: orgId || "",
+        instance_id: instId || null,
+        message_id: `optimistic_${Date.now()}`,
+        remote_jid: `${phone}@s.whatsapp.net`,
+        phone_number: phone,
+        direction: "outgoing",
+        message_type: variables.mediaType,
+        content: variables.caption || null,
+        media_url: null,
+        push_name: null,
+        status: "pending",
+        lead_id: null,
+        timestamp: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+      };
+
+      queryClient.setQueryData<WhatsAppMessage[]>(
+        ["whatsapp_messages", orgId, phone, instId],
+        (old) => [...(old || []), optimisticMsg]
+      );
+
+      return { previousMessages };
+    },
+    onError: (_err, variables, context) => {
+      if (context?.previousMessages) {
+        queryClient.setQueryData(
+          ["whatsapp_messages", teamMember?.organization_id, variables.phoneNumber, variables.instanceId],
+          context.previousMessages
+        );
+      }
+    },
+    onSettled: (_, __, variables) => {
       queryClient.invalidateQueries({
-        queryKey: ["whatsapp_messages", teamMember?.organization_id, variables.phoneNumber.replace(/\D/g, "")],
+        queryKey: ["whatsapp_messages", teamMember?.organization_id, variables.phoneNumber, variables.instanceId],
       });
       queryClient.invalidateQueries({
         queryKey: ["whatsapp_contacts"],

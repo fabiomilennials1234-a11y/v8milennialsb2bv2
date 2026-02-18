@@ -561,8 +561,9 @@ Deno.serve(async (req) => {
         break;
 
       case "send.message":
-        // Mensagem enviada por nós - apenas log
-        console.log("[Evolution Webhook] Message sent:", payload.data);
+        // Mensagem enviada via API — salvar no banco para aparecer no chat
+        console.log("[Evolution Webhook] Message sent via API, saving to DB");
+        await handleSendMessage(supabase, whatsappInstance, payload.data);
         break;
 
       default:
@@ -1044,6 +1045,83 @@ async function handleMessagesUpdate(
     if (error) {
       console.error("[Evolution Webhook] Error updating message status:", error);
     }
+  }
+}
+
+/**
+ * Processa evento send.message (mensagem enviada via API).
+ * Salva no banco para que apareça no chat do atendente.
+ * O payload de send.message tem a mesma estrutura de messages.upsert.
+ */
+async function handleSendMessage(
+  supabase: ReturnType<typeof createClient>,
+  instance: { id: string; organization_id: string; instance_name: string },
+  data: Record<string, unknown>
+) {
+  // send.message pode vir como objeto único ou array
+  const msg = (data as unknown as MessageData) || {};
+
+  // Pode vir embrulhado em .key no nível raiz ou em .message
+  const key = (msg.key || (data as Record<string, unknown>).key) as MessageData["key"] | undefined;
+  if (!key?.remoteJid || !key.id) {
+    console.log("[Evolution Webhook] send.message: missing key/remoteJid, skipping");
+    return;
+  }
+
+  // Ignorar broadcasts e grupos
+  if (key.remoteJid.includes("@broadcast") || key.remoteJid.includes("@g.us")) {
+    return;
+  }
+
+  const phoneNumber = extractPhoneNumber(key.remoteJid);
+  const messageText = extractMessageText(msg) || (data as Record<string, unknown>).text as string || null;
+
+  // Determinar tipo de mensagem
+  let messageType = "text";
+  let mediaUrl: string | null = null;
+
+  const message = msg.message || (data as Record<string, unknown>).message as Record<string, unknown> | undefined;
+  if (message) {
+    if ((message as Record<string, unknown>).imageMessage) messageType = "image";
+    else if ((message as Record<string, unknown>).audioMessage) {
+      messageType = ((message as Record<string, unknown>).audioMessage as Record<string, unknown>)?.ptt ? "ptt" : "audio";
+    }
+    else if ((message as Record<string, unknown>).videoMessage) messageType = "video";
+    else if ((message as Record<string, unknown>).documentMessage) messageType = "document";
+  }
+
+  console.log("[Evolution Webhook] send.message saving:", {
+    phone: phoneNumber,
+    type: messageType,
+    messageId: key.id,
+  });
+
+  const { error: msgError } = await supabase.from("whatsapp_messages").insert({
+    organization_id: instance.organization_id,
+    instance_id: instance.id,
+    message_id: key.id,
+    remote_jid: key.remoteJid,
+    phone_number: phoneNumber,
+    direction: "outgoing",
+    message_type: messageType,
+    content: messageText,
+    media_url: mediaUrl,
+    push_name: (msg.pushName || null) as string | null,
+    status: "sent",
+    timestamp: msg.messageTimestamp
+      ? new Date(Number(msg.messageTimestamp) * 1000).toISOString()
+      : new Date().toISOString(),
+    raw_payload: data as unknown as Record<string, unknown>,
+  });
+
+  if (msgError) {
+    if (!msgError.message?.includes("duplicate")) {
+      console.error("[Evolution Webhook] Error saving send.message:", msgError);
+    } else {
+      console.log("[Evolution Webhook] send.message already exists (duplicate), OK");
+    }
+  } else {
+    console.log("[Evolution Webhook] send.message saved successfully");
   }
 }
 
