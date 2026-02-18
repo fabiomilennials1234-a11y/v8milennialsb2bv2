@@ -817,6 +817,16 @@ async function handleMessagesUpsert(
         });
       }
 
+      // Auto-desarquivar conversa quando chega mensagem incoming
+      if (direction === "incoming") {
+        await supabase
+          .from("whatsapp_conversations")
+          .update({ archived_at: null })
+          .eq("instance_id", instance.id)
+          .eq("phone_number", phoneNumber)
+          .not("archived_at", "is", null);
+      }
+
       // Se for mensagem recebida, processar com IA (se tiver agente vinculado)
       if (direction === "incoming" && messageText) {
         // Primeiro tentar associar a um lead existente

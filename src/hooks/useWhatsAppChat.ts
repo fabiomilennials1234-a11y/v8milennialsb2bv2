@@ -21,6 +21,12 @@ export interface WhatsAppMessage {
   created_at: string;
 }
 
+export interface ChatContactTag {
+  id: string;
+  name: string;
+  color: string;
+}
+
 export interface ChatContact {
   phone_number: string;
   push_name: string | null;
@@ -31,6 +37,12 @@ export interface ChatContact {
   unread_count: number;
   lead_id: string | null;
   lead_name: string | null;
+  /** ID do registro em whatsapp_conversations (null se nunca teve ação) */
+  conversation_id: string | null;
+  /** Se a conversa está arquivada */
+  archived_at: string | null;
+  /** Tags combinadas: lead_tags + conversation_tags (sem duplicatas) */
+  tags: ChatContactTag[];
 }
 
 /** Instância de WhatsApp que o usuário pode acessar (para seletor de inbox) */
@@ -152,6 +164,9 @@ export function useWhatsAppContacts(instanceId: string | null) {
             unread_count: 0,
             lead_id: msg.lead_id,
             lead_name: leadName,
+            conversation_id: null,
+            archived_at: null,
+            tags: [],
           });
         } else {
           // Manter a mensagem mais recente; preferir lead_id/lead_name quando existir
@@ -205,7 +220,94 @@ export function useWhatsAppContacts(instanceId: string | null) {
         contact.unread_count = unreadByPhone[key] ?? 0;
       }
 
-      return Array.from(contactsMap.values());
+      // Buscar metadados de conversas (archive/delete) e tags de conversa
+      const { data: convMeta } = await supabase
+        .from("whatsapp_conversations")
+        .select("id, phone_number, archived_at, deleted_at")
+        .eq("organization_id", organizationId)
+        .eq("instance_id", instanceId);
+
+      const { data: convTagsData } = await supabase
+        .from("whatsapp_conversation_tags")
+        .select(`
+          conversation_id,
+          tags!inner(id, name, color)
+        `);
+
+      // Mapear conversation tags por conversation_id
+      const convTagsByConvId = new Map<string, ChatContactTag[]>();
+      for (const row of convTagsData || []) {
+        const tag = row.tags as unknown as ChatContactTag;
+        const existing = convTagsByConvId.get(row.conversation_id) || [];
+        existing.push(tag);
+        convTagsByConvId.set(row.conversation_id, existing);
+      }
+
+      // Buscar lead_tags para leads associados
+      const leadIds = Array.from(contactsMap.values())
+        .map((c) => c.lead_id)
+        .filter((id): id is string => !!id);
+
+      const leadTagsMap = new Map<string, ChatContactTag[]>();
+      if (leadIds.length > 0) {
+        const { data: leadTagsData } = await supabase
+          .from("lead_tags")
+          .select("lead_id, tags!inner(id, name, color)")
+          .in("lead_id", leadIds);
+
+        for (const row of leadTagsData || []) {
+          const tag = (row as unknown as { tags: ChatContactTag }).tags;
+          const existing = leadTagsMap.get(row.lead_id) || [];
+          existing.push(tag);
+          leadTagsMap.set(row.lead_id, existing);
+        }
+      }
+
+      // Enriquecer contatos com metadados de conversa e tags
+      const convMetaMap = new Map<string, { id: string; archived_at: string | null; deleted_at: string | null }>();
+      for (const row of convMeta || []) {
+        convMetaMap.set(row.phone_number, row);
+      }
+
+      const results: ChatContact[] = [];
+      for (const contact of contactsMap.values()) {
+        const meta = convMetaMap.get(contact.phone_number);
+
+        // Filtrar conversas excluídas
+        if (meta?.deleted_at) continue;
+
+        contact.conversation_id = meta?.id ?? null;
+        contact.archived_at = meta?.archived_at ?? null;
+
+        // Merge tags: lead_tags + conversation_tags (sem duplicatas por tag.id)
+        const tagIds = new Set<string>();
+        const mergedTags: ChatContactTag[] = [];
+
+        // Lead tags primeiro
+        if (contact.lead_id) {
+          for (const tag of leadTagsMap.get(contact.lead_id) || []) {
+            if (!tagIds.has(tag.id)) {
+              tagIds.add(tag.id);
+              mergedTags.push(tag);
+            }
+          }
+        }
+
+        // Conversation tags
+        if (meta?.id) {
+          for (const tag of convTagsByConvId.get(meta.id) || []) {
+            if (!tagIds.has(tag.id)) {
+              tagIds.add(tag.id);
+              mergedTags.push(tag);
+            }
+          }
+        }
+
+        contact.tags = mergedTags;
+        results.push(contact);
+      }
+
+      return results;
     },
     enabled: !!organizationId && !!instanceId,
     // Polling de fallback: atualiza lista (e badge da sidebar) a cada 10s quando a aba está em foco (realtime pode falhar em produção)
