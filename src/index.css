@@ -69,9 +69,9 @@
     --chart-5: 200 80% 50%;
 
     /* Custom Gradients */
-    --gradient-gold: linear-gradient(135deg, hsl(33 81% 54%) 0%, hsl(33 81% 54%) 25%, hsl(47 100% 50%) 100%);
-    --gradient-primary: linear-gradient(135deg, hsl(33 81% 54%) 0%, hsl(33 81% 54%) 25%, hsl(47 100% 50%) 100%);
-    --gradient-primary-hover: linear-gradient(135deg, hsl(33 81% 48%) 0%, hsl(33 81% 48%) 25%, hsl(47 100% 45%) 100%);
+    --gradient-gold: linear-gradient(135deg, hsl(31 85% 53%) 0%, hsl(31 85% 53%) 25%, hsl(47 100% 50%) 100%);
+    --gradient-primary: linear-gradient(135deg, hsl(31 85% 53%) 0%, hsl(31 85% 53%) 25%, hsl(47 100% 50%) 100%);
+    --gradient-primary-hover: linear-gradient(135deg, hsl(31 85% 47%) 0%, hsl(31 85% 47%) 25%, hsl(47 100% 45%) 100%);
     --gradient-success: linear-gradient(135deg, hsl(142 70% 45%) 0%, hsl(152 70% 50%) 100%);
     --gradient-dark: linear-gradient(135deg, hsl(36 20% 18%) 0%, hsl(36 15% 25%) 100%);
     

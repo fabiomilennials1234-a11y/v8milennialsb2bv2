@@ -1157,6 +1157,7 @@ export function useImportLeads() {
         .from("tags")
         .select("id")
         .eq("name", tagName)
+        .eq("organization_id", organizationId)
         .maybeSingle();
 
       if (existingTag) {
@@ -1164,10 +1165,10 @@ export function useImportLeads() {
       } else {
         const { data: newTag, error: tagError } = await supabase
           .from("tags")
-          .insert({ name: tagName, color: "#f59e0b" })
+          .insert({ name: tagName, color: "#f59e0b", organization_id: organizationId })
           .select("id")
           .single();
-        
+
         if (tagError) throw tagError;
         tagId = newTag.id;
       }

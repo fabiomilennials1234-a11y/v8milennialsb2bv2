@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useOrganization } from "./useOrganization";
 
 export type ProductType = "mrr" | "projeto" | "unitario";
 
@@ -26,33 +27,43 @@ export type ProductInsert = Omit<Product, "id" | "created_at" | "updated_at">;
 export type ProductUpdate = Partial<ProductInsert> & { id: string };
 
 export function useProducts() {
+  const { organizationId, isReady } = useOrganization();
+
   return useQuery({
-    queryKey: ["products"],
+    queryKey: ["products", organizationId],
     queryFn: async () => {
+      if (!organizationId) return [];
       const { data, error } = await supabase
         .from("products")
         .select("*")
+        .eq("organization_id", organizationId)
         .order("name");
 
       if (error) throw error;
       return data as Product[];
     },
+    enabled: isReady,
   });
 }
 
 export function useActiveProducts() {
+  const { organizationId, isReady } = useOrganization();
+
   return useQuery({
-    queryKey: ["products", "active"],
+    queryKey: ["products", "active", organizationId],
     queryFn: async () => {
+      if (!organizationId) return [];
       const { data, error } = await supabase
         .from("products")
         .select("*")
         .eq("is_active", true)
+        .eq("organization_id", organizationId)
         .order("name");
 
       if (error) throw error;
       return data as Product[];
     },
+    enabled: isReady,
   });
 }
 

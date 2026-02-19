@@ -81,24 +81,26 @@ export default function CampanhaDetail() {
 
   const handleMoveToConfirmacao = async (lead: any) => {
     try {
+      if (!organizationId) throw new Error("Sem organização");
       // 1. Create or get tag with campaign name
       const tagName = `Campanha: ${campanha?.name}`;
       let tagId: string;
 
-      // Check if tag already exists
+      // Check if tag already exists for this organization
       const { data: existingTag } = await supabase
         .from("tags")
         .select("id")
         .eq("name", tagName)
+        .eq("organization_id", organizationId)
         .maybeSingle();
 
       if (existingTag) {
         tagId = existingTag.id;
       } else {
-        // Create new tag with campaign-specific color
+        // Create new tag with campaign-specific color, scoped to organization
         const { data: newTag, error: tagError } = await supabase
           .from("tags")
-          .insert({ name: tagName, color: "#8b5cf6" }) // Purple color for campaigns
+          .insert({ name: tagName, color: "#8b5cf6", organization_id: organizationId })
           .select("id")
           .single();
 

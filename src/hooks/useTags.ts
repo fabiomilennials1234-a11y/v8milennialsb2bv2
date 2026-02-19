@@ -1,37 +1,44 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
+import { useOrganization } from "./useOrganization";
 
 export type Tag = Tables<"tags">;
 export type TagInsert = TablesInsert<"tags">;
 export type TagUpdate = TablesUpdate<"tags">;
 
 export function useTags() {
+  const { organizationId, isReady } = useOrganization();
+
   return useQuery({
-    queryKey: ["tags"],
+    queryKey: ["tags", organizationId],
     queryFn: async () => {
+      if (!organizationId) return [];
       const { data, error } = await supabase
         .from("tags")
         .select("*")
+        .eq("organization_id", organizationId)
         .order("name");
-      
+
       if (error) throw error;
       return data as Tag[];
     },
+    enabled: isReady,
   });
 }
 
 export function useCreateTag() {
   const queryClient = useQueryClient();
-  
+  const { organizationId } = useOrganization();
+
   return useMutation({
     mutationFn: async (tag: TagInsert) => {
       const { data, error } = await supabase
         .from("tags")
-        .insert(tag)
+        .insert({ ...tag, organization_id: tag.organization_id ?? organizationId })
         .select()
         .single();
-      
+
       if (error) throw error;
       return data;
     },

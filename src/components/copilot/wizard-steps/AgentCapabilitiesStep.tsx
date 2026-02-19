@@ -207,8 +207,8 @@ export function AgentCapabilitiesStep() {
               setValue("responseDelayMs", v, { shouldDirty: true })
             }
             min={0}
-            max={5000}
-            step={500}
+            max={45000}
+            step={1000}
           />
           <p className="text-xs text-muted-foreground">
             Tempo de espera artificial antes do agente enviar a resposta. Simula
