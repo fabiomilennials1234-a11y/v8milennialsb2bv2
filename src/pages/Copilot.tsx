@@ -100,7 +100,7 @@ export default function Copilot() {
   if (subLoading || isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="w-8 h-8 animate-spin text-millennials-yellow" />
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
       </div>
     );
   }
@@ -115,7 +115,7 @@ export default function Copilot() {
       >
         <div>
           <h1 className="text-3xl font-bold flex items-center gap-3">
-            <Bot className="w-8 h-8 text-millennials-yellow" />
+            <Bot className="w-8 h-8 text-primary" />
             Copilot - Agentes de IA
           </h1>
           <p className="text-muted-foreground mt-1">
@@ -134,7 +134,7 @@ export default function Copilot() {
         {canManageCopilot && (
           <Button
             onClick={handleCreateAgent}
-            className="bg-millennials-yellow hover:bg-millennials-yellow/90 text-black"
+            className="bg-primary hover:bg-primary/90 text-primary-foreground"
           >
             <Plus className="w-4 h-4 mr-2" />
             Novo Copilot
@@ -148,10 +148,10 @@ export default function Copilot() {
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
         >
-          <Card className="border-millennials-yellow bg-millennials-yellow/5">
+          <Card className="border-primary bg-primary/5">
             <CardContent className="pt-6">
               <div className="flex items-start gap-4">
-                <Lock className="w-6 h-6 text-millennials-yellow flex-shrink-0 mt-1" />
+                <Lock className="w-6 h-6 text-primary flex-shrink-0 mt-1" />
                 <div>
                   <h3 className="font-semibold mb-1">
                     Recurso Exclusivo para Assinantes
@@ -188,18 +188,18 @@ export default function Copilot() {
               whileHover={{ scale: 1.02 }}
             >
               <Card
-                  className="h-full cursor-pointer hover:border-millennials-yellow/50 transition-colors"
+                  className="h-full cursor-pointer hover:border-primary/50 transition-colors"
                   onClick={() => handleOpenConfig(agent)}
                 >
                 <CardHeader>
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-2">
-                      <Bot className="w-5 h-5 text-millennials-yellow" />
+                      <Bot className="w-5 h-5 text-primary" />
                       <CardTitle className="text-lg">{agent.name}</CardTitle>
                     </div>
                     <div className="flex items-center gap-1">
                       {agent.is_default && (
-                        <Star className="w-4 h-4 fill-millennials-yellow text-millennials-yellow" />
+                        <Star className="w-4 h-4 fill-primary text-primary" />
                       )}
                       {agent.is_active ? (
                         <Badge className="bg-green-500">Ativo</Badge>
@@ -341,7 +341,7 @@ export default function Copilot() {
               {canManageCopilot && (
                 <Button
                   onClick={handleCreateAgent}
-                  className="bg-millennials-yellow hover:bg-millennials-yellow/90 text-black"
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground"
                 >
                   <Plus className="w-4 h-4 mr-2" />
                   Criar Primeiro Copilot

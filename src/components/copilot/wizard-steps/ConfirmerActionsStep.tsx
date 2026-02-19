@@ -358,7 +358,7 @@ export function ConfirmerActionsStep() {
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-bold mb-2 flex items-center gap-2">
-          <Zap className="w-6 h-6 text-millennials-yellow" />
+          <Zap className="w-6 h-6 text-primary" />
           Ações do Confirmador
         </h2>
         <p className="text-muted-foreground">

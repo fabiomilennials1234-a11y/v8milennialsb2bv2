@@ -615,7 +615,7 @@ export function CopilotWizard() {
             animate={{ opacity: 1, y: 0 }}
             className="mb-8"
           >
-            <h1 className="text-3xl font-bold text-millennials-yellow mb-2">
+            <h1 className="text-3xl font-bold text-primary mb-2">
               Criar Novo Copilot
             </h1>
             <p className="text-muted-foreground">
@@ -654,7 +654,7 @@ export function CopilotWizard() {
           animate={{ opacity: 1, y: 0 }}
           className="mb-8"
         >
-          <h1 className="text-3xl font-bold text-millennials-yellow mb-2">
+          <h1 className="text-3xl font-bold text-primary mb-2">
             {activeConfig.label}
           </h1>
           <p className="text-muted-foreground">
@@ -690,9 +690,9 @@ export function CopilotWizard() {
               <motion.div
                 className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all ${
                   index < currentStep
-                    ? "bg-millennials-yellow border-millennials-yellow text-black"
+                    ? "bg-primary border-primary text-primary-foreground"
                     : index === currentStep
-                    ? "border-millennials-yellow text-millennials-yellow"
+                    ? "border-primary text-primary"
                     : "border-muted text-muted-foreground"
                 }`}
                 whileHover={{ scale: 1.1 }}
@@ -804,7 +804,7 @@ export function CopilotWizard() {
                     type="button"
                     disabled={createAgent.isPending}
                     onClick={() => handleSubmit(onSubmit)()}
-                    className="bg-millennials-yellow hover:bg-millennials-yellow/90 text-black"
+                    className="bg-primary hover:bg-primary/90 text-primary-foreground"
                   >
                     {createAgent.isPending ? (
                       "Criando..."
@@ -819,7 +819,7 @@ export function CopilotWizard() {
                   <Button
                     type="button"
                     onClick={handleNext}
-                    className="bg-millennials-yellow hover:bg-millennials-yellow/90 text-black"
+                    className="bg-primary hover:bg-primary/90 text-primary-foreground"
                   >
                     Próximo
                     <ChevronRight className="w-4 h-4 ml-2" />

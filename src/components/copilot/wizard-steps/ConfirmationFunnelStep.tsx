@@ -85,8 +85,8 @@ const CONFIRMATION_STAGES = [
     label: "No Dia",
     timing: "Dia da reunião",
     icon: CheckCircle2,
-    color: "text-millennials-yellow",
-    bgColor: "bg-millennials-yellow/10",
+    color: "text-primary",
+    bgColor: "bg-primary/10",
     defaultGoal: "Lembrete final no dia. Enviar link novamente. Confirmar que vai participar.",
     defaultBehavior: "Mensagem curta e direta. Envie o link da reunião. Se não responder até X minutos antes, marcar como risco.",
   },
@@ -305,7 +305,7 @@ export function ConfirmationFunnelStep() {
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-bold mb-2 flex items-center gap-2">
-          <Calendar className="w-6 h-6 text-millennials-yellow" />
+          <Calendar className="w-6 h-6 text-primary" />
           Funil de Confirmação
         </h2>
         <p className="text-muted-foreground">
@@ -379,8 +379,8 @@ export function ConfirmationFunnelStep() {
       </div>
 
       {/* Dica */}
-      <div className="bg-millennials-yellow/10 border border-millennials-yellow/30 rounded-lg p-4">
-        <h4 className="font-semibold text-millennials-yellow mb-2">Como funciona o funil?</h4>
+      <div className="bg-primary/10 border border-primary/30 rounded-lg p-4">
+        <h4 className="font-semibold text-primary mb-2">Como funciona o funil?</h4>
         <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
           <li>Quando o qualificador/SDR agenda uma reunião, o lead entra no pipe de Confirmação</li>
           <li>O confirmador atua <strong>apenas nas etapas ativas</strong> com mensagens progressivas</li>

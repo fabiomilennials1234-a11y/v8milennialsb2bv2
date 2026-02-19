@@ -82,7 +82,7 @@ export default {
         sm: "calc(var(--radius) - 4px)",
       },
       boxShadow: {
-        'gold': '0 10px 30px -10px hsl(48 92% 53% / 0.3)',
+        'gold': '0 10px 30px -10px hsl(47 100% 50% / 0.3)',
         'success': '0 10px 30px -10px hsl(142 70% 45% / 0.3)',
       },
       keyframes: {

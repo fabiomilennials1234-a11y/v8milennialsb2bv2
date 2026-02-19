@@ -56,7 +56,7 @@ export function OutboundConfigStep() {
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-bold mb-2 flex items-center gap-2">
-          <MessageSquare className="w-6 h-6 text-millennials-yellow" />
+          <MessageSquare className="w-6 h-6 text-primary" />
           Configuração de Outbound
         </h2>
         <p className="text-muted-foreground">
@@ -166,7 +166,7 @@ export function OutboundConfigStep() {
               <Badge
                 key={variable.name}
                 variant="outline"
-                className="cursor-pointer hover:bg-millennials-yellow/20 transition-colors"
+                className="cursor-pointer hover:bg-primary/20 transition-colors"
                 onClick={() => insertVariable(variable.name)}
                 title={variable.description}
               >
@@ -220,7 +220,7 @@ export function OutboundConfigStep() {
             }
             className="text-left p-3 border rounded-lg hover:bg-muted/50 transition-colors"
           >
-            <span className="text-sm font-medium text-millennials-yellow">Abordagem Curiosa</span>
+            <span className="text-sm font-medium text-primary">Abordagem Curiosa</span>
             <p className="text-sm text-muted-foreground mt-1">
               "Oi {"{nome}"}! 👋 Vi que você demonstrou interesse em {"{interesse}"}. O que mais te chamou atenção sobre isso?"
             </p>
@@ -237,7 +237,7 @@ export function OutboundConfigStep() {
             }
             className="text-left p-3 border rounded-lg hover:bg-muted/50 transition-colors"
           >
-            <span className="text-sm font-medium text-millennials-yellow">Abordagem Solícita</span>
+            <span className="text-sm font-medium text-primary">Abordagem Solícita</span>
             <p className="text-sm text-muted-foreground mt-1">
               "Olá {"{nome}"}, tudo bem? Sou da {"{empresa}"} e vi que você se cadastrou na nossa campanha. Posso te ajudar com alguma dúvida?"
             </p>
@@ -254,7 +254,7 @@ export function OutboundConfigStep() {
             }
             className="text-left p-3 border rounded-lg hover:bg-muted/50 transition-colors"
           >
-            <span className="text-sm font-medium text-millennials-yellow">Abordagem Direta</span>
+            <span className="text-sm font-medium text-primary">Abordagem Direta</span>
             <p className="text-sm text-muted-foreground mt-1">
               "E aí {"{nome}"}! Vi que você tá procurando {"{interesse}"}. Deixa eu te fazer uma pergunta rápida: qual o maior desafio que você enfrenta hoje nessa área?"
             </p>

@@ -115,7 +115,7 @@ export function ActivationTriggersStep() {
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-bold mb-2 flex items-center gap-2">
-          <Filter className="w-6 h-6 text-millennials-yellow" />
+          <Filter className="w-6 h-6 text-primary" />
           Gatilhos de Ativação
         </h2>
         <p className="text-muted-foreground">
@@ -182,7 +182,7 @@ export function ActivationTriggersStep() {
               key={origin.value}
               className={`flex items-center gap-2 p-3 rounded-lg border cursor-pointer transition-all ${
                 origins.includes(origin.value)
-                  ? "border-millennials-yellow bg-millennials-yellow/10"
+                  ? "border-primary bg-primary/10"
                   : "border-muted hover:border-muted-foreground/50"
               }`}
             >

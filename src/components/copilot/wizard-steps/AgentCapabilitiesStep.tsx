@@ -107,7 +107,7 @@ export function AgentCapabilitiesStep() {
     <div className="space-y-8">
       <div>
         <h2 className="text-2xl font-bold mb-2 flex items-center gap-2">
-          <Shield className="w-6 h-6 text-millennials-yellow" />
+          <Shield className="w-6 h-6 text-primary" />
           Capacidades do Agente
         </h2>
         <p className="text-muted-foreground">

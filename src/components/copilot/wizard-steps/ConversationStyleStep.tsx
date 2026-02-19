@@ -32,7 +32,7 @@ export function ConversationStyleStep() {
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-bold mb-2 flex items-center gap-2">
-          <MessageCircle className="w-6 h-6 text-millennials-yellow" />
+          <MessageCircle className="w-6 h-6 text-primary" />
           Estilo de Conversa
         </h2>
         <p className="text-muted-foreground">

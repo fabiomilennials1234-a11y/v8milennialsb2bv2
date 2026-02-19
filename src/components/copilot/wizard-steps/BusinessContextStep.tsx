@@ -116,7 +116,7 @@ export function BusinessContextStep() {
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-bold mb-2 flex items-center gap-2">
-          <Building2 className="w-6 h-6 text-millennials-yellow" />
+          <Building2 className="w-6 h-6 text-primary" />
           Contexto do Negócio
         </h2>
         <p className="text-muted-foreground">
@@ -134,7 +134,7 @@ export function BusinessContextStep() {
             <FormItem>
               <FormLabel>Nome da empresa / marca *</FormLabel>
               <FormControl>
-                <Input placeholder="Ex: V8 Millennials" {...field} />
+                <Input placeholder="Ex: Torque CRM" {...field} />
               </FormControl>
               <FormDescription>Como o agente deve apresentar a empresa.</FormDescription>
               <FormMessage />

@@ -28,7 +28,7 @@ export function MeetingConfirmationStep() {
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-bold mb-2 flex items-center gap-2">
-          <Calendar className="w-6 h-6 text-millennials-yellow" />
+          <Calendar className="w-6 h-6 text-primary" />
           Confirmação de Reuniões
         </h2>
         <p className="text-muted-foreground">
@@ -39,7 +39,7 @@ export function MeetingConfirmationStep() {
       {/* Quando lead é qualificado (reunião agendada com sucesso) */}
       <div className="space-y-4 border rounded-lg p-4">
         <div className="flex items-center gap-2">
-          <Bell className="w-4 h-4 text-millennials-yellow" />
+          <Bell className="w-4 h-4 text-primary" />
           <h3 className="font-semibold">Quando a reunião é confirmada</h3>
         </div>
 

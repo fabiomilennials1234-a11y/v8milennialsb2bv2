@@ -50,7 +50,7 @@ export function OperationModeStep() {
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-bold mb-2 flex items-center gap-2">
-          <PhoneOutgoing className="w-6 h-6 text-millennials-yellow" />
+          <PhoneOutgoing className="w-6 h-6 text-primary" />
           Modo de Operação
         </h2>
         <p className="text-muted-foreground">
@@ -78,8 +78,8 @@ export function OperationModeStep() {
                       key={mode.value}
                       className={`flex items-start gap-4 p-4 rounded-lg border-2 cursor-pointer transition-all ${
                         isSelected
-                          ? "border-millennials-yellow bg-millennials-yellow/10"
-                          : "border-muted hover:border-millennials-yellow/50"
+                          ? "border-primary bg-primary/10"
+                          : "border-muted hover:border-primary/50"
                       }`}
                       whileHover={{ scale: 1.01 }}
                       whileTap={{ scale: 0.99 }}

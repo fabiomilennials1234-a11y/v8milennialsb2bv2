@@ -3,6 +3,8 @@
  * Used by outbound-trigger (immediate) and process-outbound-dispatches (scheduled)
  */
 
+import { humanizeMessage } from "./message-humanizer.ts";
+
 interface DispatchRow {
   id: string;
   lead_id: string;
@@ -89,6 +91,9 @@ export async function sendOutboundDispatch(
     let phone = String(row.lead.phone).replace(/\D/g, "");
     if (!phone.startsWith("55")) phone = "55" + phone;
 
+    // Humanizar mensagem para evitar banimento por mensagens repetitivas
+    const humanizedContent = await humanizeMessage(row.message_content);
+
     const sendResponse = await fetch(`${evolutionUrl}/message/sendText/${instanceName}`, {
       method: "POST",
       headers: {
@@ -97,7 +102,7 @@ export async function sendOutboundDispatch(
       },
       body: JSON.stringify({
         number: phone,
-        text: row.message_content,
+        text: humanizedContent,
       }),
     });
 
@@ -147,7 +152,7 @@ export async function sendOutboundDispatch(
       remote_jid: phone + "@s.whatsapp.net",
       from_me: true,
       message_type: "conversation",
-      content: row.message_content,
+      content: humanizedContent,
       timestamp: new Date().toISOString(),
       status: "sent",
     });

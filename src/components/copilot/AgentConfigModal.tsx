@@ -228,7 +228,7 @@ export function AgentConfigModal({
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Bot className="w-5 h-5 text-millennials-yellow" />
+            <Bot className="w-5 h-5 text-primary" />
             Configurar Copilot: {agent.name}
           </DialogTitle>
         </DialogHeader>
@@ -507,7 +507,7 @@ export function AgentConfigModal({
                       >
                         <div
                           className={`flex items-center justify-between p-4 cursor-pointer transition-colors ${
-                            isActive ? "bg-millennials-yellow/10" : "hover:bg-muted/50"
+                            isActive ? "bg-primary/10" : "hover:bg-muted/50"
                           }`}
                           onClick={() => handleTogglePipe(pipe.value)}
                         >
@@ -908,7 +908,7 @@ export function AgentConfigModal({
           <Button
             onClick={handleSave}
             disabled={updatePipeline.isPending}
-            className="bg-millennials-yellow hover:bg-millennials-yellow/90 text-black"
+            className="bg-primary hover:bg-primary/90 text-primary-foreground"
           >
             <Save className="w-4 h-4 mr-2" />
             {updatePipeline.isPending ? "Salvando..." : "Salvar Configurações"}

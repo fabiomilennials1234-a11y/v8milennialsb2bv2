@@ -120,7 +120,7 @@ export function KnowledgeBaseStep() {
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-bold mb-2 flex items-center gap-2">
-          <BookOpen className="w-6 h-6 text-millennials-yellow" />
+          <BookOpen className="w-6 h-6 text-primary" />
           Base de Conhecimento
         </h2>
         <p className="text-muted-foreground">
@@ -141,7 +141,7 @@ export function KnowledgeBaseStep() {
         className={`
           border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors
           ${dragOver
-            ? "border-millennials-yellow bg-millennials-yellow/5"
+            ? "border-primary bg-primary/5"
             : "border-muted-foreground/25 hover:border-muted-foreground/50"
           }
           ${knowledgeBaseFiles.length >= MAX_FILES ? "opacity-50 pointer-events-none" : ""}
@@ -298,12 +298,12 @@ export function KnowledgeBaseManager({
         onClick={() => fileInputRef.current?.click()}
         className={`
           border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors
-          ${dragOver ? "border-millennials-yellow bg-millennials-yellow/5" : "border-muted-foreground/25 hover:border-muted-foreground/50"}
+          ${dragOver ? "border-primary bg-primary/5" : "border-muted-foreground/25 hover:border-muted-foreground/50"}
           ${uploadPending ? "opacity-50 pointer-events-none" : ""}
         `}
       >
         {uploadPending ? (
-          <Loader2 className="w-6 h-6 mx-auto mb-2 animate-spin text-millennials-yellow" />
+          <Loader2 className="w-6 h-6 mx-auto mb-2 animate-spin text-primary" />
         ) : (
           <Upload className="w-6 h-6 mx-auto mb-2 text-muted-foreground" />
         )}

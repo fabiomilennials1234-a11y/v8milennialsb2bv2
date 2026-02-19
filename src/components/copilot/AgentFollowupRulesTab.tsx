@@ -250,7 +250,7 @@ function RuleCard({
             {/* Gatilhos de Tempo */}
             <div className="space-y-4">
               <div className="flex items-center gap-2 text-sm font-medium">
-                <Clock className="w-4 h-4 text-millennials-yellow" />
+                <Clock className="w-4 h-4 text-primary" />
                 Gatilho de Tempo
               </div>
               
@@ -290,7 +290,7 @@ function RuleCard({
             {/* Filtros de Leads */}
             <div className="space-y-4">
               <div className="flex items-center gap-2 text-sm font-medium">
-                <Filter className="w-4 h-4 text-millennials-yellow" />
+                <Filter className="w-4 h-4 text-primary" />
                 Filtros de Leads
               </div>
 
@@ -416,7 +416,7 @@ function RuleCard({
             {/* Comportamento */}
             <div className="space-y-4">
               <div className="flex items-center gap-2 text-sm font-medium">
-                <MessageSquare className="w-4 h-4 text-millennials-yellow" />
+                <MessageSquare className="w-4 h-4 text-primary" />
                 Comportamento
               </div>
 
@@ -488,7 +488,7 @@ function RuleCard({
             {/* Horários */}
             <div className="space-y-4">
               <div className="flex items-center gap-2 text-sm font-medium">
-                <Calendar className="w-4 h-4 text-millennials-yellow" />
+                <Calendar className="w-4 h-4 text-primary" />
                 Horários de Envio
               </div>
 
@@ -625,12 +625,12 @@ export function AgentFollowupRulesTab({ agentId }: AgentFollowupRulesTabProps) {
       </div>
 
       {/* Dica */}
-      <Card className="bg-millennials-yellow/10 border-millennials-yellow/30">
+      <Card className="bg-primary/10 border-primary/30">
         <CardContent className="pt-4">
           <div className="flex gap-3">
-            <Info className="w-5 h-5 text-millennials-yellow shrink-0 mt-0.5" />
+            <Info className="w-5 h-5 text-primary shrink-0 mt-0.5" />
             <div className="text-sm">
-              <p className="font-medium text-millennials-yellow mb-1">
+              <p className="font-medium text-primary mb-1">
                 Follow-up com Contexto Inteligente
               </p>
               <p className="text-muted-foreground">

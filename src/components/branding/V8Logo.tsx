@@ -1,56 +1,43 @@
 import { motion } from "framer-motion";
-import logoLight from "@/assets/logo-light.png";
-import v8Logo from "@/assets/v8-logo.png";
+import torqueLogo from "@/assets/torque-logo.png";
 
-interface V8LogoProps {
+interface TorqueLogoProps {
   size?: "sm" | "md" | "lg" | "xl";
-  showMillennials?: boolean;
   animated?: boolean;
   className?: string;
 }
 
-export function V8Logo({ 
-  size = "md", 
-  showMillennials = true, 
+export function TorqueLogo({
+  size = "md",
   animated = true,
-  className = "" 
-}: V8LogoProps) {
+  className = ""
+}: TorqueLogoProps) {
   const logoSizes = {
-    sm: "h-10",
-    md: "h-14",
-    lg: "h-20",
-    xl: "h-28",
-  };
-
-  const millennialsSizes = {
-    sm: "h-5",
-    md: "h-7",
-    lg: "h-10",
-    xl: "h-12",
+    sm: "h-8",
+    md: "h-12",
+    lg: "h-16",
+    xl: "h-24",
   };
 
   const LogoWrapper = animated ? motion.div : "div";
 
   return (
     <div className={`flex items-center gap-2 ${className}`}>
-      <LogoWrapper 
+      <LogoWrapper
         {...(animated && {
           initial: { scale: 0.8, opacity: 0 },
           animate: { scale: 1, opacity: 1 },
           transition: { type: "spring", duration: 0.5 }
         })}
       >
-        <img src={v8Logo} alt="V8" className={logoSizes[size]} />
+        <img src={torqueLogo} alt="Torque CRM" className={logoSizes[size]} />
       </LogoWrapper>
-      {showMillennials && (
-        <div className="flex flex-col">
-          <span className="text-muted-foreground text-[10px] leading-none">powered by</span>
-          <img src={logoLight} alt="Millennials B2B" className={millennialsSizes[size]} />
-        </div>
-      )}
     </div>
   );
 }
+
+/** @deprecated Use TorqueLogo instead */
+export const V8Logo = TorqueLogo;
 
 // Fuel quality badges for lead rating
 export function FuelQualityBadge({ rating }: { rating: number }) {

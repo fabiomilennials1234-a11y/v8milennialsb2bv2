@@ -140,7 +140,7 @@ export default function Dashboard() {
                 </motion.span>
               </h1>
               <p className="text-muted-foreground">
-                Central de Comando V8 • Hora de acelerar
+                Central de Comando Torque • Hora de acelerar
               </p>
             </div>
           </div>

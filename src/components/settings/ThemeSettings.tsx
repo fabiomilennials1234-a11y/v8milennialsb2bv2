@@ -166,10 +166,10 @@ export function ThemeSettings() {
         <p className="text-sm text-muted-foreground mb-3">Preview</p>
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 rounded-xl bg-primary flex items-center justify-center">
-            <span className="text-primary-foreground font-bold">ML</span>
+            <span className="text-primary-foreground font-bold">TQ</span>
           </div>
           <div>
-            <p className="font-medium">Millennials CRM</p>
+            <p className="font-medium">Torque CRM</p>
             <p className="text-sm text-muted-foreground">Sistema de Gestão Comercial</p>
           </div>
         </div>

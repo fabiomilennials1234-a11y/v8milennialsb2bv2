@@ -2,6 +2,8 @@
  * Envia mensagem de follow-up via Evolution API e registra execução
  */
 
+import { humanizeMessage } from "./message-humanizer.ts";
+
 // deno-lint-ignore no-explicit-any
 export async function sendFollowupMessage(
   supabase: any,
@@ -34,6 +36,9 @@ export async function sendFollowupMessage(
   let formattedPhone = String(phone).replace(/\D/g, "");
   if (!formattedPhone.startsWith("55")) formattedPhone = "55" + formattedPhone;
 
+  // Humanizar mensagem para evitar banimento por mensagens repetitivas
+  const humanizedContent = await humanizeMessage(messageContent);
+
   const sendResponse = await fetch(
     `${evolutionUrl}/message/sendText/${instanceName}`,
     {
@@ -44,7 +49,7 @@ export async function sendFollowupMessage(
       },
       body: JSON.stringify({
         number: formattedPhone,
-        text: messageContent,
+        text: humanizedContent,
       }),
     }
   );
@@ -65,7 +70,7 @@ export async function sendFollowupMessage(
     phone_number: formattedPhone,
     direction: "outgoing",
     message_type: "conversation",
-    content: messageContent,
+    content: humanizedContent,
     status: "sent",
     lead_id: leadId,
     timestamp: new Date().toISOString(),
@@ -75,7 +80,7 @@ export async function sendFollowupMessage(
     lead_id: leadId,
     rule_id: ruleId,
     organization_id: organizationId,
-    message_content: messageContent,
+    message_content: humanizedContent,
     instance_name: instanceName,
   });
 

@@ -356,7 +356,7 @@ export function FollowupActionsStep() {
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-bold mb-2 flex items-center gap-2">
-          <Zap className="w-6 h-6 text-millennials-yellow" />
+          <Zap className="w-6 h-6 text-primary" />
           Ações de Follow-up
         </h2>
         <p className="text-muted-foreground">
@@ -425,8 +425,8 @@ export function FollowupActionsStep() {
       </div>
 
       {/* Dica */}
-      <div className="bg-millennials-yellow/10 border border-millennials-yellow/30 rounded-lg p-4">
-        <h4 className="font-semibold text-millennials-yellow mb-2">Como funciona?</h4>
+      <div className="bg-primary/10 border border-primary/30 rounded-lg p-4">
+        <h4 className="font-semibold text-primary mb-2">Como funciona?</h4>
         <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
           <li>O agente envia follow-ups automáticos conforme as regras configuradas na próxima etapa</li>
           <li>Se o lead responder, dispara a ação "Quando Reengajar"</li>

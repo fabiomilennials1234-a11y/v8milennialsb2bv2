@@ -54,8 +54,8 @@ export function TemplateStep() {
               onClick={() => handleSelectTemplate(template.type)}
               className={`p-6 rounded-lg border-2 transition-all text-left ${
                 isSelected
-                  ? "border-millennials-yellow bg-millennials-yellow/10"
-                  : "border-muted hover:border-millennials-yellow/50"
+                  ? "border-primary bg-primary/10"
+                  : "border-muted hover:border-primary/50"
               }`}
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
@@ -64,7 +64,7 @@ export function TemplateStep() {
                 <div
                   className={`p-3 rounded-lg ${
                     isSelected
-                      ? "bg-millennials-yellow text-black"
+                      ? "bg-primary text-primary-foreground"
                       : "bg-muted text-muted-foreground"
                   }`}
                 >
@@ -74,7 +74,7 @@ export function TemplateStep() {
                   <div className="flex items-center gap-2 mb-1">
                     <h3 className="font-semibold">{template.name}</h3>
                     {isSelected && (
-                      <Check className="w-5 h-5 text-millennials-yellow" />
+                      <Check className="w-5 h-5 text-primary" />
                     )}
                   </div>
                   <p className="text-sm text-muted-foreground mb-2">

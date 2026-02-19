@@ -51,7 +51,7 @@ interface MetricCardProps {
 function MetricCard({ title, value, subtitle, icon, trend, variant = "default" }: MetricCardProps) {
   const variantStyles = {
     default: "bg-card",
-    primary: "bg-millennials-yellow/10 border-millennials-yellow/20",
+    primary: "bg-primary/10 border-primary/20",
     success: "bg-green-500/10 border-green-500/20",
     warning: "bg-amber-500/10 border-amber-500/20",
   };
@@ -159,7 +159,7 @@ export function AgentMetricsTab({ agentId }: AgentMetricsTabProps) {
         <MetricCard
           title="Total de Conversas"
           value={metrics.totalConversations}
-          icon={<MessageSquare className="w-5 h-5 text-millennials-yellow" />}
+          icon={<MessageSquare className="w-5 h-5 text-primary" />}
           trend={metrics.trends.conversations}
           variant="primary"
         />

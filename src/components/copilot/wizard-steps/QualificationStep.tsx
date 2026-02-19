@@ -47,7 +47,7 @@ export function QualificationStep() {
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-bold mb-2 flex items-center gap-2">
-          <ListChecks className="w-6 h-6 text-millennials-yellow" />
+          <ListChecks className="w-6 h-6 text-primary" />
           Qualificação mínima
         </h2>
         <p className="text-muted-foreground">

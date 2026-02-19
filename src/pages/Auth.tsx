@@ -6,9 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { Zap, Mail, Lock, User, ArrowRight, Loader2 } from 'lucide-react';
-import logoLight from '@/assets/logo-light.png';
-import v8Logo from '@/assets/v8-logo.png';
+import { Mail, Lock, User, ArrowRight, Loader2 } from 'lucide-react';
+import torqueLogo from '@/assets/torque-logo.png';
+import torqueHexagons from '@/assets/torque-hexagons.png';
 
 export default function Auth() {
   const [isLogin, setIsLogin] = useState(true);
@@ -76,7 +76,7 @@ export default function Auth() {
           }
         } else {
           toast({
-            title: 'Bem-vindo ao V8! 🏁',
+            title: 'Bem-vindo ao Torque! 🏁',
             description: 'Hora de acelerar suas vendas.',
           });
           navigate('/');
@@ -97,38 +97,34 @@ export default function Auth() {
     <div className="min-h-screen bg-background flex overflow-hidden">
       {/* Left Panel - V8 Branding */}
       <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-sidebar-background via-sidebar-accent to-sidebar-background relative overflow-hidden">
-        {/* Racing stripe pattern */}
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute top-0 left-1/4 w-8 h-full bg-primary transform -skew-x-12" />
-          <div className="absolute top-0 left-1/4 ml-12 w-4 h-full bg-primary transform -skew-x-12" />
-          <div className="absolute top-0 right-1/4 w-8 h-full bg-primary transform skew-x-12" />
-          <div className="absolute top-0 right-1/4 mr-12 w-4 h-full bg-primary transform skew-x-12" />
-        </div>
-        
-        {/* Animated checkered flag pattern */}
-        <motion.div 
-          className="absolute bottom-0 left-0 right-0 h-32 opacity-20"
-          initial={{ x: -100 }}
-          animate={{ x: 0 }}
+        {/* Hexagonal background pattern */}
+        <motion.img
+          src={torqueHexagons}
+          alt=""
+          className="absolute -bottom-[8%] right-[2%] w-[50%] opacity-[0.12] pointer-events-none select-none -rotate-12"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 0.12 }}
           transition={{ duration: 1, ease: "easeOut" }}
-        >
-          <div className="checkered-pattern h-full" />
-        </motion.div>
+        />
+        <motion.img
+          src={torqueHexagons}
+          alt=""
+          className="absolute top-[18%] left-[62%] w-[30%] opacity-[0.08] pointer-events-none select-none rotate-[160deg]"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 0.08 }}
+          transition={{ duration: 1, ease: "easeOut", delay: 0.15 }}
+        />
         
         <div className="relative z-10 flex flex-col justify-between p-12 w-full">
           <div className="flex items-center gap-3">
-            <motion.img 
-              src={v8Logo}
-              alt="V8"
-              className="h-24 object-contain drop-shadow-lg"
+            <motion.img
+              src={torqueLogo}
+              alt="Torque CRM"
+              className="h-16 object-contain drop-shadow-lg"
               initial={{ scale: 0.5, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               transition={{ duration: 0.5, type: "spring" }}
             />
-            <div className="flex flex-col">
-              <span className="text-sidebar-foreground/60 text-xs">powered by</span>
-              <img src={logoLight} alt="Millennials" className="h-8 object-contain" />
-            </div>
           </div>
           
           <div className="space-y-6">
@@ -138,9 +134,9 @@ export default function Auth() {
               transition={{ delay: 0.3, duration: 0.6 }}
             >
               <h1 className="text-5xl font-black text-sidebar-foreground leading-tight">
-                Motor de Vendas
+                CRM de Vendas
                 <br />
-                <span className="text-primary">Alta Performance</span>
+                <span className="text-gradient-primary">Alta Performance</span>
               </h1>
             </motion.div>
             
@@ -150,8 +146,8 @@ export default function Auth() {
               transition={{ delay: 0.4, duration: 0.6 }}
               className="text-sidebar-foreground/70 text-lg max-w-md"
             >
-              Acelere suas vendas com um sistema turbinado. 
-              Cada lead é combustível, cada vendedor é um piloto.
+              Acelere suas vendas com um sistema de alta performance.
+              Cada lead é uma oportunidade, cada vendedor é um campeão.
             </motion.p>
 
             <motion.div
@@ -180,16 +176,33 @@ export default function Auth() {
           </div>
 
           <div className="flex items-center gap-2 text-sidebar-foreground/40 text-sm">
-            <span>🛣️</span>
-            <span>Rota 66 das Vendas</span>
+            <span>⚙️</span>
+            <span>Torque CRM</span>
             <span className="mx-2">•</span>
-            <span>© 2024 Millennials B2B</span>
+            <span>© 2025 Torque</span>
           </div>
         </div>
       </div>
 
       {/* Right Panel - Auth Form */}
-      <div className="flex-1 flex items-center justify-center p-8">
+      <div className="flex-1 flex items-center justify-center p-8 relative overflow-hidden">
+        {/* Subtle hexagonal decorations */}
+        <motion.img
+          src={torqueHexagons}
+          alt=""
+          className="absolute -top-[8%] -right-[8%] w-[40%] opacity-[0.04] pointer-events-none select-none rotate-[55deg]"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 0.04 }}
+          transition={{ duration: 1.2, ease: "easeOut", delay: 0.3 }}
+        />
+        <motion.img
+          src={torqueHexagons}
+          alt=""
+          className="absolute -bottom-[10%] -right-[5%] w-[45%] opacity-[0.04] pointer-events-none select-none -rotate-[110deg]"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 0.04 }}
+          transition={{ duration: 1.2, ease: "easeOut", delay: 0.4 }}
+        />
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -198,8 +211,7 @@ export default function Auth() {
           {/* Mobile Logo */}
           <div className="lg:hidden mb-8 text-center">
             <div className="inline-flex items-center gap-3 px-4 py-3 bg-sidebar-background rounded-xl">
-              <img src={v8Logo} alt="V8" className="h-14 object-contain drop-shadow-lg" />
-              <span className="font-bold text-sidebar-foreground">Millennials</span>
+              <img src={torqueLogo} alt="Torque CRM" className="h-10 object-contain drop-shadow-lg" />
             </div>
           </div>
 
@@ -210,7 +222,7 @@ export default function Auth() {
               </h2>
               <p className="text-muted-foreground mt-2">
                 {isLogin 
-                  ? 'Acesse a Central de Comando V8' 
+                  ? 'Acesse a Central de Comando Torque'
                   : 'Junte-se aos pilotos de alta performance'}
               </p>
             </div>
@@ -274,7 +286,7 @@ export default function Auth() {
 
               <Button
                 type="submit"
-                className="w-full bg-millennials-yellow hover:bg-millennials-yellow-hover text-millennials-dark font-semibold h-12"
+                className="w-full gradient-primary gradient-primary-hover text-white font-semibold h-12 border-0"
                 disabled={loading}
               >
                 {loading ? (
@@ -297,12 +309,12 @@ export default function Auth() {
                 {isLogin ? (
                   <>
                     Não tem conta?{' '}
-                    <span className="text-millennials-yellow font-medium">Cadastre-se</span>
+                    <span className="text-primary font-medium">Cadastre-se</span>
                   </>
                 ) : (
                   <>
                     Já tem conta?{' '}
-                    <span className="text-millennials-yellow font-medium">Faça login</span>
+                    <span className="text-primary font-medium">Faça login</span>
                   </>
                 )}
               </button>

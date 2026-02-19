@@ -11,8 +11,7 @@ import { useTVDashboardData } from "@/hooks/useTVDashboardData";
 import { AICoachSection } from "@/components/tv/AICoachSection";
 import { SalesFunnel } from "@/components/tv/SalesFunnel";
 import { Button } from "@/components/ui/button";
-import v8Logo from "@/assets/v8-logo.png";
-import logoDark from "@/assets/logo-dark.png";
+import torqueLogo from "@/assets/torque-logo.png";
 
 // Animated counter component
 function AnimatedNumber({ value, prefix = "", suffix = "", decimals = 0 }: { 
@@ -71,7 +70,7 @@ export default function TVDashboard() {
     return (
       <div className="h-screen bg-[hsl(36,20%,8%)] flex items-center justify-center">
         <div className="text-center">
-          <img src={v8Logo} alt="V8" className="h-20 mx-auto mb-4 animate-pulse" />
+          <img src={torqueLogo} alt="Torque" className="h-14 mx-auto mb-4 animate-pulse" />
           <p className="text-white/60">Carregando dashboard...</p>
         </div>
       </div>
@@ -93,9 +92,7 @@ export default function TVDashboard() {
       {/* Header - Clean & Minimal */}
       <header className="flex items-center justify-between px-6 py-3 border-b border-white/5">
         <div className="flex items-center gap-4">
-          <img src={v8Logo} alt="V8" className="h-10" />
-          <div className="h-6 w-px bg-white/10" />
-          <img src={logoDark} alt="Millennials B2B" className="h-5 opacity-80" />
+          <img src={torqueLogo} alt="Torque CRM" className="h-8" />
           <div className="h-6 w-px bg-white/10" />
           <div>
             <h1 className="text-lg font-bold text-white tracking-tight">

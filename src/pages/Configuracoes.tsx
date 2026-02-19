@@ -422,7 +422,7 @@ function GeneralSettings() {
       <div className="space-y-4">
         <div className="grid gap-2">
           <Label htmlFor="company-name">Nome da Empresa</Label>
-          <Input id="company-name" defaultValue="Millennials B2B" />
+          <Input id="company-name" defaultValue="Torque CRM" />
         </div>
 
         <div className="grid gap-2">

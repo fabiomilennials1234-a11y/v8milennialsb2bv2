@@ -7,7 +7,7 @@
 
 @layer base {
   :root {
-    /* Millennials Brand Colors */
+    /* Torque Brand Colors */
     --background: 45 20% 98%;
     --foreground: 30 18% 20%;
 
@@ -17,12 +17,12 @@
     --popover: 0 0% 100%;
     --popover-foreground: 30 18% 20%;
 
-    /* Primary Yellow - Brand Identity */
-    --primary: 48 92% 53%;
+    /* Primary Yellow - Torque Brand Identity */
+    --primary: 47 100% 50%;
     --primary-foreground: 30 18% 15%;
 
     /* Secondary - Soft Yellow */
-    --secondary: 48 60% 95%;
+    --secondary: 47 40% 95%;
     --secondary-foreground: 30 18% 20%;
 
     /* Muted */
@@ -47,29 +47,31 @@
 
     --border: 45 20% 90%;
     --input: 45 20% 90%;
-    --ring: 48 92% 53%;
+    --ring: 47 100% 50%;
 
     --radius: 0.75rem;
 
     /* Sidebar - Dark Theme */
     --sidebar-background: 36 20% 18%;
     --sidebar-foreground: 45 20% 90%;
-    --sidebar-primary: 48 92% 53%;
-    --sidebar-primary-foreground: 30 18% 15%;
+    --sidebar-primary: 33 81% 54%;
+    --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 36 15% 25%;
     --sidebar-accent-foreground: 45 20% 95%;
     --sidebar-border: 36 15% 25%;
-    --sidebar-ring: 48 92% 53%;
+    --sidebar-ring: 33 81% 54%;
 
     /* Chart Colors */
-    --chart-1: 48 92% 53%;
+    --chart-1: 47 100% 50%;
     --chart-2: 142 70% 45%;
     --chart-3: 36 20% 22%;
     --chart-4: 0 84% 60%;
     --chart-5: 200 80% 50%;
 
     /* Custom Gradients */
-    --gradient-gold: linear-gradient(135deg, hsl(48 92% 53%) 0%, hsl(38 92% 58%) 100%);
+    --gradient-gold: linear-gradient(135deg, hsl(33 81% 54%) 0%, hsl(33 81% 54%) 25%, hsl(47 100% 50%) 100%);
+    --gradient-primary: linear-gradient(135deg, hsl(33 81% 54%) 0%, hsl(33 81% 54%) 25%, hsl(47 100% 50%) 100%);
+    --gradient-primary-hover: linear-gradient(135deg, hsl(33 81% 48%) 0%, hsl(33 81% 48%) 25%, hsl(47 100% 45%) 100%);
     --gradient-success: linear-gradient(135deg, hsl(142 70% 45%) 0%, hsl(152 70% 50%) 100%);
     --gradient-dark: linear-gradient(135deg, hsl(36 20% 18%) 0%, hsl(36 15% 25%) 100%);
     
@@ -77,7 +79,7 @@
     --shadow-sm: 0 1px 2px 0 hsl(30 18% 20% / 0.05);
     --shadow-md: 0 4px 6px -1px hsl(30 18% 20% / 0.08), 0 2px 4px -2px hsl(30 18% 20% / 0.05);
     --shadow-lg: 0 10px 15px -3px hsl(30 18% 20% / 0.1), 0 4px 6px -4px hsl(30 18% 20% / 0.05);
-    --shadow-gold: 0 10px 30px -10px hsl(48 92% 53% / 0.3);
+    --shadow-gold: 0 10px 30px -10px hsl(47 100% 50% / 0.3);
   }
 
   html.dark,
@@ -92,7 +94,7 @@
     --popover: 36 20% 16%;
     --popover-foreground: 45 20% 95%;
 
-    --primary: 48 92% 53%;
+    --primary: 47 100% 50%;
     --primary-foreground: 30 18% 15%;
 
     --secondary: 36 15% 22%;
@@ -101,7 +103,7 @@
     --muted: 36 15% 22%;
     --muted-foreground: 45 15% 70%;
 
-    --accent: 48 92% 53%;
+    --accent: 47 100% 50%;
     --accent-foreground: 30 18% 15%;
 
     --destructive: 0 62% 50%;
@@ -112,7 +114,7 @@
 
     --border: 36 15% 25%;
     --input: 36 15% 25%;
-    --ring: 48 92% 53%;
+    --ring: 47 100% 50%;
 
     --sidebar-background: 36 20% 10%;
     --sidebar-foreground: 45 20% 90%;
@@ -184,7 +186,8 @@
   }
 
   .sidebar-item-active {
-    @apply bg-primary text-primary-foreground font-medium;
+    background: var(--gradient-primary);
+    @apply text-white font-medium;
   }
 
   .badge-success {
@@ -221,6 +224,14 @@
     background: var(--gradient-gold);
   }
 
+  .gradient-primary {
+    background: var(--gradient-primary);
+  }
+
+  .gradient-primary-hover:hover {
+    background: var(--gradient-primary-hover);
+  }
+
   .gradient-success {
     background: var(--gradient-success);
   }
@@ -232,6 +243,13 @@
   .text-gradient-gold {
     @apply bg-clip-text text-transparent;
     background: var(--gradient-gold);
+  }
+
+  .text-gradient-primary {
+    background-image: var(--gradient-primary);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
   }
 
   /* V8 Racing Font */

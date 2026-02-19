@@ -25,8 +25,8 @@ import {
   BarChart2,
   Lock,
 } from "lucide-react";
-import logoDark from "@/assets/logo-light.png";
-import v8Logo from "@/assets/v8-logo.png";
+import torqueLogo from "@/assets/torque-logo.png";
+import torqueIcon from "@/assets/torque-icon.png";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useWhatsAppContacts, useWhatsAppMessagesRealtime } from "@/hooks/useWhatsAppChat";
@@ -166,33 +166,66 @@ export function Sidebar() {
     >
       {/* Logo */}
       <div className="p-4 flex items-center justify-between border-b border-sidebar-border min-h-[80px]">
-        {!open ? (
-          <div className="flex flex-col items-center w-full gap-2">
-            <img src={v8Logo} alt="V8" className="h-10 w-10 object-contain" />
-            <button
-              onClick={() => setCollapsed(false)}
-              className="p-2 rounded-lg hover:bg-sidebar-accent transition-colors"
-            >
-              <ChevronRight className="w-5 h-5 text-sidebar-foreground" />
-            </button>
-          </div>
-        ) : (
-          <>
-            <div className="flex items-center gap-2 min-w-0">
-              <img src={v8Logo} alt="V8" className="h-12 w-12 object-contain flex-shrink-0" />
-              <span className="text-sidebar-foreground/60 text-xs flex-shrink-0">by</span>
-              <img src={logoDark} alt="Millennials B2B" className="h-6 object-contain" />
-            </div>
-            <div className="flex items-center gap-1 flex-shrink-0">
-              <AlertsDropdown />
-              <button
-                onClick={() => setCollapsed(true)}
-                className="p-2 rounded-lg hover:bg-sidebar-accent transition-colors"
-              >
-                <ChevronLeft className="w-5 h-5 text-sidebar-foreground" />
-              </button>
-            </div>
-          </>
+        {/* Logo area - crossfade between icon (collapsed) and full logo (expanded) */}
+        <div
+          className="relative flex-shrink-0"
+          style={{
+            width: open ? 150 : 40,
+            height: 40,
+            transition: `width 0.55s ${sidebarEase}`,
+          }}
+        >
+          {/* Collapsed: icon only */}
+          <img
+            src={torqueIcon}
+            alt="Torque"
+            className="absolute left-0 top-0 h-10 w-10 object-contain"
+            style={{
+              opacity: open ? 0 : 1,
+              transition: `opacity 0.2s ease`,
+              transitionDelay: open ? "0s" : "0.15s",
+            }}
+          />
+          {/* Expanded: full horizontal logo, scaled to fit */}
+          <img
+            src={torqueLogo}
+            alt="Torque CRM"
+            className="absolute left-0 top-1/2 -translate-y-1/2 object-contain object-left"
+            style={{
+              width: 150,
+              opacity: open ? 1 : 0,
+              transition: `opacity 0.2s ease`,
+              transitionDelay: open ? "0.15s" : "0s",
+            }}
+          />
+        </div>
+
+        {/* Alerts + collapse button (expanded) */}
+        <div
+          className="flex items-center gap-2 flex-shrink-0 ml-3 [&_button]:text-sidebar-foreground/80 [&_button]:hover:text-sidebar-foreground [&_button]:hover:bg-sidebar-accent"
+          style={{
+            opacity: open ? 1 : 0,
+            pointerEvents: open ? "auto" : "none",
+            transition: `opacity 0.35s ${sidebarEase}`,
+          }}
+        >
+          <AlertsDropdown />
+          <button
+            onClick={() => setCollapsed(true)}
+            className="p-2 rounded-lg hover:bg-sidebar-accent transition-colors"
+          >
+            <ChevronLeft className="w-5 h-5 text-sidebar-foreground" />
+          </button>
+        </div>
+
+        {/* Expand button (collapsed) */}
+        {!open && (
+          <button
+            onClick={() => setCollapsed(false)}
+            className="p-2 rounded-lg hover:bg-sidebar-accent transition-colors"
+          >
+            <ChevronRight className="w-5 h-5 text-sidebar-foreground" />
+          </button>
         )}
       </div>
 
