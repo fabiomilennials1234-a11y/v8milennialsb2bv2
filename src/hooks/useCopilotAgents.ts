@@ -18,8 +18,10 @@ import type {
   CreateAgentPayload,
   UpdateAgentPayload,
   MoveRule,
+  CopilotWizardData,
 } from "@/types/copilot";
 import { followupRuleToDB } from "./useAgentFollowupRules";
+import type { AgentDocument } from "./useAgentDocuments";
 
 /**
  * Payload para atualização de configuração de pipeline
@@ -600,6 +602,423 @@ export function useLinkAgentToWhatsAppInstance() {
     onError: (error: Error) => {
       toast.error("Erro ao vincular WhatsApp", {
         description: error.message,
+      });
+    },
+  });
+}
+
+// =====================================================
+// EDIT MODE - HOOKS PARA EDIÇÃO VIA WIZARD
+// =====================================================
+
+/**
+ * Busca todos os dados de um agente no formato CopilotWizardData
+ * para preencher o wizard em modo de edição.
+ *
+ * Carrega: agente + FAQs + kanban rules + followup rules + documentos
+ */
+export function useCopilotAgentForEdit(agentId?: string) {
+  return useQuery({
+    queryKey: ["copilot_agent_for_edit", agentId],
+    queryFn: async (): Promise<{ wizardData: CopilotWizardData; existingDocuments: AgentDocument[] } | null> => {
+      if (!agentId) return null;
+
+      // Buscar tudo em paralelo
+      const [agentRes, faqsRes, kanbanRes, followupRes, docsRes] = await Promise.all([
+        supabase
+          .from("copilot_agents")
+          .select("*")
+          .eq("id", agentId)
+          .single(),
+        supabase
+          .from("copilot_agent_faqs")
+          .select("*")
+          .eq("agent_id", agentId)
+          .order("position", { ascending: true }),
+        supabase
+          .from("copilot_agent_kanban_rules")
+          .select("*")
+          .eq("agent_id", agentId),
+        supabase
+          .from("copilot_agent_followup_rules")
+          .select("*")
+          .eq("agent_id", agentId)
+          .order("priority", { ascending: true }),
+        supabase
+          .from("copilot_agent_documents")
+          .select("*")
+          .eq("agent_id", agentId)
+          .order("created_at", { ascending: false }),
+      ]);
+
+      if (agentRes.error) throw agentRes.error;
+      if (!agentRes.data) return null;
+
+      const agent = agentRes.data;
+      const faqs = faqsRes.data || [];
+      const kanbanRules = kanbanRes.data || [];
+      const followupRules = followupRes.data || [];
+      const documents = (docsRes.data || []) as AgentDocument[];
+
+      // Transformar DB → CopilotWizardData
+      const objectiveComposite = (agent.objective_composite as any) || {
+        mission: agent.main_objective || "",
+        success_criteria: "",
+        limits: "",
+      };
+      const businessContext = (agent.business_context as any) || {};
+      const conversationStyle = (agent.conversation_style as any) || {};
+      const qualificationRules = (agent.qualification_rules as any) || {};
+      const availability = (agent.availability as any) || {};
+      const activationTriggers = (agent.activation_triggers as any) || {
+        required: { tags: [], origins: [], hasPhone: true, hasEmail: false },
+        optional: [],
+      };
+      const outboundConfig = (agent.outbound_config as any) || {
+        delayMinutes: 5,
+        firstMessageTemplate: "",
+        availableVariables: ["nome", "empresa", "email", "telefone", "origem", "interesse", "segmento", "campanha"],
+        maxRetries: 3,
+        retryIntervalMinutes: 30,
+      };
+      const automationActions = (agent.automation_actions as any) || {
+        onQualify: { moveToStage: "", moveToPipe: null, addTags: [], notifyUserId: null, sendMessage: false, messageTemplate: "" },
+        onDisqualify: { moveToStage: "", moveToPipe: null, addTags: [], notifyUserId: null, sendMessage: false, messageTemplate: "" },
+        onNeedHuman: { moveToStage: "", moveToPipe: null, addTags: [], notifyUserId: null, sendMessage: false, messageTemplate: "" },
+      };
+
+      const wizardData: CopilotWizardData = {
+        templateType: agent.template_type as any,
+        name: agent.name,
+        personality: {
+          tone: (agent.personality_tone as any) || "profissional",
+          style: (agent.personality_style as any) || "consultivo",
+          energy: (agent.personality_energy as any) || "moderada",
+        },
+        skills: (agent.skills as string[]) || [],
+        allowedTopics: (agent.allowed_topics as string[]) || [],
+        forbiddenTopics: (agent.forbidden_topics as string[]) || [],
+        faqs: faqs.map((f) => ({ question: f.question, answer: f.answer })),
+        businessContext: {
+          companyName: businessContext.companyName || "",
+          productSummary: businessContext.productSummary || "",
+          idealCustomerProfile: businessContext.idealCustomerProfile || "",
+          serviceRegion: businessContext.serviceRegion || "",
+          valueProps: businessContext.valueProps || "",
+          customerPains: businessContext.customerPains || "",
+          socialProof: businessContext.socialProof || "",
+          pricingPolicy: businessContext.pricingPolicy || "",
+          commercialTerms: businessContext.commercialTerms || "",
+          businessHoursSla: businessContext.businessHoursSla || "",
+          primaryCta: businessContext.primaryCta || "",
+          compliancePolicy: businessContext.compliancePolicy || "",
+        },
+        conversationStyle: {
+          responseLength: conversationStyle.responseLength || "curto",
+          maxQuestions: conversationStyle.maxQuestions || "1",
+          emojiPolicy: conversationStyle.emojiPolicy || "raro",
+          openingStyle: conversationStyle.openingStyle || "",
+          closingStyle: conversationStyle.closingStyle || "",
+          whatsappGuidelines: conversationStyle.whatsappGuidelines || "",
+          humanizationTips: conversationStyle.humanizationTips || "",
+        },
+        qualification: {
+          requiredFields: qualificationRules.requiredFields || [],
+          optionalFields: qualificationRules.optionalFields || [],
+          notes: qualificationRules.notes || "",
+        },
+        examples: (agent.few_shot_examples as any[]) || [{ lead: "", agent: "" }],
+        availability: {
+          mode: availability.mode || "always",
+          timezone: availability.timezone || "America/Sao_Paulo",
+          days: availability.days || ["mon", "tue", "wed", "thu", "fri"],
+          start: availability.start || "09:00",
+          end: availability.end || "18:00",
+        },
+        responseDelaySeconds: (agent as any).response_delay_seconds ?? 0,
+        mainObjective: agent.main_objective || "",
+        objectiveComposite,
+        kanbanRules: kanbanRules.map((r) => ({
+          pipeType: r.pipe_type,
+          stageName: r.stage_name,
+          goal: r.goal,
+          behavior: r.behavior,
+          allowedActions: (r.allowed_actions as string[]) || [],
+          forbiddenActions: (r.forbidden_actions as string[]) || [],
+        })),
+        operationMode: ((agent as any).operation_mode as any) || "inbound",
+        activationTriggers,
+        outboundConfig,
+        automationActions,
+        followupRules: followupRules.map((r: any) => ({
+          id: r.id,
+          name: r.name,
+          description: r.description || undefined,
+          isActive: r.is_active,
+          priority: r.priority,
+          triggerType: r.trigger_type,
+          triggerDelayHours: r.trigger_delay_hours,
+          triggerDelayMinutes: r.trigger_delay_minutes,
+          maxFollowups: r.max_followups,
+          filterTags: r.filter_tags || [],
+          filterTagsExclude: r.filter_tags_exclude || [],
+          filterOrigins: r.filter_origins || [],
+          filterPipes: r.filter_pipes || [],
+          filterStages: r.filter_stages || [],
+          filterCustomFields: Object.entries(r.filter_custom_fields || {}).map(([field, config]: [string, any]) => ({
+            field,
+            operator: config.operator,
+            value: config.value,
+          })),
+          useLastContext: r.use_last_context,
+          contextLookbackDays: r.context_lookback_days,
+          followupStyle: r.followup_style,
+          messageTemplate: r.message_template || undefined,
+          sendOnlyBusinessHours: r.send_only_business_hours,
+          businessHoursStart: r.business_hours_start,
+          businessHoursEnd: r.business_hours_end,
+          sendDays: r.send_days || [],
+          timezone: r.timezone,
+        })),
+        customInstructions: agent.custom_instructions || "",
+        knowledgeBaseFiles: [], // Arquivos novos serão adicionados pelo usuário
+        canQualifyLead: (agent as any).can_qualify_lead ?? true,
+        canScheduleMeeting: (agent as any).can_schedule_meeting ?? true,
+        canSendFollowup: (agent as any).can_send_followup ?? true,
+        canUpdateCrm: (agent as any).can_update_crm ?? false,
+        canAnswerFaq: (agent as any).can_answer_faq ?? true,
+        canCreateLead: (agent as any).can_create_lead ?? true,
+        canTransferHuman: (agent as any).can_transfer_human ?? true,
+        canMoveCards: agent.can_move_cards ?? false,
+        maxConversationTurns: (agent as any).max_conversation_turns ?? 20,
+        responseDelayMs: (agent as any).response_delay_ms ?? 1000,
+        attendUnknownContacts: (agent as any).attend_unknown_contacts ?? false,
+      };
+
+      return { wizardData, existingDocuments: documents };
+    },
+    enabled: !!agentId,
+    staleTime: 0, // Sempre buscar dados frescos ao editar
+  });
+}
+
+/**
+ * Payload para atualização completa do agente a partir do wizard de edição
+ */
+export interface UpdateAgentFromWizardPayload {
+  agentId: string;
+  data: CopilotWizardData;
+  /** IDs de documentos existentes que devem ser removidos */
+  documentsToRemove: Array<{ documentId: string; filePath: string }>;
+}
+
+/**
+ * Atualiza um agente existente a partir dos dados do wizard.
+ * Sincroniza: campos principais + FAQs + kanban rules + followup rules + documentos
+ * Regenera o system prompt automaticamente.
+ */
+export function useUpdateCopilotAgentFromWizard() {
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+
+  return useMutation({
+    mutationFn: async (payload: UpdateAgentFromWizardPayload) => {
+      const { agentId, data, documentsToRemove } = payload;
+
+      // 1. Atualizar campos principais do agente
+      const agentUpdate: any = {
+        name: data.name,
+        personality_tone: data.personality.tone,
+        personality_style: data.personality.style,
+        personality_energy: data.personality.energy,
+        skills: data.skills || [],
+        allowed_topics: data.allowedTopics || [],
+        forbidden_topics: data.forbiddenTopics || [],
+        main_objective: data.objectiveComposite?.mission || data.mainObjective,
+        objective_composite: data.objectiveComposite?.mission
+          ? data.objectiveComposite
+          : null,
+        custom_instructions: data.customInstructions || null,
+        business_context: data.businessContext || {},
+        conversation_style: data.conversationStyle || {},
+        qualification_rules: data.qualification || {},
+        few_shot_examples: data.examples || [],
+        availability: data.availability || {},
+        response_delay_seconds: data.responseDelaySeconds ?? 0,
+        operation_mode: data.operationMode || "inbound",
+        attend_unknown_contacts: data.attendUnknownContacts ?? false,
+      };
+
+      if (data.activationTriggers) {
+        agentUpdate.activation_triggers = data.activationTriggers;
+      }
+      if (data.operationMode === "outbound" || data.operationMode === "hybrid") {
+        if (data.outboundConfig) {
+          agentUpdate.outbound_config = data.outboundConfig;
+        }
+      } else {
+        agentUpdate.outbound_config = null;
+      }
+      if (data.automationActions) {
+        agentUpdate.automation_actions = data.automationActions;
+      }
+
+      // Capabilities
+      agentUpdate.can_qualify_lead = data.canQualifyLead ?? true;
+      agentUpdate.can_schedule_meeting = data.canScheduleMeeting ?? true;
+      agentUpdate.can_send_followup = data.canSendFollowup ?? true;
+      agentUpdate.can_update_crm = data.canUpdateCrm ?? false;
+      agentUpdate.can_answer_faq = data.canAnswerFaq ?? true;
+      agentUpdate.can_create_lead = data.canCreateLead ?? true;
+      agentUpdate.can_transfer_human = data.canTransferHuman ?? true;
+      agentUpdate.can_move_cards = data.canMoveCards ?? false;
+      agentUpdate.max_conversation_turns = data.maxConversationTurns ?? 20;
+      agentUpdate.response_delay_ms = data.responseDelayMs ?? 1000;
+
+      const { data: updatedAgent, error: agentError } = await supabase
+        .from("copilot_agents")
+        .update(agentUpdate)
+        .eq("id", agentId)
+        .select()
+        .single();
+
+      if (agentError) throw agentError;
+
+      // 2. Sincronizar FAQs (delete all + insert)
+      await supabase
+        .from("copilot_agent_faqs")
+        .delete()
+        .eq("agent_id", agentId);
+
+      if (data.faqs && data.faqs.length > 0) {
+        const faqsToInsert = data.faqs.map((faq, index) => ({
+          agent_id: agentId,
+          question: faq.question,
+          answer: faq.answer,
+          position: index,
+        }));
+
+        const { error: faqsError } = await supabase
+          .from("copilot_agent_faqs")
+          .insert(faqsToInsert);
+
+        if (faqsError) throw faqsError;
+      }
+
+      // 3. Sincronizar Kanban Rules (delete all + insert)
+      await supabase
+        .from("copilot_agent_kanban_rules")
+        .delete()
+        .eq("agent_id", agentId);
+
+      const activeKanbanRules = (data.kanbanRules || [])
+        .filter((r: any) => !r._disabled)
+        .map(({ _disabled, ...rule }: any) => rule);
+
+      if (activeKanbanRules.length > 0) {
+        const rulesToInsert = activeKanbanRules.map((rule: any) => ({
+          agent_id: agentId,
+          pipe_type: rule.pipeType,
+          stage_name: rule.stageName,
+          goal: rule.goal,
+          behavior: rule.behavior,
+          allowed_actions: rule.allowedActions,
+          forbidden_actions: rule.forbiddenActions,
+        }));
+
+        const { error: rulesError } = await supabase
+          .from("copilot_agent_kanban_rules")
+          .insert(rulesToInsert);
+
+        if (rulesError) throw rulesError;
+      }
+
+      // 4. Sincronizar Follow-up Rules (delete all + insert) — se template followup
+      if (updatedAgent.template_type === "followup") {
+        await supabase
+          .from("copilot_agent_followup_rules")
+          .delete()
+          .eq("agent_id", agentId);
+
+        if (data.followupRules && data.followupRules.length > 0) {
+          const followupToInsert = data.followupRules.map((rule, index) =>
+            followupRuleToDB(
+              { ...rule, priority: rule.priority ?? index, name: rule.name || `Regra ${index + 1}` },
+              agentId
+            )
+          );
+          const { error: followupError } = await supabase
+            .from("copilot_agent_followup_rules")
+            .insert(followupToInsert as any);
+
+          if (followupError) throw followupError;
+        }
+      }
+
+      // 5. Remover documentos marcados para exclusão
+      for (const doc of documentsToRemove) {
+        try {
+          await supabase.storage
+            .from("agent-documents")
+            .remove([doc.filePath]);
+
+          await supabase
+            .from("copilot_agent_documents")
+            .delete()
+            .eq("id", doc.documentId);
+        } catch (docErr) {
+          console.error("Erro ao remover documento:", docErr);
+        }
+      }
+
+      // 6. Regenerar system prompt
+      const { data: createdFaqs } = await supabase
+        .from("copilot_agent_faqs")
+        .select("*")
+        .eq("agent_id", agentId);
+
+      const { data: createdRules } = await supabase
+        .from("copilot_agent_kanban_rules")
+        .select("*")
+        .eq("agent_id", agentId);
+
+      const promptResult = generatePrompt(
+        updatedAgent,
+        createdFaqs || [],
+        createdRules || []
+      );
+
+      const promptHash = computePromptHash(updatedAgent, createdFaqs || []);
+
+      await saveCopilotSystemPrompt(
+        agentId,
+        promptResult.systemPrompt,
+        promptResult.metadata.version,
+        promptHash
+      );
+
+      return updatedAgent as CopilotAgent;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["copilot_agents"] });
+      queryClient.invalidateQueries({ queryKey: ["copilot_agent_for_edit"] });
+      queryClient.invalidateQueries({ queryKey: ["agent_documents"] });
+      toast.success("Copilot atualizado com sucesso!", {
+        description: "Todas as alterações foram salvas e o prompt foi regenerado.",
+      });
+    },
+    onError: (error: any) => {
+      console.error("Erro ao atualizar agente via wizard:", error);
+
+      let errorMessage = error?.message || "Erro desconhecido ao atualizar o agente";
+
+      if (errorMessage.includes("unique_agent_name_per_org")) {
+        errorMessage = "Já existe um agente com este nome na sua organização. Escolha um nome diferente.";
+      }
+
+      toast.error("Erro ao atualizar Copilot", {
+        description: errorMessage,
+        duration: 10000,
       });
     },
   });

@@ -1523,6 +1523,7 @@ export type Database = {
           forbidden_actions: string[] | null
           goal: string
           id: string
+          needs_review: boolean
           pipe_type: string
           stage_name: string
           updated_at: string
@@ -1535,6 +1536,7 @@ export type Database = {
           forbidden_actions?: string[] | null
           goal: string
           id?: string
+          needs_review?: boolean
           pipe_type: string
           stage_name: string
           updated_at?: string
@@ -1547,6 +1549,7 @@ export type Database = {
           forbidden_actions?: string[] | null
           goal?: string
           id?: string
+          needs_review?: boolean
           pipe_type?: string
           stage_name?: string
           updated_at?: string

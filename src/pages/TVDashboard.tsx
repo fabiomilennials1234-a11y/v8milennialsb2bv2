@@ -118,11 +118,11 @@ export default function TVDashboard() {
         </div>
       </header>
 
-      {/* Main Grid - 8pt system */}
-      <div className="flex-1 p-4 grid grid-cols-12 gap-4 overflow-hidden">
-        
-        {/* Left Column - Meta do Mês (Hero) - BIGGER THERMOMETER */}
-        <div className="col-span-4 flex flex-col gap-4">
+      {/* Main Grid */}
+      <div className="flex-1 p-3 grid grid-cols-12 gap-3 overflow-hidden">
+
+        {/* Left Column - Meta do Mês */}
+        <div className="col-span-3 flex flex-col gap-3">
           <TVCard className="flex-1 relative overflow-hidden">
             <div className="h-full flex flex-col">
               {/* Header with Month */}
@@ -136,30 +136,30 @@ export default function TVDashboard() {
               </div>
 
               {/* THERMOMETER - Full Height */}
-              <div className="flex-1 flex items-stretch gap-6 min-h-0">
+              <div className="flex-1 flex items-stretch gap-3 min-h-0">
                 {/* Scale Labels - Left Side */}
-                <div className="flex flex-col justify-between py-4 text-right w-12">
+                <div className="flex flex-col justify-between py-2 text-right w-10">
                   {[100, 75, 50, 25, 0].map((p) => (
-                    <span key={p} className="text-xs font-mono text-white/40">
+                    <span key={p} className="text-[10px] font-mono text-white/50">
                       {formatCurrency((meta * p) / 100)}
                     </span>
                   ))}
                 </div>
 
                 {/* Thermometer Tube Container */}
-                <div className="relative flex flex-col items-center flex-1 py-4">
-                  {/* TOP GOAL - Gamified "Explosion" Target */}
+                <div className="relative flex flex-col items-center flex-1 py-2">
+                  {/* TOP GOAL - Gamified Target */}
                   <motion.div
-                    animate={{ 
+                    animate={{
                       scale: percentage >= 100 ? [1, 1.2, 1] : 1,
-                      boxShadow: percentage >= 100 
+                      boxShadow: percentage >= 100
                         ? ["0 0 0px rgba(234,179,8,0.5)", "0 0 40px rgba(234,179,8,0.8)", "0 0 0px rgba(234,179,8,0.5)"]
                         : "none"
                     }}
                     transition={{ repeat: percentage >= 100 ? Infinity : 0, duration: 1 }}
-                    className={`relative -mb-4 z-20 px-6 py-3 rounded-xl border-2 ${
-                      percentage >= 100 
-                        ? "bg-gradient-to-br from-yellow-400 via-amber-500 to-orange-500 border-yellow-300 shadow-2xl shadow-yellow-500/30" 
+                    className={`relative -mb-3 z-20 px-4 py-2 rounded-xl border-2 ${
+                      percentage >= 100
+                        ? "bg-gradient-to-br from-yellow-400 via-amber-500 to-orange-500 border-yellow-300 shadow-2xl shadow-yellow-500/30"
                         : "bg-gradient-to-br from-primary/80 to-primary border-primary/50"
                     }`}
                   >
@@ -171,29 +171,29 @@ export default function TVDashboard() {
                         className="absolute inset-0 rounded-xl bg-yellow-400/50"
                       />
                     )}
-                    <p className="text-3xl font-black text-white drop-shadow-lg text-center">
+                    <p className="text-2xl font-black text-white drop-shadow-lg text-center">
                       R$ {formatCurrency(meta)}
                     </p>
-                    <p className="text-xs font-medium text-white/80 text-center mt-0.5">
-                      {percentage >= 100 ? "🏆 META BATIDA!" : "Meta do Mês"}
+                    <p className="text-[10px] font-medium text-white/80 text-center">
+                      {percentage >= 100 ? "META BATIDA!" : "Meta do Mês"}
                     </p>
                   </motion.div>
 
                   {/* Tube */}
-                  <div className="relative w-20 flex-1 rounded-t-full bg-white/5 border-2 border-white/10 overflow-hidden">
+                  <div className="relative w-16 flex-1 rounded-t-full bg-white/[0.08] border-2 border-white/20 overflow-hidden">
                     {/* Grid lines */}
                     {[25, 50, 75].map((p) => (
-                      <div key={p} className="absolute left-0 right-0 h-px bg-white/10" style={{ bottom: `${p}%` }} />
+                      <div key={p} className="absolute left-0 right-0 h-px bg-white/15" style={{ bottom: `${p}%` }} />
                     ))}
-                    
+
                     {/* Expected position marker */}
                     <motion.div
                       initial={{ bottom: 0 }}
                       animate={{ bottom: `${Math.min((ondeDeveria / meta) * 100, 100)}%` }}
                       transition={{ duration: 1, delay: 0.3 }}
-                      className="absolute left-0 right-0 h-1 bg-white/30 z-10"
+                      className="absolute left-0 right-0 h-1 bg-white/40 z-10"
                     >
-                      <div className="absolute -right-2 top-1/2 -translate-y-1/2 w-0 h-0 border-t-[6px] border-b-[6px] border-l-[8px] border-transparent border-l-white/30" />
+                      <div className="absolute -right-2 top-1/2 -translate-y-1/2 w-0 h-0 border-t-[5px] border-b-[5px] border-l-[7px] border-transparent border-l-white/40" />
                     </motion.div>
 
                     {/* Fill */}
@@ -202,89 +202,90 @@ export default function TVDashboard() {
                       animate={{ height: `${Math.min(percentage, 100)}%` }}
                       transition={{ duration: 1.5, ease: "easeOut" }}
                       className={`absolute bottom-0 left-1 right-1 rounded-t-full ${
-                        isAhead 
-                          ? "bg-gradient-to-t from-emerald-600 via-emerald-500 to-emerald-400" 
+                        isAhead
+                          ? "bg-gradient-to-t from-emerald-600 via-emerald-500 to-emerald-400"
                           : "bg-gradient-to-t from-amber-600 via-amber-500 to-yellow-400"
                       }`}
                     >
                       {/* Shine effect */}
-                      <div className="absolute inset-y-0 left-2 w-2 bg-white/25 rounded-full" />
-                      
+                      <div className="absolute inset-y-0 left-1.5 w-1.5 bg-white/25 rounded-full" />
+
                       {/* Bubbles animation */}
                       <motion.div
                         animate={{ y: [0, -10, 0] }}
                         transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
-                        className="absolute bottom-4 left-1/2 -translate-x-1/2 w-3 h-3 rounded-full bg-white/20"
+                        className="absolute bottom-4 left-1/2 -translate-x-1/2 w-2.5 h-2.5 rounded-full bg-white/20"
                       />
                     </motion.div>
                   </div>
 
                   {/* Bulb at bottom */}
                   <motion.div
-                    animate={{ 
-                      boxShadow: isAhead 
+                    animate={{
+                      boxShadow: isAhead
                         ? ["0 0 10px rgba(16,185,129,0.4)", "0 0 25px rgba(16,185,129,0.7)", "0 0 10px rgba(16,185,129,0.4)"]
                         : ["0 0 10px rgba(245,158,11,0.4)", "0 0 25px rgba(245,158,11,0.7)", "0 0 10px rgba(245,158,11,0.4)"]
                     }}
                     transition={{ repeat: Infinity, duration: 2 }}
-                    className={`-mt-3 w-24 h-24 rounded-full flex flex-col items-center justify-center z-10 border-4 ${
-                      isAhead 
-                        ? "bg-gradient-to-br from-emerald-400 to-emerald-600 border-emerald-400/50" 
+                    className={`-mt-2 w-18 h-18 rounded-full flex flex-col items-center justify-center z-10 border-3 shrink-0 ${
+                      isAhead
+                        ? "bg-gradient-to-br from-emerald-400 to-emerald-600 border-emerald-400/50"
                         : "bg-gradient-to-br from-amber-400 to-amber-600 border-amber-400/50"
                     }`}
+                    style={{ width: 72, height: 72 }}
                   >
-                    <span className="text-2xl font-black text-white drop-shadow-md">
+                    <span className="text-xl font-black text-white drop-shadow-md">
                       {percentage.toFixed(0)}%
                     </span>
-                    <span className="text-[10px] text-white/80 font-medium">atingido</span>
+                    <span className="text-[9px] text-white/80 font-medium">atingido</span>
                   </motion.div>
                 </div>
 
                 {/* Current Value Label - Right Side */}
-                <div className="relative w-28 py-4">
+                <div className="relative w-24 py-2">
                   <motion.div
                     initial={{ bottom: "0%" }}
                     animate={{ bottom: `${Math.max(5, Math.min(percentage - 8, 85))}%` }}
                     transition={{ duration: 1.5, ease: "easeOut" }}
                     className="absolute left-0 right-0"
                   >
-                    <div className="flex items-center gap-1.5">
-                      <div className={`w-0 h-0 border-t-[8px] border-b-[8px] border-r-[10px] border-transparent ${
+                    <div className="flex items-center gap-1">
+                      <div className={`w-0 h-0 border-t-[6px] border-b-[6px] border-r-[8px] border-transparent ${
                         isAhead ? "border-r-emerald-500" : "border-r-amber-500"
                       }`} />
-                      <motion.div 
+                      <motion.div
                         animate={{ scale: [1, 1.02, 1] }}
                         transition={{ repeat: Infinity, duration: 2 }}
-                        className={`px-3 py-2 rounded-lg font-bold text-lg shadow-lg ${
+                        className={`px-2 py-1.5 rounded-lg font-bold text-sm shadow-lg ${
                           isAhead ? "bg-emerald-500 text-white" : "bg-amber-500 text-black"
                         }`}
                       >
                         R$ {formatCurrency(atual)}
                       </motion.div>
                     </div>
-                    <p className="text-[10px] text-white/40 mt-1 ml-4">vendido</p>
+                    <p className="text-[9px] text-white/40 mt-0.5 ml-3">vendido</p>
                   </motion.div>
                 </div>
               </div>
 
               {/* Status Bar */}
-              <div className={`mt-4 py-3 px-4 rounded-xl flex items-center justify-center gap-3 ${
-                isAhead 
-                  ? "bg-emerald-500/15 border border-emerald-500/30" 
+              <div className={`mt-2 py-2 px-3 rounded-lg flex items-center justify-center gap-2 ${
+                isAhead
+                  ? "bg-emerald-500/15 border border-emerald-500/30"
                   : "bg-amber-500/15 border border-amber-500/30"
               }`}>
                 {isAhead ? (
                   <>
-                    <ArrowUpRight className="w-5 h-5 text-emerald-400" />
-                    <span className="text-base font-bold text-emerald-400">
-                      +R$ {formatCurrency(diferenca)} acima do esperado
+                    <ArrowUpRight className="w-4 h-4 text-emerald-400" />
+                    <span className="text-sm font-bold text-emerald-400">
+                      +R$ {formatCurrency(diferenca)} acima
                     </span>
                   </>
                 ) : (
                   <>
-                    <ArrowDownRight className="w-5 h-5 text-amber-400" />
-                    <span className="text-base font-bold text-amber-400">
-                      -R$ {formatCurrency(diferenca)} para alcançar
+                    <ArrowDownRight className="w-4 h-4 text-amber-400" />
+                    <span className="text-sm font-bold text-amber-400">
+                      -R$ {formatCurrency(diferenca)} atrás
                     </span>
                   </>
                 )}
@@ -292,18 +293,16 @@ export default function TVDashboard() {
 
               {/* How much is missing */}
               {quantoFalta > 0 && (
-                <div className="mt-3 text-center">
-                  <p className="text-sm text-white/50">
-                    Falta <span className="font-bold text-white">R$ {formatCurrency(quantoFalta)}</span> para bater a meta
-                  </p>
-                </div>
+                <p className="mt-1.5 text-xs text-white/50 text-center">
+                  Falta <span className="font-bold text-white">R$ {formatCurrency(quantoFalta)}</span> para a meta
+                </p>
               )}
             </div>
           </TVCard>
         </div>
 
         {/* Middle/Right - KPIs + Individual Goals + Everything else */}
-        <div className="col-span-8 flex flex-col gap-4">
+        <div className="col-span-9 flex flex-col gap-3">
           {/* KPIs Row - Compact */}
           <div className="grid grid-cols-6 gap-3">
             <KPICard 
@@ -349,7 +348,7 @@ export default function TVDashboard() {
           </div>
 
           {/* Main Content Area - Grid */}
-          <div className="flex-1 grid grid-cols-3 gap-4 min-h-0">
+          <div className="flex-1 grid grid-cols-3 gap-3 min-h-0">
             {/* Left Side - Sales Funnel */}
             <TVCard className="flex flex-col">
               <SalesFunnel
@@ -366,12 +365,12 @@ export default function TVDashboard() {
 
             {/* Middle - Individual Goals */}
             <TVCard className="flex flex-col">
-              <div className="flex items-center gap-2 mb-4">
+              <div className="flex items-center gap-2 mb-2">
                 <TrendingUp className="w-5 h-5 text-primary" />
                 <span className="text-sm font-bold text-white uppercase tracking-wider">Metas Individuais</span>
               </div>
 
-              <div className="flex-1 grid grid-cols-2 gap-4 overflow-y-auto">
+              <div className="flex-1 grid grid-cols-2 gap-3 overflow-y-auto">
                 {/* Closers */}
                 <div className="flex flex-col">
                   <p className="text-xs text-white/50 uppercase tracking-wider mb-2 font-semibold">Closers</p>
@@ -397,7 +396,7 @@ export default function TVDashboard() {
             </TVCard>
 
             {/* Right Side - Propostas + Vendas + Coach */}
-            <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-3">
               {/* Hot Proposals */}
               <TVCard className="flex-1">
                 <div className="flex items-center justify-between mb-3">
@@ -511,7 +510,7 @@ function TVCard({
       whileHover={{ y: -2 }}
       transition={{ duration: 0.2 }}
       className={`
-        p-4 rounded-xl
+        p-3 rounded-xl
         bg-white/[0.03] border border-white/5
         backdrop-blur-sm
         ${accent ? accentClasses[accent] : ""}

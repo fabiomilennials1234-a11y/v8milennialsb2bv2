@@ -304,6 +304,18 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/copilot/:id/editar"
+        element={
+          <ProtectedRoute>
+            <SubscriptionProtectedRoute requireActive>
+              <LayoutWrapper>
+                <CopilotWizard />
+              </LayoutWrapper>
+            </SubscriptionProtectedRoute>
+          </ProtectedRoute>
+        }
+      />
       {/* Master Admin Routes */}
       <Route
         path="/master"

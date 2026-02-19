@@ -5,7 +5,7 @@
  * do funil WhatsApp. Essas regras são injetadas no prompt do AgentEngine.
  */
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { LayoutList, Save, Loader2, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -30,18 +30,12 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
-import { PIPE_STAGES } from "@/types/copilot";
+import { usePipelineStageOptions } from "@/hooks/usePipelineStages";
 import {
   useAgentKanbanRules,
   useUpsertKanbanRules,
   type KanbanRuleForm,
 } from "@/hooks/useAgentKanbanRules";
-
-const WHATSAPP_STAGES = [
-  ...(PIPE_STAGES["whatsapp"] || []),
-  { value: "aguardando_humano", label: "Aguardando Humano" },
-  { value: "descartado", label: "Descartado" },
-];
 
 const createEmptyRule = (stage: { value: string; label: string }): KanbanRuleForm => ({
   pipe_type: "whatsapp",
@@ -108,12 +102,14 @@ function StageCollapsible({
   onUpdate,
   isExpanded,
   onToggle,
+  needsReview,
 }: {
   stage: { value: string; label: string };
   rule: KanbanRuleForm;
   onUpdate: (updates: Partial<KanbanRuleForm>) => void;
   isExpanded: boolean;
   onToggle: () => void;
+  needsReview?: boolean;
 }) {
   const hasContent =
     (rule.goal && rule.goal.trim()) ||
@@ -132,6 +128,11 @@ function StageCollapsible({
                 Configurado
               </Badge>
             ) : null}
+            {needsReview && (
+              <Badge variant="outline" className="text-xs text-amber-500 border-amber-500">
+                Auto-gerada
+              </Badge>
+            )}
           </div>
         </div>
       </CollapsibleTrigger>
@@ -188,6 +189,13 @@ function StageCollapsible({
 }
 
 export function AgentKanbanRulesTab({ agentId }: AgentKanbanRulesTabProps) {
+  const { options: whatsappStageOptions } = usePipelineStageOptions("whatsapp");
+  const WHATSAPP_STAGES = useMemo(() => [
+    ...whatsappStageOptions,
+    { value: "aguardando_humano", label: "Aguardando Humano" },
+    { value: "descartado", label: "Descartado" },
+  ], [whatsappStageOptions]);
+
   const { data: rules, isLoading } = useAgentKanbanRules(agentId);
   const upsert = useUpsertKanbanRules(agentId);
 
@@ -226,7 +234,7 @@ export function AgentKanbanRulesTab({ agentId }: AgentKanbanRulesTabProps) {
       {} as Record<string, KanbanRuleForm>
     );
     setLocalRules(byStage);
-  }, [rules]);
+  }, [rules, WHATSAPP_STAGES]);
 
   const updateRule = useCallback((stageValue: string, updates: Partial<KanbanRuleForm>) => {
     setLocalRules((prev) => ({
@@ -245,7 +253,7 @@ export function AgentKanbanRulesTab({ agentId }: AgentKanbanRulesTabProps) {
   const handleSave = useCallback(() => {
     const toSave = WHATSAPP_STAGES.map((s) => localRules[s.value] ?? createEmptyRule(s));
     upsert.mutate(toSave);
-  }, [localRules, upsert]);
+  }, [localRules, upsert, WHATSAPP_STAGES]);
 
   if (isLoading) {
     return (
@@ -290,6 +298,7 @@ export function AgentKanbanRulesTab({ agentId }: AgentKanbanRulesTabProps) {
               onUpdate={(updates) => updateRule(stage.value, updates)}
               isExpanded={expandedStages[stage.value] ?? false}
               onToggle={() => toggleStage(stage.value)}
+              needsReview={rules?.find(r => r.pipe_type === "whatsapp" && r.stage_name === stage.value)?.needs_review ?? false}
             />
           ))}
         </div>

@@ -17,6 +17,7 @@ export interface KanbanRuleForm {
   behavior: string;
   allowed_actions: string[];
   forbidden_actions: string[];
+  needs_review?: boolean;
 }
 
 /**
@@ -79,10 +80,11 @@ export function useUpsertKanbanRules(agentId: string) {
         agent_id: agentId,
         pipe_type: r.pipe_type,
         stage_name: r.stage_name,
-        goal: (r.goal || "").trim() || null,
-        behavior: (r.behavior || "").trim() || null,
+        goal: (r.goal || "").trim() || "",
+        behavior: (r.behavior || "").trim() || "",
         allowed_actions: r.allowed_actions || [],
         forbidden_actions: r.forbidden_actions || [],
+        needs_review: false, // User explicitly saved → no longer needs review
       }));
 
       const { data, error } = await supabase

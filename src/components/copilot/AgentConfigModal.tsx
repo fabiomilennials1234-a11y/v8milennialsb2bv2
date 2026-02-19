@@ -27,6 +27,7 @@ import {
   BarChart3,
   Clock,
   LayoutList,
+  Pencil,
 } from "lucide-react";
 import {
   Dialog,
@@ -56,10 +57,12 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { useNavigate } from "react-router-dom";
 import { useUpdateCopilotAgentPipeline, useLinkAgentToWhatsAppInstance } from "@/hooks/useCopilotAgents";
 import { useWhatsAppInstancesWithAgent } from "@/hooks/useWhatsAppInstances";
 import type { CopilotAgentWithRelations, MoveRule } from "@/types/copilot";
-import { PIPE_TYPES, PIPE_STAGES } from "@/types/copilot";
+import { PIPE_TYPES } from "@/types/copilot";
+import { useAllPipelineStageOptions } from "@/hooks/usePipelineStages";
 import { AgentMetricsTab } from "./AgentMetricsTab";
 import { AgentTasksTab } from "./AgentTasksTab";
 import { AgentFollowupRulesTab } from "./AgentFollowupRulesTab";
@@ -76,9 +79,11 @@ export function AgentConfigModal({
   open,
   onOpenChange,
 }: AgentConfigModalProps) {
+  const navigate = useNavigate();
   const updatePipeline = useUpdateCopilotAgentPipeline();
   const linkToWhatsApp = useLinkAgentToWhatsAppInstance();
   const { data: whatsappInstances = [], isLoading: isLoadingInstances } = useWhatsAppInstancesWithAgent();
+  const { stagesByPipe } = useAllPipelineStageOptions();
 
   // Estado local para edição
   const [activePipes, setActivePipes] = useState<string[]>([]);
@@ -160,7 +165,7 @@ export function AgentConfigModal({
   };
 
   const handleSelectAllStages = (pipe: string) => {
-    const allStages = PIPE_STAGES[pipe]?.map((s) => s.value) || [];
+    const allStages = (stagesByPipe[pipe] || []).map((s) => s.value);
     setActiveStages((prev) => ({
       ...prev,
       [pipe]: allStages,
@@ -577,7 +582,7 @@ export function AgentConfigModal({
                                   </div>
                                 </div>
                                 <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                                  {PIPE_STAGES[pipe.value]?.map((stage) => (
+                                  {(stagesByPipe[pipe.value] || [])?.map((stage) => (
                                     <div
                                       key={stage.value}
                                       className="flex items-center gap-2"
@@ -736,7 +741,7 @@ export function AgentConfigModal({
                                               <SelectValue placeholder="Etapa" />
                                             </SelectTrigger>
                                             <SelectContent>
-                                              {PIPE_STAGES[rule.from.pipe]?.map(
+                                              {(stagesByPipe[rule.from.pipe] || [])?.map(
                                                 (stage) => (
                                                   <SelectItem
                                                     key={stage.value}
@@ -793,7 +798,7 @@ export function AgentConfigModal({
                                               <SelectValue placeholder="Etapa" />
                                             </SelectTrigger>
                                             <SelectContent>
-                                              {PIPE_STAGES[rule.to.pipe]?.map(
+                                              {(stagesByPipe[rule.to.pipe] || [])?.map(
                                                 (stage) => (
                                                   <SelectItem
                                                     key={stage.value}
@@ -900,19 +905,31 @@ export function AgentConfigModal({
           </ScrollArea>
         </Tabs>
 
-        <div className="flex justify-end gap-2 pt-4 border-t">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            <X className="w-4 h-4 mr-2" />
-            Cancelar
-          </Button>
+        <div className="flex justify-between pt-4 border-t">
           <Button
-            onClick={handleSave}
-            disabled={updatePipeline.isPending}
-            className="bg-primary hover:bg-primary/90 text-primary-foreground"
+            variant="outline"
+            onClick={() => {
+              onOpenChange(false);
+              navigate(`/copilot/${agent.id}/editar`);
+            }}
           >
-            <Save className="w-4 h-4 mr-2" />
-            {updatePipeline.isPending ? "Salvando..." : "Salvar Configurações"}
+            <Pencil className="w-4 h-4 mr-2" />
+            Editar Copilot
           </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => onOpenChange(false)}>
+              <X className="w-4 h-4 mr-2" />
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleSave}
+              disabled={updatePipeline.isPending}
+              className="bg-primary hover:bg-primary/90 text-primary-foreground"
+            >
+              <Save className="w-4 h-4 mr-2" />
+              {updatePipeline.isPending ? "Salvando..." : "Salvar Configurações"}
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

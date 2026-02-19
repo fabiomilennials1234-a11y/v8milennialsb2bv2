@@ -258,11 +258,18 @@ export interface MoveToPipeConfig {
   stage: string;
 }
 
-/** Etapas válidas por pipe (para moveToPipe) */
+/**
+ * @deprecated Use usePipelineStageOptions("confirmacao") do hook usePipelineStages.
+ * Mantido temporariamente para compatibilidade.
+ */
 export const PIPE_CONFIRMACAO_STAGES = [
   "reuniao_marcada", "confirmar_d3", "confirmar_d2", "confirmar_d1",
   "pre_confirmada", "confirmacao_no_dia", "confirmada_no_dia", "compareceu", "perdido",
 ] as const;
+/**
+ * @deprecated Use usePipelineStageOptions("propostas") do hook usePipelineStages.
+ * Mantido temporariamente para compatibilidade.
+ */
 export const PIPE_PROPOSTAS_STAGES = [
   "marcar_compromisso", "compromisso_marcado", "esfriou", "futuro", "vendido", "perdido",
 ] as const;
@@ -436,7 +443,8 @@ export const PIPE_TYPES = [
 ] as const;
 
 /**
- * Etapas (stages) de cada pipeline
+ * @deprecated Use useAllPipelineStageOptions() ou usePipelineStageOptions(type) do hook usePipelineStages.
+ * Mantido temporariamente para compatibilidade.
  */
 export const PIPE_STAGES: Record<string, { value: string; label: string }[]> = {
   confirmacao: [

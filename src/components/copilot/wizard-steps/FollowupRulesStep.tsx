@@ -56,7 +56,8 @@ import {
   AlertCircle,
 } from "lucide-react";
 import type { CopilotWizardData, FollowupRule } from "@/types/copilot";
-import { PIPE_TYPES, PIPE_STAGES } from "@/types/copilot";
+import { PIPE_TYPES } from "@/types/copilot";
+import { useAllPipelineStageOptions } from "@/hooks/usePipelineStages";
 
 const FOLLOWUP_STYLES = [
   { value: "direct", label: "Direto", description: "Pergunta direta sobre o assunto anterior" },
@@ -105,6 +106,7 @@ export function FollowupRulesStep() {
   const { watch, setValue, control } = useFormContext<CopilotWizardData>();
   const [expandedRules, setExpandedRules] = useState<Record<number, boolean>>({});
   const [tagInput, setTagInput] = useState("");
+  const { stagesByPipe } = useAllPipelineStageOptions();
   
   // Usar useFieldArray se disponível ou gerenciar manualmente
   const followupRules = watch("followupRules") || [];
@@ -395,7 +397,7 @@ export function FollowupRulesStep() {
                               </SelectTrigger>
                               <SelectContent>
                                 {(rule.filterPipes || []).flatMap((pipe: string) =>
-                                  (PIPE_STAGES[pipe] || []).map((stage) => (
+                                  (stagesByPipe[pipe] || []).map((stage) => (
                                     <SelectItem key={`${pipe}-${stage.value}`} value={stage.value}>
                                       {stage.label}
                                     </SelectItem>

@@ -323,3 +323,47 @@ export function getPipelineTypeName(type: PipelineType): string {
   };
   return names[type];
 }
+
+/**
+ * Converte etapas do banco para o formato {value, label} usado nos selects/checkboxes.
+ * Substitui as constantes hardcoded PIPE_STAGES, PIPE_CONFIRMACAO_STAGES, etc.
+ */
+export function stagesToSelectOptions(
+  stages: PipelineStage[] | { id: string; stage_key: string; name: string; color: string | null }[] | undefined
+): { value: string; label: string }[] {
+  if (!stages) return [];
+  return stages.map((s) => ({
+    value: "stage_key" in s ? s.stage_key : s.id,
+    label: s.name,
+  }));
+}
+
+/**
+ * Hook que retorna etapas dinâmicas formatadas para selects/checkboxes.
+ * Substituição direta de PIPE_STAGES[pipelineType].
+ */
+export function usePipelineStageOptions(pipelineType: PipelineType) {
+  const { data: stages, isLoading } = usePipelineStages(pipelineType);
+  const options = stagesToSelectOptions(stages);
+  return { options, isLoading, stages };
+}
+
+/**
+ * Hook que retorna etapas de TODOS os pipes formatadas para selects.
+ * Substituição direta de PIPE_STAGES (objeto completo).
+ */
+export function useAllPipelineStageOptions() {
+  const whatsapp = usePipelineStageOptions("whatsapp");
+  const confirmacao = usePipelineStageOptions("confirmacao");
+  const propostas = usePipelineStageOptions("propostas");
+
+  const isLoading = whatsapp.isLoading || confirmacao.isLoading || propostas.isLoading;
+
+  const stagesByPipe: Record<string, { value: string; label: string }[]> = {
+    whatsapp: whatsapp.options,
+    confirmacao: confirmacao.options,
+    propostas: propostas.options,
+  };
+
+  return { stagesByPipe, isLoading };
+}

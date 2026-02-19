@@ -83,7 +83,7 @@ export function SalesFunnel({
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="flex items-center gap-2 mb-4">
+      <div className="flex items-center gap-2 mb-2">
         <div className="p-1.5 rounded-lg bg-gradient-to-br from-primary/20 to-primary/5 border border-primary/20">
           <TrendingDown className="w-4 h-4 text-primary" />
         </div>
@@ -141,7 +141,7 @@ export function SalesFunnel({
                   </div>
 
                   {/* Progress Bar */}
-                  <div className="relative h-7 bg-white/5 rounded-lg overflow-hidden border border-white/5">
+                  <div className="relative h-6 bg-white/5 rounded-lg overflow-hidden border border-white/5">
                     <motion.div
                       initial={{ width: 0 }}
                       animate={{ width: `${widthPercentage}%` }}
@@ -194,7 +194,7 @@ export function SalesFunnel({
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.8 }}
-        className="mt-4 pt-3 border-t border-white/5"
+        className="mt-2 pt-2 border-t border-white/5"
       >
         <div className="flex items-center justify-between text-xs">
           <span className="text-white/40">Taxa Total</span>

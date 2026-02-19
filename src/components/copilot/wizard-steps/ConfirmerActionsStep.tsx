@@ -42,42 +42,7 @@ import { Zap, CheckCircle2, XCircle, UserPlus, Plus, X, ArrowRightCircle } from 
 import { useState } from "react";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
 import type { CopilotWizardData } from "@/types/copilot";
-import {
-  PIPE_CONFIRMACAO_STAGES,
-  PIPE_PROPOSTAS_STAGES,
-} from "@/types/copilot";
-
-const PIPE_CONFIRMACAO_LABELS: Record<string, string> = {
-  reuniao_marcada: "Reunião marcada",
-  confirmar_d3: "Confirmar D-3",
-  confirmar_d2: "Confirmar D-2",
-  confirmar_d1: "Confirmar D-1",
-  pre_confirmada: "Pré-confirmada",
-  confirmacao_no_dia: "Confirmação no dia",
-  confirmada_no_dia: "Confirmada no dia",
-  compareceu: "Compareceu",
-  perdido: "Perdido",
-};
-const PIPE_PROPOSTAS_LABELS: Record<string, string> = {
-  marcar_compromisso: "Marcar compromisso",
-  compromisso_marcado: "Compromisso marcado",
-  esfriou: "Esfriou",
-  futuro: "Futuro",
-  vendido: "Vendido",
-  perdido: "Perdido",
-};
-
-/** Etapas do pipe de confirmação para o select */
-const CONFIRMATION_STAGES = [
-  { value: "reuniao_marcada", label: "Reunião Marcada" },
-  { value: "confirmar_d5", label: "Confirmar D-5" },
-  { value: "confirmar_d3", label: "Confirmar D-3" },
-  { value: "confirmar_d1", label: "Confirmar D-1" },
-  { value: "confirmacao_no_dia", label: "Confirmação no Dia" },
-  { value: "remarcar", label: "Remarcar" },
-  { value: "compareceu", label: "Compareceu" },
-  { value: "perdido", label: "Perdido" },
-];
+import { usePipelineStageOptions } from "@/hooks/usePipelineStages";
 
 interface ActionSectionProps {
   title: string;
@@ -85,7 +50,6 @@ interface ActionSectionProps {
   icon: React.ReactNode;
   colorClass: string;
   prefix: "onQualify" | "onDisqualify" | "onNeedHuman";
-  stageOptions: Array<{ value: string; label: string }>;
 }
 
 function ActionSection({
@@ -94,11 +58,12 @@ function ActionSection({
   icon,
   colorClass,
   prefix,
-  stageOptions,
 }: ActionSectionProps) {
   const { control, watch, setValue } = useFormContext<CopilotWizardData>();
   const [newTag, setNewTag] = useState("");
   const { data: teamMembers = [] } = useTeamMembers();
+  const { options: confirmacaoOptions } = usePipelineStageOptions("confirmacao");
+  const { options: propostasOptions } = usePipelineStageOptions("propostas");
 
   const tags = watch(`automationActions.${prefix}.addTags`) || [];
   const sendMessage = watch(`automationActions.${prefix}.sendMessage`);
@@ -156,7 +121,7 @@ function ActionSection({
                 </FormControl>
                 <SelectContent>
                   <SelectItem value="__none__">Não mover</SelectItem>
-                  {stageOptions.map((stage) => (
+                  {confirmacaoOptions.map((stage) => (
                     <SelectItem key={stage.value} value={stage.value}>
                       {stage.label}
                     </SelectItem>
@@ -185,8 +150,8 @@ function ActionSection({
                 } else {
                   const defaultStage =
                     v === "confirmacao"
-                      ? PIPE_CONFIRMACAO_STAGES[0]
-                      : PIPE_PROPOSTAS_STAGES[0];
+                      ? confirmacaoOptions[0]?.value || ""
+                      : propostasOptions[0]?.value || "";
                   setValue(
                     `automationActions.${prefix}.moveToPipe`,
                     { pipe: v as "confirmacao" | "propostas", stage: defaultStage },
@@ -219,13 +184,11 @@ function ActionSection({
                 </SelectTrigger>
                 <SelectContent>
                   {(moveToPipe.pipe === "confirmacao"
-                    ? PIPE_CONFIRMACAO_STAGES
-                    : PIPE_PROPOSTAS_STAGES
+                    ? confirmacaoOptions
+                    : propostasOptions
                   ).map((s) => (
-                    <SelectItem key={s} value={s}>
-                      {moveToPipe.pipe === "confirmacao"
-                        ? PIPE_CONFIRMACAO_LABELS[s] ?? s
-                        : PIPE_PROPOSTAS_LABELS[s] ?? s}
+                    <SelectItem key={s.value} value={s.value}>
+                      {s.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -373,7 +336,6 @@ export function ConfirmerActionsStep() {
           icon={<CheckCircle2 className="w-5 h-5 text-green-400" />}
           colorClass="bg-green-500/10"
           prefix="onQualify"
-          stageOptions={CONFIRMATION_STAGES}
         />
 
         <ActionSection
@@ -382,7 +344,6 @@ export function ConfirmerActionsStep() {
           icon={<XCircle className="w-5 h-5 text-red-400" />}
           colorClass="bg-red-500/10"
           prefix="onDisqualify"
-          stageOptions={CONFIRMATION_STAGES}
         />
 
         <ActionSection
@@ -391,7 +352,6 @@ export function ConfirmerActionsStep() {
           icon={<UserPlus className="w-5 h-5 text-blue-400" />}
           colorClass="bg-blue-500/10"
           prefix="onNeedHuman"
-          stageOptions={CONFIRMATION_STAGES}
         />
       </Accordion>
 

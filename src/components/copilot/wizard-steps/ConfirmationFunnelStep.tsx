@@ -9,7 +9,7 @@
  */
 
 import { useFormContext } from "react-hook-form";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -36,84 +36,38 @@ import {
   RefreshCw,
   ToggleLeft,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import type { CopilotWizardData } from "@/types/copilot";
+import { usePipelineStageOptions } from "@/hooks/usePipelineStages";
 
-/** Etapas do funil de confirmação com metadata */
-const CONFIRMATION_STAGES = [
-  {
-    stageName: "reuniao_marcada",
-    label: "Reunião Marcada",
-    timing: "Assim que agendar",
-    icon: Calendar,
-    color: "text-blue-400",
-    bgColor: "bg-blue-500/10",
-    defaultGoal: "Enviar mensagem de boas-vindas com os detalhes da reunião (data, hora, link). Confirmar que o lead recebeu.",
-    defaultBehavior: "Seja caloroso e objetivo. Envie os dados da reunião de forma clara. Pergunte se o lead tem alguma dúvida sobre a preparação.",
-  },
-  {
-    stageName: "confirmar_d5",
-    label: "Confirmar D-5",
-    timing: "5 dias antes",
-    icon: Clock,
-    color: "text-cyan-400",
-    bgColor: "bg-cyan-500/10",
-    defaultGoal: "Primeiro lembrete. Confirmar que a reunião continua de pé. Identificar possíveis conflitos.",
-    defaultBehavior: "Abordagem leve e amigável. Pergunte se o horário ainda funciona. Se o lead não responder, não insista nesta etapa.",
-  },
-  {
-    stageName: "confirmar_d3",
-    label: "Confirmar D-3",
-    timing: "3 dias antes",
-    icon: Clock,
-    color: "text-green-400",
-    bgColor: "bg-green-500/10",
-    defaultGoal: "Segundo lembrete com mais urgência. Reenviar dados da reunião. Confirmar presença.",
-    defaultBehavior: "Seja direto mas cordial. Reforce o valor da reunião. Reenvie o link e horário. Se lead pedir reagendamento, ofereça novas opções.",
-  },
-  {
-    stageName: "confirmar_d1",
-    label: "Confirmar D-1",
-    timing: "1 dia antes",
-    icon: AlertTriangle,
-    color: "text-yellow-400",
-    bgColor: "bg-yellow-500/10",
-    defaultGoal: "Confirmação final. Garantir que o lead está ciente e preparado. Último momento para reagendar.",
-    defaultBehavior: "Tom mais urgente. Peça confirmação explícita ('Pode confirmar?'). Se não responder, considere risco de no-show.",
-  },
-  {
-    stageName: "confirmacao_no_dia",
-    label: "No Dia",
-    timing: "Dia da reunião",
-    icon: CheckCircle2,
-    color: "text-primary",
-    bgColor: "bg-primary/10",
-    defaultGoal: "Lembrete final no dia. Enviar link novamente. Confirmar que vai participar.",
-    defaultBehavior: "Mensagem curta e direta. Envie o link da reunião. Se não responder até X minutos antes, marcar como risco.",
-  },
-  {
-    stageName: "remarcar",
-    label: "Remarcar",
-    timing: "Quando precisa reagendar",
-    icon: RefreshCw,
-    color: "text-orange-400",
-    bgColor: "bg-orange-500/10",
-    defaultGoal: "Facilitar o reagendamento rápido. Oferecer novas opções de horário. Não perder o lead.",
-    defaultBehavior: "Seja compreensivo. Ofereça 2-3 opções de novo horário. Confirme o novo agendamento imediatamente. Não julgue o motivo.",
-  },
-  {
-    stageName: "perdido",
-    label: "Perdido / No-Show",
-    timing: "Quando não compareceu",
-    icon: XCircle,
-    color: "text-red-400",
-    bgColor: "bg-red-500/10",
-    defaultGoal: "Tentar recuperar o lead com reagendamento. Se não responder após tentativas, encerrar.",
-    defaultBehavior: "Pergunte se aconteceu algo. Ofereça reagendamento. Se após 2-3 tentativas não responder, agradeça e encerre educadamente.",
-  },
-];
+/** Metadata visual/comportamental por etapa (fallback para etapas conhecidas) */
+const STAGE_METADATA: Record<string, { timing: string; icon: LucideIcon; color: string; bgColor: string; defaultGoal: string; defaultBehavior: string }> = {
+  reuniao_marcada: { timing: "Assim que agendar", icon: Calendar, color: "text-blue-400", bgColor: "bg-blue-500/10", defaultGoal: "Enviar mensagem de boas-vindas com os detalhes da reunião (data, hora, link). Confirmar que o lead recebeu.", defaultBehavior: "Seja caloroso e objetivo. Envie os dados da reunião de forma clara. Pergunte se o lead tem alguma dúvida sobre a preparação." },
+  confirmar_d5: { timing: "5 dias antes", icon: Clock, color: "text-cyan-400", bgColor: "bg-cyan-500/10", defaultGoal: "Primeiro lembrete. Confirmar que a reunião continua de pé.", defaultBehavior: "Abordagem leve e amigável. Pergunte se o horário ainda funciona." },
+  confirmar_d3: { timing: "3 dias antes", icon: Clock, color: "text-green-400", bgColor: "bg-green-500/10", defaultGoal: "Segundo lembrete com mais urgência. Reenviar dados da reunião.", defaultBehavior: "Seja direto mas cordial. Reforce o valor da reunião." },
+  confirmar_d2: { timing: "2 dias antes", icon: Clock, color: "text-green-400", bgColor: "bg-green-500/10", defaultGoal: "Lembrete intermediário. Confirmar presença.", defaultBehavior: "Seja direto e cordial." },
+  confirmar_d1: { timing: "1 dia antes", icon: AlertTriangle, color: "text-yellow-400", bgColor: "bg-yellow-500/10", defaultGoal: "Confirmação final. Garantir que o lead está ciente e preparado.", defaultBehavior: "Tom mais urgente. Peça confirmação explícita." },
+  confirmacao_no_dia: { timing: "Dia da reunião", icon: CheckCircle2, color: "text-primary", bgColor: "bg-primary/10", defaultGoal: "Lembrete final no dia. Enviar link novamente.", defaultBehavior: "Mensagem curta e direta. Envie o link da reunião." },
+  remarcar: { timing: "Quando precisa reagendar", icon: RefreshCw, color: "text-orange-400", bgColor: "bg-orange-500/10", defaultGoal: "Facilitar o reagendamento rápido.", defaultBehavior: "Seja compreensivo. Ofereça 2-3 opções de novo horário." },
+  compareceu: { timing: "Quando compareceu", icon: CheckCircle2, color: "text-green-400", bgColor: "bg-green-500/10", defaultGoal: "Confirmar presença e dar boas-vindas.", defaultBehavior: "Seja caloroso e parabenize." },
+  perdido: { timing: "Quando não compareceu", icon: XCircle, color: "text-red-400", bgColor: "bg-red-500/10", defaultGoal: "Tentar recuperar o lead com reagendamento.", defaultBehavior: "Pergunte se aconteceu algo. Ofereça reagendamento." },
+};
+
+const DEFAULT_STAGE_META = { timing: "Nova etapa", icon: Clock, color: "text-muted-foreground", bgColor: "bg-muted/10", defaultGoal: "Definir objetivo para esta etapa", defaultBehavior: "Comportamento padrão do agente" };
+
+interface DynamicStage {
+  stageName: string;
+  label: string;
+  timing: string;
+  icon: LucideIcon;
+  color: string;
+  bgColor: string;
+  defaultGoal: string;
+  defaultBehavior: string;
+}
 
 interface StageConfigCardProps {
-  stage: typeof CONFIRMATION_STAGES[number];
+  stage: DynamicStage;
   ruleIndex: number;
   isOpen: boolean;
   isEnabled: boolean;
@@ -217,26 +171,46 @@ function StageConfigCard({ stage, ruleIndex, isOpen, isEnabled, onToggle, onTogg
 
 export function ConfirmationFunnelStep() {
   const { watch, setValue } = useFormContext<CopilotWizardData>();
+  const { options: confirmacaoStages } = usePipelineStageOptions("confirmacao");
+
+  const dynamicStages = useMemo<DynamicStage[]>(() =>
+    confirmacaoStages.map((stage) => ({
+      stageName: stage.value,
+      label: stage.label,
+      ...(STAGE_METADATA[stage.value] || DEFAULT_STAGE_META),
+    })),
+    [confirmacaoStages]
+  );
+
   const [openStages, setOpenStages] = useState<Record<string, boolean>>({
     reuniao_marcada: true,
   });
 
-  // Todas as etapas habilitadas por padrão na primeira renderização
-  const [enabledStages, setEnabledStages] = useState<Record<string, boolean>>(() => {
-    const initial: Record<string, boolean> = {};
-    CONFIRMATION_STAGES.forEach((s) => {
-      initial[s.stageName] = true;
+  const [enabledStages, setEnabledStages] = useState<Record<string, boolean>>({});
+
+  // Sincronizar enabledStages quando as etapas dinâmicas carregarem
+  useEffect(() => {
+    setEnabledStages((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      dynamicStages.forEach((s) => {
+        if (!(s.stageName in next)) {
+          next[s.stageName] = true;
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
     });
-    return initial;
-  });
+  }, [dynamicStages]);
 
   const rules = watch("kanbanRules") || [];
 
   // Garantir que temos regras para todas as etapas do funil
   const ensureRules = useCallback(() => {
-    if (rules.length >= CONFIRMATION_STAGES.length) return;
+    if (dynamicStages.length === 0) return;
+    if (rules.length >= dynamicStages.length) return;
 
-    const newRules = CONFIRMATION_STAGES.map((stage) => {
+    const newRules = dynamicStages.map((stage) => {
       const existing = rules.find(
         (r: any) => r.stageName === stage.stageName && r.pipeType === "confirmacao"
       );
@@ -251,20 +225,22 @@ export function ConfirmationFunnelStep() {
     });
 
     setValue("kanbanRules", newRules as any);
-  }, [rules, setValue]);
+  }, [rules, setValue, dynamicStages]);
 
   // Inicializar regras se necessário
-  if (rules.length < CONFIRMATION_STAGES.length) {
-    ensureRules();
-  }
+  useEffect(() => {
+    if (dynamicStages.length > 0 && rules.length < dynamicStages.length) {
+      ensureRules();
+    }
+  }, [dynamicStages.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Sincronizar enabledStages com as regras existentes (caso edite um agente salvo)
   useEffect(() => {
-    if (rules.length > 0) {
+    if (rules.length > 0 && dynamicStages.length > 0) {
       const hasDisabled = rules.some((r: any) => r.pipeType === "confirmacao" && r._disabled);
       if (hasDisabled) {
         const restored: Record<string, boolean> = {};
-        CONFIRMATION_STAGES.forEach((s) => {
+        dynamicStages.forEach((s) => {
           const rule = rules.find((r: any) => r.stageName === s.stageName && r.pipeType === "confirmacao");
           restored[s.stageName] = rule ? !rule._disabled : true;
         });
@@ -299,7 +275,7 @@ export function ConfirmationFunnelStep() {
   };
 
   const enabledCount = Object.values(enabledStages).filter(Boolean).length;
-  const totalCount = CONFIRMATION_STAGES.length;
+  const totalCount = dynamicStages.length;
 
   return (
     <div className="space-y-6">
@@ -328,7 +304,7 @@ export function ConfirmationFunnelStep() {
 
       {/* Visual do funil — só mostra etapas habilitadas na trilha visual */}
       <div className="flex items-center gap-1 overflow-x-auto pb-2">
-        {CONFIRMATION_STAGES.map((stage, i) => {
+        {dynamicStages.map((stage, i) => {
           const Icon = stage.icon;
           const enabled = enabledStages[stage.stageName];
           return (
@@ -347,7 +323,7 @@ export function ConfirmationFunnelStep() {
                 <Icon className="w-3 h-3" />
                 {stage.label}
               </button>
-              {i < CONFIRMATION_STAGES.length - 1 && (
+              {i < dynamicStages.length - 1 && (
                 <span className={`mx-1 ${!enabled ? "text-muted-foreground/30" : "text-muted-foreground"}`}>→</span>
               )}
             </div>
@@ -358,7 +334,7 @@ export function ConfirmationFunnelStep() {
       {/* Cards por etapa */}
       <div className="space-y-3">
         <AnimatePresence>
-          {CONFIRMATION_STAGES.map((stage, index) => (
+          {dynamicStages.map((stage, index) => (
             <motion.div
               key={stage.stageName}
               initial={{ opacity: 0, y: 10 }}

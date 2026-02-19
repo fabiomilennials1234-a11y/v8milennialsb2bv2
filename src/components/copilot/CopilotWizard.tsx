@@ -13,21 +13,22 @@
  * - SDR: ~15 steps
  */
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useForm, FormProvider } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronLeft, ChevronRight, Check, X, Eye, Info } from "lucide-react";
+import { ChevronLeft, ChevronRight, Check, X, Eye, Info, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { useCreateCopilotAgent } from "@/hooks/useCopilotAgents";
+import { useCreateCopilotAgent, useCopilotAgentForEdit, useUpdateCopilotAgentFromWizard } from "@/hooks/useCopilotAgents";
 import { useUploadAgentDocument } from "@/hooks/useAgentDocuments";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import type { CopilotWizardData } from "@/types/copilot";
+import type { AgentDocument } from "@/hooks/useAgentDocuments";
 
 import { TemplateStep } from "./wizard-steps/TemplateStep";
 import { getWizardConfig, STEP_REGISTRY } from "./wizard-configs";
@@ -342,12 +343,22 @@ function resolveSteps(config: WizardTypeConfig) {
 }
 
 export function CopilotWizard() {
+  const { id: editAgentId } = useParams<{ id: string }>();
+  const isEditMode = !!editAgentId;
+
   const [currentStep, setCurrentStep] = useState(0);
   const [activeConfig, setActiveConfig] = useState<WizardTypeConfig | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [existingDocuments, setExistingDocuments] = useState<AgentDocument[]>([]);
+  const [documentsToRemove, setDocumentsToRemove] = useState<Array<{ documentId: string; filePath: string }>>([]);
+  const editDataLoaded = useRef(false);
   const navigate = useNavigate();
   const createAgent = useCreateCopilotAgent();
+  const updateAgent = useUpdateCopilotAgentFromWizard();
   const uploadDocument = useUploadAgentDocument();
+
+  // Buscar dados do agente para edição
+  const { data: editData, isLoading: isLoadingEdit } = useCopilotAgentForEdit(editAgentId);
 
   const methods = useForm<CopilotWizardData>({
     resolver: zodResolver(wizardSchema),
@@ -359,8 +370,32 @@ export function CopilotWizard() {
   const { handleSubmit, trigger, formState, getValues, watch, reset } = methods;
   const templateType = watch("templateType");
 
-  // Quando template muda, carregar config e aplicar defaults
+  // Modo edição: carregar dados do agente no form (uma vez)
   useEffect(() => {
+    if (!isEditMode || !editData || editDataLoaded.current) return;
+
+    const { wizardData, existingDocuments: docs } = editData;
+
+    // Carregar config do template
+    const config = getWizardConfig(wizardData.templateType);
+    if (config) {
+      setActiveConfig(config);
+      setCurrentStep(0);
+    }
+
+    // Preencher form com dados existentes
+    reset(wizardData, { keepDirtyValues: false });
+
+    // Guardar documentos existentes
+    setExistingDocuments(docs);
+
+    editDataLoaded.current = true;
+  }, [isEditMode, editData, reset]);
+
+  // Modo criação: quando template muda, carregar config e aplicar defaults
+  useEffect(() => {
+    if (isEditMode) return; // Não interferir no modo edição
+
     if (!templateType) {
       setActiveConfig(null);
       return;
@@ -391,7 +426,7 @@ export function CopilotWizard() {
       // Reset form com novos defaults
       reset(mergedDefaults, { keepDirtyValues: false });
     }
-  }, [templateType, reset]);
+  }, [templateType, reset, isEditMode]);
 
   // Resolver steps da config ativa
   const resolvedSteps = useMemo(() => {
@@ -464,14 +499,21 @@ export function CopilotWizard() {
   }, [currentStep]);
 
   const handleCancel = useCallback(() => {
+    if (isEditMode && formState.isDirty) {
+      const confirmed = window.confirm("Você tem alterações não salvas. Deseja sair?");
+      if (!confirmed) return;
+    }
     navigate("/copilot");
-  }, [navigate]);
+  }, [navigate, isEditMode, formState.isDirty]);
 
   const handleBackToTemplate = useCallback(() => {
     setActiveConfig(null);
     setCurrentStep(0);
     reset(BASE_DEFAULTS);
   }, [reset]);
+
+  // Flag de pending unificada para ambos os modos
+  const isSaving = isEditMode ? updateAgent.isPending : createAgent.isPending;
 
   const onSubmit = async (data: CopilotWizardData) => {
     try {
@@ -495,6 +537,45 @@ export function CopilotWizard() {
         return;
       }
 
+      // =====================================================
+      // MODO EDIÇÃO
+      // =====================================================
+      if (isEditMode && editAgentId) {
+        const updatedAgent = await updateAgent.mutateAsync({
+          agentId: editAgentId,
+          data,
+          documentsToRemove,
+        });
+
+        // Upload de novos documentos da knowledge base (se houver)
+        const filesToUpload = data.knowledgeBaseFiles || [];
+        if (filesToUpload.length > 0 && updatedAgent?.id && updatedAgent?.organization_id) {
+          for (const file of filesToUpload) {
+            try {
+              await uploadDocument.mutateAsync({
+                agentId: updatedAgent.id,
+                organizationId: updatedAgent.organization_id,
+                file,
+              });
+            } catch (uploadErr) {
+              console.error("Erro ao enviar documento:", uploadErr);
+            }
+          }
+        }
+
+        setTimeout(() => {
+          try {
+            navigate("/copilot");
+          } catch (navError) {
+            window.location.href = "/copilot";
+          }
+        }, 500);
+        return;
+      }
+
+      // =====================================================
+      // MODO CRIAÇÃO (fluxo original, intocado)
+      // =====================================================
       const agentPayload: any = {
         name: data.name,
         template_type: data.templateType,
@@ -583,7 +664,9 @@ export function CopilotWizard() {
         }
       }, 500);
     } catch (error: any) {
-      let errorMessage = "Erro desconhecido ao criar o agente";
+      let errorMessage = isEditMode
+        ? "Erro desconhecido ao atualizar o agente"
+        : "Erro desconhecido ao criar o agente";
       if (error?.message) {
         errorMessage = error.message;
       } else if (error?.error?.message) {
@@ -598,15 +681,27 @@ export function CopilotWizard() {
         errorMessage = "Coluna não encontrada no banco. Execute a migration pendente.";
       }
 
-      toast.error("Erro ao criar Copilot", {
+      toast.error(isEditMode ? "Erro ao atualizar Copilot" : "Erro ao criar Copilot", {
         description: errorMessage,
         duration: 10000,
       });
     }
   };
 
-  // Fase 1: Seleção de template (sem config ativa)
-  if (!activeConfig) {
+  // Loading state para modo edição
+  if (isEditMode && isLoadingEdit) {
+    return (
+      <div className="min-h-screen bg-background p-6">
+        <div className="max-w-4xl mx-auto flex flex-col items-center justify-center py-20">
+          <Loader2 className="w-8 h-8 animate-spin text-primary mb-4" />
+          <p className="text-muted-foreground">Carregando dados do copilot...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Fase 1: Seleção de template (sem config ativa) — apenas modo criação
+  if (!activeConfig && !isEditMode) {
     return (
       <div className="min-h-screen bg-background p-6">
         <div className="max-w-4xl mx-auto">
@@ -644,6 +739,18 @@ export function CopilotWizard() {
     );
   }
 
+  // Se modo edição e config ainda não carregou, aguardar
+  if (!activeConfig) {
+    return (
+      <div className="min-h-screen bg-background p-6">
+        <div className="max-w-4xl mx-auto flex flex-col items-center justify-center py-20">
+          <Loader2 className="w-8 h-8 animate-spin text-primary mb-4" />
+          <p className="text-muted-foreground">Preparando wizard...</p>
+        </div>
+      </div>
+    );
+  }
+
   // Fase 2: Wizard config-driven
   return (
     <div className="min-h-screen bg-background p-6">
@@ -655,10 +762,12 @@ export function CopilotWizard() {
           className="mb-8"
         >
           <h1 className="text-3xl font-bold text-primary mb-2">
-            {activeConfig.label}
+            {isEditMode ? `Editar: ${activeConfig.label}` : activeConfig.label}
           </h1>
           <p className="text-muted-foreground">
-            {activeConfig.description} — {totalSteps} etapas
+            {isEditMode
+              ? `Editando copilot — ${totalSteps} etapas`
+              : `${activeConfig.description} — ${totalSteps} etapas`}
           </p>
         </motion.div>
 
@@ -761,32 +870,32 @@ export function CopilotWizard() {
                   type="button"
                   variant="outline"
                   onClick={handleCancel}
-                  disabled={createAgent.isPending}
+                  disabled={isSaving}
                 >
                   <X className="w-4 h-4 mr-2" />
                   Cancelar
                 </Button>
-                {currentStep === 0 ? (
+                {currentStep === 0 && !isEditMode ? (
                   <Button
                     type="button"
                     variant="outline"
                     onClick={handleBackToTemplate}
-                    disabled={createAgent.isPending}
+                    disabled={isSaving}
                   >
                     <ChevronLeft className="w-4 h-4 mr-2" />
                     Trocar Tipo
                   </Button>
-                ) : (
+                ) : currentStep > 0 ? (
                   <Button
                     type="button"
                     variant="outline"
                     onClick={handlePrevious}
-                    disabled={createAgent.isPending}
+                    disabled={isSaving}
                   >
                     <ChevronLeft className="w-4 h-4 mr-2" />
                     Anterior
                   </Button>
-                )}
+                ) : null}
               </div>
 
               <div className="flex gap-2">
@@ -802,15 +911,15 @@ export function CopilotWizard() {
                 {isLastStep ? (
                   <Button
                     type="button"
-                    disabled={createAgent.isPending}
+                    disabled={isSaving}
                     onClick={() => handleSubmit(onSubmit)()}
                     className="bg-primary hover:bg-primary/90 text-primary-foreground"
                   >
-                    {createAgent.isPending ? (
-                      "Criando..."
+                    {isSaving ? (
+                      isEditMode ? "Salvando..." : "Criando..."
                     ) : (
                       <>
-                        Criar Copilot
+                        {isEditMode ? "Salvar Alterações" : "Criar Copilot"}
                         <Check className="w-4 h-4 ml-2" />
                       </>
                     )}

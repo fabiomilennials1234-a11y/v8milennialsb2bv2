@@ -42,41 +42,7 @@ import { Zap, MessageCircle, Clock, UserPlus, Plus, X, ArrowRightCircle } from "
 import { useState } from "react";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
 import type { CopilotWizardData } from "@/types/copilot";
-import {
-  PIPE_CONFIRMACAO_STAGES,
-  PIPE_PROPOSTAS_STAGES,
-} from "@/types/copilot";
-
-const PIPE_CONFIRMACAO_LABELS: Record<string, string> = {
-  reuniao_marcada: "Reunião marcada",
-  confirmar_d3: "Confirmar D-3",
-  confirmar_d2: "Confirmar D-2",
-  confirmar_d1: "Confirmar D-1",
-  pre_confirmada: "Pré-confirmada",
-  confirmacao_no_dia: "Confirmação no dia",
-  confirmada_no_dia: "Confirmada no dia",
-  compareceu: "Compareceu",
-  perdido: "Perdido",
-};
-const PIPE_PROPOSTAS_LABELS: Record<string, string> = {
-  marcar_compromisso: "Marcar compromisso",
-  compromisso_marcado: "Compromisso marcado",
-  esfriou: "Esfriou",
-  futuro: "Futuro",
-  vendido: "Vendido",
-  perdido: "Perdido",
-};
-
-const STAGES = [
-  { value: "novo", label: "Novo" },
-  { value: "abordado", label: "Abordado" },
-  { value: "respondeu", label: "Respondeu" },
-  { value: "qualificado", label: "Qualificado" },
-  { value: "agendado", label: "Agendado" },
-  { value: "aguardando_humano", label: "Aguardando Humano" },
-  { value: "descartado", label: "Descartado" },
-  { value: "esfriou", label: "Esfriou" },
-];
+import { usePipelineStageOptions } from "@/hooks/usePipelineStages";
 
 interface ActionSectionProps {
   title: string;
@@ -96,6 +62,9 @@ function ActionSection({
   const { control, watch, setValue } = useFormContext<CopilotWizardData>();
   const [newTag, setNewTag] = useState("");
   const { data: teamMembers = [] } = useTeamMembers();
+  const { options: whatsappStageOptions } = usePipelineStageOptions("whatsapp");
+  const { options: confirmacaoOptions } = usePipelineStageOptions("confirmacao");
+  const { options: propostasOptions } = usePipelineStageOptions("propostas");
 
   const tags = watch(`automationActions.${prefix}.addTags`) || [];
   const sendMessage = watch(`automationActions.${prefix}.sendMessage`);
@@ -153,7 +122,7 @@ function ActionSection({
                 </FormControl>
                 <SelectContent>
                   <SelectItem value="__none__">Não mover</SelectItem>
-                  {STAGES.map((stage) => (
+                  {whatsappStageOptions.map((stage) => (
                     <SelectItem key={stage.value} value={stage.value}>
                       {stage.label}
                     </SelectItem>
@@ -182,8 +151,8 @@ function ActionSection({
                 } else {
                   const defaultStage =
                     v === "confirmacao"
-                      ? PIPE_CONFIRMACAO_STAGES[0]
-                      : PIPE_PROPOSTAS_STAGES[0];
+                      ? confirmacaoOptions[0]?.value || ""
+                      : propostasOptions[0]?.value || "";
                   setValue(
                     `automationActions.${prefix}.moveToPipe`,
                     { pipe: v as "confirmacao" | "propostas", stage: defaultStage },
@@ -217,13 +186,11 @@ function ActionSection({
                 </SelectTrigger>
                 <SelectContent>
                   {(moveToPipe.pipe === "confirmacao"
-                    ? PIPE_CONFIRMACAO_STAGES
-                    : PIPE_PROPOSTAS_STAGES
+                    ? confirmacaoOptions
+                    : propostasOptions
                   ).map((s) => (
-                    <SelectItem key={s} value={s}>
-                      {moveToPipe.pipe === "confirmacao"
-                        ? PIPE_CONFIRMACAO_LABELS[s] ?? s
-                        : PIPE_PROPOSTAS_LABELS[s] ?? s}
+                    <SelectItem key={s.value} value={s.value}>
+                      {s.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
