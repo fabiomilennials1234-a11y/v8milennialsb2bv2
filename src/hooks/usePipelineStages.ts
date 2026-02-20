@@ -30,8 +30,11 @@ export interface PipelineStageInsert {
   is_final_negative?: boolean;
 }
 
+// Controle para garantir que etapas padrão existam no banco (uma vez por sessão)
+const defaultsEnsuredForSession = new Set<string>();
+
 // Etapas padrão (fallback se não houver no banco)
-const DEFAULT_STAGES: Record<PipelineType, { id: string; title: string; color: string }[]> = {
+export const DEFAULT_STAGES: Record<PipelineType, { id: string; title: string; color: string }[]> = {
   whatsapp: [
     { id: "novo", title: "Novo", color: "#6366f1" },
     { id: "abordado", title: "Abordado", color: "#f59e0b" },
@@ -87,7 +90,32 @@ export function usePipelineStages(pipelineType: PipelineType) {
         }));
       }
 
+      const fallbackStages = DEFAULT_STAGES[pipelineType].map((stage, index) => ({
+        id: stage.id,
+        stage_key: stage.id,
+        name: stage.title,
+        color: stage.color,
+        position: index,
+        is_active: true,
+        is_final_positive: false,
+        is_final_negative: false,
+      }));
+
       try {
+        // Garantir que etapas padrão existam no banco (uma vez por sessão).
+        // Resolve o cenário onde a organização não tem etapas padrão criadas,
+        // fazendo o sistema depender de um fallback em memória que não é persistido.
+        // A função SQL usa ON CONFLICT DO NOTHING, então é idempotente e segura.
+        const ensureKey = `${organizationId}:${pipelineType}`;
+        if (!defaultsEnsuredForSession.has(ensureKey)) {
+          defaultsEnsuredForSession.add(ensureKey);
+          try {
+            await supabase.rpc("create_default_pipeline_stages", { org_id: organizationId });
+          } catch (rpcErr) {
+            console.warn("Error ensuring default stages:", rpcErr);
+          }
+        }
+
         const { data, error } = await supabase
           .from("pipeline_stages")
           .select("*")
@@ -99,46 +127,19 @@ export function usePipelineStages(pipelineType: PipelineType) {
         // Se houver erro (tabela não existe, etc), usa fallback
         if (error) {
           console.warn("Pipeline stages table not available, using defaults:", error.message);
-          return DEFAULT_STAGES[pipelineType].map((stage, index) => ({
-            id: stage.id,
-            stage_key: stage.id,
-            name: stage.title,
-            color: stage.color,
-            position: index,
-            is_active: true,
-            is_final_positive: false,
-            is_final_negative: false,
-          }));
+          return fallbackStages;
         }
 
-        // Se não houver etapas, retornar as padrão
+        // Se não houver etapas (mesmo após ensure), usar fallback
         if (!data || data.length === 0) {
-          return DEFAULT_STAGES[pipelineType].map((stage, index) => ({
-            id: stage.id,
-            stage_key: stage.id,
-            name: stage.title,
-            color: stage.color,
-            position: index,
-            is_active: true,
-            is_final_positive: false,
-            is_final_negative: false,
-          }));
+          return fallbackStages;
         }
 
         return data as PipelineStage[];
       } catch (err) {
         // Fallback em caso de qualquer erro
         console.warn("Error fetching pipeline stages, using defaults:", err);
-        return DEFAULT_STAGES[pipelineType].map((stage, index) => ({
-          id: stage.id,
-          stage_key: stage.id,
-          name: stage.title,
-          color: stage.color,
-          position: index,
-          is_active: true,
-          is_final_positive: false,
-          is_final_negative: false,
-        }));
+        return fallbackStages;
       }
     },
     enabled: true,
@@ -193,6 +194,16 @@ export function useCreatePipelineStage() {
     mutationFn: async (stage: PipelineStageInsert) => {
       if (!teamMember?.organization_id) {
         throw new Error("Organização não encontrada");
+      }
+
+      // Garantir que etapas padrão existam no banco antes de criar nova etapa.
+      // Isso previne o bug onde criar uma etapa fazia as padrão (fallback) sumirem,
+      // pois o fallback só é ativado quando não há nenhuma etapa no banco.
+      // A função SQL usa ON CONFLICT DO NOTHING, então é idempotente e segura.
+      try {
+        await supabase.rpc("create_default_pipeline_stages", { org_id: teamMember.organization_id });
+      } catch (rpcErr) {
+        console.warn("Error ensuring default stages before create:", rpcErr);
       }
 
       const { data, error } = await supabase
