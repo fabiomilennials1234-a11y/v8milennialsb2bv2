@@ -306,7 +306,11 @@ export function CampanhaDispatchRulesSection({ campanhaId, stages, embedded }: C
         toast.error(error.message || "Erro ao processar fila");
         return;
       }
-      const result = data as { processed?: number; sent?: number; failed?: number; actions_executed?: number; message?: string } | null;
+      const result = data as { success?: boolean; processed?: number; sent?: number; failed?: number; actions_executed?: number; message?: string; error?: string } | null;
+      if (result?.error) {
+        toast.error(`Erro ao processar fila: ${result.error}`);
+        return;
+      }
       if (result?.processed === 0 && !result?.actions_executed) {
         toast.info(result?.message || "Nenhuma mensagem pendente");
       } else if (result?.processed != null) {

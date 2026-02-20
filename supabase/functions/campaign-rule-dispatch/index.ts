@@ -98,9 +98,10 @@ Deno.serve(async (req) => {
     if (campanhaId) {
       console.log("[campaign-rule-dispatch] Single campaign mode:", campanhaId);
       const result = await processCampaignQueue(supabase, campanhaId);
+      const hasError = !!result.error;
       return new Response(
-        JSON.stringify({ success: true, ...result }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ success: !hasError, ...result }),
+        { status: hasError ? 500 : 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     } else {
       console.log("[campaign-rule-dispatch] Multi-campaign mode (isolated)");
