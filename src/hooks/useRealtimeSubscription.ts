@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -7,6 +7,13 @@ export function useRealtimeSubscription(
   queryKeys: string[]
 ) {
   const queryClient = useQueryClient();
+  // Manter referência estável das queryKeys para evitar subscribe/unsubscribe
+  // constante no useEffect (arrays criam referência nova a cada render)
+  const queryKeysRef = useRef(queryKeys);
+  queryKeysRef.current = queryKeys;
+
+  // Serializar para usar como dependência estável
+  const queryKeysKey = JSON.stringify(queryKeys);
 
   useEffect(() => {
     const channel = supabase
@@ -15,7 +22,7 @@ export function useRealtimeSubscription(
         "postgres_changes",
         { event: "*", schema: "public", table },
         () => {
-          queryKeys.forEach((key) => {
+          queryKeysRef.current.forEach((key) => {
             queryClient.invalidateQueries({ queryKey: [key] });
           });
         }
@@ -25,5 +32,6 @@ export function useRealtimeSubscription(
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [table, queryClient, queryKeys]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [table, queryClient, queryKeysKey]);
 }
