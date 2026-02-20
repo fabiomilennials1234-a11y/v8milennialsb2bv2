@@ -622,6 +622,7 @@ export default function PipeWhatsapp() {
         await createPipeConfirmacao.mutateAsync({
           lead_id: item.lead_id,
           sdr_id: item.sdr_id,
+          closer_id: item.lead?.closer?.id || null,
           status: "reuniao_marcada",
           meeting_date: item.scheduled_date,
         });
