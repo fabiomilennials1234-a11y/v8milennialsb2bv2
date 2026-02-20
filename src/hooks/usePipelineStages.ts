@@ -33,14 +33,22 @@ export interface PipelineStageInsert {
 // Controle para garantir que etapas padrão existam no banco (uma vez por sessão)
 const defaultsEnsuredForSession = new Set<string>();
 
-// Etapas padrão (fallback se não houver no banco)
-export const DEFAULT_STAGES: Record<PipelineType, { id: string; title: string; color: string }[]> = {
+// Etapas padrão com flags de etapa final (fallback + seed no banco)
+interface DefaultStage {
+  id: string;
+  title: string;
+  color: string;
+  is_final_positive?: boolean;
+  is_final_negative?: boolean;
+}
+
+export const DEFAULT_STAGES: Record<PipelineType, DefaultStage[]> = {
   whatsapp: [
     { id: "novo", title: "Novo", color: "#6366f1" },
     { id: "abordado", title: "Abordado", color: "#f59e0b" },
     { id: "respondeu", title: "Respondeu", color: "#3b82f6" },
     { id: "esfriou", title: "Esfriou", color: "#ef4444" },
-    { id: "agendado", title: "Agendado ✓", color: "#22c55e" },
+    { id: "agendado", title: "Agendado ✓", color: "#22c55e", is_final_positive: true },
   ],
   confirmacao: [
     { id: "reuniao_marcada", title: "Reunião Marcada", color: "#6366f1" },
@@ -50,8 +58,8 @@ export const DEFAULT_STAGES: Record<PipelineType, { id: string; title: string; c
     { id: "confirmar_d1", title: "Confirmar D-1", color: "#f97316" },
     { id: "confirmacao_no_dia", title: "Confirmação no Dia", color: "#ef4444" },
     { id: "remarcar", title: "Remarcar 📅", color: "#f97316" },
-    { id: "compareceu", title: "Compareceu ✓", color: "#22c55e" },
-    { id: "perdido", title: "Perdido ✗", color: "#ef4444" },
+    { id: "compareceu", title: "Compareceu ✓", color: "#22c55e", is_final_positive: true },
+    { id: "perdido", title: "Perdido ✗", color: "#ef4444", is_final_negative: true },
   ],
   propostas: [
     { id: "marcar_compromisso", title: "Marcar Compromisso", color: "#F5C518" },
@@ -59,10 +67,46 @@ export const DEFAULT_STAGES: Record<PipelineType, { id: string; title: string; c
     { id: "compromisso_marcado", title: "Compromisso Marcado", color: "#3B82F6" },
     { id: "esfriou", title: "Esfriou", color: "#64748B" },
     { id: "futuro", title: "Futuro", color: "#8B5CF6" },
-    { id: "vendido", title: "Vendido ✓", color: "#22C55E" },
-    { id: "perdido", title: "Perdido", color: "#EF4444" },
+    { id: "vendido", title: "Vendido ✓", color: "#22C55E", is_final_positive: true },
+    { id: "perdido", title: "Perdido", color: "#EF4444", is_final_negative: true },
   ],
 };
+
+/**
+ * Garante que as etapas padrão de TODOS os pipelines existam no banco para uma organização.
+ * Usa upsert com ignoreDuplicates (ON CONFLICT DO NOTHING), então é idempotente e segura.
+ */
+async function ensureDefaultStagesInDb(organizationId: string) {
+  const allStages: Record<string, unknown>[] = [];
+
+  for (const pipeType of ["whatsapp", "confirmacao", "propostas"] as PipelineType[]) {
+    for (let i = 0; i < DEFAULT_STAGES[pipeType].length; i++) {
+      const stage = DEFAULT_STAGES[pipeType][i];
+      allStages.push({
+        organization_id: organizationId,
+        pipeline_type: pipeType,
+        stage_key: stage.id,
+        name: stage.title,
+        color: stage.color,
+        position: i,
+        is_active: true,
+        is_final_positive: stage.is_final_positive ?? false,
+        is_final_negative: stage.is_final_negative ?? false,
+      });
+    }
+  }
+
+  const { error } = await supabase
+    .from("pipeline_stages")
+    .upsert(allStages, {
+      onConflict: "organization_id,pipeline_type,stage_key",
+      ignoreDuplicates: true,
+    });
+
+  if (error) {
+    console.warn("Error ensuring default stages via upsert:", error.message);
+  }
+}
 
 /**
  * Hook para buscar etapas de um pipeline específico
@@ -105,15 +149,11 @@ export function usePipelineStages(pipelineType: PipelineType) {
         // Garantir que etapas padrão existam no banco (uma vez por sessão).
         // Resolve o cenário onde a organização não tem etapas padrão criadas,
         // fazendo o sistema depender de um fallback em memória que não é persistido.
-        // A função SQL usa ON CONFLICT DO NOTHING, então é idempotente e segura.
-        const ensureKey = `${organizationId}:${pipelineType}`;
+        // Usa upsert direto com ignoreDuplicates (ON CONFLICT DO NOTHING).
+        const ensureKey = `${organizationId}`;
         if (!defaultsEnsuredForSession.has(ensureKey)) {
           defaultsEnsuredForSession.add(ensureKey);
-          try {
-            await supabase.rpc("create_default_pipeline_stages", { org_id: organizationId });
-          } catch (rpcErr) {
-            console.warn("Error ensuring default stages:", rpcErr);
-          }
+          await ensureDefaultStagesInDb(organizationId);
         }
 
         const { data, error } = await supabase
@@ -199,12 +239,7 @@ export function useCreatePipelineStage() {
       // Garantir que etapas padrão existam no banco antes de criar nova etapa.
       // Isso previne o bug onde criar uma etapa fazia as padrão (fallback) sumirem,
       // pois o fallback só é ativado quando não há nenhuma etapa no banco.
-      // A função SQL usa ON CONFLICT DO NOTHING, então é idempotente e segura.
-      try {
-        await supabase.rpc("create_default_pipeline_stages", { org_id: teamMember.organization_id });
-      } catch (rpcErr) {
-        console.warn("Error ensuring default stages before create:", rpcErr);
-      }
+      await ensureDefaultStagesInDb(teamMember.organization_id);
 
       const { data, error } = await supabase
         .from("pipeline_stages")
