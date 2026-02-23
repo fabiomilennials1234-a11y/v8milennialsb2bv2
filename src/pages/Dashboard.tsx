@@ -26,11 +26,15 @@ import { PriorityLeads } from "@/components/dashboard/PriorityLeads";
 import { useDashboardMetrics, useFunnelData, useRankingData, useConversionRates } from "@/hooks/useDashboardMetrics";
 import { useTeamGoals } from "@/hooks/useGoals";
 import { useAuth } from "@/contexts/AuthContext";
+import { useOrganization } from "@/hooks/useOrganization";
+import { useUserRole } from "@/hooks/useUserRole";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import boltIcon from "@/assets/bolt-icon.png";
+import DashboardBDR from "./DashboardBDR";
+import DashboardCliente from "./DashboardCliente";
 
 function formatCurrency(value: number): string {
   if (value >= 1000000) return `R$ ${(value / 1000000).toFixed(1)}M`;
@@ -40,6 +44,10 @@ function formatCurrency(value: number): string {
 
 export default function Dashboard() {
   const { user } = useAuth();
+  const { orgType } = useOrganization();
+  const { data: userRole } = useUserRole();
+  const role = userRole?.role;
+
   const now = new Date();
   const month = now.getMonth() + 1;
   const year = now.getFullYear();
@@ -47,11 +55,19 @@ export default function Dashboard() {
   const daysInMonth = new Date(year, month, 0).getDate();
   const expectedProgress = (dayOfMonth / daysInMonth) * 100;
 
+  // Hooks devem ser chamados ANTES de qualquer return condicional (Rules of Hooks)
   const { data: metrics, isLoading: metricsLoading } = useDashboardMetrics(month, year);
   const { data: funnelData, isLoading: funnelLoading } = useFunnelData(month, year);
   const { data: rankingData, isLoading: rankingLoading } = useRankingData(month, year);
   const { data: conversionRates, isLoading: conversionLoading } = useConversionRates(month, year);
   const { data: teamGoals, isLoading: goalsLoading } = useTeamGoals(month, year);
+
+  // Roteamento condicional para orgs OUTBOUND (após todos os hooks)
+  if (orgType === "outbound") {
+    if (role === "bdr") return <DashboardBDR />;
+    if (role === "cliente") return <DashboardCliente />;
+    // agency → usa o dashboard padrão (abaixo)
+  }
 
   const userName = user?.user_metadata?.full_name?.split(" ")[0] || user?.email?.split("@")[0] || "Usuário";
 

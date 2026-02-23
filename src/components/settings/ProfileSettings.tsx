@@ -1,6 +1,5 @@
-import { useState } from "react";
-import { motion } from "framer-motion";
-import { User, Mail, Camera, Save, Shield } from "lucide-react";
+import { useState, useRef } from "react";
+import { User, Mail, Camera, Save, Shield, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,17 +7,25 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserRole } from "@/hooks/useUserRole";
+import { supabase } from "@/integrations/supabase/client";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 export function ProfileSettings() {
   const { user } = useAuth();
   const { data: userRole } = useUserRole();
-  
+  const queryClient = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const [formData, setFormData] = useState({
     full_name: user?.user_metadata?.full_name || "",
     email: user?.email || "",
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(
+    user?.user_metadata?.avatar_url || null
+  );
 
   const initials = formData.full_name
     ? formData.full_name.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase()
@@ -32,10 +39,83 @@ export function ProfileSettings() {
 
   const roleConfig = roleLabels[userRole?.role || ""] || { label: "Usuário", color: "" };
 
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user?.id) return;
+
+    // Validar tipo e tamanho
+    if (!file.type.startsWith("image/")) {
+      toast.error("Por favor, selecione uma imagem");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("A imagem deve ter no máximo 5MB");
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      const ext = file.name.split(".").pop() || "jpg";
+      const path = `avatars/${user.id}.${ext}`;
+
+      // Upload para Supabase Storage
+      const { error: uploadError } = await supabase.storage
+        .from("media")
+        .upload(path, file, {
+          contentType: file.type,
+          upsert: true,
+        });
+
+      if (uploadError) throw uploadError;
+
+      // Obter URL pública
+      const { data: urlData } = supabase.storage
+        .from("media")
+        .getPublicUrl(path);
+
+      const publicUrl = urlData.publicUrl;
+
+      // Salvar no profiles
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .update({ avatar_url: publicUrl })
+        .eq("id", user.id);
+
+      if (profileError) throw profileError;
+
+      // Atualizar user_metadata
+      await supabase.auth.updateUser({
+        data: { avatar_url: publicUrl },
+      });
+
+      setAvatarUrl(publicUrl);
+      queryClient.invalidateQueries({ queryKey: ["avatar-map"] });
+      queryClient.invalidateQueries({ queryKey: ["profiles"] });
+      toast.success("Foto de perfil atualizada!");
+    } catch (error: any) {
+      console.error("Erro ao fazer upload:", error);
+      toast.error(error.message || "Erro ao fazer upload da foto");
+    } finally {
+      setIsUploading(false);
+      // Limpar o input para permitir re-upload do mesmo arquivo
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
   const handleSave = async () => {
     setIsLoading(true);
     try {
-      // Here you would update the user profile
+      // Atualizar nome no profiles
+      if (user?.id) {
+        await supabase
+          .from("profiles")
+          .update({ full_name: formData.full_name })
+          .eq("id", user.id);
+
+        await supabase.auth.updateUser({
+          data: { full_name: formData.full_name },
+        });
+      }
       toast.success("Perfil atualizado com sucesso!");
     } catch (error) {
       toast.error("Erro ao atualizar perfil");
@@ -57,13 +137,28 @@ export function ProfileSettings() {
       <div className="flex items-center gap-6">
         <div className="relative">
           <Avatar className="w-20 h-20">
-            <AvatarImage src={user?.user_metadata?.avatar_url} />
+            <AvatarImage src={avatarUrl || undefined} />
             <AvatarFallback className="text-2xl bg-primary text-primary-foreground">
               {initials}
             </AvatarFallback>
           </Avatar>
-          <button className="absolute bottom-0 right-0 p-1.5 bg-primary text-primary-foreground rounded-full hover:bg-primary/90 transition-colors">
-            <Camera className="w-3 h-3" />
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleAvatarUpload}
+          />
+          <button
+            className="absolute bottom-0 right-0 p-1.5 bg-primary text-primary-foreground rounded-full hover:bg-primary/90 transition-colors disabled:opacity-50"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isUploading}
+          >
+            {isUploading ? (
+              <Loader2 className="w-3 h-3 animate-spin" />
+            ) : (
+              <Camera className="w-3 h-3" />
+            )}
           </button>
         </div>
         <div>
@@ -126,7 +221,7 @@ export function ProfileSettings() {
           <div>
             <p className="text-muted-foreground">Criado em</p>
             <p className="mt-1">
-              {user?.created_at 
+              {user?.created_at
                 ? new Date(user.created_at).toLocaleDateString('pt-BR')
                 : '-'
               }
@@ -135,7 +230,7 @@ export function ProfileSettings() {
           <div>
             <p className="text-muted-foreground">Último Login</p>
             <p className="mt-1">
-              {user?.last_sign_in_at 
+              {user?.last_sign_in_at
                 ? new Date(user.last_sign_in_at).toLocaleDateString('pt-BR')
                 : '-'
               }

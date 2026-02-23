@@ -17,7 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { openWhatsApp, formatPhoneForWhatsApp } from "@/lib/whatsapp";
-import { format, isToday, isTomorrow, isPast, differenceInHours, differenceInDays } from "date-fns";
+import { format, isToday, isTomorrow, isPast, differenceInHours, differenceInDays, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { isConfirmacaoOverdue } from "@/hooks/useOrganizationSettings";
 import { QuickAddDailyAction } from "./QuickAddDailyAction";
@@ -53,6 +53,7 @@ interface ConfirmacaoCardProps {
     isConfirmed?: boolean;
     updatedAt?: string | null;
     overdueDays?: number;
+    createdAt?: string;
   };
   onClick?: () => void;
   variant?: "default" | "compact" | "detailed";
@@ -422,7 +423,13 @@ export function ConfirmacaoCard({ card, onClick, variant = "default" }: Confirma
         </div>
       )}
 
-      {/* Confirmation Button + Responsáveis */}
+      {/* Entry Timer + Confirmation Button + Responsáveis */}
+      {card.createdAt && (
+        <div className="flex items-center gap-1 text-[10px] text-muted-foreground mb-2">
+          <Clock className="w-3 h-3" />
+          <span>{formatDistanceToNow(new Date(card.createdAt), { addSuffix: true, locale: ptBR })}</span>
+        </div>
+      )}
       <div className="flex items-center justify-between pt-2 border-t border-border">
         <div className="flex items-center gap-3">
           {/* Confirmation Toggle Button */}

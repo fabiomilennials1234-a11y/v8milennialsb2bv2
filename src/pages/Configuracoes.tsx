@@ -18,6 +18,7 @@ import {
   MessageSquare,
   Calendar,
   Webhook,
+  Award,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -50,11 +51,14 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useTags, useCreateTag, useUpdateTag, useDeleteTag, Tag as TagType } from "@/hooks/useTags";
-import { useIsAdmin } from "@/hooks/useUserRole";
+import { useIsAdmin, useIsAgency } from "@/hooks/useUserRole";
+import { useOrganization } from "@/hooks/useOrganization";
 import { useOrganizationSettings } from "@/hooks/useOrganizationSettings";
 import { WhatsAppSettings } from "@/components/settings/WhatsAppSettings";
 import { GoogleCalendarSettings } from "@/components/settings/GoogleCalendarSettings";
 import { WebhookSettings } from "@/components/settings/WebhookSettings";
+import { ClienteSidebarConfig } from "@/components/settings/ClienteSidebarConfig";
+import { BadgesConfig } from "@/components/settings/BadgesConfig";
 import { toast } from "sonner";
 
 const colorOptions = [
@@ -462,6 +466,13 @@ function GeneralSettings() {
 }
 
 export default function Configuracoes() {
+  const { orgType } = useOrganization();
+  const { isAgency } = useIsAgency();
+  const isOutbound = orgType === "outbound";
+  const showClienteTab = isOutbound && isAgency;
+  const showBadgesTab = isOutbound && isAgency;
+  const extraTabs = (showClienteTab ? 1 : 0) + (showBadgesTab ? 1 : 0);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -480,7 +491,7 @@ export default function Configuracoes() {
       </div>
 
       <Tabs defaultValue="tags" className="w-full">
-        <TabsList className="grid w-full max-w-3xl grid-cols-6">
+        <TabsList className={`grid w-full max-w-4xl ${extraTabs === 2 ? "grid-cols-8" : extraTabs === 1 ? "grid-cols-7" : "grid-cols-6"}`}>
           <TabsTrigger value="tags" className="gap-2">
             <Tag className="w-4 h-4" />
             Tags
@@ -505,6 +516,18 @@ export default function Configuracoes() {
             <Settings className="w-4 h-4" />
             Geral
           </TabsTrigger>
+          {showClienteTab && (
+            <TabsTrigger value="cliente-acesso" className="gap-2">
+              <Users className="w-4 h-4" />
+              Cliente
+            </TabsTrigger>
+          )}
+          {showBadgesTab && (
+            <TabsTrigger value="badges" className="gap-2">
+              <Award className="w-4 h-4" />
+              Badges
+            </TabsTrigger>
+          )}
         </TabsList>
 
         <div className="mt-6">
@@ -555,6 +578,26 @@ export default function Configuracoes() {
               </CardContent>
             </Card>
           </TabsContent>
+
+          {showClienteTab && (
+            <TabsContent value="cliente-acesso">
+              <Card className="glass-card">
+                <CardContent className="pt-6">
+                  <ClienteSidebarConfig />
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
+
+          {showBadgesTab && (
+            <TabsContent value="badges">
+              <Card className="glass-card">
+                <CardContent className="pt-6">
+                  <BadgesConfig />
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
         </div>
       </Tabs>
 

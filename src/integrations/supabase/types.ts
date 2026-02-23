@@ -3523,6 +3523,8 @@ export type Database = {
       }
       pipeline_stages: {
         Row: {
+          auto_move_min_days: number | null
+          auto_move_max_days: number | null
           color: string | null
           created_at: string | null
           id: string
@@ -3537,6 +3539,8 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          auto_move_min_days?: number | null
+          auto_move_max_days?: number | null
           color?: string | null
           created_at?: string | null
           id?: string
@@ -3551,6 +3555,8 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          auto_move_min_days?: number | null
+          auto_move_max_days?: number | null
           color?: string | null
           created_at?: string | null
           id?: string
@@ -4621,6 +4627,353 @@ export type Database = {
           },
         ]
       }
+      upsell_clients: {
+        Row: {
+          id: string
+          organization_id: string
+          lead_id: string
+          name: string
+          company: string | null
+          email: string | null
+          phone: string | null
+          potencial: Database["public"]["Enums"]["upsell_potencial"]
+          tipo_cliente_tempo: string
+          gestao_stage: string
+          gestao_manual_override: boolean
+          is_active: boolean
+          closer_id: string | null
+          first_sale_at: string
+          churned_at: string | null
+          reactivated_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          lead_id: string
+          name: string
+          company?: string | null
+          email?: string | null
+          phone?: string | null
+          potencial?: Database["public"]["Enums"]["upsell_potencial"]
+          tipo_cliente_tempo?: string
+          gestao_stage?: string
+          gestao_manual_override?: boolean
+          is_active?: boolean
+          closer_id?: string | null
+          first_sale_at?: string
+          churned_at?: string | null
+          reactivated_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          lead_id?: string
+          name?: string
+          company?: string | null
+          email?: string | null
+          phone?: string | null
+          potencial?: Database["public"]["Enums"]["upsell_potencial"]
+          tipo_cliente_tempo?: string
+          gestao_stage?: string
+          gestao_manual_override?: boolean
+          is_active?: boolean
+          closer_id?: string | null
+          first_sale_at?: string
+          churned_at?: string | null
+          reactivated_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "upsell_clients_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "upsell_clients_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "upsell_clients_closer_id_fkey"
+            columns: ["closer_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      upsell_gestao_rules: {
+        Row: {
+          id: string
+          organization_id: string
+          base_stage_key: string
+          gestao_from_stage: string
+          gestao_to_stage: string
+          position: number
+          is_active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          base_stage_key: string
+          gestao_from_stage: string
+          gestao_to_stage: string
+          position?: number
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          base_stage_key?: string
+          gestao_from_stage?: string
+          gestao_to_stage?: string
+          position?: number
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "upsell_gestao_rules_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      upsell_client_products: {
+        Row: {
+          id: string
+          client_id: string
+          product_id: string | null
+          product_name: string
+          product_type: string
+          sale_value: number
+          contract_duration: number | null
+          status: string
+          started_at: string
+          cancelled_at: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          client_id: string
+          product_id?: string | null
+          product_name: string
+          product_type: string
+          sale_value: number
+          contract_duration?: number | null
+          status?: string
+          started_at?: string
+          cancelled_at?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          client_id?: string
+          product_id?: string | null
+          product_name?: string
+          product_type?: string
+          sale_value?: number
+          contract_duration?: number | null
+          status?: string
+          started_at?: string
+          cancelled_at?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "upsell_client_products_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "upsell_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "upsell_client_products_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      upsell_campanhas: {
+        Row: {
+          id: string
+          organization_id: string
+          client_id: string
+          closer_id: string | null
+          status: Database["public"]["Enums"]["upsell_campanha_status"]
+          mrr_planejado: number | null
+          projeto_planejado: number | null
+          data_abordagem: string | null
+          data_venda: string | null
+          notes: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          client_id: string
+          closer_id?: string | null
+          status?: Database["public"]["Enums"]["upsell_campanha_status"]
+          mrr_planejado?: number | null
+          projeto_planejado?: number | null
+          data_abordagem?: string | null
+          data_venda?: string | null
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          client_id?: string
+          closer_id?: string | null
+          status?: Database["public"]["Enums"]["upsell_campanha_status"]
+          mrr_planejado?: number | null
+          projeto_planejado?: number | null
+          data_abordagem?: string | null
+          data_venda?: string | null
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "upsell_campanhas_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "upsell_campanhas_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "upsell_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "upsell_campanhas_closer_id_fkey"
+            columns: ["closer_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      upsell_orders: {
+        Row: {
+          id: string
+          organization_id: string
+          client_id: string
+          closer_id: string | null
+          product_id: string | null
+          product_name: string
+          product_type: string
+          sale_value: number
+          origin: string
+          campanha_id: string | null
+          pipe_proposta_id: string | null
+          sold_at: string
+          notes: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          client_id: string
+          closer_id?: string | null
+          product_id?: string | null
+          product_name: string
+          product_type: string
+          sale_value: number
+          origin?: string
+          campanha_id?: string | null
+          pipe_proposta_id?: string | null
+          sold_at?: string
+          notes?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          client_id?: string
+          closer_id?: string | null
+          product_id?: string | null
+          product_name?: string
+          product_type?: string
+          sale_value?: number
+          origin?: string
+          campanha_id?: string | null
+          pipe_proposta_id?: string | null
+          sold_at?: string
+          notes?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "upsell_orders_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "upsell_orders_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "upsell_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "upsell_orders_closer_id_fkey"
+            columns: ["closer_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "upsell_orders_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "upsell_orders_campanha_id_fkey"
+            columns: ["campanha_id"]
+            isOneToOne: false
+            referencedRelation: "upsell_campanhas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "upsell_orders_pipe_proposta_id_fkey"
+            columns: ["pipe_proposta_id"]
+            isOneToOne: false
+            referencedRelation: "pipe_propostas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -4914,6 +5267,20 @@ export type Database = {
         | "digital"
         | "service"
         | "unitario"
+      upsell_campanha_status:
+        | "cliente"
+        | "planejado"
+        | "abordado"
+        | "interesse"
+        | "proposta"
+        | "vendido"
+        | "futuro"
+        | "perdido"
+      upsell_potencial:
+        | "baixo"
+        | "medio"
+        | "alto"
+        | "estrategico"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -5111,6 +5478,22 @@ export const Constants = {
         "digital",
         "service",
         "unitario",
+      ],
+      upsell_campanha_status: [
+        "cliente",
+        "planejado",
+        "abordado",
+        "interesse",
+        "proposta",
+        "vendido",
+        "futuro",
+        "perdido",
+      ],
+      upsell_potencial: [
+        "baixo",
+        "medio",
+        "alto",
+        "estrategico",
       ],
     },
   },

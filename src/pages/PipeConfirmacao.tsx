@@ -259,6 +259,7 @@ export default function PipeConfirmacao() {
       isConfirmed: item.is_confirmed || false,
       updatedAt: item.updated_at,
       overdueDays,
+      createdAt: item.created_at,
     };
   };
 

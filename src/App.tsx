@@ -31,6 +31,7 @@ import Marketing from "./pages/Marketing";
 import Produtos from "./pages/Produtos";
 import Copilot from "./pages/Copilot";
 import ChatWhatsApp from "./pages/ChatWhatsApp";
+import Upsell from "./pages/Upsell";
 import { CopilotWizard } from "@/components/copilot/CopilotWizard";
 import { SubscriptionProtectedRoute } from "@/components/SubscriptionProtectedRoute";
 import NotFound from "./pages/NotFound";
@@ -288,6 +289,16 @@ function AppRoutes() {
           <ProtectedRoute>
             <LayoutWrapper>
               <ChatWhatsApp />
+            </LayoutWrapper>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/upsell"
+        element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <Upsell />
             </LayoutWrapper>
           </ProtectedRoute>
         }

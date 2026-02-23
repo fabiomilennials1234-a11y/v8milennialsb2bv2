@@ -28,6 +28,8 @@ import { useTeamMembers, useCurrentTeamMember } from "@/hooks/useTeamMembers";
 import { useCommissions, useCommissionSummary } from "@/hooks/useCommissions";
 import { useIsAdmin } from "@/hooks/useUserRole";
 import { Skeleton } from "@/components/ui/skeleton";
+import { UserAvatar } from "@/components/ui/user-avatar";
+import { useAvatarMap } from "@/hooks/useAvatarMap";
 
 const months = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
@@ -48,9 +50,10 @@ interface MemberCommissionCardProps {
   memberRole: string;
   month: number;
   year: number;
+  avatarUrl?: string;
 }
 
-function MemberCommissionCard({ memberId, memberName, memberRole, month, year }: MemberCommissionCardProps) {
+function MemberCommissionCard({ memberId, memberName, memberRole, month, year, avatarUrl }: MemberCommissionCardProps) {
   const { data: summary, isLoading } = useCommissionSummary(memberId, month, year);
 
   if (isLoading) {
@@ -81,11 +84,12 @@ function MemberCommissionCard({ memberId, memberName, memberRole, month, year }:
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                <span className="text-sm font-bold text-primary">
-                  {memberName.split(" ").map(n => n[0]).join("").slice(0, 2)}
-                </span>
-              </div>
+              <UserAvatar
+                name={memberName}
+                avatarUrl={avatarUrl}
+                size="md"
+                fallbackClassName="bg-primary/10 text-primary"
+              />
               <div>
                 <CardTitle className="text-base">{memberName}</CardTitle>
                 <Badge variant="outline" className="text-xs mt-0.5">
@@ -209,6 +213,7 @@ export default function Comissoes() {
   const { data: currentMember, isLoading: isLoadingCurrentMember } = useCurrentTeamMember();
   const { data: teamMembers = [], isLoading: isLoadingMembers } = useTeamMembers();
   const { data: commissions = [], isLoading: isLoadingCommissions } = useCommissions(selectedMonth, selectedYear);
+  const avatarMap = useAvatarMap();
 
   // Filter members based on admin status
   const visibleClosers = useMemo(() => {
@@ -431,6 +436,7 @@ export default function Comissoes() {
                     memberRole={member.role}
                     month={selectedMonth}
                     year={selectedYear}
+                    avatarUrl={avatarMap.get(member.id)}
                   />
                 ))}
               </div>
@@ -460,6 +466,7 @@ export default function Comissoes() {
                     memberRole={member.role}
                     month={selectedMonth}
                     year={selectedYear}
+                    avatarUrl={avatarMap.get(member.id)}
                   />
                 ))}
               </div>

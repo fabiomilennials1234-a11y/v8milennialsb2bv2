@@ -6,7 +6,7 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Settings2, Layers, Type, Upload, FileDown, Send, Shuffle } from "lucide-react";
+import { Settings2, Layers, Type, Upload, FileDown, Send, Shuffle, Clock } from "lucide-react";
 import { type PipelineType, type PipelineStage } from "@/hooks/usePipelineStages";
 import { type FunnelDestination } from "@/hooks/useImportLeads";
 import { ManagePipelineStagesContent } from "./ManagePipelineStagesModal";
@@ -15,14 +15,17 @@ import { ImportLeadsFunnelContent } from "@/components/leads/ImportLeadsFunnelMo
 import { ExportLeadsContent } from "@/components/leads/ExportLeadsModal";
 import { PipeDispatchRulesSection } from "./PipeDispatchRulesSection";
 import { PipeDistributionSection } from "./PipeDistributionSection";
+import { UpsellStageRulesTab } from "@/components/upsell/UpsellStageRulesTab";
 
 const PIPE_LABELS: Record<PipelineType, string> = {
   whatsapp: "Qualificação",
   confirmacao: "Confirmação",
   propostas: "Propostas",
+  upsell_base: "Carteira Base",
+  upsell_gestao: "Carteira Gestão",
 };
 
-const PIPE_TO_DESTINATION: Record<PipelineType, FunnelDestination> = {
+const PIPE_TO_DESTINATION: Partial<Record<PipelineType, FunnelDestination>> = {
   whatsapp: "qualificacao",
   confirmacao: "confirmacao",
   propostas: "propostas",
@@ -43,6 +46,14 @@ export function PipeSettingsDialog({
   stages,
   defaultTab = "etapas",
 }: PipeSettingsDialogProps) {
+  const isUpsellBase = pipeType === "upsell_base";
+  const isUpsellGestao = pipeType === "upsell_gestao";
+  const isUpsell = isUpsellBase || isUpsellGestao;
+  const destination = PIPE_TO_DESTINATION[pipeType];
+
+  // upsell_base: Etapas + Regras (2 tabs). upsell_gestao: Etapas only (1 tab). Others: 6 tabs.
+  const tabCount = isUpsellGestao ? 1 : isUpsellBase ? 2 : 6;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[900px] max-h-[85vh] overflow-hidden flex flex-col">
@@ -54,31 +65,41 @@ export function PipeSettingsDialog({
         </DialogHeader>
 
         <Tabs defaultValue={defaultTab} className="flex-1 overflow-hidden flex flex-col">
-          <TabsList className="grid w-full grid-cols-6">
+          <TabsList className={`grid w-full grid-cols-${tabCount}`}>
             <TabsTrigger value="etapas" className="gap-1.5 text-xs">
               <Layers className="w-3.5 h-3.5" />
               Etapas
             </TabsTrigger>
-            <TabsTrigger value="campos" className="gap-1.5 text-xs">
-              <Type className="w-3.5 h-3.5" />
-              Campos
-            </TabsTrigger>
-            <TabsTrigger value="distribuicao" className="gap-1.5 text-xs">
-              <Shuffle className="w-3.5 h-3.5" />
-              Distribuição
-            </TabsTrigger>
-            <TabsTrigger value="importar" className="gap-1.5 text-xs">
-              <Upload className="w-3.5 h-3.5" />
-              Importar
-            </TabsTrigger>
-            <TabsTrigger value="exportar" className="gap-1.5 text-xs">
-              <FileDown className="w-3.5 h-3.5" />
-              Exportar
-            </TabsTrigger>
-            <TabsTrigger value="disparos" className="gap-1.5 text-xs">
-              <Send className="w-3.5 h-3.5" />
-              Disparos
-            </TabsTrigger>
+            {isUpsellBase && (
+              <TabsTrigger value="regras" className="gap-1.5 text-xs">
+                <Clock className="w-3.5 h-3.5" />
+                Regras
+              </TabsTrigger>
+            )}
+            {!isUpsell && (
+              <>
+                <TabsTrigger value="campos" className="gap-1.5 text-xs">
+                  <Type className="w-3.5 h-3.5" />
+                  Campos
+                </TabsTrigger>
+                <TabsTrigger value="distribuicao" className="gap-1.5 text-xs">
+                  <Shuffle className="w-3.5 h-3.5" />
+                  Distribuição
+                </TabsTrigger>
+                <TabsTrigger value="importar" className="gap-1.5 text-xs">
+                  <Upload className="w-3.5 h-3.5" />
+                  Importar
+                </TabsTrigger>
+                <TabsTrigger value="exportar" className="gap-1.5 text-xs">
+                  <FileDown className="w-3.5 h-3.5" />
+                  Exportar
+                </TabsTrigger>
+                <TabsTrigger value="disparos" className="gap-1.5 text-xs">
+                  <Send className="w-3.5 h-3.5" />
+                  Disparos
+                </TabsTrigger>
+              </>
+            )}
           </TabsList>
 
           <ScrollArea className="flex-1 mt-4">
@@ -89,30 +110,40 @@ export function PipeSettingsDialog({
               />
             </TabsContent>
 
-            <TabsContent value="campos" className="mt-0">
-              <CustomFieldsManager />
-            </TabsContent>
+            {isUpsellBase && (
+              <TabsContent value="regras" className="mt-0">
+                <UpsellStageRulesTab stages={stages} />
+              </TabsContent>
+            )}
 
-            <TabsContent value="distribuicao" className="mt-0">
-              <PipeDistributionSection pipeType={pipeType} />
-            </TabsContent>
+            {!isUpsell && (
+              <>
+                <TabsContent value="campos" className="mt-0">
+                  <CustomFieldsManager />
+                </TabsContent>
 
-            <TabsContent value="importar" className="mt-0">
-              <ImportLeadsFunnelContent
-                destination={PIPE_TO_DESTINATION[pipeType]}
-              />
-            </TabsContent>
+                <TabsContent value="distribuicao" className="mt-0">
+                  <PipeDistributionSection pipeType={pipeType} />
+                </TabsContent>
 
-            <TabsContent value="exportar" className="mt-0">
-              <ExportLeadsContent />
-            </TabsContent>
+                <TabsContent value="importar" className="mt-0">
+                  {destination && (
+                    <ImportLeadsFunnelContent destination={destination} />
+                  )}
+                </TabsContent>
 
-            <TabsContent value="disparos" className="mt-0">
-              <PipeDispatchRulesSection
-                pipeType={pipeType}
-                stages={stages}
-              />
-            </TabsContent>
+                <TabsContent value="exportar" className="mt-0">
+                  <ExportLeadsContent />
+                </TabsContent>
+
+                <TabsContent value="disparos" className="mt-0">
+                  <PipeDispatchRulesSection
+                    pipeType={pipeType}
+                    stages={stages}
+                  />
+                </TabsContent>
+              </>
+            )}
           </ScrollArea>
         </Tabs>
       </DialogContent>

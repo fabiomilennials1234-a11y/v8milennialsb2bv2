@@ -65,7 +65,7 @@ import { toast } from "sonner";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useEffect } from "react";
 
-type TeamRole = "sdr" | "closer";
+type TeamRole = "sdr" | "closer" | "agency" | "bdr" | "cliente";
 
 interface TeamMemberFormData {
   name: string;
@@ -113,8 +113,9 @@ export default function Equipe() {
   const { data: members = [], isLoading } = useTeamMembers();
   const updateMember = useUpdateTeamMember();
   const savePermissions = useSaveTeamMemberOrgPermissions();
-  const { organizationId } = useOrganization();
+  const { organizationId, orgType } = useOrganization();
   const { isAdmin } = useIsAdmin();
+  const isOutbound = orgType === "outbound";
   const queryClient = useQueryClient();
   const { data: editingMemberPerms } = useTeamMemberOrgPermissions(editingMember?.id ?? null);
 
@@ -154,7 +155,10 @@ export default function Equipe() {
     return matchesSearch && matchesRole;
   });
 
-  const { data: profiles = [] } = useProfiles();
+  const { data: allProfiles = [] } = useProfiles();
+  // Filtrar profiles para mostrar apenas usuários da mesma organização
+  const orgUserIds = new Set(members.filter(m => m.user_id).map(m => m.user_id));
+  const profiles = allProfiles.filter(p => orgUserIds.has(p.id));
 
   const handleOpenEditDialog = (member: TeamMember) => {
     setEditingMember(member);
@@ -177,16 +181,25 @@ export default function Equipe() {
   const handleSubmitEdit = async () => {
     if (!editingMember) return;
     try {
+      // Sanitizar valores numéricos para evitar NaN no banco
+      const sanitizedData = {
+        ...formData,
+        ote_base: isNaN(formData.ote_base) ? 0 : formData.ote_base,
+        ote_bonus: isNaN(formData.ote_bonus) ? 0 : formData.ote_bonus,
+        commission_mrr_percent: isNaN(formData.commission_mrr_percent) ? 1.0 : formData.commission_mrr_percent,
+        commission_projeto_percent: isNaN(formData.commission_projeto_percent) ? 0.5 : formData.commission_projeto_percent,
+      };
       await updateMember.mutateAsync({
         id: editingMember.id,
-        ...formData,
+        ...sanitizedData,
+        role: sanitizedData.role as any,
       });
       // Sincronizar user_roles para que RLS e UI vejam a role correta (admin/closer/sdr)
       if (editingMember.user_id) {
         await supabase.from("user_roles").delete().eq("user_id", editingMember.user_id);
         const { error: insertErr } = await supabase.from("user_roles").insert({
           user_id: editingMember.user_id,
-          role: formData.role,
+          role: formData.role as any,
         });
         if (insertErr && !String(insertErr.message).toLowerCase().includes("duplicate")) {
           console.warn("[Equipe] Sync user_roles:", insertErr.message);
@@ -367,19 +380,27 @@ export default function Equipe() {
   const handleCreateUserDialogOpen = (open: boolean) => {
     setIsCreateUserDialogOpen(open);
     if (!open) {
-      setCreateUserForm({ email: "", name: "", role: "sdr", password: "" });
+      setCreateUserForm({ email: "", name: "", role: isOutbound ? "bdr" : "sdr", password: "" });
       setCreatedUserEmail(null);
     }
   };
 
-  const roleLabels = {
+  const roleLabels: Record<string, string> = {
     sdr: "SDR",
     closer: "Closer",
+    admin: "Admin",
+    agency: "Agency",
+    bdr: "BDR",
+    cliente: "Cliente",
   };
 
-  const roleColors = {
+  const roleColors: Record<string, string> = {
     sdr: "bg-chart-5/10 text-chart-5 border-chart-5/20",
     closer: "bg-primary/10 text-primary border-primary/20",
+    admin: "bg-purple-500/10 text-purple-500 border-purple-500/20",
+    agency: "bg-purple-500/10 text-purple-500 border-purple-500/20",
+    bdr: "bg-chart-5/10 text-chart-5 border-chart-5/20",
+    cliente: "bg-blue-500/10 text-blue-500 border-blue-500/20",
   };
 
   return (
@@ -396,7 +417,9 @@ export default function Equipe() {
             Equipe
           </motion.h1>
           <p className="text-muted-foreground mt-1">
-            Gerencie SDRs, Closers e suas configurações de OTE
+            {isOutbound
+              ? "Gerencie BDRs, Clientes e suas configurações"
+              : "Gerencie SDRs, Closers e suas configurações de OTE"}
           </p>
         </div>
 
@@ -409,14 +432,14 @@ export default function Equipe() {
                 setIsDialogOpen(open);
               }}
             >
-              <DialogContent className="sm:max-w-[500px]">
+              <DialogContent className="sm:max-w-[500px] max-h-[85vh] flex flex-col">
                 <DialogHeader>
                   <DialogTitle>Editar Membro</DialogTitle>
                   <DialogDescription>
                     Ajuste as informações do membro da equipe (OTE, comissões, Cal.com, etc.)
                   </DialogDescription>
                 </DialogHeader>
-              <div className="grid gap-4 py-4">
+              <div className="grid gap-4 py-4 overflow-y-auto flex-1 pr-1">
                 <div className="grid gap-2">
                   <Label htmlFor="name">Nome</Label>
                   <Input
@@ -453,8 +476,18 @@ export default function Equipe() {
                       <SelectValue placeholder="Selecione a função" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="sdr">SDR</SelectItem>
-                      <SelectItem value="closer">Closer</SelectItem>
+                      {isOutbound ? (
+                        <>
+                          <SelectItem value="agency">Agency</SelectItem>
+                          <SelectItem value="bdr">BDR</SelectItem>
+                          <SelectItem value="cliente">Cliente</SelectItem>
+                        </>
+                      ) : (
+                        <>
+                          <SelectItem value="sdr">SDR</SelectItem>
+                          <SelectItem value="closer">Closer</SelectItem>
+                        </>
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
@@ -465,8 +498,12 @@ export default function Equipe() {
                       id="ote_base"
                       type="number"
                       min="0"
+                      step="0.01"
                       value={formData.ote_base}
-                      onChange={(e) => setFormData(prev => ({ ...prev, ote_base: e.target.value === "" ? 0 : Number(e.target.value) }))}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value);
+                        setFormData(prev => ({ ...prev, ote_base: isNaN(val) ? 0 : val }));
+                      }}
                     />
                   </div>
                   <div className="grid gap-2">
@@ -475,8 +512,12 @@ export default function Equipe() {
                       id="ote_bonus"
                       type="number"
                       min="0"
+                      step="0.01"
                       value={formData.ote_bonus}
-                      onChange={(e) => setFormData(prev => ({ ...prev, ote_bonus: e.target.value === "" ? 0 : Number(e.target.value) }))}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value);
+                        setFormData(prev => ({ ...prev, ote_bonus: isNaN(val) ? 0 : val }));
+                      }}
                     />
                   </div>
                 </div>
@@ -487,9 +528,12 @@ export default function Equipe() {
                       id="commission_mrr"
                       type="number"
                       min="0"
-                      step="0.1"
+                      step="0.01"
                       value={formData.commission_mrr_percent}
-                      onChange={(e) => setFormData(prev => ({ ...prev, commission_mrr_percent: e.target.value === "" ? 0 : Number(e.target.value) }))}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value);
+                        setFormData(prev => ({ ...prev, commission_mrr_percent: isNaN(val) ? 0 : val }));
+                      }}
                     />
                   </div>
                   <div className="grid gap-2">
@@ -498,9 +542,12 @@ export default function Equipe() {
                       id="commission_projeto"
                       type="number"
                       min="0"
-                      step="0.1"
+                      step="0.01"
                       value={formData.commission_projeto_percent}
-                      onChange={(e) => setFormData(prev => ({ ...prev, commission_projeto_percent: e.target.value === "" ? 0 : Number(e.target.value) }))}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value);
+                        setFormData(prev => ({ ...prev, commission_projeto_percent: isNaN(val) ? 0 : val }));
+                      }}
                     />
                   </div>
                 </div>
@@ -597,7 +644,7 @@ export default function Equipe() {
                     </p>
                     <DialogFooter>
                       <Button variant="outline" onClick={() => handleCreateUserDialogOpen(false)}>Fechar</Button>
-                      <Button onClick={() => { setCreatedUserEmail(null); setCreateUserForm({ email: "", name: "", role: "sdr", password: "" }); }}>
+                      <Button onClick={() => { setCreatedUserEmail(null); setCreateUserForm({ email: "", name: "", role: isOutbound ? "bdr" : "sdr", password: "" }); }}>
                         Criar outro usuário
                       </Button>
                     </DialogFooter>
@@ -634,8 +681,18 @@ export default function Equipe() {
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="sdr">SDR</SelectItem>
-                            <SelectItem value="closer">Closer</SelectItem>
+                            {isOutbound ? (
+                              <>
+                                <SelectItem value="agency">Agency</SelectItem>
+                                <SelectItem value="bdr">BDR</SelectItem>
+                                <SelectItem value="cliente">Cliente</SelectItem>
+                              </>
+                            ) : (
+                              <>
+                                <SelectItem value="sdr">SDR</SelectItem>
+                                <SelectItem value="closer">Closer</SelectItem>
+                              </>
+                            )}
                           </SelectContent>
                         </Select>
                       </div>
@@ -683,9 +740,11 @@ export default function Equipe() {
           transition={{ delay: 0.05 }}
           className="glass-card p-4"
         >
-          <p className="text-xs text-muted-foreground mb-1">SDRs Ativos</p>
+          <p className="text-xs text-muted-foreground mb-1">
+            {isOutbound ? "BDRs Ativos" : "SDRs Ativos"}
+          </p>
           <p className="text-xl font-bold text-chart-5">
-            {members.filter((m) => m.role === "sdr" && m.is_active).length}
+            {members.filter((m) => m.role === (isOutbound ? "bdr" : "sdr") && m.is_active).length}
           </p>
         </motion.div>
         <motion.div
@@ -694,9 +753,11 @@ export default function Equipe() {
           transition={{ delay: 0.1 }}
           className="glass-card p-4"
         >
-          <p className="text-xs text-muted-foreground mb-1">Closers Ativos</p>
+          <p className="text-xs text-muted-foreground mb-1">
+            {isOutbound ? "Clientes Ativos" : "Closers Ativos"}
+          </p>
           <p className="text-xl font-bold text-primary">
-            {members.filter((m) => m.role === "closer" && m.is_active).length}
+            {members.filter((m) => m.role === (isOutbound ? "cliente" : "closer") && m.is_active).length}
           </p>
         </motion.div>
         <motion.div
@@ -733,8 +794,18 @@ export default function Equipe() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todas Funções</SelectItem>
-            <SelectItem value="sdr">SDR</SelectItem>
-            <SelectItem value="closer">Closer</SelectItem>
+            {isOutbound ? (
+              <>
+                <SelectItem value="agency">Agency</SelectItem>
+                <SelectItem value="bdr">BDR</SelectItem>
+                <SelectItem value="cliente">Cliente</SelectItem>
+              </>
+            ) : (
+              <>
+                <SelectItem value="sdr">SDR</SelectItem>
+                <SelectItem value="closer">Closer</SelectItem>
+              </>
+            )}
           </SelectContent>
         </Select>
       </div>

@@ -23,8 +23,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { CampanhaStage, CampanhaLead, useUpdateCampanhaLead, useDeleteCampanhaLead, useExtractLeadToPipe, type CampanhaPipeAutomation } from "@/hooks/useCampanhas";
 import { useDeleteLead } from "@/hooks/useLeads";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
-import { Phone, Mail, Building2, GripVertical, User, DollarSign, Star, Tag, Trash2, Edit2, Filter, MessageSquare, Save, X, Search } from "lucide-react";
+import { Phone, Mail, Building2, GripVertical, User, DollarSign, Star, Tag, Trash2, Edit2, Filter, MessageSquare, Save, X, Search, Clock } from "lucide-react";
 import { toast } from "sonner";
+import { formatDistanceToNow } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import { openWhatsApp } from "@/lib/whatsapp";
 import { LeadDetailModal } from "@/components/leads/LeadDetailModal";
 import { LeadModal } from "@/components/leads/LeadModal";
@@ -304,6 +306,14 @@ function KanbanCardItem({ lead, isReuniao, onMoveToConfirmacao, onExtractToPipe,
                   +{leadData.lead_tags.length - 3}
                 </Badge>
               )}
+            </div>
+          )}
+
+          {/* Timer - tempo no funil */}
+          {lead.created_at && (
+            <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+              <Clock className="w-3 h-3" />
+              <span>{formatDistanceToNow(new Date(lead.created_at), { addSuffix: true, locale: ptBR })}</span>
             </div>
           )}
 

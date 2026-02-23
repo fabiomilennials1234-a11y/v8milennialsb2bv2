@@ -9,10 +9,13 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
+export type OrgType = "crm" | "outbound";
+
 export interface MasterOrganization {
   id: string;
   name: string;
   slug: string;
+  org_type: OrgType;
   subscription_status: string;
   subscription_plan: string | null;
   subscription_expires_at: string | null;
@@ -106,6 +109,36 @@ export function useMasterOrganizationStats() {
   });
 }
 
+// Todos os sidebar keys para CLIENTE em orgs OUTBOUND (tudo configurável pelo AGENCY)
+const DEFAULT_SIDEBAR_PERMISSIONS: { sidebar_key: string; is_visible: boolean }[] = [
+  { sidebar_key: "dashboard", is_visible: true },
+  { sidebar_key: "campanhas", is_visible: false },
+  { sidebar_key: "marketing", is_visible: true },
+  { sidebar_key: "chat_whatsapp", is_visible: true },
+  { sidebar_key: "funis", is_visible: true },
+  { sidebar_key: "follow_ups", is_visible: true },
+  { sidebar_key: "leads", is_visible: true },
+  { sidebar_key: "performance", is_visible: false },
+  { sidebar_key: "comissoes", is_visible: false },
+  { sidebar_key: "copilot", is_visible: true },
+  { sidebar_key: "equipe", is_visible: false },
+  { sidebar_key: "produtos", is_visible: false },
+  { sidebar_key: "tv_dashboard", is_visible: false },
+  { sidebar_key: "configuracoes", is_visible: false },
+];
+
+// Badges base do sistema para orgs OUTBOUND
+const SYSTEM_BADGES: { name: string; description: string; icon: string; criteria_type: string; criteria_value: number }[] = [
+  { name: "Primeiro Lead Quente", description: "Recebeu o primeiro lead quente", icon: "flame", criteria_type: "leads_quentes", criteria_value: 1 },
+  { name: "Primeira Venda", description: "Fechou a primeira venda", icon: "target", criteria_type: "vendas_count", criteria_value: 1 },
+  { name: "10 Leads Convertidos", description: "Converteu 10 leads", icon: "trending-up", criteria_type: "leads_quentes", criteria_value: 10 },
+  { name: "Primeira Venda Recorrente", description: "Primeira venda de cliente recorrente", icon: "repeat", criteria_type: "vendas_recorrentes", criteria_value: 1 },
+  { name: "R$ 50k Faturados", description: "Atingiu R$ 50.000 em faturamento", icon: "badge-dollar-sign", criteria_type: "faturamento_total", criteria_value: 50000 },
+  { name: "50 Leads Convertidos", description: "Converteu 50 leads", icon: "zap", criteria_type: "leads_quentes", criteria_value: 50 },
+  { name: "R$ 100k Faturados", description: "Atingiu R$ 100.000 em faturamento", icon: "trophy", criteria_type: "faturamento_total", criteria_value: 100000 },
+  { name: "5 Vendas Fechadas", description: "Fechou 5 vendas", icon: "award", criteria_type: "vendas_count", criteria_value: 5 },
+];
+
 /**
  * Criar nova organização
  */
@@ -116,14 +149,19 @@ export function useMasterCreateOrganization() {
     mutationFn: async (data: {
       name: string;
       slug: string;
+      org_type?: OrgType;
       subscription_plan?: string;
       subscription_status?: string;
     }) => {
+      const orgType = data.org_type || "crm";
+
+      // 1. Criar organização
       const { data: org, error } = await supabase
         .from("organizations")
         .insert({
           name: data.name,
           slug: data.slug,
+          org_type: orgType,
           subscription_plan: data.subscription_plan || "free",
           subscription_status: data.subscription_status || "trial",
         })
@@ -131,6 +169,42 @@ export function useMasterCreateOrganization() {
         .single();
 
       if (error) throw error;
+
+      // 2. Se OUTBOUND: seed sidebar permissions + badges base
+      if (orgType === "outbound") {
+        const sidebarRows = DEFAULT_SIDEBAR_PERMISSIONS.map((p) => ({
+          organization_id: org.id,
+          sidebar_key: p.sidebar_key,
+          is_visible: p.is_visible,
+        }));
+
+        const { error: sidebarError } = await supabase
+          .from("client_sidebar_permissions")
+          .insert(sidebarRows);
+
+        if (sidebarError) {
+          console.error("Error seeding sidebar permissions:", sidebarError);
+        }
+
+        const badgeRows = SYSTEM_BADGES.map((b) => ({
+          organization_id: org.id,
+          name: b.name,
+          description: b.description,
+          icon: b.icon,
+          criteria_type: b.criteria_type,
+          criteria_value: b.criteria_value,
+          is_system: true,
+        }));
+
+        const { error: badgesError } = await supabase
+          .from("badges")
+          .insert(badgeRows);
+
+        if (badgesError) {
+          console.error("Error seeding badges:", badgesError);
+        }
+      }
+
       return org;
     },
     onSuccess: () => {

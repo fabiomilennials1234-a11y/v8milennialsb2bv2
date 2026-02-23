@@ -50,6 +50,7 @@ import {
   useMasterCreateOrganization,
   useMasterUpdateOrganization,
   useMasterDeleteOrganization,
+  type OrgType,
 } from "@/hooks/useMasterOrganizations";
 import { BillingOverrideModal } from "@/components/master/BillingOverrideModal";
 
@@ -62,6 +63,7 @@ export default function MasterOrganizations() {
   // Form states
   const [newOrgName, setNewOrgName] = useState("");
   const [newOrgSlug, setNewOrgSlug] = useState("");
+  const [newOrgType, setNewOrgType] = useState<OrgType>("crm");
 
   const { data: organizations, isLoading } = useMasterOrganizations();
   const createOrg = useMasterCreateOrganization();
@@ -79,9 +81,11 @@ export default function MasterOrganizations() {
     await createOrg.mutateAsync({
       name: newOrgName,
       slug: newOrgSlug.toLowerCase().replace(/\s+/g, "-"),
+      org_type: newOrgType,
     });
     setNewOrgName("");
     setNewOrgSlug("");
+    setNewOrgType("crm");
     setCreateOpen(false);
   };
 
@@ -141,6 +145,7 @@ export default function MasterOrganizations() {
             <TableHeader>
               <TableRow>
                 <TableHead>Organização</TableHead>
+                <TableHead>Tipo</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Plano</TableHead>
                 <TableHead>Criada em</TableHead>
@@ -150,13 +155,13 @@ export default function MasterOrganizations() {
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-8">
+                  <TableCell colSpan={6} className="text-center py-8">
                     Carregando...
                   </TableCell>
                 </TableRow>
               ) : filteredOrgs?.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                     Nenhuma organização encontrada
                   </TableCell>
                 </TableRow>
@@ -168,6 +173,11 @@ export default function MasterOrganizations() {
                         <p className="font-medium">{org.name}</p>
                         <p className="text-sm text-muted-foreground">{org.slug}</p>
                       </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={org.org_type === "outbound" ? "default" : "secondary"}>
+                        {org.org_type === "outbound" ? "Outbound" : "CRM"}
+                      </Badge>
                     </TableCell>
                     <TableCell>
                       {getStatusBadge(org.subscription_status, org.billing_override)}
@@ -254,6 +264,32 @@ export default function MasterOrganizations() {
             <DialogTitle>Nova Organização</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Tipo de Organização</Label>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant={newOrgType === "crm" ? "default" : "outline"}
+                  className="flex-1"
+                  onClick={() => setNewOrgType("crm")}
+                >
+                  CRM
+                </Button>
+                <Button
+                  type="button"
+                  variant={newOrgType === "outbound" ? "default" : "outline"}
+                  className="flex-1"
+                  onClick={() => setNewOrgType("outbound")}
+                >
+                  Outbound
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {newOrgType === "crm"
+                  ? "Fluxo padrão com Admin, SDR e Closer."
+                  : "Agência de prospecção com Agency, BDR e Cliente."}
+              </p>
+            </div>
             <div className="space-y-2">
               <Label>Nome</Label>
               <Input

@@ -5,7 +5,7 @@ import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
 import type { Tables } from "@/integrations/supabase/types";
 
 export type UserRole = Tables<"user_roles">;
-export type AppRole = "admin" | "sdr" | "closer";
+export type AppRole = "admin" | "sdr" | "closer" | "agency" | "bdr" | "cliente";
 
 export function useUserRole() {
   const { user } = useAuth();
@@ -37,7 +37,31 @@ export function useUserRole() {
 export function useIsAdmin() {
   const { data: userRole, isLoading } = useUserRole();
   return {
-    isAdmin: userRole?.role === "admin",
+    isAdmin: userRole?.role === "admin" || userRole?.role === "agency",
+    isLoading,
+  };
+}
+
+export function useIsAgency() {
+  const { data: userRole, isLoading } = useUserRole();
+  return {
+    isAgency: userRole?.role === "agency",
+    isLoading,
+  };
+}
+
+export function useIsBDR() {
+  const { data: userRole, isLoading } = useUserRole();
+  return {
+    isBDR: userRole?.role === "bdr",
+    isLoading,
+  };
+}
+
+export function useIsCliente() {
+  const { data: userRole, isLoading } = useUserRole();
+  return {
+    isCliente: userRole?.role === "cliente",
     isLoading,
   };
 }
@@ -50,24 +74,24 @@ export function useHasRole(role: AppRole) {
   };
 }
 
-/** Admin e Closers podem criar copilots, configurar agentes e gerenciar instâncias WhatsApp. Usa user_roles com fallback para team_members.role. */
+/** Admin/Agency e Closers podem criar copilots, configurar agentes e gerenciar instâncias WhatsApp. Usa user_roles com fallback para team_members.role. */
 export function useCanManageCopilot() {
   const { data: userRole, isLoading } = useUserRole();
   const { data: currentTeamMember, isLoading: loadingTeam } = useCurrentTeamMember();
   const role = userRole?.role ?? currentTeamMember?.role;
   return {
-    canManage: role === "admin" || role === "closer",
+    canManage: role === "admin" || role === "closer" || role === "agency",
     isLoading: isLoading || loadingTeam,
   };
 }
 
-/** Admin e Closers podem criar instâncias WhatsApp, conectar números e gerenciar vendedores por número. Usa user_roles com fallback para team_members.role. */
+/** Admin/Agency e Closers podem criar instâncias WhatsApp, conectar números e gerenciar vendedores por número. Usa user_roles com fallback para team_members.role. */
 export function useCanManageWhatsApp() {
   const { data: userRole, isLoading } = useUserRole();
   const { data: currentTeamMember, isLoading: loadingTeam } = useCurrentTeamMember();
   const role = userRole?.role ?? currentTeamMember?.role;
   return {
-    canManage: role === "admin" || role === "closer",
+    canManage: role === "admin" || role === "closer" || role === "agency",
     isLoading: isLoading || loadingTeam,
   };
 }

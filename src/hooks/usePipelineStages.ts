@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 
-export type PipelineType = "whatsapp" | "confirmacao" | "propostas";
+export type PipelineType = "whatsapp" | "confirmacao" | "propostas" | "upsell_base" | "upsell_gestao";
 
 export interface PipelineStage {
   id: string;
@@ -16,6 +16,8 @@ export interface PipelineStage {
   is_active: boolean;
   is_final_positive: boolean;
   is_final_negative: boolean;
+  auto_move_min_days: number | null;
+  auto_move_max_days: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -70,6 +72,21 @@ export const DEFAULT_STAGES: Record<PipelineType, DefaultStage[]> = {
     { id: "vendido", title: "Vendido ✓", color: "#22C55E", is_final_positive: true },
     { id: "perdido", title: "Perdido", color: "#EF4444", is_final_negative: true },
   ],
+  upsell_base: [
+    { id: "0-3m", title: "0-3 meses", color: "#3B82F6" },
+    { id: "3-6m", title: "3-6 meses", color: "#22C55E" },
+    { id: "6-9m", title: "6-9 meses", color: "#F59E0B" },
+    { id: "9-12m", title: "9-12 meses", color: "#EF4444" },
+    { id: "12-18m", title: "12-18 meses", color: "#8B5CF6" },
+    { id: "18m+", title: "18+ meses", color: "#EC4899" },
+  ],
+  upsell_gestao: [
+    { id: "campeoes", title: "Campeões", color: "#22C55E" },
+    { id: "fieis", title: "Fiéis", color: "#3B82F6" },
+    { id: "primeira_compra", title: "Primeira Compra", color: "#8B5CF6" },
+    { id: "em_risco", title: "Em Risco", color: "#F59E0B" },
+    { id: "inativos", title: "Inativos", color: "#EF4444" },
+  ],
 };
 
 /**
@@ -79,7 +96,7 @@ export const DEFAULT_STAGES: Record<PipelineType, DefaultStage[]> = {
 async function ensureDefaultStagesInDb(organizationId: string) {
   const allStages: Record<string, unknown>[] = [];
 
-  for (const pipeType of ["whatsapp", "confirmacao", "propostas"] as PipelineType[]) {
+  for (const pipeType of ["whatsapp", "confirmacao", "propostas", "upsell_base", "upsell_gestao"] as PipelineType[]) {
     for (let i = 0; i < DEFAULT_STAGES[pipeType].length; i++) {
       const stage = DEFAULT_STAGES[pipeType][i];
       allStages.push({
@@ -280,6 +297,8 @@ export function useUpdatePipelineStage() {
       is_active?: boolean;
       is_final_positive?: boolean;
       is_final_negative?: boolean;
+      auto_move_min_days?: number | null;
+      auto_move_max_days?: number | null;
     }) => {
       const { data, error } = await supabase
         .from("pipeline_stages")
@@ -366,6 +385,8 @@ export function getPipelineTypeName(type: PipelineType): string {
     whatsapp: "Qualificação",
     confirmacao: "Confirmação",
     propostas: "Propostas",
+    upsell_base: "Carteira Base",
+    upsell_gestao: "Carteira Gestão",
   };
   return names[type];
 }

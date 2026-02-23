@@ -5,6 +5,8 @@ import {
   Flame, Calendar, Users, Plus, Edit2, Trash2, CheckCircle, Lock, Sparkles
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { UserAvatar } from "@/components/ui/user-avatar";
+import { useAvatarMap } from "@/hooks/useAvatarMap";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -128,7 +130,7 @@ function getPositionStyle(position: number) {
 // ============ SUB-COMPONENTS ============
 
 // Ranking Card Component
-function RankingCard({ user, showValue = true }: { user: RankingUser; showValue?: boolean }) {
+function RankingCard({ user, showValue = true, avatarUrl }: { user: RankingUser; showValue?: boolean; avatarUrl?: string }) {
   const isTop3 = user.position <= 3;
   const styles = positionStyles[user.position as keyof typeof positionStyles];
   const Icon = styles?.icon;
@@ -171,13 +173,13 @@ function RankingCard({ user, showValue = true }: { user: RankingUser; showValue?
           )}
         </div>
 
-        <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
-          isTop3 ? "bg-white/20 border-2 " + styles.border : "bg-accent"
-        }`}>
-          <span className={`text-lg font-semibold ${isTop3 ? "text-foreground" : "text-accent-foreground"}`}>
-            {user.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
-          </span>
-        </div>
+        <UserAvatar
+          name={user.name}
+          avatarUrl={avatarUrl}
+          size="lg"
+          className={isTop3 ? "border-2 " + styles.border : ""}
+          fallbackClassName={isTop3 ? "bg-white/20 text-foreground" : "bg-accent text-accent-foreground"}
+        />
 
         <div className="flex-1">
           <div className="flex items-center gap-2">
@@ -622,6 +624,7 @@ export default function Performance() {
   const { data: teamGoals, isLoading: goalsLoading } = useTeamGoals(selectedMonth, selectedYear);
   const { data: allGoals = [] } = useGoals(selectedMonth, selectedYear);
   const { data: metrics, isLoading: metricsLoading } = useDashboardMetrics(selectedMonth, selectedYear);
+  const avatarMap = useAvatarMap();
   const { data: rankingData, isLoading: rankingLoading } = useRankingData(selectedMonth, selectedYear);
   const { data: awards, isLoading: awardsLoading } = useAwards(selectedMonth, selectedYear);
   const { data: teamMembers = [] } = useTeamMembers();
@@ -933,7 +936,7 @@ export default function Performance() {
                   Array(3).fill(0).map((_, i) => <Skeleton key={i} className="h-20" />)
                 ) : closers.length > 0 ? (
                   closers.map((user) => (
-                    <RankingCard key={user.id} user={user} />
+                    <RankingCard key={user.id} user={user} avatarUrl={avatarMap.get(user.id)} />
                   ))
                 ) : (
                   <p className="text-muted-foreground text-center py-8">Nenhum closer com vendas.</p>
@@ -954,7 +957,7 @@ export default function Performance() {
                   Array(3).fill(0).map((_, i) => <Skeleton key={i} className="h-20" />)
                 ) : sdrs.length > 0 ? (
                   sdrs.map((user) => (
-                    <RankingCard key={user.id} user={user} showValue={false} />
+                    <RankingCard key={user.id} user={user} showValue={false} avatarUrl={avatarMap.get(user.id)} />
                   ))
                 ) : (
                   <p className="text-muted-foreground text-center py-8">Nenhum SDR com reuniões.</p>
@@ -1126,11 +1129,12 @@ export default function Performance() {
                               <span className="text-sm font-bold text-muted-foreground">{position}</span>
                             )}
                           </div>
-                          <div className="w-10 h-10 rounded-full bg-accent flex items-center justify-center">
-                            <span className="text-sm font-semibold text-accent-foreground">
-                              {vendedor.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
-                            </span>
-                          </div>
+                          <UserAvatar
+                            name={vendedor.name}
+                            avatarUrl={avatarMap.get(vendedor.id)}
+                            size="md"
+                            fallbackClassName="bg-accent text-accent-foreground"
+                          />
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between mb-1">
                               <span className="text-sm font-medium truncate">{vendedor.name}</span>
@@ -1208,11 +1212,12 @@ export default function Performance() {
                               <span className="text-sm font-bold text-muted-foreground">{position}</span>
                             )}
                           </div>
-                          <div className="w-10 h-10 rounded-full bg-accent flex items-center justify-center">
-                            <span className="text-sm font-semibold text-accent-foreground">
-                              {sdr.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
-                            </span>
-                          </div>
+                          <UserAvatar
+                            name={sdr.name}
+                            avatarUrl={avatarMap.get(sdr.id)}
+                            size="md"
+                            fallbackClassName="bg-accent text-accent-foreground"
+                          />
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between mb-1">
                               <span className="text-sm font-medium truncate">{sdr.name}</span>
@@ -1451,11 +1456,12 @@ export default function Performance() {
                       return (
                         <div key={goal.id} className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
                           <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                              <span className="text-sm font-semibold text-primary">
-                                {getMemberName(goal.team_member_id).split(" ").map((n) => n[0]).join("").slice(0, 2)}
-                              </span>
-                            </div>
+                            <UserAvatar
+                              name={getMemberName(goal.team_member_id)}
+                              avatarUrl={avatarMap.get(goal.team_member_id)}
+                              size="md"
+                              fallbackClassName="bg-primary/10 text-primary"
+                            />
                             <div>
                               <p className="font-medium">{getMemberName(goal.team_member_id)}</p>
                               <Badge variant="outline" className="mt-1">{typeInfo.label}</Badge>

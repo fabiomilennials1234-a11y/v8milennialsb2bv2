@@ -20,6 +20,7 @@ export interface MasterUserView {
   team_member_id: string | null;
   organization_id: string | null;
   organization_name: string | null;
+  org_type: "crm" | "outbound" | null;
   role: string | null;
   is_active: boolean;
 }
@@ -50,7 +51,7 @@ export function useMasterUsers() {
           role,
           is_active,
           organization_id,
-          organization:organizations(id, name)
+          organization:organizations(id, name, org_type)
         `)
         .order("name");
 
@@ -76,6 +77,7 @@ export function useMasterUsers() {
         team_member_id: member.id,
         organization_id: member.organization_id,
         organization_name: (member.organization as any)?.name || null,
+        org_type: (member.organization as any)?.org_type || null,
         role: member.role,
         is_active: member.is_active,
       }));
@@ -163,7 +165,7 @@ export function useMasterChangeUserRole() {
       newRole,
     }: {
       userId: string;
-      newRole: "admin" | "sdr" | "closer";
+      newRole: string;
     }) => {
       // Atualizar na tabela user_roles
       const { error: deleteError } = await supabase
@@ -208,13 +210,17 @@ export function useMasterMoveUserToOrg() {
     mutationFn: async ({
       teamMemberId,
       newOrgId,
+      newRole,
     }: {
       teamMemberId: string;
       newOrgId: string;
+      newRole?: string;
     }) => {
+      const updates: Record<string, any> = { organization_id: newOrgId };
+      if (newRole) updates.role = newRole;
       const { error } = await supabase
         .from("team_members")
-        .update({ organization_id: newOrgId })
+        .update(updates)
         .eq("id", teamMemberId);
 
       if (error) throw error;

@@ -73,6 +73,7 @@ export default function MasterUsers() {
   const [moveOrgOpen, setMoveOrgOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [newOrgId, setNewOrgId] = useState("");
+  const [moveNewRole, setMoveNewRole] = useState("");
 
   const [createUserOpen, setCreateUserOpen] = useState(false);
   const [createUserLoading, setCreateUserLoading] = useState(false);
@@ -81,6 +82,7 @@ export default function MasterUsers() {
     email: "",
     name: "",
     password: "",
+    role: "admin",
   });
 
   const [assignPendingOpen, setAssignPendingOpen] = useState(false);
@@ -114,10 +116,12 @@ export default function MasterUsers() {
     await moveToOrg.mutateAsync({
       teamMemberId: selectedUser.team_member_id,
       newOrgId,
+      newRole: moveNewRole || undefined,
     });
     setMoveOrgOpen(false);
     setSelectedUser(null);
     setNewOrgId("");
+    setMoveNewRole("");
   };
 
   const handleCreateUserSubmit = async () => {
@@ -165,7 +169,7 @@ export default function MasterUsers() {
           email: email.trim(),
           name: name.trim(),
           password: password.trim(),
-          role: "admin",
+          role: createUserForm.role,
         }),
       });
       const data = (await res.json().catch(() => ({}))) as { success?: boolean; message?: string; error?: string };
@@ -176,8 +180,8 @@ export default function MasterUsers() {
         return;
       }
       if (data?.success) {
-        toast.success("Usuário admin criado. A pessoa pode entrar com este email e a senha definida.");
-        setCreateUserForm({ organization_id: "", email: "", name: "", password: "" });
+        toast.success("Usuário criado. A pessoa pode entrar com este email e a senha definida.");
+        setCreateUserForm({ organization_id: "", email: "", name: "", password: "", role: "admin" });
         setCreateUserOpen(false);
         queryClient.invalidateQueries({ queryKey: ["master-users"] });
         queryClient.invalidateQueries({ queryKey: ["master-organization-members"] });
@@ -198,9 +202,36 @@ export default function MasterUsers() {
         return <Badge variant="default">SDR</Badge>;
       case "closer":
         return <Badge variant="secondary">Closer</Badge>;
+      case "agency":
+        return <Badge variant="destructive">Agency</Badge>;
+      case "bdr":
+        return <Badge variant="default">BDR</Badge>;
+      case "cliente":
+        return <Badge variant="secondary">Cliente</Badge>;
       default:
         return <Badge variant="outline">-</Badge>;
     }
+  };
+
+  // Roles disponíveis por tipo de organização
+  const getRolesForOrgType = (orgType: string | null) => {
+    if (orgType === "outbound") {
+      return [
+        { value: "agency", label: "Agency" },
+        { value: "bdr", label: "BDR" },
+        { value: "cliente", label: "Cliente" },
+      ];
+    }
+    return [
+      { value: "admin", label: "Admin" },
+      { value: "sdr", label: "SDR" },
+      { value: "closer", label: "Closer" },
+    ];
+  };
+
+  // Descobrir org_type de uma org pelo id
+  const getOrgType = (orgId: string) => {
+    return organizations?.find((o) => o.id === orgId)?.org_type || "crm";
   };
 
   return (
@@ -218,7 +249,7 @@ export default function MasterUsers() {
         </div>
         <Button onClick={() => setCreateUserOpen(true)}>
           <UserPlus className="w-4 h-4 mr-2" />
-          Criar usuário admin
+          Criar usuário
         </Button>
       </div>
 
@@ -365,36 +396,19 @@ export default function MasterUsers() {
                               Alterar Role
                             </DropdownMenuSubTrigger>
                             <DropdownMenuSubContent>
-                              <DropdownMenuItem
-                                onClick={() =>
-                                  changeRole.mutate({
-                                    userId: user.id,
-                                    newRole: "admin",
-                                  })
-                                }
-                              >
-                                Admin
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onClick={() =>
-                                  changeRole.mutate({
-                                    userId: user.id,
-                                    newRole: "sdr",
-                                  })
-                                }
-                              >
-                                SDR
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onClick={() =>
-                                  changeRole.mutate({
-                                    userId: user.id,
-                                    newRole: "closer",
-                                  })
-                                }
-                              >
-                                Closer
-                              </DropdownMenuItem>
+                              {getRolesForOrgType(user.org_type).map((r) => (
+                                <DropdownMenuItem
+                                  key={r.value}
+                                  onClick={() =>
+                                    changeRole.mutate({
+                                      userId: user.id,
+                                      newRole: r.value,
+                                    })
+                                  }
+                                >
+                                  {r.label}
+                                </DropdownMenuItem>
+                              ))}
                             </DropdownMenuSubContent>
                           </DropdownMenuSub>
                           <DropdownMenuItem
@@ -464,19 +478,43 @@ export default function MasterUsers() {
             </div>
             <div className="space-y-2">
               <Label>Nova Organização</Label>
-              <Select value={newOrgId} onValueChange={setNewOrgId}>
+              <Select
+                value={newOrgId}
+                onValueChange={(v) => {
+                  setNewOrgId(v);
+                  const selectedOrgType = getOrgType(v);
+                  setMoveNewRole(selectedOrgType === "outbound" ? "agency" : "admin");
+                }}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione..." />
                 </SelectTrigger>
                 <SelectContent>
                   {organizations?.map((org) => (
                     <SelectItem key={org.id} value={org.id}>
-                      {org.name}
+                      {org.name} {org.org_type === "outbound" ? "(Outbound)" : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
+            {newOrgId && (
+              <div className="space-y-2">
+                <Label>Função na nova organização</Label>
+                <Select value={moveNewRole} onValueChange={setMoveNewRole}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {getRolesForOrgType(getOrgType(newOrgId)).map((r) => (
+                      <SelectItem key={r.value} value={r.value}>
+                        {r.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setMoveOrgOpen(false)}>
@@ -492,20 +530,22 @@ export default function MasterUsers() {
         </DialogContent>
       </Dialog>
 
-      {/* Create User Admin Dialog */}
+      {/* Create User Dialog */}
       <Dialog open={createUserOpen} onOpenChange={setCreateUserOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Criar usuário admin</DialogTitle>
+            <DialogTitle>Criar usuário</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>Organização</Label>
               <Select
                 value={createUserForm.organization_id}
-                onValueChange={(v) =>
-                  setCreateUserForm((prev) => ({ ...prev, organization_id: v }))
-                }
+                onValueChange={(v) => {
+                  const selectedOrgType = getOrgType(v);
+                  const defaultRole = selectedOrgType === "outbound" ? "agency" : "admin";
+                  setCreateUserForm((prev) => ({ ...prev, organization_id: v, role: defaultRole }));
+                }}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione a organização..." />
@@ -513,12 +553,34 @@ export default function MasterUsers() {
                 <SelectContent>
                   {organizations?.map((org) => (
                     <SelectItem key={org.id} value={org.id}>
-                      {org.name}
+                      {org.name} {org.org_type === "outbound" ? "(Outbound)" : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
+            {createUserForm.organization_id && (
+              <div className="space-y-2">
+                <Label>Função</Label>
+                <Select
+                  value={createUserForm.role}
+                  onValueChange={(v) =>
+                    setCreateUserForm((prev) => ({ ...prev, role: v }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {getRolesForOrgType(getOrgType(createUserForm.organization_id)).map((r) => (
+                      <SelectItem key={r.value} value={r.value}>
+                        {r.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div className="space-y-2">
               <Label>Email</Label>
               <Input
@@ -560,7 +622,7 @@ export default function MasterUsers() {
               onClick={handleCreateUserSubmit}
               disabled={createUserLoading}
             >
-              {createUserLoading ? "Criando..." : "Criar usuário admin"}
+              {createUserLoading ? "Criando..." : "Criar usuário"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -580,14 +642,21 @@ export default function MasterUsers() {
               </div>
               <div className="space-y-2">
                 <Label>Organização</Label>
-                <Select value={assignOrgId} onValueChange={setAssignOrgId}>
+                <Select
+                  value={assignOrgId}
+                  onValueChange={(v) => {
+                    setAssignOrgId(v);
+                    const selectedOrgType = getOrgType(v);
+                    setAssignRole(selectedOrgType === "outbound" ? "agency" : "admin");
+                  }}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione a organização..." />
                   </SelectTrigger>
                   <SelectContent>
                     {organizations?.map((org) => (
                       <SelectItem key={org.id} value={org.id}>
-                        {org.name}
+                        {org.name} {org.org_type === "outbound" ? "(Outbound)" : ""}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -600,10 +669,19 @@ export default function MasterUsers() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="member">Membro</SelectItem>
-                    <SelectItem value="admin">Admin</SelectItem>
-                    <SelectItem value="sdr">SDR</SelectItem>
-                    <SelectItem value="closer">Closer</SelectItem>
+                    {assignOrgId ? (
+                      getRolesForOrgType(getOrgType(assignOrgId)).map((r) => (
+                        <SelectItem key={r.value} value={r.value}>
+                          {r.label}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <>
+                        <SelectItem value="admin">Admin</SelectItem>
+                        <SelectItem value="sdr">SDR</SelectItem>
+                        <SelectItem value="closer">Closer</SelectItem>
+                      </>
+                    )}
                   </SelectContent>
                 </Select>
               </div>

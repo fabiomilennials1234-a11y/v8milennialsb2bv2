@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Progress } from "@/components/ui/progress";
 import { MiniProgressRing } from "@/components/gamification/ProgressRing";
+import { UserAvatar } from "@/components/ui/user-avatar";
 import { cn } from "@/lib/utils";
 
 interface TeamMemberCardProps {
@@ -45,6 +46,7 @@ interface TeamMemberCardProps {
     ranking?: number;
   };
   isAdmin?: boolean;
+  avatarUrl?: string;
   onEdit?: () => void;
   onDelete?: () => void;
   index?: number;
@@ -80,6 +82,7 @@ export function TeamMemberCard({
   member,
   stats,
   isAdmin,
+  avatarUrl,
   onEdit,
   onDelete,
   index = 0,
@@ -122,16 +125,18 @@ export function TeamMemberCard({
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-center gap-3">
           {/* Avatar */}
-          <div
-            className={cn(
-              "w-14 h-14 rounded-xl flex items-center justify-center text-lg font-bold",
+          <UserAvatar
+            name={member.name}
+            avatarUrl={avatarUrl}
+            size="lg"
+            className="h-14 w-14 rounded-xl"
+            fallbackClassName={cn(
+              "rounded-xl",
               member.is_active
                 ? "bg-gradient-to-br from-primary to-primary/80 text-primary-foreground"
                 : "bg-muted text-muted-foreground"
             )}
-          >
-            {initials}
-          </div>
+          />
 
           {/* Info */}
           <div>

@@ -2,8 +2,10 @@ import { motion } from "framer-motion";
 import { Trophy, Medal, Award, TrendingUp, Zap, Star, Crown, Flame, Calendar } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
-import { TopThreePodium, LeaderboardCard } from "@/components/gamification/LeaderboardCard";
+import { TopThreePodium } from "@/components/gamification/LeaderboardCard";
 import { MiniProgressRing } from "@/components/gamification/ProgressRing";
+import { UserAvatar } from "@/components/ui/user-avatar";
+import { useAvatarMap } from "@/hooks/useAvatarMap";
 import badgeIcon from "@/assets/badge-icon.png";
 import { useRankingData } from "@/hooks/useDashboardMetrics";
 
@@ -24,7 +26,7 @@ const positionStyles = {
   3: { icon: Award, color: "text-amber-600", bg: "bg-gradient-to-br from-amber-600 to-amber-700", border: "border-amber-600" },
 };
 
-function RankingCard({ user, showValue = true }: { user: RankingUser; showValue?: boolean }) {
+function RankingCard({ user, showValue = true, avatarUrl }: { user: RankingUser; showValue?: boolean; avatarUrl?: string }) {
   const isTop3 = user.position <= 3;
   const styles = positionStyles[user.position as keyof typeof positionStyles];
   const Icon = styles?.icon;
@@ -70,13 +72,13 @@ function RankingCard({ user, showValue = true }: { user: RankingUser; showValue?
         </div>
 
         {/* Avatar */}
-        <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
-          isTop3 ? "bg-white/20 border-2 " + styles.border : "bg-accent"
-        }`}>
-          <span className={`text-lg font-semibold ${isTop3 ? "text-foreground" : "text-accent-foreground"}`}>
-            {user.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
-          </span>
-        </div>
+        <UserAvatar
+          name={user.name}
+          avatarUrl={avatarUrl}
+          size="lg"
+          className={isTop3 ? "border-2 " + styles.border : ""}
+          fallbackClassName={isTop3 ? "bg-white/20 text-foreground" : "bg-accent text-accent-foreground"}
+        />
 
         {/* Info */}
         <div className="flex-1">
@@ -131,6 +133,7 @@ function RankingCard({ user, showValue = true }: { user: RankingUser; showValue?
 export default function Ranking() {
   const now = new Date();
   const { data: rankingData, isLoading } = useRankingData(now.getMonth() + 1, now.getFullYear());
+  const avatarMap = useAvatarMap();
 
   const closers: RankingUser[] = rankingData?.closerRanking || [];
   const sdrs: RankingUser[] = rankingData?.sdrRanking || [];
@@ -143,6 +146,7 @@ export default function Ranking() {
     value: c.value,
     position: c.position,
     goalProgress: c.goalProgress,
+    avatarUrl: avatarMap.get(c.id),
   }));
 
   return (
@@ -232,7 +236,7 @@ export default function Ranking() {
             Array(3).fill(0).map((_, i) => <Skeleton key={i} className="h-20" />)
           ) : closers.length > 0 ? (
             closers.map((user) => (
-              <RankingCard key={user.id} user={user} />
+              <RankingCard key={user.id} user={user} avatarUrl={avatarMap.get(user.id)} />
             ))
           ) : (
             <p className="text-muted-foreground text-center py-8">Nenhum closer cadastrado.</p>
@@ -244,7 +248,7 @@ export default function Ranking() {
             Array(3).fill(0).map((_, i) => <Skeleton key={i} className="h-20" />)
           ) : sdrs.length > 0 ? (
             sdrs.map((user) => (
-              <RankingCard key={user.id} user={user} showValue={false} />
+              <RankingCard key={user.id} user={user} showValue={false} avatarUrl={avatarMap.get(user.id)} />
             ))
           ) : (
             <p className="text-muted-foreground text-center py-8">Nenhum SDR cadastrado.</p>

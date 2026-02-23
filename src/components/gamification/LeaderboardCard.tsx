@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { Trophy, Medal, Award, Crown, Flame, TrendingUp } from "lucide-react";
 import { MiniProgressRing } from "./ProgressRing";
+import { UserAvatar } from "@/components/ui/user-avatar";
 
 interface LeaderboardUser {
   id: string;
@@ -91,13 +92,12 @@ export function LeaderboardCard({
         </div>
 
         {/* Avatar */}
-        <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
-          isTop3 ? "bg-white/20" : "bg-accent"
-        }`}>
-          <span className={`text-lg font-bold ${isTop3 ? "text-white" : "text-accent-foreground"}`}>
-            {user.name.split(" ").map(n => n[0]).join("").slice(0, 2)}
-          </span>
-        </div>
+        <UserAvatar
+          name={user.name}
+          avatarUrl={user.avatarUrl}
+          size="lg"
+          fallbackClassName={isTop3 ? "bg-white/20 text-white" : "bg-accent text-accent-foreground"}
+        />
 
         {/* Info */}
         <div className="flex-1 min-w-0">
@@ -159,17 +159,27 @@ export function TopThreePodium({
             {/* Avatar */}
             <motion.div
               whileHover={{ scale: 1.1, y: -5 }}
-              className={`w-16 h-16 rounded-full flex items-center justify-center mb-3 border-4 ${
-                actualPosition === 1 
-                  ? "border-yellow-400 bg-yellow-400/20" 
-                  : actualPosition === 2 
-                  ? "border-slate-400 bg-slate-400/20" 
-                  : "border-amber-600 bg-amber-600/20"
-              }`}
+              className="mb-3"
             >
-              <span className="text-xl font-bold">
-                {user.name.split(" ").map(n => n[0]).join("")}
-              </span>
+              <UserAvatar
+                name={user.name}
+                avatarUrl={user.avatarUrl}
+                size="xl"
+                className={`border-4 ${
+                  actualPosition === 1
+                    ? "border-yellow-400"
+                    : actualPosition === 2
+                    ? "border-slate-400"
+                    : "border-amber-600"
+                }`}
+                fallbackClassName={
+                  actualPosition === 1
+                    ? "bg-yellow-400/20"
+                    : actualPosition === 2
+                    ? "bg-slate-400/20"
+                    : "bg-amber-600/20"
+                }
+              />
             </motion.div>
 
             {/* Name */}

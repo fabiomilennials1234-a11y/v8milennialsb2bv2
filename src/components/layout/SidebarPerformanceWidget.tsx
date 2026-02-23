@@ -1,8 +1,10 @@
 import { motion } from "framer-motion";
-import { DollarSign, Target, Flame, CheckCircle } from "lucide-react";
+import { DollarSign, Target, Flame, CheckCircle, Trophy, Lock, Zap } from "lucide-react";
 import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
 import { useCommissionSummary } from "@/hooks/useCommissions";
 import { useOrganization } from "@/hooks/useOrganization";
+import { useBadges, useUserBadges } from "@/hooks/useBadges";
+import { useDashboardMetrics } from "@/hooks/useDashboardMetrics";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { OraculoComercial } from "./OraculoComercial";
@@ -214,8 +216,8 @@ export function SidebarPerformanceWidget({ collapsed }: SidebarPerformanceWidget
     memberRole === "closer" ? currentMember?.id : undefined
   );
 
-  // Admin não vê o widget
-  if (memberRole === "admin") return null;
+  // Admin e agency não veem o widget
+  if (memberRole === "admin" || memberRole === "agency") return null;
 
   // Se não tem membro associado, não mostra
   if (!currentMember && !memberLoading) return null;
@@ -422,5 +424,248 @@ export function SidebarPerformanceWidget({ collapsed }: SidebarPerformanceWidget
     );
   }
 
+  // Widget para CLIENTE — progresso de badges/conquistas
+  if (memberRole === "cliente") {
+    return <SidebarBadgesWidget collapsed={collapsed} teamMemberId={currentMember?.id} />;
+  }
+
   return null;
+}
+
+// ─── Widget de Badges para CLIENTE ──────────────────────────
+const BADGE_ICON_MAP: Record<string, React.ElementType> = {
+  flame: Flame,
+  target: Target,
+  "trending-up": Trophy,
+  zap: Zap,
+  trophy: Trophy,
+};
+
+// Labels amigáveis para criteria_type
+const CRITERIA_LABELS: Record<string, string> = {
+  leads_quentes: "leads quentes",
+  vendas_count: "vendas",
+  faturamento_total: "de faturamento",
+  vendas_recorrentes: "vendas recorrentes",
+};
+
+// Badges placeholder — mesmos usados no DashboardCliente quando a org não tem badges no banco
+const PLACEHOLDER_BADGES: { id: string; name: string; description: string; icon: string; criteria_type: string; criteria_value: number }[] = [
+  { id: "ph-1", name: "Primeiro Lead Quente", description: "Receba o primeiro lead quente", icon: "flame", criteria_type: "leads_quentes", criteria_value: 1 },
+  { id: "ph-2", name: "Primeira Venda", description: "Feche sua primeira venda", icon: "target", criteria_type: "vendas_count", criteria_value: 1 },
+  { id: "ph-3", name: "Faturamento R$10K", description: "Atinja R$10K em faturamento", icon: "trending-up", criteria_type: "faturamento_total", criteria_value: 10000 },
+  { id: "ph-4", name: "5 Vendas", description: "Feche 5 vendas no mês", icon: "zap", criteria_type: "vendas_count", criteria_value: 5 },
+  { id: "ph-5", name: "Top Closer", description: "Feche 10 vendas", icon: "trophy", criteria_type: "vendas_count", criteria_value: 10 },
+];
+
+function formatBadgeValue(value: number, criteriaType: string): string {
+  if (criteriaType === "faturamento_total") {
+    return new Intl.NumberFormat("pt-BR", {
+      style: "currency",
+      currency: "BRL",
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(value);
+  }
+  return String(value);
+}
+
+function SidebarBadgesWidget({
+  collapsed,
+  teamMemberId,
+}: {
+  collapsed: boolean;
+  teamMemberId: string | undefined;
+}) {
+  const now = new Date();
+  const month = now.getMonth() + 1;
+  const year = now.getFullYear();
+
+  const { data: dbBadges = [] } = useBadges();
+  const { data: userBadges = [] } = useUserBadges(teamMemberId ?? null);
+  const { data: metrics } = useDashboardMetrics(month, year);
+
+  // Se não há badges no banco, usa placeholders
+  const badges = dbBadges.length > 0 ? dbBadges : PLACEHOLDER_BADGES;
+
+  // Mapa de progresso — mesmo usado no DashboardCliente
+  const progressMap: Record<string, number> = {
+    leads_quentes: metrics?.reunioesMarcadas ?? 0,
+    vendas_count: metrics?.novosClientes ?? 0,
+    faturamento_total: metrics?.vendaTotal ?? 0,
+    vendas_recorrentes: 0,
+  };
+
+  const unlockedIds = new Set(userBadges.map((ub) => ub.badge_id));
+  const unlockedCount = badges.filter((b) => unlockedIds.has(b.id)).length;
+  const totalCount = badges.length;
+  const overallPercentage = totalCount > 0 ? (unlockedCount / totalCount) * 100 : 0;
+
+  // Próximo badge a desbloquear (ordenado por criteria_value, pega o primeiro não desbloqueado)
+  const nextBadge = badges.find((b) => !unlockedIds.has(b.id));
+  const NextIcon = nextBadge ? (BADGE_ICON_MAP[nextBadge.icon ?? ""] ?? Trophy) : Trophy;
+
+  // Progresso em direção ao próximo badge
+  const nextCurrentValue = nextBadge ? (progressMap[nextBadge.criteria_type] ?? 0) : 0;
+  const nextTargetValue = nextBadge?.criteria_value ?? 1;
+  const nextProgress = Math.min((nextCurrentValue / nextTargetValue) * 100, 100);
+  const nextRemaining = Math.max(nextTargetValue - nextCurrentValue, 0);
+
+  return (
+    <div className="p-3 border-t border-sidebar-border space-y-2">
+      {/* Card 1 — Conquistas resumo (quantas alcançou) */}
+      <motion.div
+        initial={{ scale: 0.95, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        className="rounded-lg p-3 bg-gradient-to-br from-primary/20 to-primary/5 border border-primary/30"
+      >
+        {collapsed ? (
+          <div className="flex flex-col items-center gap-1">
+            <Trophy className="w-5 h-5 text-primary" />
+            <span className="text-xs font-bold text-primary">
+              {unlockedCount}/{totalCount}
+            </span>
+          </div>
+        ) : (
+          <>
+            <div className="flex items-center gap-2 mb-2">
+              <Trophy className="w-4 h-4 text-primary" />
+              <span className="text-xs font-medium text-sidebar-foreground/70">Conquistas</span>
+            </div>
+            <div className="flex items-baseline gap-1">
+              <span className="text-2xl font-bold text-primary">{unlockedCount}</span>
+              <span className="text-sm text-sidebar-foreground/50">/ {totalCount}</span>
+            </div>
+            <div className="mt-2 h-1.5 bg-sidebar-border rounded-full overflow-hidden">
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `${Math.min(overallPercentage, 100)}%` }}
+                transition={{ duration: 0.5, ease: "easeOut" }}
+                className="h-full rounded-full bg-primary"
+              />
+            </div>
+            <p className="text-xs text-sidebar-foreground/50 mt-1">
+              {overallPercentage.toFixed(0)}% desbloqueado
+            </p>
+          </>
+        )}
+      </motion.div>
+
+      {/* Card 2 — Progresso em direção ao próximo badge */}
+      {!collapsed && nextBadge && (
+        <motion.div
+          initial={{ scale: 0.95, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ delay: 0.1 }}
+          className="rounded-lg p-3 bg-gradient-to-br from-amber-500/20 to-amber-600/10 border border-amber-500/30"
+        >
+          <div className="flex items-center gap-2 mb-2">
+            <Target className="w-4 h-4 text-amber-400" />
+            <span className="text-xs font-medium text-sidebar-foreground/70">Próximo marco</span>
+          </div>
+
+          {/* Ícone + nome */}
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-10 h-10 rounded-full bg-muted border-2 border-amber-500/30 flex items-center justify-center shrink-0">
+              <NextIcon className="w-5 h-5 text-amber-400/70" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-sidebar-foreground truncate">{nextBadge.name}</p>
+              {nextBadge.description && (
+                <p className="text-[10px] text-sidebar-foreground/50 truncate">{nextBadge.description}</p>
+              )}
+            </div>
+          </div>
+
+          {/* Barra de progresso do badge */}
+          <div className="h-2 bg-sidebar-border rounded-full overflow-hidden">
+            <motion.div
+              initial={{ width: 0 }}
+              animate={{ width: `${nextProgress}%` }}
+              transition={{ duration: 0.6, ease: "easeOut" }}
+              className={`h-full rounded-full ${
+                nextProgress >= 80
+                  ? "bg-emerald-400"
+                  : nextProgress >= 40
+                    ? "bg-amber-400"
+                    : "bg-amber-400/60"
+              }`}
+            />
+          </div>
+
+          {/* Valores e quanto falta */}
+          <div className="flex items-center justify-between mt-1.5">
+            <span className="text-xs font-semibold text-sidebar-foreground">
+              {formatBadgeValue(nextCurrentValue, nextBadge.criteria_type)}
+              <span className="text-sidebar-foreground/40 font-normal">
+                {" "}/ {formatBadgeValue(nextTargetValue, nextBadge.criteria_type)}
+              </span>
+            </span>
+            <span className="text-[10px] text-sidebar-foreground/50">
+              {nextProgress.toFixed(0)}%
+            </span>
+          </div>
+
+          {/* Mensagem de quanto falta */}
+          <p className="text-[10px] text-amber-400/80 mt-1">
+            {nextRemaining > 0
+              ? `Falta${nextBadge.criteria_type === "faturamento_total" ? "m" : nextRemaining === 1 ? "" : "m"} ${formatBadgeValue(nextRemaining, nextBadge.criteria_type)} ${CRITERIA_LABELS[nextBadge.criteria_type] ?? ""}`
+              : "Quase lá! Atualize o dashboard"}
+          </p>
+        </motion.div>
+      )}
+
+      {/* Card 3 — Todos os badges já desbloqueados estão completos */}
+      {!collapsed && !nextBadge && badges.length > 0 && (
+        <motion.div
+          initial={{ scale: 0.95, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ delay: 0.1 }}
+          className="rounded-lg p-3 bg-gradient-to-br from-emerald-500/20 to-emerald-600/10 border border-emerald-500/30"
+        >
+          <div className="flex items-center gap-2">
+            <Zap className="w-4 h-4 text-emerald-400" />
+            <span className="text-xs font-medium text-emerald-400">Todas as conquistas desbloqueadas!</span>
+          </div>
+        </motion.div>
+      )}
+
+      {/* Card 4 — Badges desbloqueados (ícones compactos) */}
+      {!collapsed && unlockedCount > 0 && (
+        <motion.div
+          initial={{ scale: 0.95, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ delay: 0.2 }}
+          className="rounded-lg p-3 bg-gradient-to-br from-emerald-500/20 to-emerald-600/10 border border-emerald-500/30"
+        >
+          <div className="flex items-center gap-2 mb-2">
+            <Zap className="w-4 h-4 text-emerald-400" />
+            <span className="text-xs font-medium text-sidebar-foreground/70">Desbloqueados</span>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {badges
+              .filter((b) => unlockedIds.has(b.id))
+              .slice(0, 4)
+              .map((b) => {
+                const BadgeIcon = BADGE_ICON_MAP[b.icon ?? ""] ?? Trophy;
+                return (
+                  <div
+                    key={b.id}
+                    className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center border border-primary/50"
+                    title={b.name}
+                  >
+                    <BadgeIcon className="w-4 h-4 text-primary-foreground" />
+                  </div>
+                );
+              })}
+            {unlockedCount > 4 && (
+              <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-xs font-bold text-muted-foreground">
+                +{unlockedCount - 4}
+              </div>
+            )}
+          </div>
+        </motion.div>
+      )}
+    </div>
+  );
 }

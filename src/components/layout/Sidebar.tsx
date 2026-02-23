@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
   Gauge,
@@ -23,19 +23,29 @@ import {
   Bot,
   GitBranch,
   BarChart2,
+  TrendingUp,
   Lock,
+  Camera,
+  Loader2,
 } from "lucide-react";
 import torqueLogo from "@/assets/torque-logo.png";
 import torqueIcon from "@/assets/torque-icon.png";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserRole } from "@/hooks/useUserRole";
+import { useOrganization } from "@/hooks/useOrganization";
+import { useVisibleSidebarKeys } from "@/hooks/useClientSidebarPermissions";
 import { useWhatsAppContacts, useWhatsAppMessagesRealtime } from "@/hooks/useWhatsAppChat";
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
 import { SIDEBAR_FEATURE_MAP, type FeatureKey } from "@/lib/feature-registry";
 import { UpgradeModal } from "@/components/shared/UpgradeModal";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { UserAvatar } from "@/components/ui/user-avatar";
 import { AlertsDropdown } from "@/components/notifications/AlertsDropdown";
 import { SidebarPerformanceWidget } from "./SidebarPerformanceWidget";
+import { supabase } from "@/integrations/supabase/client";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 interface NavItem {
@@ -54,6 +64,7 @@ const funisSubItems: NavItem[] = [
   { label: "Qualificação", icon: MessageSquare, path: "/pipe-whatsapp" },
   { label: "Confirmação", icon: Calendar, path: "/pipe-confirmacao" },
   { label: "Propostas", icon: Kanban, path: "/pipe-propostas" },
+  { label: "Carteira", icon: TrendingUp, path: "/upsell" },
 ];
 
 const navItems: NavItemWithChildren[] = [
@@ -79,25 +90,79 @@ const bottomNavItems: NavItem[] = [
   { label: "Pitstop", icon: Settings, path: "/configuracoes" },
 ];
 
-const FUNIS_PATHS = ["/pipe-whatsapp", "/pipe-confirmacao", "/pipe-propostas", "/funis"] as const;
+const FUNIS_PATHS = ["/pipe-whatsapp", "/pipe-confirmacao", "/pipe-propostas", "/upsell", "/funis"] as const;
 
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const [hovered, setHovered] = useState(false);
   const [expandedMenus, setExpandedMenus] = useState<string[]>([]);
   const [upgradeModal, setUpgradeModal] = useState<{ open: boolean; label: string; description?: string }>({ open: false, label: "" });
+  const [avatarModalOpen, setAvatarModalOpen] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const queryClient = useQueryClient();
   const location = useLocation();
   const isOnFunisPage = FUNIS_PATHS.some((p) => location.pathname.startsWith(p));
   const open = isOnFunisPage ? !collapsed : !collapsed || hovered;
   const { user, signOut } = useAuth();
   const { data: userRole } = useUserRole();
+  const { orgType } = useOrganization();
+  const visibleSidebarKeys = useVisibleSidebarKeys();
   const { hasFeature } = useOrgFeatures();
+  const role = userRole?.role;
+  const isOutbound = orgType === "outbound";
 
   /** Verifica se um nav item está bloqueado pela feature flag */
   const isLocked = (path: string): boolean => {
     const featureKey = SIDEBAR_FEATURE_MAP[path];
     if (!featureKey) return false;
     return !hasFeature(featureKey);
+  };
+
+  // Mapeamento path → sidebar_key para filtragem OUTBOUND (todos os itens)
+  const PATH_TO_SIDEBAR_KEY: Record<string, string> = {
+    "/": "dashboard",
+    "/campanhas": "campanhas",
+    "/marketing": "marketing",
+    "/chat-whatsapp": "chat_whatsapp",
+    "/funis": "funis",
+    "/follow-ups": "follow_ups",
+    "/leads": "leads",
+    "/performance": "performance",
+    "/comissoes": "comissoes",
+    "/copilot": "copilot",
+    "/equipe": "equipe",
+    "/produtos": "produtos",
+    "/tv": "tv_dashboard",
+    "/configuracoes": "configuracoes",
+  };
+
+  // Paths que o BDR nunca vê (hardcoded)
+  const BDR_HIDDEN_PATHS = new Set([
+    "/comissoes",
+    "/configuracoes",
+  ]);
+
+  /** Verifica se um nav item deve ser escondido baseado no org_type e role */
+  const isHiddenByOrgRole = (path: string): boolean => {
+    if (!isOutbound) return false; // CRM: sem filtro
+    if (role === "agency") return false; // Agency vê tudo
+
+    if (role === "bdr") {
+      return BDR_HIDDEN_PATHS.has(path);
+    }
+
+    if (role === "cliente") {
+      // Tudo controlado pelas permissões do banco
+      const sidebarKey = PATH_TO_SIDEBAR_KEY[path];
+      if (sidebarKey) {
+        return !visibleSidebarKeys.has(sidebarKey);
+      }
+      return false;
+    }
+
+    return false;
   };
 
   /** Abre modal de upgrade para uma feature bloqueada */
@@ -142,13 +207,62 @@ export function Sidebar() {
   };
 
   const getRoleLabel = () => {
-    if (!userRole?.role) return "Piloto";
+    if (!role) return "Piloto";
     const labels: Record<string, string> = {
       admin: "Chefe de Equipe",
       sdr: "Piloto SDR",
       closer: "Piloto Closer",
+      agency: "Agency",
+      bdr: "BDR",
+      cliente: "Cliente",
     };
-    return labels[userRole.role] || "Piloto";
+    return labels[role] || "Piloto";
+  };
+
+  // Avatar URL do user metadata
+  const currentAvatarUrl = avatarUrl || user?.user_metadata?.avatar_url || null;
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user?.id) return;
+
+    if (!file.type.startsWith("image/")) {
+      toast.error("Por favor, selecione uma imagem");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("A imagem deve ter no máximo 5MB");
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      const ext = file.name.split(".").pop() || "jpg";
+      const path = `avatars/${user.id}.${ext}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("media")
+        .upload(path, file, { contentType: file.type, upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage.from("media").getPublicUrl(path);
+      const publicUrl = urlData.publicUrl;
+
+      await supabase.from("profiles").update({ avatar_url: publicUrl }).eq("id", user.id);
+      await supabase.auth.updateUser({ data: { avatar_url: publicUrl } });
+
+      setAvatarUrl(publicUrl);
+      queryClient.invalidateQueries({ queryKey: ["avatar-map"] });
+      queryClient.invalidateQueries({ queryKey: ["profiles"] });
+      toast.success("Foto de perfil atualizada!");
+      setAvatarModalOpen(false);
+    } catch (error: any) {
+      toast.error(error.message || "Erro ao fazer upload da foto");
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
   };
 
   const sidebarEase = "cubic-bezier(0.32, 0.72, 0, 1)";
@@ -232,6 +346,9 @@ export function Sidebar() {
       {/* Main Navigation */}
       <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
         {navItems.map((item) => {
+          // Filtrar por org_type + role (OUTBOUND)
+          if (isHiddenByOrgRole(item.path)) return null;
+
           const locked = isLocked(item.path);
 
           return (
@@ -363,8 +480,8 @@ export function Sidebar() {
           );
         })}
         
-        {/* Admin Navigation */}
-        {userRole?.role === "admin" && (
+        {/* Admin Navigation — com label ADMIN para admin/agency, sem label para CLIENTE */}
+        {(role === "admin" || role === "agency") && (
           <>
             {open && (
               <div className="pt-3 pb-1">
@@ -372,6 +489,9 @@ export function Sidebar() {
               </div>
             )}
             {adminNavItems.map((item) => {
+              // Filtrar por org_type + role (OUTBOUND)
+              if (isHiddenByOrgRole(item.path)) return null;
+
               const adminLocked = isLocked(item.path);
               return adminLocked ? (
                 <button
@@ -412,45 +532,87 @@ export function Sidebar() {
             })}
           </>
         )}
+
+        {/* Itens admin habilitados pelo AGENCY para CLIENTE (sem label ADMIN) */}
+        {role === "cliente" && isOutbound && adminNavItems.some((item) => !isHiddenByOrgRole(item.path)) && (
+          <>
+            {adminNavItems.map((item) => {
+              if (isHiddenByOrgRole(item.path)) return null;
+              return (
+                <NavLink
+                  key={item.path}
+                  to={item.path}
+                  className={`sidebar-item ${
+                    isActive(item.path) ? "sidebar-item-active" : ""
+                  }`}
+                >
+                  <item.icon className="w-5 h-5 flex-shrink-0" />
+                  <span
+                    className={cn(
+                      "overflow-hidden whitespace-nowrap flex-1 text-sm min-w-0 transition-opacity duration-400 ease-out group-hover/sidebar:translate-x-0.5 transition-transform",
+                      open ? "opacity-100" : "opacity-0"
+                    )}
+                  >
+                    {item.label}
+                  </span>
+                </NavLink>
+              );
+            })}
+          </>
+        )}
       </nav>
 
       {/* Performance Widget */}
       <SidebarPerformanceWidget collapsed={!open} />
 
-      {/* Bottom Navigation */}
+      {/* Bottom Navigation — filtrado por org_type + role */}
+      {bottomNavItems.some((item) => !isHiddenByOrgRole(item.path)) && (
       <div className="p-3 border-t border-sidebar-border space-y-1">
-        {bottomNavItems.map((item) => (
-          <NavLink
-            key={item.path}
-            to={item.path}
-            className={`sidebar-item ${
-              isActive(item.path) ? "sidebar-item-active" : ""
-            }`}
-          >
-            <item.icon className="w-5 h-5 flex-shrink-0" />
-            <span
-              className={cn(
-                "overflow-hidden whitespace-nowrap text-sm min-w-0 transition-opacity duration-400 ease-out group-hover/sidebar:translate-x-0.5 transition-transform",
-                open ? "opacity-100" : "opacity-0"
-              )}
+        {bottomNavItems.map((item) => {
+          if (isHiddenByOrgRole(item.path)) return null;
+          return (
+            <NavLink
+              key={item.path}
+              to={item.path}
+              className={`sidebar-item ${
+                isActive(item.path) ? "sidebar-item-active" : ""
+              }`}
             >
-              {item.label}
-            </span>
-          </NavLink>
-        ))}
+              <item.icon className="w-5 h-5 flex-shrink-0" />
+              <span
+                className={cn(
+                  "overflow-hidden whitespace-nowrap text-sm min-w-0 transition-opacity duration-400 ease-out group-hover/sidebar:translate-x-0.5 transition-transform",
+                  open ? "opacity-100" : "opacity-0"
+                )}
+              >
+                {item.label}
+              </span>
+            </NavLink>
+          );
+        })}
       </div>
+      )}
 
       {/* User Section */}
       <div className="p-3 border-t border-sidebar-border">
         <div className="sidebar-item cursor-pointer">
-          <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
-            <span className="text-sm font-semibold text-primary-foreground">{getUserInitials()}</span>
+          <div
+            className="flex-shrink-0"
+            onClick={() => setAvatarModalOpen(true)}
+          >
+            <UserAvatar
+              name={getUserName()}
+              avatarUrl={currentAvatarUrl}
+              size="sm"
+              fallbackClassName="bg-primary text-primary-foreground"
+            />
           </div>
           <div
             className={cn(
-              "overflow-hidden flex-1 min-w-0 transition-opacity duration-400 ease-out",
+              "overflow-hidden flex-1 min-w-0 transition-opacity duration-400 ease-out cursor-pointer",
               open ? "opacity-100" : "opacity-0"
             )}
+            onClick={() => setAvatarModalOpen(true)}
           >
             <p className="text-sm font-medium text-sidebar-foreground truncate">{getUserName()}</p>
             <p className="text-xs text-sidebar-foreground/60">{getRoleLabel()}</p>
@@ -467,6 +629,62 @@ export function Sidebar() {
           )}
         </div>
       </div>
+
+      {/* Avatar Upload Modal */}
+      <Dialog open={avatarModalOpen} onOpenChange={setAvatarModalOpen}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>Foto de Perfil</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col items-center gap-6 py-4">
+            <div className="relative">
+              <UserAvatar
+                name={getUserName()}
+                avatarUrl={currentAvatarUrl}
+                size="2xl"
+                fallbackClassName="bg-primary text-primary-foreground"
+              />
+              <button
+                className="absolute bottom-0 right-0 p-2 bg-primary text-primary-foreground rounded-full hover:bg-primary/90 transition-colors disabled:opacity-50"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isUploading}
+              >
+                {isUploading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Camera className="w-4 h-4" />
+                )}
+              </button>
+            </div>
+            <div className="text-center">
+              <p className="font-medium">{getUserName()}</p>
+              <p className="text-sm text-muted-foreground">{getRoleLabel()}</p>
+            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleAvatarUpload}
+            />
+            <Button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isUploading}
+              className="w-full gap-2"
+            >
+              {isUploading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Camera className="w-4 h-4" />
+              )}
+              {isUploading ? "Enviando..." : "Escolher Foto"}
+            </Button>
+            <p className="text-xs text-muted-foreground text-center">
+              Formatos aceitos: JPG, PNG, GIF. Tamanho máximo: 5MB.
+            </p>
+          </div>
+        </DialogContent>
+      </Dialog>
       {/* Upgrade Modal */}
       <UpgradeModal
         open={upgradeModal.open}

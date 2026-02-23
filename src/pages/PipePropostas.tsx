@@ -42,7 +42,7 @@ import { CommitmentDateModal } from "@/components/proposals/CommitmentDateModal"
 import { DaysUntilMeeting } from "@/components/proposals/DaysUntilMeeting";
 import { CalorAnalyticsChart } from "@/components/proposals/CalorAnalyticsChart";
 import { ProductAnalyticsChart } from "@/components/proposals/ProductAnalyticsChart";
-import { format } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useLogLeadAction } from "@/hooks/useLogLeadAction";
 import { toast } from "sonner";
@@ -241,6 +241,14 @@ function ProposalCardComponent({
               +{proposal.tags.length - 3}
             </Badge>
           )}
+        </div>
+      )}
+
+      {/* Entry Timer */}
+      {proposal.createdAt && (
+        <div className="flex items-center gap-1 text-[10px] text-muted-foreground mb-2">
+          <Clock className="w-3 h-3 shrink-0" />
+          <span>{formatDistanceToNow(new Date(proposal.createdAt), { addSuffix: true, locale: ptBR })}</span>
         </div>
       )}
 

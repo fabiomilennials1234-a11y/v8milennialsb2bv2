@@ -3,6 +3,8 @@ import { Target, Users, TrendingUp, Calendar, Zap, Trophy, Flame, Star, Crown, A
 import { GoalProgress } from "@/components/dashboard/GoalProgress";
 import { ProgressRing } from "@/components/gamification/ProgressRing";
 import { AchievementBadge, BadgeType } from "@/components/gamification/AchievementBadge";
+import { UserAvatar } from "@/components/ui/user-avatar";
+import { useAvatarMap } from "@/hooks/useAvatarMap";
 import { useTeamGoals, useIndividualGoals } from "@/hooks/useGoals";
 import { useDashboardMetrics } from "@/hooks/useDashboardMetrics";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -34,6 +36,7 @@ export default function Metas() {
   const { data: teamGoals, isLoading: goalsLoading } = useTeamGoals(month, year);
   const { data: individualGoals, isLoading: individualLoading } = useIndividualGoals(month, year);
   const { data: metrics, isLoading: metricsLoading } = useDashboardMetrics(month, year);
+  const avatarMap = useAvatarMap();
 
   const isLoading = goalsLoading || individualLoading || metricsLoading;
 
@@ -320,11 +323,12 @@ export default function Metas() {
                       </div>
 
                       {/* Avatar */}
-                      <div className="w-10 h-10 rounded-full bg-accent flex items-center justify-center flex-shrink-0">
-                        <span className="text-sm font-semibold text-accent-foreground">
-                          {vendedor.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
-                        </span>
-                      </div>
+                      <UserAvatar
+                        name={vendedor.name}
+                        avatarUrl={avatarMap.get(vendedor.id)}
+                        size="md"
+                        fallbackClassName="bg-accent text-accent-foreground"
+                      />
                       
                       {/* Info */}
                       <div className="flex-1 min-w-0">
@@ -416,11 +420,12 @@ export default function Metas() {
                       </div>
 
                       {/* Avatar */}
-                      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                        <span className="text-sm font-semibold text-primary">
-                          {sdr.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
-                        </span>
-                      </div>
+                      <UserAvatar
+                        name={sdr.name}
+                        avatarUrl={avatarMap.get(sdr.id)}
+                        size="md"
+                        fallbackClassName="bg-primary/10 text-primary"
+                      />
                       
                       {/* Info */}
                       <div className="flex-1 min-w-0">
