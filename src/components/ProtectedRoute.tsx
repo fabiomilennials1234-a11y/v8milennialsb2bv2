@@ -2,6 +2,7 @@ import { ReactNode } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCurrentTeamMember } from '@/hooks/useTeamMembers';
+import { useMasterAuth } from '@/hooks/useMasterAuth';
 import { Loader2, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -13,9 +14,10 @@ interface ProtectedRouteProps {
 export function ProtectedRoute({ children, requireOrganization = true }: ProtectedRouteProps) {
   const { user, loading: authLoading, signOut } = useAuth();
   const { data: teamMember, isLoading: teamMemberLoading, error: teamMemberError } = useCurrentTeamMember();
+  const { isMaster, isLoading: masterLoading } = useMasterAuth();
 
-  // Loading state - auth
-  if (authLoading) {
+  // Loading state - auth ou master
+  if (authLoading || masterLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
@@ -31,8 +33,8 @@ export function ProtectedRoute({ children, requireOrganization = true }: Protect
     return <Navigate to="/auth" replace />;
   }
 
-  // Loading team member data
-  if (teamMemberLoading && requireOrganization) {
+  // Loading team member data (master bypass: virtual member resolve assíncrono)
+  if (teamMemberLoading && requireOrganization && !isMaster) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
@@ -43,8 +45,8 @@ export function ProtectedRoute({ children, requireOrganization = true }: Protect
     );
   }
 
-  // SECURITY: Validate organization membership
-  if (requireOrganization) {
+  // SECURITY: Validate organization membership (master bypassa todas as validações)
+  if (requireOrganization && !isMaster) {
     // No team member record
     if (!teamMember) {
       return (
@@ -105,8 +107,8 @@ export function ProtectedRoute({ children, requireOrganization = true }: Protect
     }
   }
 
-  // Error fetching team member (but don't block if we already have data)
-  if (teamMemberError && !teamMember && requireOrganization) {
+  // Error fetching team member (but don't block if we already have data or is master)
+  if (teamMemberError && !teamMember && requireOrganization && !isMaster) {
     console.error('[ProtectedRoute] Error fetching team member:', teamMemberError);
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">

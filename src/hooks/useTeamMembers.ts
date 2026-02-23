@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useMasterAuth } from "./useMasterAuth";
 import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
 import { useOrganization } from "./useOrganization";
 import { useRealtimeSubscription } from "./useRealtimeSubscription";
@@ -8,6 +9,14 @@ import { useRealtimeSubscription } from "./useRealtimeSubscription";
 export type TeamMember = Tables<"team_members">;
 export type TeamMemberInsert = TablesInsert<"team_members">;
 export type TeamMemberUpdate = TablesUpdate<"team_members">;
+
+/**
+ * Detecta se um teamMemberId é virtual (master shadow user).
+ * IDs virtuais nunca devem ser usados em mutations com FK.
+ */
+export function isVirtualTeamMember(id: string | null | undefined): boolean {
+  return !!id?.startsWith("master-virtual-");
+}
 
 // Chave no localStorage para org selecionada (org switcher)
 const SELECTED_ORG_KEY = "selected_org_id";
@@ -28,20 +37,43 @@ export function setSelectedOrgId(orgId: string) {
   }
 }
 
+/**
+ * Cria um team member virtual para o master user (shadow user).
+ * Não existe no banco — apenas no frontend para manter o fluxo de contexto.
+ */
+function buildVirtualTeamMember(userId: string, organizationId: string): TeamMember {
+  return {
+    id: `master-virtual-${userId}`,
+    user_id: userId,
+    organization_id: organizationId,
+    name: "Master",
+    role: "admin",
+    is_active: true,
+    ote_base: null,
+    ote_bonus: null,
+    commission_mrr_percent: null,
+    commission_projeto_percent: null,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  } as TeamMember;
+}
+
 // Hook to get the current user's team member record
 // Suporta troca de org via localStorage (org switcher)
+// Master users recebem um team member virtual (shadow user)
 export function useCurrentTeamMember() {
   const { user } = useAuth();
+  const { isMaster, isLoading: masterLoading } = useMasterAuth();
 
   return useQuery({
-    queryKey: ["team_members", "current", user?.id],
+    queryKey: ["team_members", "current", user?.id, isMaster],
     queryFn: async () => {
       if (!user?.id) {
         console.log("🔍 useCurrentTeamMember: Sem user.id");
         return null;
       }
 
-      console.log("🔍 useCurrentTeamMember: Buscando team_member para user:", user.id);
+      console.log("🔍 useCurrentTeamMember: Buscando team_member para user:", user.id, { isMaster });
 
       const storedOrgId = getSelectedOrgId();
 
@@ -61,7 +93,23 @@ export function useCurrentTeamMember() {
           });
           return data as TeamMember;
         }
-        // Se não encontrou nessa org, fallback abaixo
+
+        // Master sem team_member nessa org: criar virtual member
+        if (isMaster) {
+          // Verificar se a org ainda existe
+          const { data: orgExists } = await supabase
+            .from("organizations")
+            .select("id")
+            .eq("id", storedOrgId)
+            .maybeSingle();
+
+          if (orgExists) {
+            console.log("✅ useCurrentTeamMember: Master virtual (org selecionada):", { organizationId: storedOrgId });
+            return buildVirtualTeamMember(user.id, storedOrgId);
+          }
+          // Org não existe mais, limpar e buscar outra
+          localStorage.removeItem(SELECTED_ORG_KEY);
+        }
       }
 
       // Fallback: buscar qualquer team_member ativo do user
@@ -84,19 +132,40 @@ export function useCurrentTeamMember() {
         throw error;
       }
 
-      // Salvar a org encontrada como preferência
+      // Se encontrou team_member real, salvar e retornar
       if (data?.organization_id) {
         setSelectedOrgId(data.organization_id);
+        console.log("✅ useCurrentTeamMember: Resultado:", {
+          hasData: true,
+          organizationId: data.organization_id,
+        });
+        return data as TeamMember;
+      }
+
+      // Master sem nenhum team_member: buscar primeira org disponível
+      if (isMaster) {
+        const { data: firstOrg } = await supabase
+          .from("organizations")
+          .select("id")
+          .order("name")
+          .limit(1)
+          .maybeSingle();
+
+        if (firstOrg) {
+          setSelectedOrgId(firstOrg.id);
+          console.log("✅ useCurrentTeamMember: Master virtual (primeira org):", { organizationId: firstOrg.id });
+          return buildVirtualTeamMember(user.id, firstOrg.id);
+        }
       }
 
       console.log("✅ useCurrentTeamMember: Resultado:", {
-        hasData: !!data,
-        organizationId: data?.organization_id,
+        hasData: false,
+        organizationId: null,
       });
 
-      return data as TeamMember | null;
+      return null;
     },
-    enabled: !!user?.id,
+    enabled: !!user?.id && !masterLoading,
     retry: 2,
     staleTime: 30000, // 30 segundos
   });
@@ -199,9 +268,12 @@ export function useUpdateTeamMember() {
         query = query.eq("organization_id", organizationId);
       }
 
-      const { data, error } = await query.select().single();
+      const { data, error } = await query.select().maybeSingle();
 
       if (error) throw error;
+      if (!data) {
+        throw new Error("Não foi possível atualizar o membro. Verifique suas permissões de admin.");
+      }
       return data;
     },
     onSuccess: () => {

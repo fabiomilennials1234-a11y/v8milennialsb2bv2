@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
+import { useCurrentTeamMember, isVirtualTeamMember } from "@/hooks/useTeamMembers";
 
 export interface WhatsAppMessage {
   id: string;
@@ -61,6 +61,7 @@ export function useWhatsAppInstancesForUser() {
   const { data: teamMember } = useCurrentTeamMember();
   const organizationId = teamMember?.organization_id;
   const teamMemberId = teamMember?.id;
+  const isMasterVirtual = isVirtualTeamMember(teamMemberId);
 
   return useQuery({
     queryKey: ["whatsapp_instances_for_user", organizationId, teamMemberId],
@@ -76,6 +77,11 @@ export function useWhatsAppInstancesForUser() {
 
       if (instError) throw instError;
       if (!instances?.length) return [];
+
+      // Master (shadow user) vê todas as instâncias sem restrição
+      if (isMasterVirtual) {
+        return instances as WhatsAppInstanceForUser[];
+      }
 
       const { data: allowedRows } = await supabase
         .from("whatsapp_instance_allowed_members")
@@ -359,6 +365,9 @@ async function assertCanReplyOnInstance(
   organizationId: string,
   teamMemberId: string
 ): Promise<void> {
+  // Master (shadow user) pode responder em qualquer instância
+  if (isVirtualTeamMember(teamMemberId)) return;
+
   const { data: instance } = await supabase
     .from("whatsapp_instances")
     .select("id")

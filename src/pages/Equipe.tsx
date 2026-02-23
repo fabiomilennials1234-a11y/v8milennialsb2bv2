@@ -195,8 +195,12 @@ export default function Equipe() {
         role: sanitizedData.role as any,
       });
       // Sincronizar user_roles para que RLS e UI vejam a role correta (admin/closer/sdr)
-      if (editingMember.user_id) {
-        await supabase.from("user_roles").delete().eq("user_id", editingMember.user_id);
+      // GUARD: só sincroniza se o membro editado tem user_id e a role mudou
+      if (editingMember.user_id && formData.role !== editingMember.role) {
+        const { error: delErr } = await supabase.from("user_roles").delete().eq("user_id", editingMember.user_id);
+        if (delErr) {
+          console.warn("[Equipe] Erro ao remover user_roles:", delErr.message);
+        }
         const { error: insertErr } = await supabase.from("user_roles").insert({
           user_id: editingMember.user_id,
           role: formData.role as any,
@@ -216,9 +220,10 @@ export default function Equipe() {
       setEditingMember(null);
     } catch (error: any) {
       const msg = error?.message || "";
-      if (msg.includes("new row violates") || msg.includes("permission") || msg.includes("policy")) {
+      const msgLower = msg.toLowerCase();
+      if (msgLower.includes("new row violates") || msgLower.includes("permission") || msgLower.includes("policy")) {
         toast.error("Sem permissão para editar. Verifique se você é admin.");
-      } else if (msg.includes("Row not found") || msg.includes("0 rows")) {
+      } else if (msgLower.includes("row not found") || msgLower.includes("0 rows") || msgLower.includes("json object requested") || msgLower.includes("não foi possível atualizar")) {
         toast.error("Não foi possível atualizar. Verifique suas permissões de admin.");
       } else {
         toast.error("Erro ao salvar membro: " + (msg || "erro desconhecido"));

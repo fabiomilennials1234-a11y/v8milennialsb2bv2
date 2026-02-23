@@ -21,6 +21,7 @@ import { useDashboardMetrics, useFunnelData } from "@/hooks/useDashboardMetrics"
 import { useBadges, useUserBadges, useUnlockBadge } from "@/hooks/useBadges";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOrganization } from "@/hooks/useOrganization";
+import { isVirtualTeamMember } from "@/hooks/useTeamMembers";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { format } from "date-fns";
@@ -86,9 +87,9 @@ export default function DashboardCliente() {
     vendas_recorrentes: 0,
   };
 
-  // Auto-unlock de badges ao carregar
+  // Auto-unlock de badges ao carregar (skip para master virtual — sem FK real)
   useEffect(() => {
-    if (!teamMemberId || badges.length === 0) return;
+    if (!teamMemberId || badges.length === 0 || isVirtualTeamMember(teamMemberId)) return;
     const unlockedIds = new Set(userBadges.map((ub) => ub.badge_id));
     for (const badge of badges) {
       if (unlockedIds.has(badge.id)) continue;
