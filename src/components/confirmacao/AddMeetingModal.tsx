@@ -5,9 +5,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { CalendarIcon, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
+import { CalendarIcon, Loader2, CheckCircle2, AlertCircle, Video } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -15,6 +16,9 @@ import { useLeads } from "@/hooks/useLeads";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
 import { useCreatePipeConfirmacao, PipeConfirmacaoStatus } from "@/hooks/usePipeConfirmacao";
 import { useLogLeadAction } from "@/hooks/useLogLeadAction";
+import { useGoogleCalendarStatus } from "@/hooks/useGoogleCalendar";
+import { useCalendarSharing } from "@/hooks/useGoogleCalendarSharing";
+import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
 interface AddMeetingModalProps {
@@ -34,18 +38,54 @@ export function AddMeetingModal({ open, onOpenChange, onSuccess }: AddMeetingMod
   const [status, setStatus] = useState<PipeConfirmacaoStatus>("reuniao_marcada");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Google Calendar states
+  const [createGoogleEvent, setCreateGoogleEvent] = useState(true);
+  const [calendarOwnerId, setCalendarOwnerId] = useState<string>("");
+
+  const { session } = useAuth();
   const { data: leads, isLoading: leadsLoading } = useLeads();
   const { data: teamMembers, isLoading: membersLoading } = useTeamMembers();
   const createPipeConfirmacao = useCreatePipeConfirmacao();
   const logAction = useLogLeadAction();
 
+  // Google Calendar hooks
+  const { data: calStatus } = useGoogleCalendarStatus();
+  const { data: sharingData } = useCalendarSharing();
+
+  const ownUserId = session?.user?.id ?? "";
+
   const sdrs = teamMembers?.filter(m => m.role === "sdr" && m.is_active) || [];
   const closers = teamMembers?.filter(m => m.role === "closer" && m.is_active) || [];
+
+  // Build list of calendars available to create events in
+  const calendarOptions = useMemo(() => {
+    const opts: { id: string; label: string }[] = [];
+    if (calStatus?.connected) {
+      const emailLabel = calStatus.google_email ? ` (${calStatus.google_email})` : "";
+      opts.push({ id: ownUserId, label: `Meu Calendário${emailLabel}` });
+    }
+    // Incoming shares where the owner gave us permission to create events
+    sharingData?.incoming
+      ?.filter((s) => s.can_create_events)
+      .forEach((share) => {
+        if (share.owner?.name) {
+          opts.push({ id: share.owner_id, label: share.owner.name });
+        }
+      });
+    return opts;
+  }, [calStatus, sharingData, ownUserId]);
+
+  // Auto-select first available calendar
+  useEffect(() => {
+    if (calendarOptions.length > 0 && !calendarOwnerId) {
+      setCalendarOwnerId(calendarOptions[0].id);
+    }
+  }, [calendarOptions.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Find lead by email
   const foundLeadByEmail = useMemo(() => {
     if (!email.trim() || !leads) return null;
-    return leads.find(lead => 
+    return leads.find(lead =>
       lead.email?.toLowerCase().trim() === email.toLowerCase().trim()
     ) || null;
   }, [email, leads]);
@@ -68,8 +108,10 @@ export function AddMeetingModal({ open, onOpenChange, onSuccess }: AddMeetingMod
       setCloserId("");
       setNotes("");
       setStatus("reuniao_marcada");
+      setCreateGoogleEvent(true);
+      setCalendarOwnerId(calendarOptions[0]?.id ?? "");
     }
-  }, [open]);
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSubmit = async () => {
     if (!selectedLeadId) {
@@ -90,7 +132,7 @@ export function AddMeetingModal({ open, onOpenChange, onSuccess }: AddMeetingMod
       const meetingDateTime = new Date(meetingDate);
       meetingDateTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
 
-      await createPipeConfirmacao.mutateAsync({
+      const pipeData = await createPipeConfirmacao.mutateAsync({
         lead_id: selectedLeadId,
         meeting_date: meetingDateTime.toISOString(),
         sdr_id: sdrId || null,
@@ -104,7 +146,65 @@ export function AddMeetingModal({ open, onOpenChange, onSuccess }: AddMeetingMod
         action: "meeting_scheduled",
         description: `Reunião agendada para ${format(meetingDateTime, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}`,
       });
-      toast.success("Reunião adicionada com sucesso!");
+
+      // ── Cria evento no Google Calendar ───────────────────────────────────
+      if (createGoogleEvent && calendarOwnerId && session?.access_token) {
+        try {
+          const lead = foundLeadByEmail ?? leads?.find((l) => l.id === selectedLeadId);
+          const leadName = lead?.name ?? "Lead";
+
+          const url = `${(import.meta.env.VITE_SUPABASE_URL as string ?? "").replace(/\/$/, "")}/functions/v1/google-calendar-events`;
+          const res = await fetch(url, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${session.access_token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              title: `${leadName} - Reunião`,
+              description: [
+                `Reunião com lead: ${leadName}`,
+                lead?.company ? `Empresa: ${lead.company}` : null,
+                lead?.phone  ? `Telefone: ${lead.phone}`  : null,
+                notes        ? `\nObservações: ${notes}`  : null,
+              ]
+                .filter(Boolean)
+                .join("\n"),
+              start_at:             meetingDateTime.toISOString(),
+              end_at:               new Date(meetingDateTime.getTime() + 60 * 60 * 1000).toISOString(),
+              timezone:             "America/Sao_Paulo",
+              lead_id:              selectedLeadId,
+              pipe_confirmacao_id:  pipeData.id,
+              calendar_owner_id:    calendarOwnerId,
+            }),
+          });
+
+          if (res.ok) {
+            const gcData = await res.json();
+            if (gcData.meet_link) {
+              toast.success("Reunião criada!", {
+                description: `Link do Google Meet gerado automaticamente.`,
+              });
+            } else {
+              toast.success("Reunião adicionada e evento criado no Google Calendar!");
+            }
+          } else {
+            const errData = await res.json().catch(() => ({}));
+            console.warn("[AddMeetingModal] Google Calendar error:", errData);
+            toast.success("Reunião adicionada com sucesso!");
+            toast.warning("Não foi possível criar o evento no Google Calendar", {
+              description: (errData as { message?: string }).message ?? "Verifique se o Google Calendar está conectado.",
+            });
+          }
+        } catch (gcErr) {
+          console.warn("[AddMeetingModal] Google Calendar error:", gcErr);
+          toast.success("Reunião adicionada com sucesso!");
+          toast.warning("Não foi possível criar o evento no Google Calendar");
+        }
+      } else {
+        toast.success("Reunião adicionada com sucesso!");
+      }
+
       onOpenChange(false);
       onSuccess?.();
     } catch (error) {
@@ -123,6 +223,8 @@ export function AddMeetingModal({ open, onOpenChange, onSuccess }: AddMeetingMod
     { value: "confirmacao_no_dia", label: "Confirmação no Dia" },
     { value: "remarcar", label: "Remarcar" },
   ];
+
+  const hasCalendars = calendarOptions.length > 0;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -160,7 +262,7 @@ export function AddMeetingModal({ open, onOpenChange, onSuccess }: AddMeetingMod
                 "text-xs",
                 foundLeadByEmail ? "text-green-600" : "text-muted-foreground"
               )}>
-                {foundLeadByEmail 
+                {foundLeadByEmail
                   ? `Lead encontrado: ${foundLeadByEmail.name}${foundLeadByEmail.company ? ` - ${foundLeadByEmail.company}` : ""}`
                   : "Nenhum lead encontrado com este email. Selecione manualmente abaixo."
                 }
@@ -171,21 +273,21 @@ export function AddMeetingModal({ open, onOpenChange, onSuccess }: AddMeetingMod
           {/* Lead Selection */}
           <div className="space-y-2">
             <Label>Lead *</Label>
-            <Select 
-              value={selectedLeadId} 
+            <Select
+              value={selectedLeadId}
               onValueChange={setSelectedLeadId}
               disabled={!!foundLeadByEmail}
             >
               <SelectTrigger className={cn(foundLeadByEmail && "bg-muted")}>
                 <SelectValue placeholder={leadsLoading ? "Carregando..." : "Selecione um lead"} />
               </SelectTrigger>
-                <SelectContent>
-                  {leads?.filter(lead => lead.id).map((lead) => (
-                    <SelectItem key={lead.id} value={lead.id}>
-                      {lead.name} {lead.company && `- ${lead.company}`}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
+              <SelectContent>
+                {leads?.filter(lead => lead.id).map((lead) => (
+                  <SelectItem key={lead.id} value={lead.id}>
+                    {lead.name} {lead.company && `- ${lead.company}`}
+                  </SelectItem>
+                ))}
+              </SelectContent>
             </Select>
             {foundLeadByEmail && (
               <p className="text-xs text-muted-foreground">
@@ -297,6 +399,45 @@ export function AddMeetingModal({ open, onOpenChange, onSuccess }: AddMeetingMod
               rows={3}
             />
           </div>
+
+          {/* Google Calendar Section */}
+          {hasCalendars && (
+            <div className="rounded-lg border border-border/50 p-3 space-y-3 bg-muted/20">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Video className="w-4 h-4 text-primary" />
+                  <span className="text-sm font-medium">Google Calendar</span>
+                </div>
+                <Switch
+                  checked={createGoogleEvent}
+                  onCheckedChange={setCreateGoogleEvent}
+                />
+              </div>
+
+              {createGoogleEvent && (
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">
+                    Em qual agenda criar o evento?
+                  </Label>
+                  <Select value={calendarOwnerId} onValueChange={setCalendarOwnerId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione a agenda" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {calendarOptions.map((opt) => (
+                        <SelectItem key={opt.id} value={opt.id}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[11px] text-muted-foreground">
+                    Um link do Google Meet será gerado automaticamente e salvo na reunião.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Actions */}
           <div className="flex justify-end gap-3 pt-4">
