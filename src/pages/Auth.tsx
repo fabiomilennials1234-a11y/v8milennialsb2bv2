@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { Mail, Lock, User, ArrowRight, Loader2 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import torqueLogo from '@/assets/torque-logo.png';
 import torqueHexagons from '@/assets/torque-hexagons.png';
 
@@ -175,11 +176,18 @@ export default function Auth() {
             </motion.div>
           </div>
 
-          <div className="flex items-center gap-2 text-sidebar-foreground/40 text-sm">
+          <div className="flex items-center gap-2 text-sidebar-foreground/40 text-sm flex-wrap">
             <span>⚙️</span>
             <span>Torque CRM</span>
             <span className="mx-2">•</span>
-            <span>© 2025 Torque</span>
+            <span>© {new Date().getFullYear()} Torque</span>
+            <span className="mx-2">•</span>
+            <Link
+              to="/privacidade"
+              className="hover:text-sidebar-foreground/70 transition-colors underline underline-offset-2"
+            >
+              Política de Privacidade
+            </Link>
           </div>
         </div>
       </div>
@@ -320,6 +328,14 @@ export default function Auth() {
               </button>
             </div>
           </div>
+          <p className="text-center text-xs text-muted-foreground/50 mt-6">
+            <Link
+              to="/privacidade"
+              className="hover:text-muted-foreground transition-colors underline underline-offset-2"
+            >
+              Política de Privacidade
+            </Link>
+          </p>
         </motion.div>
       </div>
     </div>
