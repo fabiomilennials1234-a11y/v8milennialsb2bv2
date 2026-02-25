@@ -44,6 +44,7 @@ import {
   ChevronRight,
   X,
   Loader2,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -122,6 +123,7 @@ interface AgendaEvent {
   resource: CalendarEvent & {
     owner_name?: string;
     color: string;
+    calendar_owner_id?: string;
   };
 }
 
@@ -480,13 +482,17 @@ function MonthView({
 function EventDetailPopover({
   state,
   onClose,
+  onDelete,
 }: {
   state: PopoverState;
   onClose: () => void;
+  onDelete: (event: AgendaEvent) => Promise<void>;
 }) {
   const { event, x, y } = state;
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ left: x + 14, top: y - 16 });
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   // Adjust so it doesn't overflow viewport
   useEffect(() => {
@@ -502,7 +508,7 @@ function EventDetailPopover({
     setPos({ left, top });
   }, [x, y]);
 
-  // Close on outside click
+  // Close on outside click (only when not in delete-confirm mode)
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) onClose();
@@ -513,6 +519,17 @@ function EventDetailPopover({
       document.removeEventListener("mousedown", handler);
     };
   }, [onClose]);
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      await onDelete(event);
+      onClose();
+    } catch {
+      setDeleting(false);
+      setConfirmDelete(false);
+    }
+  };
 
   const color = event.resource.color;
 
@@ -530,17 +547,26 @@ function EventDetailPopover({
       <div className="h-[3px]" style={{ backgroundColor: color }} />
 
       <div className="p-4 space-y-3">
-        {/* Title + close */}
+        {/* Title + actions */}
         <div className="flex items-start justify-between gap-2">
           <h3 className="font-semibold text-sm leading-snug flex-1 text-foreground">
             {event.title}
           </h3>
-          <button
-            onClick={onClose}
-            className="text-muted-foreground hover:text-foreground transition-colors shrink-0 mt-0.5 rounded"
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
+          <div className="flex items-center gap-1 shrink-0 mt-0.5">
+            <button
+              onClick={() => setConfirmDelete(true)}
+              className="text-muted-foreground hover:text-destructive transition-colors rounded p-0.5"
+              title="Excluir evento"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={onClose}
+              className="text-muted-foreground hover:text-foreground transition-colors rounded p-0.5"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
 
         {/* Origin badge */}
@@ -616,6 +642,46 @@ function EventDetailPopover({
             {event.resource.description}
           </p>
         )}
+
+        {/* Delete confirm — inline, no modal */}
+        <AnimatePresence>
+          {confirmDelete && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.15 }}
+              className="overflow-hidden"
+            >
+              <div className="pt-1 border-t border-border/30 space-y-2">
+                <p className="text-[11px] text-destructive font-medium">
+                  Excluir este evento do Google Calendar?
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setConfirmDelete(false)}
+                    disabled={deleting}
+                    className="flex-1 text-[11px] py-1.5 rounded-md border border-border/50 text-muted-foreground hover:bg-muted/40 transition-colors disabled:opacity-50"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={handleDelete}
+                    disabled={deleting}
+                    className="flex-1 text-[11px] py-1.5 rounded-md bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
+                  >
+                    {deleting ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <Trash2 className="w-3 h-3" />
+                    )}
+                    Excluir
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </motion.div>
   );
@@ -746,9 +812,10 @@ export default function Agenda() {
             meet_link:   meetLink,
             lead_id:     (e.lead_id    as string | null) ?? null,
             origin,
-            html_link:   (e.htmlLink   as string | null) ?? (e.html_link as string | null) ?? null,
-            owner_name:  calInfo?.name,
+            html_link:          (e.htmlLink   as string | null) ?? (e.html_link as string | null) ?? null,
+            owner_name:         calInfo?.name,
             color,
+            calendar_owner_id:  ownerId,
           },
         } as AgendaEvent;
       });
@@ -781,6 +848,32 @@ export default function Agenda() {
     e.stopPropagation();
     setPopover({ event, x: e.clientX, y: e.clientY });
   }, []);
+
+  const handleDeleteEvent = useCallback(async (event: AgendaEvent) => {
+    if (!session?.access_token) throw new Error("Não autenticado");
+
+    const base = (import.meta.env.VITE_SUPABASE_URL as string ?? "").replace(/\/$/, "");
+    const params = new URLSearchParams({ event_id: event.id });
+    if (event.resource.calendar_owner_id) {
+      params.set("calendar_owner_id", event.resource.calendar_owner_id);
+    }
+
+    const res = await fetch(`${base}/functions/v1/google-calendar-events?${params}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      toast.error("Erro ao excluir evento", {
+        description: (err as { message?: string }).message ?? "Tente novamente",
+      });
+      throw new Error("delete failed");
+    }
+
+    toast.success("Evento excluído");
+    refetch();
+  }, [session, refetch]);
 
   const handleSlotClick = useCallback((day: Date, hour = 9) => {
     if (!status?.connected) return;
@@ -1014,6 +1107,7 @@ export default function Agenda() {
           <EventDetailPopover
             state={popover}
             onClose={() => setPopover(null)}
+            onDelete={handleDeleteEvent}
           />
         )}
       </AnimatePresence>
