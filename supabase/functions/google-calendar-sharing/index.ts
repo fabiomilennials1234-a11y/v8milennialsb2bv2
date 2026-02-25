@@ -70,40 +70,50 @@ Deno.serve(async (req) => {
 
     // ── GET: listar compartilhamentos ───────────────────────────────────────
     if (req.method === "GET") {
-      // Quem eu compartilhei (outgoing)
-      const { data: outgoing } = await supabase
+      // Quem eu compartilhei (outgoing) — consulta sem depender de nome de FK
+      const { data: outgoingRaw, error: outgoingErr } = await supabase
         .from("google_calendar_sharing")
-        .select(`
-          viewer_id,
-          can_create_events,
-          created_at,
-          viewer:team_members!google_calendar_sharing_viewer_id_fkey(
-            user_id,
-            name,
-            email,
-            role
-          )
-        `)
+        .select("viewer_id, can_create_events, created_at")
         .eq("owner_id", user.id);
 
+      if (outgoingErr) console.error("[sharing] outgoing query error:", outgoingErr);
+
       // Quem compartilhou comigo (incoming)
-      const { data: incoming } = await supabase
+      const { data: incomingRaw, error: incomingErr } = await supabase
         .from("google_calendar_sharing")
-        .select(`
-          owner_id,
-          can_create_events,
-          created_at,
-          owner:team_members!google_calendar_sharing_owner_id_fkey(
-            user_id,
-            name,
-            email,
-            role
-          )
-        `)
+        .select("owner_id, can_create_events, created_at")
         .eq("viewer_id", user.id);
 
+      if (incomingErr) console.error("[sharing] incoming query error:", incomingErr);
+
+      // Busca dados dos membros referenciados nas shares
+      const viewerIds  = (outgoingRaw ?? []).map((s) => s.viewer_id);
+      const ownerIds   = (incomingRaw  ?? []).map((s) => s.owner_id);
+      const memberIds  = [...new Set([...viewerIds, ...ownerIds])];
+
+      let memberMap: Record<string, { user_id: string; name: string; email: string; role: string }> = {};
+      if (memberIds.length > 0) {
+        const { data: membersData } = await supabase
+          .from("team_members")
+          .select("user_id, name, email, role")
+          .in("user_id", memberIds);
+        (membersData ?? []).forEach((m) => { memberMap[m.user_id] = m; });
+      }
+
+      // Monta outgoing com dados do viewer
+      const outgoing = (outgoingRaw ?? []).map((s) => ({
+        ...s,
+        viewer: memberMap[s.viewer_id] ?? null,
+      }));
+
+      // Monta incoming com dados do owner
+      const incoming = (incomingRaw ?? []).map((s) => ({
+        ...s,
+        owner: memberMap[s.owner_id] ?? null,
+      }));
+
       // Lista de membros da org que ainda não estão no compartilhamento (para adicionar)
-      const sharedViewerIds = (outgoing ?? []).map((s) => s.viewer_id);
+      const sharedViewerIds = (outgoingRaw ?? []).map((s) => s.viewer_id);
       const { data: orgMembers } = await supabase
         .from("team_members")
         .select("user_id, name, email, role")

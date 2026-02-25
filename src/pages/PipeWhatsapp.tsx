@@ -47,6 +47,7 @@ import { useLogLeadAction } from "@/hooks/useLogLeadAction";
 import { useCreateAcaoDoDia } from "@/hooks/useAcoesDoDia";
 import { LeadModal } from "@/components/leads/LeadModal";
 import { CreateOpportunityModal } from "@/components/kanban/CreateOpportunityModal";
+import { AddMeetingModal } from "@/components/confirmacao/AddMeetingModal";
 import { formatDistanceToNow, format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -465,6 +466,12 @@ export default function PipeWhatsapp() {
   const [editingLead, setEditingLead] = useState<any>(null);
   const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; pipeId: string; leadId: string } | null>(null);
   const [deleteAllLeadsDialogOpen, setDeleteAllLeadsDialogOpen] = useState(false);
+  const [meetingModal, setMeetingModal] = useState<{
+    open: boolean;
+    leadId: string;
+    sdrId: string | null;
+    closerId: string | null;
+  } | null>(null);
   const [metricsPeriod, setMetricsPeriod] = useState<MetricsPeriod>("all");
   const now = new Date();
   const [selectedMetricsMonth, setSelectedMetricsMonth] = useState(now.getMonth() + 1);
@@ -626,13 +633,14 @@ export default function PipeWhatsapp() {
         const targetPipeName = getPipelineTypeName(targetPipe as any);
 
         if (targetPipe === "confirmacao") {
-          await createPipeConfirmacao.mutateAsync({
-            lead_id: item.lead_id,
-            sdr_id: item.sdr_id,
-            closer_id: item.lead?.closer?.id || null,
-            status: targetStage,
-            meeting_date: item.scheduled_date,
+          // Open AddMeetingModal so the user can enter date/time and Google Calendar details
+          setMeetingModal({
+            open: true,
+            leadId: item.lead_id,
+            sdrId: item.sdr_id ?? null,
+            closerId: item.lead?.closer?.id ?? null,
           });
+          return; // toast is shown by the modal on success
         } else if (targetPipe === "propostas") {
           await createPipeProposta.mutateAsync({
             lead_id: item.lead_id,
@@ -932,6 +940,24 @@ export default function PipeWhatsapp() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* AddMeetingModal — opened when a lead is dragged to an "agendado" stage */}
+      {meetingModal && (
+        <AddMeetingModal
+          open={meetingModal.open}
+          onOpenChange={(isOpen) => {
+            if (!isOpen) setMeetingModal(null);
+          }}
+          prefilledLeadId={meetingModal.leadId}
+          prefilledSdrId={meetingModal.sdrId ?? undefined}
+          prefilledCloserId={meetingModal.closerId ?? undefined}
+          onSuccess={() => {
+            setMeetingModal(null);
+            refetch();
+            toast.success("Reunião agendada e lead movido para Confirmação!");
+          }}
+        />
+      )}
 
     </div>
   );

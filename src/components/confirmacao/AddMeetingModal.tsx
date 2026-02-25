@@ -25,15 +25,28 @@ interface AddMeetingModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
+  /** When provided, the lead is pre-selected and locked (no email search / dropdown) */
+  prefilledLeadId?: string;
+  /** When provided, the SDR is pre-selected */
+  prefilledSdrId?: string;
+  /** When provided, the closer is pre-selected */
+  prefilledCloserId?: string;
 }
 
-export function AddMeetingModal({ open, onOpenChange, onSuccess }: AddMeetingModalProps) {
+export function AddMeetingModal({
+  open,
+  onOpenChange,
+  onSuccess,
+  prefilledLeadId,
+  prefilledSdrId,
+  prefilledCloserId,
+}: AddMeetingModalProps) {
   const [email, setEmail] = useState("");
-  const [selectedLeadId, setSelectedLeadId] = useState<string>("");
+  const [selectedLeadId, setSelectedLeadId] = useState<string>(prefilledLeadId ?? "");
   const [meetingDate, setMeetingDate] = useState<Date | undefined>();
   const [meetingTime, setMeetingTime] = useState("10:00");
-  const [sdrId, setSdrId] = useState<string>("");
-  const [closerId, setCloserId] = useState<string>("");
+  const [sdrId, setSdrId] = useState<string>(prefilledSdrId ?? "");
+  const [closerId, setCloserId] = useState<string>(prefilledCloserId ?? "");
   const [notes, setNotes] = useState("");
   const [status, setStatus] = useState<PipeConfirmacaoStatus>("reuniao_marcada");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -97,15 +110,24 @@ export function AddMeetingModal({ open, onOpenChange, onSuccess }: AddMeetingMod
     }
   }, [foundLeadByEmail]);
 
+  // Sync prefilled values when the modal opens or prefilled props change
+  useEffect(() => {
+    if (open) {
+      if (prefilledLeadId) setSelectedLeadId(prefilledLeadId);
+      if (prefilledSdrId)  setSdrId(prefilledSdrId);
+      if (prefilledCloserId) setCloserId(prefilledCloserId);
+    }
+  }, [open, prefilledLeadId, prefilledSdrId, prefilledCloserId]);
+
   // Reset form when modal closes
   useEffect(() => {
     if (!open) {
       setEmail("");
-      setSelectedLeadId("");
+      setSelectedLeadId(prefilledLeadId ?? "");
       setMeetingDate(undefined);
       setMeetingTime("10:00");
-      setSdrId("");
-      setCloserId("");
+      setSdrId(prefilledSdrId ?? "");
+      setCloserId(prefilledCloserId ?? "");
       setNotes("");
       setStatus("reuniao_marcada");
       setCreateGoogleEvent(true);
@@ -234,67 +256,90 @@ export function AddMeetingModal({ open, onOpenChange, onSuccess }: AddMeetingMod
         </DialogHeader>
 
         <div className="space-y-4 mt-4">
-          {/* Email Search */}
-          <div className="space-y-2">
-            <Label>Email do Lead</Label>
-            <div className="relative">
-              <Input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="Digite o email para buscar lead existente..."
-                className={cn(
-                  foundLeadByEmail && "border-green-500 pr-10"
-                )}
-              />
-              {email.trim() && (
-                <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                  {foundLeadByEmail ? (
-                    <CheckCircle2 className="h-4 w-4 text-green-500" />
-                  ) : (
-                    <AlertCircle className="h-4 w-4 text-muted-foreground" />
+          {/* Lead info (prefilled mode) or search + select (manual mode) */}
+          {prefilledLeadId ? (
+            <div className="space-y-1">
+              <Label>Lead</Label>
+              {(() => {
+                const lead = leads?.find(l => l.id === prefilledLeadId);
+                return lead ? (
+                  <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
+                    <span className="font-medium">{lead.name}</span>
+                    {lead.company && <span className="text-muted-foreground">— {lead.company}</span>}
+                  </div>
+                ) : (
+                  <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+                    {leadsLoading ? "Carregando..." : "Lead selecionado"}
+                  </div>
+                );
+              })()}
+            </div>
+          ) : (
+            <>
+              {/* Email Search */}
+              <div className="space-y-2">
+                <Label>Email do Lead</Label>
+                <div className="relative">
+                  <Input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="Digite o email para buscar lead existente..."
+                    className={cn(
+                      foundLeadByEmail && "border-green-500 pr-10"
+                    )}
+                  />
+                  {email.trim() && (
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                      {foundLeadByEmail ? (
+                        <CheckCircle2 className="h-4 w-4 text-green-500" />
+                      ) : (
+                        <AlertCircle className="h-4 w-4 text-muted-foreground" />
+                      )}
+                    </div>
                   )}
                 </div>
-              )}
-            </div>
-            {email.trim() && (
-              <p className={cn(
-                "text-xs",
-                foundLeadByEmail ? "text-green-600" : "text-muted-foreground"
-              )}>
-                {foundLeadByEmail
-                  ? `Lead encontrado: ${foundLeadByEmail.name}${foundLeadByEmail.company ? ` - ${foundLeadByEmail.company}` : ""}`
-                  : "Nenhum lead encontrado com este email. Selecione manualmente abaixo."
-                }
-              </p>
-            )}
-          </div>
+                {email.trim() && (
+                  <p className={cn(
+                    "text-xs",
+                    foundLeadByEmail ? "text-green-600" : "text-muted-foreground"
+                  )}>
+                    {foundLeadByEmail
+                      ? `Lead encontrado: ${foundLeadByEmail.name}${foundLeadByEmail.company ? ` - ${foundLeadByEmail.company}` : ""}`
+                      : "Nenhum lead encontrado com este email. Selecione manualmente abaixo."
+                    }
+                  </p>
+                )}
+              </div>
 
-          {/* Lead Selection */}
-          <div className="space-y-2">
-            <Label>Lead *</Label>
-            <Select
-              value={selectedLeadId}
-              onValueChange={setSelectedLeadId}
-              disabled={!!foundLeadByEmail}
-            >
-              <SelectTrigger className={cn(foundLeadByEmail && "bg-muted")}>
-                <SelectValue placeholder={leadsLoading ? "Carregando..." : "Selecione um lead"} />
-              </SelectTrigger>
-              <SelectContent>
-                {leads?.filter(lead => lead.id).map((lead) => (
-                  <SelectItem key={lead.id} value={lead.id}>
-                    {lead.name} {lead.company && `- ${lead.company}`}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {foundLeadByEmail && (
-              <p className="text-xs text-muted-foreground">
-                Lead vinculado automaticamente pelo email
-              </p>
-            )}
-          </div>
+              {/* Lead Selection */}
+              <div className="space-y-2">
+                <Label>Lead *</Label>
+                <Select
+                  value={selectedLeadId}
+                  onValueChange={setSelectedLeadId}
+                  disabled={!!foundLeadByEmail}
+                >
+                  <SelectTrigger className={cn(foundLeadByEmail && "bg-muted")}>
+                    <SelectValue placeholder={leadsLoading ? "Carregando..." : "Selecione um lead"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {leads?.filter(lead => lead.id).map((lead) => (
+                      <SelectItem key={lead.id} value={lead.id}>
+                        {lead.name} {lead.company && `- ${lead.company}`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {foundLeadByEmail && (
+                  <p className="text-xs text-muted-foreground">
+                    Lead vinculado automaticamente pelo email
+                  </p>
+                )}
+              </div>
+            </>
+          )}
 
           {/* Meeting Date & Time */}
           <div className="grid grid-cols-2 gap-4">

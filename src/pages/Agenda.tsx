@@ -155,6 +155,65 @@ function getEventHeight(event: AgendaEvent): number {
   return (duration / 60) * HOUR_HEIGHT;
 }
 
+/**
+ * Greedy interval-graph colouring for side-by-side overlap layout.
+ * Events that don't overlap get full width; overlapping events share width equally.
+ * Returns a map of eventId → { left, width } as fractions (0–1).
+ */
+function computeEventLayout(events: AgendaEvent[]): Map<string, { left: number; width: number }> {
+  const result = new Map<string, { left: number; width: number }>();
+  if (events.length === 0) return result;
+
+  const sorted = [...events].sort((a, b) => a.start.getTime() - b.start.getTime());
+
+  // Group events into clusters of transitively-overlapping events
+  const clusters: AgendaEvent[][] = [];
+  let cluster: AgendaEvent[] = [];
+  let clusterMaxEnd = new Date(0);
+
+  for (const event of sorted) {
+    if (cluster.length === 0 || event.start < clusterMaxEnd) {
+      cluster.push(event);
+      if (event.end > clusterMaxEnd) clusterMaxEnd = event.end;
+    } else {
+      clusters.push(cluster);
+      cluster = [event];
+      clusterMaxEnd = event.end;
+    }
+  }
+  if (cluster.length > 0) clusters.push(cluster);
+
+  // For each cluster, assign greedy column slots (interval graph colouring)
+  for (const clusterEvents of clusters) {
+    const colEnds: Date[] = [];
+    const eventCols = new Map<string, number>();
+
+    for (const event of clusterEvents) {
+      let placed = false;
+      for (let i = 0; i < colEnds.length; i++) {
+        if (colEnds[i] <= event.start) {
+          colEnds[i] = event.end;
+          eventCols.set(event.id, i);
+          placed = true;
+          break;
+        }
+      }
+      if (!placed) {
+        eventCols.set(event.id, colEnds.length);
+        colEnds.push(event.end);
+      }
+    }
+
+    const totalCols = colEnds.length;
+    for (const event of clusterEvents) {
+      const col = eventCols.get(event.id)!;
+      result.set(event.id, { left: col / totalCols, width: 1 / totalCols });
+    }
+  }
+
+  return result;
+}
+
 function getNowTop(): number {
   const now = new Date();
   return (getHours(now) * 60 + getMinutes(now)) / 60 * HOUR_HEIGHT;
@@ -175,22 +234,32 @@ function getMonthGrid(date: Date): Date[] {
 function TimeGridEvent({
   event,
   dayStart,
+  leftPct,
+  widthPct,
   onClick,
 }: {
   event: AgendaEvent;
   dayStart: Date;
+  /** Left offset as a fraction of the column width (0–1) */
+  leftPct: number;
+  /** Width as a fraction of the column width (0–1) */
+  widthPct: number;
   onClick: (e: React.MouseEvent, event: AgendaEvent) => void;
 }) {
   const top = getEventTop(event, dayStart);
   const height = Math.max(getEventHeight(event), 22);
   const color = event.resource.color;
+  // 2px inset on each side so adjacent events don't touch
+  const MARGIN = 2;
 
   return (
     <div
-      className="absolute left-1 right-1 rounded-r-md cursor-pointer overflow-hidden transition-all duration-150 hover:brightness-110 hover:shadow-md z-10"
+      className="absolute rounded-r-md cursor-pointer overflow-hidden transition-all duration-150 hover:brightness-110 hover:shadow-md z-10"
       style={{
         top: `${top}px`,
         height: `${height}px`,
+        left: `calc(${leftPct * 100}% + ${MARGIN}px)`,
+        width: `calc(${widthPct * 100}% - ${MARGIN * 2}px)`,
         borderLeft: `3px solid ${color}`,
         backgroundColor: `${color}1A`,
       }}
@@ -333,6 +402,7 @@ function TimeGrid({
             const dayStart = startOfDay(day);
             const dayEvents = events.filter((e) => isSameDay(e.start, day));
             const isCurrentDay = isToday(day);
+            const layout = computeEventLayout(dayEvents);
 
             return (
               <div
@@ -364,14 +434,19 @@ function TimeGrid({
                 ))}
 
                 {/* Events */}
-                {dayEvents.map((event) => (
-                  <TimeGridEvent
-                    key={event.id}
-                    event={event}
-                    dayStart={dayStart}
-                    onClick={onEventClick}
-                  />
-                ))}
+                {dayEvents.map((event) => {
+                  const pos = layout.get(event.id) ?? { left: 0, width: 1 };
+                  return (
+                    <TimeGridEvent
+                      key={event.id}
+                      event={event}
+                      dayStart={dayStart}
+                      leftPct={pos.left}
+                      widthPct={pos.width}
+                      onClick={onEventClick}
+                    />
+                  );
+                })}
 
                 {/* Current time indicator */}
                 {isCurrentDay && (
@@ -741,6 +816,35 @@ export default function Agenda() {
     });
   };
 
+  // Calendars where the current user has CREATE permission (own + shared with can_create_events)
+  const createCalendarOptions = useMemo(() => {
+    const opts: Array<{ id: string; name: string; color: string }> = [];
+    if (status?.connected) {
+      opts.push({ id: ownUserId, name: "Meu Calendário", color: USER_COLORS[0] });
+    }
+    sharingData?.incoming
+      ?.filter((s) => s.can_create_events)
+      .forEach((share, idx) => {
+        opts.push({
+          id: share.owner_id,
+          name: share.owner?.name ?? "Calendário Compartilhado",
+          color: USER_COLORS[(idx + 1) % USER_COLORS.length],
+        });
+      });
+    return opts;
+  }, [status, sharingData, ownUserId]);
+
+  // True when the user can create events in at least one calendar
+  const canCreateEvents = createCalendarOptions.length > 0;
+
+  // Which calendar to create new events in (defaults to first option)
+  const [createCalendarOwnerId, setCreateCalendarOwnerId] = useState<string>("");
+  useEffect(() => {
+    if (createCalendarOptions.length > 0 && !createCalendarOwnerId) {
+      setCreateCalendarOwnerId(createCalendarOptions[0].id);
+    }
+  }, [createCalendarOptions.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Date range for query
   const { startDate, endDate } = useMemo(() => {
     if (view === "day") {
@@ -876,7 +980,7 @@ export default function Agenda() {
   }, [session, refetch]);
 
   const handleSlotClick = useCallback((day: Date, hour = 9) => {
-    if (!status?.connected) return;
+    if (!canCreateEvents) return;
     const slotStart = new Date(day.getFullYear(), day.getMonth(), day.getDate(), hour);
     setNewEvent((prev) => ({
       ...prev,
@@ -907,6 +1011,7 @@ export default function Agenda() {
           timezone: "America/Sao_Paulo",
           color_id: newEvent.color_id || undefined,
           with_meet: newEvent.with_meet,
+          calendar_owner_id: createCalendarOwnerId || undefined,
         }),
       });
       if (!res.ok) throw new Error((await res.json()).message ?? "Erro ao criar evento");
@@ -1066,7 +1171,7 @@ export default function Agenda() {
           size="sm"
           className="gap-1.5 h-7 text-xs rounded-lg"
           onClick={() => setCreateOpen(true)}
-          disabled={!status?.connected}
+          disabled={!canCreateEvents}
         >
           <Plus className="w-3.5 h-3.5" />
           Novo Evento
@@ -1209,6 +1314,30 @@ export default function Agenda() {
                 ))}
               </div>
             </div>
+
+            {/* Calendar picker — shown when multiple options OR user has no own calendar */}
+            {(createCalendarOptions.length > 1 || !status?.connected) && createCalendarOptions.length > 0 && (
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Criar em</Label>
+                <div className="flex flex-wrap gap-2">
+                  {createCalendarOptions.map((cal) => (
+                    <button
+                      key={cal.id}
+                      type="button"
+                      onClick={() => setCreateCalendarOwnerId(cal.id)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border transition-all ${
+                        createCalendarOwnerId === cal.id
+                          ? "border-primary bg-primary/10 text-foreground font-medium"
+                          : "border-border/40 text-muted-foreground hover:border-border hover:text-foreground"
+                      }`}
+                    >
+                      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: cal.color }} />
+                      {cal.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Google Meet toggle */}
             <div className="flex items-center justify-between rounded-lg bg-muted/30 px-3 py-2">
