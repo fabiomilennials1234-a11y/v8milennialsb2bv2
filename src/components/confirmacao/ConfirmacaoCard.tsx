@@ -1,9 +1,9 @@
 import { motion } from "framer-motion";
-import { 
-  Star, 
-  Building2, 
-  Calendar, 
-  User, 
+import {
+  Star,
+  Building2,
+  Calendar,
+  User,
   Clock,
   Phone,
   Mail,
@@ -11,7 +11,8 @@ import {
   CheckCircle2,
   MapPin,
   MessageCircle,
-  Check
+  Check,
+  Video,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -54,6 +55,7 @@ interface ConfirmacaoCardProps {
     updatedAt?: string | null;
     overdueDays?: number;
     createdAt?: string;
+    meetLink?: string | null;
   };
   onClick?: () => void;
   variant?: "default" | "compact" | "detailed";
@@ -363,6 +365,20 @@ export function ConfirmacaoCard({ card, onClick, variant = "default" }: Confirma
           {/* Countdown Timer */}
           {!["compareceu", "perdido"].includes(card.status || "") && (
             <MeetingCountdown meetingDate={meetingDate} variant="compact" className="mt-1" />
+          )}
+
+          {/* Link do Google Meet */}
+          {card.meetLink && (
+            <a
+              href={card.meetLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="mt-1.5 flex items-center gap-1.5 text-[11px] text-primary hover:underline w-fit"
+            >
+              <Video className="w-3 h-3 shrink-0" />
+              Entrar no Google Meet
+            </a>
           )}
         </div>
       )}

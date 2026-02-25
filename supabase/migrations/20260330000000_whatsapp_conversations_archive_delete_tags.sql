@@ -47,6 +47,7 @@ COMMENT ON TABLE public.whatsapp_conversations IS 'Metadados de conversas WhatsA
 ALTER TABLE public.whatsapp_conversations ENABLE ROW LEVEL SECURITY;
 
 -- SELECT: membro da organização
+DROP POLICY IF EXISTS "whatsapp_conversations_select_org" ON public.whatsapp_conversations;
 CREATE POLICY "whatsapp_conversations_select_org"
   ON public.whatsapp_conversations FOR SELECT
   TO authenticated
@@ -57,6 +58,7 @@ CREATE POLICY "whatsapp_conversations_select_org"
   );
 
 -- INSERT: membro da organização (criar registro ao arquivar/taguear)
+DROP POLICY IF EXISTS "whatsapp_conversations_insert_org" ON public.whatsapp_conversations;
 CREATE POLICY "whatsapp_conversations_insert_org"
   ON public.whatsapp_conversations FOR INSERT
   TO authenticated
@@ -67,6 +69,7 @@ CREATE POLICY "whatsapp_conversations_insert_org"
   );
 
 -- UPDATE archived_at: qualquer membro da organização
+DROP POLICY IF EXISTS "whatsapp_conversations_update_archive" ON public.whatsapp_conversations;
 CREATE POLICY "whatsapp_conversations_update_archive"
   ON public.whatsapp_conversations FOR UPDATE
   TO authenticated
@@ -82,6 +85,7 @@ CREATE POLICY "whatsapp_conversations_update_archive"
   );
 
 -- Service role full access (para webhook auto-desarquivar)
+DROP POLICY IF EXISTS "whatsapp_conversations_service_role" ON public.whatsapp_conversations;
 CREATE POLICY "whatsapp_conversations_service_role"
   ON public.whatsapp_conversations FOR ALL
   TO authenticated
@@ -144,6 +148,7 @@ COMMENT ON TABLE public.whatsapp_conversation_tags IS 'Tags de conversas WhatsAp
 ALTER TABLE public.whatsapp_conversation_tags ENABLE ROW LEVEL SECURITY;
 
 -- SELECT: membro da organização (via JOIN com conversation)
+DROP POLICY IF EXISTS "whatsapp_conversation_tags_select" ON public.whatsapp_conversation_tags;
 CREATE POLICY "whatsapp_conversation_tags_select"
   ON public.whatsapp_conversation_tags FOR SELECT
   TO authenticated
@@ -157,6 +162,7 @@ CREATE POLICY "whatsapp_conversation_tags_select"
   );
 
 -- INSERT: membro da organização
+DROP POLICY IF EXISTS "whatsapp_conversation_tags_insert" ON public.whatsapp_conversation_tags;
 CREATE POLICY "whatsapp_conversation_tags_insert"
   ON public.whatsapp_conversation_tags FOR INSERT
   TO authenticated
@@ -170,6 +176,7 @@ CREATE POLICY "whatsapp_conversation_tags_insert"
   );
 
 -- DELETE: membro da organização
+DROP POLICY IF EXISTS "whatsapp_conversation_tags_delete" ON public.whatsapp_conversation_tags;
 CREATE POLICY "whatsapp_conversation_tags_delete"
   ON public.whatsapp_conversation_tags FOR DELETE
   TO authenticated

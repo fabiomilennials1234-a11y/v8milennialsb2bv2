@@ -13,30 +13,36 @@
 -- 1. ENUMS
 -- ============================================
 
-CREATE TYPE upsell_campanha_status AS ENUM (
-  'cliente',
-  'planejado',
-  'abordado',
-  'interesse',
-  'proposta',
-  'vendido',
-  'futuro',
-  'perdido'
-);
+DO $$ BEGIN
+  CREATE TYPE upsell_campanha_status AS ENUM (
+    'cliente',
+    'planejado',
+    'abordado',
+    'interesse',
+    'proposta',
+    'vendido',
+    'futuro',
+    'perdido'
+  );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE TYPE upsell_potencial AS ENUM (
-  'baixo',
-  'medio',
-  'alto',
-  'estrategico'
-);
+DO $$ BEGIN
+  CREATE TYPE upsell_potencial AS ENUM (
+    'baixo',
+    'medio',
+    'alto',
+    'estrategico'
+  );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ============================================
 -- 2. TABELAS
 -- ============================================
 
 -- 2.1 upsell_clients - clientes na base
-CREATE TABLE upsell_clients (
+CREATE TABLE IF NOT EXISTS upsell_clients (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   lead_id         UUID NOT NULL REFERENCES leads(id) ON DELETE RESTRICT,
@@ -62,7 +68,7 @@ CREATE TABLE upsell_clients (
 );
 
 -- 2.2 upsell_client_products - produtos ativos do cliente
-CREATE TABLE upsell_client_products (
+CREATE TABLE IF NOT EXISTS upsell_client_products (
   id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   client_id        UUID NOT NULL REFERENCES upsell_clients(id) ON DELETE CASCADE,
   product_id       UUID REFERENCES products(id) ON DELETE SET NULL,
@@ -77,7 +83,7 @@ CREATE TABLE upsell_client_products (
 );
 
 -- 2.3 upsell_campanhas - campanhas de abordagem
-CREATE TABLE upsell_campanhas (
+CREATE TABLE IF NOT EXISTS upsell_campanhas (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id   UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   client_id         UUID NOT NULL REFERENCES upsell_clients(id) ON DELETE CASCADE,
@@ -95,7 +101,7 @@ CREATE TABLE upsell_campanhas (
 );
 
 -- 2.4 upsell_orders - registro de cada venda (fonte de verdade financeira)
-CREATE TABLE upsell_orders (
+CREATE TABLE IF NOT EXISTS upsell_orders (
   id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id  UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   client_id        UUID NOT NULL REFERENCES upsell_clients(id) ON DELETE CASCADE,
@@ -117,23 +123,23 @@ CREATE TABLE upsell_orders (
 -- 3. INDICES
 -- ============================================
 
-CREATE INDEX idx_upsell_clients_org ON upsell_clients(organization_id);
-CREATE INDEX idx_upsell_clients_lead ON upsell_clients(lead_id);
-CREATE INDEX idx_upsell_clients_closer ON upsell_clients(closer_id);
-CREATE INDEX idx_upsell_clients_active ON upsell_clients(organization_id, is_active);
+CREATE INDEX IF NOT EXISTS idx_upsell_clients_org ON upsell_clients(organization_id);
+CREATE INDEX IF NOT EXISTS idx_upsell_clients_lead ON upsell_clients(lead_id);
+CREATE INDEX IF NOT EXISTS idx_upsell_clients_closer ON upsell_clients(closer_id);
+CREATE INDEX IF NOT EXISTS idx_upsell_clients_active ON upsell_clients(organization_id, is_active);
 
-CREATE INDEX idx_upsell_client_products_client ON upsell_client_products(client_id);
-CREATE INDEX idx_upsell_client_products_status ON upsell_client_products(client_id, status);
+CREATE INDEX IF NOT EXISTS idx_upsell_client_products_client ON upsell_client_products(client_id);
+CREATE INDEX IF NOT EXISTS idx_upsell_client_products_status ON upsell_client_products(client_id, status);
 
-CREATE INDEX idx_upsell_campanhas_org_status ON upsell_campanhas(organization_id, status);
-CREATE INDEX idx_upsell_campanhas_client ON upsell_campanhas(client_id);
-CREATE INDEX idx_upsell_campanhas_closer ON upsell_campanhas(closer_id);
+CREATE INDEX IF NOT EXISTS idx_upsell_campanhas_org_status ON upsell_campanhas(organization_id, status);
+CREATE INDEX IF NOT EXISTS idx_upsell_campanhas_client ON upsell_campanhas(client_id);
+CREATE INDEX IF NOT EXISTS idx_upsell_campanhas_closer ON upsell_campanhas(closer_id);
 
-CREATE INDEX idx_upsell_orders_org_sold ON upsell_orders(organization_id, sold_at);
-CREATE INDEX idx_upsell_orders_client ON upsell_orders(client_id);
-CREATE INDEX idx_upsell_orders_closer_sold ON upsell_orders(closer_id, sold_at);
-CREATE INDEX idx_upsell_orders_proposta ON upsell_orders(pipe_proposta_id);
-CREATE INDEX idx_upsell_orders_campanha ON upsell_orders(campanha_id);
+CREATE INDEX IF NOT EXISTS idx_upsell_orders_org_sold ON upsell_orders(organization_id, sold_at);
+CREATE INDEX IF NOT EXISTS idx_upsell_orders_client ON upsell_orders(client_id);
+CREATE INDEX IF NOT EXISTS idx_upsell_orders_closer_sold ON upsell_orders(closer_id, sold_at);
+CREATE INDEX IF NOT EXISTS idx_upsell_orders_proposta ON upsell_orders(pipe_proposta_id);
+CREATE INDEX IF NOT EXISTS idx_upsell_orders_campanha ON upsell_orders(campanha_id);
 
 -- ============================================
 -- 4. ROW LEVEL SECURITY
@@ -145,24 +151,29 @@ ALTER TABLE upsell_campanhas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE upsell_orders ENABLE ROW LEVEL SECURITY;
 
 -- 4.1 upsell_clients
+DROP POLICY IF EXISTS "upsell_clients_select_org" ON upsell_clients;
 CREATE POLICY "upsell_clients_select_org" ON upsell_clients
   FOR SELECT TO authenticated
   USING (organization_id = public.get_user_organization_id());
 
+DROP POLICY IF EXISTS "upsell_clients_insert_org" ON upsell_clients;
 CREATE POLICY "upsell_clients_insert_org" ON upsell_clients
   FOR INSERT TO authenticated
   WITH CHECK (organization_id = public.get_user_organization_id());
 
+DROP POLICY IF EXISTS "upsell_clients_update_org" ON upsell_clients;
 CREATE POLICY "upsell_clients_update_org" ON upsell_clients
   FOR UPDATE TO authenticated
   USING (organization_id = public.get_user_organization_id())
   WITH CHECK (organization_id = public.get_user_organization_id());
 
+DROP POLICY IF EXISTS "upsell_clients_delete_org" ON upsell_clients;
 CREATE POLICY "upsell_clients_delete_org" ON upsell_clients
   FOR DELETE TO authenticated
   USING (organization_id = public.get_user_organization_id());
 
 -- 4.2 upsell_client_products (via join com upsell_clients)
+DROP POLICY IF EXISTS "upsell_client_products_select" ON upsell_client_products;
 CREATE POLICY "upsell_client_products_select" ON upsell_client_products
   FOR SELECT TO authenticated
   USING (
@@ -173,6 +184,7 @@ CREATE POLICY "upsell_client_products_select" ON upsell_client_products
     )
   );
 
+DROP POLICY IF EXISTS "upsell_client_products_insert" ON upsell_client_products;
 CREATE POLICY "upsell_client_products_insert" ON upsell_client_products
   FOR INSERT TO authenticated
   WITH CHECK (
@@ -183,6 +195,7 @@ CREATE POLICY "upsell_client_products_insert" ON upsell_client_products
     )
   );
 
+DROP POLICY IF EXISTS "upsell_client_products_update" ON upsell_client_products;
 CREATE POLICY "upsell_client_products_update" ON upsell_client_products
   FOR UPDATE TO authenticated
   USING (
@@ -193,6 +206,7 @@ CREATE POLICY "upsell_client_products_update" ON upsell_client_products
     )
   );
 
+DROP POLICY IF EXISTS "upsell_client_products_delete" ON upsell_client_products;
 CREATE POLICY "upsell_client_products_delete" ON upsell_client_products
   FOR DELETE TO authenticated
   USING (
@@ -204,37 +218,45 @@ CREATE POLICY "upsell_client_products_delete" ON upsell_client_products
   );
 
 -- 4.3 upsell_campanhas
+DROP POLICY IF EXISTS "upsell_campanhas_select_org" ON upsell_campanhas;
 CREATE POLICY "upsell_campanhas_select_org" ON upsell_campanhas
   FOR SELECT TO authenticated
   USING (organization_id = public.get_user_organization_id());
 
+DROP POLICY IF EXISTS "upsell_campanhas_insert_org" ON upsell_campanhas;
 CREATE POLICY "upsell_campanhas_insert_org" ON upsell_campanhas
   FOR INSERT TO authenticated
   WITH CHECK (organization_id = public.get_user_organization_id());
 
+DROP POLICY IF EXISTS "upsell_campanhas_update_org" ON upsell_campanhas;
 CREATE POLICY "upsell_campanhas_update_org" ON upsell_campanhas
   FOR UPDATE TO authenticated
   USING (organization_id = public.get_user_organization_id())
   WITH CHECK (organization_id = public.get_user_organization_id());
 
+DROP POLICY IF EXISTS "upsell_campanhas_delete_org" ON upsell_campanhas;
 CREATE POLICY "upsell_campanhas_delete_org" ON upsell_campanhas
   FOR DELETE TO authenticated
   USING (organization_id = public.get_user_organization_id());
 
 -- 4.4 upsell_orders
+DROP POLICY IF EXISTS "upsell_orders_select_org" ON upsell_orders;
 CREATE POLICY "upsell_orders_select_org" ON upsell_orders
   FOR SELECT TO authenticated
   USING (organization_id = public.get_user_organization_id());
 
+DROP POLICY IF EXISTS "upsell_orders_insert_org" ON upsell_orders;
 CREATE POLICY "upsell_orders_insert_org" ON upsell_orders
   FOR INSERT TO authenticated
   WITH CHECK (organization_id = public.get_user_organization_id());
 
+DROP POLICY IF EXISTS "upsell_orders_update_org" ON upsell_orders;
 CREATE POLICY "upsell_orders_update_org" ON upsell_orders
   FOR UPDATE TO authenticated
   USING (organization_id = public.get_user_organization_id())
   WITH CHECK (organization_id = public.get_user_organization_id());
 
+DROP POLICY IF EXISTS "upsell_orders_delete_org" ON upsell_orders;
 CREATE POLICY "upsell_orders_delete_org" ON upsell_orders
   FOR DELETE TO authenticated
   USING (organization_id = public.get_user_organization_id());
@@ -246,7 +268,7 @@ CREATE POLICY "upsell_orders_delete_org" ON upsell_orders
 -- 5.1 Adicionar 'upsell_base' ao CHECK constraint de pipeline_stages
 ALTER TABLE pipeline_stages DROP CONSTRAINT IF EXISTS pipeline_stages_pipeline_type_check;
 ALTER TABLE pipeline_stages ADD CONSTRAINT pipeline_stages_pipeline_type_check
-  CHECK (pipeline_type IN ('whatsapp', 'confirmacao', 'propostas', 'upsell_base'));
+  CHECK (pipeline_type IN ('whatsapp', 'confirmacao', 'propostas', 'upsell_base', 'upsell_gestao'));
 
 -- 5.2 Atualizar funcao para incluir stages default de upsell_base
 CREATE OR REPLACE FUNCTION create_default_pipeline_stages(org_id UUID)
@@ -462,10 +484,12 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trg_upsell_clients_updated_at ON upsell_clients;
 CREATE TRIGGER trg_upsell_clients_updated_at
   BEFORE UPDATE ON upsell_clients
   FOR EACH ROW EXECUTE FUNCTION update_upsell_updated_at();
 
+DROP TRIGGER IF EXISTS trg_upsell_campanhas_updated_at ON upsell_campanhas;
 CREATE TRIGGER trg_upsell_campanhas_updated_at
   BEFORE UPDATE ON upsell_campanhas
   FOR EACH ROW EXECUTE FUNCTION update_upsell_updated_at();
@@ -474,10 +498,10 @@ CREATE TRIGGER trg_upsell_campanhas_updated_at
 -- 8. REALTIME
 -- ============================================
 
-ALTER PUBLICATION supabase_realtime ADD TABLE upsell_clients;
-ALTER PUBLICATION supabase_realtime ADD TABLE upsell_client_products;
-ALTER PUBLICATION supabase_realtime ADD TABLE upsell_campanhas;
-ALTER PUBLICATION supabase_realtime ADD TABLE upsell_orders;
+DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE upsell_clients; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE upsell_client_products; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE upsell_campanhas; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE upsell_orders; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- ============================================
 -- 9. LOG

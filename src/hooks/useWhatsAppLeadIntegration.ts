@@ -142,12 +142,19 @@ export function useCreateLeadFromWhatsApp() {
         const effectiveSdrIdForShadow = sdrId || teamMember.id;
 
         if (effectiveDestination === "qualificacao") {
-          await supabase.from("pipe_whatsapp").insert({
-            lead_id: existingLead.id,
-            status: "novo",
-            sdr_id: effectiveSdrIdForShadow,
-            organization_id: teamMember.organization_id,
-          });
+          // Não duplicar se já estiver em confirmação ou propostas
+          const [{ data: inConf }, { data: inProp }] = await Promise.all([
+            supabase.from("pipe_confirmacao").select("id").eq("lead_id", existingLead.id).maybeSingle(),
+            supabase.from("pipe_propostas").select("id").eq("lead_id", existingLead.id).maybeSingle(),
+          ]);
+          if (!inConf && !inProp) {
+            await supabase.from("pipe_whatsapp").insert({
+              lead_id: existingLead.id,
+              status: "novo",
+              sdr_id: effectiveSdrIdForShadow,
+              organization_id: teamMember.organization_id,
+            });
+          }
         } else if (effectiveDestination === "confirmacao") {
           await supabase.from("pipe_confirmacao").insert({
             lead_id: existingLead.id,
@@ -208,14 +215,23 @@ export function useCreateLeadFromWhatsApp() {
 
       // 3. Inserir no destino escolhido
       if (effectiveDestination === "qualificacao") {
-        const { error: pipeError } = await supabase.from("pipe_whatsapp").insert({
-          lead_id: newLead.id,
-          status: "novo",
-          sdr_id: effectiveSdrId,
-          organization_id: teamMember.organization_id,
-        });
-        if (pipeError) {
-          console.error("[WhatsApp Lead] Erro ao adicionar ao pipeline qualificação:", pipeError);
+        // Verificar se o lead já está ativo em outro pipe antes de inserir em qualificação
+        const [{ data: inConfirmacao }, { data: inPropostas }] = await Promise.all([
+          supabase.from("pipe_confirmacao").select("id").eq("lead_id", newLead.id).maybeSingle(),
+          supabase.from("pipe_propostas").select("id").eq("lead_id", newLead.id).maybeSingle(),
+        ]);
+        if (!inConfirmacao && !inPropostas) {
+          const { error: pipeError } = await supabase.from("pipe_whatsapp").insert({
+            lead_id: newLead.id,
+            status: "novo",
+            sdr_id: effectiveSdrId,
+            organization_id: teamMember.organization_id,
+          });
+          if (pipeError) {
+            console.error("[WhatsApp Lead] Erro ao adicionar ao pipeline qualificação:", pipeError);
+          }
+        } else {
+          console.log("[WhatsApp Lead] Lead já está em outro pipe ativo — não inserido em qualificação.");
         }
       } else if (effectiveDestination === "confirmacao") {
         const { error: pipeError } = await supabase.from("pipe_confirmacao").insert({
@@ -313,14 +329,14 @@ export function useLinkLeadToWhatsApp() {
         console.error("[WhatsApp Lead] Erro ao atualizar lead:", leadError);
       }
 
-      // 2. Verificar se lead já está no pipeline WhatsApp
-      const { data: existingPipe } = await supabase
-        .from("pipe_whatsapp")
-        .select("id")
-        .eq("lead_id", leadId)
-        .maybeSingle();
+      // 2. Verificar se lead já está no pipeline WhatsApp ou em outro pipe ativo
+      const [{ data: existingPipe }, { data: inConfirmacao }, { data: inPropostas }] = await Promise.all([
+        supabase.from("pipe_whatsapp").select("id").eq("lead_id", leadId).maybeSingle(),
+        supabase.from("pipe_confirmacao").select("id").eq("lead_id", leadId).maybeSingle(),
+        supabase.from("pipe_propostas").select("id").eq("lead_id", leadId).maybeSingle(),
+      ]);
 
-      if (!existingPipe) {
+      if (!existingPipe && !inConfirmacao && !inPropostas) {
         if (!teamMember?.id || !teamMember?.organization_id) {
           throw new Error("Usuário não está vinculado a uma organização");
         }

@@ -21,8 +21,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { DraggableKanbanBoard, DraggableItem, KanbanColumn } from "@/components/kanban/DraggableKanbanBoard";
-import { usePipeConfirmacao, useUpdatePipeConfirmacao, PipeConfirmacaoStatus } from "@/hooks/usePipeConfirmacao";
-import { usePipelineStages, stagesToColumns } from "@/hooks/usePipelineStages";
+import { usePipeConfirmacao, useUpdatePipeConfirmacao, useCreatePipeConfirmacao, PipeConfirmacaoStatus } from "@/hooks/usePipeConfirmacao";
+import { usePipelineStages, stagesToColumns, getPipelineTypeName } from "@/hooks/usePipelineStages";
 import { PipeSettingsDialog } from "@/components/pipelines/PipeSettingsDialog";
 import { useDeleteAllLeadsInPipe } from "@/hooks/useLeads";
 import { useCreatePipeProposta } from "@/hooks/usePipePropostas";
@@ -65,6 +65,7 @@ interface ConfirmacaoCardData extends DraggableItem {
   isConfirmed?: boolean;
   updatedAt?: string | null;
   overdueDays?: number;
+  meetLink?: string | null;
 }
 
 // Calculate correct status based on meeting date using CALENDAR DAYS (not hours)
@@ -163,6 +164,7 @@ export default function PipeConfirmacao() {
   const { data: teamMembers = [] } = useTeamMembers();
   const updatePipeConfirmacao = useUpdatePipeConfirmacao();
   const createPipeProposta = useCreatePipeProposta();
+  const createPipeConfirmacao = useCreatePipeConfirmacao();
   const deleteAllLeadsInPipe = useDeleteAllLeadsInPipe("confirmacao");
   const logAction = useLogLeadAction();
 
@@ -260,6 +262,7 @@ export default function PipeConfirmacao() {
       updatedAt: item.updated_at,
       overdueDays,
       createdAt: item.created_at,
+      meetLink: item.meet_link ?? null,
     };
   };
 
@@ -343,10 +346,44 @@ export default function PipeConfirmacao() {
 
     const stageLabel = statusColumns.find(c => c.id === newStatus)?.title || newStatus;
 
-    // If moving to compareceu, open modal to select SDR/Closer
-    if (newStatus === "compareceu") {
-      setPendingCompareceuItem(item);
-      setIsCompareceuModalOpen(true);
+    // Check if moving to a success stage
+    const movedStage = pipelineStages.find(s => s.stage_key === newStatus);
+    if (movedStage?.is_final_positive) {
+      const targetPipe = movedStage.target_pipe_type || "propostas"; // fallback
+
+      // If target is propostas, open CompareceuModal to select SDR/Closer
+      if (targetPipe === "propostas") {
+        setPendingCompareceuItem(item);
+        setIsCompareceuModalOpen(true);
+        return;
+      }
+
+      // For other target pipes, create entry directly
+      try {
+        const targetStage = movedStage.target_stage_key;
+        const targetPipeName = getPipelineTypeName(targetPipe as any);
+
+        await updatePipeConfirmacao.mutateAsync({
+          id: itemId,
+          status: newStatus as PipeConfirmacaoStatus,
+          leadId: item.lead_id,
+          assignedTo: item.sdr_id || item.closer_id,
+        });
+
+        if (targetPipe === "confirmacao" && targetStage) {
+          await createPipeConfirmacao.mutateAsync({
+            lead_id: item.lead_id,
+            sdr_id: item.sdr_id,
+            closer_id: item.closer_id,
+            status: targetStage,
+          });
+        }
+
+        logAction({ leadId: item.lead_id, action: "stage_changed", description: `Etapa alterada para "${stageLabel}" no Pipe Confirmação` });
+        toast.success(`Lead movido para ${targetPipeName} automaticamente!`);
+      } catch (error) {
+        toast.error("Erro ao atualizar status");
+      }
       return;
     }
 
@@ -366,24 +403,29 @@ export default function PipeConfirmacao() {
 
   const handleCompareceuConfirm = async (sdrId: string | null, closerId: string | null) => {
     if (!pendingCompareceuItem) return;
-    
+
     setIsProcessingCompareceu(true);
     try {
+      // Find the success stage to get the configured status and target
+      const successStage = pipelineStages.find(s => s.is_final_positive);
+      const successStageKey = successStage?.stage_key || "compareceu";
+      const targetStageKey = successStage?.target_stage_key || "marcar_compromisso"; // fallback
+
       // Update confirmacao with SDR and Closer
-      await updatePipeConfirmacao.mutateAsync({ 
-        id: pendingCompareceuItem.id, 
-        status: "compareceu" as PipeConfirmacaoStatus,
+      await updatePipeConfirmacao.mutateAsync({
+        id: pendingCompareceuItem.id,
+        status: successStageKey as PipeConfirmacaoStatus,
         sdr_id: sdrId,
         closer_id: closerId,
         leadId: pendingCompareceuItem.lead_id,
         assignedTo: sdrId || closerId,
       });
 
-      // Create proposta with selected closer
+      // Create proposta with selected closer and configured target stage
       await createPipeProposta.mutateAsync({
         lead_id: pendingCompareceuItem.lead_id,
         closer_id: closerId,
-        status: "marcar_compromisso",
+        status: targetStageKey,
       });
 
       logAction({ leadId: pendingCompareceuItem.lead_id, action: "meeting_attended", description: `Lead compareceu à reunião e movido para Gestão de Propostas` });

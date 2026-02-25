@@ -1,4 +1,4 @@
-project_id = "twoghutcvlfgemadaeez"
+project_id = "jsjsmuncfkbsbzqzqhfq"
 
 # Auth: não exigir confirmação de email para login (SDR/equipe interno).
 # Em projetos hospedados, desative em: Dashboard → Authentication → Providers → Email → "Confirm email".
@@ -49,4 +49,12 @@ verify_jwt = false
 
 # process-followup-automations: chamado por pg_cron; autenticação via x-cron-secret
 [functions.process-followup-automations]
+verify_jwt = false
+
+# google-calendar-callback: redirect do Google OAuth (sem JWT)
+[functions.google-calendar-callback]
+verify_jwt = false
+
+# google-calendar-webhook: push notifications do Google Calendar (sem JWT)
+[functions.google-calendar-webhook]
 verify_jwt = false

@@ -37,6 +37,7 @@ import {
   useDisconnectGoogleCalendar,
   useGoogleCalendarCallback,
 } from "@/hooks/useGoogleCalendar";
+import { GoogleCalendarSharingSettings } from "@/components/settings/GoogleCalendarSharingSettings";
 import { useAuth } from "@/contexts/AuthContext";
 
 // Ícone do Google (SVG inline para não precisar de dependência extra)
@@ -185,7 +186,7 @@ export function GoogleCalendarSettings() {
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="p-4 border rounded-lg bg-card"
+          className="p-4 border rounded-lg bg-card space-y-0"
         >
           <div className="flex items-start justify-between">
             <div className="space-y-3">
@@ -268,6 +269,9 @@ export function GoogleCalendarSettings() {
               </AlertDialogContent>
             </AlertDialog>
           </div>
+
+          {/* Compartilhamento — visível apenas quando conectado */}
+          <GoogleCalendarSharingSettings />
         </motion.div>
       ) : (
         // Estado: Não conectado

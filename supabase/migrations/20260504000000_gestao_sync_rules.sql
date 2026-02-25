@@ -22,6 +22,7 @@ CREATE INDEX IF NOT EXISTS idx_upsell_gestao_rules_base_stage
   ON upsell_gestao_rules(organization_id, base_stage_key);
 
 -- Unique constraint: uma regra por combinação org + base_stage + gestao_from
+ALTER TABLE upsell_gestao_rules DROP CONSTRAINT IF EXISTS uq_gestao_rule_combo;
 ALTER TABLE upsell_gestao_rules
   ADD CONSTRAINT uq_gestao_rule_combo
   UNIQUE (organization_id, base_stage_key, gestao_from_stage);
@@ -29,25 +30,29 @@ ALTER TABLE upsell_gestao_rules
 -- RLS
 ALTER TABLE upsell_gestao_rules ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "upsell_gestao_rules_select_org" ON upsell_gestao_rules;
 CREATE POLICY "upsell_gestao_rules_select_org" ON upsell_gestao_rules
   FOR SELECT TO authenticated
   USING (organization_id = public.get_user_organization_id());
 
+DROP POLICY IF EXISTS "upsell_gestao_rules_insert_org" ON upsell_gestao_rules;
 CREATE POLICY "upsell_gestao_rules_insert_org" ON upsell_gestao_rules
   FOR INSERT TO authenticated
   WITH CHECK (organization_id = public.get_user_organization_id());
 
+DROP POLICY IF EXISTS "upsell_gestao_rules_update_org" ON upsell_gestao_rules;
 CREATE POLICY "upsell_gestao_rules_update_org" ON upsell_gestao_rules
   FOR UPDATE TO authenticated
   USING (organization_id = public.get_user_organization_id())
   WITH CHECK (organization_id = public.get_user_organization_id());
 
+DROP POLICY IF EXISTS "upsell_gestao_rules_delete_org" ON upsell_gestao_rules;
 CREATE POLICY "upsell_gestao_rules_delete_org" ON upsell_gestao_rules
   FOR DELETE TO authenticated
   USING (organization_id = public.get_user_organization_id());
 
 -- Realtime
-ALTER PUBLICATION supabase_realtime ADD TABLE upsell_gestao_rules;
+DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE upsell_gestao_rules; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- 2. Campo de bloqueio manual no upsell_clients
 ALTER TABLE upsell_clients
@@ -125,6 +130,7 @@ CREATE TRIGGER trg_upsell_order_auto_move
   EXECUTE FUNCTION handle_upsell_order_auto_move();
 
 -- 4. Trigger updated_at para upsell_gestao_rules
+DROP TRIGGER IF EXISTS trg_upsell_gestao_rules_updated_at ON upsell_gestao_rules;
 CREATE TRIGGER trg_upsell_gestao_rules_updated_at
   BEFORE UPDATE ON upsell_gestao_rules
   FOR EACH ROW EXECUTE FUNCTION update_upsell_updated_at();

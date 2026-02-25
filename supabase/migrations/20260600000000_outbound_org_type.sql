@@ -13,7 +13,7 @@
 -- 1. ENUM org_type + COLUNA em organizations
 -- ============================================
 
-CREATE TYPE org_type AS ENUM ('crm', 'outbound');
+DO $$ BEGIN CREATE TYPE org_type AS ENUM ('crm', 'outbound'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 ALTER TABLE organizations
   ADD COLUMN IF NOT EXISTS org_type org_type NOT NULL DEFAULT 'crm';
@@ -37,7 +37,7 @@ ALTER TYPE app_role ADD VALUE IF NOT EXISTS 'cliente';
 -- Controla quais itens da sidebar o CLIENTE ve em orgs OUTBOUND.
 -- Configurado pelo AGENCY via checkboxes.
 
-CREATE TABLE client_sidebar_permissions (
+CREATE TABLE IF NOT EXISTS client_sidebar_permissions (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   sidebar_key     TEXT NOT NULL,
@@ -51,7 +51,7 @@ CREATE TABLE client_sidebar_permissions (
 -- Items fixos NAO entram nesta tabela:
 --   dashboard (sempre visivel), campanhas/equipe/config/comissoes/produtos/tv (nunca visiveis)
 
-CREATE INDEX idx_client_sidebar_permissions_org ON client_sidebar_permissions(organization_id);
+CREATE INDEX IF NOT EXISTS idx_client_sidebar_permissions_org ON client_sidebar_permissions(organization_id);
 
 -- ============================================
 -- 4. TABELA badges
@@ -60,7 +60,7 @@ CREATE INDEX idx_client_sidebar_permissions_org ON client_sidebar_permissions(or
 -- is_system = true: badges pre-definidos pelo sistema
 -- is_system = false: badges customizados criados pelo AGENCY
 
-CREATE TABLE badges (
+CREATE TABLE IF NOT EXISTS badges (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   name            TEXT NOT NULL,
@@ -75,15 +75,15 @@ CREATE TABLE badges (
 -- criteria_type valores esperados:
 -- leads_quentes, vendas_count, vendas_recorrentes, faturamento_total
 
-CREATE INDEX idx_badges_org ON badges(organization_id);
-CREATE INDEX idx_badges_system ON badges(organization_id, is_system);
+CREATE INDEX IF NOT EXISTS idx_badges_org ON badges(organization_id);
+CREATE INDEX IF NOT EXISTS idx_badges_system ON badges(organization_id, is_system);
 
 -- ============================================
 -- 5. TABELA user_badges
 -- ============================================
 -- Badges desbloqueados por cada team_member (CLIENTE).
 
-CREATE TABLE user_badges (
+CREATE TABLE IF NOT EXISTS user_badges (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   badge_id        UUID NOT NULL REFERENCES badges(id) ON DELETE CASCADE,
   team_member_id  UUID NOT NULL REFERENCES team_members(id) ON DELETE CASCADE,
@@ -91,8 +91,8 @@ CREATE TABLE user_badges (
   UNIQUE(badge_id, team_member_id)
 );
 
-CREATE INDEX idx_user_badges_member ON user_badges(team_member_id);
-CREATE INDEX idx_user_badges_badge ON user_badges(badge_id);
+CREATE INDEX IF NOT EXISTS idx_user_badges_member ON user_badges(team_member_id);
+CREATE INDEX IF NOT EXISTS idx_user_badges_badge ON user_badges(badge_id);
 
 -- ============================================
 -- 6. ROW LEVEL SECURITY
@@ -103,42 +103,51 @@ ALTER TABLE badges ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_badges ENABLE ROW LEVEL SECURITY;
 
 -- 6.1 client_sidebar_permissions
+DROP POLICY IF EXISTS "client_sidebar_permissions_select_org" ON client_sidebar_permissions;
 CREATE POLICY "client_sidebar_permissions_select_org" ON client_sidebar_permissions
   FOR SELECT TO authenticated
   USING (organization_id = public.get_user_organization_id());
 
+DROP POLICY IF EXISTS "client_sidebar_permissions_insert_org" ON client_sidebar_permissions;
 CREATE POLICY "client_sidebar_permissions_insert_org" ON client_sidebar_permissions
   FOR INSERT TO authenticated
   WITH CHECK (organization_id = public.get_user_organization_id());
 
+DROP POLICY IF EXISTS "client_sidebar_permissions_update_org" ON client_sidebar_permissions;
 CREATE POLICY "client_sidebar_permissions_update_org" ON client_sidebar_permissions
   FOR UPDATE TO authenticated
   USING (organization_id = public.get_user_organization_id())
   WITH CHECK (organization_id = public.get_user_organization_id());
 
+DROP POLICY IF EXISTS "client_sidebar_permissions_delete_org" ON client_sidebar_permissions;
 CREATE POLICY "client_sidebar_permissions_delete_org" ON client_sidebar_permissions
   FOR DELETE TO authenticated
   USING (organization_id = public.get_user_organization_id());
 
 -- 6.2 badges
+DROP POLICY IF EXISTS "badges_select_org" ON badges;
 CREATE POLICY "badges_select_org" ON badges
   FOR SELECT TO authenticated
   USING (organization_id = public.get_user_organization_id());
 
+DROP POLICY IF EXISTS "badges_insert_org" ON badges;
 CREATE POLICY "badges_insert_org" ON badges
   FOR INSERT TO authenticated
   WITH CHECK (organization_id = public.get_user_organization_id());
 
+DROP POLICY IF EXISTS "badges_update_org" ON badges;
 CREATE POLICY "badges_update_org" ON badges
   FOR UPDATE TO authenticated
   USING (organization_id = public.get_user_organization_id())
   WITH CHECK (organization_id = public.get_user_organization_id());
 
+DROP POLICY IF EXISTS "badges_delete_org" ON badges;
 CREATE POLICY "badges_delete_org" ON badges
   FOR DELETE TO authenticated
   USING (organization_id = public.get_user_organization_id());
 
 -- 6.3 user_badges
+DROP POLICY IF EXISTS "user_badges_select" ON user_badges;
 CREATE POLICY "user_badges_select" ON user_badges
   FOR SELECT TO authenticated
   USING (
@@ -149,6 +158,7 @@ CREATE POLICY "user_badges_select" ON user_badges
     )
   );
 
+DROP POLICY IF EXISTS "user_badges_insert" ON user_badges;
 CREATE POLICY "user_badges_insert" ON user_badges
   FOR INSERT TO authenticated
   WITH CHECK (
@@ -159,6 +169,7 @@ CREATE POLICY "user_badges_insert" ON user_badges
     )
   );
 
+DROP POLICY IF EXISTS "user_badges_update" ON user_badges;
 CREATE POLICY "user_badges_update" ON user_badges
   FOR UPDATE TO authenticated
   USING (
@@ -169,6 +180,7 @@ CREATE POLICY "user_badges_update" ON user_badges
     )
   );
 
+DROP POLICY IF EXISTS "user_badges_delete" ON user_badges;
 CREATE POLICY "user_badges_delete" ON user_badges
   FOR DELETE TO authenticated
   USING (
@@ -183,9 +195,9 @@ CREATE POLICY "user_badges_delete" ON user_badges
 -- 7. REALTIME
 -- ============================================
 
-ALTER PUBLICATION supabase_realtime ADD TABLE client_sidebar_permissions;
-ALTER PUBLICATION supabase_realtime ADD TABLE badges;
-ALTER PUBLICATION supabase_realtime ADD TABLE user_badges;
+DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE client_sidebar_permissions; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE badges; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE user_badges; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- ============================================
 -- 8. LOG

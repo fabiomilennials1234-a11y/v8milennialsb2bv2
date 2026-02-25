@@ -34,13 +34,14 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { DraggableKanbanBoard, DraggableItem, KanbanColumn } from "@/components/kanban/DraggableKanbanBoard";
-import { usePipeWhatsapp, useUpdatePipeWhatsapp, useDeletePipeWhatsapp } from "@/hooks/usePipeWhatsapp";
+import { usePipeWhatsapp, useUpdatePipeWhatsapp, useDeletePipeWhatsapp, type PipeWhatsappStatus } from "@/hooks/usePipeWhatsapp";
 import { usePipeWhatsappMetrics, type MetricsPeriod } from "@/hooks/usePipeMetrics";
-import { usePipelineStages, stagesToColumns } from "@/hooks/usePipelineStages";
+import { usePipelineStages, stagesToColumns, getPipelineTypeName } from "@/hooks/usePipelineStages";
 import { PipeSettingsDialog } from "@/components/pipelines/PipeSettingsDialog";
 import { useCreatePipeConfirmacao } from "@/hooks/usePipeConfirmacao";
+import { useCreatePipeProposta } from "@/hooks/usePipePropostas";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
-import { useDeleteLead, useDeleteAllLeadsInPipe, useToggleLeadAI } from "@/hooks/useLeads";
+import { useDeleteAllLeadsInPipe, useToggleLeadAI } from "@/hooks/useLeads";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useLogLeadAction } from "@/hooks/useLogLeadAction";
 import { useCreateAcaoDoDia } from "@/hooks/useAcoesDoDia";
@@ -213,7 +214,7 @@ function WhatsappCardComponent({ card, onDelete, isAdmin, onQuickAdd, onCardClic
               }}
             >
               <Trash2 className="w-4 h-4 mr-2" />
-              {isAdmin ? "Excluir do Funil + Lead" : "Remover do Funil"}
+              Remover do Funil
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -480,9 +481,9 @@ export default function PipeWhatsapp() {
   const { data: userRole } = useUserRole();
   const updatePipeWhatsapp = useUpdatePipeWhatsapp();
   const deletePipeWhatsapp = useDeletePipeWhatsapp();
-  const deleteLead = useDeleteLead();
   const deleteAllLeadsInPipe = useDeleteAllLeadsInPipe("whatsapp");
   const createPipeConfirmacao = useCreatePipeConfirmacao();
+  const createPipeProposta = useCreatePipeProposta();
   const createAcaoDoDia = useCreateAcaoDoDia();
   const logAction = useLogLeadAction();
 
@@ -617,16 +618,30 @@ export default function PipeWhatsapp() {
 
       logAction({ leadId: item.lead_id, action: "stage_changed", description: `Etapa alterada para "${stageLabel}" no Funil WhatsApp` });
 
-      // If moved to "agendado", automatically create entry in pipe_confirmacao
-      if (newStatus === "agendado") {
-        await createPipeConfirmacao.mutateAsync({
-          lead_id: item.lead_id,
-          sdr_id: item.sdr_id,
-          closer_id: item.lead?.closer?.id || null,
-          status: "reuniao_marcada",
-          meeting_date: item.scheduled_date,
-        });
-        toast.success("Lead movido para Confirmação de Reunião automaticamente!");
+      // If moved to a success stage, automatically create entry in the target pipe
+      const movedStage = pipelineStages.find(s => s.stage_key === newStatus);
+      if (movedStage?.is_final_positive) {
+        const targetPipe = movedStage.target_pipe_type || "confirmacao"; // fallback
+        const targetStage = movedStage.target_stage_key || "reuniao_marcada"; // fallback
+        const targetPipeName = getPipelineTypeName(targetPipe as any);
+
+        if (targetPipe === "confirmacao") {
+          await createPipeConfirmacao.mutateAsync({
+            lead_id: item.lead_id,
+            sdr_id: item.sdr_id,
+            closer_id: item.lead?.closer?.id || null,
+            status: targetStage,
+            meeting_date: item.scheduled_date,
+          });
+        } else if (targetPipe === "propostas") {
+          await createPipeProposta.mutateAsync({
+            lead_id: item.lead_id,
+            closer_id: item.lead?.closer?.id || null,
+            status: targetStage,
+          });
+        }
+
+        toast.success(`Lead movido para ${targetPipeName} automaticamente!`);
       } else {
         toast.success("Status atualizado com sucesso!");
       }
@@ -636,29 +651,16 @@ export default function PipeWhatsapp() {
     }
   };
 
-  // Handle delete
+  // Handle delete — always removes only from this pipe, never deletes the full lead
   const handleDelete = async () => {
     if (!deleteDialog) return;
 
     try {
-      // Always remove from pipe
       await deletePipeWhatsapp.mutateAsync(deleteDialog.pipeId);
-      
-      // If admin, also delete the lead
-      if (isAdmin) {
-        await deleteLead.mutateAsync(deleteDialog.leadId);
-        toast.success("Lead e oportunidade excluídos com sucesso!");
-      } else {
-        toast.success("Oportunidade removida do funil!");
-      }
-      
+      toast.success("Oportunidade removida do funil!");
       setDeleteDialog(null);
     } catch (error: any) {
-      if (error.message?.includes("row-level security")) {
-        toast.error("Você não tem permissão para excluir leads. Apenas a oportunidade foi removida.");
-      } else {
-        toast.error("Erro ao excluir");
-      }
+      toast.error("Erro ao excluir");
       console.error(error);
     }
   };
@@ -886,19 +888,16 @@ export default function PipeWhatsapp() {
           <AlertDialogHeader>
             <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
             <AlertDialogDescription>
-              {isAdmin 
-                ? "Você irá excluir esta oportunidade do funil E o lead associado. Esta ação não pode ser desfeita."
-                : "Você irá remover esta oportunidade do funil. O lead será mantido no sistema."
-              }
+              Você irá remover esta oportunidade do funil. O lead será mantido no sistema.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction 
+            <AlertDialogAction
               onClick={handleDelete}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {isAdmin ? "Excluir Lead e Oportunidade" : "Remover do Funil"}
+              Remover do Funil
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

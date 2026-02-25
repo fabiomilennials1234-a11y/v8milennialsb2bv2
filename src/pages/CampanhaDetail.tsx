@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { useCampanha, useCampanhaStages, useCampanhaLeads, useCampanhaMembers, useUpdateCampanhaMember, useDeleteCampanhaLead, useCampanhaPipeAutomations } from "@/hooks/useCampanhas";
+import { useCampanha, useCampanhaStages, useCampanhaLeads, useCampanhaMembers, useUpdateCampanhaMember, useDeleteCampanhaLead, useCampanhaPipeAutomations, useExtractLeadToPipe, resolveExtractionTarget, type CampanhaLead } from "@/hooks/useCampanhas";
 import { useCreatePipeConfirmacao } from "@/hooks/usePipeConfirmacao";
 import { useImportLeads } from "@/hooks/useImportLeads";
 import { useOrganization } from "@/hooks/useOrganization";
@@ -49,7 +49,8 @@ export default function CampanhaDetail() {
   const { data: leads = [] } = useCampanhaLeads(id);
   const { data: members = [] } = useCampanhaMembers(id);
   const { data: pipeAutomations = [] } = useCampanhaPipeAutomations(id);
-  const [extractModalLead, setExtractModalLead] = useState<import("@/hooks/useCampanhas").CampanhaLead | null>(null);
+  const [extractModalLead, setExtractModalLead] = useState<CampanhaLead | null>(null);
+  const extractLeadToPipe = useExtractLeadToPipe();
   const createConfirmacao = useCreatePipeConfirmacao();
   const updateMember = useUpdateCampanhaMember();
   const deleteCampanhaLead = useDeleteCampanhaLead();
@@ -76,6 +77,40 @@ export default function CampanhaDetail() {
       toast.error("Erro ao corrigir nomes");
     } finally {
       setIsFixingNames(false);
+    }
+  };
+
+  // Extração inteligente: resolve destino pelo objetivo da campanha
+  const handleExtractToPipe = async (lead: CampanhaLead) => {
+    if (!campanha || !organizationId) {
+      setExtractModalLead(lead); // Fallback: abre modal
+      return;
+    }
+
+    const target = resolveExtractionTarget(campanha);
+    if (!target) {
+      // Campanha livre sem destino configurado — abre modal manual
+      setExtractModalLead(lead);
+      return;
+    }
+
+    // Destino resolvido automaticamente — extrai direto
+    try {
+      await extractLeadToPipe.mutateAsync({
+        campanha_lead_id: lead.id,
+        campanha_id: campanha.id,
+        lead_id: lead.lead_id,
+        target_pipe: target.pipe,
+        stage: target.stage,
+        organization_id: organizationId,
+        sdr_id: lead.sdr_id ?? undefined,
+        closer_id: lead.closer_id ?? undefined,
+        campaign_name: campanha.name,
+      });
+      toast.success(`Lead enviado para o pipe com sucesso`);
+    } catch (e) {
+      console.error(e);
+      toast.error("Erro ao enviar lead para o pipe");
     }
   };
 
@@ -351,7 +386,7 @@ export default function CampanhaDetail() {
             organizationId={organizationId ?? undefined}
             campanhaName={campanha?.name ?? ""}
             onMoveToConfirmacao={handleMoveToConfirmacao}
-            onExtractToPipe={setExtractModalLead}
+            onExtractToPipe={handleExtractToPipe}
           />
         </TabsContent>
 

@@ -874,6 +874,8 @@ export type Database = {
           created_at: string | null
           deadline: string
           description: string | null
+          free_target_pipe: string | null
+          free_target_stage: string | null
           id: string
           individual_goal: number | null
           investimento_cents: number | null
@@ -892,6 +894,7 @@ export type Database = {
           mkt_investimento_cadastro_cents: number | null
           mkt_investimento_call_cents: number | null
           name: string
+          objective: string
           organization_id: string | null
           team_goal: number
           updated_at: string | null
@@ -907,6 +910,8 @@ export type Database = {
           created_at?: string | null
           deadline: string
           description?: string | null
+          free_target_pipe?: string | null
+          free_target_stage?: string | null
           id?: string
           individual_goal?: number | null
           investimento_cents?: number | null
@@ -925,6 +930,7 @@ export type Database = {
           mkt_investimento_cadastro_cents?: number | null
           mkt_investimento_call_cents?: number | null
           name: string
+          objective?: string
           organization_id?: string | null
           team_goal?: number
           updated_at?: string | null
@@ -940,6 +946,8 @@ export type Database = {
           created_at?: string | null
           deadline?: string
           description?: string | null
+          free_target_pipe?: string | null
+          free_target_stage?: string | null
           id?: string
           individual_goal?: number | null
           investimento_cents?: number | null
@@ -958,6 +966,7 @@ export type Database = {
           mkt_investimento_cadastro_cents?: number | null
           mkt_investimento_call_cents?: number | null
           name?: string
+          objective?: string
           organization_id?: string | null
           team_goal?: number
           updated_at?: string | null
@@ -5084,7 +5093,7 @@ export type Database = {
         Returns: string
       }
       get_ranking_data: {
-        Args: { p_month: number; p_year: number }
+        Args: { p_month: number; p_year: number; p_organization_id?: string }
         Returns: Json
       }
       get_user_org_role: { Args: never; Returns: string }

@@ -9,19 +9,24 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { useCreateCampanha, type CampaignType, type AutoConfig, type LeadDistributionMode, type CampanhaMemberRole } from "@/hooks/useCampanhas";
+import {
+  useCreateCampanha,
+  type CampaignType, type CampaignObjective, type TargetPipe,
+  type AutoConfig, type LeadDistributionMode, type CampanhaMemberRole,
+  OBJECTIVE_LABELS, OBJECTIVE_DEFAULT_STAGES,
+} from "@/hooks/useCampanhas";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
 import { useWhatsAppInstances } from "@/hooks/useWhatsAppInstances";
 import { toast } from "sonner";
 import {
   Plus, X, GripVertical, Target, Users, Calendar, DollarSign,
-  Bot, FileText, Kanban, ChevronLeft, ChevronRight, Check,
-  Zap, Clock, MousePointer, Shuffle, User, Lock
+  Bot, ChevronLeft, ChevronRight, Check,
+  Zap, MousePointer, Shuffle, User, Lock,
+  ClipboardList, CalendarCheck, HandCoins, Settings2
 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
-import { CAMPAIGN_TYPE_FEATURE_MAP } from "@/lib/feature-registry";
 import { AgentSelectorStep } from "./AgentSelectorStep";
 import { TemplateSelectorStep } from "./TemplateSelectorStep";
 
@@ -44,6 +49,72 @@ const defaultStages: StageInput[] = [
   { id: "4", name: "Reunião Marcada", color: "#22C55E", is_reuniao_marcada: true },
   { id: "5", name: "Perdido", color: "#EF4444", is_reuniao_marcada: false },
 ];
+
+const CAMPAIGN_OBJECTIVES = [
+  {
+    type: "qualificacao" as CampaignObjective,
+    title: OBJECTIVE_LABELS.qualificacao,
+    description: "Aborde e qualifique leads frios",
+    detail: "Lead entra como Novo no SDR Pipeline",
+    pipeLabel: "Pipe WhatsApp",
+    icon: ClipboardList,
+    iconColor: "text-blue-500",
+    badge: "Mais comum",
+  },
+  {
+    type: "agendamentos" as CampaignObjective,
+    title: OBJECTIVE_LABELS.agendamentos,
+    description: "Converta leads em reuniões agendadas",
+    detail: "Lead entra como Reunião Marcada no Pipeline de Confirmação",
+    pipeLabel: "Pipe Confirmação",
+    icon: CalendarCheck,
+    iconColor: "text-green-500",
+    badge: null,
+  },
+  {
+    type: "propostas" as CampaignObjective,
+    title: OBJECTIVE_LABELS.propostas,
+    description: "Envie propostas e feche negócios",
+    detail: "Lead entra em Marcar Compromisso no Pipeline de Propostas",
+    pipeLabel: "Pipe Propostas",
+    icon: HandCoins,
+    iconColor: "text-amber-500",
+    badge: null,
+  },
+  {
+    type: "livre" as CampaignObjective,
+    title: OBJECTIVE_LABELS.livre,
+    description: "Objetivo personalizado para seu fluxo",
+    detail: "Você escolhe o pipe e o status de destino",
+    pipeLabel: null,
+    icon: Settings2,
+    iconColor: "text-muted-foreground",
+    badge: null,
+  },
+];
+
+const PIPE_OPTIONS: { value: TargetPipe; label: string }[] = [
+  { value: "pipe_whatsapp", label: "Pipe WhatsApp (SDR)" },
+  { value: "pipe_confirmacao", label: "Pipe Confirmação (Reuniões)" },
+  { value: "pipe_propostas", label: "Pipe Propostas (Closer)" },
+];
+
+const PIPE_STAGE_OPTIONS: Record<TargetPipe, { value: string; label: string }[]> = {
+  pipe_whatsapp: [
+    { value: "novo", label: "Novo" },
+    { value: "em_contato", label: "Em Contato" },
+    { value: "qualificado", label: "Qualificado" },
+  ],
+  pipe_confirmacao: [
+    { value: "reuniao_marcada", label: "Reunião Marcada" },
+    { value: "compareceu", label: "Compareceu" },
+  ],
+  pipe_propostas: [
+    { value: "marcar_compromisso", label: "Marcar Compromisso" },
+    { value: "proposta_enviada", label: "Proposta Enviada" },
+    { value: "negociacao", label: "Negociação" },
+  ],
+};
 
 const CAMPAIGN_MODES = [
   {
@@ -82,11 +153,11 @@ const CAMPAIGN_MODES = [
   },
 ];
 
-type WizardStep = "mode" | "config" | "details" | "stages" | "members";
-
-const STEP_ORDER: WizardStep[] = ["mode", "config", "details", "stages", "members"];
+type WizardStep = "objective" | "free_config" | "mode" | "config" | "details" | "stages" | "members";
 
 const STEP_LABELS: Record<WizardStep, string> = {
+  objective: "Objetivo",
+  free_config: "Destino",
   mode: "Tipo",
   config: "Configuração",
   details: "Detalhes",
@@ -96,7 +167,12 @@ const STEP_LABELS: Record<WizardStep, string> = {
 
 export function CreateCampanhaModal({ open, onOpenChange }: CreateCampanhaModalProps) {
   // Wizard state
-  const [currentStep, setCurrentStep] = useState<WizardStep>("mode");
+  const [currentStep, setCurrentStep] = useState<WizardStep>("objective");
+
+  // Campaign objective
+  const [objective, setObjective] = useState<CampaignObjective>("qualificacao");
+  const [freeTargetPipe, setFreeTargetPipe] = useState<TargetPipe | null>(null);
+  const [freeTargetStage, setFreeTargetStage] = useState<string | null>(null);
 
   // Campaign mode
   const [campaignType, setCampaignType] = useState<CampaignType>("manual");
@@ -142,26 +218,38 @@ export function CreateCampanhaModal({ open, onOpenChange }: CreateCampanhaModalP
   const { data: whatsappInstances = [] } = useWhatsAppInstances();
   const { canCreateCampaign } = useOrgFeatures();
 
-  // Calculate steps based on campaign type
-  const getStepsForType = (type: CampaignType): WizardStep[] => {
-    switch (type) {
-      case "automatica":
-        return ["mode", "config", "details", "stages", "members"]; // config = agent selector
-      case "semi_automatica":
-        return ["mode", "config", "details", "stages", "members"]; // config = template selector
-      case "manual":
-      default:
-        return ["mode", "details", "stages", "members"]; // no config step
+  // Calculate steps based on objective + campaign type
+  const getActiveSteps = (obj: CampaignObjective, type: CampaignType): WizardStep[] => {
+    const steps: WizardStep[] = ["objective"];
+
+    // Free config step only for 'livre'
+    if (obj === "livre") {
+      steps.push("free_config");
     }
+
+    // Mode step
+    steps.push("mode");
+
+    // Config step for automatica/semi
+    if (type === "automatica" || type === "semi_automatica") {
+      steps.push("config");
+    }
+
+    steps.push("details", "stages", "members");
+    return steps;
   };
 
-  const activeSteps = getStepsForType(campaignType);
+  const activeSteps = getActiveSteps(objective, campaignType);
   const currentStepIndex = activeSteps.indexOf(currentStep);
   const progress = ((currentStepIndex + 1) / activeSteps.length) * 100;
   const isLastStep = currentStepIndex === activeSteps.length - 1;
 
   const canGoNext = () => {
     switch (currentStep) {
+      case "objective":
+        return true;
+      case "free_config":
+        return !!freeTargetPipe && !!freeTargetStage;
       case "mode":
         return true;
       case "config":
@@ -195,6 +283,24 @@ export function CreateCampanhaModal({ open, onOpenChange }: CreateCampanhaModalP
     if (prevIndex >= 0) {
       setCurrentStep(activeSteps[prevIndex]);
     }
+  };
+
+  const handleObjectiveSelect = (obj: CampaignObjective) => {
+    setObjective(obj);
+    // Reset free config when changing objective
+    if (obj !== "livre") {
+      setFreeTargetPipe(null);
+      setFreeTargetStage(null);
+    }
+    // Update suggested stages based on objective
+    const suggestedNames = OBJECTIVE_DEFAULT_STAGES[obj];
+    const lastIndex = suggestedNames.length - 1;
+    setStages(suggestedNames.map((name, i) => ({
+      id: (i + 1).toString(),
+      name,
+      color: i === lastIndex ? "#22C55E" : i === 0 ? "#6B7280" : "#3B82F6",
+      is_reuniao_marcada: i === lastIndex, // last stage = success
+    })));
   };
 
   const handleModeSelect = (type: CampaignType) => {
@@ -251,6 +357,9 @@ export function CreateCampanhaModal({ open, onOpenChange }: CreateCampanhaModalP
         team_goal: teamGoal,
         individual_goal: individualGoal,
         bonus_value: bonusValue,
+        objective,
+        free_target_pipe: objective === "livre" ? freeTargetPipe : null,
+        free_target_stage: objective === "livre" ? freeTargetStage : null,
         campaign_type: campaignType,
         agent_id: campaignType === "automatica" ? selectedAgentId : null,
         auto_config: campaignType === "automatica" ? autoConfig : null,
@@ -282,7 +391,10 @@ export function CreateCampanhaModal({ open, onOpenChange }: CreateCampanhaModalP
   };
 
   const resetForm = () => {
-    setCurrentStep("mode");
+    setCurrentStep("objective");
+    setObjective("qualificacao");
+    setFreeTargetPipe(null);
+    setFreeTargetStage(null);
     setCampaignType("manual");
     setSelectedAgentId(null);
     setAutoConfig({
@@ -310,6 +422,125 @@ export function CreateCampanhaModal({ open, onOpenChange }: CreateCampanhaModalP
 
   const renderStepContent = () => {
     switch (currentStep) {
+      case "objective":
+        return (
+          <div className="space-y-4">
+            <div className="text-center mb-6">
+              <h3 className="text-lg font-semibold">Qual o objetivo desta campanha?</h3>
+              <p className="text-sm text-muted-foreground">
+                O objetivo define para onde o lead vai ao atingir sucesso
+              </p>
+            </div>
+
+            <div className="grid gap-3">
+              {CAMPAIGN_OBJECTIVES.map((obj) => {
+                const Icon = obj.icon;
+                const isSelected = objective === obj.type;
+                return (
+                  <Card
+                    key={obj.type}
+                    className={cn(
+                      "cursor-pointer transition-all hover:shadow-md bg-muted",
+                      isSelected && "ring-2 ring-primary shadow-md"
+                    )}
+                    onClick={() => handleObjectiveSelect(obj.type)}
+                  >
+                    <CardContent className="p-4 flex items-start gap-4">
+                      <div className={cn(
+                        "w-12 h-12 rounded-lg flex items-center justify-center shrink-0",
+                        isSelected
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-card shadow-sm border border-border"
+                      )}>
+                        <Icon className={cn("w-6 h-6", !isSelected && obj.iconColor)} />
+                      </div>
+
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold">{obj.title}</span>
+                          {obj.badge && (
+                            <Badge className="bg-primary/10 text-primary border-primary/20 text-xs">
+                              {obj.badge}
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-sm text-muted-foreground mt-0.5">{obj.description}</p>
+                        <p className="text-xs text-muted-foreground/70 mt-1.5 flex items-center gap-1">
+                          {obj.pipeLabel && (
+                            <Badge variant="outline" className="text-xs font-normal">
+                              {obj.pipeLabel}
+                            </Badge>
+                          )}
+                          <span>{obj.detail}</span>
+                        </p>
+                      </div>
+
+                      {isSelected && <Check className="w-5 h-5 text-primary shrink-0 mt-0.5" />}
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          </div>
+        );
+
+      case "free_config":
+        return (
+          <div className="space-y-6">
+            <div className="text-center mb-4">
+              <h3 className="text-lg font-semibold">Configurar destino de sucesso</h3>
+              <p className="text-sm text-muted-foreground">
+                Para onde o lead vai ao atingir sucesso nesta campanha?
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Pipe de destino *</Label>
+                <Select
+                  value={freeTargetPipe ?? ""}
+                  onValueChange={(v) => {
+                    setFreeTargetPipe(v as TargetPipe);
+                    setFreeTargetStage(null); // Reset stage when pipe changes
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o pipe de destino" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PIPE_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {freeTargetPipe && (
+                <div className="space-y-2">
+                  <Label>Status inicial no pipe *</Label>
+                  <Select
+                    value={freeTargetStage ?? ""}
+                    onValueChange={(v) => setFreeTargetStage(v)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione o status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PIPE_STAGE_OPTIONS[freeTargetPipe].map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+
       case "mode":
         return (
           <div className="space-y-4">

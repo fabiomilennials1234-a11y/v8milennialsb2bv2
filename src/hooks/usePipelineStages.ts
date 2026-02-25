@@ -18,6 +18,8 @@ export interface PipelineStage {
   is_final_negative: boolean;
   auto_move_min_days: number | null;
   auto_move_max_days: number | null;
+  target_pipe_type: string | null;
+  target_stage_key: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -42,6 +44,8 @@ interface DefaultStage {
   color: string;
   is_final_positive?: boolean;
   is_final_negative?: boolean;
+  target_pipe_type?: string;
+  target_stage_key?: string;
 }
 
 export const DEFAULT_STAGES: Record<PipelineType, DefaultStage[]> = {
@@ -50,7 +54,7 @@ export const DEFAULT_STAGES: Record<PipelineType, DefaultStage[]> = {
     { id: "abordado", title: "Abordado", color: "#f59e0b" },
     { id: "respondeu", title: "Respondeu", color: "#3b82f6" },
     { id: "esfriou", title: "Esfriou", color: "#ef4444" },
-    { id: "agendado", title: "Agendado ✓", color: "#22c55e", is_final_positive: true },
+    { id: "agendado", title: "Agendado ✓", color: "#22c55e", is_final_positive: true, target_pipe_type: "confirmacao", target_stage_key: "reuniao_marcada" },
   ],
   confirmacao: [
     { id: "reuniao_marcada", title: "Reunião Marcada", color: "#6366f1" },
@@ -60,7 +64,7 @@ export const DEFAULT_STAGES: Record<PipelineType, DefaultStage[]> = {
     { id: "confirmar_d1", title: "Confirmar D-1", color: "#f97316" },
     { id: "confirmacao_no_dia", title: "Confirmação no Dia", color: "#ef4444" },
     { id: "remarcar", title: "Remarcar 📅", color: "#f97316" },
-    { id: "compareceu", title: "Compareceu ✓", color: "#22c55e", is_final_positive: true },
+    { id: "compareceu", title: "Compareceu ✓", color: "#22c55e", is_final_positive: true, target_pipe_type: "propostas", target_stage_key: "marcar_compromisso" },
     { id: "perdido", title: "Perdido ✗", color: "#ef4444", is_final_negative: true },
   ],
   propostas: [
@@ -109,6 +113,8 @@ async function ensureDefaultStagesInDb(organizationId: string) {
         is_active: true,
         is_final_positive: stage.is_final_positive ?? false,
         is_final_negative: stage.is_final_negative ?? false,
+        target_pipe_type: stage.target_pipe_type ?? null,
+        target_stage_key: stage.target_stage_key ?? null,
       });
     }
   }
@@ -146,8 +152,10 @@ export function usePipelineStages(pipelineType: PipelineType) {
           color: stage.color,
           position: index,
           is_active: true,
-          is_final_positive: false,
-          is_final_negative: false,
+          is_final_positive: stage.is_final_positive ?? false,
+          is_final_negative: stage.is_final_negative ?? false,
+          target_pipe_type: stage.target_pipe_type ?? null,
+          target_stage_key: stage.target_stage_key ?? null,
         }));
       }
 
@@ -158,8 +166,10 @@ export function usePipelineStages(pipelineType: PipelineType) {
         color: stage.color,
         position: index,
         is_active: true,
-        is_final_positive: false,
-        is_final_negative: false,
+        is_final_positive: stage.is_final_positive ?? false,
+        is_final_negative: stage.is_final_negative ?? false,
+        target_pipe_type: stage.target_pipe_type ?? null,
+        target_stage_key: stage.target_stage_key ?? null,
       }));
 
       try {
@@ -299,6 +309,8 @@ export function useUpdatePipelineStage() {
       is_final_negative?: boolean;
       auto_move_min_days?: number | null;
       auto_move_max_days?: number | null;
+      target_pipe_type?: string | null;
+      target_stage_key?: string | null;
     }) => {
       const { data, error } = await supabase
         .from("pipeline_stages")
@@ -433,4 +445,20 @@ export function useAllPipelineStageOptions() {
   };
 
   return { stagesByPipe, isLoading };
+}
+
+/**
+ * Retorna a configuração de transição da etapa de sucesso de um pipe.
+ * Busca a etapa com is_final_positive e retorna target_pipe_type/target_stage_key.
+ */
+export function getSuccessStageTransition(
+  stages: PipelineStage[] | undefined
+): { targetPipe: PipelineType; targetStage: string } | null {
+  if (!stages) return null;
+  const successStage = stages.find((s) => s.is_final_positive);
+  if (!successStage?.target_pipe_type || !successStage?.target_stage_key) return null;
+  return {
+    targetPipe: successStage.target_pipe_type as PipelineType,
+    targetStage: successStage.target_stage_key,
+  };
 }

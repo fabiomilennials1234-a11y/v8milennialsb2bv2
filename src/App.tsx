@@ -32,6 +32,8 @@ import Produtos from "./pages/Produtos";
 import Copilot from "./pages/Copilot";
 import ChatWhatsApp from "./pages/ChatWhatsApp";
 import Upsell from "./pages/Upsell";
+import Agenda from "./pages/Agenda";
+import Privacidade from "./pages/Privacidade";
 import { CopilotWizard } from "@/components/copilot/CopilotWizard";
 import { SubscriptionProtectedRoute } from "@/components/SubscriptionProtectedRoute";
 import NotFound from "./pages/NotFound";
@@ -105,6 +107,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/auth" element={<AuthRoute />} />
+      <Route path="/privacidade" element={<Privacidade />} />
       <Route
         path="/"
         element={
@@ -299,6 +302,16 @@ function AppRoutes() {
           <ProtectedRoute>
             <LayoutWrapper>
               <Upsell />
+            </LayoutWrapper>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/agenda"
+        element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <Agenda />
             </LayoutWrapper>
           </ProtectedRoute>
         }

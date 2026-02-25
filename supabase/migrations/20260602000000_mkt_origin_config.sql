@@ -28,6 +28,7 @@ CREATE INDEX IF NOT EXISTS idx_mkt_origin_config_org_period
 ALTER TABLE public.mkt_origin_config ENABLE ROW LEVEL SECURITY;
 
 -- Select: any authenticated member of the org
+DROP POLICY IF EXISTS "mkt_origin_config_select" ON public.mkt_origin_config;
 CREATE POLICY "mkt_origin_config_select"
   ON public.mkt_origin_config FOR SELECT
   USING (
@@ -40,6 +41,7 @@ CREATE POLICY "mkt_origin_config_select"
   );
 
 -- Insert: admin only
+DROP POLICY IF EXISTS "mkt_origin_config_insert" ON public.mkt_origin_config;
 CREATE POLICY "mkt_origin_config_insert"
   ON public.mkt_origin_config FOR INSERT
   WITH CHECK (
@@ -53,6 +55,7 @@ CREATE POLICY "mkt_origin_config_insert"
   );
 
 -- Update: admin only
+DROP POLICY IF EXISTS "mkt_origin_config_update" ON public.mkt_origin_config;
 CREATE POLICY "mkt_origin_config_update"
   ON public.mkt_origin_config FOR UPDATE
   USING (
@@ -66,6 +69,7 @@ CREATE POLICY "mkt_origin_config_update"
   );
 
 -- Delete: admin only
+DROP POLICY IF EXISTS "mkt_origin_config_delete" ON public.mkt_origin_config;
 CREATE POLICY "mkt_origin_config_delete"
   ON public.mkt_origin_config FOR DELETE
   USING (

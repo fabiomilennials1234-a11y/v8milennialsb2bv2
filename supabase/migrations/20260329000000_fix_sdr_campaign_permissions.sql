@@ -37,6 +37,7 @@ $$;
 -- 2. campanha_pipe_automations INSERT: + viewer + member
 -- ============================================
 DROP POLICY IF EXISTS "campanha_pipe_automations_insert_organization_admin" ON public.campanha_pipe_automations;
+DROP POLICY IF EXISTS "campanha_pipe_automations_insert_org" ON public.campanha_pipe_automations;
 CREATE POLICY "campanha_pipe_automations_insert_org"
   ON public.campanha_pipe_automations FOR INSERT
   TO authenticated
@@ -58,6 +59,7 @@ CREATE POLICY "campanha_pipe_automations_insert_org"
 -- 3. campanha_pipe_automations UPDATE: + viewer + member
 -- ============================================
 DROP POLICY IF EXISTS "campanha_pipe_automations_update_organization_admin" ON public.campanha_pipe_automations;
+DROP POLICY IF EXISTS "campanha_pipe_automations_update_org" ON public.campanha_pipe_automations;
 CREATE POLICY "campanha_pipe_automations_update_org"
   ON public.campanha_pipe_automations FOR UPDATE
   TO authenticated
@@ -87,6 +89,7 @@ CREATE POLICY "campanha_pipe_automations_update_org"
 -- 4. campanha_pipe_automations DELETE: + viewer + member
 -- ============================================
 DROP POLICY IF EXISTS "campanha_pipe_automations_delete_organization_admin" ON public.campanha_pipe_automations;
+DROP POLICY IF EXISTS "campanha_pipe_automations_delete_org" ON public.campanha_pipe_automations;
 CREATE POLICY "campanha_pipe_automations_delete_org"
   ON public.campanha_pipe_automations FOR DELETE
   TO authenticated
@@ -109,6 +112,7 @@ CREATE POLICY "campanha_pipe_automations_delete_org"
 -- ============================================
 DROP POLICY IF EXISTS "campanha_leads_delete_admin_or_viewer" ON public.campanha_leads;
 DROP POLICY IF EXISTS "campanha_leads_delete_admin_only" ON public.campanha_leads;
+DROP POLICY IF EXISTS "campanha_leads_delete_authorized" ON public.campanha_leads;
 CREATE POLICY "campanha_leads_delete_authorized"
   ON public.campanha_leads FOR DELETE
   TO authenticated
@@ -131,6 +135,7 @@ CREATE POLICY "campanha_leads_delete_authorized"
 -- 6. campanha_leads UPDATE: garantir que membro pode mover leads
 -- ============================================
 DROP POLICY IF EXISTS "campanha_leads_update_by_responsibility" ON public.campanha_leads;
+DROP POLICY IF EXISTS "campanha_leads_update_authorized" ON public.campanha_leads;
 CREATE POLICY "campanha_leads_update_authorized"
   ON public.campanha_leads FOR UPDATE
   TO authenticated

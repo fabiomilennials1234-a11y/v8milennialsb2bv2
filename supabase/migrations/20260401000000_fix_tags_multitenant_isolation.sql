@@ -29,6 +29,7 @@ WHERE organization_id IS NULL
 -- 2. Replace global UNIQUE(name) with per-org UNIQUE(name, organization_id)
 -- ============================================
 ALTER TABLE public.tags DROP CONSTRAINT IF EXISTS tags_name_key;
+ALTER TABLE public.tags DROP CONSTRAINT IF EXISTS tags_name_organization_unique;
 ALTER TABLE public.tags ADD CONSTRAINT tags_name_organization_unique UNIQUE (name, organization_id);
 
 -- ============================================

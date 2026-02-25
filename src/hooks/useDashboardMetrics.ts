@@ -325,6 +325,7 @@ export function useRankingData(month?: number, year?: number) {
       const { data, error } = await supabase.rpc("get_ranking_data", {
         p_month: selectedMonth,
         p_year: selectedYear,
+        p_organization_id: organizationId,
       });
 
       if (error) {

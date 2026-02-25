@@ -5,6 +5,38 @@ import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { useOrganization } from "@/hooks/useOrganization";
 import { triggerFollowUpAutomation } from "@/hooks/useAutoFollowUp";
 
+// Tipos para os objetivos de campanha
+export type CampaignObjective = 'qualificacao' | 'agendamentos' | 'propostas' | 'livre';
+
+export type TargetPipe = 'pipe_whatsapp' | 'pipe_confirmacao' | 'pipe_propostas';
+
+export const OBJECTIVE_TARGET_MAP: Record<Exclude<CampaignObjective, 'livre'>, { pipe: TargetPipe; stage: string }> = {
+  qualificacao: { pipe: 'pipe_whatsapp', stage: 'novo' },
+  agendamentos: { pipe: 'pipe_confirmacao', stage: 'reuniao_marcada' },
+  propostas:    { pipe: 'pipe_propostas', stage: 'marcar_compromisso' },
+};
+
+export const OBJECTIVE_LABELS: Record<CampaignObjective, string> = {
+  qualificacao: 'Qualificação',
+  agendamentos: 'Agendamentos',
+  propostas: 'Propostas',
+  livre: 'Livre',
+};
+
+export const OBJECTIVE_DESCRIPTIONS: Record<CampaignObjective, string> = {
+  qualificacao: 'Qualificar leads → Pipe WhatsApp',
+  agendamentos: 'Agendar reuniões → Pipe Confirmação',
+  propostas: 'Enviar propostas → Pipe Propostas',
+  livre: 'Objetivo customizado → Você configura',
+};
+
+export const OBJECTIVE_DEFAULT_STAGES: Record<CampaignObjective, string[]> = {
+  qualificacao: ['Novo', 'Contatado', 'Interessado', 'Qualificado'],
+  agendamentos: ['Novo', 'Contatado', 'Agendamento Marcado'],
+  propostas: ['Novo', 'Contatado', 'Proposta Enviada', 'Negociação'],
+  livre: ['Novo', 'Em Progresso', 'Concluído'],
+};
+
 // Tipos para os modos de campanha
 export type CampaignType = 'automatica' | 'semi_automatica' | 'manual';
 
@@ -31,6 +63,10 @@ export interface Campanha {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  // Objetivo estratégico da campanha
+  objective: CampaignObjective;
+  free_target_pipe: TargetPipe | null;
+  free_target_stage: string | null;
   // Campos dos modos de campanha
   campaign_type: CampaignType;
   agent_id: string | null;
@@ -141,6 +177,10 @@ export interface CampanhaInsert {
   team_goal: number;
   individual_goal?: number | null;
   bonus_value?: number | null;
+  // Objetivo estratégico da campanha
+  objective?: CampaignObjective;
+  free_target_pipe?: TargetPipe | null;
+  free_target_stage?: string | null;
   // Campos dos modos de campanha
   campaign_type?: CampaignType;
   agent_id?: string | null;
@@ -384,6 +424,10 @@ export function useCreateCampanha() {
           team_goal: campanha.team_goal,
           individual_goal: campanha.individual_goal,
           bonus_value: campanha.bonus_value,
+          // Objetivo estratégico
+          objective: campanha.objective || 'livre',
+          free_target_pipe: campanha.objective === 'livre' ? (campanha.free_target_pipe ?? null) : null,
+          free_target_stage: campanha.objective === 'livre' ? (campanha.free_target_stage ?? null) : null,
           // Campos dos modos de campanha
           campaign_type: campanha.campaign_type || 'manual',
           agent_id: campanha.agent_id || null,
@@ -1195,6 +1239,18 @@ export function useDeleteCampanhaDispatchRuleStep() {
       queryClient.invalidateQueries({ queryKey: ["campanha_dispatch_rules"] });
     },
   });
+}
+
+// --- Resolver destino de extração a partir do objetivo da campanha ---
+
+export function resolveExtractionTarget(campanha: Pick<Campanha, 'objective' | 'free_target_pipe' | 'free_target_stage'>): { pipe: TargetPipe; stage: string } | null {
+  if (campanha.objective !== 'livre') {
+    return OBJECTIVE_TARGET_MAP[campanha.objective];
+  }
+  if (campanha.free_target_pipe && campanha.free_target_stage) {
+    return { pipe: campanha.free_target_pipe, stage: campanha.free_target_stage };
+  }
+  return null; // Campanha livre sem destino configurado
 }
 
 // --- Extrair lead da campanha e enviar para um pipe (sai da campanha, entra no pipe) ---

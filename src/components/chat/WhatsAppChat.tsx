@@ -34,6 +34,7 @@ import {
   ArchiveRestore,
   Trash2,
   Tag,
+  Settings,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -70,6 +71,7 @@ import { useTags } from "@/hooks/useTags";
 import { useIsAdmin } from "@/hooks/useUserRole";
 import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
 import { LeadDetailContent } from "./LeadDetailContent";
+import { WhatsAppSettings } from "@/components/settings/WhatsAppSettings";
 import {
   Dialog,
   DialogContent,
@@ -226,6 +228,7 @@ function ContactList({
   allTags,
   onAddTag,
   onRemoveTag,
+  onOpenInstances,
 }: {
   contacts: ChatContact[];
   selectedPhone: string | null;
@@ -249,6 +252,7 @@ function ContactList({
   allTags: { id: string; name: string; color: string }[];
   onAddTag: (phone: string, tagId: string) => void;
   onRemoveTag: (conversationId: string, tagId: string) => void;
+  onOpenInstances?: () => void;
 }) {
   const filteredContacts = contacts.filter((c) => {
     if (showOnlyWithLead && !c.lead_id) return false;
@@ -270,9 +274,23 @@ function ContactList({
       <div className="p-3 border-b bg-background shrink-0">
         {instances && instances.length > 0 && onSelectInstance && selectedInstanceId != null && (
           <div className="mb-3">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5">
-              Número / Inbox
-            </p>
+            <div className="flex items-center justify-between mb-1.5">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                Número / Inbox
+              </p>
+              {isAdmin && onOpenInstances && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onOpenInstances}
+                  className="h-6 gap-1 text-xs text-muted-foreground hover:text-foreground px-2"
+                  title="Gerenciar instâncias WhatsApp"
+                >
+                  <Settings className="w-3.5 h-3.5" />
+                  Instâncias
+                </Button>
+              )}
+            </div>
             <Select value={selectedInstanceId || ""} onValueChange={onSelectInstance}>
               <SelectTrigger className="h-9 w-full bg-background">
                 <SelectValue placeholder="Escolha o número..." />
@@ -1785,6 +1803,7 @@ export function WhatsAppChat() {
   const [showOnlyWithLead, setShowOnlyWithLead] = useState(false);
   const [isLeadPanelOpen, setIsLeadPanelOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"active" | "archived">("active");
+  const [isInstancesModalOpen, setIsInstancesModalOpen] = useState(false);
 
   const { data: instances = [], isLoading: instancesLoading } = useWhatsAppInstancesForUser();
   const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(() => {
@@ -1921,9 +1940,34 @@ export function WhatsAppChat() {
           Nenhuma conversa será exibida até que um administrador vincule você a um número/inbox.
           Peça ao administrador para incluir você na configuração da instância desejada.
         </p>
-        <Button variant="outline" asChild>
-          <a href="/configuracoes">Ir para Configurações</a>
-        </Button>
+        {isAdmin ? (
+          <Button onClick={() => setIsInstancesModalOpen(true)} className="gap-2">
+            <Settings className="w-4 h-4" />
+            Instâncias
+          </Button>
+        ) : (
+          <Button variant="outline" asChild>
+            <a href="/configuracoes">Ir para Configurações</a>
+          </Button>
+        )}
+        <Dialog open={isInstancesModalOpen} onOpenChange={setIsInstancesModalOpen}>
+          <DialogContent className="max-w-2xl w-[calc(100vw-2rem)] max-h-[90vh] flex flex-col overflow-hidden">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Settings className="w-5 h-5" />
+                Instâncias WhatsApp
+              </DialogTitle>
+              <DialogDescription>
+                Gerencie suas conexões WhatsApp via Evolution API
+              </DialogDescription>
+            </DialogHeader>
+            <ScrollArea className="flex-1 min-h-0 overflow-y-auto">
+              <div className="pr-1 pb-4">
+                <WhatsAppSettings />
+              </div>
+            </ScrollArea>
+          </DialogContent>
+        </Dialog>
       </div>
     );
   }
@@ -1961,6 +2005,7 @@ export function WhatsAppChat() {
             allTags={allTags}
             onAddTag={handleAddTag}
             onRemoveTag={handleRemoveTag}
+            onOpenInstances={isAdmin ? () => setIsInstancesModalOpen(true) : undefined}
           />
         </div>
 
@@ -1993,6 +2038,28 @@ export function WhatsAppChat() {
           )}
         </div>
       </div>
+
+      {/* Modal de Instâncias WhatsApp */}
+      {isAdmin && (
+        <Dialog open={isInstancesModalOpen} onOpenChange={setIsInstancesModalOpen}>
+          <DialogContent className="max-w-2xl w-[calc(100vw-2rem)] max-h-[90vh] flex flex-col overflow-hidden">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Settings className="w-5 h-5" />
+                Instâncias WhatsApp
+              </DialogTitle>
+              <DialogDescription>
+                Gerencie suas conexões WhatsApp via Evolution API
+              </DialogDescription>
+            </DialogHeader>
+            <ScrollArea className="flex-1 min-h-0 overflow-y-auto">
+              <div className="pr-1 pb-4">
+                <WhatsAppSettings />
+              </div>
+            </ScrollArea>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {/* Wizard/Modal do lead (Informações → Pipeline → Campanhas) */}
       {selectedPhone && (

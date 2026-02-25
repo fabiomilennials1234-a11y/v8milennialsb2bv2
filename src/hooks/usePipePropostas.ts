@@ -146,15 +146,38 @@ export function useUpdatePipeProposta() {
 
 export function useDeletePipeProposta() {
   const queryClient = useQueryClient();
-  
+
   return useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase
         .from("pipe_propostas")
         .delete()
         .eq("id", id);
-      
+
       if (error) throw error;
+    },
+    onMutate: async (id: string) => {
+      // Cancel any in-flight refetches so they don't overwrite the optimistic update
+      await queryClient.cancelQueries({ queryKey: ["pipe_propostas"] });
+
+      // Snapshot previous cache for rollback
+      const previousData = queryClient.getQueriesData({ queryKey: ["pipe_propostas"] });
+
+      // Optimistically remove the proposal from all cached pipe_propostas queries
+      queryClient.setQueriesData({ queryKey: ["pipe_propostas"] }, (old: any) => {
+        if (!Array.isArray(old)) return old;
+        return old.filter((item: any) => item.id !== id);
+      });
+
+      return { previousData };
+    },
+    onError: (_err, _id, context) => {
+      // Rollback optimistic update on error
+      if (context?.previousData) {
+        context.previousData.forEach(([queryKey, data]) => {
+          queryClient.setQueryData(queryKey, data);
+        });
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["pipe_propostas"] });

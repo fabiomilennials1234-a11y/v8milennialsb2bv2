@@ -1,21 +1,24 @@
 /**
  * Hook para integração com Google Calendar
  *
- * Gerencia conexão OAuth, status e operações de calendário
+ * Utiliza Supabase Edge Functions em vez do microserviço Python (descontinuado).
+ *
+ * - Status:      query direta ao banco via Supabase client (google_calendar_tokens)
+ * - Connect:     Edge Function google-calendar-connect
+ * - Disconnect:  Edge Function google-calendar-disconnect
+ * - Events:      Edge Function google-calendar-events (Etapa 3)
  */
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
-// URL do microserviço de calendário
-// Em desenvolvimento, usa proxy do Vite para evitar CORS
-// Em produção, usa URL direta configurada no .env
-const CALENDAR_SERVICE_URL = import.meta.env.DEV 
-  ? "/api/calendar-service"  // Proxy do Vite
-  : (import.meta.env.VITE_CALENDAR_SERVICE_URL || "http://localhost:8000");
+const SUPABASE_FUNCTIONS_URL = `${(import.meta.env.VITE_SUPABASE_URL as string ?? "").replace(/\/$/, "")}/functions/v1`;
 
-interface ConnectionStatus {
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+export interface ConnectionStatus {
   connected: boolean;
   google_email: string | null;
   connected_at: string | null;
@@ -24,12 +27,7 @@ interface ConnectionStatus {
   is_active: boolean;
 }
 
-interface AuthorizationUrlResponse {
-  authorization_url: string;
-  state: string;
-}
-
-interface CalendarEvent {
+export interface CalendarEvent {
   id: string;
   summary: string;
   description: string | null;
@@ -37,167 +35,152 @@ interface CalendarEvent {
   start: string;
   end: string;
   status: string;
-  html_link: string;
+  meet_link: string | null;
+  lead_id: string | null;
+  origin: "google" | "calcom" | "system";
+  html_link: string | null;
 }
 
-// Helper para criar headers com token
-function createAuthHeaders(accessToken: string): HeadersInit {
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function edgeFunctionUrl(name: string): string {
+  return `${SUPABASE_FUNCTIONS_URL}/${name}`;
+}
+
+function authHeaders(accessToken: string): HeadersInit {
   return {
     Authorization: `Bearer ${accessToken}`,
     "Content-Type": "application/json",
   };
 }
 
-// Função para verificar status da conexão
-async function fetchConnectionStatus(
-  accessToken: string
-): Promise<ConnectionStatus> {
-  const headers = createAuthHeaders(accessToken);
-  
-  console.log("[GoogleCalendar] Fetching status from:", CALENDAR_SERVICE_URL);
-  console.log("[GoogleCalendar] Token preview:", accessToken.substring(0, 30) + "...");
+// ─── Status: query direta ao banco ───────────────────────────────────────────
 
-  try {
-    const response = await fetch(`${CALENDAR_SERVICE_URL}/api/auth/status`, {
-      method: "GET",
-      headers,
-      // Adicionar timeout
-      signal: AbortSignal.timeout(10000),
-    });
+async function fetchConnectionStatus(userId: string): Promise<ConnectionStatus> {
+  const { data, error } = await supabase
+    .from("google_calendar_tokens")
+    .select("google_email, connected_at, scopes_granted, last_sync_at, is_active")
+    .eq("user_id", userId)
+    .maybeSingle();
 
-    console.log("[GoogleCalendar] Response status:", response.status);
+  if (error) throw new Error(error.message);
 
-    if (!response.ok) {
-      if (response.status === 401) {
-        throw new Error("Sessão expirada. Faça login novamente.");
-      }
-      const text = await response.text();
-      console.error("[GoogleCalendar] Error response:", text);
-      throw new Error(`Erro ao verificar status: ${text}`);
-    }
-
-    const data = await response.json();
-    console.log("[GoogleCalendar] Response data:", data);
-    return data;
-  } catch (error) {
-    console.error("[GoogleCalendar] Fetch error:", error);
-    if (error instanceof TypeError && error.message === "Failed to fetch") {
-      throw new Error("Não foi possível conectar ao servidor. Verifique se o microserviço está rodando.");
-    }
-    throw error;
+  if (!data || !data.is_active) {
+    return {
+      connected: false,
+      google_email: null,
+      connected_at: null,
+      scopes: [],
+      last_sync: null,
+      is_active: false,
+    };
   }
+
+  return {
+    connected: true,
+    google_email: data.google_email ?? null,
+    connected_at: data.connected_at ?? null,
+    scopes: (data.scopes_granted as string[]) ?? [],
+    last_sync: data.last_sync_at ?? null,
+    is_active: true,
+  };
 }
 
-// Função para iniciar conexão OAuth
+// ─── Connect: chama Edge Function e redireciona ao Google ─────────────────────
+
 async function initiateOAuth(accessToken: string): Promise<string> {
-  const headers = createAuthHeaders(accessToken);
-
-  const response = await fetch(`${CALENDAR_SERVICE_URL}/api/auth/google`, {
+  const response = await fetch(edgeFunctionUrl("google-calendar-connect"), {
     method: "GET",
-    headers,
+    headers: authHeaders(accessToken),
   });
 
   if (!response.ok) {
-    throw new Error("Erro ao iniciar conexão com Google");
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.message ?? "Erro ao iniciar conexão com Google");
   }
 
-  const data: AuthorizationUrlResponse = await response.json();
-  return data.authorization_url;
+  const data = await response.json();
+  return data.authorization_url as string;
 }
 
-// Função para revogar conexão
+// ─── Disconnect: chama Edge Function ─────────────────────────────────────────
+
 async function revokeConnection(accessToken: string): Promise<void> {
-  const headers = createAuthHeaders(accessToken);
-
-  const response = await fetch(`${CALENDAR_SERVICE_URL}/api/auth/revoke`, {
+  const response = await fetch(edgeFunctionUrl("google-calendar-disconnect"), {
     method: "POST",
-    headers,
+    headers: authHeaders(accessToken),
   });
 
   if (!response.ok) {
-    throw new Error("Erro ao desconectar Google Calendar");
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.message ?? "Erro ao desconectar Google Calendar");
   }
 }
 
-// Função para listar eventos
+// ─── Events: chama Edge Function (implementada na Etapa 3) ───────────────────
+
 async function fetchEvents(
   accessToken: string,
   startDate?: Date,
   endDate?: Date
 ): Promise<CalendarEvent[]> {
-  const headers = createAuthHeaders(accessToken);
-
   const params = new URLSearchParams();
-  if (startDate) params.append("start", startDate.toISOString());
-  if (endDate) params.append("end", endDate.toISOString());
+  if (startDate) params.set("start", startDate.toISOString());
+  if (endDate)   params.set("end", endDate.toISOString());
 
   const response = await fetch(
-    `${CALENDAR_SERVICE_URL}/api/calendar/events?${params}`,
-    {
-      method: "GET",
-      headers,
-    }
+    `${edgeFunctionUrl("google-calendar-events")}?${params}`,
+    { headers: authHeaders(accessToken) }
   );
 
   if (!response.ok) {
-    throw new Error("Erro ao buscar eventos do calendário");
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.message ?? "Erro ao buscar eventos do calendário");
   }
 
   const data = await response.json();
-  return data.events;
+  return (data.events as CalendarEvent[]) ?? [];
 }
 
+// ─── Hooks públicos ───────────────────────────────────────────────────────────
+
 /**
- * Hook para verificar status da conexão com Google Calendar
- * Usa o contexto de auth para garantir que o token está disponível
+ * Verifica o status da conexão com Google Calendar.
+ * Lê diretamente do banco — sem Edge Function, sem microserviço.
  */
 export function useGoogleCalendarStatus() {
   const { session, loading: authLoading } = useAuth();
-  const accessToken = session?.access_token;
-
-  // Debug: verificar se o token existe
-  console.log("[GoogleCalendar] Auth state:", {
-    hasSession: !!session,
-    hasToken: !!accessToken,
-    authLoading,
-    tokenPreview: accessToken ? accessToken.substring(0, 20) + "..." : null,
-  });
+  const userId = session?.user?.id;
 
   return useQuery({
-    queryKey: ["google-calendar-status", accessToken?.substring(0, 10)],
-    queryFn: () => fetchConnectionStatus(accessToken!),
-    enabled: !!accessToken && !authLoading,
-    staleTime: 0, // Sempre buscar do servidor durante debug
-    gcTime: 0, // Não cachear durante debug
-    retry: 2,
-    retryDelay: 1000,
+    queryKey: ["google-calendar-status", userId],
+    queryFn: () => fetchConnectionStatus(userId!),
+    enabled: !!userId && !authLoading,
+    staleTime: 30_000,
   });
 }
 
 /**
- * Hook para conectar Google Calendar
+ * Inicia o fluxo OAuth do Google Calendar.
+ * Redireciona o usuário para a página de autorização do Google.
  */
 export function useConnectGoogleCalendar() {
   const { session } = useAuth();
 
   return useMutation({
     mutationFn: async () => {
-      if (!session?.access_token) {
-        throw new Error("Usuário não autenticado");
-      }
+      if (!session?.access_token) throw new Error("Usuário não autenticado");
       const authUrl = await initiateOAuth(session.access_token);
       window.location.href = authUrl;
     },
     onError: (error: Error) => {
-      toast.error("Erro ao conectar", {
-        description: error.message,
-      });
+      toast.error("Erro ao conectar", { description: error.message });
     },
   });
 }
 
 /**
- * Hook para desconectar Google Calendar
+ * Desconecta o Google Calendar, revogando tokens e limpando dados locais.
  */
 export function useDisconnectGoogleCalendar() {
   const { session } = useAuth();
@@ -205,47 +188,47 @@ export function useDisconnectGoogleCalendar() {
 
   return useMutation({
     mutationFn: () => {
-      if (!session?.access_token) {
-        throw new Error("Usuário não autenticado");
-      }
+      if (!session?.access_token) throw new Error("Usuário não autenticado");
       return revokeConnection(session.access_token);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["google-calendar-status"] });
+      queryClient.invalidateQueries({ queryKey: ["google-calendar-events"] });
       toast.success("Google Calendar desconectado");
     },
     onError: (error: Error) => {
-      toast.error("Erro ao desconectar", {
-        description: error.message,
-      });
+      toast.error("Erro ao desconectar", { description: error.message });
     },
   });
 }
 
 /**
- * Hook para listar eventos do calendário
+ * Lista eventos do calendário (próprio + calendários compartilhados).
+ * Requer que a Edge Function google-calendar-events esteja implantada (Etapa 3).
  */
 export function useCalendarEvents(startDate?: Date, endDate?: Date) {
   const { session } = useAuth();
   const accessToken = session?.access_token;
 
   return useQuery({
-    queryKey: ["google-calendar-events", startDate, endDate],
+    queryKey: ["google-calendar-events", startDate?.toISOString(), endDate?.toISOString()],
     queryFn: () => fetchEvents(accessToken!, startDate, endDate),
-    enabled: false,
+    enabled: !!accessToken,
+    staleTime: 60_000,
   });
 }
 
 /**
- * Hook para processar callback do OAuth
+ * Processa o retorno do OAuth (query params ?google=connected&email=...).
+ * Deve ser chamado na página /configuracoes após o redirect do Google.
  */
 export function useGoogleCalendarCallback() {
   const queryClient = useQueryClient();
 
   const processCallback = (searchParams: URLSearchParams) => {
     const googleStatus = searchParams.get("google");
-    const email = searchParams.get("email");
-    const reason = searchParams.get("reason");
+    const email        = searchParams.get("email");
+    const reason       = searchParams.get("reason");
 
     if (googleStatus === "connected") {
       toast.success("Google Calendar conectado!", {
@@ -256,8 +239,14 @@ export function useGoogleCalendarCallback() {
     }
 
     if (googleStatus === "error") {
+      const friendlyReason: Record<string, string> = {
+        refresh_token_ausente_revogue_e_tente_novamente:
+          "Revogue o acesso nas configurações do Google e tente novamente.",
+        state_invalido_ou_expirado: "O link expirou. Tente conectar novamente.",
+        falha_na_troca_de_tokens:   "Erro ao autenticar com o Google. Tente novamente.",
+      };
       toast.error("Erro ao conectar Google Calendar", {
-        description: reason || "Tente novamente",
+        description: (reason && friendlyReason[reason]) ?? reason ?? "Tente novamente",
       });
       return { success: false, reason };
     }
