@@ -63,8 +63,8 @@ begin
   order by created_at desc
   limit 1;
 
-  -- Credenciais (lidas de variáveis de configuração do Supabase Vault)
-  v_supabase_url := current_setting('app.supabase_url', true);
+  -- Credenciais hardcoded (ALTER DATABASE não tem permissão no Supabase managed)
+  v_supabase_url := 'https://jsjsmuncfkbsbzqzqhfq.supabase.co';
   v_service_key  := current_setting('app.service_role_key', true);
 
   -- Dispara chamada HTTP assíncrona para a Edge Function

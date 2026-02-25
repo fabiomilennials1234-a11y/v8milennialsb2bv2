@@ -51,10 +51,21 @@ verify_jwt = false
 [functions.process-followup-automations]
 verify_jwt = false
 
-# google-calendar-callback: redirect do Google OAuth (sem JWT)
+# google-calendar: JWT validado internamente em todas as funções
 [functions.google-calendar-callback]
 verify_jwt = false
 
-# google-calendar-webhook: push notifications do Google Calendar (sem JWT)
 [functions.google-calendar-webhook]
+verify_jwt = false
+
+[functions.google-calendar-connect]
+verify_jwt = false
+
+[functions.google-calendar-disconnect]
+verify_jwt = false
+
+[functions.google-calendar-events]
+verify_jwt = false
+
+[functions.google-calendar-sharing]
 verify_jwt = false
