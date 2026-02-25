@@ -673,22 +673,60 @@ export default function Agenda() {
   const { data: eventsData, isLoading, refetch } = useCalendarEvents(startDate, endDate);
 
   const calendarEvents: AgendaEvent[] = useMemo(() => {
-    const events = (eventsData ?? []) as Array<CalendarEvent & { calendar_owner_id?: string }>;
+    // Edge function returns raw Google API items where start/end are objects
+    // { dateTime: "...", timeZone: "..." } or { date: "..." } for all-day events.
+    // We need to normalize them to strings before constructing Date objects.
+    type RawEvent = Record<string, unknown> & { calendar_owner_id?: string };
+    const events = (eventsData ?? []) as RawEvent[];
+
     return events
       .filter((e) => {
-        const ownerId = e.calendar_owner_id ?? ownUserId;
-        return activeCalendars.has(ownerId) && e.status !== "cancelled";
+        const ownerId = (e.calendar_owner_id ?? ownUserId) as string;
+        const status = typeof e.status === "string" ? e.status : "";
+        return activeCalendars.has(ownerId) && status !== "cancelled";
       })
       .map((e) => {
-        const ownerId = e.calendar_owner_id ?? ownUserId;
+        const ownerId = (e.calendar_owner_id ?? ownUserId) as string;
         const calInfo = allCalendars.find((c) => c.id === ownerId);
-        const color = calInfo?.color ?? ORIGIN_COLORS[e.origin] ?? USER_COLORS[0];
+        const origin = ((e.origin as string) ?? "google") as CalendarEvent["origin"];
+        const color = calInfo?.color ?? ORIGIN_COLORS[origin] ?? USER_COLORS[0];
+
+        // Normalize start/end: Google API returns objects, cache returns strings
+        type DateField = { dateTime?: string; date?: string } | string | undefined;
+        const toStr = (f: DateField): string => {
+          if (!f) return "";
+          if (typeof f === "string") return f;
+          return f.dateTime ?? f.date ?? "";
+        };
+        const startStr = toStr(e.start as DateField);
+        const endStr   = toStr(e.end   as DateField) || startStr;
+
+        // meet_link: normalized field (from cache) or raw Google field
+        const meetLink =
+          (e.meet_link as string | null) ??
+          (e.hangoutLink as string | null) ??
+          null;
+
         return {
-          id: e.id,
-          title: e.summary ?? "(sem título)",
-          start: new Date(e.start),
-          end: new Date(e.end ?? e.start),
-          resource: { ...e, owner_name: calInfo?.name, color },
+          id: e.id as string,
+          title: (e.summary as string) ?? "(sem título)",
+          start: new Date(startStr),
+          end:   new Date(endStr),
+          resource: {
+            id:          e.id as string,
+            summary:     (e.summary as string) ?? "(sem título)",
+            description: (e.description as string | null) ?? null,
+            location:    (e.location   as string | null) ?? null,
+            start:       startStr,
+            end:         endStr,
+            status:      (e.status as string) ?? "confirmed",
+            meet_link:   meetLink,
+            lead_id:     (e.lead_id    as string | null) ?? null,
+            origin,
+            html_link:   (e.htmlLink   as string | null) ?? (e.html_link as string | null) ?? null,
+            owner_name:  calInfo?.name,
+            color,
+          },
         } as AgendaEvent;
       });
   }, [eventsData, activeCalendars, allCalendars, ownUserId]);
