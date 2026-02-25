@@ -38,13 +38,15 @@ interface CreateEventPayload {
   title: string;
   description?: string;
   location?: string;
-  start_at: string;          // ISO 8601
-  end_at: string;            // ISO 8601
-  timezone?: string;         // Ex: "America/Sao_Paulo"
-  attendees?: string[];      // Emails dos convidados
-  lead_id?: string;          // UUID do lead para vincular
+  start_at: string;             // ISO 8601
+  end_at: string;               // ISO 8601
+  timezone?: string;            // Ex: "America/Sao_Paulo"
+  attendees?: string[];         // Emails dos convidados
+  lead_id?: string;             // UUID do lead para vincular
   pipe_confirmacao_id?: string; // UUID do pipe_confirmacao para salvar meet_link
   calendar_owner_id?: string;   // user_id do dono do calendário (para criar no calendário de outro)
+  color_id?: string;            // Google Calendar colorId ("1"–"11", vazio = padrão)
+  with_meet?: boolean;          // Gerar link do Google Meet (default: true)
 }
 
 interface UpdateEventPayload {
@@ -285,32 +287,39 @@ Deno.serve(async (req) => {
         return json({ error: "Not Connected", message: "Usuário não tem Google Calendar conectado" }, 400);
       }
 
-      const timezone = payload.timezone ?? "America/Sao_Paulo";
+      const timezone  = payload.timezone ?? "America/Sao_Paulo";
       const requestId = crypto.randomUUID();
+      const createMeet = payload.with_meet !== false; // default true
 
-      const googleEvent = {
+      const googleEvent: Record<string, unknown> = {
         summary:     payload.title,
         description: payload.description ?? null,
         location:    payload.location ?? null,
         start: { dateTime: payload.start_at, timeZone: timezone },
         end:   { dateTime: payload.end_at,   timeZone: timezone },
         attendees: (payload.attendees ?? []).map((email) => ({ email })),
-        // Gera link do Google Meet automaticamente
-        conferenceData: {
-          createRequest: {
-            requestId,
-            conferenceSolutionKey: { type: "hangoutsMeet" },
-          },
-        },
+        // Cor do evento (Google Calendar colorId 1–11)
+        ...(payload.color_id ? { colorId: payload.color_id } : {}),
+        // Gera link do Google Meet (opcional)
+        ...(createMeet
+          ? {
+              conferenceData: {
+                createRequest: {
+                  requestId,
+                  conferenceSolutionKey: { type: "hangoutsMeet" },
+                },
+              },
+            }
+          : {}),
         // Vincula ao lead via extended properties para uso no webhook
-        extendedProperties: payload.lead_id
-          ? { private: { lead_id: payload.lead_id, system: "v8milennialsb2b" } }
-          : undefined,
+        ...(payload.lead_id
+          ? { extendedProperties: { private: { lead_id: payload.lead_id, system: "v8milennialsb2b" } } }
+          : {}),
       };
 
       const googleRes = await googleCalendarRequest(
         "POST",
-        "/calendars/primary/events?conferenceDataVersion=1",
+        `/calendars/primary/events${createMeet ? "?conferenceDataVersion=1" : ""}`,
         tokenData.accessToken,
         googleEvent
       );

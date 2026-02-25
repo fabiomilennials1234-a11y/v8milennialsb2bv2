@@ -34,6 +34,7 @@ import {
   CalendarDays,
   Plus,
   Video,
+  VideoOff,
   ExternalLink,
   User,
   Clock,
@@ -49,6 +50,7 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -93,6 +95,21 @@ const USER_COLORS = [
 
 const DAY_NAMES_SHORT = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 
+// Google Calendar event colors (colorId → hex)
+const GOOGLE_EVENT_COLORS: Record<string, string> = {
+  "1":  "#7986CB", // Lavanda
+  "2":  "#33B679", // Sálvia
+  "3":  "#8E24AA", // Uva
+  "4":  "#E67C73", // Flamingo
+  "5":  "#F6BF26", // Banana
+  "6":  "#F4511E", // Tangerina
+  "7":  "#039BE5", // Pavão
+  "8":  "#3F51B5", // Mirtilo
+  "9":  "#0B8043", // Manjericão
+  "10": "#D50000", // Tomate
+  "11": "#616161", // Grafite
+};
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type ViewType = "day" | "week" | "month";
@@ -114,6 +131,8 @@ interface NewEventForm {
   location: string;
   start_at: string;
   end_at: string;
+  color_id: string;   // Google Calendar colorId ("" = default)
+  with_meet: boolean; // Gerar link do Google Meet
 }
 
 interface PopoverState {
@@ -618,6 +637,8 @@ export default function Agenda() {
     location: "",
     start_at: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
     end_at: format(addHours(new Date(), 1), "yyyy-MM-dd'T'HH:mm"),
+    color_id: "",
+    with_meet: true,
   });
 
   // Calendars
@@ -689,7 +710,9 @@ export default function Agenda() {
         const ownerId = (e.calendar_owner_id ?? ownUserId) as string;
         const calInfo = allCalendars.find((c) => c.id === ownerId);
         const origin = ((e.origin as string) ?? "google") as CalendarEvent["origin"];
-        const color = calInfo?.color ?? ORIGIN_COLORS[origin] ?? USER_COLORS[0];
+        // Prefer event-level color (set via color picker) over calendar color
+        const googleColor = e.colorId ? GOOGLE_EVENT_COLORS[e.colorId as string] : null;
+        const color = googleColor ?? calInfo?.color ?? ORIGIN_COLORS[origin] ?? USER_COLORS[0];
 
         // Normalize start/end: Google API returns objects, cache returns strings
         type DateField = { dateTime?: string; date?: string } | string | undefined;
@@ -789,6 +812,8 @@ export default function Agenda() {
           start_at: new Date(newEvent.start_at).toISOString(),
           end_at: new Date(newEvent.end_at).toISOString(),
           timezone: "America/Sao_Paulo",
+          color_id: newEvent.color_id || undefined,
+          with_meet: newEvent.with_meet,
         }),
       });
       if (!res.ok) throw new Error((await res.json()).message ?? "Erro ao criar evento");
@@ -801,6 +826,8 @@ export default function Agenda() {
         title: "", description: "", location: "",
         start_at: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
         end_at: format(addHours(new Date(), 1), "yyyy-MM-dd'T'HH:mm"),
+        color_id: "",
+        with_meet: true,
       });
       refetch();
     } catch (err) {
@@ -1054,9 +1081,57 @@ export default function Agenda() {
               />
             </div>
 
-            <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/30 rounded-lg px-3 py-2">
-              <Video className="w-3.5 h-3.5 text-primary shrink-0" />
-              Link do Google Meet será gerado automaticamente
+            {/* Color picker */}
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Cor do Evento</Label>
+              <div className="flex flex-wrap gap-2 pt-0.5">
+                {/* Default / no color */}
+                <button
+                  type="button"
+                  onClick={() => setNewEvent((p) => ({ ...p, color_id: "" }))}
+                  title="Padrão"
+                  className={`w-5 h-5 rounded-full border-2 transition-all flex-shrink-0 ${
+                    !newEvent.color_id
+                      ? "border-foreground scale-125 shadow-sm"
+                      : "border-border/40 hover:scale-110"
+                  }`}
+                  style={{
+                    background: "conic-gradient(#aaa 0% 50%, #666 50% 100%)",
+                  }}
+                />
+                {Object.entries(GOOGLE_EVENT_COLORS).map(([id, hex]) => (
+                  <button
+                    type="button"
+                    key={id}
+                    onClick={() => setNewEvent((p) => ({ ...p, color_id: id }))}
+                    title={hex}
+                    className={`w-5 h-5 rounded-full border-2 transition-all flex-shrink-0 ${
+                      newEvent.color_id === id
+                        ? "border-foreground scale-125 shadow-sm"
+                        : "border-transparent hover:scale-110"
+                    }`}
+                    style={{ backgroundColor: hex }}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Google Meet toggle */}
+            <div className="flex items-center justify-between rounded-lg bg-muted/30 px-3 py-2">
+              <div className="flex items-center gap-2 text-xs">
+                {newEvent.with_meet ? (
+                  <Video className="w-3.5 h-3.5 text-primary shrink-0" />
+                ) : (
+                  <VideoOff className="w-3.5 h-3.5 text-muted-foreground/50 shrink-0" />
+                )}
+                <span className={newEvent.with_meet ? "text-foreground/80" : "text-muted-foreground/50"}>
+                  {newEvent.with_meet ? "Gerar link do Google Meet" : "Sem link do Google Meet"}
+                </span>
+              </div>
+              <Switch
+                checked={newEvent.with_meet}
+                onCheckedChange={(v) => setNewEvent((p) => ({ ...p, with_meet: v }))}
+              />
             </div>
 
             <div className="flex justify-end gap-2 pt-1">
