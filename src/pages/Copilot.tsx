@@ -22,6 +22,7 @@ import {
   Loader2,
   Settings,
   GitBranch,
+  BarChart3,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -50,6 +51,7 @@ import {
 } from "@/hooks/useCopilotAgents";
 import { useCopilotSubscription } from "@/hooks/useCopilotSubscription";
 import { useCanManageCopilot } from "@/hooks/useUserRole";
+import { useMasterAuth } from "@/hooks/useMasterAuth";
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
 import { toast } from "sonner";
 import { AgentConfigModal } from "@/components/copilot/AgentConfigModal";
@@ -61,6 +63,7 @@ export default function Copilot() {
   const { hasAccess, isTrial, isLoading: subLoading } =
     useCopilotSubscription();
   const { canManage: canManageCopilot } = useCanManageCopilot();
+  const { isMaster } = useMasterAuth();
   const deleteAgent = useDeleteCopilotAgent();
   const toggleAgent = useToggleCopilotAgent();
   const setDefault = useSetDefaultCopilotAgent();
@@ -76,6 +79,11 @@ export default function Copilot() {
   };
 
   const handleCreateAgent = () => {
+    // Master sempre tem acesso irrestrito
+    if (isMaster) {
+      navigate("/copilot/novo");
+      return;
+    }
     // Admins e closers sempre têm acesso; outros precisam de assinatura ativa
     if (!canManageCopilot && !hasAccess) {
       navigate("/configuracoes");
@@ -131,15 +139,24 @@ export default function Copilot() {
           )}
         </div>
 
-        {canManageCopilot && (
+        <div className="flex items-center gap-2">
           <Button
-            onClick={handleCreateAgent}
-            className="bg-primary hover:bg-primary/90 text-primary-foreground"
+            variant="outline"
+            onClick={() => navigate("/copilot/metricas")}
           >
-            <Plus className="w-4 h-4 mr-2" />
-            Novo Copilot
+            <BarChart3 className="w-4 h-4 mr-2" />
+            Métricas LLM
           </Button>
-        )}
+          {canManageCopilot && (
+            <Button
+              onClick={handleCreateAgent}
+              className="bg-primary hover:bg-primary/90 text-primary-foreground"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Novo Copilot
+            </Button>
+          )}
+        </div>
       </motion.div>
 
       {/* Subscription Warning - Apenas para quem não tem acesso */}

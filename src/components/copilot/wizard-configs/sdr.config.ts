@@ -5,18 +5,21 @@ export const SDR_CONFIG: WizardTypeConfig = {
   label: "SDR - Gerador de Reuniões",
   description: "Prospecção ativa e agendamento de reuniões qualificadas",
   steps: [
-    // Core (idêntico ao Follow-up)
+    // Identidade e contexto primeiro (impacto máximo no prompt)
     "name",
+    "businessContext",
+    "objectiveComposite",
+    // Personalidade e estilo
     "personality",
     "skills",
-    "businessContext",
     "conversationStyle",
     "examples",
     "availability",
-    "objectiveComposite",
+    // Configurações operacionais
     "capabilities",
     "knowledgeBase",
     "customInstructions",
+    "kanbanRulesReview",
     // Específico do SDR
     "faqs",
     "qualification",
@@ -24,6 +27,8 @@ export const SDR_CONFIG: WizardTypeConfig = {
     "activationTriggers",
     "outboundConfig",
     "automationActions",
+    // Teste final
+    "testConversation",
   ],
   defaults: {
     templateType: "sdr",

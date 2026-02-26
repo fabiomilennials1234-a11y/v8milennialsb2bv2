@@ -9,16 +9,10 @@ export type PipeProposta = Tables<"pipe_propostas">;
 export type PipePropostaInsert = TablesInsert<"pipe_propostas">;
 export type PipePropostaUpdate = TablesUpdate<"pipe_propostas">;
 
-export type PipePropostasStatus =
-  | "marcar_compromisso"
-  | "reativar"
-  | "compromisso_marcado"
-  | "esfriou"
-  | "futuro"
-  | "vendido"
-  | "perdido";
+// Dynamic — accepts any stage_key from pipeline_stages (custom stages supported)
+export type PipePropostasStatus = string;
 
-export const statusColumns: { id: PipePropostasStatus; title: string; color: string }[] = [
+export const statusColumns: { id: string; title: string; color: string }[] = [
   { id: "marcar_compromisso", title: "Marcar Compromisso", color: "#F5C518" },
   { id: "reativar", title: "Reativar", color: "#F97316" },
   { id: "compromisso_marcado", title: "Compromisso Marcado", color: "#3B82F6" },

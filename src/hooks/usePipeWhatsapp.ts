@@ -9,10 +9,10 @@ export type PipeWhatsapp = Tables<"pipe_whatsapp">;
 export type PipeWhatsappInsert = TablesInsert<"pipe_whatsapp">;
 export type PipeWhatsappUpdate = TablesUpdate<"pipe_whatsapp">;
 
-// Using database enum values
-export type PipeWhatsappStatus = "novo" | "abordado" | "respondeu" | "esfriou" | "agendado";
+// Dynamic — accepts any stage_key from pipeline_stages (custom stages supported)
+export type PipeWhatsappStatus = string;
 
-export const statusColumns: { id: PipeWhatsappStatus; title: string; color: string }[] = [
+export const statusColumns: { id: string; title: string; color: string }[] = [
   { id: "novo", title: "Novo", color: "#6366f1" },
   { id: "abordado", title: "Abordado", color: "#f59e0b" },
   { id: "respondeu", title: "Respondeu", color: "#3b82f6" },

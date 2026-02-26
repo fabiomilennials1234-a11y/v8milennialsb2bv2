@@ -22,7 +22,9 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { MessageCircle } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Card } from "@/components/ui/card";
+import { MessageCircle, ShieldAlert } from "lucide-react";
 import type { CopilotWizardData } from "@/types/copilot";
 
 export function ConversationStyleStep() {
@@ -173,6 +175,40 @@ export function ConversationStyleStep() {
                 />
               </FormControl>
               <FormDescription>Instruções finas para soar mais natural.</FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        {/* Identidade do Agente */}
+        <FormField
+          control={control}
+          name="conversationStyle.hideAiIdentity"
+          render={({ field }) => (
+            <FormItem>
+              <Card className="p-4 border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/20">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-start gap-3">
+                    <ShieldAlert className="w-5 h-5 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <FormLabel className="text-base font-semibold cursor-pointer">
+                        Ocultar identidade de IA
+                      </FormLabel>
+                      <FormDescription className="mt-1">
+                        O agente nunca se apresentará como IA, bot ou assistente virtual.
+                        Responde como um consultor humano da empresa. Se perguntado diretamente,
+                        desvia ou afirma ser da equipe.
+                      </FormDescription>
+                    </div>
+                  </div>
+                  <FormControl>
+                    <Switch
+                      checked={field.value ?? false}
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                </div>
+              </Card>
               <FormMessage />
             </FormItem>
           )}

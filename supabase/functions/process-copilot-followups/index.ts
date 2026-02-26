@@ -12,10 +12,13 @@ import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { getNextSendTime } from "../_shared/followupSchedule.ts";
 import { sendFollowupMessage } from "../_shared/followup-sender.ts";
+import { AgentEngine } from "../agent-message/agent-engine.ts";
+import { OpenRouterClient } from "../agent-message/openrouter-client.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
+const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY") ?? "";
 const BATCH_PER_RULE = 20;
 
 function replaceVariables(template: string, vars: Record<string, string>): string {
@@ -229,21 +232,49 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      const timeVars = getTimeVars(now);
-      const template =
-        rule.message_template ||
-        "Oi {nome}! Vi que ficamos sem conversar. Posso te ajudar em algo?";
-      const messageContent = replaceVariables(template, {
-        nome: lead.name || "você",
-        empresa: lead.company || "",
-        email: lead.email || "",
-        telefone: lead.phone || "",
-        origem: lead.origin || "",
-        segmento: lead.segment || "",
-        saudacao: timeVars.saudacao,
-        data: timeVars.data,
-        hora: timeVars.hora,
-      });
+      // Gerar mensagem via AgentEngine (item #3) ou fallback para template fixo
+      let messageContent: string;
+      if (OPENROUTER_API_KEY) {
+        try {
+          const openRouter = new OpenRouterClient(OPENROUTER_API_KEY);
+          const engine = new AgentEngine(supabase, openRouter, orgId);
+          messageContent = await engine.generateFollowupMessage(lead.id, {
+            followupCount: count ?? 0,
+            ruleTemplate: rule.message_template || undefined,
+            followupStyle: rule.followup_style || undefined,
+          });
+          console.log(`[Followup] AgentEngine gerou mensagem para lead ${lead.id}: "${messageContent.substring(0, 60)}..."`);
+        } catch (genErr) {
+          console.warn('[Followup] AgentEngine falhou, usando template fixo:', genErr);
+          const timeVars = getTimeVars(now);
+          const tmpl = rule.message_template || "Oi {nome}! Vi que ficamos sem conversar. Posso te ajudar em algo?";
+          messageContent = replaceVariables(tmpl, {
+            nome: lead.name || "você",
+            empresa: lead.company || "",
+            email: lead.email || "",
+            telefone: lead.phone || "",
+            origem: lead.origin || "",
+            segmento: lead.segment || "",
+            saudacao: timeVars.saudacao,
+            data: timeVars.data,
+            hora: timeVars.hora,
+          });
+        }
+      } else {
+        const timeVars = getTimeVars(now);
+        const tmpl = rule.message_template || "Oi {nome}! Vi que ficamos sem conversar. Posso te ajudar em algo?";
+        messageContent = replaceVariables(tmpl, {
+          nome: lead.name || "você",
+          empresa: lead.company || "",
+          email: lead.email || "",
+          telefone: lead.phone || "",
+          origem: lead.origin || "",
+          segmento: lead.segment || "",
+          saudacao: timeVars.saudacao,
+          data: timeVars.data,
+          hora: timeVars.hora,
+        });
+      }
 
       const result = await sendFollowupMessage(supabase, {
         organizationId: orgId,

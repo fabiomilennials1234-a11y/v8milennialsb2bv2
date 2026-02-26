@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
+import { useMasterAuth } from "@/hooks/useMasterAuth";
 import type { Tables } from "@/integrations/supabase/types";
 
 export type UserRole = Tables<"user_roles">;
@@ -74,24 +75,26 @@ export function useHasRole(role: AppRole) {
   };
 }
 
-/** Admin/Agency e Closers podem criar copilots, configurar agentes e gerenciar instâncias WhatsApp. Usa user_roles com fallback para team_members.role. */
+/** Admin/Agency, Closers e Master podem criar copilots, configurar agentes e gerenciar instâncias WhatsApp. Usa user_roles com fallback para team_members.role. */
 export function useCanManageCopilot() {
   const { data: userRole, isLoading } = useUserRole();
   const { data: currentTeamMember, isLoading: loadingTeam } = useCurrentTeamMember();
+  const { isMaster, isLoading: masterLoading } = useMasterAuth();
   const role = userRole?.role ?? currentTeamMember?.role;
   return {
-    canManage: role === "admin" || role === "closer" || role === "agency",
-    isLoading: isLoading || loadingTeam,
+    canManage: isMaster || role === "admin" || role === "closer" || role === "agency",
+    isLoading: isLoading || loadingTeam || masterLoading,
   };
 }
 
-/** Admin/Agency e Closers podem criar instâncias WhatsApp, conectar números e gerenciar vendedores por número. Usa user_roles com fallback para team_members.role. */
+/** Admin/Agency, Closers e Master podem criar instâncias WhatsApp, conectar números e gerenciar vendedores por número. Usa user_roles com fallback para team_members.role. */
 export function useCanManageWhatsApp() {
   const { data: userRole, isLoading } = useUserRole();
   const { data: currentTeamMember, isLoading: loadingTeam } = useCurrentTeamMember();
+  const { isMaster, isLoading: masterLoading } = useMasterAuth();
   const role = userRole?.role ?? currentTeamMember?.role;
   return {
-    canManage: role === "admin" || role === "closer" || role === "agency",
-    isLoading: isLoading || loadingTeam,
+    canManage: isMaster || role === "admin" || role === "closer" || role === "agency",
+    isLoading: isLoading || loadingTeam || masterLoading,
   };
 }

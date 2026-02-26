@@ -137,6 +137,7 @@ export interface CopilotWizardData {
     closingStyle: string;
     whatsappGuidelines: string;
     humanizationTips: string;
+    hideAiIdentity?: boolean;
   };
 
   // Step 10: Qualificação Mínima
@@ -189,8 +190,11 @@ export interface CopilotWizardData {
   // Step 18: Regras de Follow-up
   followupRules: FollowupRule[];
 
-  // Step 19: Instruções personalizadas do usuário
-  customInstructions: string;
+  // Step 19: Instruções personalizadas do usuário (Do's & Don'ts)
+  customInstructions: {
+    dos: string;
+    donts: string;
+  };
 
   // Step 20: Base de Conhecimento (RAG)
   knowledgeBaseFiles: File[];
@@ -209,6 +213,9 @@ export interface CopilotWizardData {
 
   // Configuração: Atender contatos sem lead (shadow leads)
   attendUnknownContacts: boolean;
+
+  // Item #7: Temperatura do LLM (Criativo / Balanceado / Preciso)
+  llmTemperatureMode: 'criativo' | 'balanceado' | 'preciso';
 }
 
 // =====================================================
@@ -257,22 +264,6 @@ export interface MoveToPipeConfig {
   pipe: "confirmacao" | "propostas";
   stage: string;
 }
-
-/**
- * @deprecated Use usePipelineStageOptions("confirmacao") do hook usePipelineStages.
- * Mantido temporariamente para compatibilidade.
- */
-export const PIPE_CONFIRMACAO_STAGES = [
-  "reuniao_marcada", "confirmar_d3", "confirmar_d2", "confirmar_d1",
-  "pre_confirmada", "confirmacao_no_dia", "confirmada_no_dia", "compareceu", "perdido",
-] as const;
-/**
- * @deprecated Use usePipelineStageOptions("propostas") do hook usePipelineStages.
- * Mantido temporariamente para compatibilidade.
- */
-export const PIPE_PROPOSTAS_STAGES = [
-  "marcar_compromisso", "compromisso_marcado", "esfriou", "futuro", "vendido", "perdido",
-] as const;
 
 /**
  * Ações a executar em determinado resultado

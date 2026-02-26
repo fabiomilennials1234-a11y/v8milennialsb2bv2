@@ -61,11 +61,31 @@ Deno.serve(async (req) => {
     // 2. INITIALIZE AGENT ENGINE
     const engine = new AgentEngine(supabase, openRouter, organizationId);
 
+    // 2.5 TYPING INDICATOR — item #10 — fire-and-forget, não bloqueia
+    sendTypingIndicator(supabase, from, organizationId)
+      .catch(e => console.warn('[agent-message] Typing indicator failed (non-fatal):', e));
+
     // 3. PROCESS MESSAGE (toda lógica está aqui)
     const response = await engine.processMessage(lead.id, message);
 
-    // 4. RETURN RESPONSE
-    return new Response(JSON.stringify(response), {
+    // 3.5 Item #8: LLM-as-a-judge — avaliar qualidade da resposta (fire-and-forget)
+    if (response.message && (response as any)._eval_meta) {
+      const evalMeta = (response as any)._eval_meta;
+      evaluateConversation({
+        organizationId,
+        leadId: lead.id,
+        userMessage: message,
+        agentResponse: response.message,
+        conversationId: evalMeta.conversationId,
+        agentId: evalMeta.agentId,
+        turnCount: evalMeta.turnCount,
+        systemPromptExcerpt: evalMeta.systemPromptExcerpt,
+      }).catch(e => console.warn('[agent-message] Evaluation failed (non-fatal):', e));
+    }
+
+    // 4. RETURN RESPONSE (strip internal _eval_meta before sending)
+    const { _eval_meta: _unused, ...publicResponse } = response as any;
+    return new Response(JSON.stringify(publicResponse), {
       headers: { ...corsHeaders, "Content-Type": "application/json" }
     });
 
@@ -80,6 +100,42 @@ Deno.serve(async (req) => {
     });
   }
 });
+
+/**
+ * Item #10: Typing indicator — envia presença "composing" via Evolution API
+ * antes do AgentEngine processar a mensagem, para o lead ver que está digitando.
+ */
+async function sendTypingIndicator(
+  supabase: ReturnType<typeof createClient>,
+  phone: string,
+  organizationId: string
+): Promise<void> {
+  const evolutionUrl = Deno.env.get("EVOLUTION_API_URL");
+  const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
+  if (!evolutionUrl || !evolutionKey) return;
+
+  const { data: instance } = await supabase
+    .from("whatsapp_instances")
+    .select("instance_name")
+    .eq("organization_id", organizationId)
+    .eq("status", "open")
+    .limit(1)
+    .maybeSingle();
+
+  if (!instance?.instance_name) return;
+
+  let formattedPhone = String(phone).replace(/\D/g, "");
+  if (!formattedPhone.startsWith("55")) formattedPhone = "55" + formattedPhone;
+
+  await fetch(
+    `${evolutionUrl}/chat/sendPresence/${instance.instance_name}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: evolutionKey },
+      body: JSON.stringify({ number: formattedPhone, delay: 500, presence: "composing" }),
+    }
+  ).catch(() => {}); // best-effort
+}
 
 /**
  * Identifica tenant baseado no phone/session
@@ -143,4 +199,38 @@ async function identifyTenant(
 
   console.log('[agent-message] No organization_id provided and no lead found');
   return { lead: null, organizationId: null };
+}
+
+/**
+ * Item #8: LLM-as-a-judge — chama a edge function de avaliação em background.
+ * Fire-and-forget: nunca bloqueia a resposta ao lead.
+ */
+async function evaluateConversation(params: {
+  organizationId: string;
+  leadId: string;
+  userMessage: string;
+  agentResponse: string;
+  conversationId: string;
+  agentId: string;
+  turnCount: number;
+  systemPromptExcerpt: string;
+}): Promise<void> {
+  // Apenas avaliar a cada 3 turnos para reduzir custo de API
+  if (params.turnCount % 3 !== 0) return;
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!supabaseUrl || !serviceKey) return;
+
+  await fetch(
+    `${supabaseUrl}/functions/v1/evaluate-agent-conversation`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${serviceKey}`,
+      },
+      body: JSON.stringify(params),
+    }
+  );
 }

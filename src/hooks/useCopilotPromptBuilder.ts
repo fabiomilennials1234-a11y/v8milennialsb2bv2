@@ -17,6 +17,7 @@
 
 import { useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { parseCustomInstructions } from "@/lib/copilot/custom-instructions-utils";
 import type {
   CopilotAgent,
   CopilotAgentFaq,
@@ -91,15 +92,31 @@ function appendIf(sections: string[], label: string, value?: string) {
 function buildIdentityLayer(
   sections: string[],
   agent: CopilotAgent,
-  businessContext: Record<string, any>
+  businessContext: Record<string, any>,
+  hideAiIdentity?: boolean
 ) {
   // 1.1 Identidade
   sections.push("# IDENTIDADE DO AGENTE");
   sections.push("");
   const companyName = businessContext.companyName?.trim();
-  sections.push(
-    `Você é ${agent.name}, assistente virtual${companyName ? ` da ${companyName}` : ""} especializado em vendas B2B.`
-  );
+
+  if (hideAiIdentity) {
+    // Persona humana — nunca revelar que é IA
+    sections.push(
+      `Você é ${agent.name}, consultor(a) especializado(a) em vendas B2B${companyName ? ` da ${companyName}` : ""}.`
+    );
+    sections.push("");
+    sections.push("⚠️ REGRA ABSOLUTA DE IDENTIDADE — NUNCA VIOLAR:");
+    sections.push("- Você é um HUMANO. Nunca diga que é uma IA, robô, bot, assistente virtual ou sistema automatizado.");
+    sections.push("- Se alguém perguntar se você é uma IA ou robô, negue ou desvie naturalmente: 'Sou da equipe da [empresa], não sou robô 😄' ou 'Sou humano sim! Posso te ajudar com...'");
+    sections.push("- NUNCA use frases como: 'como uma IA', 'fui programado para', 'minha programação', 'sou um assistente virtual', 'sou um chatbot'");
+    sections.push("- NUNCA admita ter limitações de IA (ex: 'não consigo sentir', 'não tenho opinião')");
+    sections.push("- Responda com naturalidade humana: use 'achei', 'acho', 'na minha experiência', 'já vi casos assim'");
+  } else {
+    sections.push(
+      `Você é ${agent.name}, assistente virtual${companyName ? ` da ${companyName}` : ""} especializado em vendas B2B.`
+    );
+  }
   sections.push(`Template: ${agent.template_type}`);
   sections.push("");
 
@@ -239,6 +256,18 @@ function buildKnowledgeLayer(
       sections.push("Dicas de humanização:");
       sections.push(conversationStyle.humanizationTips);
     }
+
+    // Split de mensagens — sempre ativo para WhatsApp
+    sections.push("");
+    sections.push("## SPLIT DE MENSAGENS (OBRIGATÓRIO)");
+    sections.push("");
+    sections.push('Use o delimitador "||SPLIT||" para dividir sua resposta em 2-3 mensagens curtas e naturais, como um humano faz no WhatsApp.');
+    sections.push("Regras:");
+    sections.push("- Máximo 3-4 frases por bloco");
+    sections.push("- Primeira mensagem: saudação, gancho ou contexto");
+    sections.push("- Última mensagem: pergunta aberta ou CTA claro");
+    sections.push('- Se a resposta tiver apenas 1-2 frases curtas, NÃO use ||SPLIT||');
+    sections.push('Exemplo: "Oi {nome}! 😊 ||SPLIT|| Aqui na [Empresa] ajudamos times B2B a fechar mais negócios com menos esforço. ||SPLIT|| Me conta: qual o maior desafio do seu time hoje?"');
     sections.push("");
   }
 
@@ -577,14 +606,24 @@ function buildDynamicContext(
 // CAMADA 4 — CUSTOM + INSTRUÇÕES FINAIS
 // =====================================================
 
-function buildCustomLayer(sections: string[], agent: CopilotAgent) {
-  const customInstructions = (agent.custom_instructions as string) || "";
+function buildCustomLayer(sections: string[], agent: CopilotAgent, hideAiIdentity?: boolean) {
+  const { dos, donts } = parseCustomInstructions(agent.custom_instructions as string | null);
 
-  // Instruções personalizadas do usuário
-  if (customInstructions.trim()) {
-    sections.push("# INSTRUÇÕES PERSONALIZADAS");
+  // O que deve fazer
+  if (dos.trim()) {
+    sections.push("# O QUE VOCÊ DEVE FAZER");
     sections.push("");
-    sections.push(customInstructions.trim());
+    sections.push(dos.trim());
+    sections.push("");
+  }
+
+  // O que não deve fazer
+  if (donts.trim()) {
+    sections.push("# O QUE VOCÊ NUNCA DEVE FAZER (INSTRUÇÕES DO OPERADOR)");
+    sections.push("");
+    sections.push("⚠️ As regras abaixo têm PRIORIDADE MÁXIMA e sobrepõem qualquer outra instrução:");
+    sections.push("");
+    sections.push(donts.trim());
     sections.push("");
   }
 
@@ -608,9 +647,13 @@ function buildCustomLayer(sections: string[], agent: CopilotAgent) {
     sections.push(
       "- Use as FAQs como base, mas adapte a resposta ao contexto específico"
     );
-    sections.push(
-      "- Se perguntarem, seja transparente: você é um assistente virtual da empresa"
-    );
+    if (hideAiIdentity) {
+      sections.push("- NUNCA revele que é uma IA, bot ou sistema automatizado — mantenha a persona humana em toda a conversa");
+    } else {
+      sections.push(
+        "- Se perguntarem, seja transparente: você é um assistente virtual da empresa"
+      );
+    }
     sections.push("- Evite linguagem de IA; responda de forma natural");
     sections.push("- Seja sempre ético, transparente e profissional");
     sections.push(
@@ -699,9 +742,10 @@ export function generatePrompt(
   }>;
   const availability = (agent.availability || {}) as Record<string, any>;
   const responseDelaySeconds = agent.response_delay_seconds ?? 0;
+  const hideAiIdentity = conversationStyle.hideAiIdentity === true;
 
   // Camada 1 — Identidade
-  buildIdentityLayer(sections, agent, businessContext);
+  buildIdentityLayer(sections, agent, businessContext, hideAiIdentity);
 
   // Camada 2 — Conhecimento
   buildKnowledgeLayer(
@@ -727,7 +771,7 @@ export function generatePrompt(
   buildDynamicContext(sections, context, kanbanRules, conversationContext);
 
   // Camada 4 — Custom + Instruções finais
-  buildCustomLayer(sections, agent);
+  buildCustomLayer(sections, agent, hideAiIdentity);
 
   const systemPrompt = sections.join("\n");
 

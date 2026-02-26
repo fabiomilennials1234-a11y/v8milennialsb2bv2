@@ -4,17 +4,104 @@
  * Calcula um score de 0-100 baseado em quão completos e ricos
  * são os campos que compõem o prompt do agente.
  *
- * Ponderação:
- *   Business Context  25%
- *   Objetivo           20%
- *   FAQs               15%
- *   Exemplos           15%
- *   Estilo             10%
- *   Custom Instructions 10%
- *   Qualificação        5%
+ * Ponderação padrão (ajustada por templateType):
+ *   Business Context  20-25%
+ *   Objetivo          15-20%
+ *   Kanban Rules      10-15%
+ *   FAQs               0-15%
+ *   Exemplos          10-15%
+ *   Estilo              8-10%
+ *   Custom Instructions 7-10%
+ *   Qualificação        0-5%
  */
 
 import type { CopilotWizardData } from "@/types/copilot";
+
+// Pesos por template (somam 100)
+interface TemplateWeights {
+  businessContext: number;  // pontos máximos
+  objective: number;
+  kanbanRules: number;
+  faqs: number;
+  examples: number;
+  style: number;
+  customInstructions: number;
+  qualification: number;
+}
+
+const TEMPLATE_WEIGHTS: Record<string, TemplateWeights> = {
+  qualificador: {
+    businessContext: 20,
+    objective: 15,
+    kanbanRules: 10,
+    faqs: 15,
+    examples: 12,
+    style: 8,
+    customInstructions: 10,
+    qualification: 10,
+  },
+  sdr: {
+    businessContext: 22,
+    objective: 15,
+    kanbanRules: 12,
+    faqs: 12,
+    examples: 15,
+    style: 8,
+    customInstructions: 8,
+    qualification: 8,
+  },
+  followup: {
+    businessContext: 20,
+    objective: 18,
+    kanbanRules: 12,
+    faqs: 8,
+    examples: 18,
+    style: 10,
+    customInstructions: 10,
+    qualification: 4,
+  },
+  agendador: {
+    businessContext: 22,
+    objective: 20,
+    kanbanRules: 18,
+    faqs: 8,
+    examples: 15,
+    style: 8,
+    customInstructions: 7,
+    qualification: 2,
+  },
+  prospectador: {
+    businessContext: 25,
+    objective: 18,
+    kanbanRules: 10,
+    faqs: 8,
+    examples: 15,
+    style: 10,
+    customInstructions: 8,
+    qualification: 6,
+  },
+  custom: {
+    businessContext: 25,
+    objective: 20,
+    kanbanRules: 5,
+    faqs: 15,
+    examples: 15,
+    style: 10,
+    customInstructions: 10,
+    qualification: 0,
+  },
+};
+
+const DEFAULT_WEIGHTS: TemplateWeights = {
+  businessContext: 20,
+  objective: 15,
+  kanbanRules: 10,
+  faqs: 12,
+  examples: 15,
+  style: 8,
+  customInstructions: 10,
+  qualification: 5,
+};
 
 export type QualityLevel = "low" | "medium" | "good" | "excellent";
 
@@ -29,12 +116,14 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 export function computePromptQuality(
-  data: Partial<CopilotWizardData>
+  data: Partial<CopilotWizardData>,
+  templateType?: string
 ): PromptQualityResult {
   const missing: string[] = [];
   let total = 0;
+  const w = (templateType && TEMPLATE_WEIGHTS[templateType]) || DEFAULT_WEIGHTS;
 
-  // 1. Business Context (25 pontos)
+  // 1. Business Context
   const bc = data.businessContext;
   if (bc) {
     const fields = [
@@ -44,95 +133,112 @@ export function computePromptQuality(
       { key: "valueProps", label: "Proposta de valor", min: 10 },
       { key: "customerPains", label: "Dores que resolve", min: 10 },
     ];
-    let bcScore = 0;
+    const pointsEach = w.businessContext / fields.length;
     fields.forEach((f) => {
       const val = (bc as any)[f.key] as string;
       if (val && val.trim().length >= f.min) {
-        bcScore += 5;
+        total += pointsEach;
       } else {
         missing.push(f.label);
       }
     });
-    total += bcScore;
   } else {
-    total += 0;
     missing.push("Contexto do negócio");
   }
 
-  // 2. Objetivo (20 pontos)
+  // 2. Objetivo
   const obj = data.objectiveComposite;
   if (obj?.mission && obj.mission.length >= 20) {
-    total += 10;
+    total += w.objective * 0.5;
     if (obj.success_criteria && obj.success_criteria.length >= 10) {
-      total += 7;
+      total += w.objective * 0.35;
     } else {
       missing.push("Critério de sucesso");
     }
     if (obj.limits && obj.limits.length >= 5) {
-      total += 3;
+      total += w.objective * 0.15;
     }
   } else if (data.mainObjective && data.mainObjective.length >= 10) {
-    total += 8; // legado recebe parcial
+    total += w.objective * 0.4; // legado recebe parcial
   } else {
     missing.push("Objetivo do agente");
   }
 
-  // 3. FAQs (15 pontos)
-  const faqsWithAnswer = (data.faqs || []).filter(
-    (f) => f.question && f.answer && f.answer.length >= 5
+  // 3. Kanban Rules
+  const kanbanRules = (data.kanbanRules || []).filter(
+    (r: any) => r.goal && r.goal.length >= 5 && r.behavior && r.behavior.length >= 5
   );
-  if (faqsWithAnswer.length >= 3) {
-    total += 15;
-  } else if (faqsWithAnswer.length >= 1) {
-    total += faqsWithAnswer.length * 5;
-  } else {
-    missing.push("FAQs (pelo menos 1 com resposta)");
+  if (w.kanbanRules > 0) {
+    if (kanbanRules.length >= 3) {
+      total += w.kanbanRules;
+    } else if (kanbanRules.length >= 1) {
+      total += (kanbanRules.length / 3) * w.kanbanRules;
+    } else {
+      missing.push("Regras do Kanban");
+    }
   }
 
-  // 4. Exemplos (15 pontos)
+  // 4. FAQs (apenas se o template valoriza FAQs)
+  if (w.faqs > 0) {
+    const faqsWithAnswer = (data.faqs || []).filter(
+      (f) => f.question && f.answer && f.answer.length >= 5
+    );
+    if (faqsWithAnswer.length >= 3) {
+      total += w.faqs;
+    } else if (faqsWithAnswer.length >= 1) {
+      total += (faqsWithAnswer.length / 3) * w.faqs;
+    } else {
+      missing.push("FAQs (pelo menos 1 com resposta)");
+    }
+  }
+
+  // 5. Exemplos
   const validExamples = (data.examples || []).filter(
     (e) => e.lead && e.agent && e.lead.length >= 5 && e.agent.length >= 5
   );
   if (validExamples.length >= 3) {
-    total += 15;
+    total += w.examples;
   } else if (validExamples.length >= 1) {
-    total += validExamples.length * 5;
+    total += (validExamples.length / 3) * w.examples;
   } else {
     missing.push("Exemplos de conversa");
   }
 
-  // 5. Estilo (10 pontos)
+  // 6. Estilo
   const style = data.conversationStyle;
   if (style) {
     let styleScore = 0;
-    if (style.responseLength) styleScore += 3;
-    if (style.emojiPolicy) styleScore += 2;
-    if (style.openingStyle && style.openingStyle.length >= 5) styleScore += 3;
-    if (style.closingStyle && style.closingStyle.length >= 5) styleScore += 2;
+    const maxStyle = w.style;
+    if (style.responseLength) styleScore += maxStyle * 0.3;
+    if (style.emojiPolicy) styleScore += maxStyle * 0.2;
+    if (style.openingStyle && style.openingStyle.length >= 5) styleScore += maxStyle * 0.3;
+    if (style.closingStyle && style.closingStyle.length >= 5) styleScore += maxStyle * 0.2;
     total += styleScore;
-    if (styleScore < 5) missing.push("Estilo de conversa (abertura/fechamento)");
+    if (styleScore < maxStyle * 0.5) missing.push("Estilo de conversa (abertura/fechamento)");
   } else {
     missing.push("Estilo de conversa");
   }
 
-  // 6. Custom Instructions (10 pontos)
+  // 7. Custom Instructions (opcional — não penaliza se ausente)
   const ci = data.customInstructions;
-  if (ci && ci.trim().length >= 20) {
-    total += 10;
-  } else if (ci && ci.trim().length >= 5) {
-    total += 5;
-  }
-  // Não adicionamos missing — é opcional
-
-  // 7. Qualificação (5 pontos)
-  const qual = data.qualification;
-  if (qual?.requiredFields && qual.requiredFields.length >= 2) {
-    total += 5;
-  } else if (qual?.requiredFields && qual.requiredFields.length >= 1) {
-    total += 2;
+  const ciText = typeof ci === "string" ? ci : ((ci?.dos || "") + " " + (ci?.donts || "")).trim();
+  if (ciText.length >= 20) {
+    total += w.customInstructions;
+  } else if (ciText.length >= 5) {
+    total += w.customInstructions * 0.5;
   }
 
-  const score = clamp(total, 0, 100);
+  // 8. Qualificação (apenas se o template valoriza)
+  if (w.qualification > 0) {
+    const qual = data.qualification;
+    if (qual?.requiredFields && qual.requiredFields.length >= 2) {
+      total += w.qualification;
+    } else if (qual?.requiredFields && qual.requiredFields.length >= 1) {
+      total += w.qualification * 0.4;
+    }
+  }
+
+  const score = clamp(Math.round(total), 0, 100);
   let level: QualityLevel;
   if (score >= 85) level = "excellent";
   else if (score >= 65) level = "good";

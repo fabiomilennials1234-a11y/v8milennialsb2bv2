@@ -27,10 +27,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useState, useEffect } from "react";
-import type { Database } from "@/integrations/supabase/types";
-
-type PipeConfirmacaoStatus = Database["public"]["Enums"]["pipe_confirmacao_status"];
-
 interface ConfirmacaoCardProps {
   card: {
     id: string;

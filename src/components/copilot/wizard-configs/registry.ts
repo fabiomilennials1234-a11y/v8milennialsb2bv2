@@ -30,6 +30,8 @@ import { ConfirmerActionsStep } from "../wizard-steps/ConfirmerActionsStep";
 import { CustomInstructionsStep } from "../wizard-steps/CustomInstructionsStep";
 import { KnowledgeBaseStep } from "../wizard-steps/KnowledgeBaseStep";
 import { AgentCapabilitiesStep } from "../wizard-steps/AgentCapabilitiesStep";
+import { KanbanRulesReviewStep } from "../wizard-steps/KanbanRulesReviewStep";
+import { TestConversationStep } from "../wizard-steps/TestConversationStep";
 import type { StepRegistryEntry } from "./types";
 
 export const STEP_REGISTRY: Record<string, StepRegistryEntry> = {
@@ -157,5 +159,15 @@ export const STEP_REGISTRY: Record<string, StepRegistryEntry> = {
     component: AgentCapabilitiesStep,
     title: "Capacidades",
     fieldToValidate: "canQualifyLead",
+  },
+  kanbanRulesReview: {
+    component: KanbanRulesReviewStep,
+    title: "Kanban",
+    fieldToValidate: "kanbanRules",
+  },
+  testConversation: {
+    component: TestConversationStep,
+    title: "Testar",
+    fieldToValidate: "name", // step opcional, valida só name
   },
 };

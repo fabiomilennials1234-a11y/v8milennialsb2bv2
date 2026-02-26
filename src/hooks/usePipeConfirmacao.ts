@@ -9,22 +9,12 @@ export type PipeConfirmacao = Tables<"pipe_confirmacao">;
 export type PipeConfirmacaoInsert = TablesInsert<"pipe_confirmacao">;
 export type PipeConfirmacaoUpdate = TablesUpdate<"pipe_confirmacao">;
 
-export type PipeConfirmacaoStatus = 
-  | "reuniao_marcada"
-  | "confirmar_d5"
-  | "confirmar_d3"
-  | "confirmar_d2"
-  | "confirmar_d1"
-  | "pre_confirmada"
-  | "confirmacao_no_dia"
-  | "confirmada_no_dia"
-  | "remarcar"
-  | "compareceu"
-  | "perdido";
+// Dynamic — accepts any stage_key from pipeline_stages (custom stages supported)
+export type PipeConfirmacaoStatus = string;
 
 // Visual Kanban columns - pre_confirmada and confirmada_no_dia are NOT shown as columns
 // They are visual states (colors) on the cards instead
-export const statusColumns: { id: PipeConfirmacaoStatus; title: string; color: string }[] = [
+export const statusColumns: { id: string; title: string; color: string }[] = [
   { id: "reuniao_marcada", title: "Reunião Marcada", color: "#6366f1" },
   { id: "confirmar_d5", title: "Confirmar D-5", color: "#8b5cf6" },
   { id: "confirmar_d3", title: "Confirmar D-3", color: "#a855f7" },

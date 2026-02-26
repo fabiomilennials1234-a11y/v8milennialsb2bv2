@@ -339,6 +339,50 @@ export type Database = {
           },
         ]
       }
+      badges: {
+        Row: {
+          created_at: string
+          criteria_type: string
+          criteria_value: number
+          description: string | null
+          icon: string | null
+          id: string
+          is_system: boolean
+          name: string
+          organization_id: string
+        }
+        Insert: {
+          created_at?: string
+          criteria_type: string
+          criteria_value?: number
+          description?: string | null
+          icon?: string | null
+          id?: string
+          is_system?: boolean
+          name: string
+          organization_id: string
+        }
+        Update: {
+          created_at?: string
+          criteria_type?: string
+          criteria_value?: number
+          description?: string | null
+          icon?: string | null
+          id?: string
+          is_system?: boolean
+          name?: string
+          organization_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "badges_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       campaign_dispatch_batches: {
         Row: {
           campanha_id: string
@@ -1010,6 +1054,38 @@ export type Database = {
           },
         ]
       }
+      client_sidebar_permissions: {
+        Row: {
+          created_at: string
+          id: string
+          is_visible: boolean
+          organization_id: string
+          sidebar_key: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_visible?: boolean
+          organization_id: string
+          sidebar_key: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_visible?: boolean
+          organization_id?: string
+          sidebar_key?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_sidebar_permissions_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       commissions: {
         Row: {
           amount: number
@@ -1090,6 +1166,7 @@ export type Database = {
           organization_id: string
           qualification_data: Json | null
           questions_asked: string[] | null
+          sentiment: string | null
           updated_at: string
         }
         Insert: {
@@ -1110,6 +1187,7 @@ export type Database = {
           organization_id: string
           qualification_data?: Json | null
           questions_asked?: string[] | null
+          sentiment?: string | null
           updated_at?: string
         }
         Update: {
@@ -1130,6 +1208,7 @@ export type Database = {
           organization_id?: string
           qualification_data?: Json | null
           questions_asked?: string[] | null
+          sentiment?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -1327,6 +1406,117 @@ export type Database = {
           },
         ]
       }
+      copilot_ab_assignments: {
+        Row: {
+          agent_id: string
+          assigned_at: string | null
+          conversation_id: string | null
+          id: string
+          lead_id: string
+          variant_id: string
+        }
+        Insert: {
+          agent_id: string
+          assigned_at?: string | null
+          conversation_id?: string | null
+          id?: string
+          lead_id: string
+          variant_id: string
+        }
+        Update: {
+          agent_id?: string
+          assigned_at?: string | null
+          conversation_id?: string | null
+          id?: string
+          lead_id?: string
+          variant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "copilot_ab_assignments_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "copilot_agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "copilot_ab_assignments_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "copilot_ab_assignments_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "copilot_ab_assignments_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "copilot_agent_variants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      copilot_agent_document_chunks: {
+        Row: {
+          agent_id: string
+          chunk_index: number
+          content: string
+          created_at: string | null
+          document_id: string
+          embedding: string | null
+          id: string
+          organization_id: string
+        }
+        Insert: {
+          agent_id: string
+          chunk_index?: number
+          content: string
+          created_at?: string | null
+          document_id: string
+          embedding?: string | null
+          id?: string
+          organization_id: string
+        }
+        Update: {
+          agent_id?: string
+          chunk_index?: number
+          content?: string
+          created_at?: string | null
+          document_id?: string
+          embedding?: string | null
+          id?: string
+          organization_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "copilot_agent_document_chunks_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "copilot_agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "copilot_agent_document_chunks_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "copilot_agent_documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "copilot_agent_document_chunks_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       copilot_agent_documents: {
         Row: {
           agent_id: string
@@ -1392,6 +1582,7 @@ export type Database = {
           agent_id: string
           answer: string
           created_at: string
+          embedding: string | null
           id: string
           position: number | null
           question: string
@@ -1401,6 +1592,7 @@ export type Database = {
           agent_id: string
           answer: string
           created_at?: string
+          embedding?: string | null
           id?: string
           position?: number | null
           question: string
@@ -1410,6 +1602,7 @@ export type Database = {
           agent_id?: string
           answer?: string
           created_at?: string
+          embedding?: string | null
           id?: string
           position?: number | null
           question?: string
@@ -1532,7 +1725,7 @@ export type Database = {
           forbidden_actions: string[] | null
           goal: string
           id: string
-          needs_review: boolean
+          needs_review: boolean | null
           pipe_type: string
           stage_name: string
           updated_at: string
@@ -1545,7 +1738,7 @@ export type Database = {
           forbidden_actions?: string[] | null
           goal: string
           id?: string
-          needs_review?: boolean
+          needs_review?: boolean | null
           pipe_type: string
           stage_name: string
           updated_at?: string
@@ -1558,7 +1751,7 @@ export type Database = {
           forbidden_actions?: string[] | null
           goal?: string
           id?: string
-          needs_review?: boolean
+          needs_review?: boolean | null
           pipe_type?: string
           stage_name?: string
           updated_at?: string
@@ -1569,6 +1762,84 @@ export type Database = {
             columns: ["agent_id"]
             isOneToOne: false
             referencedRelation: "copilot_agents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      copilot_agent_variants: {
+        Row: {
+          agent_id: string
+          avg_score_goal_align: number | null
+          avg_score_overall: number | null
+          created_at: string | null
+          description: string | null
+          id: string
+          is_active: boolean | null
+          is_control: boolean | null
+          meetings_scheduled: number | null
+          name: string
+          organization_id: string
+          qualification_rate: number | null
+          system_prompt_override: string | null
+          temperature_override: string | null
+          total_conversations: number | null
+          total_turns: number | null
+          traffic_pct: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          agent_id: string
+          avg_score_goal_align?: number | null
+          avg_score_overall?: number | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_control?: boolean | null
+          meetings_scheduled?: number | null
+          name: string
+          organization_id: string
+          qualification_rate?: number | null
+          system_prompt_override?: string | null
+          temperature_override?: string | null
+          total_conversations?: number | null
+          total_turns?: number | null
+          traffic_pct?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          agent_id?: string
+          avg_score_goal_align?: number | null
+          avg_score_overall?: number | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_control?: boolean | null
+          meetings_scheduled?: number | null
+          name?: string
+          organization_id?: string
+          qualification_rate?: number | null
+          system_prompt_override?: string | null
+          temperature_override?: string | null
+          total_conversations?: number | null
+          total_turns?: number | null
+          traffic_pct?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "copilot_agent_variants_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "copilot_agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "copilot_agent_variants_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -1609,6 +1880,7 @@ export type Database = {
           is_active: boolean | null
           is_default: boolean | null
           llm_model: string | null
+          llm_temperature_mode: string | null
           main_objective: string
           max_conversation_turns: number | null
           move_rules: Json | null
@@ -1624,6 +1896,9 @@ export type Database = {
           qualification_rules: Json | null
           response_delay_ms: number | null
           response_delay_seconds: number | null
+          routing_origins: string[] | null
+          routing_segments: string[] | null
+          routing_stages: string[] | null
           skills: string[] | null
           system_prompt: string | null
           system_prompt_version: number | null
@@ -1668,6 +1943,7 @@ export type Database = {
           is_active?: boolean | null
           is_default?: boolean | null
           llm_model?: string | null
+          llm_temperature_mode?: string | null
           main_objective: string
           max_conversation_turns?: number | null
           move_rules?: Json | null
@@ -1683,6 +1959,9 @@ export type Database = {
           qualification_rules?: Json | null
           response_delay_ms?: number | null
           response_delay_seconds?: number | null
+          routing_origins?: string[] | null
+          routing_segments?: string[] | null
+          routing_stages?: string[] | null
           skills?: string[] | null
           system_prompt?: string | null
           system_prompt_version?: number | null
@@ -1727,6 +2006,7 @@ export type Database = {
           is_active?: boolean | null
           is_default?: boolean | null
           llm_model?: string | null
+          llm_temperature_mode?: string | null
           main_objective?: string
           max_conversation_turns?: number | null
           move_rules?: Json | null
@@ -1742,6 +2022,9 @@ export type Database = {
           qualification_rules?: Json | null
           response_delay_ms?: number | null
           response_delay_seconds?: number | null
+          routing_origins?: string[] | null
+          routing_segments?: string[] | null
+          routing_stages?: string[] | null
           skills?: string[] | null
           system_prompt?: string | null
           system_prompt_version?: number | null
@@ -1771,6 +2054,98 @@ export type Database = {
             columns: ["whatsapp_instance_id"]
             isOneToOne: false
             referencedRelation: "whatsapp_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      copilot_conversation_evaluations: {
+        Row: {
+          agent_id: string | null
+          agent_response: string
+          conversation_id: string
+          evaluated_at: string | null
+          id: string
+          lead_id: string | null
+          model_used: string | null
+          organization_id: string
+          score_conciseness: number | null
+          score_goal_align: number | null
+          score_overall: number | null
+          score_relevance: number | null
+          score_tone: number | null
+          strengths: string | null
+          suggestion: string | null
+          turn_count: number
+          user_message: string
+          weaknesses: string | null
+        }
+        Insert: {
+          agent_id?: string | null
+          agent_response: string
+          conversation_id: string
+          evaluated_at?: string | null
+          id?: string
+          lead_id?: string | null
+          model_used?: string | null
+          organization_id: string
+          score_conciseness?: number | null
+          score_goal_align?: number | null
+          score_overall?: number | null
+          score_relevance?: number | null
+          score_tone?: number | null
+          strengths?: string | null
+          suggestion?: string | null
+          turn_count?: number
+          user_message: string
+          weaknesses?: string | null
+        }
+        Update: {
+          agent_id?: string | null
+          agent_response?: string
+          conversation_id?: string
+          evaluated_at?: string | null
+          id?: string
+          lead_id?: string | null
+          model_used?: string | null
+          organization_id?: string
+          score_conciseness?: number | null
+          score_goal_align?: number | null
+          score_overall?: number | null
+          score_relevance?: number | null
+          score_tone?: number | null
+          strengths?: string | null
+          suggestion?: string | null
+          turn_count?: number
+          user_message?: string
+          weaknesses?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "copilot_conversation_evaluations_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "copilot_agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "copilot_conversation_evaluations_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "copilot_conversation_evaluations_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "copilot_conversation_evaluations_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -2157,6 +2532,119 @@ export type Database = {
           },
         ]
       }
+      google_calendar_events_cache: {
+        Row: {
+          all_day: boolean
+          attendees: Json | null
+          created_at: string
+          description: string | null
+          end_at: string | null
+          google_calendar_id: string
+          google_event_status: string
+          id: string
+          lead_id: string | null
+          location: string | null
+          meet_link: string | null
+          organization_id: string
+          origin: string
+          start_at: string
+          synced_at: string
+          title: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          all_day?: boolean
+          attendees?: Json | null
+          created_at?: string
+          description?: string | null
+          end_at?: string | null
+          google_calendar_id?: string
+          google_event_status?: string
+          id: string
+          lead_id?: string | null
+          location?: string | null
+          meet_link?: string | null
+          organization_id: string
+          origin?: string
+          start_at: string
+          synced_at?: string
+          title?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          all_day?: boolean
+          attendees?: Json | null
+          created_at?: string
+          description?: string | null
+          end_at?: string | null
+          google_calendar_id?: string
+          google_event_status?: string
+          id?: string
+          lead_id?: string | null
+          location?: string | null
+          meet_link?: string | null
+          organization_id?: string
+          origin?: string
+          start_at?: string
+          synced_at?: string
+          title?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "google_calendar_events_cache_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "google_calendar_events_cache_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      google_calendar_sharing: {
+        Row: {
+          can_create_events: boolean
+          created_at: string
+          id: string
+          organization_id: string
+          owner_id: string
+          viewer_id: string
+        }
+        Insert: {
+          can_create_events?: boolean
+          created_at?: string
+          id?: string
+          organization_id: string
+          owner_id: string
+          viewer_id: string
+        }
+        Update: {
+          can_create_events?: boolean
+          created_at?: string
+          id?: string
+          organization_id?: string
+          owner_id?: string
+          viewer_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "google_calendar_sharing_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       google_calendar_sync_logs: {
         Row: {
           agent_id: string | null
@@ -2274,6 +2762,50 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "google_calendar_tokens_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      google_calendar_watch_channels: {
+        Row: {
+          calendar_id: string
+          channel_id: string
+          created_at: string
+          expiration: string | null
+          id: string
+          is_active: boolean
+          organization_id: string
+          resource_id: string | null
+          user_id: string
+        }
+        Insert: {
+          calendar_id?: string
+          channel_id: string
+          created_at?: string
+          expiration?: string | null
+          id?: string
+          is_active?: boolean
+          organization_id: string
+          resource_id?: string | null
+          user_id: string
+        }
+        Update: {
+          calendar_id?: string
+          channel_id?: string
+          created_at?: string
+          expiration?: string | null
+          id?: string
+          is_active?: boolean
+          organization_id?: string
+          resource_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "google_calendar_watch_channels_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
@@ -2457,6 +2989,80 @@ export type Database = {
           },
         ]
       }
+      lead_memories: {
+        Row: {
+          agent_id: string | null
+          content: string
+          conversation_id: string | null
+          created_at: string | null
+          embedding: string | null
+          id: string
+          importance: number | null
+          last_accessed: string | null
+          lead_id: string
+          memory_type: string
+          organization_id: string
+          turn_count: number | null
+        }
+        Insert: {
+          agent_id?: string | null
+          content: string
+          conversation_id?: string | null
+          created_at?: string | null
+          embedding?: string | null
+          id?: string
+          importance?: number | null
+          last_accessed?: string | null
+          lead_id: string
+          memory_type?: string
+          organization_id: string
+          turn_count?: number | null
+        }
+        Update: {
+          agent_id?: string | null
+          content?: string
+          conversation_id?: string | null
+          created_at?: string | null
+          embedding?: string | null
+          id?: string
+          importance?: number | null
+          last_accessed?: string | null
+          lead_id?: string
+          memory_type?: string
+          organization_id?: string
+          turn_count?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_memories_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "copilot_agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_memories_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_memories_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_memories_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lead_scores: {
         Row: {
           created_at: string
@@ -2557,9 +3163,8 @@ export type Database = {
           organization_id: string | null
           origin: Database["public"]["Enums"]["lead_origin"]
           phone: string | null
-          pipe_whatsapp:
-            | Database["public"]["Enums"]["pipe_whatsapp_status"]
-            | null
+          pipe_whatsapp: string | null
+          qualification_score: number | null
           rating: number | null
           sdr_id: string | null
           segment: string | null
@@ -2590,9 +3195,8 @@ export type Database = {
           organization_id?: string | null
           origin?: Database["public"]["Enums"]["lead_origin"]
           phone?: string | null
-          pipe_whatsapp?:
-            | Database["public"]["Enums"]["pipe_whatsapp_status"]
-            | null
+          pipe_whatsapp?: string | null
+          qualification_score?: number | null
           rating?: number | null
           sdr_id?: string | null
           segment?: string | null
@@ -2623,9 +3227,8 @@ export type Database = {
           organization_id?: string | null
           origin?: Database["public"]["Enums"]["lead_origin"]
           phone?: string | null
-          pipe_whatsapp?:
-            | Database["public"]["Enums"]["pipe_whatsapp_status"]
-            | null
+          pipe_whatsapp?: string | null
+          qualification_score?: number | null
           rating?: number | null
           sdr_id?: string | null
           segment?: string | null
@@ -2782,6 +3385,62 @@ export type Database = {
         }
         Relationships: []
       }
+      mkt_origin_config: {
+        Row: {
+          created_at: string | null
+          id: string
+          investimento_cents: number
+          month: number
+          organization_id: string
+          origin: string
+          show_agendamentos: boolean
+          show_comparecimentos: boolean
+          show_leads: boolean
+          show_propostas: boolean
+          show_vendas: boolean
+          updated_at: string | null
+          year: number
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          investimento_cents?: number
+          month: number
+          organization_id: string
+          origin: string
+          show_agendamentos?: boolean
+          show_comparecimentos?: boolean
+          show_leads?: boolean
+          show_propostas?: boolean
+          show_vendas?: boolean
+          updated_at?: string | null
+          year: number
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          investimento_cents?: number
+          month?: number
+          organization_id?: string
+          origin?: string
+          show_agendamentos?: boolean
+          show_comparecimentos?: boolean
+          show_leads?: boolean
+          show_propostas?: boolean
+          show_vendas?: boolean
+          updated_at?: string | null
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mkt_origin_config_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notifications: {
         Row: {
           created_at: string | null
@@ -2936,6 +3595,7 @@ export type Database = {
           id: string
           limit_overrides: Json | null
           name: string
+          org_type: Database["public"]["Enums"]["org_type"]
           payment_customer_id: string | null
           payment_subscription_id: string | null
           plan_id: string | null
@@ -2957,6 +3617,7 @@ export type Database = {
           id?: string
           limit_overrides?: Json | null
           name: string
+          org_type?: Database["public"]["Enums"]["org_type"]
           payment_customer_id?: string | null
           payment_subscription_id?: string | null
           plan_id?: string | null
@@ -2978,6 +3639,7 @@ export type Database = {
           id?: string
           limit_overrides?: Json | null
           name?: string
+          org_type?: Database["public"]["Enums"]["org_type"]
           payment_customer_id?: string | null
           payment_subscription_id?: string | null
           plan_id?: string | null
@@ -3041,12 +3703,13 @@ export type Database = {
           id: string
           is_confirmed: boolean
           lead_id: string
+          meet_link: string | null
           meeting_date: string | null
           metrics_period_at: string | null
           notes: string | null
           organization_id: string | null
           sdr_id: string | null
-          status: Database["public"]["Enums"]["pipe_confirmacao_status"]
+          status: string
           updated_at: string
         }
         Insert: {
@@ -3055,12 +3718,13 @@ export type Database = {
           id?: string
           is_confirmed?: boolean
           lead_id: string
+          meet_link?: string | null
           meeting_date?: string | null
           metrics_period_at?: string | null
           notes?: string | null
           organization_id?: string | null
           sdr_id?: string | null
-          status?: Database["public"]["Enums"]["pipe_confirmacao_status"]
+          status?: string
           updated_at?: string
         }
         Update: {
@@ -3069,12 +3733,13 @@ export type Database = {
           id?: string
           is_confirmed?: boolean
           lead_id?: string
+          meet_link?: string | null
           meeting_date?: string | null
           metrics_period_at?: string | null
           notes?: string | null
           organization_id?: string | null
           sdr_id?: string | null
-          status?: Database["public"]["Enums"]["pipe_confirmacao_status"]
+          status?: string
           updated_at?: string
         }
         Relationships: [
@@ -3402,7 +4067,7 @@ export type Database = {
           product_id: string | null
           product_type: Database["public"]["Enums"]["product_type"] | null
           sale_value: number | null
-          status: Database["public"]["Enums"]["pipe_propostas_status"]
+          status: string
           updated_at: string
         }
         Insert: {
@@ -3420,7 +4085,7 @@ export type Database = {
           product_id?: string | null
           product_type?: Database["public"]["Enums"]["product_type"] | null
           sale_value?: number | null
-          status?: Database["public"]["Enums"]["pipe_propostas_status"]
+          status?: string
           updated_at?: string
         }
         Update: {
@@ -3438,7 +4103,7 @@ export type Database = {
           product_id?: string | null
           product_type?: Database["public"]["Enums"]["product_type"] | null
           sale_value?: number | null
-          status?: Database["public"]["Enums"]["pipe_propostas_status"]
+          status?: string
           updated_at?: string
         }
         Relationships: [
@@ -3481,7 +4146,7 @@ export type Database = {
           organization_id: string | null
           scheduled_date: string | null
           sdr_id: string | null
-          status: Database["public"]["Enums"]["pipe_whatsapp_status"]
+          status: string
           updated_at: string
         }
         Insert: {
@@ -3492,7 +4157,7 @@ export type Database = {
           organization_id?: string | null
           scheduled_date?: string | null
           sdr_id?: string | null
-          status?: Database["public"]["Enums"]["pipe_whatsapp_status"]
+          status?: string
           updated_at?: string
         }
         Update: {
@@ -3503,7 +4168,7 @@ export type Database = {
           organization_id?: string | null
           scheduled_date?: string | null
           sdr_id?: string | null
-          status?: Database["public"]["Enums"]["pipe_whatsapp_status"]
+          status?: string
           updated_at?: string
         }
         Relationships: [
@@ -3532,8 +4197,8 @@ export type Database = {
       }
       pipeline_stages: {
         Row: {
-          auto_move_min_days: number | null
           auto_move_max_days: number | null
+          auto_move_min_days: number | null
           color: string | null
           created_at: string | null
           id: string
@@ -3545,11 +4210,13 @@ export type Database = {
           pipeline_type: string
           position: number
           stage_key: string
+          target_pipe_type: string | null
+          target_stage_key: string | null
           updated_at: string | null
         }
         Insert: {
-          auto_move_min_days?: number | null
           auto_move_max_days?: number | null
+          auto_move_min_days?: number | null
           color?: string | null
           created_at?: string | null
           id?: string
@@ -3561,11 +4228,13 @@ export type Database = {
           pipeline_type: string
           position?: number
           stage_key: string
+          target_pipe_type?: string | null
+          target_stage_key?: string | null
           updated_at?: string | null
         }
         Update: {
-          auto_move_min_days?: number | null
           auto_move_max_days?: number | null
+          auto_move_min_days?: number | null
           color?: string | null
           created_at?: string | null
           id?: string
@@ -3577,6 +4246,8 @@ export type Database = {
           pipeline_type?: string
           position?: number
           stage_key?: string
+          target_pipe_type?: string | null
+          target_stage_key?: string | null
           updated_at?: string | null
         }
         Relationships: [
@@ -4003,21 +4674,21 @@ export type Database = {
           created_at: string
           id: string
           name: string
-          organization_id: string | null
+          organization_id: string
         }
         Insert: {
           color?: string | null
           created_at?: string
           id?: string
           name: string
-          organization_id?: string | null
+          organization_id: string
         }
         Update: {
           color?: string | null
           created_at?: string
           id?: string
           name?: string
-          organization_id?: string | null
+          organization_id?: string
         }
         Relationships: [
           {
@@ -4157,6 +4828,389 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      upsell_campanhas: {
+        Row: {
+          client_id: string
+          closer_id: string | null
+          created_at: string
+          data_abordagem: string | null
+          data_venda: string | null
+          id: string
+          mrr_planejado: number | null
+          notes: string | null
+          organization_id: string
+          projeto_planejado: number | null
+          status: Database["public"]["Enums"]["upsell_campanha_status"]
+          updated_at: string
+        }
+        Insert: {
+          client_id: string
+          closer_id?: string | null
+          created_at?: string
+          data_abordagem?: string | null
+          data_venda?: string | null
+          id?: string
+          mrr_planejado?: number | null
+          notes?: string | null
+          organization_id: string
+          projeto_planejado?: number | null
+          status?: Database["public"]["Enums"]["upsell_campanha_status"]
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string
+          closer_id?: string | null
+          created_at?: string
+          data_abordagem?: string | null
+          data_venda?: string | null
+          id?: string
+          mrr_planejado?: number | null
+          notes?: string | null
+          organization_id?: string
+          projeto_planejado?: number | null
+          status?: Database["public"]["Enums"]["upsell_campanha_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "upsell_campanhas_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "upsell_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "upsell_campanhas_closer_id_fkey"
+            columns: ["closer_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "upsell_campanhas_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      upsell_client_products: {
+        Row: {
+          cancelled_at: string | null
+          client_id: string
+          contract_duration: number | null
+          created_at: string
+          id: string
+          product_id: string | null
+          product_name: string
+          product_type: string
+          sale_value: number
+          started_at: string
+          status: string
+        }
+        Insert: {
+          cancelled_at?: string | null
+          client_id: string
+          contract_duration?: number | null
+          created_at?: string
+          id?: string
+          product_id?: string | null
+          product_name: string
+          product_type: string
+          sale_value: number
+          started_at?: string
+          status?: string
+        }
+        Update: {
+          cancelled_at?: string | null
+          client_id?: string
+          contract_duration?: number | null
+          created_at?: string
+          id?: string
+          product_id?: string | null
+          product_name?: string
+          product_type?: string
+          sale_value?: number
+          started_at?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "upsell_client_products_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "upsell_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "upsell_client_products_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      upsell_clients: {
+        Row: {
+          churned_at: string | null
+          closer_id: string | null
+          company: string | null
+          created_at: string
+          email: string | null
+          first_sale_at: string
+          gestao_manual_override: boolean
+          gestao_stage: string | null
+          id: string
+          is_active: boolean
+          lead_id: string
+          name: string
+          organization_id: string
+          phone: string | null
+          potencial: Database["public"]["Enums"]["upsell_potencial"]
+          reactivated_at: string | null
+          tipo_cliente_tempo: string
+          updated_at: string
+        }
+        Insert: {
+          churned_at?: string | null
+          closer_id?: string | null
+          company?: string | null
+          created_at?: string
+          email?: string | null
+          first_sale_at?: string
+          gestao_manual_override?: boolean
+          gestao_stage?: string | null
+          id?: string
+          is_active?: boolean
+          lead_id: string
+          name: string
+          organization_id: string
+          phone?: string | null
+          potencial?: Database["public"]["Enums"]["upsell_potencial"]
+          reactivated_at?: string | null
+          tipo_cliente_tempo?: string
+          updated_at?: string
+        }
+        Update: {
+          churned_at?: string | null
+          closer_id?: string | null
+          company?: string | null
+          created_at?: string
+          email?: string | null
+          first_sale_at?: string
+          gestao_manual_override?: boolean
+          gestao_stage?: string | null
+          id?: string
+          is_active?: boolean
+          lead_id?: string
+          name?: string
+          organization_id?: string
+          phone?: string | null
+          potencial?: Database["public"]["Enums"]["upsell_potencial"]
+          reactivated_at?: string | null
+          tipo_cliente_tempo?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "upsell_clients_closer_id_fkey"
+            columns: ["closer_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "upsell_clients_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "upsell_clients_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      upsell_gestao_rules: {
+        Row: {
+          base_stage_key: string
+          created_at: string
+          gestao_from_stage: string
+          gestao_to_stage: string
+          id: string
+          is_active: boolean
+          organization_id: string
+          position: number
+          updated_at: string
+        }
+        Insert: {
+          base_stage_key: string
+          created_at?: string
+          gestao_from_stage: string
+          gestao_to_stage: string
+          id?: string
+          is_active?: boolean
+          organization_id: string
+          position?: number
+          updated_at?: string
+        }
+        Update: {
+          base_stage_key?: string
+          created_at?: string
+          gestao_from_stage?: string
+          gestao_to_stage?: string
+          id?: string
+          is_active?: boolean
+          organization_id?: string
+          position?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "upsell_gestao_rules_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      upsell_orders: {
+        Row: {
+          campanha_id: string | null
+          client_id: string
+          closer_id: string | null
+          created_at: string
+          id: string
+          notes: string | null
+          organization_id: string
+          origin: string
+          pipe_proposta_id: string | null
+          product_id: string | null
+          product_name: string
+          product_type: string
+          sale_value: number
+          sold_at: string
+        }
+        Insert: {
+          campanha_id?: string | null
+          client_id: string
+          closer_id?: string | null
+          created_at?: string
+          id?: string
+          notes?: string | null
+          organization_id: string
+          origin?: string
+          pipe_proposta_id?: string | null
+          product_id?: string | null
+          product_name: string
+          product_type: string
+          sale_value: number
+          sold_at?: string
+        }
+        Update: {
+          campanha_id?: string | null
+          client_id?: string
+          closer_id?: string | null
+          created_at?: string
+          id?: string
+          notes?: string | null
+          organization_id?: string
+          origin?: string
+          pipe_proposta_id?: string | null
+          product_id?: string | null
+          product_name?: string
+          product_type?: string
+          sale_value?: number
+          sold_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "upsell_orders_campanha_id_fkey"
+            columns: ["campanha_id"]
+            isOneToOne: false
+            referencedRelation: "upsell_campanhas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "upsell_orders_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "upsell_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "upsell_orders_closer_id_fkey"
+            columns: ["closer_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "upsell_orders_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "upsell_orders_pipe_proposta_id_fkey"
+            columns: ["pipe_proposta_id"]
+            isOneToOne: false
+            referencedRelation: "pipe_propostas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "upsell_orders_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_badges: {
+        Row: {
+          badge_id: string
+          id: string
+          team_member_id: string
+          unlocked_at: string
+        }
+        Insert: {
+          badge_id: string
+          id?: string
+          team_member_id: string
+          unlocked_at?: string
+        }
+        Update: {
+          badge_id?: string
+          id?: string
+          team_member_id?: string
+          unlocked_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_badges_badge_id_fkey"
+            columns: ["badge_id"]
+            isOneToOne: false
+            referencedRelation: "badges"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_badges_team_member_id_fkey"
+            columns: ["team_member_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
             referencedColumns: ["id"]
           },
         ]
@@ -4636,353 +5690,6 @@ export type Database = {
           },
         ]
       }
-      upsell_clients: {
-        Row: {
-          id: string
-          organization_id: string
-          lead_id: string
-          name: string
-          company: string | null
-          email: string | null
-          phone: string | null
-          potencial: Database["public"]["Enums"]["upsell_potencial"]
-          tipo_cliente_tempo: string
-          gestao_stage: string
-          gestao_manual_override: boolean
-          is_active: boolean
-          closer_id: string | null
-          first_sale_at: string
-          churned_at: string | null
-          reactivated_at: string | null
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          organization_id: string
-          lead_id: string
-          name: string
-          company?: string | null
-          email?: string | null
-          phone?: string | null
-          potencial?: Database["public"]["Enums"]["upsell_potencial"]
-          tipo_cliente_tempo?: string
-          gestao_stage?: string
-          gestao_manual_override?: boolean
-          is_active?: boolean
-          closer_id?: string | null
-          first_sale_at?: string
-          churned_at?: string | null
-          reactivated_at?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          organization_id?: string
-          lead_id?: string
-          name?: string
-          company?: string | null
-          email?: string | null
-          phone?: string | null
-          potencial?: Database["public"]["Enums"]["upsell_potencial"]
-          tipo_cliente_tempo?: string
-          gestao_stage?: string
-          gestao_manual_override?: boolean
-          is_active?: boolean
-          closer_id?: string | null
-          first_sale_at?: string
-          churned_at?: string | null
-          reactivated_at?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "upsell_clients_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "upsell_clients_lead_id_fkey"
-            columns: ["lead_id"]
-            isOneToOne: false
-            referencedRelation: "leads"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "upsell_clients_closer_id_fkey"
-            columns: ["closer_id"]
-            isOneToOne: false
-            referencedRelation: "team_members"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      upsell_gestao_rules: {
-        Row: {
-          id: string
-          organization_id: string
-          base_stage_key: string
-          gestao_from_stage: string
-          gestao_to_stage: string
-          position: number
-          is_active: boolean
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          organization_id: string
-          base_stage_key: string
-          gestao_from_stage: string
-          gestao_to_stage: string
-          position?: number
-          is_active?: boolean
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          organization_id?: string
-          base_stage_key?: string
-          gestao_from_stage?: string
-          gestao_to_stage?: string
-          position?: number
-          is_active?: boolean
-          created_at?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "upsell_gestao_rules_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      upsell_client_products: {
-        Row: {
-          id: string
-          client_id: string
-          product_id: string | null
-          product_name: string
-          product_type: string
-          sale_value: number
-          contract_duration: number | null
-          status: string
-          started_at: string
-          cancelled_at: string | null
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          client_id: string
-          product_id?: string | null
-          product_name: string
-          product_type: string
-          sale_value: number
-          contract_duration?: number | null
-          status?: string
-          started_at?: string
-          cancelled_at?: string | null
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          client_id?: string
-          product_id?: string | null
-          product_name?: string
-          product_type?: string
-          sale_value?: number
-          contract_duration?: number | null
-          status?: string
-          started_at?: string
-          cancelled_at?: string | null
-          created_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "upsell_client_products_client_id_fkey"
-            columns: ["client_id"]
-            isOneToOne: false
-            referencedRelation: "upsell_clients"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "upsell_client_products_product_id_fkey"
-            columns: ["product_id"]
-            isOneToOne: false
-            referencedRelation: "products"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      upsell_campanhas: {
-        Row: {
-          id: string
-          organization_id: string
-          client_id: string
-          closer_id: string | null
-          status: Database["public"]["Enums"]["upsell_campanha_status"]
-          mrr_planejado: number | null
-          projeto_planejado: number | null
-          data_abordagem: string | null
-          data_venda: string | null
-          notes: string | null
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          organization_id: string
-          client_id: string
-          closer_id?: string | null
-          status?: Database["public"]["Enums"]["upsell_campanha_status"]
-          mrr_planejado?: number | null
-          projeto_planejado?: number | null
-          data_abordagem?: string | null
-          data_venda?: string | null
-          notes?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          organization_id?: string
-          client_id?: string
-          closer_id?: string | null
-          status?: Database["public"]["Enums"]["upsell_campanha_status"]
-          mrr_planejado?: number | null
-          projeto_planejado?: number | null
-          data_abordagem?: string | null
-          data_venda?: string | null
-          notes?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "upsell_campanhas_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "upsell_campanhas_client_id_fkey"
-            columns: ["client_id"]
-            isOneToOne: false
-            referencedRelation: "upsell_clients"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "upsell_campanhas_closer_id_fkey"
-            columns: ["closer_id"]
-            isOneToOne: false
-            referencedRelation: "team_members"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      upsell_orders: {
-        Row: {
-          id: string
-          organization_id: string
-          client_id: string
-          closer_id: string | null
-          product_id: string | null
-          product_name: string
-          product_type: string
-          sale_value: number
-          origin: string
-          campanha_id: string | null
-          pipe_proposta_id: string | null
-          sold_at: string
-          notes: string | null
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          organization_id: string
-          client_id: string
-          closer_id?: string | null
-          product_id?: string | null
-          product_name: string
-          product_type: string
-          sale_value: number
-          origin?: string
-          campanha_id?: string | null
-          pipe_proposta_id?: string | null
-          sold_at?: string
-          notes?: string | null
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          organization_id?: string
-          client_id?: string
-          closer_id?: string | null
-          product_id?: string | null
-          product_name?: string
-          product_type?: string
-          sale_value?: number
-          origin?: string
-          campanha_id?: string | null
-          pipe_proposta_id?: string | null
-          sold_at?: string
-          notes?: string | null
-          created_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "upsell_orders_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "upsell_orders_client_id_fkey"
-            columns: ["client_id"]
-            isOneToOne: false
-            referencedRelation: "upsell_clients"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "upsell_orders_closer_id_fkey"
-            columns: ["closer_id"]
-            isOneToOne: false
-            referencedRelation: "team_members"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "upsell_orders_product_id_fkey"
-            columns: ["product_id"]
-            isOneToOne: false
-            referencedRelation: "products"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "upsell_orders_campanha_id_fkey"
-            columns: ["campanha_id"]
-            isOneToOne: false
-            referencedRelation: "upsell_campanhas"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "upsell_orders_pipe_proposta_id_fkey"
-            columns: ["pipe_proposta_id"]
-            isOneToOne: false
-            referencedRelation: "pipe_propostas"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
     }
     Views: {
       [_ in never]: never
@@ -5093,7 +5800,7 @@ export type Database = {
         Returns: string
       }
       get_ranking_data: {
-        Args: { p_month: number; p_year: number; p_organization_id?: string }
+        Args: { p_month: number; p_organization_id?: string; p_year: number }
         Returns: Json
       }
       get_user_org_role: { Args: never; Returns: string }
@@ -5136,6 +5843,10 @@ export type Database = {
         Args: { p_assigned_to: string; p_closer_id: string; p_sdr_id: string }
         Returns: boolean
       }
+      is_user_responsible_in_any_pipe: {
+        Args: { p_lead_id: string }
+        Returns: boolean
+      }
       master_add_user: {
         Args: { _email: string; _notes?: string }
         Returns: string
@@ -5165,6 +5876,49 @@ export type Database = {
       master_remove_user: {
         Args: { _target_user_id: string }
         Returns: undefined
+      }
+      match_document_chunks: {
+        Args: {
+          agent_id_filter: string
+          match_count?: number
+          query_embedding: string
+          similarity_threshold?: number
+        }
+        Returns: {
+          content: string
+          document_id: string
+          id: string
+          similarity: number
+        }[]
+      }
+      match_faqs: {
+        Args: {
+          agent_id_filter: string
+          match_count?: number
+          query_embedding: string
+          similarity_threshold?: number
+        }
+        Returns: {
+          answer: string
+          id: string
+          question: string
+          similarity: number
+        }[]
+      }
+      match_lead_memories: {
+        Args: {
+          lead_id_filter: string
+          match_count?: number
+          query_embedding: string
+          similarity_threshold?: number
+        }
+        Returns: {
+          content: string
+          id: string
+          importance: number
+          memory_type: string
+          similarity: number
+        }[]
       }
       normalize_brazilian_phone: { Args: { phone: string }; Returns: string }
       org_check_limit: {
@@ -5234,7 +5988,7 @@ export type Database = {
         | "amigavel"
         | "energetico"
         | "consultivo"
-      app_role: "admin" | "sdr" | "closer"
+      app_role: "admin" | "sdr" | "closer" | "agency" | "bdr" | "cliente"
       lead_origin:
         | "whatsapp"
         | "meta_ads"
@@ -5243,32 +5997,7 @@ export type Database = {
         | "remarketing"
         | "google_ads"
         | "cal"
-      pipe_confirmacao_status:
-        | "reuniao_marcada"
-        | "confirmar_d5"
-        | "confirmar_d3"
-        | "confirmar_d2"
-        | "confirmar_d1"
-        | "pre_confirmada"
-        | "confirmacao_no_dia"
-        | "confirmada_no_dia"
-        | "remarcar"
-        | "compareceu"
-        | "perdido"
-      pipe_propostas_status:
-        | "marcar_compromisso"
-        | "reativar"
-        | "compromisso_marcado"
-        | "esfriou"
-        | "futuro"
-        | "vendido"
-        | "perdido"
-      pipe_whatsapp_status:
-        | "novo"
-        | "abordado"
-        | "respondeu"
-        | "esfriou"
-        | "agendado"
+      org_type: "crm" | "outbound"
       product_type:
         | "mrr"
         | "projeto"
@@ -5285,11 +6014,7 @@ export type Database = {
         | "vendido"
         | "futuro"
         | "perdido"
-      upsell_potencial:
-        | "baixo"
-        | "medio"
-        | "alto"
-        | "estrategico"
+      upsell_potencial: "baixo" | "medio" | "alto" | "estrategico"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -5441,7 +6166,7 @@ export const Constants = {
         "energetico",
         "consultivo",
       ],
-      app_role: ["admin", "sdr", "closer"],
+      app_role: ["admin", "sdr", "closer", "agency", "bdr", "cliente"],
       lead_origin: [
         "whatsapp",
         "meta_ads",
@@ -5451,35 +6176,7 @@ export const Constants = {
         "google_ads",
         "cal",
       ],
-      pipe_confirmacao_status: [
-        "reuniao_marcada",
-        "confirmar_d5",
-        "confirmar_d3",
-        "confirmar_d2",
-        "confirmar_d1",
-        "pre_confirmada",
-        "confirmacao_no_dia",
-        "confirmada_no_dia",
-        "remarcar",
-        "compareceu",
-        "perdido",
-      ],
-      pipe_propostas_status: [
-        "marcar_compromisso",
-        "reativar",
-        "compromisso_marcado",
-        "esfriou",
-        "futuro",
-        "vendido",
-        "perdido",
-      ],
-      pipe_whatsapp_status: [
-        "novo",
-        "abordado",
-        "respondeu",
-        "esfriou",
-        "agendado",
-      ],
+      org_type: ["crm", "outbound"],
       product_type: [
         "mrr",
         "projeto",
@@ -5498,12 +6195,7 @@ export const Constants = {
         "futuro",
         "perdido",
       ],
-      upsell_potencial: [
-        "baixo",
-        "medio",
-        "alto",
-        "estrategico",
-      ],
+      upsell_potencial: ["baixo", "medio", "alto", "estrategico"],
     },
   },
 } as const

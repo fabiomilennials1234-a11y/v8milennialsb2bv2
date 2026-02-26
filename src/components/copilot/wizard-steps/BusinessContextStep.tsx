@@ -1,9 +1,13 @@
 /**
- * Step: Contexto do Negócio (melhorado)
+ * Step: Contexto do Negócio
  *
  * Campos obrigatórios no topo com char counters,
  * opcionais em seção colapsável "Campos avançados".
  * Placeholders variam por templateType.
+ *
+ * Funcionalidades extras:
+ * - "Importar de outro agente": copia businessContext de agente existente
+ * - "Preencher com IA": gera campos via edge function a partir de nome + descrição
  */
 
 import { useState } from "react";
@@ -18,8 +22,17 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Building2, ChevronDown, ChevronUp } from "lucide-react";
+import { Building2, ChevronDown, ChevronUp, Copy, Sparkles, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { toast } from "sonner";
+import { useCopilotAgents } from "@/hooks/useCopilotAgents";
 import type { CopilotWizardData } from "@/types/copilot";
 
 /** Placeholders por template */
@@ -106,23 +119,280 @@ function CharCounter({ value, min }: { value: string; min: number }) {
   );
 }
 
+/** Dialog para importar businessContext de outro agente */
+function ImportFromAgentDialog({
+  onImport,
+}: {
+  onImport: (bc: Record<string, unknown>) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const { data: agents = [], isLoading } = useCopilotAgents();
+
+  const agentsWithContext = agents.filter(
+    (a) => a.business_context && (a.business_context as any)?.companyName
+  );
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button type="button" variant="outline" size="sm" className="gap-2">
+          <Copy className="w-3.5 h-3.5" />
+          Importar de outro agente
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Importar Contexto do Negócio</DialogTitle>
+        </DialogHeader>
+        {isLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+          </div>
+        ) : agentsWithContext.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-4">
+            Nenhum agente com contexto de negócio encontrado.
+          </p>
+        ) : (
+          <div className="space-y-2 max-h-72 overflow-y-auto">
+            {agentsWithContext.map((agent) => {
+              const bc = agent.business_context as any;
+              return (
+                <button
+                  key={agent.id}
+                  type="button"
+                  className="w-full text-left p-3 rounded-lg border hover:bg-muted/50 transition-colors"
+                  onClick={() => {
+                    onImport(bc);
+                    setOpen(false);
+                    toast.success(`Contexto importado de "${agent.name}"`);
+                  }}
+                >
+                  <p className="font-medium text-sm">{agent.name}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
+                    {bc?.companyName} · {bc?.productSummary?.slice(0, 60)}…
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function BusinessContextStep() {
-  const { control, watch } = useFormContext<CopilotWizardData>();
+  const { control, watch, setValue } = useFormContext<CopilotWizardData>();
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [showAIDialog, setShowAIDialog] = useState(false);
+  const [aiDescription, setAiDescription] = useState("");
+  const [aiSegment, setAiSegment] = useState("");
+
   const templateType = watch("templateType");
   const ph = PLACEHOLDERS[templateType] || DEFAULT_PLACEHOLDERS;
+  const companyName = watch("businessContext.companyName");
+  const existingProductSummary = watch("businessContext.productSummary");
+
+  /** Abre o dialog pré-preenchendo com o que já existe no form */
+  const openAIDialog = () => {
+    if (!companyName || companyName.trim().length < 2) {
+      toast.error("Informe o nome da empresa antes de gerar com IA");
+      return;
+    }
+    // Pré-preenche com o que já foi digitado
+    setAiDescription(existingProductSummary || "");
+    setAiSegment("");
+    setShowAIDialog(true);
+  };
+
+  /** Chama a edge function com description e segment como contexto */
+  const handleGenerateWithAI = async () => {
+    setIsGenerating(true);
+    setShowAIDialog(false);
+    try {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+      const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
+
+      const response = await fetch(
+        `${supabaseUrl}/functions/v1/generate-business-context`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${anonKey}`,
+            apikey: anonKey,
+          },
+          body: JSON.stringify({
+            companyName: companyName.trim(),
+            templateType: templateType || "sdr",
+            description: aiDescription.trim() || undefined,
+            segment: aiSegment.trim() || undefined,
+          }),
+        }
+      );
+
+      let result: Record<string, unknown>;
+      try {
+        result = await response.json();
+      } catch {
+        throw new Error(`Resposta inválida do servidor (HTTP ${response.status})`);
+      }
+
+      if (!response.ok) {
+        const errMsg = (result?.error as string) || (result?.message as string) || `Erro HTTP ${response.status}`;
+        throw new Error(errMsg);
+      }
+
+      const bc = result?.businessContext as Record<string, unknown> | undefined;
+      if (!bc) throw new Error("Resposta vazia da IA");
+
+      applyBusinessContext(bc);
+      toast.success("Contexto gerado com IA! Revise e ajuste os campos.");
+    } catch (err: any) {
+      console.error("[BusinessContext] Erro ao gerar com IA:", err);
+      toast.error("Erro ao gerar com IA", {
+        description: err?.message || "Tente novamente em alguns segundos.",
+      });
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  /** Normaliza valor para string (o modelo às vezes retorna arrays) */
+  const normalizeToString = (value: unknown): string => {
+    if (typeof value === "string") return value;
+    if (Array.isArray(value)) return value.join(". ");
+    if (value != null) return String(value);
+    return "";
+  };
+
+  /** Aplica um objeto de businessContext no form (apenas campos não-vazios) */
+  const applyBusinessContext = (bc: Record<string, unknown>) => {
+    const fields = [
+      "productSummary",
+      "idealCustomerProfile",
+      "valueProps",
+      "customerPains",
+      "primaryCta",
+      "serviceRegion",
+      "socialProof",
+      "pricingPolicy",
+      "commercialTerms",
+      "businessHoursSla",
+      "compliancePolicy",
+    ] as const;
+    fields.forEach((key) => {
+      const str = normalizeToString(bc[key]);
+      if (str.trim().length > 0) {
+        setValue(`businessContext.${key}`, str, { shouldDirty: true });
+      }
+    });
+    const companyStr = normalizeToString(bc.companyName);
+    if (companyStr.trim().length > 0) {
+      setValue("businessContext.companyName", companyStr, { shouldDirty: true });
+    }
+  };
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold mb-2 flex items-center gap-2">
-          <Building2 className="w-6 h-6 text-primary" />
-          Contexto do Negócio
-        </h2>
-        <p className="text-muted-foreground">
-          Essas informações deixam o agente mais humano e consistente. Os campos
-          marcados com * são os mais impactantes no prompt.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold mb-2 flex items-center gap-2">
+            <Building2 className="w-6 h-6 text-primary" />
+            Contexto do Negócio
+          </h2>
+          <p className="text-muted-foreground">
+            Essas informações deixam o agente mais humano e consistente. Os campos
+            marcados com * são os mais impactantes no prompt.
+          </p>
+        </div>
+        <div className="flex flex-col sm:flex-row gap-2 flex-shrink-0">
+          <ImportFromAgentDialog onImport={applyBusinessContext} />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={openAIDialog}
+            disabled={isGenerating || !companyName || companyName.trim().length < 2}
+          >
+            {isGenerating ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Sparkles className="w-3.5 h-3.5" />
+            )}
+            {isGenerating ? "Gerando..." : "Preencher com IA"}
+          </Button>
+
+          {/* Dialog: contexto para a IA */}
+          <Dialog open={showAIDialog} onOpenChange={setShowAIDialog}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-primary" />
+                  Contextualizar IA
+                </DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 pt-1">
+                <p className="text-sm text-muted-foreground">
+                  Quanto mais contexto você fornecer, mais preciso e personalizado será o resultado.
+                </p>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">
+                    O que sua empresa/produto faz? *
+                  </label>
+                  <Textarea
+                    placeholder={`Ex: Somos uma plataforma SaaS de automação de vendas para times B2B. Ajudamos empresas a prospectar clientes via WhatsApp e CRM integrado, com IA para qualificação de leads.`}
+                    rows={4}
+                    value={aiDescription}
+                    onChange={(e) => setAiDescription(e.target.value)}
+                    className="resize-none"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Descreva o produto/serviço, público-alvo e principais diferenciais.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">
+                    Segmento de mercado{" "}
+                    <span className="text-muted-foreground font-normal">(opcional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ex: SaaS B2B, Consultoria RH, Varejo, Saúde..."
+                    value={aiSegment}
+                    onChange={(e) => setAiSegment(e.target.value)}
+                    className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowAIDialog(false)}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="gap-2"
+                    onClick={handleGenerateWithAI}
+                    disabled={aiDescription.trim().length < 10}
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    Gerar com IA
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       {/* === Campos obrigatórios (high impact) === */}

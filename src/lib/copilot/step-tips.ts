@@ -95,4 +95,12 @@ export const STEP_TIPS: Record<string, StepTip> = {
     title: "Permissões definem os poderes",
     body: "Cada capacidade ativada dá ao agente uma ferramenta real no runtime. Se 'Agendar Reuniões' está desligado, o agente nem tenta agendar. Menos permissões = agente mais focado e previsível.",
   },
+  kanbanRulesReview: {
+    title: "Revise antes de finalizar",
+    body: "Cada regra define o comportamento do agente em uma etapa específica do funil. Desative etapas que não existem no seu processo. Quanto mais precisos os objetivos, melhor o agente performa.",
+  },
+  testConversation: {
+    title: "Teste antes de publicar",
+    body: "Esta simulação usa exatamente o prompt gerado. Se o agente não responder como esperado, volte e ajuste o contexto, objetivo ou exemplos.",
+  },
 };

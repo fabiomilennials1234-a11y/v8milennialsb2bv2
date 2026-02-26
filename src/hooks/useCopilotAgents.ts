@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { generatePrompt, saveCopilotSystemPrompt, regenerateAndSavePrompt, computePromptHash } from "./useCopilotPromptBuilder";
+import { parseCustomInstructions, serializeCustomInstructions } from "@/lib/copilot/custom-instructions-utils";
 import type {
   CopilotAgent,
   CopilotAgentInsert,
@@ -22,6 +23,7 @@ import type {
 } from "@/types/copilot";
 import { followupRuleToDB } from "./useAgentFollowupRules";
 import type { AgentDocument } from "./useAgentDocuments";
+import { useCurrentTeamMember } from "./useTeamMembers";
 
 /**
  * Payload para atualização de configuração de pipeline
@@ -34,30 +36,6 @@ export interface UpdatePipelinePayload {
   autoMoveOnQualify: boolean;
   autoMoveOnObjective: boolean;
   moveRules: MoveRule[];
-}
-
-/**
- * Hook auxiliar para buscar team_member do usuário atual
- */
-function useCurrentTeamMember() {
-  const { user } = useAuth();
-
-  return useQuery({
-    queryKey: ["team_member", user?.id],
-    queryFn: async () => {
-      if (!user?.id) return null;
-
-      const { data, error } = await supabase
-        .from("team_members")
-        .select("*")
-        .eq("user_id", user.id)
-        .maybeSingle();
-
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!user?.id,
-  });
 }
 
 // =====================================================
@@ -216,6 +194,13 @@ export function useCreateCopilotAgent() {
           .insert(faqsToInsert);
 
         if (faqsError) throw faqsError;
+      }
+
+      // 2b. Item #6: Gerar embeddings semânticos das FAQs (fire-and-forget)
+      if (payload.faqs.length > 0) {
+        supabase.functions
+          .invoke("generate-faq-embeddings", { body: { agentId: agent.id } })
+          .catch((e: unknown) => console.warn("[FAQ Embeddings] Non-fatal:", e));
       }
 
       // 3. Criar regras do Kanban (se houver)
@@ -780,7 +765,7 @@ export function useCopilotAgentForEdit(agentId?: string) {
           sendDays: r.send_days || [],
           timezone: r.timezone,
         })),
-        customInstructions: agent.custom_instructions || "",
+        customInstructions: parseCustomInstructions(agent.custom_instructions),
         knowledgeBaseFiles: [], // Arquivos novos serão adicionados pelo usuário
         canQualifyLead: (agent as any).can_qualify_lead ?? true,
         canScheduleMeeting: (agent as any).can_schedule_meeting ?? true,
@@ -793,6 +778,7 @@ export function useCopilotAgentForEdit(agentId?: string) {
         maxConversationTurns: (agent as any).max_conversation_turns ?? 20,
         responseDelayMs: (agent as any).response_delay_ms ?? 1000,
         attendUnknownContacts: (agent as any).attend_unknown_contacts ?? false,
+        llmTemperatureMode: ((agent as any).llm_temperature_mode as 'criativo' | 'balanceado' | 'preciso') ?? 'balanceado',
       };
 
       return { wizardData, existingDocuments: documents };
@@ -838,7 +824,10 @@ export function useUpdateCopilotAgentFromWizard() {
         objective_composite: data.objectiveComposite?.mission
           ? data.objectiveComposite
           : null,
-        custom_instructions: data.customInstructions || null,
+        custom_instructions: serializeCustomInstructions(
+          data.customInstructions?.dos || "",
+          data.customInstructions?.donts || ""
+        ),
         business_context: data.businessContext || {},
         conversation_style: data.conversationStyle || {},
         qualification_rules: data.qualification || {},
@@ -874,6 +863,7 @@ export function useUpdateCopilotAgentFromWizard() {
       agentUpdate.can_move_cards = data.canMoveCards ?? false;
       agentUpdate.max_conversation_turns = data.maxConversationTurns ?? 20;
       agentUpdate.response_delay_ms = data.responseDelayMs ?? 1000;
+      (agentUpdate as any).llm_temperature_mode = data.llmTemperatureMode ?? 'balanceado';
 
       const { data: updatedAgent, error: agentError } = await supabase
         .from("copilot_agents")
@@ -903,6 +893,13 @@ export function useUpdateCopilotAgentFromWizard() {
           .insert(faqsToInsert);
 
         if (faqsError) throw faqsError;
+      }
+
+      // 2b. Item #6: Gerar embeddings semânticos das FAQs (fire-and-forget)
+      if (data.faqs && data.faqs.length > 0) {
+        supabase.functions
+          .invoke("generate-faq-embeddings", { body: { agentId } })
+          .catch((e: unknown) => console.warn("[FAQ Embeddings] Non-fatal:", e));
       }
 
       // 3. Sincronizar Kanban Rules (delete all + insert)

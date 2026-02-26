@@ -7,6 +7,7 @@
  */
 
 import type { CopilotWizardData, CopilotAgent, CopilotAgentFaq } from "@/types/copilot";
+import { serializeCustomInstructions } from "@/lib/copilot/custom-instructions-utils";
 
 /**
  * Converte dados do wizard para um pseudo-CopilotAgent que generatePrompt() aceita.
@@ -27,7 +28,10 @@ export function mapWizardDataToAgentPreview(data: CopilotWizardData): {
     objective_composite: data.objectiveComposite?.mission
       ? data.objectiveComposite
       : null,
-    custom_instructions: data.customInstructions || null,
+    custom_instructions: serializeCustomInstructions(
+      data.customInstructions?.dos || "",
+      data.customInstructions?.donts || ""
+    ),
     business_context: data.businessContext || {},
     conversation_style: data.conversationStyle || {},
     qualification_rules: data.qualification || {},

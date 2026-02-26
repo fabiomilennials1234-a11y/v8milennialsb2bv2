@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { generateEmbeddingsBatch, chunkText } from "../_shared/embeddings.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -190,6 +191,17 @@ REGRAS:
       })
       .eq("id", documentId);
 
+    // 8. Item #5 RAG: gerar chunks + embeddings do conteúdo original
+    //    (fire-and-forget: não bloqueia o retorno ao usuário)
+    generateAndStoreChunkEmbeddings(
+      supabase,
+      OPENROUTER_API_KEY,
+      documentId,
+      doc.agent_id,
+      doc.organization_id,
+      textContent.substring(0, 60000) // max 60k chars para chunking
+    ).catch(e => console.warn("[process-agent-document] Chunk embeddings failed (non-fatal):", e));
+
     return new Response(
       JSON.stringify({ success: true, summary: summary.trim() }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -202,3 +214,54 @@ REGRAS:
     );
   }
 });
+
+/**
+ * Item #5 RAG: Divide o conteúdo em chunks, gera embeddings e salva na tabela
+ * copilot_agent_document_chunks. Chamada em background (fire-and-forget).
+ */
+async function generateAndStoreChunkEmbeddings(
+  supabase: ReturnType<typeof createClient>,
+  apiKey: string,
+  documentId: string,
+  agentId: string,
+  organizationId: string,
+  textContent: string
+): Promise<void> {
+  // Limpar chunks antigos do documento (re-processamento)
+  await supabase
+    .from("copilot_agent_document_chunks")
+    .delete()
+    .eq("document_id", documentId);
+
+  const chunks = chunkText(textContent);
+  if (chunks.length === 0) return;
+
+  console.log(`[RAG] Gerando embeddings para ${chunks.length} chunks do documento ${documentId}`);
+
+  // Gerar embeddings em batch
+  const embeddings = await generateEmbeddingsBatch(chunks, apiKey);
+
+  // Montar linhas para inserção
+  const rows = chunks.map((content, i) => ({
+    document_id: documentId,
+    agent_id: agentId,
+    organization_id: organizationId,
+    chunk_index: i,
+    content,
+    embedding: `[${embeddings[i].join(",")}]`,
+  }));
+
+  // Inserir em batches de 50
+  const INSERT_BATCH = 50;
+  for (let i = 0; i < rows.length; i += INSERT_BATCH) {
+    const batch = rows.slice(i, i + INSERT_BATCH);
+    const { error } = await supabase
+      .from("copilot_agent_document_chunks")
+      .insert(batch);
+    if (error) {
+      console.error(`[RAG] Erro ao inserir chunks ${i}-${i + INSERT_BATCH}:`, error.message);
+    }
+  }
+
+  console.log(`[RAG] ${rows.length} chunks indexados para documento ${documentId}`);
+}

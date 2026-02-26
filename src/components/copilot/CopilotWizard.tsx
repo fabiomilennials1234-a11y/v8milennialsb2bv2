@@ -18,7 +18,7 @@ import { useForm, FormProvider } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronLeft, ChevronRight, Check, X, Eye, Info, Loader2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Check, X, Eye, Info, Loader2, CheckCircle2, Rocket, Settings, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -35,6 +35,7 @@ import { getWizardConfig, STEP_REGISTRY } from "./wizard-configs";
 import type { WizardTypeConfig } from "./wizard-configs";
 import { PromptPreviewSheet } from "./PromptPreviewSheet";
 import { mapWizardDataToAgentPreview } from "@/lib/copilot/prompt-utils";
+import { serializeCustomInstructions } from "@/lib/copilot/custom-instructions-utils";
 import { generatePrompt } from "@/hooks/useCopilotPromptBuilder";
 import {
   computePromptQuality,
@@ -84,6 +85,7 @@ const wizardSchema = z.object({
     closingStyle: z.string().optional().or(z.literal("")),
     whatsappGuidelines: z.string().optional().or(z.literal("")),
     humanizationTips: z.string().optional().or(z.literal("")),
+    hideAiIdentity: z.boolean().optional().default(false),
   }),
   qualification: z.object({
     requiredFields: z.array(z.string()).min(1, "Selecione ao menos 1 campo obrigatório"),
@@ -95,7 +97,7 @@ const wizardSchema = z.object({
       lead: z.string().min(1, "Mensagem do lead obrigatória"),
       agent: z.string().min(1, "Resposta do agente obrigatória"),
     })
-  ).min(1, "Adicione pelo menos 1 exemplo"),
+  ).optional().default([]),
   availability: z.object({
     mode: z.enum(["always", "scheduled"]),
     timezone: z.string().min(1, "Informe o fuso horário"),
@@ -116,7 +118,17 @@ const wizardSchema = z.object({
     success_criteria: z.string().min(10, "Critério de sucesso deve ter pelo menos 10 caracteres"),
     limits: z.string().optional().or(z.literal("")),
   }),
-  customInstructions: z.string().max(2000, "Máximo 2000 caracteres").optional().or(z.literal("")),
+  customInstructions: z.preprocess(
+    (v) => {
+      if (v === undefined || v === null) return { dos: "", donts: "" };
+      if (typeof v === "string") return { dos: v, donts: "" };
+      return v;
+    },
+    z.object({
+      dos: z.string().max(2000, "Máximo 2000 caracteres").default(""),
+      donts: z.string().max(2000, "Máximo 2000 caracteres").default(""),
+    })
+  ).default({ dos: "", donts: "" }),
   knowledgeBaseFiles: z.array(z.any()).optional().default([]),
   canQualifyLead: z.boolean().default(true),
   canScheduleMeeting: z.boolean().default(true),
@@ -127,7 +139,8 @@ const wizardSchema = z.object({
   canTransferHuman: z.boolean().default(true),
   canMoveCards: z.boolean().default(false),
   maxConversationTurns: z.number().min(5).max(50).default(20),
-  responseDelayMs: z.number().min(0).max(5000).default(1000),
+  responseDelayMs: z.number().min(0).max(45000).default(1000),
+  llmTemperatureMode: z.enum(['criativo', 'balanceado', 'preciso']).default('balanceado'),
   kanbanRules: z.array(z.any()),
   followupRules: z.array(z.any()).optional().default([]),
   attendUnknownContacts: z.boolean().optional().default(false),
@@ -252,7 +265,7 @@ const BASE_DEFAULTS: CopilotWizardData = {
     optionalFields: [],
     notes: "",
   },
-  examples: [{ lead: "", agent: "" }],
+  examples: [],
   availability: {
     mode: "always",
     timezone: "America/Sao_Paulo",
@@ -263,7 +276,7 @@ const BASE_DEFAULTS: CopilotWizardData = {
   responseDelaySeconds: 0,
   mainObjective: "",
   objectiveComposite: { mission: "", success_criteria: "", limits: "" },
-  customInstructions: "",
+  customInstructions: { dos: "", donts: "" },
   knowledgeBaseFiles: [],
   canQualifyLead: true,
   canScheduleMeeting: true,
@@ -275,6 +288,7 @@ const BASE_DEFAULTS: CopilotWizardData = {
   canMoveCards: false,
   maxConversationTurns: 20,
   responseDelayMs: 1000,
+  llmTemperatureMode: 'balanceado' as const,
   kanbanRules: [],
   followupRules: [],
   attendUnknownContacts: false,
@@ -351,7 +365,11 @@ export function CopilotWizard() {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [existingDocuments, setExistingDocuments] = useState<AgentDocument[]>([]);
   const [documentsToRemove, setDocumentsToRemove] = useState<Array<{ documentId: string; filePath: string }>>([]);
+  const [visitedSteps, setVisitedSteps] = useState<Set<number>>(new Set([0]));
+  const [createdAgentId, setCreatedAgentId] = useState<string | null>(null);
   const editDataLoaded = useRef(false);
+  const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const DRAFT_KEY = "copilot_wizard_draft";
   const navigate = useNavigate();
   const createAgent = useCreateCopilotAgent();
   const updateAgent = useUpdateCopilotAgentFromWizard();
@@ -441,12 +459,79 @@ export function CopilotWizard() {
     }
   }, [resolvedSteps.length, currentStep]);
 
+  // Resetar steps visitados quando config muda
+  useEffect(() => {
+    setVisitedSteps(new Set([0]));
+    setCurrentStep(0);
+  }, [activeConfig?.type]);
+
   // Observar dados do formulário para quality score
   const watchedData = watch();
 
-  // Quality score computado a partir dos dados do form
+  // Auto-save draft no localStorage (apenas modo criação, debounced 1s)
+  useEffect(() => {
+    if (isEditMode || !activeConfig) return;
+    if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
+    draftTimerRef.current = setTimeout(() => {
+      try {
+        const values = getValues();
+        if (values.templateType) {
+          localStorage.setItem(DRAFT_KEY, JSON.stringify(values));
+        }
+      } catch {/* ignore storage errors */}
+    }, 1000);
+    return () => {
+      if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
+    };
+  }, [watchedData, isEditMode, activeConfig, getValues]);
+
+  // Restaurar rascunho ao selecionar template (apenas criação)
+  useEffect(() => {
+    if (isEditMode || !activeConfig) return;
+    try {
+      const saved = localStorage.getItem(DRAFT_KEY);
+      if (!saved) return;
+      const parsed = JSON.parse(saved) as CopilotWizardData;
+      if (parsed.templateType !== activeConfig.type) return;
+      // Só restaura se há dados significativos (nome preenchido)
+      if (!parsed.name || parsed.name.trim().length < 3) return;
+      // Normalizar customInstructions para o novo formato (migração de string → objeto)
+      if (typeof (parsed as any).customInstructions === "string") {
+        const raw = (parsed as any).customInstructions as string;
+        parsed.customInstructions = { dos: raw, donts: "" };
+      } else if (!parsed.customInstructions || typeof parsed.customInstructions !== "object") {
+        parsed.customInstructions = { dos: "", donts: "" };
+      }
+      reset(parsed, { keepDirtyValues: false });
+      toast.info("Rascunho restaurado", {
+        description: `Continuando de onde você parou: "${parsed.name}"`,
+        action: {
+          label: "Descartar",
+          onClick: () => {
+            localStorage.removeItem(DRAFT_KEY);
+            const config = getWizardConfig(activeConfig.type);
+            if (config) {
+              reset(
+                { ...BASE_DEFAULTS, ...config.defaults, templateType: activeConfig.type,
+                  kanbanRules: config.suggestedKanbanRules.map((r) => ({
+                    pipeType: r.pipe_type, stageName: r.stage_name,
+                    goal: r.goal, behavior: r.behavior,
+                    allowedActions: r.allowed_actions, forbiddenActions: r.forbidden_actions,
+                  })),
+                },
+                { keepDirtyValues: false }
+              );
+            }
+          },
+        },
+      });
+    } catch {/* ignore */}
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeConfig?.type, isEditMode]);
+
+  // Quality score computado a partir dos dados do form (template-aware)
   const quality = useMemo(
-    () => computePromptQuality(watchedData),
+    () => computePromptQuality(watchedData, watchedData.templateType),
     [watchedData]
   );
 
@@ -488,7 +573,9 @@ export function CopilotWizard() {
     const isValid = await trigger(fieldToValidate as any);
 
     if (isValid && currentStep < totalSteps - 1) {
-      setCurrentStep((prev) => prev + 1);
+      const nextStep = currentStep + 1;
+      setCurrentStep(nextStep);
+      setVisitedSteps((prev) => new Set([...prev, nextStep]));
     }
   }, [currentStepData, currentStep, totalSteps, trigger]);
 
@@ -589,7 +676,10 @@ export function CopilotWizard() {
         objective_composite: data.objectiveComposite?.mission
           ? data.objectiveComposite
           : null,
-        custom_instructions: data.customInstructions || null,
+        custom_instructions: serializeCustomInstructions(
+          data.customInstructions?.dos || "",
+          data.customInstructions?.donts || ""
+        ),
         business_context: data.businessContext || {},
         conversation_style: data.conversationStyle || {},
         qualification_rules: data.qualification || {},
@@ -627,6 +717,7 @@ export function CopilotWizard() {
       agentPayload.can_move_cards = data.canMoveCards ?? false;
       agentPayload.max_conversation_turns = data.maxConversationTurns ?? 20;
       agentPayload.response_delay_ms = data.responseDelayMs ?? 1000;
+      agentPayload.llm_temperature_mode = data.llmTemperatureMode ?? 'balanceado';
 
       // Filtrar regras desativadas pelo usuário no funil de confirmação
       const activeKanbanRules = (data.kanbanRules || [])
@@ -656,13 +747,9 @@ export function CopilotWizard() {
         }
       }
 
-      setTimeout(() => {
-        try {
-          navigate("/copilot");
-        } catch (navError) {
-          window.location.href = "/copilot";
-        }
-      }, 500);
+      // Limpar draft e mostrar tela de sucesso
+      try { localStorage.removeItem(DRAFT_KEY); } catch {/* ignore */}
+      setCreatedAgentId(createdAgent?.id || "new");
     } catch (error: any) {
       let errorMessage = isEditMode
         ? "Erro desconhecido ao atualizar o agente"
@@ -751,6 +838,102 @@ export function CopilotWizard() {
     );
   }
 
+  // Tela de sucesso após criação
+  if (createdAgentId) {
+    return (
+      <div className="min-h-screen bg-background p-6">
+        <div className="max-w-2xl mx-auto">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.4 }}
+            className="text-center py-12"
+          >
+            <div className="flex justify-center mb-6">
+              <div className="w-20 h-20 rounded-full bg-green-500/10 border-2 border-green-500/30 flex items-center justify-center">
+                <CheckCircle2 className="w-10 h-10 text-green-500" />
+              </div>
+            </div>
+            <h1 className="text-3xl font-bold mb-3">Copilot criado com sucesso!</h1>
+            <p className="text-muted-foreground text-lg mb-10">
+              Seu agente está pronto. Configure o WhatsApp e ative para começar.
+            </p>
+
+            <div className="grid gap-4 mb-10">
+              <Card className="p-5 text-left border-primary/20 bg-primary/5">
+                <div className="flex items-start gap-4">
+                  <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                    <span className="text-primary font-bold text-sm">1</span>
+                  </div>
+                  <div>
+                    <h3 className="font-semibold mb-1">Conectar ao WhatsApp</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Vincule um número ao seu agente na aba de configurações do Copilot.
+                    </p>
+                  </div>
+                </div>
+              </Card>
+
+              <Card className="p-5 text-left border-primary/20 bg-primary/5">
+                <div className="flex items-start gap-4">
+                  <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                    <span className="text-primary font-bold text-sm">2</span>
+                  </div>
+                  <div>
+                    <h3 className="font-semibold mb-1">Ativar o agente</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Ative o agente no painel de Copilots para ele começar a responder automaticamente.
+                    </p>
+                  </div>
+                </div>
+              </Card>
+
+              <Card className="p-5 text-left">
+                <div className="flex items-start gap-4">
+                  <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+                    <span className="text-muted-foreground font-bold text-sm">3</span>
+                  </div>
+                  <div>
+                    <h3 className="font-semibold mb-1">Monitorar conversas</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Acompanhe as interações do agente e refine as respostas conforme necessário.
+                    </p>
+                  </div>
+                </div>
+              </Card>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              <Button
+                variant="outline"
+                onClick={() => navigate("/copilot")}
+                className="gap-2"
+              >
+                Ver todos os Copilots
+                <ArrowRight className="w-4 h-4" />
+              </Button>
+              <Button
+                onClick={() => navigate(`/copilot/${createdAgentId}/edit`)}
+                className="gap-2"
+              >
+                <Settings className="w-4 h-4" />
+                Configurar agente
+              </Button>
+              <Button
+                variant="default"
+                className="gap-2 bg-green-600 hover:bg-green-700"
+                onClick={() => navigate("/copilot")}
+              >
+                <Rocket className="w-4 h-4" />
+                Ativar agora
+              </Button>
+            </div>
+          </motion.div>
+        </div>
+      </div>
+    );
+  }
+
   // Fase 2: Wizard config-driven
   return (
     <div className="min-h-screen bg-background p-6">
@@ -794,35 +977,42 @@ export function CopilotWizard() {
 
         {/* Steps Indicator */}
         <div className="flex justify-between mb-8 overflow-x-auto pb-2">
-          {resolvedSteps.map((step, index) => (
-            <div key={step.id} className="flex flex-col items-center gap-2">
-              <motion.div
-                className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all ${
-                  index < currentStep
-                    ? "bg-primary border-primary text-primary-foreground"
-                    : index === currentStep
-                    ? "border-primary text-primary"
-                    : "border-muted text-muted-foreground"
-                }`}
-                whileHover={{ scale: 1.1 }}
-              >
-                {index < currentStep ? (
-                  <Check className="w-5 h-5" />
-                ) : (
-                  <span className="text-sm font-medium">{index + 1}</span>
-                )}
-              </motion.div>
-              <span
-                className={`text-xs text-center max-w-[80px] ${
-                  index === currentStep
-                    ? "text-foreground font-medium"
-                    : "text-muted-foreground"
-                }`}
-              >
-                {step.title}
-              </span>
-            </div>
-          ))}
+          {resolvedSteps.map((step, index) => {
+            const isAccessible = isEditMode || visitedSteps.has(index);
+            return (
+              <div key={step.id} className="flex flex-col items-center gap-2">
+                <motion.div
+                  className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all ${
+                    isAccessible ? "cursor-pointer" : "cursor-default"
+                  } ${
+                    index < currentStep
+                      ? "bg-primary border-primary text-primary-foreground"
+                      : index === currentStep
+                      ? "border-primary text-primary"
+                      : "border-muted text-muted-foreground"
+                  }`}
+                  whileHover={{ scale: isAccessible ? 1.1 : 1 }}
+                  onClick={() => isAccessible && setCurrentStep(index)}
+                  title={isAccessible ? `Ir para: ${step.title}` : undefined}
+                >
+                  {index < currentStep ? (
+                    <Check className="w-5 h-5" />
+                  ) : (
+                    <span className="text-sm font-medium">{index + 1}</span>
+                  )}
+                </motion.div>
+                <span
+                  className={`text-xs text-center max-w-[80px] ${
+                    index === currentStep
+                      ? "text-foreground font-medium"
+                      : "text-muted-foreground"
+                  }`}
+                >
+                  {step.title}
+                </span>
+              </div>
+            );
+          })}
         </div>
 
         {/* Form Content */}
@@ -912,7 +1102,24 @@ export function CopilotWizard() {
                   <Button
                     type="button"
                     disabled={isSaving}
-                    onClick={() => handleSubmit(onSubmit)()}
+                    onClick={() => handleSubmit(onSubmit, (errors) => {
+                      const keys = Object.keys(errors);
+                      const labels: Record<string, string> = {
+                        businessContext: "Contexto do Negócio",
+                        objectiveComposite: "Objetivo",
+                        examples: "Exemplos",
+                        skills: "Habilidades",
+                        qualification: "Qualificação",
+                        mainObjective: "Objetivo principal",
+                        name: "Nome",
+                        availability: "Disponibilidade",
+                      };
+                      const readable = keys.slice(0, 4).map(k => labels[k] || k).join(", ");
+                      toast.error("Campos obrigatórios não preenchidos", {
+                        description: `Verifique: ${readable}${keys.length > 4 ? " e outros..." : ""}`,
+                        duration: 6000,
+                      });
+                    })()}
                     className="bg-primary hover:bg-primary/90 text-primary-foreground"
                   >
                     {isSaving ? (

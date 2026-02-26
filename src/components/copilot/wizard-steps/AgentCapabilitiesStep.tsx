@@ -17,6 +17,9 @@ import {
   HelpCircle,
   Database,
   Shield,
+  Sparkles,
+  Scale,
+  Target,
 } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
@@ -92,11 +95,39 @@ const CAPABILITIES = [
 
 type CapabilityKey = (typeof CAPABILITIES)[number]["key"];
 
+const TEMPERATURE_OPTIONS = [
+  {
+    value: 'criativo' as const,
+    label: 'Criativo',
+    description: 'Respostas mais variadas, originais e expressivas. Ideal para vendas e prospecção.',
+    icon: Sparkles,
+    color: 'text-purple-500',
+    bgActive: 'bg-purple-500/10 border-purple-500/60',
+  },
+  {
+    value: 'balanceado' as const,
+    label: 'Balanceado',
+    description: 'Equilíbrio entre criatividade e precisão. Funciona bem na maioria dos cenários.',
+    icon: Scale,
+    color: 'text-blue-500',
+    bgActive: 'bg-blue-500/10 border-blue-500/60',
+  },
+  {
+    value: 'preciso' as const,
+    label: 'Preciso',
+    description: 'Respostas mais diretas e consistentes. Ideal para FAQ, agendamento e suporte.',
+    icon: Target,
+    color: 'text-green-500',
+    bgActive: 'bg-green-500/10 border-green-500/60',
+  },
+] as const;
+
 export function AgentCapabilitiesStep() {
   const { setValue, watch } = useFormContext<CopilotWizardData>();
 
   const maxTurns = watch("maxConversationTurns") ?? 20;
   const delayMs = watch("responseDelayMs") ?? 1000;
+  const temperatureMode = watch("llmTemperatureMode") ?? "balanceado";
 
   const toggleCapability = (key: CapabilityKey) => {
     const current = watch(key);
@@ -164,6 +195,50 @@ export function AgentCapabilitiesStep() {
             </motion.button>
           );
         })}
+      </div>
+
+      {/* Temperatura do LLM — item #7 */}
+      <div className="space-y-4 border-t pt-6">
+        <div>
+          <h3 className="text-lg font-semibold flex items-center gap-2">
+            <Sparkles className="w-5 h-5 text-primary" />
+            Estilo de Raciocínio
+          </h3>
+          <p className="text-sm text-muted-foreground mt-1">
+            Define como o agente equilibra criatividade e precisão nas respostas.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {TEMPERATURE_OPTIONS.map((opt) => {
+            const Icon = opt.icon;
+            const isSelected = temperatureMode === opt.value;
+            return (
+              <motion.button
+                key={opt.value}
+                type="button"
+                onClick={() => setValue("llmTemperatureMode", opt.value, { shouldDirty: true })}
+                className={`flex flex-col items-start gap-2 p-4 rounded-lg border-2 text-left transition-all ${
+                  isSelected ? opt.bgActive : "border-muted bg-muted/20 opacity-60"
+                }`}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+              >
+                <div className={`p-2 rounded-md ${isSelected ? "bg-background/50" : "bg-muted/50"}`}>
+                  <Icon className={`w-5 h-5 ${isSelected ? opt.color : "text-muted-foreground"}`} />
+                </div>
+                <div>
+                  <span className="font-semibold text-sm block">{opt.label}</span>
+                  <p className="text-xs text-muted-foreground mt-0.5">{opt.description}</p>
+                </div>
+                {isSelected && (
+                  <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-primary/20 text-primary self-end">
+                    Selecionado
+                  </span>
+                )}
+              </motion.button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Configurações avançadas */}

@@ -18,9 +18,9 @@ create table if not exists public.google_calendar_sharing (
   constraint no_self_sharing check (owner_id <> viewer_id)
 );
 
-create index idx_calendar_sharing_org      on public.google_calendar_sharing(organization_id);
-create index idx_calendar_sharing_owner    on public.google_calendar_sharing(owner_id);
-create index idx_calendar_sharing_viewer   on public.google_calendar_sharing(viewer_id);
+create index if not exists idx_calendar_sharing_org      on public.google_calendar_sharing(organization_id);
+create index if not exists idx_calendar_sharing_owner    on public.google_calendar_sharing(owner_id);
+create index if not exists idx_calendar_sharing_viewer   on public.google_calendar_sharing(viewer_id);
 
 alter table public.google_calendar_sharing enable row level security;
 
@@ -74,11 +74,11 @@ create table if not exists public.google_calendar_events_cache (
   updated_at          timestamptz not null default now()
 );
 
-create index idx_cal_cache_user          on public.google_calendar_events_cache(user_id);
-create index idx_cal_cache_org           on public.google_calendar_events_cache(organization_id);
-create index idx_cal_cache_start         on public.google_calendar_events_cache(start_at);
-create index idx_cal_cache_lead          on public.google_calendar_events_cache(lead_id);
-create index idx_cal_cache_origin        on public.google_calendar_events_cache(origin);
+create index if not exists idx_cal_cache_user          on public.google_calendar_events_cache(user_id);
+create index if not exists idx_cal_cache_org           on public.google_calendar_events_cache(organization_id);
+create index if not exists idx_cal_cache_start         on public.google_calendar_events_cache(start_at);
+create index if not exists idx_cal_cache_lead          on public.google_calendar_events_cache(lead_id);
+create index if not exists idx_cal_cache_origin        on public.google_calendar_events_cache(origin);
 
 alter table public.google_calendar_events_cache enable row level security;
 
@@ -133,10 +133,10 @@ create table if not exists public.google_calendar_watch_channels (
   created_at       timestamptz not null default now()
 );
 
-create index idx_watch_channels_user       on public.google_calendar_watch_channels(user_id);
-create index idx_watch_channels_active     on public.google_calendar_watch_channels(is_active);
-create index idx_watch_channels_expiration on public.google_calendar_watch_channels(expiration);
-create index idx_watch_channels_channel_id on public.google_calendar_watch_channels(channel_id);
+create index if not exists idx_watch_channels_user       on public.google_calendar_watch_channels(user_id);
+create index if not exists idx_watch_channels_active     on public.google_calendar_watch_channels(is_active);
+create index if not exists idx_watch_channels_expiration on public.google_calendar_watch_channels(expiration);
+create index if not exists idx_watch_channels_channel_id on public.google_calendar_watch_channels(channel_id);
 
 alter table public.google_calendar_watch_channels enable row level security;
 

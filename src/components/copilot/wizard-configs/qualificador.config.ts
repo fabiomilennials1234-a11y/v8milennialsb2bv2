@@ -5,22 +5,27 @@ export const QUALIFICADOR_CONFIG: WizardTypeConfig = {
   label: "Qualificador de Leads",
   description: "Qualifica leads via BANT com perguntas estratégicas",
   steps: [
-    // Core (idêntico ao Follow-up)
+    // Identidade e contexto primeiro (impacto máximo no prompt)
     "name",
+    "businessContext",
+    "objectiveComposite",
+    // Personalidade e estilo
     "personality",
     "skills",
-    "businessContext",
     "conversationStyle",
     "examples",
     "availability",
-    "objectiveComposite",
+    // Configurações operacionais
     "capabilities",
     "knowledgeBase",
     "customInstructions",
+    "kanbanRulesReview",
     // Específico do Qualificador
     "faqs",
     "qualification",
     "automationActions",
+    // Teste final
+    "testConversation",
   ],
   defaults: {
     templateType: "qualificador",

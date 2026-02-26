@@ -5,24 +5,29 @@ export const PROSPECTADOR_CONFIG: WizardTypeConfig = {
   label: "Prospector Estratégico",
   description: "Mensagens personalizadas de prospecção com alto impacto",
   steps: [
-    // Core (idêntico ao Follow-up)
+    // Identidade e contexto primeiro (impacto máximo no prompt)
     "name",
+    "businessContext",
+    "objectiveComposite",
+    // Personalidade e estilo
     "personality",
     "skills",
-    "businessContext",
     "conversationStyle",
     "examples",
     "availability",
-    "objectiveComposite",
+    // Configurações operacionais
     "capabilities",
     "knowledgeBase",
     "customInstructions",
+    "kanbanRulesReview",
     // Específico do Prospectador
     "faqs",
     "operationMode",
     "activationTriggers",
     "outboundConfig",
     "automationActions",
+    // Teste final
+    "testConversation",
   ],
   defaults: {
     templateType: "prospectador",

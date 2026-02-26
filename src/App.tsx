@@ -30,6 +30,7 @@ import CampanhaDetail from "./pages/CampanhaDetail";
 import Marketing from "./pages/Marketing";
 import Produtos from "./pages/Produtos";
 import Copilot from "./pages/Copilot";
+import CopilotMetrics from "./pages/CopilotMetrics";
 import ChatWhatsApp from "./pages/ChatWhatsApp";
 import Upsell from "./pages/Upsell";
 import Agenda from "./pages/Agenda";
@@ -282,6 +283,16 @@ function AppRoutes() {
           <ProtectedRoute>
             <LayoutWrapper>
               <Copilot />
+            </LayoutWrapper>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/copilot/metricas"
+        element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <CopilotMetrics />
             </LayoutWrapper>
           </ProtectedRoute>
         }
