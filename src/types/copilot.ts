@@ -255,6 +255,25 @@ export interface OutboundConfig {
   availableVariables: string[];            // Variáveis disponíveis no template
   maxRetries: number;                      // Máximo de tentativas se falhar
   retryIntervalMinutes: number;            // Intervalo entre tentativas
+  audioEnabled?: boolean;                  // Habilitar envio de áudio na abordagem
+  audioSendOrder?: "text_first" | "audio_first"; // Ordem de envio texto/áudio
+}
+
+/**
+ * Áudio pré-gravado para abordagem outbound
+ */
+export interface CopilotAgentAudio {
+  id: string;
+  agent_id: string;
+  organization_id: string;
+  name: string;
+  storage_path: string;
+  public_url: string;
+  mime_type: string;
+  file_size: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 /**

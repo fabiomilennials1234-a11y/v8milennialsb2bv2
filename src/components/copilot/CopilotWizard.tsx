@@ -25,6 +25,7 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { useCreateCopilotAgent, useCopilotAgentForEdit, useUpdateCopilotAgentFromWizard } from "@/hooks/useCopilotAgents";
 import { useUploadAgentDocument } from "@/hooks/useAgentDocuments";
+import { useUploadCopilotAgentAudio } from "@/hooks/useCopilotAgentAudios";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import type { CopilotWizardData } from "@/types/copilot";
@@ -164,6 +165,8 @@ const wizardSchema = z.object({
     availableVariables: z.array(z.string()),
     maxRetries: z.number().min(1).max(5),
     retryIntervalMinutes: z.number().min(1).max(60),
+    audioEnabled: z.boolean().optional(),
+    audioSendOrder: z.enum(["text_first", "audio_first"]).optional(),
   }),
   automationActions: z.object({
     onQualify: z.object({
@@ -303,6 +306,8 @@ const BASE_DEFAULTS: CopilotWizardData = {
     availableVariables: ["nome", "empresa", "email", "telefone", "origem", "interesse", "segmento", "campanha"],
     maxRetries: 3,
     retryIntervalMinutes: 30,
+    audioEnabled: false,
+    audioSendOrder: "text_first" as const,
   },
   automationActions: {
     onQualify: {
@@ -374,6 +379,7 @@ export function CopilotWizard() {
   const createAgent = useCreateCopilotAgent();
   const updateAgent = useUpdateCopilotAgentFromWizard();
   const uploadDocument = useUploadAgentDocument();
+  const uploadAgentAudio = useUploadCopilotAgentAudio();
 
   // Buscar dados do agente para edição
   const { data: editData, isLoading: isLoadingEdit } = useCopilotAgentForEdit(editAgentId);
@@ -743,6 +749,23 @@ export function CopilotWizard() {
             });
           } catch (uploadErr) {
             console.error("Erro ao enviar documento:", uploadErr);
+          }
+        }
+      }
+
+      // Upload de áudios de abordagem (se houver)
+      const pendingAudioFiles = (data as any)._pendingAudioFiles || [];
+      if (pendingAudioFiles.length > 0 && createdAgent?.id && createdAgent?.organization_id) {
+        for (const audio of pendingAudioFiles) {
+          try {
+            await uploadAgentAudio.mutateAsync({
+              agentId: createdAgent.id,
+              organizationId: createdAgent.organization_id,
+              file: audio.file,
+              name: audio.name,
+            });
+          } catch (audioErr) {
+            console.error("Erro ao enviar áudio:", audioErr);
           }
         }
       }

@@ -64,6 +64,8 @@ export const PROSPECTADOR_CONFIG: WizardTypeConfig = {
       availableVariables: ["nome", "empresa", "segmento", "origem", "campanha"],
       maxRetries: 2,
       retryIntervalMinutes: 60,
+      audioEnabled: false,
+      audioSendOrder: "text_first" as const,
     },
     knowledgeBaseFiles: [],
     canQualifyLead: true,

@@ -74,6 +74,8 @@ export const SDR_CONFIG: WizardTypeConfig = {
       availableVariables: ["nome", "empresa", "email", "telefone", "origem", "interesse", "segmento", "campanha"],
       maxRetries: 3,
       retryIntervalMinutes: 30,
+      audioEnabled: false,
+      audioSendOrder: "text_first" as const,
     },
     knowledgeBaseFiles: [],
     canQualifyLead: true,

@@ -659,12 +659,15 @@ export function useCopilotAgentForEdit(agentId?: string) {
         required: { tags: [], origins: [], hasPhone: true, hasEmail: false },
         optional: [],
       };
-      const outboundConfig = (agent.outbound_config as any) || {
-        delayMinutes: 5,
-        firstMessageTemplate: "",
-        availableVariables: ["nome", "empresa", "email", "telefone", "origem", "interesse", "segmento", "campanha"],
-        maxRetries: 3,
-        retryIntervalMinutes: 30,
+      const rawOutboundConfig = (agent.outbound_config as any) || {};
+      const outboundConfig = {
+        delayMinutes: rawOutboundConfig.delayMinutes ?? 5,
+        firstMessageTemplate: rawOutboundConfig.firstMessageTemplate ?? "",
+        availableVariables: rawOutboundConfig.availableVariables ?? ["nome", "empresa", "email", "telefone", "origem", "interesse", "segmento", "campanha"],
+        maxRetries: rawOutboundConfig.maxRetries ?? 3,
+        retryIntervalMinutes: rawOutboundConfig.retryIntervalMinutes ?? 30,
+        audioEnabled: rawOutboundConfig.audioEnabled ?? false,
+        audioSendOrder: rawOutboundConfig.audioSendOrder ?? "text_first",
       };
       const automationActions = (agent.automation_actions as any) || {
         onQualify: { moveToStage: "", moveToPipe: null, addTags: [], notifyUserId: null, sendMessage: false, messageTemplate: "" },

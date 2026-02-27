@@ -86,6 +86,17 @@ serve(async (req) => {
     const payload: LeadWebhookPayload = await req.json();
     console.log("[lead-webhook] Received payload:", JSON.stringify(payload, null, 2));
 
+    // Sanitizar campos: remover whitespace/newlines de todos os valores em fields
+    if (payload.fields) {
+      for (const key of Object.keys(payload.fields)) {
+        const val = payload.fields[key];
+        if (typeof val === "string") {
+          const trimmed = val.trim();
+          payload.fields[key] = trimmed === "" ? undefined : trimmed;
+        }
+      }
+    }
+
     // Validação básica
     if (!payload.fields || (!payload.fields.phone && !payload.fields.email)) {
       return new Response(
@@ -259,39 +270,78 @@ serve(async (req) => {
     }
 
     // Salvar campos personalizados (novo e existente)
+    // Se o campo não existe na org, cria automaticamente + salva valor
+    const customFieldResults: Record<string, string> = {};
     if (Object.keys(customFields).length > 0) {
+      console.log("[lead-webhook] Processing custom fields:", Object.keys(customFields));
       for (const [fieldName, fieldValue] of Object.entries(customFields)) {
         if (fieldValue !== undefined && fieldValue !== null && String(fieldValue).trim() !== "") {
-          let { data: customField } = await supabase
+          console.log(`[lead-webhook] Custom field "${fieldName}" = "${fieldValue}"`);
+
+          // Buscar campo existente
+          const { data: existingField, error: findErr } = await supabase
             .from("lead_custom_fields")
             .select("id")
             .eq("organization_id", organizationId)
             .eq("field_name", fieldName)
             .maybeSingle();
 
-          if (!customField) {
-            const { data: newField } = await supabase
+          if (findErr) {
+            console.error(`[lead-webhook] Error finding custom field "${fieldName}":`, findErr);
+          }
+
+          let customFieldId = existingField?.id;
+
+          // Se não existe, criar automaticamente
+          if (!customFieldId) {
+            const { data: newField, error: createErr } = await supabase
               .from("lead_custom_fields")
               .insert({
                 organization_id: organizationId,
                 field_name: fieldName,
                 field_type: "text",
               })
-              .select()
+              .select("id")
               .single();
-            customField = newField;
+
+            if (createErr) {
+              console.error(`[lead-webhook] Error creating custom field "${fieldName}":`, createErr);
+              // Tentar buscar novamente (pode ter sido criado por race condition)
+              const { data: retryField } = await supabase
+                .from("lead_custom_fields")
+                .select("id")
+                .eq("organization_id", organizationId)
+                .eq("field_name", fieldName)
+                .maybeSingle();
+              customFieldId = retryField?.id;
+            } else {
+              customFieldId = newField?.id;
+              console.log(`[lead-webhook] Custom field "${fieldName}" created:`, customFieldId);
+            }
           }
 
-          if (customField) {
-            await supabase
+          // Salvar valor
+          if (customFieldId) {
+            const { error: upsertErr } = await supabase
               .from("lead_custom_field_values")
               .upsert({
                 lead_id: leadId,
-                field_id: customField.id,
+                field_id: customFieldId,
                 value: String(fieldValue),
               }, {
                 onConflict: "lead_id,field_id",
               });
+
+            if (upsertErr) {
+              console.error(`[lead-webhook] Error saving custom field value "${fieldName}":`, upsertErr);
+              customFieldResults[fieldName] = `value_error: ${upsertErr.message}`;
+            } else {
+              console.log(`[lead-webhook] Custom field "${fieldName}" saved for lead ${leadId}`);
+              customFieldResults[fieldName] = "saved";
+            }
+          } else {
+            console.error(`[lead-webhook] Could not resolve custom field "${fieldName}" — skipping value`);
+            customFieldResults[fieldName] = "error: field_not_resolved";
           }
         }
       }
@@ -572,6 +622,9 @@ serve(async (req) => {
       is_new: isNewLead,
       message: isNewLead ? "Lead criado com sucesso" : "Lead encontrado e atualizado",
     };
+    if (Object.keys(customFieldResults).length > 0) {
+      responseBody.custom_fields = customFieldResults;
+    }
     if (payload.place_in_pipe) responseBody.place_in_pipe = payload.place_in_pipe;
     if (payload.place_in_campaign) {
       responseBody.place_in_campaign = payload.place_in_campaign;
