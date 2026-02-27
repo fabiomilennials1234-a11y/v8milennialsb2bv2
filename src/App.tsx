@@ -36,6 +36,7 @@ import Upsell from "./pages/Upsell";
 import CustomPipeline from "./pages/CustomPipeline";
 import Agenda from "./pages/Agenda";
 import Privacidade from "./pages/Privacidade";
+import ApiDocs from "./pages/ApiDocs";
 import { CopilotWizard } from "@/components/copilot/CopilotWizard";
 import { SubscriptionProtectedRoute } from "@/components/SubscriptionProtectedRoute";
 import NotFound from "./pages/NotFound";
@@ -110,6 +111,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/auth" element={<AuthRoute />} />
       <Route path="/privacidade" element={<Privacidade />} />
+      <Route path="/docs" element={<ApiDocs />} />
       <Route
         path="/"
         element={
