@@ -33,6 +33,7 @@ import Copilot from "./pages/Copilot";
 import CopilotMetrics from "./pages/CopilotMetrics";
 import ChatWhatsApp from "./pages/ChatWhatsApp";
 import Upsell from "./pages/Upsell";
+import CustomPipeline from "./pages/CustomPipeline";
 import Agenda from "./pages/Agenda";
 import Privacidade from "./pages/Privacidade";
 import { CopilotWizard } from "@/components/copilot/CopilotWizard";
@@ -313,6 +314,16 @@ function AppRoutes() {
           <ProtectedRoute>
             <LayoutWrapper>
               <Upsell />
+            </LayoutWrapper>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/pipe/custom/:slug"
+        element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <CustomPipeline />
             </LayoutWrapper>
           </ProtectedRoute>
         }

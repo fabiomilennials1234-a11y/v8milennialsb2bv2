@@ -365,7 +365,7 @@ export function ManageStagesModal({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Gerenciar Etapas</DialogTitle>
             <DialogDescription>
@@ -373,7 +373,7 @@ export function ManageStagesModal({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 mt-4">
+          <div className="overflow-y-auto max-h-[calc(80vh-10rem)] space-y-4 pr-1">
             {/* Lista de etapas */}
             <DndContext
               sensors={sensors}

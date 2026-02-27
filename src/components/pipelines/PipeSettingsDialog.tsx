@@ -5,7 +5,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Settings2, Layers, Type, Upload, FileDown, Send, Shuffle, Clock } from "lucide-react";
 import { type PipelineType, type PipelineStage } from "@/hooks/usePipelineStages";
 import { type FunnelDestination } from "@/hooks/useImportLeads";
@@ -56,7 +55,7 @@ export function PipeSettingsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[900px] max-h-[85vh] overflow-hidden flex flex-col">
+      <DialogContent className="max-w-[900px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Settings2 className="w-5 h-5 text-primary" />
@@ -64,7 +63,7 @@ export function PipeSettingsDialog({
           </DialogTitle>
         </DialogHeader>
 
-        <Tabs defaultValue={defaultTab} className="flex-1 overflow-hidden flex flex-col">
+        <Tabs defaultValue={defaultTab}>
           <TabsList className={`grid w-full grid-cols-${tabCount}`}>
             <TabsTrigger value="etapas" className="gap-1.5 text-xs">
               <Layers className="w-3.5 h-3.5" />
@@ -102,7 +101,7 @@ export function PipeSettingsDialog({
             )}
           </TabsList>
 
-          <ScrollArea className="flex-1 mt-4">
+          <div className="overflow-y-auto max-h-[calc(85vh-12rem)] mt-4 pr-1">
             <TabsContent value="etapas" className="mt-0">
               <ManagePipelineStagesContent
                 pipelineType={pipeType}
@@ -144,7 +143,7 @@ export function PipeSettingsDialog({
                 </TabsContent>
               </>
             )}
-          </ScrollArea>
+          </div>
         </Tabs>
       </DialogContent>
     </Dialog>

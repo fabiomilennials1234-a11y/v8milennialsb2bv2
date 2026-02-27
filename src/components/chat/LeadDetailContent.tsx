@@ -9,6 +9,9 @@ import {
   ArrowRight,
   Check,
   ExternalLink,
+  X,
+  ChevronDown,
+  GitBranch,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -19,19 +22,34 @@ import { Separator } from "@/components/ui/separator";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   useLeadByPhone,
-  usePipeWhatsappByLeadId,
   useCreateLeadFromWhatsApp,
-  useLinkLeadToWhatsApp,
-  useUpdateLeadPipelineStatus,
   type LeadDestination,
 } from "@/hooks/useWhatsAppLeadIntegration";
+import {
+  useLeadAllPipelines,
+  useAddLeadToStandardPipe,
+  useMoveLeadInStandardPipe,
+  useRemoveLeadFromStandardPipe,
+  type PipelineStatus,
+  type StandardPipelineStatus,
+  type CustomPipelineStatus,
+} from "@/hooks/useLeadAllPipelines";
+import {
+  useAddLeadToCustomPipe,
+  useMoveLeadInCustomPipe,
+  useRemoveLeadFromCustomPipe,
+  useCustomPipelines,
+  useCustomPipelineStages,
+} from "@/hooks/useCustomPipelines";
 import { useUpdateLead } from "@/hooks/useLeads";
 import { useLogLeadAction } from "@/hooks/useLogLeadAction";
 import { useCampanhas, useCampanhaStages } from "@/hooks/useCampanhas";
@@ -51,27 +69,10 @@ const originOptions = [
   { value: "outro", label: "Outro" },
 ];
 
-const destinationOptions = [
-  { value: "qualificacao", label: "Pipe de Qualificação" },
-  { value: "confirmacao", label: "Pipe de Confirmação" },
-  { value: "propostas", label: "Pipe de Propostas" },
-  { value: "campanha", label: "Campanha" },
-  { value: "none", label: "Nenhum" },
-];
-
-const pipelineStages = [
-  { id: "novo", title: "Novo", color: "#6366f1", icon: "🆕" },
-  { id: "abordado", title: "Abordado", color: "#f59e0b", icon: "👋" },
-  { id: "respondeu", title: "Respondeu", color: "#3b82f6", icon: "💬" },
-  { id: "esfriou", title: "Esfriou", color: "#ef4444", icon: "❄️" },
-  { id: "agendado", title: "Agendado", color: "#22c55e", icon: "✅" },
-];
-
 export interface LeadDetailContentProps {
   phoneNumber: string;
   pushName?: string | null;
   onClose?: () => void;
-  /** Quando true, exibe cabeçalho com nome e telefone (ex.: no Sheet) */
   showHeader?: boolean;
 }
 
@@ -86,11 +87,19 @@ export function LeadDetailContent({
   const [selectedCampanhaId, setSelectedCampanhaId] = useState<string | null>(null);
   const [isAddingToCampanha, setIsAddingToCampanha] = useState(false);
 
-  // Campos de criação: destino e metadados
+  // Campos de criação
   const [createOrigin, setCreateOrigin] = useState("whatsapp");
   const [createSdrId, setCreateSdrId] = useState<string>("");
   const [createDestination, setCreateDestination] = useState<LeadDestination>("qualificacao");
   const [createCampanhaId, setCreateCampanhaId] = useState<string>("");
+  const [createCustomPipelineId, setCreateCustomPipelineId] = useState<string>("");
+  const [createCustomStageId, setCreateCustomStageId] = useState<string>("");
+  const [createStageId, setCreateStageId] = useState<string>("");
+
+  // Pipeline tab: expanding/adding states
+  const [expandedPipeline, setExpandedPipeline] = useState<string | null>(null);
+  const [addingToPipeline, setAddingToPipeline] = useState<string | null>(null);
+  const [addStageId, setAddStageId] = useState<string>("");
 
   const [formData, setFormData] = useState({
     name: "",
@@ -104,17 +113,29 @@ export function LeadDetailContent({
   const { data: teamMember } = useCurrentTeamMember();
   const { data: teamMembers = [] } = useTeamMembers();
   const { data: lead, isLoading: leadLoading, refetch: refetchLead } = useLeadByPhone(phoneNumber);
-  const { data: pipeStatus, isLoading: pipeLoading } = usePipeWhatsappByLeadId(lead?.id || null);
+  const { data: allPipelines = [], isLoading: pipelinesLoading } = useLeadAllPipelines(lead?.id || null);
   const { data: campanhas = [] } = useCampanhas();
   const { data: campanhaStages = [] } = useCampanhaStages(
     (createDestination === "campanha" ? createCampanhaId : selectedCampanhaId) || undefined
   );
 
+  // Custom pipelines for creation dropdown
+  const { data: customPipelines = [] } = useCustomPipelines();
+  const { data: customPipeStages = [] } = useCustomPipelineStages(
+    createDestination === "custom" ? createCustomPipelineId : undefined
+  );
+
   const createLead = useCreateLeadFromWhatsApp();
-  const linkLeadToWhatsApp = useLinkLeadToWhatsApp();
   const updateLead = useUpdateLead();
-  const updatePipeStatus = useUpdateLeadPipelineStatus();
   const logAction = useLogLeadAction();
+
+  // Pipeline mutations
+  const addToStandard = useAddLeadToStandardPipe();
+  const moveInStandard = useMoveLeadInStandardPipe();
+  const removeFromStandard = useRemoveLeadFromStandardPipe();
+  const addToCustom = useAddLeadToCustomPipe();
+  const moveInCustom = useMoveLeadInCustomPipe();
+  const removeFromCustom = useRemoveLeadFromCustomPipe();
 
   const activeCampanhas = campanhas.filter((c) => c.is_active);
 
@@ -137,12 +158,58 @@ export function LeadDetailContent({
         notes: "",
       });
       setIsCreating(true);
-      // Default SDR to current user
       if (teamMember?.id && !createSdrId) {
         setCreateSdrId(teamMember.id);
       }
     }
   }, [lead, leadLoading, pushName, teamMember?.id]);
+
+  // Reset stage when destination changes
+  useEffect(() => {
+    setCreateStageId("");
+    setCreateCustomStageId("");
+    setCreateCustomPipelineId("");
+  }, [createDestination]);
+
+  useEffect(() => {
+    setCreateCustomStageId("");
+  }, [createCustomPipelineId]);
+
+  // ─── Standard stage definitions for creation dropdown ─────────
+  const getStandardStages = (dest: string) => {
+    switch (dest) {
+      case "qualificacao":
+        return [
+          { id: "novo", label: "Novo" },
+          { id: "abordado", label: "Abordado" },
+          { id: "respondeu", label: "Respondeu" },
+          { id: "esfriou", label: "Esfriou" },
+          { id: "agendado", label: "Agendado" },
+        ];
+      case "confirmacao":
+        return [
+          { id: "pre_confirmacao", label: "Pré-Confirmação" },
+          { id: "confirmado", label: "Confirmado" },
+          { id: "remarcado", label: "Remarcado" },
+          { id: "cancelado", label: "Cancelado" },
+          { id: "realizada", label: "Realizada" },
+        ];
+      case "propostas":
+        return [
+          { id: "proposta_enviada", label: "Proposta Enviada" },
+          { id: "em_negociacao", label: "Em Negociação" },
+          { id: "fechado_ganho", label: "Fechado Ganho" },
+          { id: "fechado_perdido", label: "Fechado Perdido" },
+        ];
+      default:
+        return [];
+    }
+  };
+
+  const standardStagesForCreate = getStandardStages(createDestination);
+  const isStandardDest = ["qualificacao", "confirmacao", "propostas"].includes(createDestination);
+
+  // ─── Handlers ─────────────────────────────────────────────────
 
   const handleCreateLead = async () => {
     try {
@@ -153,7 +220,32 @@ export function LeadDetailContent({
         sdrId: createSdrId || undefined,
         destination: createDestination,
         campanhaId: createDestination === "campanha" ? createCampanhaId : undefined,
+        customPipelineId: createDestination === "custom" ? createCustomPipelineId : undefined,
+        customStageId: createDestination === "custom" ? createCustomStageId : undefined,
       });
+
+      // If standard destination with specific stage (not default first)
+      if (isStandardDest && createStageId && result.leadId) {
+        // The hook inserts with default stage, we may need to update if different
+        // For now, we handle this by updating after creation if stage differs
+        const defaultStages: Record<string, string> = {
+          qualificacao: "novo",
+          confirmacao: "pre_confirmacao",
+          propostas: "proposta_enviada",
+        };
+        if (createStageId !== defaultStages[createDestination]) {
+          // Need to update the pipe status
+          const tableMap: Record<string, string> = {
+            qualificacao: "pipe_whatsapp",
+            confirmacao: "pipe_confirmacao",
+            propostas: "pipe_propostas",
+          };
+          await supabase
+            .from(tableMap[createDestination])
+            .update({ status: createStageId })
+            .eq("lead_id", result.leadId);
+        }
+      }
 
       if (result.isNew && (formData.company || formData.email || formData.notes)) {
         await updateLead.mutateAsync({
@@ -191,24 +283,6 @@ export function LeadDetailContent({
       toast.error(error.message || "Erro ao atualizar");
     }
   };
-
-  const handleStageChange = async (newStatus: string) => {
-    if (!pipeStatus || !lead) return;
-    try {
-      await updatePipeStatus.mutateAsync({
-        pipeId: pipeStatus.id,
-        leadId: lead.id,
-        status: newStatus as any,
-      });
-      const stageName = pipelineStages.find((s) => s.id === newStatus)?.title;
-      logAction({ leadId: lead.id, action: "stage_changed", description: `Movido para "${stageName}" no WhatsApp SDR` });
-      toast.success(`Lead movido para ${stageName}`);
-    } catch (error: any) {
-      toast.error(error.message || "Erro ao atualizar status");
-    }
-  };
-
-  // Pipeline linking is now handled during lead creation with destination choice
 
   const handleAddToCampanha = async () => {
     if (!lead || !selectedCampanhaId || !campanhaStages.length) return;
@@ -249,12 +323,129 @@ export function LeadDetailContent({
     }
   };
 
-  const isLoading = leadLoading || pipeLoading;
+  // ─── Pipeline tab handlers ────────────────────────────────────
+
+  const handleMoveStage = async (pipeline: PipelineStatus, newStageId: string) => {
+    if (!lead) return;
+    try {
+      if (pipeline.type === "standard" && pipeline.pipeId) {
+        await moveInStandard.mutateAsync({
+          pipeId: pipeline.pipeId,
+          pipeType: pipeline.pipeType,
+          newStageId,
+        });
+        const stageName = pipeline.stages.find((s) => s.id === newStageId)?.label;
+        toast.success(`Movido para "${stageName}"`);
+      } else if (pipeline.type === "custom" && pipeline.entryId) {
+        await moveInCustom.mutateAsync({
+          entry_id: pipeline.entryId,
+          pipeline_id: pipeline.pipelineId,
+          new_stage_id: newStageId,
+        });
+        const stageName = pipeline.stages.find((s) => s.id === newStageId)?.name;
+        toast.success(`Movido para "${stageName}"`);
+      }
+      setExpandedPipeline(null);
+    } catch {
+      toast.error("Erro ao mover lead");
+    }
+  };
+
+  const handleRemoveFromPipeline = async (pipeline: PipelineStatus) => {
+    if (!lead) return;
+    try {
+      if (pipeline.type === "standard" && pipeline.pipeId) {
+        await removeFromStandard.mutateAsync({
+          pipeId: pipeline.pipeId,
+          pipeType: pipeline.pipeType,
+        });
+        toast.success(`Removido de "${pipeline.label}"`);
+      } else if (pipeline.type === "custom" && pipeline.entryId) {
+        await removeFromCustom.mutateAsync({
+          entry_id: pipeline.entryId,
+          pipeline_id: pipeline.pipelineId,
+        });
+        toast.success(`Removido de "${pipeline.pipelineName}"`);
+      }
+    } catch {
+      toast.error("Erro ao remover lead");
+    }
+  };
+
+  const handleAddToPipeline = async (pipeline: PipelineStatus) => {
+    if (!lead || !addStageId) return;
+    try {
+      if (pipeline.type === "standard") {
+        await addToStandard.mutateAsync({
+          leadId: lead.id,
+          pipeType: pipeline.pipeType,
+          stageId: addStageId,
+        });
+        toast.success(`Adicionado a "${pipeline.label}"`);
+      } else if (pipeline.type === "custom") {
+        await addToCustom.mutateAsync({
+          pipeline_id: pipeline.pipelineId,
+          lead_id: lead.id,
+          stage_id: addStageId,
+        });
+        toast.success(`Adicionado a "${pipeline.pipelineName}"`);
+      }
+      setAddingToPipeline(null);
+      setAddStageId("");
+    } catch (error: any) {
+      if (error.message?.includes("duplicate")) {
+        toast.info("Lead já está neste funil");
+      } else {
+        toast.error("Erro ao adicionar lead");
+      }
+    }
+  };
+
+  const isLoading = leadLoading;
+
+  const isCreateDisabled = () => {
+    if (createLead.isPending || !formData.name) return true;
+    if (createDestination === "campanha" && !createCampanhaId) return true;
+    if (createDestination === "custom" && (!createCustomPipelineId || !createCustomStageId)) return true;
+    if (isStandardDest && !createStageId) return true;
+    return false;
+  };
+
+  // ─── Render helpers ───────────────────────────────────────────
+
+  const getPipelineKey = (p: PipelineStatus) =>
+    p.type === "standard" ? p.pipeType : p.pipelineId;
+
+  const getPipelineLabel = (p: PipelineStatus) =>
+    p.type === "standard" ? p.label : p.pipelineName;
+
+  const getPipelineColor = (p: PipelineStatus) =>
+    p.type === "standard" ? p.color : p.pipelineColor;
+
+  const isInPipeline = (p: PipelineStatus) =>
+    p.type === "standard" ? !!p.pipeId : !!p.entryId;
+
+  const getCurrentStageLabel = (p: PipelineStatus) => {
+    if (p.type === "standard") return p.currentStageLabel;
+    return p.currentStageName;
+  };
+
+  const getStages = (p: PipelineStatus) => {
+    if (p.type === "standard") return p.stages.map((s) => ({ id: s.id, name: s.label, color: s.color }));
+    return p.stages.map((s) => ({ id: s.id, name: s.name, color: s.color }));
+  };
+
+  const getCurrentStageId = (p: PipelineStatus) => {
+    if (p.type === "standard") return p.currentStage;
+    return p.currentStageId;
+  };
+
+  // ─── Render ───────────────────────────────────────────────────
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
       {showHeader && (
-        <div className="pb-4 border-b border-border/60 mb-4">
+        <div className="pb-4 border-b border-border/60 mb-4 px-6 pt-6">
           <div className="flex items-center gap-2">
             <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
               <User className="w-5 h-5 text-primary" />
@@ -282,7 +473,8 @@ export function LeadDetailContent({
           <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
         </div>
       ) : !lead && isCreating ? (
-        <div className="space-y-4 py-4 overflow-y-auto">
+        /* ─── CREATION FORM ─────────────────────────────────── */
+        <div className="space-y-4 py-4 overflow-y-auto px-6">
           <div className="text-center pb-4">
             <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-primary/10 flex items-center justify-center">
               <Plus className="w-8 h-8 text-primary" />
@@ -367,22 +559,97 @@ export function LeadDetailContent({
               </Select>
             </div>
 
+            {/* ─── Expanded Destination Dropdown ─── */}
             <div className="grid gap-2">
               <Label htmlFor="destination">Destino</Label>
-              <Select value={createDestination} onValueChange={(v) => setCreateDestination(v as LeadDestination)}>
+              <Select
+                value={createDestination === "custom" ? `custom:${createCustomPipelineId}` : createDestination}
+                onValueChange={(v) => {
+                  if (v.startsWith("custom:")) {
+                    setCreateDestination("custom");
+                    setCreateCustomPipelineId(v.replace("custom:", ""));
+                  } else {
+                    setCreateDestination(v as LeadDestination);
+                  }
+                }}
+              >
                 <SelectTrigger id="destination">
                   <SelectValue placeholder="Selecione o destino" />
                 </SelectTrigger>
                 <SelectContent>
-                  {destinationOptions.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
+                  <SelectGroup>
+                    <SelectLabel>Funis Padrão</SelectLabel>
+                    <SelectItem value="qualificacao">Qualificação</SelectItem>
+                    <SelectItem value="confirmacao">Confirmação</SelectItem>
+                    <SelectItem value="propostas">Propostas</SelectItem>
+                  </SelectGroup>
+                  {customPipelines.length > 0 && (
+                    <SelectGroup>
+                      <SelectLabel>Funis Customizados</SelectLabel>
+                      {customPipelines.map((pipe) => (
+                        <SelectItem key={pipe.id} value={`custom:${pipe.id}`}>
+                          <div className="flex items-center gap-2">
+                            <div
+                              className="w-3 h-3 rounded-full"
+                              style={{ backgroundColor: pipe.color }}
+                            />
+                            {pipe.name}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  )}
+                  <SelectGroup>
+                    <SelectLabel>Outros</SelectLabel>
+                    <SelectItem value="campanha">Campanha</SelectItem>
+                    <SelectItem value="none">Nenhum</SelectItem>
+                  </SelectGroup>
                 </SelectContent>
               </Select>
             </div>
 
+            {/* Stage selector for standard pipelines */}
+            {isStandardDest && (
+              <div className="grid gap-2">
+                <Label>Etapa</Label>
+                <Select value={createStageId} onValueChange={setCreateStageId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione a etapa..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {standardStagesForCreate.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {/* Stage selector for custom pipeline */}
+            {createDestination === "custom" && createCustomPipelineId && (
+              <div className="grid gap-2">
+                <Label>Etapa</Label>
+                <Select value={createCustomStageId} onValueChange={setCreateCustomStageId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione a etapa..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {customPipeStages.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: s.color }} />
+                          {s.name}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {/* Campaign selector */}
             {createDestination === "campanha" && (
               <div className="grid gap-2">
                 <Label htmlFor="create-campanha">Campanha</Label>
@@ -414,7 +681,7 @@ export function LeadDetailContent({
             <Button
               className={onClose ? "flex-1" : "w-full"}
               onClick={handleCreateLead}
-              disabled={createLead.isPending || !formData.name || (createDestination === "campanha" && !createCampanhaId)}
+              disabled={isCreateDisabled()}
             >
               {createLead.isPending ? (
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -426,14 +693,16 @@ export function LeadDetailContent({
           </div>
         </div>
       ) : lead ? (
+        /* ─── LEAD EXISTS: TABS ─────────────────────────────── */
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 overflow-hidden flex flex-col">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-3 mx-6 w-[calc(100%-3rem)]">
             <TabsTrigger value="info">Informações</TabsTrigger>
             <TabsTrigger value="pipeline">Pipeline</TabsTrigger>
             <TabsTrigger value="campanha">Campanhas</TabsTrigger>
           </TabsList>
 
-          <div className="flex-1 overflow-y-auto mt-4">
+          <div className="flex-1 overflow-y-auto mt-4 px-6 pb-4">
+            {/* ─── TAB: INFO ─── */}
             <TabsContent value="info" className="mt-0 space-y-4">
               <div className="grid gap-4">
                 <div className="grid gap-2">
@@ -531,82 +800,167 @@ export function LeadDetailContent({
               </div>
             </TabsContent>
 
-            <TabsContent value="pipeline" className="mt-0 space-y-4">
+            {/* ─── TAB: PIPELINE (UNIFIED) ─── */}
+            <TabsContent value="pipeline" className="mt-0 space-y-3">
               <div className="text-center pb-2">
-                <h4 className="font-medium">Pipeline de Qualificação</h4>
-                <p className="text-sm text-muted-foreground">Mova o lead entre os estágios</p>
+                <h4 className="font-medium flex items-center justify-center gap-2">
+                  <GitBranch className="w-4 h-4" />
+                  Funis
+                </h4>
+                <p className="text-sm text-muted-foreground">Gerencie o lead em todos os funis</p>
               </div>
 
-              {pipeStatus ? (
-                <div className="space-y-3">
-                  <div className="p-3 rounded-lg bg-muted/50 text-center">
-                    <span className="text-xs text-muted-foreground">Status Atual</span>
-                    <div className="flex items-center justify-center gap-2 mt-1">
-                      <span className="text-2xl">
-                        {pipelineStages.find((s) => s.id === pipeStatus.status)?.icon}
-                      </span>
-                      <span
-                        className="font-semibold text-lg"
-                        style={{
-                          color: pipelineStages.find((s) => s.id === pipeStatus.status)?.color,
-                        }}
-                      >
-                        {pipelineStages.find((s) => s.id === pipeStatus.status)?.title}
-                      </span>
-                    </div>
-                  </div>
-
-                  <Separator />
-
-                  <div className="grid grid-cols-1 gap-2">
-                    {pipelineStages.map((stage) => {
-                      const isCurrent = stage.id === pipeStatus.status;
-                      return (
-                        <Button
-                          key={stage.id}
-                          variant={isCurrent ? "default" : "outline"}
-                          className={cn("justify-start h-12", isCurrent && "ring-2 ring-offset-2")}
-                          style={{
-                            ...(isCurrent && { backgroundColor: stage.color }),
-                            borderColor: stage.color,
-                          }}
-                          onClick={() => !isCurrent && handleStageChange(stage.id)}
-                          disabled={isCurrent || updatePipeStatus.isPending}
-                        >
-                          <span className="text-lg mr-3">{stage.icon}</span>
-                          <span className="flex-1 text-left">{stage.title}</span>
-                          {isCurrent ? <Check className="w-4 h-4" /> : <ArrowRight className="w-4 h-4 opacity-50" />}
-                        </Button>
-                      );
-                    })}
-                  </div>
+              {pipelinesLoading ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
                 </div>
               ) : (
-                <div className="text-center py-8 space-y-3">
-                  <Target className="w-10 h-10 mx-auto text-muted-foreground/50" />
-                  <p className="text-muted-foreground text-sm">
-                    Lead não está no pipeline de qualificação.
-                  </p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      if (!lead) return;
-                      linkLeadToWhatsApp.mutate({ leadId: lead.id, phone: phoneNumber });
-                    }}
-                    disabled={linkLeadToWhatsApp.isPending}
-                  >
-                    {linkLeadToWhatsApp.isPending ? (
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    ) : (
-                      <Plus className="w-4 h-4 mr-2" />
-                    )}
-                    Adicionar ao pipeline
-                  </Button>
+                <div className="space-y-2">
+                  {allPipelines.map((pipeline) => {
+                    const key = getPipelineKey(pipeline);
+                    const label = getPipelineLabel(pipeline);
+                    const color = getPipelineColor(pipeline);
+                    const inPipe = isInPipeline(pipeline);
+                    const currentLabel = getCurrentStageLabel(pipeline);
+                    const currentId = getCurrentStageId(pipeline);
+                    const stages = getStages(pipeline);
+                    const isExpanded = expandedPipeline === key;
+                    const isAdding = addingToPipeline === key;
+
+                    return (
+                      <div
+                        key={key}
+                        className="border rounded-lg overflow-hidden"
+                      >
+                        {/* Pipeline row */}
+                        <div className="flex items-center gap-3 p-3">
+                          <div
+                            className="w-3 h-3 rounded-full shrink-0"
+                            style={{ backgroundColor: color }}
+                          />
+                          <span className="font-medium text-sm flex-1 min-w-0 truncate">
+                            {label}
+                          </span>
+
+                          {inPipe ? (
+                            <div className="flex items-center gap-1.5">
+                              <Badge
+                                variant="secondary"
+                                className="text-xs cursor-pointer"
+                                onClick={() => setExpandedPipeline(isExpanded ? null : key)}
+                              >
+                                {currentLabel}
+                                <ChevronDown className={cn(
+                                  "w-3 h-3 ml-1 transition-transform",
+                                  isExpanded && "rotate-180"
+                                )} />
+                              </Badge>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-destructive hover:text-destructive"
+                                onClick={() => handleRemoveFromPipeline(pipeline)}
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </Button>
+                            </div>
+                          ) : (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs"
+                              onClick={() => {
+                                setAddingToPipeline(isAdding ? null : key);
+                                setAddStageId("");
+                              }}
+                            >
+                              <Plus className="w-3.5 h-3.5 mr-1" />
+                              Adicionar
+                            </Button>
+                          )}
+                        </div>
+
+                        {/* Expanded: move stage */}
+                        {isExpanded && inPipe && (
+                          <div className="border-t bg-muted/30 p-3 space-y-1.5">
+                            <span className="text-xs text-muted-foreground">Mover para:</span>
+                            <div className="grid grid-cols-1 gap-1">
+                              {stages.map((stage) => {
+                                const isCurrent = stage.id === currentId;
+                                return (
+                                  <Button
+                                    key={stage.id}
+                                    variant={isCurrent ? "default" : "outline"}
+                                    size="sm"
+                                    className={cn("justify-start h-8 text-xs", isCurrent && "pointer-events-none")}
+                                    style={isCurrent ? { backgroundColor: stage.color } : { borderColor: `${stage.color}60` }}
+                                    onClick={() => !isCurrent && handleMoveStage(pipeline, stage.id)}
+                                    disabled={moveInStandard.isPending || moveInCustom.isPending}
+                                  >
+                                    <div
+                                      className="w-2.5 h-2.5 rounded-full mr-2 shrink-0"
+                                      style={{ backgroundColor: stage.color }}
+                                    />
+                                    <span className="flex-1 text-left">{stage.name}</span>
+                                    {isCurrent && <Check className="w-3.5 h-3.5" />}
+                                  </Button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Adding: select stage */}
+                        {isAdding && !inPipe && (
+                          <div className="border-t bg-muted/30 p-3 space-y-2">
+                            <span className="text-xs text-muted-foreground">Selecione a etapa:</span>
+                            <Select value={addStageId} onValueChange={setAddStageId}>
+                              <SelectTrigger className="h-8 text-xs">
+                                <SelectValue placeholder="Etapa..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {stages.map((s) => (
+                                  <SelectItem key={s.id} value={s.id}>
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: s.color }} />
+                                      {s.name}
+                                    </div>
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            {addStageId && (
+                              <Button
+                                size="sm"
+                                className="w-full h-8 text-xs"
+                                onClick={() => handleAddToPipeline(pipeline)}
+                                disabled={addToStandard.isPending || addToCustom.isPending}
+                              >
+                                {(addToStandard.isPending || addToCustom.isPending) ? (
+                                  <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
+                                ) : (
+                                  <Plus className="w-3.5 h-3.5 mr-1" />
+                                )}
+                                Adicionar
+                              </Button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+
+                  {allPipelines.length === 0 && (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <GitBranch className="w-10 h-10 mx-auto mb-2 opacity-50" />
+                      <p className="text-sm">Nenhum funil disponível</p>
+                    </div>
+                  )}
                 </div>
               )}
             </TabsContent>
 
+            {/* ─── TAB: CAMPANHAS ─── */}
             <TabsContent value="campanha" className="mt-0 space-y-4">
               <div className="text-center pb-2">
                 <h4 className="font-medium">Campanhas</h4>

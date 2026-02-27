@@ -689,14 +689,16 @@ export function ManagePipelineStagesModal({
 }: ManagePipelineStagesModalProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+      <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Gerenciar Etapas - {getPipelineTypeName(pipelineType)}</DialogTitle>
           <DialogDescription>
             Crie, edite, reordene ou remova etapas do funil. Arraste para reordenar.
           </DialogDescription>
         </DialogHeader>
-        <ManagePipelineStagesContent pipelineType={pipelineType} stages={stages} />
+        <div className="overflow-y-auto max-h-[calc(85vh-10rem)] pr-1">
+          <ManagePipelineStagesContent pipelineType={pipelineType} stages={stages} />
+        </div>
       </DialogContent>
     </Dialog>
   );

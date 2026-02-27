@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
   Gauge,
@@ -28,6 +28,12 @@ import {
   Lock,
   Camera,
   Loader2,
+  Plus,
+  Heart,
+  Briefcase,
+  Star,
+  ShoppingBag,
+  Gift,
 } from "lucide-react";
 import torqueLogo from "@/assets/torque-logo.png";
 import torqueIcon from "@/assets/torque-icon.png";
@@ -44,6 +50,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { AlertsDropdown } from "@/components/notifications/AlertsDropdown";
 import { SidebarPerformanceWidget } from "./SidebarPerformanceWidget";
+import { useCustomPipelines } from "@/hooks/useCustomPipelines";
+import { CreatePipelineModal } from "@/components/custom-pipelines/CreatePipelineModal";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -92,12 +100,31 @@ const bottomNavItems: NavItem[] = [
   { label: "Pitstop", icon: Settings, path: "/configuracoes" },
 ];
 
-const FUNIS_PATHS = ["/pipe-whatsapp", "/pipe-confirmacao", "/pipe-propostas", "/upsell", "/funis"] as const;
+const FUNIS_PATHS = ["/pipe-whatsapp", "/pipe-confirmacao", "/pipe-propostas", "/upsell", "/funis", "/pipe/custom"] as const;
+
+const CUSTOM_PIPE_ICON_MAP: Record<string, React.ElementType> = {
+  kanban: Kanban,
+  target: Target,
+  users: UserCheck,
+  "shopping-bag": ShoppingBag,
+  heart: Heart,
+  briefcase: Briefcase,
+  star: Star,
+  zap: Zap,
+  gift: Gift,
+};
 
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const [hovered, setHovered] = useState(false);
-  const [expandedMenus, setExpandedMenus] = useState<string[]>([]);
+  const [expandedMenus, setExpandedMenus] = useState<string[]>(
+    () => {
+      // Auto-expand Funis when on a funis page
+      const path = window.location.pathname;
+      const onFunis = FUNIS_PATHS.some((p) => path.startsWith(p));
+      return onFunis ? ["Funis"] : [];
+    }
+  );
   const [upgradeModal, setUpgradeModal] = useState<{ open: boolean; label: string; description?: string }>({ open: false, label: "" });
   const [avatarModalOpen, setAvatarModalOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -112,6 +139,15 @@ export function Sidebar() {
   const { orgType } = useOrganization();
   const visibleSidebarKeys = useVisibleSidebarKeys();
   const { hasFeature } = useOrgFeatures();
+  const [showCreatePipeline, setShowCreatePipeline] = useState(false);
+
+  // Auto-expand Funis when navigating to a funis page
+  useEffect(() => {
+    if (isOnFunisPage && !expandedMenus.includes("Funis")) {
+      setExpandedMenus(prev => [...prev, "Funis"]);
+    }
+  }, [location.pathname]);
+  const { data: customPipelines = [] } = useCustomPipelines();
   const role = userRole?.role;
   const isOutbound = orgType === "outbound";
 
@@ -184,9 +220,12 @@ export function Sidebar() {
     return location.pathname.startsWith(path);
   };
 
-  const isParentActive = (children?: NavItem[]) => {
+  const isParentActive = (children?: NavItem[], parentLabel?: string) => {
     if (!children) return false;
-    return children.some(child => isActive(child.path));
+    if (children.some(child => isActive(child.path))) return true;
+    // Check custom pipelines for "Funis" parent
+    if (parentLabel === "Funis" && location.pathname.startsWith("/pipe/custom")) return true;
+    return false;
   };
 
   const toggleMenu = (label: string) => {
@@ -379,7 +418,7 @@ export function Sidebar() {
                 <button
                   onClick={() => toggleMenu(item.label)}
                   className={`sidebar-item w-full ${
-                    isParentActive(item.children) ? "sidebar-item-active" : ""
+                    isParentActive(item.children, item.label) ? "sidebar-item-active" : ""
                   }`}
                 >
                   <item.icon className="w-5 h-5 flex-shrink-0" />
@@ -424,6 +463,40 @@ export function Sidebar() {
                         </span>
                       </NavLink>
                     ))}
+                    {/* Funis customizados dinâmicos */}
+                    {item.label === "Funis" && customPipelines.length > 0 && (
+                      <div className="border-t border-sidebar-border/50 mt-1 pt-1">
+                        {customPipelines.map((pipe) => {
+                          const PipeIcon = CUSTOM_PIPE_ICON_MAP[pipe.icon] || Kanban;
+                          const pipePath = `/pipe/custom/${pipe.slug}`;
+                          return (
+                            <NavLink
+                              key={pipe.id}
+                              to={pipePath}
+                              className={`sidebar-item pl-4 ${
+                                isActive(pipePath) ? "sidebar-item-active" : ""
+                              }`}
+                            >
+                              <PipeIcon className="w-4 h-4 flex-shrink-0" style={{ color: pipe.color }} />
+                              <span className="overflow-hidden whitespace-nowrap flex-1">
+                                {pipe.name}
+                              </span>
+                            </NavLink>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {item.label === "Funis" && (
+                      <button
+                        onClick={() => setShowCreatePipeline(true)}
+                        className="sidebar-item pl-4 w-full text-muted-foreground hover:text-foreground"
+                      >
+                        <Plus className="w-4 h-4 flex-shrink-0" />
+                        <span className="overflow-hidden whitespace-nowrap flex-1 text-left text-xs">
+                          Criar Funil
+                        </span>
+                      </button>
+                    )}
                   </div>
                 </div>
               </>
@@ -693,6 +766,11 @@ export function Sidebar() {
         onOpenChange={(v) => setUpgradeModal((prev) => ({ ...prev, open: v }))}
         featureLabel={upgradeModal.label}
         featureDescription={upgradeModal.description}
+      />
+
+      <CreatePipelineModal
+        open={showCreatePipeline}
+        onOpenChange={setShowCreatePipeline}
       />
     </aside>
   );

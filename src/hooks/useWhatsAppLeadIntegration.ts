@@ -74,7 +74,7 @@ export function usePipeWhatsappByLeadId(leadId: string | null) {
   });
 }
 
-export type LeadDestination = "qualificacao" | "confirmacao" | "propostas" | "campanha" | "none";
+export type LeadDestination = "qualificacao" | "confirmacao" | "propostas" | "campanha" | "custom" | "none";
 
 /**
  * Cria lead manualmente a partir do contato WhatsApp com destino configurável
@@ -91,6 +91,8 @@ export function useCreateLeadFromWhatsApp() {
       sdrId,
       destination,
       campanhaId,
+      customPipelineId,
+      customStageId,
     }: {
       phone: string;
       pushName?: string | null;
@@ -98,6 +100,8 @@ export function useCreateLeadFromWhatsApp() {
       sdrId?: string;
       destination?: LeadDestination;
       campanhaId?: string;
+      customPipelineId?: string;
+      customStageId?: string;
     }) => {
       if (!teamMember?.organization_id) {
         throw new Error("Usuário não está vinculado a uma organização");
@@ -185,6 +189,14 @@ export function useCreateLeadFromWhatsApp() {
               sdr_id: effectiveSdrIdForShadow,
             });
           }
+        } else if (effectiveDestination === "custom" && customPipelineId && customStageId) {
+          await supabase.from("custom_pipe_entries").insert({
+            organization_id: teamMember.organization_id,
+            pipeline_id: customPipelineId,
+            lead_id: existingLead.id,
+            stage_id: customStageId,
+            assigned_to: effectiveSdrIdForShadow,
+          });
         }
 
         return { leadId: existingLead.id, isNew: false };
@@ -273,6 +285,17 @@ export function useCreateLeadFromWhatsApp() {
             console.error("[WhatsApp Lead] Erro ao adicionar à campanha:", campError);
           }
         }
+      } else if (effectiveDestination === "custom" && customPipelineId && customStageId) {
+        const { error: customError } = await supabase.from("custom_pipe_entries").insert({
+          organization_id: teamMember.organization_id,
+          pipeline_id: customPipelineId,
+          lead_id: newLead.id,
+          stage_id: customStageId,
+          assigned_to: effectiveSdrId,
+        });
+        if (customError) {
+          console.error("[WhatsApp Lead] Erro ao adicionar ao funil customizado:", customError);
+        }
       }
       // destination === "none" → no pipe/campaign insertion
 
@@ -295,6 +318,8 @@ export function useCreateLeadFromWhatsApp() {
       queryClient.invalidateQueries({ queryKey: ["pipe_confirmacao"] });
       queryClient.invalidateQueries({ queryKey: ["pipe_propostas"] });
       queryClient.invalidateQueries({ queryKey: ["campanha_leads"] });
+      queryClient.invalidateQueries({ queryKey: ["custom_pipe_entries"] });
+      queryClient.invalidateQueries({ queryKey: ["lead_all_pipelines"] });
       queryClient.invalidateQueries({ queryKey: ["whatsapp_contacts"] });
       queryClient.invalidateQueries({ queryKey: ["lead_by_phone"] });
     },
