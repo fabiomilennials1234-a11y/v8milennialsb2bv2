@@ -31,7 +31,18 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FollowUpCard } from "@/components/followups/FollowUpCard";
 import { AutomationSettings } from "@/components/followups/AutomationSettings";
 import { AcoesDoDia } from "@/components/followups/AcoesDoDia";
-import { useFollowUps, useCompleteFollowUp, useArchiveFollowUp, useArchiveManyFollowUps, type FollowUp } from "@/hooks/useFollowUps";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { useFollowUps, useCompleteFollowUp, useArchiveFollowUp, useArchiveManyFollowUps, useDeleteFollowUp, type FollowUp } from "@/hooks/useFollowUps";
+import { toast } from "sonner";
 import { useTeamMembers, useCurrentTeamMember } from "@/hooks/useTeamMembers";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useLogLeadAction } from "@/hooks/useLogLeadAction";
@@ -43,6 +54,7 @@ export default function PipeFollowUps() {
   const [dateFilter, setDateFilter] = useState<"today" | "overdue" | "upcoming" | "all">("today");
   const [showCompleted, setShowCompleted] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
+  const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; followUpId: string } | null>(null);
 
   const { data: userRole } = useUserRole();
   const { data: teamMembers } = useTeamMembers();
@@ -58,6 +70,7 @@ export default function PipeFollowUps() {
   const completeFollowUp = useCompleteFollowUp();
   const archiveFollowUp = useArchiveFollowUp();
   const archiveManyFollowUps = useArchiveManyFollowUps();
+  const deleteFollowUp = useDeleteFollowUp();
 
   // Query filtrada para exibição da lista
   const { data: followUps, isLoading } = useFollowUps({
@@ -166,6 +179,17 @@ export default function PipeFollowUps() {
 
   const handleArchiveCompleted = () => {
     if (completedIds.length > 0) archiveManyFollowUps.mutate(completedIds);
+  };
+
+  const handleOpenRemoveDialog = (followUpId: string) => {
+    setDeleteDialog({ open: true, followUpId });
+  };
+
+  const handleRemoveFollowUp = () => {
+    if (!deleteDialog) return;
+    deleteFollowUp.mutate(deleteDialog.followUpId);
+    toast.success("Follow-up removido!");
+    setDeleteDialog(null);
   };
 
   return (
@@ -401,6 +425,7 @@ export default function PipeFollowUps() {
                       followUp={followUp}
                       onComplete={handleComplete}
                       onArchive={handleArchive}
+                      onRemove={handleOpenRemoveDialog}
                     />
                   ))}
                 </div>
@@ -411,6 +436,27 @@ export default function PipeFollowUps() {
         </div>
         </div>
       </div>
+
+      {/* Delete follow-up confirmation */}
+      <AlertDialog open={deleteDialog?.open} onOpenChange={(open) => !open && setDeleteDialog(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
+            <AlertDialogDescription>
+              Você irá remover este follow-up. O lead será mantido no sistema.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleRemoveFollowUp}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Remover do Funil
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

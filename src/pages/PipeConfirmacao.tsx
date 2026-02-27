@@ -21,7 +21,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { DraggableKanbanBoard, DraggableItem, KanbanColumn } from "@/components/kanban/DraggableKanbanBoard";
-import { usePipeConfirmacao, useUpdatePipeConfirmacao, useCreatePipeConfirmacao, PipeConfirmacaoStatus } from "@/hooks/usePipeConfirmacao";
+import { usePipeConfirmacao, useUpdatePipeConfirmacao, useCreatePipeConfirmacao, useDeletePipeConfirmacao, PipeConfirmacaoStatus } from "@/hooks/usePipeConfirmacao";
 import { usePipelineStages, stagesToColumns, getPipelineTypeName } from "@/hooks/usePipelineStages";
 import { PipeSettingsDialog } from "@/components/pipelines/PipeSettingsDialog";
 import { useDeleteAllLeadsInPipe } from "@/hooks/useLeads";
@@ -152,6 +152,7 @@ export default function PipeConfirmacao() {
   const [isCompareceuModalOpen, setIsCompareceuModalOpen] = useState(false);
   const [pendingCompareceuItem, setPendingCompareceuItem] = useState<any>(null);
   const [isProcessingCompareceu, setIsProcessingCompareceu] = useState(false);
+  const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; pipeId: string; leadId: string } | null>(null);
   const [deleteAllLeadsDialogOpen, setDeleteAllLeadsDialogOpen] = useState(false);
   const [metricsPeriod, setMetricsPeriod] = useState<MetricsPeriod>("all");
   const now = new Date();
@@ -165,6 +166,7 @@ export default function PipeConfirmacao() {
   const updatePipeConfirmacao = useUpdatePipeConfirmacao();
   const createPipeProposta = useCreatePipeProposta();
   const createPipeConfirmacao = useCreatePipeConfirmacao();
+  const deletePipeConfirmacao = useDeletePipeConfirmacao();
   const deleteAllLeadsInPipe = useDeleteAllLeadsInPipe("confirmacao");
   const logAction = useLogLeadAction();
 
@@ -439,6 +441,21 @@ export default function PipeConfirmacao() {
     }
   };
 
+  const handleOpenDeleteDialog = (pipeId: string, leadId: string) => {
+    setDeleteDialog({ open: true, pipeId, leadId });
+  };
+
+  const handleDeleteFromPipe = async () => {
+    if (!deleteDialog) return;
+    try {
+      await deletePipeConfirmacao.mutateAsync(deleteDialog.pipeId);
+      toast.success("Oportunidade removida do funil!");
+      setDeleteDialog(null);
+    } catch (error) {
+      toast.error("Erro ao excluir");
+    }
+  };
+
   const handleCardClick = (card: ConfirmacaoCardData) => {
     const item = pipeData?.find(p => p.id === card.id);
     if (item) {
@@ -578,9 +595,10 @@ export default function PipeConfirmacao() {
           onStatusChange={handleStatusChange}
           onDeleteAllLeads={() => setDeleteAllLeadsDialogOpen(true)}
           renderCard={(card) => (
-            <ConfirmacaoCard 
-              card={card} 
+            <ConfirmacaoCard
+              card={card}
               onClick={() => handleCardClick(card)}
+              onDelete={handleOpenDeleteDialog}
             />
           )}
         />
@@ -627,6 +645,27 @@ export default function PipeConfirmacao() {
         currentCloserId={pendingCompareceuItem?.closer_id}
         isLoading={isProcessingCompareceu}
       />
+
+      {/* Delete single lead from pipe */}
+      <AlertDialog open={deleteDialog?.open} onOpenChange={(open) => !open && setDeleteDialog(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
+            <AlertDialogDescription>
+              Você irá remover esta oportunidade do funil. O lead será mantido no sistema.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteFromPipe}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Remover do Funil
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Delete ALL leads from THIS stage (Confirmação) confirmation */}
       <AlertDialog open={deleteAllLeadsDialogOpen} onOpenChange={setDeleteAllLeadsDialogOpen}>

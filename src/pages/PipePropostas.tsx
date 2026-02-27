@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Search, Filter, Plus, Calendar, User, Building2, Star,
   DollarSign, Clock, Tag, Loader2, TrendingUp, Package,
-  ArrowUpRight, Percent, BarChart3, Target, Flame, MessageCircle, Settings2
+  ArrowUpRight, Percent, BarChart3, Target, Flame, MessageCircle, Settings2,
+  MoreVertical, Trash2
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -26,8 +27,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { DraggableKanbanBoard, DraggableItem, KanbanColumn } from "@/components/kanban/DraggableKanbanBoard";
-import { usePipePropostas, useUpdatePipeProposta, PipePropostasStatus } from "@/hooks/usePipePropostas";
+import { usePipePropostas, useUpdatePipeProposta, useDeletePipeProposta, PipePropostasStatus } from "@/hooks/usePipePropostas";
 import { usePipePropostasMetrics, type MetricsPeriod } from "@/hooks/usePipeMetrics";
 import { useDeleteAllLeadsInPipe } from "@/hooks/useLeads";
 import { usePipelineStages, stagesToColumns } from "@/hooks/usePipelineStages";
@@ -83,12 +90,14 @@ interface ProposalCard extends DraggableItem {
 
 import { openWhatsApp, formatPhoneForWhatsApp } from "@/lib/whatsapp";
 
-function ProposalCardComponent({ 
-  proposal, 
-  onCalorChange 
-}: { 
-  proposal: ProposalCard; 
+function ProposalCardComponent({
+  proposal,
+  onCalorChange,
+  onDelete,
+}: {
+  proposal: ProposalCard;
   onCalorChange: (calor: number) => void;
+  onDelete?: (pipeId: string, leadId: string) => void;
 }) {
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat("pt-BR", {
@@ -115,10 +124,31 @@ function ProposalCardComponent({
           value={proposal.calor} 
           onChange={onCalorChange}
         />
-        <QuickAddDailyAction 
-          propostaId={proposal.id} 
+        <QuickAddDailyAction
+          propostaId={proposal.id}
           leadName={proposal.name}
         />
+        {onDelete && proposal.leadId && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+              <Button variant="ghost" size="icon" className="h-6 w-6">
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                className="text-destructive focus:text-destructive"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete(proposal.id, proposal.leadId!);
+                }}
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Remover do Funil
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
 
       <div className="flex items-start justify-between gap-2 mb-2">
@@ -308,6 +338,7 @@ export default function PipePropostas() {
     closerId: string | null;
     leadName: string;
   } | null>(null);
+  const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; pipeId: string; leadId: string } | null>(null);
   const [deleteAllLeadsDialogOpen, setDeleteAllLeadsDialogOpen] = useState(false);
   const [metricsPeriod, setMetricsPeriod] = useState<MetricsPeriod>("all");
   const now = new Date();
@@ -318,6 +349,7 @@ export default function PipePropostas() {
   const { data: pipelineStages = [] } = usePipelineStages("propostas");
   const { data: teamMembers } = useTeamMembers();
   const updatePipeProposta = useUpdatePipeProposta();
+  const deletePipeProposta = useDeletePipeProposta();
   const deleteAllLeadsInPipe = useDeleteAllLeadsInPipe("propostas");
   const logAction = useLogLeadAction();
   const { data: metricsByPeriod } = usePipePropostasMetrics(
@@ -638,6 +670,21 @@ export default function PipePropostas() {
       currency: "BRL",
       minimumFractionDigits: 0,
     }).format(value);
+  };
+
+  const handleOpenDeleteDialog = (pipeId: string, leadId: string) => {
+    setDeleteDialog({ open: true, pipeId, leadId });
+  };
+
+  const handleDeleteFromPipe = async () => {
+    if (!deleteDialog) return;
+    try {
+      await deletePipeProposta.mutateAsync(deleteDialog.pipeId);
+      toast.success("Proposta removida do funil!");
+      setDeleteDialog(null);
+    } catch (error) {
+      toast.error("Erro ao excluir");
+    }
   };
 
   // Handle status change from drag-and-drop
@@ -1035,9 +1082,10 @@ export default function PipePropostas() {
                     setIsDetailModalOpen(true);
                   }
                 }}>
-                  <ProposalCardComponent 
-                    proposal={card} 
+                  <ProposalCardComponent
+                    proposal={card}
                     onCalorChange={(calor) => handleCalorChange(card.id, calor)}
+                    onDelete={handleOpenDeleteDialog}
                   />
                 </div>
               )}
@@ -1232,6 +1280,27 @@ export default function PipePropostas() {
         onCancel={handleCommitmentDateCancel}
         leadName={pendingStatusChange?.leadName || "Lead"}
       />
+
+      {/* Delete single lead from pipe */}
+      <AlertDialog open={deleteDialog?.open} onOpenChange={(open) => !open && setDeleteDialog(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
+            <AlertDialogDescription>
+              Você irá remover esta proposta do funil. O lead será mantido no sistema.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteFromPipe}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Remover do Funil
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Delete ALL leads from THIS stage (Propostas) confirmation */}
       <AlertDialog open={deleteAllLeadsDialogOpen} onOpenChange={setDeleteAllLeadsDialogOpen}>

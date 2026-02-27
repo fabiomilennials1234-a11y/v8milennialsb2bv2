@@ -67,6 +67,11 @@ export function useUploadCopilotAgentAudio() {
         throw new Error(`Limite de ${MAX_AUDIOS} áudios atingido`);
       }
 
+      // Normalizar MIME type: remover parâmetros de codec (ex: "audio/webm;codecs=opus" → "audio/webm")
+      // O Supabase Storage faz match exato do allowed_mime_types
+      const rawMimeType = file.type || "audio/ogg";
+      const mimeType = rawMimeType.split(";")[0].trim();
+
       // Gerar path único
       const ext = file.name.split(".").pop() || "ogg";
       const uuid = crypto.randomUUID();
@@ -76,7 +81,7 @@ export function useUploadCopilotAgentAudio() {
       const { error: uploadError } = await supabase.storage
         .from("media")
         .upload(storagePath, file, {
-          contentType: file.type,
+          contentType: mimeType,
           upsert: false,
         });
 
@@ -98,7 +103,7 @@ export function useUploadCopilotAgentAudio() {
           name: name || `Áudio ${new Date().toLocaleDateString("pt-BR")}`,
           storage_path: storagePath,
           public_url: publicUrl,
-          mime_type: file.type || "audio/ogg",
+          mime_type: mimeType,
           file_size: file.size,
           is_active: true,
         })

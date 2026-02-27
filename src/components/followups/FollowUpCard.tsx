@@ -1,10 +1,10 @@
 import { motion } from "framer-motion";
 import { format, formatDistanceToNow, isPast, isToday } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { 
-  Building2, 
-  Clock, 
-  CheckCircle2, 
+import {
+  Building2,
+  Clock,
+  CheckCircle2,
   AlertTriangle,
   Calendar,
   User,
@@ -12,6 +12,7 @@ import {
   Kanban,
   MessageCircle,
   Archive,
+  Trash2,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,6 +24,7 @@ interface FollowUpCardProps {
   followUp: FollowUp;
   onComplete: (id: string) => void;
   onArchive?: (id: string) => void;
+  onRemove?: (id: string) => void;
   onClick?: () => void;
 }
 
@@ -45,7 +47,7 @@ const pipeLabels = {
   propostas: "Propostas",
 };
 
-export function FollowUpCard({ followUp, onComplete, onArchive, onClick }: FollowUpCardProps) {
+export function FollowUpCard({ followUp, onComplete, onArchive, onRemove, onClick }: FollowUpCardProps) {
   const dueDate = new Date(followUp.due_date);
   const isOverdue = isPast(dueDate) && !isToday(dueDate);
   const isDueToday = isToday(dueDate);
@@ -173,6 +175,20 @@ export function FollowUpCard({ followUp, onComplete, onArchive, onClick }: Follo
                 title="Arquivar"
               >
                 <Archive className="w-4 h-4" />
+              </Button>
+            )}
+            {onRemove && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRemove(followUp.id);
+                }}
+                title="Remover do Funil"
+              >
+                <Trash2 className="w-4 h-4" />
               </Button>
             )}
           </div>

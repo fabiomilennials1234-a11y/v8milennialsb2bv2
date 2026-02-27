@@ -1462,6 +1462,63 @@ export type Database = {
           },
         ]
       }
+      copilot_agent_audios: {
+        Row: {
+          id: string
+          agent_id: string
+          organization_id: string
+          name: string
+          storage_path: string
+          public_url: string
+          mime_type: string
+          file_size: number | null
+          is_active: boolean | null
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          agent_id: string
+          organization_id: string
+          name?: string
+          storage_path: string
+          public_url: string
+          mime_type?: string
+          file_size?: number | null
+          is_active?: boolean | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          agent_id?: string
+          organization_id?: string
+          name?: string
+          storage_path?: string
+          public_url?: string
+          mime_type?: string
+          file_size?: number | null
+          is_active?: boolean | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "copilot_agent_audios_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "copilot_agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "copilot_agent_audios_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       copilot_agent_document_chunks: {
         Row: {
           agent_id: string

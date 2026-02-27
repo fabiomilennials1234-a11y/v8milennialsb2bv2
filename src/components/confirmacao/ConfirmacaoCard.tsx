@@ -13,9 +13,17 @@ import {
   MessageCircle,
   Check,
   Video,
+  MoreVertical,
+  Trash2,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { openWhatsApp, formatPhoneForWhatsApp } from "@/lib/whatsapp";
 import { format, isToday, isTomorrow, isPast, differenceInHours, differenceInDays, formatDistanceToNow } from "date-fns";
@@ -28,6 +36,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useState, useEffect } from "react";
 interface ConfirmacaoCardProps {
+  onDelete?: (pipeId: string, leadId: string) => void;
   card: {
     id: string;
     name: string;
@@ -134,7 +143,7 @@ function getMeetingIndicator(
   return null;
 }
 
-export function ConfirmacaoCard({ card, onClick, variant = "default" }: ConfirmacaoCardProps) {
+export function ConfirmacaoCard({ card, onClick, onDelete, variant = "default" }: ConfirmacaoCardProps) {
   const origin = originConfig[card.origin] || originConfig.outro;
   const meetingDate = card.meetingDateTime || (card.meetingDate ? new Date(card.meetingDate) : null);
   const indicator = getMeetingIndicator(
@@ -315,9 +324,9 @@ export function ConfirmacaoCard({ card, onClick, variant = "default" }: Confirma
         </div>
         <div className="flex items-center gap-1 ml-2">
           {card.confirmacaoId && (
-            <QuickAddDailyAction 
-              confirmacaoId={card.confirmacaoId} 
-              leadName={card.name} 
+            <QuickAddDailyAction
+              confirmacaoId={card.confirmacaoId}
+              leadName={card.name}
             />
           )}
           <div className="flex items-center gap-0.5">
@@ -333,6 +342,27 @@ export function ConfirmacaoCard({ card, onClick, variant = "default" }: Confirma
               />
             ))}
           </div>
+          {onDelete && card.confirmacaoId && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                <Button variant="ghost" size="icon" className="h-6 w-6">
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  className="text-destructive focus:text-destructive"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete(card.confirmacaoId!, card.leadId);
+                  }}
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Remover do Funil
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
       </div>
 
