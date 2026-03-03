@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { motion } from "framer-motion";
 import { Sparkles, TrendingUp, Clock, Phone, ArrowRight, RefreshCw } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,7 +26,7 @@ interface PriorityLead {
   score: LeadScore;
 }
 
-export function PriorityLeads() {
+function PriorityLeadsBase() {
   const navigate = useNavigate();
   const { data: scores, isLoading: scoresLoading } = useLeadScores();
   const { data: leads, isLoading: leadsLoading } = useLeads();
@@ -226,3 +227,5 @@ export function PriorityLeads() {
     </Card>
   );
 }
+
+export const PriorityLeads = memo(PriorityLeadsBase);

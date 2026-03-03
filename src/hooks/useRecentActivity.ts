@@ -143,6 +143,7 @@ export function useRecentActivity(limit: number = 10) {
         .slice(0, limit);
     },
     enabled: isReady && !!organizationId,
-    refetchInterval: 30000,
+    refetchInterval: 60000, // 60s — atividade recente não precisa de polling agressivo
+    refetchIntervalInBackground: false, // Parar polling quando a aba está em background
   });
 }

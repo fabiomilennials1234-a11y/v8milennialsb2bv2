@@ -302,5 +302,6 @@ export function useTVDashboardData() {
     enabled: !!teamMembers && !!propostas && !!confirmacoes && !!whatsapp && (isAdmin !== undefined),
     staleTime: 1000 * 30, // 30 segundos — dados de TV atualizam via realtime
     refetchInterval: 1000 * 60, // Fallback: refresh a cada 60s caso realtime falhe
+    refetchIntervalInBackground: false, // Parar polling quando a aba TV está em background
   });
 }

@@ -8,23 +8,29 @@ export type Lead = Tables<"leads">;
 export type LeadInsert = TablesInsert<"leads">;
 export type LeadUpdate = TablesUpdate<"leads">;
 
+const LEADS_PAGE_SIZE = 50;
+
 /**
- * Fetch leads filtered by current user's organization
+ * Fetch leads filtered by current user's organization — COM PAGINAÇÃO
  * SECURITY: Always filters by organization_id to ensure data isolation
+ * Retorna até LEADS_PAGE_SIZE leads por página, com hasMore e loadMore.
  */
-export function useLeads() {
+export function useLeads(page: number = 0) {
   const { organizationId, isReady } = useOrganization();
-  
+
   useRealtimeSubscription("leads", ["leads", "pipe_whatsapp", "pipe_confirmacao", "pipe_propostas", "tv-dashboard"]);
-  
+
   return useQuery({
-    queryKey: ["leads", organizationId],
+    queryKey: ["leads", organizationId, page],
     queryFn: async () => {
       if (!organizationId) {
         console.warn("[useLeads] No organization_id available - returning empty array");
         return [];
       }
-      
+
+      const from = page * LEADS_PAGE_SIZE;
+      const to = from + LEADS_PAGE_SIZE - 1;
+
       const { data, error } = await supabase
         .from("leads")
         .select(`
@@ -39,15 +45,42 @@ export function useLeads() {
         .eq("organization_id", organizationId)
         // Shadow leads não aparecem na listagem até serem promovidos
         .or("is_shadow.is.null,is_shadow.eq.false")
-        .order("created_at", { ascending: false });
-      
+        .order("created_at", { ascending: false })
+        .range(from, to);
+
       if (error) throw error;
       return data;
     },
     // Only run query when organization is ready
     enabled: isReady,
+    staleTime: 30000, // 30 segundos
   });
 }
+
+/**
+ * Hook para contar total de leads (para paginação)
+ */
+export function useLeadsCount() {
+  const { organizationId, isReady } = useOrganization();
+
+  return useQuery({
+    queryKey: ["leads-count", organizationId],
+    queryFn: async () => {
+      if (!organizationId) return 0;
+      const { count, error } = await supabase
+        .from("leads")
+        .select("*", { count: "exact", head: true })
+        .eq("organization_id", organizationId)
+        .or("is_shadow.is.null,is_shadow.eq.false");
+      if (error) throw error;
+      return count ?? 0;
+    },
+    enabled: isReady,
+    staleTime: 60000, // 1 minuto
+  });
+}
+
+export { LEADS_PAGE_SIZE };
 
 /**
  * Create a new lead

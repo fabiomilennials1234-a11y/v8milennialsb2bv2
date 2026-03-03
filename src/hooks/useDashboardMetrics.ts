@@ -172,6 +172,7 @@ export function useDashboardMetrics(month?: number, year?: number) {
       };
     },
     enabled: !!organizationId,
+    staleTime: 60000, // 1 minuto — métricas não mudam a cada segundo
   });
 }
 
@@ -359,7 +360,7 @@ export function useRankingData(month?: number, year?: number) {
       };
     },
     enabled: !!organizationId,
-    staleTime: 0,
-    refetchOnMount: "always",
+    staleTime: 60000, // 1 minuto — ranking não precisa ser real-time, atualiza via realtime subscription
+    refetchOnMount: true,
   });
 }

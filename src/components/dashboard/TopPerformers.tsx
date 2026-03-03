@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { motion } from "framer-motion";
 import { Trophy, Crown, Medal, Award, TrendingUp, Flame } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,7 +16,7 @@ const positionBg = [
   "bg-gradient-to-br from-amber-600/20 to-amber-700/20",
 ];
 
-export function TopPerformers() {
+function TopPerformersBase() {
   const now = new Date();
   const navigate = useNavigate();
   const { data: rankingData, isLoading } = useRankingData(now.getMonth() + 1, now.getFullYear());
@@ -153,3 +154,5 @@ export function TopPerformers() {
     </Card>
   );
 }
+
+export const TopPerformers = memo(TopPerformersBase);

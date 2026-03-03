@@ -51,7 +51,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useLeads, useCreateLead, useUpdateLead, useDeleteLead, type Lead } from "@/hooks/useLeads";
+import { useLeads, useLeadsCount, useCreateLead, useUpdateLead, useDeleteLead, LEADS_PAGE_SIZE, type Lead } from "@/hooks/useLeads";
 import { ExportLeadsModal } from "@/components/leads/ExportLeadsModal";
 import {
   AlertDialog,
@@ -154,8 +154,11 @@ export default function Leads() {
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [formData, setFormData] = useState<LeadFormData>(initialFormData);
 
-  const { data: leads = [], isLoading } = useLeads();
+  const [page, setPage] = useState(0);
+  const { data: leads = [], isLoading } = useLeads(page);
+  const { data: totalLeads } = useLeadsCount();
   const { data: teamMembers = [] } = useTeamMembers();
+  const totalPages = Math.ceil((totalLeads ?? 0) / LEADS_PAGE_SIZE);
   const { data: currentTeamMember, isLoading: isLoadingTeamMember, isFetching: isFetchingTeamMember } = useCurrentTeamMember();
   const createLead = useCreateLead();
   const updateLead = useUpdateLead();
@@ -185,7 +188,7 @@ export default function Leads() {
   }, [leads, searchQuery, filterOrigin, filterRating]);
 
   const stats = useMemo(() => {
-    const total = leads.length;
+    const total = totalLeads ?? leads.length;
     const highRating = leads.filter((l: Lead) => (l.rating || 0) >= 7).length;
     const thisMonth = leads.filter((l: Lead) => {
       const date = new Date(l.created_at);
@@ -193,9 +196,9 @@ export default function Leads() {
       return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
     }).length;
     const withSDR = leads.filter((l: Lead) => l.sdr_id).length;
-    
+
     return { total, highRating, thisMonth, withSDR };
-  }, [leads]);
+  }, [leads, totalLeads]);
 
   const handleOpenDialog = (lead?: any) => {
     if (lead) {
@@ -514,6 +517,33 @@ export default function Leads() {
             )}
           </TableBody>
         </Table>
+
+        {/* Paginação */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between px-4 py-3 border-t">
+            <span className="text-sm text-muted-foreground">
+              Página {page + 1} de {totalPages} ({totalLeads} leads)
+            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage(p => Math.max(0, p - 1))}
+                disabled={page === 0}
+              >
+                Anterior
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+                disabled={page >= totalPages - 1}
+              >
+                Próxima
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
 
       <ExportLeadsModal open={isExportModalOpen} onOpenChange={setIsExportModalOpen} />

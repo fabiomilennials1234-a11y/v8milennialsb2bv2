@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { motion } from "framer-motion";
 import {
   TrendingUp,
@@ -18,7 +19,7 @@ interface QuickStatsProps {
   className?: string;
 }
 
-export function QuickStats({ className }: QuickStatsProps) {
+function QuickStatsBase({ className }: QuickStatsProps) {
   const { organizationId, isReady } = useOrganization();
 
   const { data: stats } = useQuery({
@@ -147,3 +148,5 @@ export function QuickStats({ className }: QuickStatsProps) {
     </div>
   );
 }
+
+export const QuickStats = memo(QuickStatsBase);

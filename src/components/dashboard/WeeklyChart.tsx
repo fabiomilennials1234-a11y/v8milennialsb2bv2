@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import { motion } from "framer-motion";
 import {
   AreaChart,
@@ -19,7 +19,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { TrendingUp } from "lucide-react";
 import { useOrganization } from "@/hooks/useOrganization";
 
-export function WeeklyChart() {
+function WeeklyChartBase() {
   const { organizationId, isReady } = useOrganization();
 
   const { data: chartData, isLoading } = useQuery({
@@ -184,3 +184,5 @@ export function WeeklyChart() {
     </Card>
   );
 }
+
+export const WeeklyChart = memo(WeeklyChartBase);

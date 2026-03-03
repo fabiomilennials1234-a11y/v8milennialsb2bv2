@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { motion } from "framer-motion";
 import { useConversionRates } from "@/hooks/useDashboardMetrics";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -70,7 +71,7 @@ function ConversionBar({ name, rate, meetings, sales, index, type }: ConversionB
   );
 }
 
-export function ConversionChart() {
+function ConversionChartBase() {
   const now = new Date();
   const { data, isLoading } = useConversionRates(now.getMonth() + 1, now.getFullYear());
 
@@ -143,3 +144,5 @@ export function ConversionChart() {
     </Tabs>
   );
 }
+
+export const ConversionChart = memo(ConversionChartBase);

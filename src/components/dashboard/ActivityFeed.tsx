@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { motion } from "framer-motion";
 import { User, Calendar, DollarSign, FileText, X, Clock } from "lucide-react";
 import { useRecentActivity, Activity } from "@/hooks/useRecentActivity";
@@ -60,7 +61,7 @@ function ActivityItem({ activity, index }: { activity: Activity; index: number }
   );
 }
 
-export function ActivityFeed() {
+function ActivityFeedBase() {
   const { data: activities, isLoading } = useRecentActivity(8);
 
   if (isLoading) {
@@ -102,3 +103,5 @@ export function ActivityFeed() {
     </ScrollArea>
   );
 }
+
+export const ActivityFeed = memo(ActivityFeedBase);

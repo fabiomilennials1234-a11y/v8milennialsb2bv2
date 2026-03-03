@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useOrganization } from "./useOrganization";
 
 /**
  * Debounce de 2 segundos para evitar cascade de invalidações
@@ -8,11 +9,25 @@ import { supabase } from "@/integrations/supabase/client";
  */
 const DEBOUNCE_MS = 2000;
 
+/**
+ * Tabelas que NÃO têm coluna organization_id — usam wildcard.
+ * Todas as outras são filtradas por org_id para reduzir ~80% do tráfego realtime.
+ */
+const TABLES_WITHOUT_ORG_ID = new Set([
+  "team_members",
+  "user_roles",
+  "profiles",
+  "master_users",
+  "tags",
+]);
+
 export function useRealtimeSubscription(
   table: string,
   queryKeys: string[]
 ) {
   const queryClient = useQueryClient();
+  const { organizationId } = useOrganization();
+
   // Manter referência estável das queryKeys para evitar subscribe/unsubscribe
   // constante no useEffect (arrays criam referência nova a cada render)
   const queryKeysRef = useRef(queryKeys);
@@ -23,11 +38,26 @@ export function useRealtimeSubscription(
   const queryKeysKey = JSON.stringify(queryKeys);
 
   useEffect(() => {
+    // Filtrar por organization_id quando a tabela suporta
+    const canFilter = !TABLES_WITHOUT_ORG_ID.has(table) && !!organizationId;
+
+    const channelName = `${table}_realtime_${organizationId ?? "global"}`;
+
+    const pgChangesConfig: Record<string, string> = {
+      event: "*",
+      schema: "public",
+      table,
+    };
+
+    if (canFilter) {
+      pgChangesConfig.filter = `organization_id=eq.${organizationId}`;
+    }
+
     const channel = supabase
-      .channel(`${table}_realtime`)
+      .channel(channelName)
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table },
+        pgChangesConfig as any,
         () => {
           // Debounce: agrupa múltiplas mudanças em sequência numa única invalidação
           if (debounceTimerRef.current) {
@@ -50,5 +80,5 @@ export function useRealtimeSubscription(
       supabase.removeChannel(channel);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [table, queryClient, queryKeysKey]);
+  }, [table, queryClient, queryKeysKey, organizationId]);
 }

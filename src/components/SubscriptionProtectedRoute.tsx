@@ -6,7 +6,8 @@
  * - Subscription expirou
  * - Subscription está suspensa/cancelada
  *
- * Admin e Closer bypassam requireActive (podem criar copilots mesmo em trial).
+ * Admin, Closer e Master bypassam requireActive (podem criar copilots mesmo em trial).
+ * Master bypassa TODA verificação de subscription.
  */
 
 import { ReactNode, useEffect, useState } from 'react';
@@ -14,11 +15,12 @@ import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { checkCurrentUserSubscription, type SubscriptionStatus } from '@/lib/subscription';
 import { useUserRole } from '@/hooks/useUserRole';
+import { useMasterAuth } from '@/hooks/useMasterAuth';
 import { Loader2 } from 'lucide-react';
 
 interface SubscriptionProtectedRouteProps {
   children: ReactNode;
-  requireActive?: boolean; // Se true, requer subscription ativa (não trial). Admin e Closer bypassam.
+  requireActive?: boolean; // Se true, requer subscription ativa (não trial). Admin, Closer e Master bypassam.
 }
 
 export function SubscriptionProtectedRoute({
@@ -27,13 +29,19 @@ export function SubscriptionProtectedRoute({
 }: SubscriptionProtectedRouteProps) {
   const { user, loading: authLoading } = useAuth();
   const { data: userRole, isLoading: roleLoading } = useUserRole();
+  const { isMaster, isLoading: masterLoading } = useMasterAuth();
   const [subscription, setSubscription] = useState<SubscriptionStatus | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const canBypassSubscription = userRole?.role === 'admin' || userRole?.role === 'closer';
+  const canBypassSubscription = isMaster || userRole?.role === 'admin' || userRole?.role === 'closer';
 
   useEffect(() => {
-    if (!authLoading && user) {
+    // Master bypassa toda verificação de subscription
+    if (isMaster && !masterLoading) {
+      setLoading(false);
+      return;
+    }
+    if (!authLoading && !masterLoading && user) {
       checkCurrentUserSubscription()
         .then(setSubscription)
         .catch(() => setSubscription(null))
@@ -41,9 +49,9 @@ export function SubscriptionProtectedRoute({
     } else if (!authLoading && !user) {
       setLoading(false);
     }
-  }, [user, authLoading]);
+  }, [user, authLoading, isMaster, masterLoading]);
 
-  if (authLoading || loading || roleLoading) {
+  if (authLoading || loading || roleLoading || masterLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
@@ -52,6 +60,11 @@ export function SubscriptionProtectedRoute({
         </div>
       </div>
     );
+  }
+
+  // Master bypassa todas as verificações de subscription
+  if (isMaster) {
+    return <>{children}</>;
   }
 
   if (!user) {

@@ -118,6 +118,7 @@ export function useCustomPipelines() {
       return (data || []) as CustomPipeline[];
     },
     enabled: !!organizationId,
+    staleTime: 5 * 60 * 1000, // 5 minutos — pipelines raramente mudam
   });
 }
 

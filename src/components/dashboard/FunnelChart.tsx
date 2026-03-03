@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { motion } from "framer-motion";
 
 interface FunnelStep {
@@ -11,7 +12,7 @@ interface FunnelChartProps {
   steps: FunnelStep[];
 }
 
-export function FunnelChart({ title, steps }: FunnelChartProps) {
+function FunnelChartBase({ title, steps }: FunnelChartProps) {
   const maxValue = Math.max(...steps.map((s) => s.value));
 
   return (
@@ -60,3 +61,5 @@ export function FunnelChart({ title, steps }: FunnelChartProps) {
     </div>
   );
 }
+
+export const FunnelChart = memo(FunnelChartBase);

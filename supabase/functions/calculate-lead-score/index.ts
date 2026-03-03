@@ -86,26 +86,57 @@ serve(async (req) => {
 
     const results = [];
 
+    // Batch queries: fetch all pipe/history data in 4 parallel queries instead of 4 per lead
+    const leadIds = (leads as LeadData[]).map(l => l.id);
+
+    const [allWhatsapp, allConfirmacao, allPropostas, allHistory] = await Promise.all([
+      supabase.from("pipe_whatsapp").select("lead_id, status").in("lead_id", leadIds),
+      supabase.from("pipe_confirmacao").select("lead_id, status, meeting_date").in("lead_id", leadIds),
+      supabase.from("pipe_propostas").select("lead_id, status, calor").in("lead_id", leadIds),
+      supabase.from("lead_history").select("lead_id, id, created_at").in("lead_id", leadIds).order("created_at", { ascending: false }),
+    ]);
+
+    // Build lookup Maps for O(1) access inside the loop
+    const whatsappMap = new Map<string, { status: string }>();
+    for (const row of allWhatsapp.data || []) {
+      if (!whatsappMap.has(row.lead_id)) whatsappMap.set(row.lead_id, row);
+    }
+
+    const confirmacaoMap = new Map<string, { status: string; meeting_date: string }>();
+    for (const row of allConfirmacao.data || []) {
+      if (!confirmacaoMap.has(row.lead_id)) confirmacaoMap.set(row.lead_id, row);
+    }
+
+    const propostaMap = new Map<string, { status: string; calor: number }>();
+    for (const row of allPropostas.data || []) {
+      if (!propostaMap.has(row.lead_id)) propostaMap.set(row.lead_id, row);
+    }
+
+    // Group history entries by lead_id (already ordered by created_at desc from query)
+    const historyMap = new Map<string, { id: string; created_at: string }[]>();
+    for (const row of allHistory.data || []) {
+      if (!historyMap.has(row.lead_id)) historyMap.set(row.lead_id, []);
+      historyMap.get(row.lead_id)!.push(row);
+    }
+
     for (const lead of leads as LeadData[]) {
-      // Get pipe data for this lead
-      const [whatsappRes, confirmacaoRes, propostaRes, historyRes] = await Promise.all([
-        supabase.from("pipe_whatsapp").select("status").eq("lead_id", lead.id).maybeSingle(),
-        supabase.from("pipe_confirmacao").select("status, meeting_date").eq("lead_id", lead.id).maybeSingle(),
-        supabase.from("pipe_propostas").select("status, calor").eq("lead_id", lead.id).maybeSingle(),
-        supabase.from("lead_history").select("id, created_at").eq("lead_id", lead.id).order("created_at", { ascending: false }),
-      ]);
+      // Lookup from pre-fetched Maps
+      const whatsappData = whatsappMap.get(lead.id);
+      const confirmacaoData = confirmacaoMap.get(lead.id);
+      const propostaData = propostaMap.get(lead.id);
+      const historyEntries = historyMap.get(lead.id) || [];
 
       const pipeData: PipeData = {
-        whatsapp_status: whatsappRes.data?.status,
-        confirmacao_status: confirmacaoRes.data?.status,
-        proposta_status: propostaRes.data?.status,
-        meeting_date: confirmacaoRes.data?.meeting_date,
-        calor: propostaRes.data?.calor,
+        whatsapp_status: whatsappData?.status,
+        confirmacao_status: confirmacaoData?.status,
+        proposta_status: propostaData?.status,
+        meeting_date: confirmacaoData?.meeting_date,
+        calor: propostaData?.calor,
       };
 
       const historyData: HistoryData = {
-        total_interactions: historyRes.data?.length || 0,
-        last_interaction: historyRes.data?.[0]?.created_at,
+        total_interactions: historyEntries.length,
+        last_interaction: historyEntries[0]?.created_at,
       };
 
       // Calculate days since creation

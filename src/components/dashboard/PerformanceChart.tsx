@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import { motion } from "framer-motion";
 import {
   AreaChart,
@@ -128,7 +128,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   return null;
 };
 
-export function PerformanceChart() {
+function PerformanceChartBase() {
   const now = new Date();
   const { data, isLoading } = usePerformanceData(
     now.getMonth() + 1,
@@ -256,3 +256,5 @@ export function PerformanceChart() {
     </Tabs>
   );
 }
+
+export const PerformanceChart = memo(PerformanceChartBase);

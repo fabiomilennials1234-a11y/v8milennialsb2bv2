@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import { motion } from "framer-motion";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -6,7 +6,7 @@ import { PieChartIcon, TrendingUp } from "lucide-react";
 import { useDashboardMetrics } from "@/hooks/useDashboardMetrics";
 import { Skeleton } from "@/components/ui/skeleton";
 
-export function SalesBreakdown() {
+function SalesBreakdownBase() {
   const now = new Date();
   const { data: metrics, isLoading } = useDashboardMetrics(now.getMonth() + 1, now.getFullYear());
 
@@ -131,3 +131,5 @@ export function SalesBreakdown() {
     </Card>
   );
 }
+
+export const SalesBreakdown = memo(SalesBreakdownBase);
