@@ -2,8 +2,8 @@
  * Step: Testar Conversa (Preview ao vivo)
  *
  * Dois modos:
- * - Reativo (sdr, qualificador, prospectador): usuário envia primeira mensagem → agente responde
- * - Proativo (followup, agendador): agente envia primeira mensagem → usuário responde como lead
+ * - Reativo (qualificador): usuário envia primeira mensagem → agente responde
+ * - Proativo (sdr, prospectador, followup, agendador): agente envia primeira mensagem → usuário responde como lead
  */
 
 import { useState, useRef, useEffect, useCallback } from "react";
@@ -24,16 +24,20 @@ interface ChatMessage {
 }
 
 /** Tipos de agentes que iniciam o contato (proativos) */
-const PROACTIVE_TYPES = new Set(["followup", "agendador"]);
+const PROACTIVE_TYPES = new Set(["followup", "agendador", "sdr", "prospectador"]);
 
 const PROACTIVE_LABELS: Record<string, string> = {
   followup: "Follow-up",
   agendador: "Confirmador de Reuniões",
+  sdr: "SDR Outbound",
+  prospectador: "Prospectador",
 };
 
 const PROACTIVE_HINTS: Record<string, string[]> = {
   followup: ["Tudo bem, pode me lembrar mais tarde", "Ainda tenho interesse sim!", "Não tenho interesse mais"],
   agendador: ["Confirmo! Estarei lá", "Preciso remarcar", "Qual o link da reunião?"],
+  sdr: ["Oi, quem é você?", "Me conta mais sobre isso", "Não tenho interesse, obrigado"],
+  prospectador: ["Pode me falar mais?", "Qual o preço?", "Não estou interessado no momento"],
 };
 
 export function TestConversationStep() {
@@ -48,7 +52,9 @@ export function TestConversationStep() {
 
   const watchedData = watch();
   const templateType = watchedData.templateType || "";
-  const isProactive = PROACTIVE_TYPES.has(templateType);
+  const operationMode = watchedData.operationMode || "inbound";
+  // Proativo: por templateType OU por operationMode outbound/hybrid
+  const isProactive = PROACTIVE_TYPES.has(templateType) || operationMode === "outbound" || operationMode === "hybrid";
   const agentName = watchedData.name || "Agente";
 
   // Gerar system prompt a partir dos dados do form
@@ -92,6 +98,9 @@ export function TestConversationStep() {
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
   const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
 
+  // Template de primeira mensagem para outbound/hybrid
+  const firstMessageTemplate = watchedData.outboundConfig?.firstMessageTemplate || "";
+
   const callEdgeFunction = useCallback(async (
     currentMessages: ChatMessage[],
     userMsg: string,
@@ -109,6 +118,7 @@ export function TestConversationStep() {
         messages: currentMessages.slice(-10),
         userMessage: userMsg,
         generateFirstMessage: isFirst,
+        ...(isFirst && firstMessageTemplate ? { firstMessageTemplate } : {}),
       }),
     });
 
@@ -123,7 +133,7 @@ export function TestConversationStep() {
     const parts = (result?.messages as string[] | undefined) || [result?.message as string];
     if (!parts[0]) throw new Error("Resposta vazia do agente");
     return parts;
-  }, [systemPrompt, supabaseUrl, anonKey]);
+  }, [systemPrompt, firstMessageTemplate, supabaseUrl, anonKey]);
 
   /** Agentes proativos: dispara a primeira mensagem do agente */
   const handleStartProactive = async () => {

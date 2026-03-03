@@ -85,6 +85,7 @@ export function useCampaignQueueItems(campanhaId: string, status: string | null)
       })) as QueueItem[];
     },
     enabled: !!campanhaId && !!status,
+    staleTime: 60000,
   });
 }
 
@@ -192,6 +193,7 @@ export function usePipeQueueItems(
       })) as QueueItem[];
     },
     enabled: !!organizationId && !!pipeType && !!status,
+    staleTime: 60000,
   });
 }
 

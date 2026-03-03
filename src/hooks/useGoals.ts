@@ -36,7 +36,7 @@ export function useGoals(month?: number, year?: number) {
       if (!organizationId) return [];
       const { data, error } = await supabase
         .from("goals")
-        .select("*")
+        .select("id, name, type, target_value, current_value, month, year, team_member_id, created_at, updated_at")
         .eq("organization_id", organizationId)
         .eq("month", selectedMonth)
         .eq("year", selectedYear);
@@ -45,6 +45,7 @@ export function useGoals(month?: number, year?: number) {
       return data as Goal[];
     },
     enabled: isReady && !!organizationId,
+    staleTime: 2 * 60 * 1000,
   });
 }
 
@@ -61,7 +62,7 @@ export function useTeamGoals(month?: number, year?: number) {
       if (!organizationId) return [];
       const { data: goals, error } = await supabase
         .from("goals")
-        .select("*")
+        .select("id, name, type, target_value, current_value, month, year, team_member_id, created_at, updated_at")
         .eq("organization_id", organizationId)
         .eq("month", selectedMonth)
         .eq("year", selectedYear)
@@ -71,6 +72,7 @@ export function useTeamGoals(month?: number, year?: number) {
       return goals as Goal[];
     },
     enabled: isReady && !!organizationId,
+    staleTime: 2 * 60 * 1000,
   });
 }
 
@@ -162,7 +164,7 @@ export function useIndividualGoals(month?: number, year?: number) {
 
       const { data: goals, error } = await supabase
         .from("goals")
-        .select("*")
+        .select("id, name, type, target_value, current_value, month, year, team_member_id")
         .eq("organization_id", organizationId)
         .eq("month", selectedMonth)
         .eq("year", selectedYear)
@@ -253,6 +255,7 @@ export function useIndividualGoals(month?: number, year?: number) {
       return { closerGoals, sdrGoals };
     },
     enabled: isReady && !!organizationId,
+    staleTime: 2 * 60 * 1000,
   });
 }
 

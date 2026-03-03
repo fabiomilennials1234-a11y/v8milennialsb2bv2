@@ -1,6 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
+const MESSAGES_PAGE_SIZE = 50;
+
 /**
  * Interface para mensagens de conversa
  */
@@ -59,12 +61,14 @@ interface WhatsAppMessage {
 }
 
 /**
- * Hook para buscar histórico de conversa de um lead
+ * Hook para buscar histórico de conversa de um lead — COM PAGINAÇÃO
  * Combina dados de conversation_messages e whatsapp_messages
+ * Retorna até MESSAGES_PAGE_SIZE mensagens por página (mais recentes primeiro).
+ * page=0 → últimas 50, page=1 → 50 anteriores, etc.
  */
-export function useConversationHistory(leadId: string | null) {
+export function useConversationHistory(leadId: string | null, page: number = 0) {
   return useQuery({
-    queryKey: ["conversation-history", leadId],
+    queryKey: ["conversation-history", leadId, page],
     queryFn: async () => {
       if (!leadId) return null;
 
@@ -82,29 +86,54 @@ export function useConversationHistory(leadId: string | null) {
         console.error("[useConversationHistory] Error fetching conversation:", convError);
       }
 
-      // Buscar mensagens da conversa (se existir)
+      const from = page * MESSAGES_PAGE_SIZE;
+      const to = from + MESSAGES_PAGE_SIZE - 1;
+
+      // Buscar mensagens da conversa (se existir) — com paginação
       let conversationMessages: ConversationMessage[] = [];
+      let convTotalCount = 0;
       if (conversation) {
+        // Contar total de mensagens da conversa
+        const { count: convCount } = await supabase
+          .from("conversation_messages")
+          .select("*", { count: "exact", head: true })
+          .eq("conversation_id", conversation.id);
+        convTotalCount = convCount ?? 0;
+
+        // Buscar página de mensagens (DESC para pegar as mais recentes, depois reverter)
         const { data: messages } = await supabase
           .from("conversation_messages")
           .select("*")
           .eq("conversation_id", conversation.id)
-          .order("created_at", { ascending: true });
+          .order("created_at", { ascending: false })
+          .range(from, to);
 
         if (messages) {
-          conversationMessages = messages;
+          // Reverter para ordem cronológica (ascending) para exibição
+          conversationMessages = messages.reverse();
         }
       }
 
-      // Buscar mensagens do WhatsApp
+      // Buscar mensagens do WhatsApp — com paginação
+      // Contar total
+      const { count: whatsappCount } = await supabase
+        .from("whatsapp_messages")
+        .select("*", { count: "exact", head: true })
+        .eq("lead_id", leadId);
+      const whatsappTotalCount = whatsappCount ?? 0;
+
       const { data: whatsappMessages } = await supabase
         .from("whatsapp_messages")
         .select("*")
         .eq("lead_id", leadId)
-        .order("timestamp", { ascending: true });
+        .order("timestamp", { ascending: false })
+        .range(from, to);
+
+      // Reverter WhatsApp para ordem cronológica
+      const sortedWhatsapp = (whatsappMessages || []).reverse();
 
       // Combinar mensagens, usando WhatsApp como fonte principal se não houver conversation_messages
-      const allMessages = conversationMessages.length > 0 
+      const allMessages = conversationMessages.length > 0
         ? conversationMessages.map(m => ({
             id: m.id,
             role: m.role,
@@ -112,7 +141,7 @@ export function useConversationHistory(leadId: string | null) {
             timestamp: m.created_at,
             source: 'conversation' as const,
           }))
-        : (whatsappMessages || []).map(m => ({
+        : sortedWhatsapp.map(m => ({
             id: m.id,
             role: m.direction === 'incoming' ? 'user' as const : 'assistant' as const,
             content: m.content || '',
@@ -121,16 +150,25 @@ export function useConversationHistory(leadId: string | null) {
             pushName: m.push_name,
           }));
 
+      // Determinar total com base na fonte usada
+      const totalCount = conversationMessages.length > 0 ? convTotalCount : whatsappTotalCount;
+      const hasMore = (from + MESSAGES_PAGE_SIZE) < totalCount;
+
       return {
         conversation,
         messages: allMessages,
         messageCount: allMessages.length,
-        whatsappMessages: whatsappMessages || [],
+        totalCount,
+        hasMore,
+        page,
+        whatsappMessages: sortedWhatsapp,
       };
     },
     enabled: !!leadId,
   });
 }
+
+export { MESSAGES_PAGE_SIZE };
 
 /**
  * Hook para buscar resumo da conversa
@@ -189,9 +227,10 @@ export function useGenerateSummary() {
 
 /**
  * Hook combinado para buscar histórico completo com resumo
+ * Aceita page para paginação de mensagens (page=0 retorna as mais recentes).
  */
-export function useFullConversationData(leadId: string | null) {
-  const historyQuery = useConversationHistory(leadId);
+export function useFullConversationData(leadId: string | null, page: number = 0) {
+  const historyQuery = useConversationHistory(leadId, page);
   const summaryQuery = useConversationSummary(leadId);
 
   return {

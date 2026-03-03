@@ -65,110 +65,38 @@ export function useDashboardMetrics(month?: number, year?: number) {
           novosClientes: 0,
         };
       }
-      // Leads: COALESCE(metrics_period_at, created_at) in range — duas queries
-      let leadsQ1 = supabase.from("leads").select("*", { count: "exact", head: true }).eq("organization_id", organizationId).not("metrics_period_at", "is", null).gte("metrics_period_at", startStr).lte("metrics_period_at", endStr);
-      let leadsQ2 = supabase.from("leads").select("*", { count: "exact", head: true }).eq("organization_id", organizationId).is("metrics_period_at", null).gte("created_at", startStr).lte("created_at", endStr);
-      if (filterByMe) {
-        leadsQ1 = leadsQ1.or(`sdr_id.eq.${myId},closer_id.eq.${myId}`);
-        leadsQ2 = leadsQ2.or(`sdr_id.eq.${myId},closer_id.eq.${myId}`);
-      }
-      const [{ count: leadsCount1 }, { count: leadsCount2 }] = await Promise.all([leadsQ1, leadsQ2]);
-      const totalLeads = (leadsCount1 || 0) + (leadsCount2 || 0);
 
-      // pipe_confirmacao: COALESCE(metrics_period_at, created_at) in range
-      let confQ1 = supabase.from("pipe_confirmacao").select("status, meeting_date, sdr_id, closer_id").eq("organization_id", organizationId).not("metrics_period_at", "is", null).gte("metrics_period_at", startStr).lte("metrics_period_at", endStr);
-      let confQ2 = supabase.from("pipe_confirmacao").select("status, meeting_date, sdr_id, closer_id").eq("organization_id", organizationId).is("metrics_period_at", null).gte("created_at", startStr).lte("created_at", endStr);
-      if (filterByMe) {
-        confQ1 = confQ1.or(`sdr_id.eq.${myId},closer_id.eq.${myId}`);
-        confQ2 = confQ2.or(`sdr_id.eq.${myId},closer_id.eq.${myId}`);
-      }
-      const [{ data: confData1 }, { data: confData2 }] = await Promise.all([confQ1, confQ2]);
-      const confirmacaoData = [...(confData1 || []), ...(confData2 || [])];
+      const { data, error } = await supabase.rpc("get_dashboard_metrics", {
+        p_org_id: organizationId,
+        p_start_date: startStr,
+        p_end_date: endStr,
+        p_filter_member_id: filterByMe ? myId : null,
+      });
 
-      const reunioesMarcadas = confirmacaoData.length;
-      const reunioesComparecidas = confirmacaoData.filter((c) => c.status === "compareceu").length;
-
-      // Taxa de no-show: apenas reuniões cuja data já passou e já têm desfecho (não inclui agendadas futuras)
-      const now = new Date();
-      const comDataPassada = confirmacaoData.filter(
-        (c) => c.meeting_date && new Date(c.meeting_date) <= now
-      );
-      const finalizadosDataPassada = comDataPassada.filter((c) =>
-        ["compareceu", "perdido", "remarcar"].includes(c.status)
-      );
-      const noShow = finalizadosDataPassada.filter(
-        (c) => c.status === "perdido" || c.status === "remarcar"
-      ).length;
-      const taxaNoShow =
-        finalizadosDataPassada.length > 0
-          ? Math.round((noShow / finalizadosDataPassada.length) * 100)
-          : 0;
-
-      // pipe_propostas vendido: COALESCE(metrics_period_at, closed_at) in range; agregação por item (MRR/Projeto por product.type; unitário só no total)
-      const propSelect = "sale_value, product_type, items:pipe_proposta_items(sale_value, product:products(type))";
-      let propQ1 = supabase.from("pipe_propostas").select(propSelect).eq("organization_id", organizationId).eq("status", "vendido").not("metrics_period_at", "is", null).gte("metrics_period_at", startStr).lte("metrics_period_at", endStr);
-      let propQ2 = supabase.from("pipe_propostas").select(propSelect).eq("organization_id", organizationId).eq("status", "vendido").is("metrics_period_at", null).gte("closed_at", startStr).lte("closed_at", endStr);
-      if (filterByMe) {
-        propQ1 = propQ1.eq("closer_id", myId);
-        propQ2 = propQ2.eq("closer_id", myId);
-      }
-      const [{ data: propData1 }, { data: propData2 }] = await Promise.all([propQ1, propQ2]);
-      const vendasFechadas = [...(propData1 || []), ...(propData2 || [])] as Array<{ sale_value: number | null; product_type: string | null; items?: Array<{ sale_value: number | null; product?: { type: string } | null }> | null }>;
-
-      let vendaTotal = 0;
-      let vendaMRR = 0;
-      let vendaProjeto = 0;
-      let mrrProposalCount = 0;
-      let projetoProposalCount = 0;
-      for (const v of vendasFechadas) {
-        const items = v.items?.filter((i) => i != null) ?? [];
-        if (items.length > 0) {
-          let propTotal = 0;
-          let propMrr = 0;
-          let propProj = 0;
-          for (const it of items) {
-            const val = Number(it.sale_value) || 0;
-            propTotal += val;
-            const t = it.product?.type;
-            if (t === "mrr") propMrr += val;
-            else if (t === "projeto") propProj += val;
-          }
-          vendaTotal += propTotal;
-          vendaMRR += propMrr;
-          vendaProjeto += propProj;
-          if (propMrr > 0) mrrProposalCount += 1;
-          if (propProj > 0) projetoProposalCount += 1;
-        } else {
-          const val = Number(v.sale_value) || 0;
-          vendaTotal += val;
-          if (v.product_type === "mrr") {
-            vendaMRR += val;
-            mrrProposalCount += 1;
-          } else if (v.product_type === "projeto") {
-            vendaProjeto += val;
-            projetoProposalCount += 1;
-          }
-        }
+      if (error) {
+        console.error("[useDashboardMetrics] RPC error:", error);
+        return {
+          totalLeads: 0, reunioesMarcadas: 0, reunioesComparecidas: 0,
+          noShow: 0, taxaNoShow: 0, vendaTotal: 0, vendaMRR: 0,
+          vendaProjeto: 0, ticketMedio: 0, ticketMedioMRR: 0,
+          ticketMedioProjeto: 0, novosClientes: 0,
+        };
       }
 
-      const novosClientes = vendasFechadas.length;
-      const ticketMedio = novosClientes > 0 ? vendaTotal / novosClientes : 0;
-      const ticketMedioMRR = mrrProposalCount > 0 ? vendaMRR / mrrProposalCount : 0;
-      const ticketMedioProjeto = projetoProposalCount > 0 ? vendaProjeto / projetoProposalCount : 0;
-
+      const d = data as Record<string, number> | null;
       return {
-        totalLeads: totalLeads || 0,
-        reunioesMarcadas,
-        reunioesComparecidas,
-        noShow,
-        taxaNoShow,
-        vendaTotal,
-        vendaMRR,
-        vendaProjeto,
-        ticketMedio,
-        ticketMedioMRR,
-        ticketMedioProjeto,
-        novosClientes,
+        totalLeads: d?.totalLeads ?? 0,
+        reunioesMarcadas: d?.reunioesMarcadas ?? 0,
+        reunioesComparecidas: d?.reunioesComparecidas ?? 0,
+        noShow: d?.noShow ?? 0,
+        taxaNoShow: d?.taxaNoShow ?? 0,
+        vendaTotal: d?.vendaTotal ?? 0,
+        vendaMRR: d?.vendaMRR ?? 0,
+        vendaProjeto: d?.vendaProjeto ?? 0,
+        ticketMedio: d?.ticketMedio ?? 0,
+        ticketMedioMRR: d?.ticketMedioMRR ?? 0,
+        ticketMedioProjeto: d?.ticketMedioProjeto ?? 0,
+        novosClientes: d?.novosClientes ?? 0,
       };
     },
     enabled: !!organizationId,
@@ -258,50 +186,34 @@ export function useFunnelData(month?: number, year?: number) {
   return useQuery({
     queryKey: ["funnel-data", selectedMonth, selectedYear, organizationId],
     queryFn: async () => {
-      if (!organizationId) {
-        return [
-          { label: "Leads", value: 0, color: "hsl(var(--primary))" },
-          { label: "Reuniões Marcadas", value: 0, color: "hsl(var(--chart-2))" },
-          { label: "Compareceu", value: 0, color: "hsl(var(--chart-3))" },
-          { label: "Propostas", value: 0, color: "hsl(var(--chart-4))" },
-          { label: "Vendas", value: 0, color: "hsl(var(--chart-5))" },
-        ];
-      }
-      const [
-        { count: leadsC1 },
-        { count: leadsC2 },
-        { count: reunC1 },
-        { count: reunC2 },
-        { count: compC1 },
-        { count: compC2 },
-        { count: propC1 },
-        { count: propC2 },
-        { count: vendC1 },
-        { count: vendC2 },
-      ] = await Promise.all([
-        supabase.from("leads").select("*", { count: "exact", head: true }).eq("organization_id", organizationId).not("metrics_period_at", "is", null).gte("metrics_period_at", startStr).lte("metrics_period_at", endStr),
-        supabase.from("leads").select("*", { count: "exact", head: true }).eq("organization_id", organizationId).is("metrics_period_at", null).gte("created_at", startStr).lte("created_at", endStr),
-        supabase.from("pipe_confirmacao").select("*", { count: "exact", head: true }).eq("organization_id", organizationId).not("metrics_period_at", "is", null).gte("metrics_period_at", startStr).lte("metrics_period_at", endStr),
-        supabase.from("pipe_confirmacao").select("*", { count: "exact", head: true }).eq("organization_id", organizationId).is("metrics_period_at", null).gte("created_at", startStr).lte("created_at", endStr),
-        supabase.from("pipe_confirmacao").select("*", { count: "exact", head: true }).eq("organization_id", organizationId).eq("status", "compareceu").not("metrics_period_at", "is", null).gte("metrics_period_at", startStr).lte("metrics_period_at", endStr),
-        supabase.from("pipe_confirmacao").select("*", { count: "exact", head: true }).eq("organization_id", organizationId).eq("status", "compareceu").is("metrics_period_at", null).gte("created_at", startStr).lte("created_at", endStr),
-        supabase.from("pipe_propostas").select("*", { count: "exact", head: true }).eq("organization_id", organizationId).not("metrics_period_at", "is", null).gte("metrics_period_at", startStr).lte("metrics_period_at", endStr),
-        supabase.from("pipe_propostas").select("*", { count: "exact", head: true }).eq("organization_id", organizationId).is("metrics_period_at", null).gte("created_at", startStr).lte("created_at", endStr),
-        supabase.from("pipe_propostas").select("*", { count: "exact", head: true }).eq("organization_id", organizationId).eq("status", "vendido").not("metrics_period_at", "is", null).gte("metrics_period_at", startStr).lte("metrics_period_at", endStr),
-        supabase.from("pipe_propostas").select("*", { count: "exact", head: true }).eq("organization_id", organizationId).eq("status", "vendido").is("metrics_period_at", null).gte("closed_at", startStr).lte("closed_at", endStr),
-      ]);
-      const totalLeads = (leadsC1 || 0) + (leadsC2 || 0);
-      const reunioesMarcadas = (reunC1 || 0) + (reunC2 || 0);
-      const reunioesComparecidas = (compC1 || 0) + (compC2 || 0);
-      const propostas = (propC1 || 0) + (propC2 || 0);
-      const vendas = (vendC1 || 0) + (vendC2 || 0);
+      const empty = [
+        { label: "Leads", value: 0, color: "hsl(var(--primary))" },
+        { label: "Reuniões Marcadas", value: 0, color: "hsl(var(--chart-2))" },
+        { label: "Compareceu", value: 0, color: "hsl(var(--chart-3))" },
+        { label: "Propostas", value: 0, color: "hsl(var(--chart-4))" },
+        { label: "Vendas", value: 0, color: "hsl(var(--chart-5))" },
+      ];
+      if (!organizationId) return empty;
 
+      const { data, error } = await supabase.rpc("get_dashboard_metrics", {
+        p_org_id: organizationId,
+        p_start_date: startStr,
+        p_end_date: endStr,
+        p_filter_member_id: null,
+      });
+
+      if (error) {
+        console.error("[useFunnelData] RPC error:", error);
+        return empty;
+      }
+
+      const d = data as Record<string, number> | null;
       return [
-        { label: "Leads", value: totalLeads || 0, color: "hsl(var(--primary))" },
-        { label: "Reuniões Marcadas", value: reunioesMarcadas || 0, color: "hsl(var(--chart-2))" },
-        { label: "Compareceu", value: reunioesComparecidas || 0, color: "hsl(var(--chart-3))" },
-        { label: "Propostas", value: propostas || 0, color: "hsl(var(--chart-4))" },
-        { label: "Vendas", value: vendas || 0, color: "hsl(var(--chart-5))" },
+        { label: "Leads", value: d?.funnelLeads ?? 0, color: "hsl(var(--primary))" },
+        { label: "Reuniões Marcadas", value: d?.funnelReunioes ?? 0, color: "hsl(var(--chart-2))" },
+        { label: "Compareceu", value: d?.funnelComparecidas ?? 0, color: "hsl(var(--chart-3))" },
+        { label: "Propostas", value: d?.funnelPropostas ?? 0, color: "hsl(var(--chart-4))" },
+        { label: "Vendas", value: d?.funnelVendas ?? 0, color: "hsl(var(--chart-5))" },
       ];
     },
     enabled: !!organizationId,

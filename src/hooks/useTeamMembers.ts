@@ -204,6 +204,7 @@ export function useTeamMembers() {
     },
     enabled: isReady && !!organizationId,
     retry: 1,
+    staleTime: 30000,
   });
 }
 

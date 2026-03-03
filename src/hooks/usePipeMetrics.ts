@@ -210,6 +210,7 @@ export function usePipePropostasMetrics(
       };
     },
     enabled: isReady && !!organizationId,
+    staleTime: 60000,
   });
 }
 
@@ -378,6 +379,7 @@ export function usePipeConfirmacaoMetrics(
       };
     },
     enabled: isReady && !!organizationId,
+    staleTime: 60000,
   });
 }
 
@@ -439,5 +441,6 @@ export function usePipeWhatsappMetrics(
       };
     },
     enabled: isReady && !!organizationId,
+    staleTime: 60000,
   });
 }

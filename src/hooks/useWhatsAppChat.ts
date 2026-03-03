@@ -316,8 +316,8 @@ export function useWhatsAppContacts(instanceId: string | null) {
       return results;
     },
     enabled: !!organizationId && !!instanceId,
-    // Polling de fallback: atualiza lista (e badge da sidebar) a cada 10s quando a aba está em foco (realtime pode falhar em produção)
-    refetchInterval: instanceId ? 10_000 : false,
+    // Polling de fallback: atualiza lista (e badge da sidebar) a cada 20s quando a aba está em foco (realtime pode falhar em produção)
+    refetchInterval: instanceId ? 20_000 : false,
     refetchIntervalInBackground: false,
   });
 }
@@ -350,8 +350,8 @@ export function useWhatsAppMessages(
       return data as WhatsAppMessage[];
     },
     enabled: !!organizationId && !!phoneNumber && !!instanceId,
-    // Polling de fallback: atualiza mensagens do chat a cada 8s quando a aba está em foco
-    refetchInterval: phoneNumber && instanceId ? 8_000 : false,
+    // Polling de fallback: atualiza mensagens do chat a cada 20s quando a aba está em foco
+    refetchInterval: phoneNumber && instanceId ? 20_000 : false,
     refetchIntervalInBackground: false,
   });
 }

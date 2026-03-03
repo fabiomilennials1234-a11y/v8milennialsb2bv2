@@ -95,6 +95,7 @@ export function OutboundConfigStep() {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const [audioPreviewUrl, setAudioPreviewUrl] = useState<string | null>(null);
   const [audioName, setAudioName] = useState("");
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -166,9 +167,13 @@ export function OutboundConfigStep() {
           type: mediaRecorder.mimeType || "audio/webm",
         });
         setAudioBlob(blob);
+        // Criar preview URL uma única vez (evita re-criar a cada render)
+        const url = URL.createObjectURL(blob);
+        setAudioPreviewUrl(url);
         stream.getTracks().forEach((t) => t.stop());
       };
-      mediaRecorder.start(100);
+      // Sem timeslice — produz WebM com metadados de duração corretos
+      mediaRecorder.start();
       setIsRecording(true);
       setRecordingTime(0);
       timerRef.current = setInterval(() => setRecordingTime((s) => s + 1), 1000);
@@ -205,18 +210,22 @@ export function OutboundConfigStep() {
         file,
         name,
       });
+      // Revogar URL pois não será mais usada
+      if (audioPreviewUrl) URL.revokeObjectURL(audioPreviewUrl);
     } else {
+      // Reusar a previewUrl já criada (não criar outra)
       setPendingAudios((prev) => [
         ...prev,
-        { file, name, previewUrl: URL.createObjectURL(audioBlob) },
+        { file, name, previewUrl: audioPreviewUrl || URL.createObjectURL(audioBlob) },
       ]);
     }
 
     setShowRecordDialog(false);
     setAudioBlob(null);
+    setAudioPreviewUrl(null);
     setAudioName("");
     setRecordingTime(0);
-  }, [audioBlob, audioName, isEditMode, editAgentId, organizationId, uploadAudio]);
+  }, [audioBlob, audioPreviewUrl, audioName, isEditMode, editAgentId, organizationId, uploadAudio]);
 
   // =====================================================
   // Upload de arquivo
@@ -676,7 +685,9 @@ export function OutboundConfigStep() {
         onOpenChange={(open) => {
           if (!open) {
             stopRecording();
+            if (audioPreviewUrl) URL.revokeObjectURL(audioPreviewUrl);
             setAudioBlob(null);
+            setAudioPreviewUrl(null);
             setAudioName("");
           }
           setShowRecordDialog(open);
@@ -722,7 +733,7 @@ export function OutboundConfigStep() {
                     Preview do áudio gravado ({formatTime(recordingTime)})
                   </p>
                   <audio
-                    src={URL.createObjectURL(audioBlob)}
+                    src={audioPreviewUrl || undefined}
                     controls
                     className="w-full"
                   />
@@ -731,7 +742,9 @@ export function OutboundConfigStep() {
                     variant="outline"
                     size="sm"
                     onClick={() => {
+                      if (audioPreviewUrl) URL.revokeObjectURL(audioPreviewUrl);
                       setAudioBlob(null);
+                      setAudioPreviewUrl(null);
                       setRecordingTime(0);
                     }}
                   >
@@ -760,8 +773,10 @@ export function OutboundConfigStep() {
               variant="ghost"
               onClick={() => {
                 stopRecording();
+                if (audioPreviewUrl) URL.revokeObjectURL(audioPreviewUrl);
                 setShowRecordDialog(false);
                 setAudioBlob(null);
+                setAudioPreviewUrl(null);
                 setAudioName("");
               }}
             >

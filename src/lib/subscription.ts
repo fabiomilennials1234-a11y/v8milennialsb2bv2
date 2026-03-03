@@ -98,12 +98,14 @@ export async function checkCurrentUserSubscription(): Promise<SubscriptionStatus
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
 
-  // Buscar organização do usuário
+  // Buscar organização do usuário (limit 1 pois masters podem estar em múltiplas orgs)
   const { data: teamMember } = await supabase
     .from('team_members')
     .select('organization_id')
     .eq('user_id', user.id)
-    .single();
+    .eq('is_active', true)
+    .limit(1)
+    .maybeSingle();
 
   if (!teamMember?.organization_id) {
     return null;
@@ -123,7 +125,9 @@ export async function getCurrentOrganization() {
     .from('team_members')
     .select('organization_id')
     .eq('user_id', user.id)
-    .single();
+    .eq('is_active', true)
+    .limit(1)
+    .maybeSingle();
 
   if (!teamMember?.organization_id) {
     return null;
@@ -133,7 +137,7 @@ export async function getCurrentOrganization() {
     .from('organizations')
     .select('*')
     .eq('id', teamMember.organization_id)
-    .single();
+    .maybeSingle();
 
   return org;
 }

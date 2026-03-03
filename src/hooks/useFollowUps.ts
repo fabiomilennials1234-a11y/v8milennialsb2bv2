@@ -111,6 +111,7 @@ export function useFollowUps(filters?: {
       return data as unknown as FollowUp[];
     },
     enabled: isReady && !!organizationId,
+    staleTime: 30000,
   });
 }
 
@@ -140,6 +141,7 @@ export function useFollowUpAutomations(triggerType?: TriggerType) {
       if (error) throw error;
       return data as unknown as FollowUpAutomation[];
     },
+    staleTime: 30000,
   });
 }
 
@@ -501,7 +503,7 @@ export function useCreateAutomatedFollowUps() {
       // Fetch active automations for this pipe and stage
       const { data: automations, error: automationsError } = await supabase
         .from("follow_up_automations")
-        .select("*")
+        .select("id, pipe_type, stage, title_template, description_template, days_offset, priority, is_active, trigger_type")
         .eq("pipe_type", pipeType)
         .eq("stage", stage)
         .eq("is_active", true);

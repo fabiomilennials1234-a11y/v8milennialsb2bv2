@@ -25,8 +25,10 @@ interface TestCopilotChatRequest {
   systemPrompt: string;
   messages: ChatMessage[];
   userMessage: string;
-  /** true = agente proativo gera a primeira mensagem (followup, agendador) */
+  /** true = agente proativo gera a primeira mensagem (followup, agendador, sdr, prospectador) */
   generateFirstMessage?: boolean;
+  /** Template de primeira mensagem configurado no outbound (ex: "Oi {nome}! Vi que...") */
+  firstMessageTemplate?: string;
   /** Item #11: Se fornecido, busca system_prompt + FAQs reais do banco */
   agentId?: string;
 }
@@ -49,7 +51,7 @@ Deno.serve(async (req) => {
     }
 
     const body: TestCopilotChatRequest = await req.json();
-    const { messages = [], userMessage, generateFirstMessage = false, agentId } = body;
+    const { messages = [], userMessage, generateFirstMessage = false, firstMessageTemplate, agentId } = body;
     let { systemPrompt } = body;
 
     // Item #11: Se agentId fornecido, buscar system_prompt atualizado do banco
@@ -87,11 +89,19 @@ Deno.serve(async (req) => {
 
     // Modo proativo: agente gera a primeira mensagem sem input do lead
     if (generateFirstMessage) {
-      const triggerInstruction =
+      let triggerInstruction =
         "[MODO TESTE — PRIMEIRA MENSAGEM]\n" +
         "Gere exatamente a primeira mensagem proativa que você enviaria para iniciar o contato com um lead, " +
         "seguindo toda a sua configuração, objetivo e personalidade. " +
         "Escreva apenas a mensagem como você a enviaria pelo WhatsApp — sem explicações, sem prefixos.";
+
+      // Se há template de outbound, instruir o agente a usá-lo como base
+      if (firstMessageTemplate) {
+        triggerInstruction +=
+          "\n\nIMPORTANTE: Use o template abaixo como base para a mensagem, " +
+          "substituindo as variáveis ({nome}, {empresa}, etc.) por dados fictícios realistas:\n" +
+          `Template: "${firstMessageTemplate}"`;
+      }
 
       const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",

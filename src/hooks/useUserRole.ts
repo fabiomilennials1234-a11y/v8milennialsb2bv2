@@ -17,10 +17,12 @@ export function useUserRole() {
     queryFn: async () => {
       if (!user?.id) return null;
       
+      // limit(1) pois user pode ter múltiplas roles (UNIQUE é em user_id+role)
       const { data, error } = await supabase
         .from("user_roles")
         .select("*")
         .eq("user_id", user.id)
+        .limit(1)
         .maybeSingle();
       
       if (error) throw error;

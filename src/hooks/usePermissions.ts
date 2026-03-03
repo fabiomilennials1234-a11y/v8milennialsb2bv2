@@ -39,6 +39,7 @@ export function useHasPermission(permissionKey: PermissionKey) {
       return data === true;
     },
     enabled: isReady && !!userRole,
+    staleTime: 5 * 60 * 1000,
   });
 }
 
@@ -76,6 +77,7 @@ export function useMyPermissions() {
       return result;
     },
     enabled: isReady && !!userRole,
+    staleTime: 5 * 60 * 1000,
   });
 }
 
@@ -100,6 +102,7 @@ export function useOrganizationRolePermissions() {
       return data as OrgRolePermission[];
     },
     enabled: isReady && !!organizationId,
+    staleTime: 5 * 60 * 1000,
   });
 }
 
@@ -147,6 +150,7 @@ export function useTeamMemberOrgPermissions(teamMemberId: string | null) {
       return map;
     },
     enabled: !!teamMemberId,
+    staleTime: 5 * 60 * 1000,
   });
 }
 

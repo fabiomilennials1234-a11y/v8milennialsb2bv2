@@ -33,6 +33,7 @@ export function useRealtimeSubscription(
   const queryKeysRef = useRef(queryKeys);
   queryKeysRef.current = queryKeys;
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const staggerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Serializar para usar como dependência estável
   const queryKeysKey = JSON.stringify(queryKeys);
@@ -64,9 +65,25 @@ export function useRealtimeSubscription(
             clearTimeout(debounceTimerRef.current);
           }
           debounceTimerRef.current = setTimeout(() => {
-            queryKeysRef.current.forEach((key) => {
-              queryClient.invalidateQueries({ queryKey: [key] });
-            });
+            const keys = queryKeysRef.current;
+            if (keys.length > 0) {
+              // Invalidar a primeira key imediatamente (dados primários da tabela)
+              queryClient.invalidateQueries({ queryKey: [keys[0]] });
+
+              // Stagger: invalidar keys secundárias (métricas, dashboards)
+              // após 2s para não sobrecarregar o DB com refetches simultâneos
+              if (keys.length > 1) {
+                if (staggerTimerRef.current) {
+                  clearTimeout(staggerTimerRef.current);
+                }
+                staggerTimerRef.current = setTimeout(() => {
+                  keys.slice(1).forEach((key) => {
+                    queryClient.invalidateQueries({ queryKey: [key] });
+                  });
+                  staggerTimerRef.current = null;
+                }, DEBOUNCE_MS);
+              }
+            }
             debounceTimerRef.current = null;
           }, DEBOUNCE_MS);
         }
@@ -76,6 +93,9 @@ export function useRealtimeSubscription(
     return () => {
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
+      }
+      if (staggerTimerRef.current) {
+        clearTimeout(staggerTimerRef.current);
       }
       supabase.removeChannel(channel);
     };

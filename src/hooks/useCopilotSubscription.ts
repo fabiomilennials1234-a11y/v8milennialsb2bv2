@@ -33,7 +33,7 @@ export function useCopilotSubscription() {
       return sub;
     },
     staleTime: 5 * 60 * 1000, // Cache por 5 minutos
-    refetchOnWindowFocus: true, // Revalidar quando usuário volta ao app
+    refetchOnWindowFocus: false,
   });
 
   const isLoading = adminLoading || subLoading;
