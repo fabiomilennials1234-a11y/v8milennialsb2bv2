@@ -1,3 +1,4 @@
+import { Suspense, lazy } from "react";
 import { ThemeProvider } from "next-themes";
 import { ThemeTransitionProvider } from "@/contexts/ThemeTransitionContext";
 import { Toaster } from "@/components/ui/toaster";
@@ -10,48 +11,60 @@ import { OrgFeaturesProvider } from "@/contexts/OrgFeaturesContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { useAutoAdminAssignment } from "@/hooks/useAutoAdminAssignment";
-import Auth from "./pages/Auth";
-import Dashboard from "./pages/Dashboard";
-import PipeConfirmacao from "./pages/PipeConfirmacao";
-import PipePropostas from "./pages/PipePropostas";
-import PipeWhatsapp from "./pages/PipeWhatsapp";
-import PipeFollowUps from "./pages/PipeFollowUps";
-import Ranking from "./pages/Ranking";
-import Metas from "./pages/Metas";
-import GestaoMetas from "./pages/GestaoMetas";
-import Performance from "./pages/Performance";
-import Equipe from "./pages/Equipe";
-import Comissoes from "./pages/Comissoes";
-import Leads from "./pages/Leads";
-import Configuracoes from "./pages/Configuracoes";
-import TVDashboard from "./pages/TVDashboard";
-import Campanhas from "./pages/Campanhas";
-import CampanhaDetail from "./pages/CampanhaDetail";
-import Marketing from "./pages/Marketing";
-import Produtos from "./pages/Produtos";
-import Copilot from "./pages/Copilot";
-import CopilotMetrics from "./pages/CopilotMetrics";
-import ChatWhatsApp from "./pages/ChatWhatsApp";
-import Upsell from "./pages/Upsell";
-import CustomPipeline from "./pages/CustomPipeline";
-import Agenda from "./pages/Agenda";
-import Privacidade from "./pages/Privacidade";
-import ApiDocs from "./pages/ApiDocs";
-import { CopilotWizard } from "@/components/copilot/CopilotWizard";
 import { SubscriptionProtectedRoute } from "@/components/SubscriptionProtectedRoute";
-import NotFound from "./pages/NotFound";
+import { Loader2 } from "lucide-react";
 
-// Master Admin
+// Lazy-loaded pages — cada página vira um chunk separado
+const Auth = lazy(() => import("./pages/Auth"));
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const PipeConfirmacao = lazy(() => import("./pages/PipeConfirmacao"));
+const PipePropostas = lazy(() => import("./pages/PipePropostas"));
+const PipeWhatsapp = lazy(() => import("./pages/PipeWhatsapp"));
+const PipeFollowUps = lazy(() => import("./pages/PipeFollowUps"));
+const Performance = lazy(() => import("./pages/Performance"));
+const Equipe = lazy(() => import("./pages/Equipe"));
+const Comissoes = lazy(() => import("./pages/Comissoes"));
+const Leads = lazy(() => import("./pages/Leads"));
+const Configuracoes = lazy(() => import("./pages/Configuracoes"));
+const TVDashboard = lazy(() => import("./pages/TVDashboard"));
+const Campanhas = lazy(() => import("./pages/Campanhas"));
+const CampanhaDetail = lazy(() => import("./pages/CampanhaDetail"));
+const Marketing = lazy(() => import("./pages/Marketing"));
+const Produtos = lazy(() => import("./pages/Produtos"));
+const Copilot = lazy(() => import("./pages/Copilot"));
+const CopilotMetrics = lazy(() => import("./pages/CopilotMetrics"));
+const ChatWhatsApp = lazy(() => import("./pages/ChatWhatsApp"));
+const Upsell = lazy(() => import("./pages/Upsell"));
+const CustomPipeline = lazy(() => import("./pages/CustomPipeline"));
+const Agenda = lazy(() => import("./pages/Agenda"));
+const Privacidade = lazy(() => import("./pages/Privacidade"));
+const ApiDocs = lazy(() => import("./pages/ApiDocs"));
+const CopilotWizard = lazy(() => import("@/components/copilot/CopilotWizard").then(m => ({ default: m.CopilotWizard })));
+const NotFound = lazy(() => import("./pages/NotFound"));
+
+// Master Admin — lazy loaded
+const MasterDashboard = lazy(() => import("./pages/master/MasterDashboard"));
+const MasterOrganizations = lazy(() => import("./pages/master/MasterOrganizations"));
+const MasterUsers = lazy(() => import("./pages/master/MasterUsers"));
+const MasterPlans = lazy(() => import("./pages/master/MasterPlans"));
+const MasterFeatures = lazy(() => import("./pages/master/MasterFeatures"));
+const MasterAuditLogs = lazy(() => import("./pages/master/MasterAuditLogs"));
+
+// Master route/layout — carregam sob demanda quando acessar /master
 import { MasterRoute } from "@/components/master/MasterRoute";
 import { MasterLayout } from "@/components/master/MasterLayout";
-import MasterDashboard from "./pages/master/MasterDashboard";
-import MasterOrganizations from "./pages/master/MasterOrganizations";
-import MasterUsers from "./pages/master/MasterUsers";
-import MasterPlans from "./pages/master/MasterPlans";
-import MasterFeatures from "./pages/master/MasterFeatures";
-import MasterAuditLogs from "./pages/master/MasterAuditLogs";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5,        // 5 minutos — dados são considerados frescos por 5 min
+      gcTime: 1000 * 60 * 10,           // 10 minutos — cache mantido 10 min após inativo
+      refetchOnWindowFocus: false,       // NÃO refetch ao voltar na aba
+      refetchOnReconnect: "always",      // Refetch ao reconectar internet
+      retry: 1,                          // 1 retry em caso de erro
+    },
+  },
+});
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
@@ -106,8 +119,17 @@ function AuthRoute() {
   return <Auth />;
 }
 
+function PageLoader() {
+  return (
+    <div className="flex items-center justify-center min-h-[60vh]">
+      <Loader2 className="w-8 h-8 animate-spin text-primary" />
+    </div>
+  );
+}
+
 function AppRoutes() {
   return (
+    <Suspense fallback={<PageLoader />}>
     <Routes>
       <Route path="/auth" element={<AuthRoute />} />
       <Route path="/privacidade" element={<Privacidade />} />
@@ -385,6 +407,7 @@ function AppRoutes() {
 
       <Route path="*" element={<NotFound />} />
     </Routes>
+    </Suspense>
   );
 }
 

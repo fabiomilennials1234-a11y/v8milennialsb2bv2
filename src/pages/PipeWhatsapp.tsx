@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, memo } from "react";
 import { motion } from "framer-motion";
 import { Search, Plus, Zap, User, Building2, Star, Phone, Loader2, Globe, Trash2, MoreVertical, Target, MessageCircle, Mail, Calendar, DollarSign, Clock, Briefcase, Settings2, Bot } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -99,7 +99,7 @@ interface WhatsappCardComponentProps {
   onCardClick?: () => void;
 }
 
-function WhatsappCardComponent({ card, onDelete, isAdmin, onQuickAdd, onCardClick }: WhatsappCardComponentProps) {
+const WhatsappCardComponent = memo(function WhatsappCardComponent({ card, onDelete, isAdmin, onQuickAdd, onCardClick }: WhatsappCardComponentProps) {
   const originInfo = originLabels[card.origin || "outro"] || originLabels.outro;
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [customTitle, setCustomTitle] = useState("");
@@ -358,7 +358,7 @@ function WhatsappCardComponent({ card, onDelete, isAdmin, onQuickAdd, onCardClic
       <AIToggle leadId={card.leadId} aiDisabled={card.ai_disabled} />
     </motion.div>
   );
-}
+});
 
 // Componente de toggle de IA separado para evitar re-renders
 function AIToggle({ leadId, aiDisabled }: { leadId: string; aiDisabled?: boolean }) {

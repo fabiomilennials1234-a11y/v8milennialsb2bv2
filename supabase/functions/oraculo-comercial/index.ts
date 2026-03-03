@@ -96,7 +96,7 @@ Qual o problema principal e qual a tarefa prioritária de hoje?`;
         "HTTP-Referer": referer,
       },
       body: JSON.stringify({
-        model: "openai/gpt-4o-mini",
+        model: "google/gemini-3-flash-preview",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },

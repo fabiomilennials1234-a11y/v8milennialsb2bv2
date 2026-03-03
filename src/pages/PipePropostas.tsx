@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, memo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search, Filter, Plus, Calendar, User, Building2, Star,
@@ -90,7 +90,7 @@ interface ProposalCard extends DraggableItem {
 
 import { openWhatsApp, formatPhoneForWhatsApp } from "@/lib/whatsapp";
 
-function ProposalCardComponent({
+const ProposalCardComponent = memo(function ProposalCardComponent({
   proposal,
   onCalorChange,
   onDelete,
@@ -315,7 +315,7 @@ function ProposalCardComponent({
       </div>
     </motion.div>
   );
-}
+});
 
 export default function PipePropostas() {
   const [searchTerm, setSearchTerm] = useState("");

@@ -47,8 +47,12 @@ export default defineConfig(({ mode }) => {
     rollupOptions: {
       output: {
         manualChunks: {
-          vendor: ['react', 'react-dom'],
+          vendor: ['react', 'react-dom', 'react-router-dom'],
           supabase: ['@supabase/supabase-js'],
+          charts: ['recharts'],
+          motion: ['framer-motion'],
+          query: ['@tanstack/react-query'],
+          dnd: ['@dnd-kit/core', '@dnd-kit/sortable', '@dnd-kit/utilities'],
         },
       },
     },

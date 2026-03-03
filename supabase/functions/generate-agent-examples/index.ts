@@ -87,7 +87,7 @@ Responda APENAS em JSON válido, sem markdown:
         "X-Title": "V8 Millennials - Generate Examples",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.0-flash-001",
+        model: "google/gemini-3-flash-preview",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: "Gere os 3 exemplos de conversa agora." },

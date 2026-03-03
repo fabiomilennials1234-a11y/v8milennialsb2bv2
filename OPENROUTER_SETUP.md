@@ -13,7 +13,7 @@ Adicione as seguintes variáveis de ambiente no Supabase:
 OPENROUTER_API_KEY=sk-or-v1-...  # Sua chave da API OpenRouter
 
 # Opcional
-OPENROUTER_DEFAULT_MODEL=openai/gpt-4o-mini  # Modelo padrão se não especificado no banco
+OPENROUTER_DEFAULT_MODEL=google/gemini-3-flash-preview  # Modelo padrão se não especificado no banco
 OPENROUTER_REFERER_URL=https://v8millennials.com  # URL de referência (opcional)
 ```
 
@@ -21,19 +21,20 @@ OPENROUTER_REFERER_URL=https://v8millennials.com  # URL de referência (opcional
 
 Você pode usar qualquer modelo suportado pelo OpenRouter. Exemplos:
 
+### Gemini (Google)
+- `google/gemini-3-flash-preview` (recomendado)
+- `google/gemini-pro`
+- `google/gemini-pro-vision`
+
 ### Claude (Anthropic)
-- `openai/gpt-4o-mini` (recomendado)
+- `anthropic/claude-3.5-sonnet`
 - `anthropic/claude-3-opus`
 - `anthropic/claude-3-sonnet`
 
 ### GPT (OpenAI)
+- `openai/gpt-4o-mini`
 - `openai/gpt-4-turbo`
 - `openai/gpt-4`
-- `openai/gpt-3.5-turbo`
-
-### Gemini (Google)
-- `google/gemini-pro`
-- `google/gemini-pro-vision`
 
 ### Outros
 - `meta-llama/llama-3-70b-instruct`
@@ -52,7 +53,7 @@ SET llm_model = 'openai/gpt-4-turbo'
 WHERE id = 'agent-id';
 ```
 
-Se não especificado, usa o `OPENROUTER_DEFAULT_MODEL` ou `openai/gpt-4o-mini`.
+Se não especificado, usa o `OPENROUTER_DEFAULT_MODEL` ou `google/gemini-3-flash-preview`.
 
 ## Como Obter API Key
 
@@ -75,7 +76,7 @@ Headers:
 
 Body:
 {
-  "model": "openai/gpt-4o-mini",
+  "model": "google/gemini-3-flash-preview",
   "messages": [
     { "role": "system", "content": "..." },
     { "role": "user", "content": "..." }

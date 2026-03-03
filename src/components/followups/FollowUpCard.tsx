@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { motion } from "framer-motion";
 import { format, formatDistanceToNow, isPast, isToday } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -47,7 +48,7 @@ const pipeLabels = {
   propostas: "Propostas",
 };
 
-export function FollowUpCard({ followUp, onComplete, onArchive, onRemove, onClick }: FollowUpCardProps) {
+export const FollowUpCard = memo(function FollowUpCard({ followUp, onComplete, onArchive, onRemove, onClick }: FollowUpCardProps) {
   const dueDate = new Date(followUp.due_date);
   const isOverdue = isPast(dueDate) && !isToday(dueDate);
   const isDueToday = isToday(dueDate);
@@ -210,4 +211,4 @@ export function FollowUpCard({ followUp, onComplete, onArchive, onRemove, onClic
       )}
     </motion.div>
   );
-}
+});

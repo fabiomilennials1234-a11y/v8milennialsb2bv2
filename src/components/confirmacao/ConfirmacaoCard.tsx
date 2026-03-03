@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { motion } from "framer-motion";
 import {
   Star,
@@ -143,7 +144,7 @@ function getMeetingIndicator(
   return null;
 }
 
-export function ConfirmacaoCard({ card, onClick, onDelete, variant = "default" }: ConfirmacaoCardProps) {
+export const ConfirmacaoCard = memo(function ConfirmacaoCard({ card, onClick, onDelete, variant = "default" }: ConfirmacaoCardProps) {
   const origin = originConfig[card.origin] || originConfig.outro;
   const meetingDate = card.meetingDateTime || (card.meetingDate ? new Date(card.meetingDate) : null);
   const indicator = getMeetingIndicator(
@@ -545,4 +546,4 @@ export function ConfirmacaoCard({ card, onClick, onDelete, variant = "default" }
       </div>
     </motion.div>
   );
-}
+});

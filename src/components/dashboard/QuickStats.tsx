@@ -82,7 +82,7 @@ export function QuickStats({ className }: QuickStatsProps) {
       };
     },
     enabled: isReady && !!organizationId,
-    refetchInterval: 30000,
+    refetchInterval: 1000 * 60 * 2, // 2 minutos
   });
 
   if (!stats) return null;

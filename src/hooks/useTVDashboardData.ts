@@ -300,7 +300,7 @@ export function useTVDashboardData() {
       } as TVDashboardMetrics;
     },
     enabled: !!teamMembers && !!propostas && !!confirmacoes && !!whatsapp && (isAdmin !== undefined),
-    staleTime: 0, // Sempre considerar dados desatualizados para refetch imediato após realtime
-    refetchInterval: 5000, // Fallback: refresh a cada 5s caso realtime falhe
+    staleTime: 1000 * 30, // 30 segundos — dados de TV atualizam via realtime
+    refetchInterval: 1000 * 60, // Fallback: refresh a cada 60s caso realtime falhe
   });
 }

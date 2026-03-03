@@ -551,9 +551,9 @@ function StepEditorRow({
             <SelectValue placeholder="Selecione o template" />
           </SelectTrigger>
           <SelectContent>
-            {templates.map((t) => (
+            {templates.filter((t) => t.id).map((t) => (
               <SelectItem key={t.id} value={t.id}>
-                {t.name}
+                {t.name || "Sem nome"}
               </SelectItem>
             ))}
           </SelectContent>
@@ -589,7 +589,7 @@ function StepEditorRow({
             <Select value={step.timeout_target_stage_id} onValueChange={(v) => onChange({ timeout_target_stage_id: v })}>
               <SelectTrigger><SelectValue placeholder="Etapa destino (timeout)" /></SelectTrigger>
               <SelectContent>
-                {stages.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                {stages.filter((s) => s.id).map((s) => <SelectItem key={s.id} value={s.id}>{s.name || s.id}</SelectItem>)}
               </SelectContent>
             </Select>
           )}
@@ -597,9 +597,9 @@ function StepEditorRow({
             <Select value={step.timeout_template_id} onValueChange={(v) => onChange({ timeout_template_id: v })}>
               <SelectTrigger><SelectValue placeholder="Template (timeout)" /></SelectTrigger>
               <SelectContent>
-                {templates.map((t) => (
+                {templates.filter((t) => t.id).map((t) => (
                   <SelectItem key={t.id} value={t.id}>
-                    {t.name}
+                    {t.name || "Sem nome"}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -613,7 +613,7 @@ function StepEditorRow({
         <Select value={step.target_stage_id} onValueChange={(v) => onChange({ target_stage_id: v })}>
           <SelectTrigger><SelectValue placeholder="Etapa destino" /></SelectTrigger>
           <SelectContent>
-            {stages.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+            {stages.filter((s) => s.id).map((s) => <SelectItem key={s.id} value={s.id}>{s.name || s.id}</SelectItem>)}
           </SelectContent>
         </Select>
       )}
@@ -632,8 +632,8 @@ function StepEditorRow({
             <Select value={step.target_sdr_id} onValueChange={(v) => onChange({ target_sdr_id: v })}>
               <SelectTrigger><SelectValue placeholder="Selecione o SDR" /></SelectTrigger>
               <SelectContent>
-                {teamMembers.map((m) => (
-                  <SelectItem key={m.id} value={m.id}>{m.name}{m.role ? ` (${m.role})` : ""}</SelectItem>
+                {teamMembers.filter((m) => m.id).map((m) => (
+                  <SelectItem key={m.id} value={m.id}>{m.name || "Sem nome"}{m.role ? ` (${m.role})` : ""}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -696,7 +696,7 @@ function RuleForm({
           <Select value={selectedStageId} onValueChange={setSelectedStageId}>
             <SelectTrigger><SelectValue placeholder="Selecione a etapa" /></SelectTrigger>
             <SelectContent>
-              {stages.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+              {stages.filter((s) => s.id).map((s) => <SelectItem key={s.id} value={s.id}>{s.name || s.id}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
@@ -704,12 +704,12 @@ function RuleForm({
       {whatsappInstances.length > 1 && (
         <div className="grid gap-2">
           <Label>Instância WhatsApp (opcional)</Label>
-          <Select value={selectedInstanceId} onValueChange={setSelectedInstanceId}>
+          <Select value={selectedInstanceId || "__auto__"} onValueChange={(v) => setSelectedInstanceId(v === "__auto__" ? "" : v)}>
             <SelectTrigger><SelectValue placeholder="Automático (1ª ativa)" /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="">Automático (1ª ativa)</SelectItem>
-              {whatsappInstances.map((inst) => (
-                <SelectItem key={inst.id} value={inst.id}>{inst.instance_name}</SelectItem>
+              <SelectItem value="__auto__">Automático (1ª ativa)</SelectItem>
+              {whatsappInstances.filter((inst) => inst.id).map((inst) => (
+                <SelectItem key={inst.id} value={inst.id}>{inst.instance_name || inst.id}</SelectItem>
               ))}
             </SelectContent>
           </Select>

@@ -55,7 +55,7 @@ export function PipeSettingsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[900px]">
+      <DialogContent className="max-w-[900px]" style={{ maxHeight: '85vh', overflow: 'hidden' }}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Settings2 className="w-5 h-5 text-primary" />
@@ -101,7 +101,7 @@ export function PipeSettingsDialog({
             )}
           </TabsList>
 
-          <div className="overflow-y-auto max-h-[calc(85vh-12rem)] mt-4 pr-1">
+          <div className="overflow-y-auto mt-4 pr-1" style={{ maxHeight: 'calc(85vh - 10rem)' }}>
             <TabsContent value="etapas" className="mt-0">
               <ManagePipelineStagesContent
                 pipelineType={pipeType}

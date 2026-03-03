@@ -102,7 +102,7 @@ Deno.serve(async (req) => {
           "X-Title": "V8 Millennials - Test Copilot Chat (First Message)",
         },
         body: JSON.stringify({
-          model: "google/gemini-2.0-flash-001",
+          model: "google/gemini-3-flash-preview",
           messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: triggerInstruction },
@@ -159,7 +159,7 @@ Deno.serve(async (req) => {
         "X-Title": "V8 Millennials - Test Copilot Chat",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.0-flash-001",
+        model: "google/gemini-3-flash-preview",
         messages: [
           { role: "system", content: systemPrompt },
           ...recentHistory,
