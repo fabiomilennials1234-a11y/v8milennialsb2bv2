@@ -12,43 +12,59 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { useAutoAdminAssignment } from "@/hooks/useAutoAdminAssignment";
 import { SubscriptionProtectedRoute } from "@/components/SubscriptionProtectedRoute";
+import { GlobalErrorBoundary } from "@/components/GlobalErrorBoundary";
 import { Loader2 } from "lucide-react";
 
-// Lazy-loaded pages — cada página vira um chunk separado
-const Auth = lazy(() => import("./pages/Auth"));
-const Dashboard = lazy(() => import("./pages/Dashboard"));
-const PipeConfirmacao = lazy(() => import("./pages/PipeConfirmacao"));
-const PipePropostas = lazy(() => import("./pages/PipePropostas"));
-const PipeWhatsapp = lazy(() => import("./pages/PipeWhatsapp"));
-const PipeFollowUps = lazy(() => import("./pages/PipeFollowUps"));
-const Performance = lazy(() => import("./pages/Performance"));
-const Equipe = lazy(() => import("./pages/Equipe"));
-const Comissoes = lazy(() => import("./pages/Comissoes"));
-const Leads = lazy(() => import("./pages/Leads"));
-const Configuracoes = lazy(() => import("./pages/Configuracoes"));
-const TVDashboard = lazy(() => import("./pages/TVDashboard"));
-const Campanhas = lazy(() => import("./pages/Campanhas"));
-const CampanhaDetail = lazy(() => import("./pages/CampanhaDetail"));
-const Marketing = lazy(() => import("./pages/Marketing"));
-const Produtos = lazy(() => import("./pages/Produtos"));
-const Copilot = lazy(() => import("./pages/Copilot"));
-const CopilotMetrics = lazy(() => import("./pages/CopilotMetrics"));
-const ChatWhatsApp = lazy(() => import("./pages/ChatWhatsApp"));
-const Upsell = lazy(() => import("./pages/Upsell"));
-const CustomPipeline = lazy(() => import("./pages/CustomPipeline"));
-const Agenda = lazy(() => import("./pages/Agenda"));
-const Privacidade = lazy(() => import("./pages/Privacidade"));
-const ApiDocs = lazy(() => import("./pages/ApiDocs"));
-const CopilotWizard = lazy(() => import("@/components/copilot/CopilotWizard").then(m => ({ default: m.CopilotWizard })));
-const NotFound = lazy(() => import("./pages/NotFound"));
+// Retry helper para chunks que falham ao carregar (comum após deploy)
+function lazyRetry<T extends { default: any }>(
+  importFn: () => Promise<T>,
+  retries = 2
+): Promise<T> {
+  return importFn().catch((err) => {
+    if (retries > 0) {
+      return new Promise<T>((resolve) =>
+        setTimeout(() => resolve(lazyRetry(importFn, retries - 1)), 1000)
+      );
+    }
+    throw err;
+  });
+}
 
-// Master Admin — lazy loaded
-const MasterDashboard = lazy(() => import("./pages/master/MasterDashboard"));
-const MasterOrganizations = lazy(() => import("./pages/master/MasterOrganizations"));
-const MasterUsers = lazy(() => import("./pages/master/MasterUsers"));
-const MasterPlans = lazy(() => import("./pages/master/MasterPlans"));
-const MasterFeatures = lazy(() => import("./pages/master/MasterFeatures"));
-const MasterAuditLogs = lazy(() => import("./pages/master/MasterAuditLogs"));
+// Lazy-loaded pages — cada página vira um chunk separado (com retry automático)
+const Auth = lazy(() => lazyRetry(() => import("./pages/Auth")));
+const Dashboard = lazy(() => lazyRetry(() => import("./pages/Dashboard")));
+const PipeConfirmacao = lazy(() => lazyRetry(() => import("./pages/PipeConfirmacao")));
+const PipePropostas = lazy(() => lazyRetry(() => import("./pages/PipePropostas")));
+const PipeWhatsapp = lazy(() => lazyRetry(() => import("./pages/PipeWhatsapp")));
+const PipeFollowUps = lazy(() => lazyRetry(() => import("./pages/PipeFollowUps")));
+const Performance = lazy(() => lazyRetry(() => import("./pages/Performance")));
+const Equipe = lazy(() => lazyRetry(() => import("./pages/Equipe")));
+const Comissoes = lazy(() => lazyRetry(() => import("./pages/Comissoes")));
+const Leads = lazy(() => lazyRetry(() => import("./pages/Leads")));
+const Configuracoes = lazy(() => lazyRetry(() => import("./pages/Configuracoes")));
+const TVDashboard = lazy(() => lazyRetry(() => import("./pages/TVDashboard")));
+const Campanhas = lazy(() => lazyRetry(() => import("./pages/Campanhas")));
+const CampanhaDetail = lazy(() => lazyRetry(() => import("./pages/CampanhaDetail")));
+const Marketing = lazy(() => lazyRetry(() => import("./pages/Marketing")));
+const Produtos = lazy(() => lazyRetry(() => import("./pages/Produtos")));
+const Copilot = lazy(() => lazyRetry(() => import("./pages/Copilot")));
+const CopilotMetrics = lazy(() => lazyRetry(() => import("./pages/CopilotMetrics")));
+const ChatWhatsApp = lazy(() => lazyRetry(() => import("./pages/ChatWhatsApp")));
+const Upsell = lazy(() => lazyRetry(() => import("./pages/Upsell")));
+const CustomPipeline = lazy(() => lazyRetry(() => import("./pages/CustomPipeline")));
+const Agenda = lazy(() => lazyRetry(() => import("./pages/Agenda")));
+const Privacidade = lazy(() => lazyRetry(() => import("./pages/Privacidade")));
+const ApiDocs = lazy(() => lazyRetry(() => import("./pages/ApiDocs")));
+const CopilotWizard = lazy(() => lazyRetry(() => import("@/components/copilot/CopilotWizard").then(m => ({ default: m.CopilotWizard }))));
+const NotFound = lazy(() => lazyRetry(() => import("./pages/NotFound")));
+
+// Master Admin — lazy loaded (com retry)
+const MasterDashboard = lazy(() => lazyRetry(() => import("./pages/master/MasterDashboard")));
+const MasterOrganizations = lazy(() => lazyRetry(() => import("./pages/master/MasterOrganizations")));
+const MasterUsers = lazy(() => lazyRetry(() => import("./pages/master/MasterUsers")));
+const MasterPlans = lazy(() => lazyRetry(() => import("./pages/master/MasterPlans")));
+const MasterFeatures = lazy(() => lazyRetry(() => import("./pages/master/MasterFeatures")));
+const MasterAuditLogs = lazy(() => lazyRetry(() => import("./pages/master/MasterAuditLogs")));
 
 // Master route/layout — carregam sob demanda quando acessar /master
 import { MasterRoute } from "@/components/master/MasterRoute";
@@ -425,7 +441,9 @@ const App = () => {
             <Sonner />
             <BrowserRouter>
               <AuthProvider>
-                <AppRoutes />
+                <GlobalErrorBoundary>
+                  <AppRoutes />
+                </GlobalErrorBoundary>
               </AuthProvider>
             </BrowserRouter>
           </TooltipProvider>
