@@ -181,11 +181,6 @@ CREATE INDEX IF NOT EXISTS idx_conversations_lead_id
 CREATE INDEX IF NOT EXISTS idx_conversations_org_state_lastmsg
   ON public.conversations(organization_id, state, last_message_at DESC);
 
--- follow_ups: busca por lead_id + status (follow-up automations)
-CREATE INDEX IF NOT EXISTS idx_follow_ups_lead_status
-  ON public.follow_ups(lead_id, status)
-  WHERE status IN ('pendente', 'em_andamento');
-
 -- copilot_conversation_evaluations: busca por conversation_id
 CREATE INDEX IF NOT EXISTS idx_copilot_evals_conversation
   ON public.copilot_conversation_evaluations(conversation_id);
