@@ -169,11 +169,6 @@ CREATE INDEX IF NOT EXISTS idx_scheduled_msgs_status_scheduled
   ON public.scheduled_campaign_messages(status, scheduled_at)
   WHERE status = 'pending';
 
--- outbound_dispatch_log: processamento de outbound
-CREATE INDEX IF NOT EXISTS idx_outbound_dispatch_status_scheduled
-  ON public.outbound_dispatch_log(status, scheduled_at)
-  WHERE status = 'pending';
-
 -- lead_memories: busca por lead + importância (long-term memory)
 CREATE INDEX IF NOT EXISTS idx_lead_memories_lead_importance
   ON public.lead_memories(lead_id, importance DESC);
