@@ -256,7 +256,8 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
-      <Route
+      {/* DESATIVADO temporariamente — descomentar para reativar Combustível */}
+      {/* <Route
         path="/leads"
         element={
           <ProtectedRoute>
@@ -265,7 +266,7 @@ function AppRoutes() {
             </LayoutWrapper>
           </ProtectedRoute>
         }
-      />
+      /> */}
       <Route
         path="/premiacoes"
         element={<Navigate to="/performance" replace />}

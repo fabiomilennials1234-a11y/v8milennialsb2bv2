@@ -84,7 +84,7 @@ const navItems: NavItemWithChildren[] = [
   { label: "Funis", icon: GitBranch, path: "/funis", children: funisSubItems },
   { label: "Agenda", icon: CalendarDays, path: "/agenda" },
   { label: "Revisão", icon: Wrench, path: "/follow-ups" },
-  { label: "Combustível", icon: Fuel, path: "/leads" },
+  // { label: "Combustível", icon: Fuel, path: "/leads" }, // DESATIVADO temporariamente
   { label: "Pódio", icon: Trophy, path: "/performance" },
   { label: "Comissões", icon: DollarSign, path: "/comissoes" },
   { label: "Copilot", icon: Bot, path: "/copilot" },
