@@ -50,7 +50,7 @@ export function usePipeConfirmacao() {
           closer:team_members!pipe_confirmacao_closer_id_fkey(id, name)
         `)
         .eq("organization_id", organizationId)
-        .order("meeting_date", { ascending: true });
+        .order("created_at", { ascending: false });
 
       if (error) throw error;
       return data;

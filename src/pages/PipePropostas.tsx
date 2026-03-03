@@ -494,13 +494,8 @@ export default function PipePropostas() {
         })
         .map(transformToCard)
         .toSorted((a, b) => {
-          if (col.id === "compromisso_marcado") {
-            const dateA = a.commitmentDate ? a.commitmentDate.getTime() : Infinity;
-            const dateB = b.commitmentDate ? b.commitmentDate.getTime() : Infinity;
-            return dateA - dateB;
-          }
-          const timeA = new Date(a.updatedAt || a.createdAt || 0).getTime();
-          const timeB = new Date(b.updatedAt || b.createdAt || 0).getTime();
+          const timeA = new Date(a.createdAt || 0).getTime();
+          const timeB = new Date(b.createdAt || 0).getTime();
           return timeB - timeA;
         });
       return {

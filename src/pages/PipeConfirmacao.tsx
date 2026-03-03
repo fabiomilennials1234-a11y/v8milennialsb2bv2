@@ -330,11 +330,11 @@ export default function PipeConfirmacao() {
           
           return matchesSearch && matchesOrigin && matchesUrgency && matchesTime && matchesStatus && matchesSdr && matchesCloser;
         })
-        // Sort by meeting date - closest meetings first
+        // Sort by created_at — leads mais recentes primeiro
         .sort((a, b) => {
-          const dateA = a.meeting_date ? new Date(a.meeting_date).getTime() : Infinity;
-          const dateB = b.meeting_date ? new Date(b.meeting_date).getTime() : Infinity;
-          return dateA - dateB;
+          const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
+          const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
+          return dateB - dateA;
         })
         .map(transformToCard);
 

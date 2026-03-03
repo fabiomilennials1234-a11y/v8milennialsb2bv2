@@ -50,7 +50,7 @@ export function usePipePropostas() {
           )
         `)
         .eq("organization_id", organizationId)
-        .order("updated_at", { ascending: false });
+        .order("created_at", { ascending: false });
 
       if (error) throw error;
       return data;

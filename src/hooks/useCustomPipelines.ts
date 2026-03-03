@@ -191,7 +191,7 @@ export function useCustomPipeEntries(pipelineId: string | undefined) {
           assigned_profile:profiles!custom_pipe_entries_assigned_to_fkey(id, full_name, avatar_url)
         `)
         .eq("pipeline_id", pipelineId)
-        .order("stage_changed_at", { ascending: false });
+        .order("created_at", { ascending: false });
 
       if (error) throw error;
       return (data || []) as CustomPipeEntry[];
