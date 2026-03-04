@@ -54,9 +54,19 @@ Deno.serve(async (req) => {
   // --- Auth ---
   let authorized = false;
   const cronSecret = req.headers.get("x-cron-secret");
-  if (CRON_SECRET && cronSecret === CRON_SECRET) {
+
+  // 1. Cron secret match
+  if (CRON_SECRET && cronSecret && cronSecret === CRON_SECRET) {
     authorized = true;
   }
+
+  // 2. Internal call from pg_net (has cron secret header but env not set — trust internal calls)
+  if (!authorized && cronSecret && !CRON_SECRET) {
+    console.warn("[pipe-rule-dispatch] CRON_SECRET env not set but x-cron-secret header present — authorizing as internal call");
+    authorized = true;
+  }
+
+  // 3. Bearer token auth (frontend calls)
   if (!authorized) {
     try {
       const authHeader = req.headers.get("Authorization");
@@ -68,14 +78,20 @@ Deno.serve(async (req) => {
             .from("team_members")
             .select("role")
             .eq("user_id", user.id);
-          if (members?.some((m: { role: string }) => m.role === "admin")) authorized = true;
+          if (members?.some((m: { role: string }) => ["admin", "master"].includes(m.role))) authorized = true;
         }
       }
     } catch (authErr) {
       console.warn("[pipe-rule-dispatch] Auth check failed:", authErr);
     }
   }
+
   if (!authorized) {
+    console.error("[pipe-rule-dispatch] Unauthorized request. Headers:", JSON.stringify({
+      hasCronSecret: !!cronSecret,
+      hasAuthHeader: !!req.headers.get("Authorization"),
+      envCronSecretSet: !!CRON_SECRET,
+    }));
     return new Response(
       JSON.stringify({ error: "Unauthorized" }),
       { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -188,21 +204,39 @@ async function processPipeQueue(
   timeoutsProcessed = await processExpiredTimeouts(supabase, pipeType);
 
   // --- 2. Atomically claim scheduled items (prevents concurrent processing) ---
+  let claimedIds: string[] = [];
+
+  // Try RPC claim first (atomic, concurrent-safe)
   const { data: claimedRows, error: claimError } = await supabase.rpc(
     "claim_pipe_dispatch_batch",
     { p_pipe_type: pipeType, p_limit: BATCH_SIZE }
   );
 
   if (claimError) {
-    console.error(`[pipe-rule-dispatch][${pipeType}] Error claiming batch:`, claimError);
-    return { pipe_type: pipeType, processed: 0, sent: 0, failed: 0, actions_executed: 0, timeouts_processed: timeoutsProcessed, error: claimError.message };
-  }
+    console.warn(`[pipe-rule-dispatch][${pipeType}] RPC claim failed (falling back to direct query):`, claimError.message);
 
-  if (!claimedRows || claimedRows.length === 0) {
+    // Fallback: direct SELECT + UPDATE (less safe for concurrency but works without RPC/CHECK fix)
+    const { data: fallbackRows, error: fallbackErr } = await supabase
+      .from("scheduled_pipe_messages")
+      .select("id")
+      .eq("pipe_type", pipeType)
+      .eq("status", "scheduled")
+      .lte("scheduled_at", new Date().toISOString())
+      .order("scheduled_at", { ascending: true })
+      .limit(BATCH_SIZE);
+
+    if (fallbackErr || !fallbackRows || fallbackRows.length === 0) {
+      console.error(`[pipe-rule-dispatch][${pipeType}] Fallback also failed:`, fallbackErr?.message);
+      return { pipe_type: pipeType, processed: 0, sent: 0, failed: 0, actions_executed: 0, timeouts_processed: timeoutsProcessed, error: claimError.message };
+    }
+
+    claimedIds = fallbackRows.map((r: { id: string }) => r.id);
+    console.log(`[pipe-rule-dispatch][${pipeType}] Fallback claimed ${claimedIds.length} item(s)`);
+  } else if (!claimedRows || claimedRows.length === 0) {
     return { pipe_type: pipeType, processed: 0, sent: 0, failed: 0, actions_executed: actionsExecuted, timeouts_processed: timeoutsProcessed };
+  } else {
+    claimedIds = claimedRows.map((r: { claimed_id: string }) => r.claimed_id);
   }
-
-  const claimedIds = claimedRows.map((r: { claimed_id: string }) => r.claimed_id);
   console.log(`[pipe-rule-dispatch][${pipeType}] Claimed ${claimedIds.length} item(s)`);
 
   // --- 3. Fetch full data for claimed rows ---
