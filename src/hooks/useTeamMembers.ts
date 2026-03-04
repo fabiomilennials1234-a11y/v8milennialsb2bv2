@@ -167,7 +167,7 @@ export function useCurrentTeamMember() {
     },
     enabled: !!user?.id && !masterLoading,
     retry: 2,
-    staleTime: 30000, // 30 segundos
+    staleTime: 5 * 60 * 1000, // 5 minutos
   });
 }
 
@@ -204,7 +204,7 @@ export function useTeamMembers() {
     },
     enabled: isReady && !!organizationId,
     retry: 1,
-    staleTime: 30000,
+    staleTime: 5 * 60 * 1000, // 5 minutos
   });
 }
 

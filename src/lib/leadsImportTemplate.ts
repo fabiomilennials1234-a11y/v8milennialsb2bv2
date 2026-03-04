@@ -1,4 +1,3 @@
-import * as XLSX from "xlsx";
 
 /** Colunas do modelo de importação de leads (igual ao esperado pelo sistema). */
 export const LEADS_TEMPLATE_HEADERS = [
@@ -96,7 +95,8 @@ const INSTRUCOES_ROWS: (string | number)[][] = [
  * - Aba "Leads": cabeçalhos corretos + linha de exemplo
  * - Aba "Instruções": passos e descrição de cada coluna
  */
-export function downloadLeadsImportTemplate(): void {
+export async function downloadLeadsImportTemplate(): Promise<void> {
+  const XLSX = await import("xlsx");
   const headers = [...LEADS_TEMPLATE_HEADERS];
   const dataRow = headers.map((h) => EXAMPLE_ROW[h] ?? "");
   const leadsData: (string | number)[][] = [headers, dataRow];

@@ -157,16 +157,12 @@ Deno.serve(async (req) => {
     const filterPipes = (rule.filter_pipes as string[]) || [];
     const filterStages = (rule.filter_stages as string[]) || [];
 
-    let sentThisRule = 0;
-    for (const c of candidates.slice(0, BATCH_PER_RULE)) {
-      const qualifiedAt = new Date(c.last_outgoing_at);
-      const sendAt = getNextSendTime(ruleSchedule, qualifiedAt);
-      if (sendAt.getTime() > now.getTime()) {
-        totalSkipped++;
-        continue;
-      }
+    const candidateSlice = candidates.slice(0, BATCH_PER_RULE);
+    const leadIds = candidateSlice.map((c: any) => c.lead_id);
 
-      const { data: lead, error: leadErr } = await supabase
+    // Batch: buscar todos os leads e contagens de execução de uma vez
+    const [{ data: allLeads }, { data: execRows }] = await Promise.all([
+      supabase
         .from("leads")
         .select(`
           id,
@@ -179,15 +175,37 @@ Deno.serve(async (req) => {
           pipe_whatsapp,
           lead_tags(tag:tags(name))
         `)
-        .eq("id", c.lead_id)
-        .single();
+        .in("id", leadIds),
+      supabase
+        .from("copilot_followup_execution_log")
+        .select("lead_id")
+        .eq("rule_id", rule.id)
+        .in("lead_id", leadIds),
+    ]);
 
-      if (leadErr || !lead?.phone) {
+    const leadMap = new Map((allLeads || []).map((l: any) => [l.id, l]));
+    const execCountMap = new Map<string, number>();
+    for (const row of execRows || []) {
+      execCountMap.set(row.lead_id, (execCountMap.get(row.lead_id) || 0) + 1);
+    }
+
+    let sentThisRule = 0;
+    for (const c of candidateSlice) {
+      const qualifiedAt = new Date(c.last_outgoing_at);
+      const sendAt = getNextSendTime(ruleSchedule, qualifiedAt);
+      if (sendAt.getTime() > now.getTime()) {
         totalSkipped++;
         continue;
       }
 
-      const leadTagNames = ((lead as any).lead_tags || [])
+      const lead = leadMap.get(c.lead_id) as any;
+
+      if (!lead?.phone) {
+        totalSkipped++;
+        continue;
+      }
+
+      const leadTagNames = (lead.lead_tags || [])
         .map((lt: any) => lt.tag?.name)
         .filter(Boolean);
 
@@ -221,13 +239,9 @@ Deno.serve(async (req) => {
         }
       }
 
-      const { count, error: countErr } = await supabase
-        .from("copilot_followup_execution_log")
-        .select("*", { count: "exact", head: true })
-        .eq("lead_id", c.lead_id)
-        .eq("rule_id", rule.id);
+      const count = execCountMap.get(c.lead_id) || 0;
 
-      if (countErr || (count ?? 0) >= (rule.max_followups ?? 3)) {
+      if (count >= (rule.max_followups ?? 3)) {
         totalSkipped++;
         continue;
       }

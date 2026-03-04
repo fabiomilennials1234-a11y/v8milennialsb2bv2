@@ -74,7 +74,7 @@ export function useMasterAuditLogs(filters: AuditLogFilters = {}) {
       if (error) throw error;
       return data as AuditLog[];
     },
-    staleTime: 10 * 1000, // 10 segundos
+    staleTime: 5 * 60 * 1000, // 5 minutos
   });
 }
 

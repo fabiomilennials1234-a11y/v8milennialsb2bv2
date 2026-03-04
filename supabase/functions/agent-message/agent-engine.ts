@@ -92,19 +92,7 @@ export class AgentEngine {
     }
     console.log('[AgentEngine] Capabilities loaded:', { agentId: capabilities.id, agentName: capabilities.name });
 
-    // 1.2. Item #18: A/B Testing — verificar se há variante ativa para este lead
-    const abVariant = await this.resolveABVariant(leadId, capabilities.id);
-    if (abVariant) {
-      if (abVariant.system_prompt_override) {
-        capabilities.system_prompt = abVariant.system_prompt_override;
-      }
-      if (abVariant.temperature_override) {
-        capabilities.llm_temperature_mode = abVariant.temperature_override;
-      }
-      console.log(`[AgentEngine] A/B variant active: ${abVariant.name}`);
-    }
-
-    // 1.5. OUT-OF-HOURS CHECK — item #15
+    // 1.5. OUT-OF-HOURS CHECK — item #15 (síncrono, instant)
     const outOfHoursReply = this.checkOutOfHours(capabilities);
     if (outOfHoursReply) {
       console.log('[AgentEngine] Fora do horário de atendimento para lead:', leadId);
@@ -116,38 +104,49 @@ export class AgentEngine {
       };
     }
 
-    // 2. Load or Create Conversation
-    console.log('[AgentEngine] Step 2: Loading/creating conversation...');
-    let conversation = await this.loadConversation(leadId, capabilities.id);
+    // 2. Parallel data loading — todas as queries independentes de uma vez
+    console.log('[AgentEngine] Step 2: Parallel data loading...');
+    const [
+      abVariant,
+      conversationResult,
+      leadData,
+      contextResult,
+      documentSummaries,
+      semanticContext,
+      longTermMemories,
+      orgCustomFields,
+      pipelineStages,
+    ] = await Promise.all([
+      this.resolveABVariant(leadId, capabilities.id),
+      this.loadConversation(leadId, capabilities.id).then(c => c || this.createConversation(leadId, capabilities.id)),
+      this.loadLeadData(leadId),
+      this.loadConversationContext(leadId),
+      this.loadDocumentSummaries(capabilities.id),
+      this.retrieveSemanticContext(userMessage, capabilities.id),
+      this.retrieveLongTermMemories(userMessage, leadId),
+      this.loadOrgCustomFields(),
+      capabilities.can_qualify_lead ? this.loadPipelineStages() : Promise.resolve([]),
+    ]);
 
-    if (!conversation) {
-      conversation = await this.createConversation(leadId, capabilities.id);
+    // Apply A/B variant overrides (item #18)
+    if (abVariant) {
+      if (abVariant.system_prompt_override) {
+        capabilities.system_prompt = abVariant.system_prompt_override;
+      }
+      if (abVariant.temperature_override) {
+        capabilities.llm_temperature_mode = abVariant.temperature_override;
+      }
+      console.log(`[AgentEngine] A/B variant active: ${abVariant.name}`);
     }
 
+    const conversation = conversationResult;
     if (!conversation) {
       console.error('[AgentEngine] Failed to load or create conversation');
       throw new Error('Failed to create conversation');
     }
+    console.log('[AgentEngine] Capabilities loaded:', { agentId: capabilities.id, agentName: capabilities.name });
 
-    // 2.5. Load Lead Data (including custom fields)
-    console.log('[AgentEngine] Step 2.5: Loading lead data...');
-    const leadData = await this.loadLeadData(leadId);
-
-    // 2.6. Load Conversation Context (último assunto, intenção, etc)
-    console.log('[AgentEngine] Step 2.6: Loading conversation context...');
-    this.conversationContext = await this.loadConversationContext(leadId);
-
-    // 2.7. Load Knowledge Base Document Summaries
-    console.log('[AgentEngine] Step 2.7: Loading knowledge base documents...');
-    const documentSummaries = await this.loadDocumentSummaries(capabilities.id);
-
-    // 2.8. Item #5+#6: Semantic RAG — busca chunks e FAQs relevantes via pgvector
-    console.log('[AgentEngine] Step 2.8: Retrieving semantic context (RAG)...');
-    const semanticContext = await this.retrieveSemanticContext(userMessage, capabilities.id);
-
-    // 2.9. Item #19: Long-term memory — recuperar memórias relevantes do lead
-    console.log('[AgentEngine] Step 2.9: Loading long-term lead memories...');
-    const longTermMemories = await this.retrieveLongTermMemories(userMessage, leadId);
+    this.conversationContext = contextResult;
 
     // 3. Update Short-Term Memory
     console.log('[AgentEngine] Step 3: Adding message to memory...');
@@ -159,8 +158,6 @@ export class AgentEngine {
 
     // 5. Build Tools (based on capabilities)
     console.log('[AgentEngine] Step 5: Building tools...');
-    const orgCustomFields = await this.loadOrgCustomFields();
-    const pipelineStages = capabilities.can_qualify_lead ? await this.loadPipelineStages() : [];
     const tools = this.buildDynamicTools(capabilities, orgCustomFields, pipelineStages);
 
     // 6. Call LLM via OpenRouter
@@ -641,7 +638,7 @@ export class AgentEngine {
   private async loadCapabilities(leadId?: string) {
     const SELECT = '*, copilot_agent_faqs(*), copilot_agent_kanban_rules(*)';
 
-    // Item #4 + #12: Roteamento por etapa, origem e segmento do lead
+    // Item #4 + #12: Roteamento por etapa, origem e segmento do lead (paralelo)
     if (leadId) {
       try {
         const { data: leadRow } = await this.supabase
@@ -650,51 +647,44 @@ export class AgentEngine {
           .eq('id', leadId)
           .maybeSingle();
 
-        // Tentativa 1: roteamento por etapa do pipe
-        if (leadRow?.pipe_whatsapp) {
-          const { data: stageAgent } = await this.supabase
-            .from('copilot_agents')
-            .select(SELECT)
-            .eq('organization_id', this.organizationId)
-            .eq('is_active', true)
-            .contains('routing_stages', [leadRow.pipe_whatsapp])
-            .maybeSingle();
+        if (leadRow) {
+          // Executar as 3 tentativas de routing em paralelo (prioridade: stage > origin > segment)
+          const [stageResult, originResult, segmentResult] = await Promise.all([
+            leadRow.pipe_whatsapp
+              ? this.supabase
+                  .from('copilot_agents')
+                  .select(SELECT)
+                  .eq('organization_id', this.organizationId)
+                  .eq('is_active', true)
+                  .contains('routing_stages', [leadRow.pipe_whatsapp])
+                  .maybeSingle()
+              : Promise.resolve({ data: null }),
+            leadRow.origin
+              ? this.supabase
+                  .from('copilot_agents')
+                  .select(SELECT)
+                  .eq('organization_id', this.organizationId)
+                  .eq('is_active', true)
+                  .contains('routing_origins', [leadRow.origin])
+                  .maybeSingle()
+              : Promise.resolve({ data: null }),
+            leadRow.segment
+              ? this.supabase
+                  .from('copilot_agents')
+                  .select(SELECT)
+                  .eq('organization_id', this.organizationId)
+                  .eq('is_active', true)
+                  .contains('routing_segments', [leadRow.segment])
+                  .maybeSingle()
+              : Promise.resolve({ data: null }),
+          ]);
 
-          if (stageAgent) {
-            console.log('[AgentEngine] Roteado por etapa:', { agentId: stageAgent.id, stage: leadRow.pipe_whatsapp });
-            return stageAgent;
-          }
-        }
-
-        // Tentativa 2: roteamento por origem do lead (item #12)
-        if (leadRow?.origin) {
-          const { data: originAgent } = await this.supabase
-            .from('copilot_agents')
-            .select(SELECT)
-            .eq('organization_id', this.organizationId)
-            .eq('is_active', true)
-            .contains('routing_origins', [leadRow.origin])
-            .maybeSingle();
-
-          if (originAgent) {
-            console.log('[AgentEngine] Roteado por origem:', { agentId: originAgent.id, origin: leadRow.origin });
-            return originAgent;
-          }
-        }
-
-        // Tentativa 3: roteamento por segmento do lead (item #12)
-        if (leadRow?.segment) {
-          const { data: segmentAgent } = await this.supabase
-            .from('copilot_agents')
-            .select(SELECT)
-            .eq('organization_id', this.organizationId)
-            .eq('is_active', true)
-            .contains('routing_segments', [leadRow.segment])
-            .maybeSingle();
-
-          if (segmentAgent) {
-            console.log('[AgentEngine] Roteado por segmento:', { agentId: segmentAgent.id, segment: leadRow.segment });
-            return segmentAgent;
+          // Respeitar prioridade: stage > origin > segment
+          const routedAgent = stageResult.data || originResult.data || segmentResult.data;
+          if (routedAgent) {
+            const routeType = stageResult.data ? 'etapa' : originResult.data ? 'origem' : 'segmento';
+            console.log(`[AgentEngine] Roteado por ${routeType}:`, { agentId: routedAgent.id });
+            return routedAgent;
           }
         }
       } catch (e) {
@@ -1155,24 +1145,13 @@ Regras:
 
       // 2. Se não existir contexto resumido, extrair das últimas mensagens
       console.log('[AgentEngine] No existing context, extracting from messages...');
-      
-      // Buscar telefone do lead
-      const { data: lead } = await this.supabase
-        .from('leads')
-        .select('phone')
-        .eq('id', leadId)
-        .single();
 
-      if (!lead?.phone) {
-        return this.getDefaultContext();
-      }
-
-      // Buscar últimas mensagens
+      // Buscar últimas mensagens usando lead_id diretamente (evita ILIKE lento em phone_number)
       const { data: messages, error: msgError } = await this.supabase
         .from('whatsapp_messages')
         .select('direction, content, created_at')
         .eq('organization_id', this.organizationId)
-        .ilike('phone_number', `%${lead.phone.slice(-8)}%`)
+        .eq('lead_id', leadId)
         .eq('message_type', 'text')
         .not('content', 'is', null)
         .order('created_at', { ascending: false })
@@ -2171,7 +2150,7 @@ Regras:
 
       const { data: messages, error } = await this.supabase
         .from('conversation_messages')
-        .select('*')
+        .select('id, conversation_id, role, content, created_at')
         .eq('conversation_id', conversationId)
         .order('created_at', { ascending: true })
         .limit(100); // busca mais para verificar se precisa comprimir
@@ -2188,8 +2167,26 @@ Regras:
 
       // Compressão automática de histórico quando excede o limite (item #1)
       if (messages.length > this.HISTORY_COMPRESS_THRESHOLD) {
-        console.log(`[AgentEngine] History has ${messages.length} messages — compressing`);
-        return await this.compressHistoryIfNeeded(conversationId, messages);
+        console.log(`[AgentEngine] History has ${messages.length} messages — scheduling background compression`);
+
+        // Verificar se já existe resumo (compressão anterior)
+        const firstMsg = messages[0];
+        if (firstMsg?.content?.startsWith('[RESUMO HISTÓRICO]')) {
+          // Resumo já existe — retornar resumo + recentes (fast path, sem LLM)
+          const recentMessages = messages.slice(-this.HISTORY_KEEP_RECENT);
+          return [
+            { role: 'user' as const, content: firstMsg.content },
+            { role: 'assistant' as const, content: messages[1]?.content || 'Entendido.' },
+            ...recentMessages.map((m: any) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+          ];
+        }
+
+        // Sem resumo ainda — fire-and-forget compressão em background, retornar recentes imediatamente
+        this.compressHistoryIfNeeded(conversationId, messages)
+          .catch(e => console.warn('[AgentEngine] Background history compression failed (non-fatal):', e));
+
+        const recentMessages = messages.slice(-this.HISTORY_KEEP_RECENT);
+        return recentMessages.map((m: any) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
       }
 
       return messages.map((msg: any) => ({

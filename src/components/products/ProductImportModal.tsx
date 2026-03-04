@@ -10,7 +10,6 @@ import { useOrganization } from "@/hooks/useOrganization";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import * as XLSX from "xlsx";
 import type { ProductType } from "@/hooks/useProducts";
 
 const TEMPLATE_HEADERS = [
@@ -99,7 +98,8 @@ function parseRow(row: Record<string, unknown>, rowIndex: number): RowValidation
   return { rowIndex, data, error: null };
 }
 
-function sheetToRows(file: File): Promise<Record<string, unknown>[]> {
+async function sheetToRows(file: File): Promise<Record<string, unknown>[]> {
+  const XLSX = await import("xlsx");
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (e) => {

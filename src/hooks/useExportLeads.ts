@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "./useOrganization";
-import * as XLSX from "xlsx";
 
 const BATCH_SIZE = 500;
 
@@ -239,6 +238,7 @@ export function useExportLeads(): UseExportLeadsResult {
         a.click();
         URL.revokeObjectURL(url);
       } else {
+        const XLSX = await import("xlsx");
         const ws = XLSX.utils.json_to_sheet(rows, { header: headers as unknown as string[] });
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "Leads");

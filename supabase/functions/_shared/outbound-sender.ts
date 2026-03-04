@@ -176,18 +176,21 @@ export async function sendOutboundDispatch(
     let audioResult: { ok: boolean; messageId?: string; error?: string } | null = null;
 
     if (chosenAudio && audioSendOrder === "audio_first") {
-      // Áudio primeiro → delay → texto
+      // Áudio primeiro → texto imediato (delay assíncrono)
       audioResult = await sendAudio();
-      if (audioResult.ok) {
-        await new Promise((r) => setTimeout(r, AUDIO_DELAY_MS));
-      }
       textResult = await sendText();
     } else if (chosenAudio) {
-      // Texto primeiro → delay → áudio (default)
+      // Texto primeiro → áudio agendado em background (não bloqueia)
       textResult = await sendText();
       if (textResult.ok) {
-        await new Promise((r) => setTimeout(r, AUDIO_DELAY_MS));
-        audioResult = await sendAudio();
+        // Fire-and-forget: envia áudio após delay sem bloquear o dispatch loop
+        setTimeout(async () => {
+          try {
+            await sendAudio();
+          } catch (e) {
+            console.warn("[outbound-sender] Background audio send failed:", e);
+          }
+        }, AUDIO_DELAY_MS);
       }
     } else {
       // Sem áudio — comportamento padrão

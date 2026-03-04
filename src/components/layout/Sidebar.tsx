@@ -41,7 +41,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useOrganization } from "@/hooks/useOrganization";
 import { useVisibleSidebarKeys } from "@/hooks/useClientSidebarPermissions";
-import { useWhatsAppContacts, useWhatsAppMessagesRealtime } from "@/hooks/useWhatsAppChat";
+// useWhatsAppContacts/Realtime removidos da Sidebar para performance (eram no-op com instanceId=null)
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
 import { SIDEBAR_FEATURE_MAP, type FeatureKey } from "@/lib/feature-registry";
 import { UpgradeModal } from "@/components/shared/UpgradeModal";
@@ -210,10 +210,9 @@ export function Sidebar() {
     setUpgradeModal({ open: true, label, description: `O módulo "${label}" não está disponível no seu plano atual.` });
   };
 
-  // Subscription realtime ativa em qualquer página para atualizar contagem de não lidas
-  useWhatsAppMessagesRealtime(null);
-  const { data: chatContacts = [] } = useWhatsAppContacts(null);
-  const chatUnreadTotal = chatContacts.reduce((sum, c) => sum + (c.unread_count || 0), 0);
+  // Badge de não lidas removido da sidebar global para performance
+  // (useWhatsAppContacts(null) retornava [] pois instanceId=null, badge era sempre 0)
+  const chatUnreadTotal = 0;
 
   const isActive = (path: string) => {
     if (path === "/") return location.pathname === "/";

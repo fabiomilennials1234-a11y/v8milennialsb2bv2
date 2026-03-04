@@ -39,12 +39,12 @@ export default function TVDashboard() {
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   useEffect(() => {
-    const interval = setInterval(() => setCurrentTime(new Date()), 1000);
+    const interval = setInterval(() => setCurrentTime(new Date()), 60_000); // 1x por minuto (era 1x por segundo)
     return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
-    const interval = setInterval(() => refetch(), 5000);
+    const interval = setInterval(() => refetch(), 30_000); // 1x a cada 30s (era 5s)
     return () => clearInterval(interval);
   }, [refetch]);
 

@@ -53,7 +53,7 @@ export function useLeads(page: number = 0) {
     },
     // Only run query when organization is ready
     enabled: isReady,
-    staleTime: 30000, // 30 segundos
+    staleTime: 5 * 60 * 1000, // 5 minutos
   });
 }
 
@@ -150,9 +150,10 @@ export function useUpdateLead() {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["leads"] });
-      queryClient.invalidateQueries({ queryKey: ["pipe_confirmacao"] });
-      queryClient.invalidateQueries({ queryKey: ["pipe_propostas"] });
+      // refetchType: 'active' — só refaz queries atualmente renderizadas (evita cascata de refetch em todas as páginas)
+      queryClient.invalidateQueries({ queryKey: ["leads"], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ["pipe_confirmacao"], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ["pipe_propostas"], refetchType: 'active' });
     },
   });
 }
@@ -549,13 +550,13 @@ export function useToggleLeadAI() {
       }
     },
     onSuccess: (_, variables) => {
-      // Invalidar todas as queries relacionadas para garantir sincronização
-      queryClient.invalidateQueries({ queryKey: ["leads"] });
+      // Invalidar apenas queries renderizadas (refetchType: 'active') para evitar cascata
+      queryClient.invalidateQueries({ queryKey: ["leads"], refetchType: 'active' });
       queryClient.invalidateQueries({ queryKey: ["lead-detail", variables.leadId] });
-      queryClient.invalidateQueries({ queryKey: ["pipe_whatsapp"] });
-      queryClient.invalidateQueries({ queryKey: ["pipe_confirmacao"] });
-      queryClient.invalidateQueries({ queryKey: ["pipe_propostas"] });
-      queryClient.invalidateQueries({ queryKey: ["lead_by_phone"] });
+      queryClient.invalidateQueries({ queryKey: ["pipe_whatsapp"], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ["pipe_confirmacao"], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ["pipe_propostas"], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ["lead_by_phone"], refetchType: 'active' });
     },
   });
 }

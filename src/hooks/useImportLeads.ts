@@ -2,7 +2,6 @@ import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import Papa from "papaparse";
-import * as XLSX from "xlsx";
 import { useOrganization } from "./useOrganization";
 
 /** Campos conhecidos do sistema (leads + UTM + funil). Custom fields são passados separadamente. */
@@ -135,7 +134,7 @@ export interface ColumnMappingOption {
 }
 
 /** Lê CSV ou XLSX e retorna array de linhas (objetos chave = coluna). */
-export function parseFileToRows(file: File): Promise<Record<string, string>[]> {
+export async function parseFileToRows(file: File): Promise<Record<string, string>[]> {
   const name = (file.name || "").toLowerCase();
   if (name.endsWith(".csv")) {
     return new Promise((resolve, reject) => {
@@ -159,6 +158,7 @@ export function parseFileToRows(file: File): Promise<Record<string, string>[]> {
     });
   }
   if (name.endsWith(".xlsx") || name.endsWith(".xls")) {
+    const XLSX = await import("xlsx");
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = (e) => {

@@ -26,14 +26,14 @@ import { Calendar, Target, Users, ArrowRight, Trophy, Clock, MoreVertical, Trash
 import { useNavigate } from "react-router-dom";
 import { useCampanhaLeads, useCampanhaStages, useCampanhaMembers } from "@/hooks/useCampanhas";
 import { useIsAdmin } from "@/hooks/useUserRole";
-import { useState } from "react";
+import { useState, memo } from "react";
 import { toast } from "sonner";
 
 interface CampanhaCardProps {
   campanha: Campanha;
 }
 
-export function CampanhaCard({ campanha }: CampanhaCardProps) {
+export const CampanhaCard = memo(function CampanhaCard({ campanha }: CampanhaCardProps) {
   const navigate = useNavigate();
   const { isAdmin } = useIsAdmin();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -228,4 +228,4 @@ export function CampanhaCard({ campanha }: CampanhaCardProps) {
     </AlertDialog>
     </>
   );
-}
+});

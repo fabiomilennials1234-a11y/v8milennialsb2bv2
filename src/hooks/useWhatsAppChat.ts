@@ -204,13 +204,27 @@ export function useWhatsAppContacts(instanceId: string | null) {
         }
       }
 
-      const { data: incomingData } = await supabase
-        .from("whatsapp_messages")
-        .select("phone_number, timestamp")
-        .eq("organization_id", organizationId)
-        .eq("instance_id", instanceId)
-        .eq("direction", "incoming")
-        .order("timestamp", { ascending: false });
+      // Buscar incoming messages, metadados de conversas e tags em paralelo
+      const [{ data: incomingData }, { data: convMeta }, { data: convTagsData }] = await Promise.all([
+        supabase
+          .from("whatsapp_messages")
+          .select("phone_number, timestamp")
+          .eq("organization_id", organizationId)
+          .eq("instance_id", instanceId)
+          .eq("direction", "incoming")
+          .order("timestamp", { ascending: false }),
+        supabase
+          .from("whatsapp_conversations")
+          .select("id, phone_number, archived_at, deleted_at")
+          .eq("organization_id", organizationId)
+          .eq("instance_id", instanceId),
+        supabase
+          .from("whatsapp_conversation_tags")
+          .select(`
+            conversation_id,
+            tags!inner(id, name, color)
+          `),
+      ]);
 
       const unreadByPhone: Record<string, number> = {};
       for (const m of incomingData || []) {
@@ -225,20 +239,6 @@ export function useWhatsAppContacts(instanceId: string | null) {
         const key = normalizePhone(contact.phone_number);
         contact.unread_count = unreadByPhone[key] ?? 0;
       }
-
-      // Buscar metadados de conversas (archive/delete) e tags de conversa
-      const { data: convMeta } = await supabase
-        .from("whatsapp_conversations")
-        .select("id, phone_number, archived_at, deleted_at")
-        .eq("organization_id", organizationId)
-        .eq("instance_id", instanceId);
-
-      const { data: convTagsData } = await supabase
-        .from("whatsapp_conversation_tags")
-        .select(`
-          conversation_id,
-          tags!inner(id, name, color)
-        `);
 
       // Mapear conversation tags por conversation_id
       const convTagsByConvId = new Map<string, ChatContactTag[]>();
@@ -340,7 +340,7 @@ export function useWhatsAppMessages(
 
       const { data, error } = await supabase
         .from("whatsapp_messages")
-        .select("*")
+        .select("id, organization_id, instance_id, message_id, remote_jid, phone_number, direction, message_type, content, media_url, push_name, status, lead_id, timestamp, created_at")
         .eq("organization_id", organizationId)
         .eq("instance_id", instanceId)
         .eq("phone_number", phoneNumber)

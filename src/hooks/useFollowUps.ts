@@ -111,7 +111,7 @@ export function useFollowUps(filters?: {
       return data as unknown as FollowUp[];
     },
     enabled: isReady && !!organizationId,
-    staleTime: 30000,
+    staleTime: 5 * 60 * 1000, // 5 minutos
   });
 }
 
@@ -141,7 +141,7 @@ export function useFollowUpAutomations(triggerType?: TriggerType) {
       if (error) throw error;
       return data as unknown as FollowUpAutomation[];
     },
-    staleTime: 30000,
+    staleTime: 5 * 60 * 1000, // 5 minutos
   });
 }
 
