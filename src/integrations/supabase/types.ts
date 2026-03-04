@@ -4317,12 +4317,90 @@ export type Database = {
           },
         ]
       }
+      product_variants: {
+        Row: {
+          id: string
+          product_id: string
+          sku: string | null
+          name: string
+          ticket: number | null
+          ticket_minimo: number | null
+          weight: number | null
+          grammage: number | null
+          dimensions: string | null
+          color: string | null
+          size: string | null
+          custom_attributes: Json
+          sort_order: number
+          is_active: boolean
+          organization_id: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          product_id: string
+          sku?: string | null
+          name: string
+          ticket?: number | null
+          ticket_minimo?: number | null
+          weight?: number | null
+          grammage?: number | null
+          dimensions?: string | null
+          color?: string | null
+          size?: string | null
+          custom_attributes?: Json
+          sort_order?: number
+          is_active?: boolean
+          organization_id: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          product_id?: string
+          sku?: string | null
+          name?: string
+          ticket?: number | null
+          ticket_minimo?: number | null
+          weight?: number | null
+          grammage?: number | null
+          dimensions?: string | null
+          color?: string | null
+          size?: string | null
+          custom_attributes?: Json
+          sort_order?: number
+          is_active?: boolean
+          organization_id?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_variants_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_variants_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       products: {
         Row: {
+          base_unit: string | null
           contrato_minimo_url: string | null
           contrato_padrao_url: string | null
           created_at: string
+          description: string | null
           entregaveis: string | null
+          has_variants: boolean
           id: string
           is_active: boolean
           links: string[] | null
@@ -4330,16 +4408,20 @@ export type Database = {
           materiais: string | null
           name: string
           organization_id: string | null
+          sku: string | null
           ticket: number | null
           ticket_minimo: number | null
           type: string
           updated_at: string
         }
         Insert: {
+          base_unit?: string | null
           contrato_minimo_url?: string | null
           contrato_padrao_url?: string | null
           created_at?: string
+          description?: string | null
           entregaveis?: string | null
+          has_variants?: boolean
           id?: string
           is_active?: boolean
           links?: string[] | null
@@ -4347,16 +4429,20 @@ export type Database = {
           materiais?: string | null
           name: string
           organization_id?: string | null
+          sku?: string | null
           ticket?: number | null
           ticket_minimo?: number | null
           type: string
           updated_at?: string
         }
         Update: {
+          base_unit?: string | null
           contrato_minimo_url?: string | null
           contrato_padrao_url?: string | null
           created_at?: string
+          description?: string | null
           entregaveis?: string | null
+          has_variants?: boolean
           id?: string
           is_active?: boolean
           links?: string[] | null
@@ -4364,6 +4450,7 @@ export type Database = {
           materiais?: string | null
           name?: string
           organization_id?: string | null
+          sku?: string | null
           ticket?: number | null
           ticket_minimo?: number | null
           type?: string

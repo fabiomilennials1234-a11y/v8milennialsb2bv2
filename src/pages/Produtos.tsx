@@ -2,8 +2,8 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Edit2, Trash2, Package, FileText, Link as LinkIcon, FileSpreadsheet } from "lucide-react";
-import { useProducts, useDeleteProduct, Product } from "@/hooks/useProducts";
+import { Plus, Edit2, Trash2, Package, FileText, Link as LinkIcon, FileSpreadsheet, Layers, Barcode } from "lucide-react";
+import { useProductsWithVariants, useDeleteProduct, Product } from "@/hooks/useProducts";
 import { CreateProductModal } from "@/components/products/CreateProductModal";
 import { EditProductModal } from "@/components/products/EditProductModal";
 import { ProductImportModal } from "@/components/products/ProductImportModal";
@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/alert-dialog";
 
 export default function Produtos() {
-  const { data: products, isLoading } = useProducts();
+  const { data: products, isLoading } = useProductsWithVariants();
   const deleteProduct = useDeleteProduct();
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -49,7 +49,7 @@ export default function Produtos() {
           <div>
             <h1 className="text-2xl font-bold">Produtos</h1>
             <p className="text-muted-foreground">
-              Gerencie seus produtos de MRR e Projetos
+              Gerencie seus produtos, variações e catálogo B2B
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -62,7 +62,7 @@ export default function Produtos() {
             </a>
             <Button variant="outline" onClick={() => setIsImportModalOpen(true)}>
               <FileSpreadsheet className="mr-2 h-4 w-4" />
-              Importar do Excel
+              Importar
             </Button>
             <Button onClick={() => setIsCreateModalOpen(true)}>
               <Plus className="mr-2 h-4 w-4" />
@@ -113,12 +113,19 @@ export default function Produtos() {
                       )}
                       <div>
                         <CardTitle className="text-lg">{product.name}</CardTitle>
-                        <Badge
-                          variant={product.type === "mrr" ? "default" : product.type === "unitario" ? "outline" : "secondary"}
-                          className="mt-1"
-                        >
-                          {product.type === "mrr" ? "MRR" : product.type === "unitario" ? "Unitário" : "Projeto"}
-                        </Badge>
+                        <div className="flex items-center gap-2 mt-1">
+                          <Badge
+                            variant={product.type === "mrr" ? "default" : product.type === "unitario" ? "outline" : "secondary"}
+                          >
+                            {product.type === "mrr" ? "MRR" : product.type === "unitario" ? "Unitário" : "Projeto"}
+                          </Badge>
+                          {product.has_variants && product.variants && product.variants.length > 0 && (
+                            <Badge variant="outline" className="text-xs gap-1">
+                              <Layers className="h-3 w-3" />
+                              {product.variants.length} var.
+                            </Badge>
+                          )}
+                        </div>
                       </div>
                     </div>
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
@@ -146,17 +153,51 @@ export default function Produtos() {
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {/* Tickets */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-xs text-muted-foreground">Ticket</p>
-                      <p className="font-semibold">{formatCurrency(product.ticket)}</p>
+                  {/* SKU */}
+                  {product.sku && (
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <Barcode className="h-3 w-3" />
+                      <span className="font-mono">{product.sku}</span>
                     </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Ticket Mínimo</p>
-                      <p className="font-semibold">{formatCurrency(product.ticket_minimo)}</p>
+                  )}
+
+                  {/* Description */}
+                  {product.description && (
+                    <p className="text-sm text-muted-foreground line-clamp-2">{product.description}</p>
+                  )}
+
+                  {/* Tickets - show only for products without variants */}
+                  {!product.has_variants && (
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-xs text-muted-foreground">Ticket</p>
+                        <p className="font-semibold">{formatCurrency(product.ticket)}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Ticket Mínimo</p>
+                        <p className="font-semibold">{formatCurrency(product.ticket_minimo)}</p>
+                      </div>
                     </div>
-                  </div>
+                  )}
+
+                  {/* Variant price range */}
+                  {product.has_variants && product.variants && product.variants.length > 0 && (
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-1">Faixa de Preço (Variações)</p>
+                      <p className="font-semibold text-sm">
+                        {(() => {
+                          const tickets = product.variants
+                            .map((v) => v.ticket)
+                            .filter((t): t is number => t != null);
+                          if (tickets.length === 0) return "—";
+                          const min = Math.min(...tickets);
+                          const max = Math.max(...tickets);
+                          if (min === max) return formatCurrency(min);
+                          return `${formatCurrency(min)} — ${formatCurrency(max)}`;
+                        })()}
+                      </p>
+                    </div>
+                  )}
 
                   {/* Entregáveis */}
                   {product.entregaveis && (
@@ -166,7 +207,7 @@ export default function Produtos() {
                     </div>
                   )}
 
-                  {/* Links & Documents - stopPropagation para não abrir o modal ao clicar no link */}
+                  {/* Links & Documents */}
                   <div className="flex flex-wrap gap-2 pt-2 border-t" onClick={(e) => e.stopPropagation()}>
                     {product.contrato_padrao_url && (
                       <a
@@ -194,6 +235,11 @@ export default function Produtos() {
                         {product.links.length} links
                       </span>
                     )}
+                    {product.base_unit && (
+                      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                        Unidade: {product.base_unit}
+                      </span>
+                    )}
                   </div>
 
                   {/* Active Status */}
@@ -216,10 +262,16 @@ export default function Produtos() {
             <p className="text-muted-foreground mb-4">
               Comece cadastrando seu primeiro produto
             </p>
-            <Button onClick={() => setIsCreateModalOpen(true)}>
-              <Plus className="mr-2 h-4 w-4" />
-              Novo Produto
-            </Button>
+            <div className="flex justify-center gap-2">
+              <Button variant="outline" onClick={() => setIsImportModalOpen(true)}>
+                <FileSpreadsheet className="mr-2 h-4 w-4" />
+                Importar
+              </Button>
+              <Button onClick={() => setIsCreateModalOpen(true)}>
+                <Plus className="mr-2 h-4 w-4" />
+                Novo Produto
+              </Button>
+            </div>
           </Card>
         )}
       </div>
@@ -251,8 +303,8 @@ export default function Produtos() {
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir produto?</AlertDialogTitle>
             <AlertDialogDescription>
-              Esta ação não pode ser desfeita. Propostas e metas vinculadas a este
-              produto ficarão sem produto associado.
+              Esta ação não pode ser desfeita. Propostas, metas e variações vinculadas
+              a este produto serão removidas.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

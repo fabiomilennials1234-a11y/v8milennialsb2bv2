@@ -9,6 +9,10 @@ export interface Product {
   id: string;
   name: string;
   type: ProductType;
+  sku: string | null;
+  description: string | null;
+  has_variants: boolean;
+  base_unit: string | null;
   ticket: number | null;
   ticket_minimo: number | null;
   entregaveis: string | null;
@@ -21,10 +25,34 @@ export interface Product {
   organization_id: string | null;
   created_at: string;
   updated_at: string;
+  variants?: ProductVariant[];
 }
 
-export type ProductInsert = Omit<Product, "id" | "created_at" | "updated_at">;
+export interface ProductVariant {
+  id: string;
+  product_id: string;
+  sku: string | null;
+  name: string;
+  ticket: number | null;
+  ticket_minimo: number | null;
+  weight: number | null;
+  grammage: number | null;
+  dimensions: string | null;
+  color: string | null;
+  size: string | null;
+  custom_attributes: Record<string, unknown>;
+  sort_order: number;
+  is_active: boolean;
+  organization_id: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export type ProductInsert = Omit<Product, "id" | "created_at" | "updated_at" | "variants">;
 export type ProductUpdate = Partial<ProductInsert> & { id: string };
+
+export type ProductVariantInsert = Omit<ProductVariant, "id" | "created_at" | "updated_at">;
+export type ProductVariantUpdate = Partial<ProductVariantInsert> & { id: string };
 
 export function useProducts() {
   const { organizationId, isReady } = useOrganization();
@@ -41,6 +69,29 @@ export function useProducts() {
 
       if (error) throw error;
       return data as Product[];
+    },
+    enabled: isReady,
+  });
+}
+
+export function useProductsWithVariants() {
+  const { organizationId, isReady } = useOrganization();
+
+  return useQuery({
+    queryKey: ["products-with-variants", organizationId],
+    queryFn: async () => {
+      if (!organizationId) return [];
+      const { data, error } = await supabase
+        .from("products")
+        .select("*, product_variants(*)")
+        .eq("organization_id", organizationId)
+        .order("name");
+
+      if (error) throw error;
+      return (data as (Product & { product_variants: ProductVariant[] })[]).map((p) => ({
+        ...p,
+        variants: p.product_variants || [],
+      }));
     },
     enabled: isReady,
   });
