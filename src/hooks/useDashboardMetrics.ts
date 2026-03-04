@@ -83,7 +83,9 @@ export function useDashboardMetrics(month?: number, year?: number) {
         };
       }
 
-      const d = data as Record<string, number> | null;
+      // Supabase RPC pode retornar JSONB como array — desembrulhar
+      const raw = Array.isArray(data) && data.length > 0 ? data[0] : data;
+      const d = raw as Record<string, number> | null;
       return {
         totalLeads: d?.totalLeads ?? 0,
         reunioesMarcadas: d?.reunioesMarcadas ?? 0,
@@ -207,7 +209,9 @@ export function useFunnelData(month?: number, year?: number) {
         return empty;
       }
 
-      const d = data as Record<string, number> | null;
+      // Supabase RPC pode retornar JSONB como array — desembrulhar
+      const raw = Array.isArray(data) && data.length > 0 ? data[0] : data;
+      const d = raw as Record<string, number> | null;
       return [
         { label: "Leads", value: d?.funnelLeads ?? 0, color: "hsl(var(--primary))" },
         { label: "Reuniões Marcadas", value: d?.funnelReunioes ?? 0, color: "hsl(var(--chart-2))" },
