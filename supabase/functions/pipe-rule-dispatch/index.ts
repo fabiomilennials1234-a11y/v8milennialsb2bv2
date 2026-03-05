@@ -120,6 +120,19 @@ Deno.serve(async (req) => {
     } else {
       console.log("[pipe-rule-dispatch] Multi-pipe mode");
 
+      // Reset stale processing items BEFORE checking for pending (prevents items stuck forever)
+      const STALE_MINUTES_GLOBAL = 5;
+      const staleThresholdGlobal = new Date(Date.now() - STALE_MINUTES_GLOBAL * 60 * 1000).toISOString();
+      const { data: staleGlobalReset } = await supabase
+        .from("scheduled_pipe_messages")
+        .update({ status: "scheduled", scheduled_at: new Date().toISOString() })
+        .eq("status", "processing")
+        .lt("scheduled_at", staleThresholdGlobal)
+        .select("id");
+      if (staleGlobalReset && staleGlobalReset.length > 0) {
+        console.log(`[pipe-rule-dispatch] Global stale reset: ${staleGlobalReset.length} item(s)`);
+      }
+
       const { data: pendingScheduled } = await supabase
         .from("scheduled_pipe_messages")
         .select("pipe_type")

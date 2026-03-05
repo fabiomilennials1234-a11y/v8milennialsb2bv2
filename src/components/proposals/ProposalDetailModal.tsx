@@ -122,22 +122,34 @@ export function ProposalDetailModal({
     isNew?: boolean;
   }>>([]);
 
+  // Reset form ONLY when dialog opens or when viewing a DIFFERENT proposta.
+  // Using [open, proposta?.id] instead of [proposta] prevents realtime refetches
+  // from wiping user's unsaved changes (notes, status, etc.)
   useEffect(() => {
-    if (proposta) {
+    if (proposta && open) {
       setFormData({
         status: proposta.status || "marcar_compromisso",
         contract_duration: proposta.contract_duration || "",
         closer_id: proposta.closer_id || "",
-        commitment_date: proposta.commitment_date 
+        commitment_date: proposta.commitment_date
           ? format(new Date(proposta.commitment_date), "yyyy-MM-dd'T'HH:mm")
           : "",
         notes: proposta.notes || "",
       });
     }
-  }, [proposta]);
+  }, [open, proposta?.id]);
 
-  // Sync local items with fetched items
+  // Sync local items with fetched items — only on dialog open or proposta change
+  // (same fix as formData: prevents realtime refetches from resetting user edits)
+  const [itemsInitialized, setItemsInitialized] = useState(false);
   useEffect(() => {
+    if (!open) {
+      setItemsInitialized(false);
+      return;
+    }
+    if (itemsInitialized) return;
+    if (itemsLoading) return;
+
     if (itemsData.length > 0) {
       setLocalItems(itemsData.map(item => ({
         id: item.id,
@@ -157,7 +169,8 @@ export function ProposalDetailModal({
         { id: crypto.randomUUID(), product_id: "", sale_value: "", isNew: true },
       ]);
     }
-  }, [itemsData, proposta]);
+    setItemsInitialized(true);
+  }, [open, proposta?.id, itemsData, itemsLoading, itemsInitialized]);
 
   const handleAddItem = () => {
     setLocalItems([...localItems, { id: crypto.randomUUID(), product_id: "", sale_value: "", isNew: true }]);

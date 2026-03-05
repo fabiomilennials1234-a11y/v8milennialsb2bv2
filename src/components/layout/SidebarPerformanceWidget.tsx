@@ -1,5 +1,6 @@
+import { useState, useCallback } from "react";
 import { motion } from "framer-motion";
-import { DollarSign, Target, Flame, CheckCircle, Trophy, Lock, Zap } from "lucide-react";
+import { DollarSign, Target, Flame, CheckCircle, Trophy, Lock, Zap, Eye, EyeOff } from "lucide-react";
 import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
 import { useCommissionSummary } from "@/hooks/useCommissions";
 import { useOrganization } from "@/hooks/useOrganization";
@@ -8,6 +9,33 @@ import { useDashboardMetrics } from "@/hooks/useDashboardMetrics";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { OraculoComercial } from "./OraculoComercial";
+
+const WIDGETS_HIDDEN_KEY = "sidebar_widgets_hidden";
+
+function useWidgetsVisibility() {
+  const [hidden, setHidden] = useState(() => {
+    try {
+      return localStorage.getItem(WIDGETS_HIDDEN_KEY) === "true";
+    } catch {
+      return false;
+    }
+  });
+
+  const toggle = useCallback(() => {
+    setHidden((prev) => {
+      const next = !prev;
+      try { localStorage.setItem(WIDGETS_HIDDEN_KEY, String(next)); } catch {}
+      return next;
+    });
+  }, []);
+
+  return { hidden, toggle };
+}
+
+function MaskedValue({ children, hidden }: { children: React.ReactNode; hidden: boolean }) {
+  if (!hidden) return <>{children}</>;
+  return <span className="select-none blur-md">{"R$ •••••"}</span>;
+}
 
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat("pt-BR", {
@@ -216,6 +244,8 @@ export function SidebarPerformanceWidget({ collapsed }: SidebarPerformanceWidget
     memberRole === "closer" ? currentMember?.id : undefined
   );
 
+  const { hidden: widgetsHidden, toggle: toggleWidgets } = useWidgetsVisibility();
+
   // Admin e agency não veem o widget
   if (memberRole === "admin" || memberRole === "agency") return null;
 
@@ -242,6 +272,18 @@ export function SidebarPerformanceWidget({ collapsed }: SidebarPerformanceWidget
 
     return (
       <div className="p-3 border-t border-sidebar-border space-y-2">
+        {/* Toggle de visibilidade */}
+        {!collapsed && (
+          <button
+            onClick={toggleWidgets}
+            className="flex items-center gap-1.5 text-[10px] text-sidebar-foreground/40 hover:text-sidebar-foreground/70 transition-colors w-full justify-end"
+            title={widgetsHidden ? "Mostrar valores" : "Ocultar valores"}
+          >
+            {widgetsHidden ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+            <span>{widgetsHidden ? "Mostrar" : "Ocultar"}</span>
+          </button>
+        )}
+
         {/* Ganhos do mês para SDR */}
         <motion.div
           initial={{ scale: 0.95, opacity: 0 }}
@@ -252,7 +294,9 @@ export function SidebarPerformanceWidget({ collapsed }: SidebarPerformanceWidget
             <div className="flex flex-col items-center gap-1">
               <DollarSign className="w-5 h-5 text-primary" />
               <span className="text-xs font-bold text-primary">
-                {formatCurrency(commissionSummary.totalEarnings).replace("R$", "")}
+                <MaskedValue hidden={widgetsHidden}>
+                  {formatCurrency(commissionSummary.totalEarnings).replace("R$", "")}
+                </MaskedValue>
               </span>
             </div>
           ) : (
@@ -266,11 +310,15 @@ export function SidebarPerformanceWidget({ collapsed }: SidebarPerformanceWidget
                 animate={{ scale: 1 }}
                 className="text-xl font-bold text-primary"
               >
-                {formatCurrency(commissionSummary.totalEarnings)}
+                <MaskedValue hidden={widgetsHidden}>
+                  {formatCurrency(commissionSummary.totalEarnings)}
+                </MaskedValue>
               </motion.div>
-              <div className="flex items-center gap-2 mt-1 text-xs text-sidebar-foreground/50">
-                <span>OTE: {formatCurrency(commissionSummary.oteBase + commissionSummary.calculatedBonus)}</span>
-              </div>
+              {!widgetsHidden && (
+                <div className="flex items-center gap-2 mt-1 text-xs text-sidebar-foreground/50">
+                  <span>OTE: {formatCurrency(commissionSummary.oteBase + commissionSummary.calculatedBonus)}</span>
+                </div>
+              )}
             </>
           )}
         </motion.div>
@@ -293,25 +341,31 @@ export function SidebarPerformanceWidget({ collapsed }: SidebarPerformanceWidget
             </div>
             <div className="flex items-baseline gap-2">
               <span className={`text-2xl font-bold ${isOnTrack ? "text-emerald-400" : "text-amber-400"}`}>
-                {sdrData.confirmed}
+                <MaskedValue hidden={widgetsHidden}>{sdrData.confirmed}</MaskedValue>
               </span>
-              <span className="text-sm text-sidebar-foreground/50">/ {sdrData.goal}</span>
+              {!widgetsHidden && (
+                <span className="text-sm text-sidebar-foreground/50">/ {sdrData.goal}</span>
+              )}
             </div>
             {/* Progress bar */}
-            <div className="mt-2 h-1.5 bg-sidebar-border rounded-full overflow-hidden">
-              <motion.div
-                initial={{ width: 0 }}
-                animate={{ width: `${Math.min(percentage, 100)}%` }}
-                transition={{ duration: 0.5, ease: "easeOut" }}
-                className={`h-full rounded-full ${isOnTrack ? "bg-emerald-400" : "bg-amber-400"}`}
-              />
-            </div>
-            <p className="text-xs text-sidebar-foreground/50 mt-1">
-              {percentage.toFixed(0)}% da meta
-            </p>
-            <p className="text-[10px] text-sidebar-foreground/40 mt-1 truncate" title={sdrData.goalName}>
-              🎯 {sdrData.goalName}
-            </p>
+            {!widgetsHidden && (
+              <>
+                <div className="mt-2 h-1.5 bg-sidebar-border rounded-full overflow-hidden">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${Math.min(percentage, 100)}%` }}
+                    transition={{ duration: 0.5, ease: "easeOut" }}
+                    className={`h-full rounded-full ${isOnTrack ? "bg-emerald-400" : "bg-amber-400"}`}
+                  />
+                </div>
+                <p className="text-xs text-sidebar-foreground/50 mt-1">
+                  {percentage.toFixed(0)}% da meta
+                </p>
+                <p className="text-[10px] text-sidebar-foreground/40 mt-1 truncate" title={sdrData.goalName}>
+                  🎯 {sdrData.goalName}
+                </p>
+              </>
+            )}
           </motion.div>
         )}
 
@@ -336,6 +390,18 @@ export function SidebarPerformanceWidget({ collapsed }: SidebarPerformanceWidget
 
     return (
       <div className="p-3 border-t border-sidebar-border space-y-2">
+        {/* Toggle de visibilidade */}
+        {!collapsed && (
+          <button
+            onClick={toggleWidgets}
+            className="flex items-center gap-1.5 text-[10px] text-sidebar-foreground/40 hover:text-sidebar-foreground/70 transition-colors w-full justify-end"
+            title={widgetsHidden ? "Mostrar valores" : "Ocultar valores"}
+          >
+            {widgetsHidden ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+            <span>{widgetsHidden ? "Mostrar" : "Ocultar"}</span>
+          </button>
+        )}
+
         {/* Ganhos do mês */}
         <motion.div
           initial={{ scale: 0.95, opacity: 0 }}
@@ -346,7 +412,9 @@ export function SidebarPerformanceWidget({ collapsed }: SidebarPerformanceWidget
             <div className="flex flex-col items-center gap-1">
               <DollarSign className="w-5 h-5 text-primary" />
               <span className="text-xs font-bold text-primary">
-                {formatCurrency(commissionSummary.totalEarnings).replace("R$", "")}
+                <MaskedValue hidden={widgetsHidden}>
+                  {formatCurrency(commissionSummary.totalEarnings).replace("R$", "")}
+                </MaskedValue>
               </span>
             </div>
           ) : (
@@ -360,13 +428,17 @@ export function SidebarPerformanceWidget({ collapsed }: SidebarPerformanceWidget
                 animate={{ scale: 1 }}
                 className="text-xl font-bold text-primary"
               >
-                {formatCurrency(commissionSummary.totalEarnings)}
+                <MaskedValue hidden={widgetsHidden}>
+                  {formatCurrency(commissionSummary.totalEarnings)}
+                </MaskedValue>
               </motion.div>
-              <div className="flex items-center gap-2 mt-1 text-xs text-sidebar-foreground/50">
-                <span>OTE: {formatCurrency(commissionSummary.oteBase + commissionSummary.calculatedBonus)}</span>
-                <span>•</span>
-                <span>Comissão: {formatCurrency(commissionSummary.totalCommission)}</span>
-              </div>
+              {!widgetsHidden && (
+                <div className="flex items-center gap-2 mt-1 text-xs text-sidebar-foreground/50">
+                  <span>OTE: {formatCurrency(commissionSummary.oteBase + commissionSummary.calculatedBonus)}</span>
+                  <span>•</span>
+                  <span>Comissão: {formatCurrency(commissionSummary.totalCommission)}</span>
+                </div>
+              )}
             </>
           )}
         </motion.div>
@@ -389,23 +461,29 @@ export function SidebarPerformanceWidget({ collapsed }: SidebarPerformanceWidget
             </div>
             <div className="flex items-baseline gap-2">
               <span className={`text-lg font-bold ${isOnTrack ? "text-emerald-400" : "text-amber-400"}`}>
-                {formatCurrency(closerSales.salesValue)}
+                <MaskedValue hidden={widgetsHidden}>{formatCurrency(closerSales.salesValue)}</MaskedValue>
               </span>
-              <span className="text-sm text-sidebar-foreground/50">/ {formatCurrency(closerSales.goal)}</span>
+              {!widgetsHidden && (
+                <span className="text-sm text-sidebar-foreground/50">/ {formatCurrency(closerSales.goal)}</span>
+              )}
             </div>
             {/* Progress bar */}
-            <div className="mt-2 h-1.5 bg-sidebar-border rounded-full overflow-hidden">
-              <motion.div
-                initial={{ width: 0 }}
-                animate={{ width: `${Math.min(percentage, 100)}%` }}
-                transition={{ duration: 0.5, ease: "easeOut" }}
-                className={`h-full rounded-full ${isOnTrack ? "bg-emerald-400" : "bg-amber-400"}`}
-              />
-            </div>
-            <p className="text-xs text-sidebar-foreground/50 mt-1">{percentage.toFixed(0)}% da meta</p>
-            <p className="text-[10px] text-sidebar-foreground/40 mt-1 truncate" title={closerSales.goalName}>
-              🎯 {closerSales.goalName}
-            </p>
+            {!widgetsHidden && (
+              <>
+                <div className="mt-2 h-1.5 bg-sidebar-border rounded-full overflow-hidden">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${Math.min(percentage, 100)}%` }}
+                    transition={{ duration: 0.5, ease: "easeOut" }}
+                    className={`h-full rounded-full ${isOnTrack ? "bg-emerald-400" : "bg-amber-400"}`}
+                  />
+                </div>
+                <p className="text-xs text-sidebar-foreground/50 mt-1">{percentage.toFixed(0)}% da meta</p>
+                <p className="text-[10px] text-sidebar-foreground/40 mt-1 truncate" title={closerSales.goalName}>
+                  🎯 {closerSales.goalName}
+                </p>
+              </>
+            )}
           </motion.div>
         )}
 
