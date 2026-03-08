@@ -1,15 +1,19 @@
 import { useState } from "react";
-import { Calendar, Star, User, Building2, Bot } from "lucide-react";
+import { Phone, Building2, Bot } from "lucide-react";
 import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { ScheduleFollowUpButton } from "@/components/followups/ScheduleFollowUpButton";
 import { LeadScoreBadge } from "@/components/leads/LeadScoreBadge";
 import { useLeadScoresMap } from "@/hooks/useLeadScore";
 import { useToggleLeadAI } from "@/hooks/useLeads";
 import { useLogLeadAction } from "@/hooks/useLogLeadAction";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+
+export interface LeadTag {
+  name: string;
+  color: string;
+}
 
 export interface Lead {
   id: string;
@@ -24,13 +28,13 @@ export interface Lead {
   sdrId?: string;
   closer?: string;
   closerId?: string;
-  tags: string[];
+  tags: LeadTag[];
   revenue?: string;
   segment?: string;
-  leadId?: string; // Original lead ID from DB
+  leadId?: string;
   sourcePipe?: "whatsapp" | "confirmacao" | "propostas";
   sourcePipeId?: string;
-  ai_disabled?: boolean; // IA Copilot desabilitada
+  ai_disabled?: boolean;
 }
 
 interface KanbanCardProps {
@@ -65,109 +69,77 @@ export function KanbanCard({ lead, onClick }: KanbanCardProps) {
   const toggleAIMutation = useToggleLeadAI();
   const logAction = useLogLeadAction();
   const [optimisticAiDisabled, setOptimisticAiDisabled] = useState<Record<string, boolean>>({});
-  
-  // Usar estado otimista se disponível, senão usar o valor do lead
-  const currentAiDisabled = optimisticAiDisabled[lead.leadId || ""] !== undefined 
-    ? optimisticAiDisabled[lead.leadId || ""] 
+
+  const currentAiDisabled = optimisticAiDisabled[lead.leadId || ""] !== undefined
+    ? optimisticAiDisabled[lead.leadId || ""]
     : (lead.ai_disabled ?? false);
 
   return (
     <div
       onClick={onClick}
-      className="kanban-card group w-full"
+      className="kanban-card group w-full cursor-pointer"
     >
-      <div className="flex items-start justify-between gap-2 mb-2">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h4 className="font-medium text-sm break-words line-clamp-2 group-hover:text-primary transition-colors" title={lead.name}>
-              {lead.name}
-            </h4>
-            {leadScore ? (
-              <LeadScoreBadge
-                score={leadScore.score}
-                predictedConversion={leadScore.predicted_conversion}
-                factors={leadScore.factors}
-                recommendedAction={leadScore.recommended_action}
-                size="sm"
-              />
-            ) : lead.leadId ? (
-              <LeadScoreBadge
-                score={null}
-                leadId={lead.leadId}
-                size="sm"
-              />
-            ) : null}
-          </div>
-          <div className="flex items-center gap-1 text-muted-foreground mt-0.5 min-w-0">
-            <Building2 className="w-3 h-3 shrink-0" />
-            <span className="text-xs break-words line-clamp-2" title={lead.company}>{lead.company}</span>
-          </div>
-        </div>
-        <div className="flex items-center gap-1 ml-2">
-          {lead.leadId && (
-            <ScheduleFollowUpButton
-              leadId={lead.leadId}
-              leadName={lead.name}
-              sourcePipe={lead.sourcePipe}
-              sourcePipeId={lead.sourcePipeId}
-              defaultAssignedTo={lead.sdrId || lead.closerId}
+      {/* Tags coloridas no topo - estilo Trello */}
+      {lead.tags.length > 0 && (
+        <div className="flex gap-1 mb-2 flex-wrap">
+          {lead.tags.slice(0, 4).map((tag) => (
+            <div
+              key={tag.name}
+              className="h-2 rounded-full min-w-[40px] flex-1 max-w-[60px]"
+              style={{ backgroundColor: tag.color }}
+              title={tag.name}
             />
-          )}
-          <div className="flex items-center gap-0.5">
-            {[...Array(5)].map((_, i) => (
-              <Star
-                key={i}
-                className={`w-3 h-3 ${
-                  i < lead.rating
-                    ? "text-primary fill-primary"
-                    : "text-muted-foreground/30"
-                }`}
-              />
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {lead.meetingDate && (
-        <div className="flex items-center gap-1.5 text-muted-foreground mb-2">
-          <Calendar className="w-3.5 h-3.5 shrink-0" />
-          <span className="text-xs">{lead.meetingDate}</span>
+          ))}
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-1.5 mb-2">
-        <Badge variant="outline" className={originColors[lead.origin]}>
+      {/* Nome + Lead Score */}
+      <div className="flex items-center gap-2 flex-wrap mb-1">
+        <h4 className="font-medium text-sm break-words line-clamp-2 group-hover:text-primary transition-colors" title={lead.name}>
+          {lead.name}
+        </h4>
+        {leadScore ? (
+          <LeadScoreBadge
+            score={leadScore.score}
+            predictedConversion={leadScore.predicted_conversion}
+            factors={leadScore.factors}
+            recommendedAction={leadScore.recommended_action}
+            size="sm"
+          />
+        ) : lead.leadId ? (
+          <LeadScoreBadge
+            score={null}
+            leadId={lead.leadId}
+            size="sm"
+          />
+        ) : null}
+      </div>
+
+      {/* Empresa */}
+      {lead.company && (
+        <div className="flex items-center gap-1 text-muted-foreground mb-2 min-w-0">
+          <Building2 className="w-3 h-3 shrink-0" />
+          <span className="text-xs break-words line-clamp-1" title={lead.company}>{lead.company}</span>
+        </div>
+      )}
+
+      {/* Badge origem + AI toggle */}
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <Badge variant="outline" className={cn("text-xs", originColors[lead.origin])}>
           {originLabels[lead.origin]}
         </Badge>
-        {lead.tags.slice(0, 2).map((tag) => (
-          <Badge key={tag} variant="secondary" className="text-xs">
-            {tag}
-          </Badge>
-        ))}
-        {lead.tags.length > 2 && (
-          <Badge variant="secondary" className="text-xs">
-            +{lead.tags.length - 2}
-          </Badge>
-        )}
-        
-        {/* AI Toggle - sempre visível quando tem leadId */}
+
         {lead.leadId && (
-          <motion.div 
-            className="flex items-center gap-1 ml-auto cursor-pointer"
+          <motion.div
+            className="flex items-center gap-1 cursor-pointer"
             onClick={(e) => {
               e.stopPropagation();
               e.preventDefault();
             }}
-            onPointerDown={(e) => {
-              e.stopPropagation();
-            }}
-            onMouseDown={(e) => {
-              e.stopPropagation();
-            }}
+            onPointerDown={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
             initial={false}
-            animate={{
-              opacity: toggleAIMutation.isPending ? 0.7 : 1,
-            }}
+            animate={{ opacity: toggleAIMutation.isPending ? 0.7 : 1 }}
             transition={{ duration: 0.2 }}
           >
             <motion.div
@@ -175,7 +147,7 @@ export function KanbanCard({ lead, onClick }: KanbanCardProps) {
                 scale: toggleAIMutation.isPending ? [1, 1.2, 1] : 1,
                 rotate: toggleAIMutation.isPending ? [0, 10, -10, 0] : 0,
               }}
-              transition={{ 
+              transition={{
                 duration: 0.5,
                 repeat: toggleAIMutation.isPending ? Infinity : 0,
               }}
@@ -186,16 +158,13 @@ export function KanbanCard({ lead, onClick }: KanbanCardProps) {
               )} />
             </motion.div>
             <motion.div
-              animate={{
-                scale: toggleAIMutation.isPending ? 0.95 : 1,
-              }}
+              animate={{ scale: toggleAIMutation.isPending ? 0.95 : 1 }}
               transition={{ duration: 0.15 }}
             >
               <Switch
                 checked={!currentAiDisabled}
                 onCheckedChange={(checked) => {
                   if (!lead.leadId) return;
-                  // Atualização otimista local imediata
                   setOptimisticAiDisabled(prev => ({ ...prev, [lead.leadId!]: !checked }));
                   toggleAIMutation.mutate(
                     { leadId: lead.leadId, disabled: !checked },
@@ -217,7 +186,6 @@ export function KanbanCard({ lead, onClick }: KanbanCardProps) {
                         });
                       },
                       onError: () => {
-                        // Reverter estado otimista em caso de erro
                         setOptimisticAiDisabled(prev => {
                           const newState = { ...prev };
                           delete newState[lead.leadId!];
@@ -235,20 +203,11 @@ export function KanbanCard({ lead, onClick }: KanbanCardProps) {
         )}
       </div>
 
-      {(lead.sdr || lead.closer) && (
-        <div className="flex items-center gap-2 pt-2 border-t border-border min-w-0 flex-wrap">
-          {lead.sdr && (
-            <div className="flex items-center gap-1.5 min-w-0">
-              <User className="w-3 h-3 text-muted-foreground shrink-0" />
-              <span className="text-xs text-muted-foreground truncate max-w-[120px]" title={lead.sdr}>SDR: {lead.sdr}</span>
-            </div>
-          )}
-          {lead.closer && (
-            <div className="flex items-center gap-1.5 min-w-0">
-              <User className="w-3 h-3 text-muted-foreground shrink-0" />
-              <span className="text-xs text-muted-foreground truncate max-w-[120px]" title={lead.closer}>Closer: {lead.closer}</span>
-            </div>
-          )}
+      {/* Telefone no rodapé */}
+      {lead.phone && (
+        <div className="flex items-center gap-1.5 pt-2 border-t border-border text-muted-foreground">
+          <Phone className="w-3 h-3 shrink-0" />
+          <span className="text-xs truncate">{lead.phone}</span>
         </div>
       )}
     </div>

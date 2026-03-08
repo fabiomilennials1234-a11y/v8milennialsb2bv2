@@ -8,7 +8,6 @@ import {
   Building2,
   Mail,
   Phone,
-  Star,
   Calendar,
   CalendarX,
   Tag,
@@ -283,20 +282,6 @@ export function LeadDetailModal({ open, onOpenChange, leadId, onEdit }: LeadDeta
                       <Badge variant="outline" className={originColors[lead.origin] || originColors.outro}>
                         {originLabels[lead.origin] || lead.origin}
                       </Badge>
-                      <div className="flex items-center gap-0.5">
-                        {[...Array(5)].map((_, i) => (
-                          <Star
-                            key={i}
-                            className={cn(
-                              "w-3.5 h-3.5",
-                              i < Math.ceil((lead.rating || 0) / 2)
-                                ? "fill-chart-5 text-chart-5"
-                                : "text-muted-foreground/30"
-                            )}
-                          />
-                        ))}
-                        <span className="text-xs text-muted-foreground ml-1">({lead.rating}/10)</span>
-                      </div>
                     </div>
                   </div>
                 </div>

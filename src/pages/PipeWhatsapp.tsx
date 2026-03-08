@@ -78,7 +78,7 @@ interface WhatsappCard extends DraggableItem {
   rating: number;
   sdr?: string;
   sdrId?: string;
-  tags: string[];
+  tags: { name: string; color: string }[];
   scheduledDate?: string;
   createdAt: string;
   segment?: string;
@@ -314,19 +314,17 @@ const WhatsappCardComponent = memo(function WhatsappCardComponent({ card, onDele
         </div>
       )}
 
-      {/* Tags */}
+      {/* Tags coloridas estilo Trello */}
       {card.tags.length > 0 && (
-        <div className="flex flex-wrap gap-1 mb-2">
-          {card.tags.slice(0, 3).map((tag) => (
-            <Badge key={tag} variant="secondary" className="text-[10px] px-1.5 py-0">
-              {tag}
-            </Badge>
+        <div className="flex gap-1 mb-2 flex-wrap">
+          {card.tags.slice(0, 4).map((tag) => (
+            <div
+              key={tag.name}
+              className="h-2 rounded-full min-w-[40px] flex-1 max-w-[60px]"
+              style={{ backgroundColor: tag.color }}
+              title={tag.name}
+            />
           ))}
-          {card.tags.length > 3 && (
-            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-              +{card.tags.length - 3}
-            </Badge>
-          )}
         </div>
       )}
 
@@ -516,7 +514,7 @@ export default function PipeWhatsapp() {
       rating: lead?.rating || 0,
       sdr: item.sdr?.name || lead?.sdr?.name,
       sdrId: item.sdr_id,
-      tags: lead?.lead_tags?.map((lt: any) => lt.tag?.name).filter(Boolean) || [],
+      tags: lead?.lead_tags?.map((lt: any) => ({ name: lt.tag?.name, color: lt.tag?.color || "#888" })).filter((t: any) => t.name) || [],
       scheduledDate: item.scheduled_date,
       createdAt: item.created_at,
       segment: lead?.segment,

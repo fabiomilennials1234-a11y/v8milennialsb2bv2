@@ -55,7 +55,7 @@ interface ConfirmacaoCardData extends DraggableItem {
   closer?: string;
   sdrId?: string | null;
   closerId?: string | null;
-  tags: string[];
+  tags: { name: string; color: string }[];
   leadId: string;
   faturamento?: number;
   segment?: string;
@@ -253,7 +253,7 @@ export default function PipeConfirmacao() {
       closer: item.closer?.name || lead?.closer?.name,
       sdrId: item.sdr_id,
       closerId: item.closer_id,
-      tags: lead?.lead_tags?.map((lt: any) => lt.tag?.name).filter(Boolean) || [],
+      tags: lead?.lead_tags?.map((lt: any) => ({ name: lt.tag?.name, color: lt.tag?.color || "#888" })).filter((t: any) => t.name) || [],
       leadId: item.lead_id,
       faturamento: lead?.faturamento,
       segment: lead?.segment,

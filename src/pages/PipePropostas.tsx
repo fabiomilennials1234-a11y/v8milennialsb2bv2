@@ -78,7 +78,7 @@ interface ProposalCard extends DraggableItem {
   productType: "mrr" | "projeto" | null;
   value: number;
   contractDuration: number;
-  tags: string[];
+  tags: { name: string; color: string }[];
   lastContact?: string;
   segment?: string;
   commitmentDate?: Date;
@@ -258,19 +258,17 @@ const ProposalCardComponent = memo(function ProposalCardComponent({
         </div>
       )}
 
-      {/* Tags */}
+      {/* Tags coloridas estilo Trello */}
       {proposal.tags.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 mb-2">
-          {proposal.tags.slice(0, 3).map((tag) => (
-            <Badge key={tag} variant="secondary" className="text-xs break-all max-w-full">
-              {tag}
-            </Badge>
+        <div className="flex gap-1 mb-2 flex-wrap">
+          {proposal.tags.slice(0, 4).map((tag) => (
+            <div
+              key={tag.name}
+              className="h-2 rounded-full min-w-[40px] flex-1 max-w-[60px]"
+              style={{ backgroundColor: tag.color }}
+              title={tag.name}
+            />
           ))}
-          {proposal.tags.length > 3 && (
-            <Badge variant="secondary" className="text-xs">
-              +{proposal.tags.length - 3}
-            </Badge>
-          )}
         </div>
       )}
 
@@ -414,7 +412,7 @@ export default function PipePropostas() {
       productType: productTypes.length === 1 ? productTypes[0] : (productTypes.length > 0 ? null : item.product_type),
       value: totalValue,
       contractDuration: item.contract_duration || 0,
-      tags: lead?.lead_tags?.map((lt: any) => lt.tag?.name).filter(Boolean) || [],
+      tags: lead?.lead_tags?.map((lt: any) => ({ name: lt.tag?.name, color: lt.tag?.color || "#888" })).filter((t: any) => t.name) || [],
       lastContact: item.commitment_date 
         ? format(new Date(item.commitment_date), "dd/MM HH:mm", { locale: ptBR })
         : undefined,

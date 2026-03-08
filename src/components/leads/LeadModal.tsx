@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Star, Building, Phone, Mail, User, Tag, Plus, Type, Hash, Calendar, List, ToggleLeft, MessageSquare, PhoneCall, Clock, History, UserPlus, UserCheck, ArrowRight, Edit2, FileText, CheckCircle, XCircle, CalendarX, DollarSign, TrendingUp, Trash2, Package, ListTodo, CheckSquare, Bot, Loader2 } from "lucide-react";
+import { Building, Phone, Mail, User, Tag, Plus, Type, Hash, Calendar, List, ToggleLeft, Clock, History, UserPlus, UserCheck, ArrowRight, Edit2, FileText, CheckCircle, XCircle, CalendarX, DollarSign, TrendingUp, Trash2, Package, ListTodo, CheckSquare, Bot, Loader2, ChevronDown, ChevronUp, Users, Send } from "lucide-react";
 import { Link } from "react-router-dom";
 import {
   Dialog,
@@ -31,6 +31,7 @@ import {
   type CustomField,
 } from "@/hooks/useLeadCustomFields";
 import { useLeadHistory } from "@/hooks/useLeadHistory";
+import { ScheduleFollowUpButton } from "@/components/followups/ScheduleFollowUpButton";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -73,20 +74,20 @@ interface FormData {
 const ACTION_CONFIG: Record<string, { icon: React.ReactNode; label: string; color: string }> = {
   lead_created: { icon: <UserPlus className="w-3.5 h-3.5" />, label: "Lead criado", color: "bg-blue-500/20 text-blue-600" },
   stage_changed: { icon: <ArrowRight className="w-3.5 h-3.5" />, label: "Etapa alterada", color: "bg-yellow-500/20 text-yellow-600" },
-  sdr_assigned: { icon: <UserCheck className="w-3.5 h-3.5" />, label: "SDR atribuído", color: "bg-green-500/20 text-green-600" },
-  closer_assigned: { icon: <UserCheck className="w-3.5 h-3.5" />, label: "Closer atribuído", color: "bg-green-500/20 text-green-600" },
+  sdr_assigned: { icon: <UserCheck className="w-3.5 h-3.5" />, label: "SDR atribuido", color: "bg-green-500/20 text-green-600" },
+  closer_assigned: { icon: <UserCheck className="w-3.5 h-3.5" />, label: "Closer atribuido", color: "bg-green-500/20 text-green-600" },
   field_updated: { icon: <Edit2 className="w-3.5 h-3.5" />, label: "Campo atualizado", color: "bg-muted text-muted-foreground" },
   note_added: { icon: <FileText className="w-3.5 h-3.5" />, label: "Nota adicionada", color: "bg-muted text-muted-foreground" },
-  meeting_scheduled: { icon: <Calendar className="w-3.5 h-3.5" />, label: "Reunião agendada", color: "bg-blue-500/20 text-blue-600" },
+  meeting_scheduled: { icon: <Calendar className="w-3.5 h-3.5" />, label: "Reuniao agendada", color: "bg-blue-500/20 text-blue-600" },
   meeting_attended: { icon: <CheckCircle className="w-3.5 h-3.5" />, label: "Compareceu", color: "bg-green-500/20 text-green-600" },
-  meeting_missed: { icon: <XCircle className="w-3.5 h-3.5" />, label: "Não compareceu", color: "bg-red-500/20 text-red-600" },
-  meeting_deleted: { icon: <CalendarX className="w-3.5 h-3.5" />, label: "Reunião removida", color: "bg-red-500/20 text-red-600" },
+  meeting_missed: { icon: <XCircle className="w-3.5 h-3.5" />, label: "Nao compareceu", color: "bg-red-500/20 text-red-600" },
+  meeting_deleted: { icon: <CalendarX className="w-3.5 h-3.5" />, label: "Reuniao removida", color: "bg-red-500/20 text-red-600" },
   proposal_created: { icon: <DollarSign className="w-3.5 h-3.5" />, label: "Proposta criada", color: "bg-purple-500/20 text-purple-600" },
   proposal_status_changed: { icon: <TrendingUp className="w-3.5 h-3.5" />, label: "Status da proposta", color: "bg-yellow-500/20 text-yellow-600" },
   proposal_deleted: { icon: <Trash2 className="w-3.5 h-3.5" />, label: "Proposta removida", color: "bg-red-500/20 text-red-600" },
   product_linked: { icon: <Package className="w-3.5 h-3.5" />, label: "Produto vinculado", color: "bg-purple-500/20 text-purple-600" },
   followup_created: { icon: <ListTodo className="w-3.5 h-3.5" />, label: "Tarefa criada", color: "bg-blue-500/20 text-blue-600" },
-  followup_completed: { icon: <CheckSquare className="w-3.5 h-3.5" />, label: "Tarefa concluída", color: "bg-green-500/20 text-green-600" },
+  followup_completed: { icon: <CheckSquare className="w-3.5 h-3.5" />, label: "Tarefa concluida", color: "bg-green-500/20 text-green-600" },
   ai_toggled: { icon: <Bot className="w-3.5 h-3.5" />, label: "IA Copilot", color: "bg-primary/20 text-primary" },
   copilot_interaction: { icon: <Bot className="w-3.5 h-3.5" />, label: "Copilot atendeu", color: "bg-primary/20 text-primary" },
 };
@@ -116,39 +117,49 @@ function TimelineItem({ action, description, date, isLast }: { action: string; d
   );
 }
 
-function StarRating({ rating, onRate }: { rating: number; onRate: (r: number) => void }) {
+function SidebarSection({
+  icon: Icon,
+  label,
+  children,
+  defaultOpen = false
+}: {
+  icon: any;
+  label: string;
+  children: React.ReactNode;
+  defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+
   return (
-    <div className="flex items-center gap-0.5">
-      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((star) => (
-        <button
-          key={star}
-          type="button"
-          onClick={() => onRate(star)}
-          className="cursor-pointer hover:scale-110 transition-transform"
-        >
-          <Star
-            className={`w-4 h-4 ${
-              star <= rating
-                ? "fill-chart-5 text-chart-5"
-                : "text-muted-foreground/30"
-            }`}
-          />
-        </button>
-      ))}
+    <div className="border border-border rounded-lg overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center gap-2 px-3 py-2.5 text-sm font-medium hover:bg-muted/50 transition-colors cursor-pointer"
+      >
+        <Icon className="w-4 h-4 text-muted-foreground" />
+        <span className="flex-1 text-left">{label}</span>
+        {open ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" /> : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />}
+      </button>
+      {open && (
+        <div className="px-3 pb-3 space-y-2 border-t border-border pt-2">
+          {children}
+        </div>
+      )}
     </div>
   );
 }
 
-export function LeadModal({ 
-  open, 
-  onOpenChange, 
-  lead, 
+export function LeadModal({
+  open,
+  onOpenChange,
+  lead,
   onSuccess,
   defaultSdrId,
   defaultCloserId
 }: LeadModalProps) {
   const isEditing = !!lead;
-  
+
   const [formData, setFormData] = useState<FormData>(() => ({
     name: lead?.name || "",
     company: lead?.company || "",
@@ -163,8 +174,7 @@ export function LeadModal({
     sdr_id: lead?.sdr_id || defaultSdrId || null,
     closer_id: lead?.closer_id || defaultCloserId || null,
   }));
-  
-  // Estado para campos personalizados
+
   const [customValues, setCustomValues] = useState<Record<string, string>>({});
   const [historyLimit, setHistoryLimit] = useState(50);
 
@@ -174,15 +184,11 @@ export function LeadModal({
   const createLead = useCreateLead();
   const updateLead = useUpdateLead();
   const logAction = useLogLeadAction();
-  
-  // Hooks para campos personalizados
+
   const { data: customFields = [] } = useLeadCustomFields();
   const { data: fieldValues = [] } = useLeadCustomFieldValues(lead?.id || null);
   const saveFieldValue = useSaveCustomFieldValue();
-  
-  // Carregar valores dos campos personalizados quando lead mudar.
-  // Dependência estável (JSON) evita loop "Maximum update depth exceeded" quando fieldValues
-  // tem nova referência a cada render.
+
   const fieldValuesKey = lead?.id ?? "";
   const fieldValuesSnapshot = fieldValues.length > 0
     ? JSON.stringify(fieldValues.map((fv) => ({ field_id: fv.field_id, value: fv.value ?? "" })))
@@ -205,27 +211,24 @@ export function LeadModal({
 
   const handleSubmit = async () => {
     if (!formData.name.trim()) {
-      toast.error("Nome é obrigatório");
+      toast.error("Nome e obrigatorio");
       return;
     }
 
-    // Verificar se ainda está carregando
     if (isLoadingTeamMember || isFetchingTeamMember) {
-      toast.info("Carregando informações da organização...");
+      toast.info("Carregando informacoes da organizacao...");
       return;
     }
 
-    // Verificar se tem organization_id
     if (!currentTeamMember?.organization_id) {
-      // Tentar refetch antes de mostrar erro
       const { data: refreshedTeamMember } = await refetchTeamMember();
-      
+
       if (!refreshedTeamMember?.organization_id) {
         toast.error(
-          "Você precisa estar vinculado a uma organização. Execute o script SQL 'SOLUCAO_DEFINITIVA_RLS.sql' no Supabase Dashboard e recarregue a página.",
+          "Voce precisa estar vinculado a uma organizacao. Execute o script SQL 'SOLUCAO_DEFINITIVA_RLS.sql' no Supabase Dashboard e recarregue a pagina.",
           { duration: 10000 }
         );
-        console.error("❌ Team member sem organization_id:", {
+        console.error("Team member sem organization_id:", {
           currentTeamMember,
           refreshedTeamMember,
           hasTeamMember: !!currentTeamMember,
@@ -235,10 +238,8 @@ export function LeadModal({
         });
         return;
       }
-      
-      // Se o refetch trouxe dados, usar o refreshed
+
       if (refreshedTeamMember?.organization_id) {
-        // Continuar com o submit usando refreshedTeamMember
         currentTeamMember.organization_id = refreshedTeamMember.organization_id;
       }
     }
@@ -257,15 +258,13 @@ export function LeadModal({
 
       if (isEditing) {
         await updateLead.mutateAsync({ id: lead.id, ...payload });
-        // Log field changes
         const changes: string[] = [];
         if (formData.name !== lead.name) changes.push("nome");
         if (formData.company !== (lead.company || "")) changes.push("empresa");
         if (formData.email !== (lead.email || "")) changes.push("email");
         if (formData.phone !== (lead.phone || "")) changes.push("telefone");
-        if (formData.rating !== (lead.rating || 5)) changes.push("rating");
         if (formData.segment !== (lead.segment || "")) changes.push("segmento");
-        if (formData.notes !== (lead.notes || "")) changes.push("observações");
+        if (formData.notes !== (lead.notes || "")) changes.push("observacoes");
         if (formData.sdr_id !== (lead.sdr_id || null)) changes.push("SDR");
         if (formData.closer_id !== (lead.closer_id || null)) changes.push("Closer");
         if (changes.length > 0) {
@@ -284,8 +283,7 @@ export function LeadModal({
         leadId = newLead.id;
         logAction({ leadId: newLead.id, action: "lead_created", description: `Lead "${formData.name}" criado` });
       }
-      
-      // Salvar campos personalizados
+
       if (leadId && Object.keys(customValues).length > 0) {
         for (const [fieldId, value] of Object.entries(customValues)) {
           if (value !== undefined) {
@@ -297,30 +295,29 @@ export function LeadModal({
           }
         }
       }
-      
+
       toast.success(isEditing ? "Lead atualizado!" : "Lead criado!");
       onOpenChange(false);
       onSuccess?.();
     } catch (error: any) {
-      console.error("❌ Erro ao salvar lead:", {
+      console.error("Erro ao salvar lead:", {
         message: error?.message,
         details: error?.details,
         hint: error?.hint,
         code: error?.code,
         fullError: error,
       });
-      
+
       if (error?.code === '42501' || error?.message?.includes('permission denied')) {
-        toast.error("Erro de permissão. Verifique as políticas RLS no Supabase.");
+        toast.error("Erro de permissao. Verifique as politicas RLS no Supabase.");
       } else if (error?.code === '23503' || error?.message?.includes('foreign key')) {
-        toast.error("Erro: organização não encontrada. Execute o script SQL de vinculação.");
+        toast.error("Erro: organizacao nao encontrada. Execute o script SQL de vinculacao.");
       } else {
         toast.error(`Erro ao salvar lead: ${error?.message || 'Erro desconhecido'}`);
       }
     }
   };
 
-  // Reset form when lead changes or modal opens
   useEffect(() => {
     if (open) {
       setFormData({
@@ -342,369 +339,402 @@ export function LeadModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-[750px] max-h-[90vh] overflow-hidden p-0">
+        <DialogHeader className="px-6 pt-6 pb-0">
           <DialogTitle className="flex items-center gap-2">
             <User className="w-5 h-5 text-primary" />
             {isEditing ? "Editar Lead" : "Novo Lead"}
           </DialogTitle>
         </DialogHeader>
 
-        <Tabs defaultValue="info" className="w-full">
-          <TabsList className={cn("grid w-full", isEditing ? "grid-cols-4" : "grid-cols-3")}>
-            <TabsTrigger value="info">Informações</TabsTrigger>
-            <TabsTrigger value="details">Detalhes</TabsTrigger>
-            <TabsTrigger value="custom" className="gap-1">
-              <Plus className="w-3 h-3" />
-              Personalizado
-            </TabsTrigger>
-            {isEditing && (
-              <TabsTrigger value="history" className="gap-1">
-                <History className="w-3 h-3" />
-                Histórico
-              </TabsTrigger>
-            )}
-          </TabsList>
+        <Tabs defaultValue="dados" className="w-full">
+          <div className="px-6">
+            <TabsList className={cn("grid w-full", isEditing ? "grid-cols-2" : "grid-cols-1")}>
+              <TabsTrigger value="dados">Dados</TabsTrigger>
+              {isEditing && (
+                <TabsTrigger value="history" className="gap-1">
+                  <History className="w-3 h-3" />
+                  Historico
+                </TabsTrigger>
+              )}
+            </TabsList>
+          </div>
 
-          <TabsContent value="info" className="space-y-4 mt-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="name">Nome *</Label>
-                <Input
-                  id="name"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="Nome do lead"
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="company">Empresa</Label>
-                <div className="relative">
-                  <Building className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    id="company"
-                    value={formData.company}
-                    onChange={(e) => setFormData({ ...formData, company: e.target.value })}
-                    placeholder="Nome da empresa"
-                    className="pl-9"
-                  />
-                </div>
-              </div>
-            </div>
+          <TabsContent value="dados" className="m-0">
+            <ScrollArea className="h-[calc(90vh-200px)] max-h-[500px]">
+              <div className="flex gap-6 px-6 py-4">
+                {/* Coluna Esquerda - 70% */}
+                <div className="flex-1 min-w-0 space-y-6">
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="email">Email</Label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    id="email"
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    placeholder="email@empresa.com"
-                    className="pl-9"
-                  />
+                  {/* CONTATO */}
+                  <div>
+                    <h3 className="text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-3">Contato</h3>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="grid gap-1.5">
+                        <Label htmlFor="name" className="text-xs">Nome *</Label>
+                        <Input
+                          id="name"
+                          value={formData.name}
+                          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                          placeholder="Nome do lead"
+                        />
+                      </div>
+                      <div className="grid gap-1.5">
+                        <Label htmlFor="company" className="text-xs">Empresa</Label>
+                        <div className="relative">
+                          <Building className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                          <Input
+                            id="company"
+                            value={formData.company}
+                            onChange={(e) => setFormData({ ...formData, company: e.target.value })}
+                            placeholder="Nome da empresa"
+                            className="pl-9"
+                          />
+                        </div>
+                      </div>
+                      <div className="grid gap-1.5">
+                        <Label htmlFor="email" className="text-xs">Email</Label>
+                        <div className="relative">
+                          <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                          <Input
+                            id="email"
+                            type="email"
+                            value={formData.email}
+                            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                            placeholder="email@empresa.com"
+                            className="pl-9"
+                          />
+                        </div>
+                      </div>
+                      <div className="grid gap-1.5">
+                        <Label htmlFor="phone" className="text-xs">Telefone</Label>
+                        <div className="relative">
+                          <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                          <Input
+                            id="phone"
+                            value={formData.phone}
+                            onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                            placeholder="(11) 99999-9999"
+                            className="pl-9"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* DETALHES */}
+                  <div>
+                    <h3 className="text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-3">Detalhes</h3>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="grid gap-1.5">
+                        <Label htmlFor="origin" className="text-xs">Origem</Label>
+                        <Select
+                          value={formData.origin}
+                          onValueChange={(v) => setFormData({ ...formData, origin: v })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Object.entries(originLabels).map(([key, label]) => (
+                              <SelectItem key={key} value={key}>{label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="grid gap-1.5">
+                        <Label htmlFor="segment" className="text-xs">Segmento</Label>
+                        <Input
+                          id="segment"
+                          value={formData.segment}
+                          onChange={(e) => setFormData({ ...formData, segment: e.target.value })}
+                          placeholder="Ex: Tecnologia, Varejo..."
+                        />
+                      </div>
+                      <div className="grid gap-1.5">
+                        <Label htmlFor="faturamento" className="text-xs">Faturamento</Label>
+                        <Input
+                          id="faturamento"
+                          value={formData.faturamento}
+                          onChange={(e) => setFormData({ ...formData, faturamento: e.target.value })}
+                          placeholder="Ex: R$ 100.000, Acima de 1M..."
+                        />
+                      </div>
+                      <div className="grid gap-1.5">
+                        <Label htmlFor="urgency" className="text-xs">Urgencia</Label>
+                        <Input
+                          id="urgency"
+                          value={formData.urgency}
+                          onChange={(e) => setFormData({ ...formData, urgency: e.target.value })}
+                          placeholder="Ex: Alta, Media, Baixa..."
+                        />
+                      </div>
+
+                      {/* Campos Personalizados inline nos detalhes */}
+                      {customFields.map((field) => {
+                        const value = customValues[field.id] || "";
+                        const FieldIcon = {
+                          text: Type,
+                          number: Hash,
+                          date: Calendar,
+                          select: List,
+                          boolean: ToggleLeft,
+                        }[field.field_type] || Type;
+
+                        return (
+                          <div key={field.id} className="grid gap-1.5">
+                            <Label className="flex items-center gap-1.5 text-xs">
+                              <FieldIcon className="w-3 h-3 text-muted-foreground" />
+                              {field.field_name}
+                              {field.is_required && <span className="text-destructive">*</span>}
+                            </Label>
+
+                            {field.field_type === "select" ? (
+                              <Select
+                                value={value}
+                                onValueChange={(v) => setCustomValues({ ...customValues, [field.id]: v })}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Selecione..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {(field.field_options || []).map((opt: string) => (
+                                    <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            ) : field.field_type === "boolean" ? (
+                              <Select
+                                value={value}
+                                onValueChange={(v) => setCustomValues({ ...customValues, [field.id]: v })}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Selecione..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="true">Sim</SelectItem>
+                                  <SelectItem value="false">Nao</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            ) : field.field_type === "date" ? (
+                              <Input
+                                type="date"
+                                value={value}
+                                onChange={(e) => setCustomValues({ ...customValues, [field.id]: e.target.value })}
+                              />
+                            ) : field.field_type === "number" ? (
+                              <Input
+                                type="number"
+                                value={value}
+                                onChange={(e) => setCustomValues({ ...customValues, [field.id]: e.target.value })}
+                                placeholder={`Digite ${field.field_name.toLowerCase()}...`}
+                              />
+                            ) : (
+                              <Input
+                                value={value}
+                                onChange={(e) => setCustomValues({ ...customValues, [field.id]: e.target.value })}
+                                placeholder={`Digite ${field.field_name.toLowerCase()}...`}
+                              />
+                            )}
+                          </div>
+                        );
+                      })}
+
+                      {/* Indicacao para adicionar novos campos */}
+                      <div className="col-span-2 flex items-center gap-1.5 text-xs text-muted-foreground pt-1">
+                        <Plus className="w-3 h-3" />
+                        <span>Gerencie campos em Configuracoes do Funil</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Tags (read-only display) */}
+                  {lead?.lead_tags?.length > 0 && (
+                    <div>
+                      <h3 className="text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-3">Etiquetas</h3>
+                      <div className="flex flex-wrap gap-2">
+                        {lead.lead_tags.map((lt: any) => (
+                          <Badge
+                            key={lt.tag.id}
+                            variant="outline"
+                            style={{
+                              backgroundColor: `${lt.tag.color}20`,
+                              borderColor: `${lt.tag.color}40`,
+                              color: lt.tag.color
+                            }}
+                          >
+                            <Tag className="w-3 h-3 mr-1" />
+                            {lt.tag.name}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* OBSERVACOES */}
+                  <div>
+                    <h3 className="text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-3">Observacoes</h3>
+                    <Textarea
+                      id="notes"
+                      value={formData.notes}
+                      onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                      placeholder="Anotacoes sobre o lead..."
+                      rows={3}
+                    />
+                  </div>
                 </div>
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="phone">Telefone</Label>
-                <div className="relative">
-                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    id="phone"
-                    value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    placeholder="(11) 99999-9999"
-                    className="pl-9"
-                  />
-                </div>
-                {formData.phone.trim() && (
-                  <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" className="gap-1.5" asChild>
-                      <Link to={`/chat-whatsapp?phone=${encodeURIComponent(formData.phone.replace(/\D/g, "") || formData.phone)}`} onClick={() => onOpenChange(false)}>
-                        <MessageSquare className="w-3.5 h-3.5" />
-                        Enviar mensagem
+
+                {/* Coluna Direita - Sidebar de acoes (30%) */}
+                <div className="w-[200px] shrink-0 space-y-2">
+                  <p className="text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-3">Acoes</p>
+
+                  {/* Responsaveis */}
+                  <SidebarSection icon={Users} label="Responsaveis">
+                    <div className="grid gap-2">
+                      <div>
+                        <Label className="text-xs text-muted-foreground">SDR</Label>
+                        <Select
+                          value={formData.sdr_id || "none"}
+                          onValueChange={(v) => setFormData({ ...formData, sdr_id: v === "none" ? null : v })}
+                        >
+                          <SelectTrigger className="h-8 text-xs">
+                            <SelectValue placeholder="Selecionar" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">Nenhum</SelectItem>
+                            {sdrs.map(sdr => (
+                              <SelectItem key={sdr.id} value={sdr.id}>{sdr.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Closer</Label>
+                        <Select
+                          value={formData.closer_id || "none"}
+                          onValueChange={(v) => setFormData({ ...formData, closer_id: v === "none" ? null : v })}
+                        >
+                          <SelectTrigger className="h-8 text-xs">
+                            <SelectValue placeholder="Selecionar" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">Nenhum</SelectItem>
+                            {closers.map(closer => (
+                              <SelectItem key={closer.id} value={closer.id}>{closer.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </SidebarSection>
+
+                  {/* Etiquetas */}
+                  <SidebarSection icon={Tag} label="Etiquetas">
+                    {lead?.lead_tags?.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {lead.lead_tags.map((lt: any) => (
+                          <Badge
+                            key={lt.tag?.id}
+                            variant="outline"
+                            className="text-[10px]"
+                            style={{
+                              backgroundColor: `${lt.tag?.color}20`,
+                              borderColor: `${lt.tag?.color}40`,
+                              color: lt.tag?.color
+                            }}
+                          >
+                            {lt.tag?.name}
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">Nenhuma etiqueta</p>
+                    )}
+                  </SidebarSection>
+
+                  {/* Agendar Tarefa */}
+                  {isEditing && lead?.id && (
+                    <ScheduleFollowUpButton
+                      leadId={lead.id}
+                      leadName={lead.name}
+                      defaultAssignedTo={formData.sdr_id || formData.closer_id || undefined}
+                      variant="button"
+                      size="sm"
+                    />
+                  )}
+
+                  {/* Enviar Mensagem */}
+                  {formData.phone.trim() && (
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start gap-2 text-sm"
+                      asChild
+                    >
+                      <Link
+                        to={`/chat?phone=${encodeURIComponent(formData.phone.replace(/\D/g, "") || formData.phone)}`}
+                        onClick={() => onOpenChange(false)}
+                      >
+                        <Send className="w-4 h-4 text-muted-foreground" />
+                        Enviar Mensagem
                       </Link>
                     </Button>
-                    <Button variant="outline" size="sm" className="gap-1.5" asChild>
-                      <a href={`tel:${(formData.phone || "").replace(/\D/g, "")}`}>
-                        <PhoneCall className="w-3.5 h-3.5" />
-                        Ligar
-                      </a>
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="origin">Origem</Label>
-                <Select
-                  value={formData.origin}
-                  onValueChange={(v) => setFormData({ ...formData, origin: v })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(originLabels).map(([key, label]) => (
-                      <SelectItem key={key} value={key}>{label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid gap-2">
-                <Label>Rating do SDR (1-10)</Label>
-                <div className="py-2">
-                  <StarRating
-                    rating={formData.rating}
-                    onRate={(r) => setFormData({ ...formData, rating: r })}
-                  />
+                  )}
                 </div>
               </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="sdr">SDR Responsável</Label>
-                <Select
-                  value={formData.sdr_id || "none"}
-                  onValueChange={(v) => setFormData({ ...formData, sdr_id: v === "none" ? null : v })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecionar SDR" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Nenhum</SelectItem>
-                    {sdrs.map(sdr => (
-                      <SelectItem key={sdr.id} value={sdr.id}>{sdr.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="closer">Closer Responsável</Label>
-                <Select
-                  value={formData.closer_id || "none"}
-                  onValueChange={(v) => setFormData({ ...formData, closer_id: v === "none" ? null : v })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecionar Closer" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Nenhum</SelectItem>
-                    {closers.map(closer => (
-                      <SelectItem key={closer.id} value={closer.id}>{closer.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="details" className="space-y-4 mt-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="segment">Segmento</Label>
-                <Input
-                  id="segment"
-                  value={formData.segment}
-                  onChange={(e) => setFormData({ ...formData, segment: e.target.value })}
-                  placeholder="Ex: Tecnologia, Varejo..."
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="faturamento">Faturamento</Label>
-                <Input
-                  id="faturamento"
-                  value={formData.faturamento}
-                  onChange={(e) => setFormData({ ...formData, faturamento: e.target.value })}
-                  placeholder="Ex: R$ 100.000, Acima de 1M..."
-                />
-              </div>
-            </div>
-
-            <div className="grid gap-2">
-              <Label htmlFor="urgency">Urgência</Label>
-              <Input
-                id="urgency"
-                value={formData.urgency}
-                onChange={(e) => setFormData({ ...formData, urgency: e.target.value })}
-                placeholder="Ex: Alta, Média, Baixa..."
-              />
-            </div>
-
-            <div className="grid gap-2">
-              <Label htmlFor="notes">Observações</Label>
-              <Textarea
-                id="notes"
-                value={formData.notes}
-                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                placeholder="Anotações sobre o lead..."
-                rows={4}
-              />
-            </div>
-
-            {lead?.lead_tags?.length > 0 && (
-              <div className="grid gap-2">
-                <Label>Tags</Label>
-                <div className="flex flex-wrap gap-2">
-                  {lead.lead_tags.map((lt: any) => (
-                    <Badge
-                      key={lt.tag.id}
-                      variant="outline"
-                      style={{ 
-                        backgroundColor: `${lt.tag.color}20`,
-                        borderColor: `${lt.tag.color}40`,
-                        color: lt.tag.color
-                      }}
-                    >
-                      <Tag className="w-3 h-3 mr-1" />
-                      {lt.tag.name}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-            )}
-          </TabsContent>
-          
-          {/* Aba de Campos Personalizados */}
-          <TabsContent value="custom" className="space-y-4 mt-4">
-            {customFields.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground border border-dashed rounded-lg">
-                <Type className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">Nenhum campo personalizado</p>
-                <p className="text-xs mt-1">
-                  Configure campos em Funil WhatsApp → Campos Personalizados
-                </p>
-              </div>
-            ) : (
-              <ScrollArea className="h-[280px] pr-4">
-                <div className="grid grid-cols-2 gap-4">
-                  {customFields.map((field) => {
-                    const value = customValues[field.id] || "";
-                    const FieldIcon = {
-                      text: Type,
-                      number: Hash,
-                      date: Calendar,
-                      select: List,
-                      boolean: ToggleLeft,
-                    }[field.field_type] || Type;
-                    
-                    return (
-                      <div key={field.id} className="grid gap-2">
-                        <Label className="flex items-center gap-1.5 text-sm">
-                          <FieldIcon className="w-3.5 h-3.5 text-muted-foreground" />
-                          {field.field_name}
-                          {field.is_required && <span className="text-destructive">*</span>}
-                        </Label>
-                        
-                        {field.field_type === "select" ? (
-                          <Select
-                            value={value}
-                            onValueChange={(v) => setCustomValues({ ...customValues, [field.id]: v })}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Selecione..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {(field.field_options || []).map((opt: string) => (
-                                <SelectItem key={opt} value={opt}>{opt}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        ) : field.field_type === "boolean" ? (
-                          <Select
-                            value={value}
-                            onValueChange={(v) => setCustomValues({ ...customValues, [field.id]: v })}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Selecione..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="true">Sim</SelectItem>
-                              <SelectItem value="false">Não</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        ) : field.field_type === "date" ? (
-                          <Input
-                            type="date"
-                            value={value}
-                            onChange={(e) => setCustomValues({ ...customValues, [field.id]: e.target.value })}
-                          />
-                        ) : field.field_type === "number" ? (
-                          <Input
-                            type="number"
-                            value={value}
-                            onChange={(e) => setCustomValues({ ...customValues, [field.id]: e.target.value })}
-                            placeholder={`Digite ${field.field_name.toLowerCase()}...`}
-                          />
-                        ) : (
-                          <Input
-                            value={value}
-                            onChange={(e) => setCustomValues({ ...customValues, [field.id]: e.target.value })}
-                            placeholder={`Digite ${field.field_name.toLowerCase()}...`}
-                          />
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </ScrollArea>
-            )}
+            </ScrollArea>
           </TabsContent>
 
           {isEditing && (
-            <TabsContent value="history" className="mt-4">
-              <ScrollArea className="h-[320px] pr-4">
-                {historyLoading ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-                  </div>
-                ) : history && history.length > 0 ? (
-                  <div className="space-y-0">
-                    {history.slice(0, historyLimit).map((item, index) => (
-                      <TimelineItem
-                        key={item.id}
-                        action={item.action}
-                        description={item.description || undefined}
-                        date={item.created_at}
-                        isLast={index === Math.min(history.length, historyLimit) - 1}
-                      />
-                    ))}
-                    {history.length > historyLimit && (
-                      <button
-                        onClick={() => setHistoryLimit((prev) => prev + 50)}
-                        className="w-full text-center text-sm text-primary hover:underline py-2"
-                      >
-                        Carregar mais ({history.length - historyLimit} restantes)
-                      </button>
-                    )}
-                  </div>
-                ) : (
-                  <div className="text-center py-8">
-                    <History className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
-                    <p className="text-sm text-muted-foreground">
-                      Nenhum histórico registrado.
-                    </p>
-                  </div>
-                )}
+            <TabsContent value="history" className="m-0">
+              <ScrollArea className="h-[calc(90vh-200px)] max-h-[500px]">
+                <div className="px-6 py-4">
+                  {historyLoading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : history && history.length > 0 ? (
+                    <div className="space-y-0">
+                      {history.slice(0, historyLimit).map((item, index) => (
+                        <TimelineItem
+                          key={item.id}
+                          action={item.action}
+                          description={item.description || undefined}
+                          date={item.created_at}
+                          isLast={index === Math.min(history.length, historyLimit) - 1}
+                        />
+                      ))}
+                      {history.length > historyLimit && (
+                        <button
+                          onClick={() => setHistoryLimit((prev) => prev + 50)}
+                          className="w-full text-center text-sm text-primary hover:underline py-2"
+                        >
+                          Carregar mais ({history.length - historyLimit} restantes)
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8">
+                      <History className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
+                      <p className="text-sm text-muted-foreground">
+                        Nenhum historico registrado.
+                      </p>
+                    </div>
+                  )}
+                </div>
               </ScrollArea>
             </TabsContent>
           )}
         </Tabs>
 
-        <div className="flex justify-end gap-2 pt-4 border-t">
+        <div className="flex justify-end gap-2 px-6 pb-6 pt-2 border-t">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancelar
           </Button>
-          <Button 
-            onClick={handleSubmit} 
+          <Button
+            onClick={handleSubmit}
             disabled={createLead.isPending || updateLead.isPending}
           >
-            {isEditing ? "Salvar Alterações" : "Criar Lead"}
+            {isEditing ? "Salvar Alteracoes" : "Criar Lead"}
           </Button>
         </div>
       </DialogContent>
