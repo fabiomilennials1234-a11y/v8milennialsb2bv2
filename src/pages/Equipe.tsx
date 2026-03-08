@@ -108,6 +108,7 @@ export default function Equipe() {
     see_subordinates_cards: false,
     see_general_info: false,
     see_all_leads: false,
+    can_delete_leads: false,
   });
 
   const { data: members = [], isLoading } = useTeamMembers();

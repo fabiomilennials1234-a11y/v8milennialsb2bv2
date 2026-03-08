@@ -8,7 +8,8 @@ export type PermissionKey =
   | "see_unassigned_cards"
   | "see_subordinates_cards"
   | "see_general_info"
-  | "see_all_leads";
+  | "see_all_leads"
+  | "can_delete_leads";
 
 export interface OrgRolePermission {
   id: string;
@@ -54,12 +55,7 @@ export function useMyPermissions() {
   return useQuery({
     queryKey: ["my-permissions", organizationId, userRole?.role],
     queryFn: async (): Promise<Record<PermissionKey, boolean>> => {
-      const keys: PermissionKey[] = [
-        "see_unassigned_cards",
-        "see_subordinates_cards",
-        "see_general_info",
-        "see_all_leads",
-      ];
+      const keys: PermissionKey[] = PERMISSION_KEYS;
       if (!organizationId) {
         return keys.reduce((acc, k) => ({ ...acc, [k]: false }), {} as Record<PermissionKey, boolean>);
       }
@@ -118,13 +114,15 @@ const PERMISSION_KEYS: PermissionKey[] = [
   "see_subordinates_cards",
   "see_general_info",
   "see_all_leads",
+  "can_delete_leads",
 ];
 
 export const PERMISSION_LABELS: Record<PermissionKey, string> = {
-  see_unassigned_cards: "Ver cards sem responsável",
+  see_unassigned_cards: "Ver cards sem responsavel",
   see_subordinates_cards: "Ver cards da equipe",
-  see_general_info: "Informações gerais",
+  see_general_info: "Informacoes gerais",
   see_all_leads: "Ver todos os leads",
+  can_delete_leads: "Excluir leads e registros",
 };
 
 /**
