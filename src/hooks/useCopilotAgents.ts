@@ -782,6 +782,9 @@ export function useCopilotAgentForEdit(agentId?: string) {
         responseDelayMs: (agent as any).response_delay_ms ?? 1000,
         attendUnknownContacts: (agent as any).attend_unknown_contacts ?? false,
         llmTemperatureMode: ((agent as any).llm_temperature_mode as 'criativo' | 'balanceado' | 'preciso') ?? 'balanceado',
+        // Wizard v3 — novos campos livres (armazenados em JSONB)
+        personaDescription: conversationStyle.personaDescription || "",
+        skillsAndTopics: businessContext.skillsAndTopics || "",
       };
 
       return { wizardData, existingDocuments: documents };
@@ -831,8 +834,8 @@ export function useUpdateCopilotAgentFromWizard() {
           data.customInstructions?.dos || "",
           data.customInstructions?.donts || ""
         ),
-        business_context: data.businessContext || {},
-        conversation_style: data.conversationStyle || {},
+        business_context: { ...(data.businessContext || {}), skillsAndTopics: data.skillsAndTopics || "" },
+        conversation_style: { ...(data.conversationStyle || {}), personaDescription: data.personaDescription || "" },
         qualification_rules: data.qualification || {},
         few_shot_examples: data.examples || [],
         availability: data.availability || {},

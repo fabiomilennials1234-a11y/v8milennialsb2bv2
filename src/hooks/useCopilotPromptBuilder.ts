@@ -59,6 +59,9 @@ export function computePromptHash(
     JSON.stringify(agent.few_shot_examples || []),
     JSON.stringify(agent.availability || {}),
     String(agent.response_delay_seconds || 0),
+    // Wizard v3 fields (stored in JSONB)
+    ((agent.conversation_style as any)?.personaDescription || ""),
+    ((agent.business_context as any)?.skillsAndTopics || ""),
     // FAQs (sorted by position for determinism)
     ...faqs
       .slice()
@@ -121,12 +124,22 @@ function buildIdentityLayer(
   sections.push("");
 
   // 1.2 Personalidade
-  sections.push("# PERSONALIDADE");
-  sections.push("");
-  sections.push(`Tom de voz: ${agent.personality_tone}`);
-  sections.push(`Estilo de comunicação: ${agent.personality_style}`);
-  sections.push(`Nível de energia: ${agent.personality_energy}`);
-  sections.push("");
+  const personaDescription = (conversationStyle as any).personaDescription as string | undefined;
+  if (personaDescription && personaDescription.trim()) {
+    // Wizard v3: campo livre descritivo
+    sections.push("# PERSONALIDADE E TOM DE VOZ");
+    sections.push("");
+    sections.push(personaDescription.trim());
+    sections.push("");
+  } else {
+    // Fallback: dropdowns legados (Wizard v2)
+    sections.push("# PERSONALIDADE");
+    sections.push("");
+    sections.push(`Tom de voz: ${agent.personality_tone}`);
+    sections.push(`Estilo de comunicação: ${agent.personality_style}`);
+    sections.push(`Nível de energia: ${agent.personality_energy}`);
+    sections.push("");
+  }
 
   // 1.3 Objetivo Principal (composite ou legado)
   const objectiveComposite = agent.objective_composite as ObjectiveComposite | null;
@@ -186,39 +199,48 @@ function buildKnowledgeLayer(
   qualificationRules: Record<string, any>,
   fewShotExamples: Array<{ lead: string; agent: string }>,
   availability: Record<string, any>,
-  responseDelaySeconds: number
+  responseDelaySeconds: number,
+  businessContext: Record<string, any> = {}
 ) {
-  // 2.1 Habilidades
-  if (agent.skills && agent.skills.length > 0) {
-    sections.push("# HABILIDADES");
+  // 2.1-2.3 Habilidades e Tópicos
+  const skillsAndTopics = (businessContext as any).skillsAndTopics as string | undefined;
+  if (skillsAndTopics && skillsAndTopics.trim()) {
+    // Wizard v3: campo livre unificado
+    sections.push("# HABILIDADES, TÓPICOS E LIMITES");
     sections.push("");
-    sections.push("Você possui as seguintes habilidades:");
-    agent.skills.forEach((skill) => sections.push(`- ${skill}`));
+    sections.push(skillsAndTopics.trim());
     sections.push("");
-  }
+  } else {
+    // Fallback: arrays legados (Wizard v2)
+    if (agent.skills && agent.skills.length > 0) {
+      sections.push("# HABILIDADES");
+      sections.push("");
+      sections.push("Você possui as seguintes habilidades:");
+      agent.skills.forEach((skill) => sections.push(`- ${skill}`));
+      sections.push("");
+    }
 
-  // 2.2 Tópicos permitidos
-  if (agent.allowed_topics && agent.allowed_topics.length > 0) {
-    sections.push("# O QUE VOCÊ PODE DISCUTIR");
-    sections.push("");
-    sections.push("Você está autorizado a discutir sobre:");
-    agent.allowed_topics.forEach((topic) => sections.push(`- ${topic}`));
-    sections.push("");
-  }
+    if (agent.allowed_topics && agent.allowed_topics.length > 0) {
+      sections.push("# O QUE VOCÊ PODE DISCUTIR");
+      sections.push("");
+      sections.push("Você está autorizado a discutir sobre:");
+      agent.allowed_topics.forEach((topic) => sections.push(`- ${topic}`));
+      sections.push("");
+    }
 
-  // 2.3 Tópicos proibidos
-  if (agent.forbidden_topics && agent.forbidden_topics.length > 0) {
-    sections.push("# O QUE VOCÊ NÃO PODE DISCUTIR");
-    sections.push("");
-    sections.push(
-      "⚠️ IMPORTANTE: Você NÃO DEVE, em hipótese alguma, discutir sobre:"
-    );
-    agent.forbidden_topics.forEach((topic) => sections.push(`- ${topic}`));
-    sections.push("");
-    sections.push(
-      "Se o cliente perguntar sobre esses tópicos, redirecione educadamente para um humano."
-    );
-    sections.push("");
+    if (agent.forbidden_topics && agent.forbidden_topics.length > 0) {
+      sections.push("# O QUE VOCÊ NÃO PODE DISCUTIR");
+      sections.push("");
+      sections.push(
+        "⚠️ IMPORTANTE: Você NÃO DEVE, em hipótese alguma, discutir sobre:"
+      );
+      agent.forbidden_topics.forEach((topic) => sections.push(`- ${topic}`));
+      sections.push("");
+      sections.push(
+        "Se o cliente perguntar sobre esses tópicos, redirecione educadamente para um humano."
+      );
+      sections.push("");
+    }
   }
 
   // 2.4 Estilo de conversa
@@ -756,7 +778,8 @@ export function generatePrompt(
     qualificationRules,
     fewShotExamples,
     availability,
-    responseDelaySeconds
+    responseDelaySeconds,
+    businessContext
   );
 
   // Camada 2.5 — Base de Conhecimento (document summaries)

@@ -49,7 +49,10 @@ export function useDashboardMetrics(month?: number, year?: number) {
   return useQuery({
     queryKey: ["dashboard-metrics", selectedMonth, selectedYear, filterByMe, myId, organizationId],
     queryFn: async (): Promise<DashboardMetrics> => {
+      console.log("🔍 [useDashboardMetrics] Chamando RPC:", { organizationId, startStr, endStr, filterByMe, myId });
+
       if (!organizationId) {
+        console.warn("⚠️ [useDashboardMetrics] organizationId é null — retornando zeros");
         return {
           totalLeads: 0,
           reunioesMarcadas: 0,
@@ -74,7 +77,7 @@ export function useDashboardMetrics(month?: number, year?: number) {
       });
 
       if (error) {
-        console.error("[useDashboardMetrics] RPC error:", error);
+        console.error("❌ [useDashboardMetrics] RPC error:", error.message, error.code, error.details, error.hint);
         return {
           totalLeads: 0, reunioesMarcadas: 0, reunioesComparecidas: 0,
           noShow: 0, taxaNoShow: 0, vendaTotal: 0, vendaMRR: 0,
@@ -82,6 +85,8 @@ export function useDashboardMetrics(month?: number, year?: number) {
           ticketMedioProjeto: 0, novosClientes: 0,
         };
       }
+
+      console.log("📊 [useDashboardMetrics] RPC raw response:", data);
 
       // Supabase RPC pode retornar JSONB como array — desembrulhar
       const raw = Array.isArray(data) && data.length > 0 ? data[0] : data;

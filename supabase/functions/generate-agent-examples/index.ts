@@ -19,6 +19,9 @@ interface GenerateExamplesRequest {
     style?: string;
     energy?: string;
   };
+  count?: number;
+  personaDescription?: string;
+  skillsAndTopics?: string;
 }
 
 serve(async (req) => {
@@ -36,7 +39,8 @@ serve(async (req) => {
     }
 
     const body: GenerateExamplesRequest = await req.json();
-    const { businessContext, templateType, personality } = body;
+    const { businessContext, templateType, personality, personaDescription, skillsAndTopics } = body;
+    const count = Math.min(Math.max(body.count || 3, 1), 10);
 
     if (!businessContext?.productSummary || businessContext.productSummary.length < 20) {
       return new Response(
@@ -55,8 +59,25 @@ serve(async (req) => {
 
     const templateDesc = templateDescriptions[templateType] || "vendas B2B";
 
+    // Build persona section
+    let personaSection = "";
+    if (personaDescription && personaDescription.trim().length > 10) {
+      personaSection = `\nPersona do agente (use este tom e estilo):\n${personaDescription.trim()}\n`;
+    } else {
+      personaSection = `\nTom: ${personality.tone || "profissional"}, Estilo: ${personality.style || "consultivo"}, Energia: ${personality.energy || "moderada"}.\n`;
+    }
+
+    // Build skills/topics section
+    let skillsSection = "";
+    if (skillsAndTopics && skillsAndTopics.trim().length > 10) {
+      skillsSection = `\nHabilidades e tópicos do agente:\n${skillsAndTopics.trim()}\n`;
+    }
+
+    const exampleWord = count === 1 ? "exemplo" : "exemplos";
+    const jsonArrayTemplate = Array.from({ length: count }, () => '{"lead": "...", "agent": "..."}').join(", ");
+
     const systemPrompt = `Você é um especialista em vendas B2B e WhatsApp marketing.
-Gere exatamente 3 exemplos de conversa curtos e realistas entre um lead e um agente de IA.
+Gere exatamente ${count} ${exampleWord} de conversa curtos e realistas entre um lead e um agente de IA.
 
 Contexto da empresa:
 - Empresa: ${businessContext.companyName || "Não informado"}
@@ -66,17 +87,17 @@ Contexto da empresa:
 - Dores que resolve: ${businessContext.customerPains || "Não informado"}
 
 O agente é do tipo "${templateType}" — especializado em ${templateDesc}.
-Tom: ${personality.tone || "profissional"}, Estilo: ${personality.style || "consultivo"}, Energia: ${personality.energy || "moderada"}.
-
+${personaSection}${skillsSection}
 REGRAS:
 - Cada exemplo deve ter 1 mensagem do lead e 1 resposta do agente
 - Use o nome da empresa e produto reais
 - Mantenha o tom e estilo indicados
-- Cada exemplo deve cobrir um cenário diferente (ex: primeiro contato, objeção, interesse)
+- Cada exemplo deve cobrir um cenário diferente (ex: primeiro contato, objeção, interesse, dúvida técnica, pedido de preço)
 - Mensagens curtas como no WhatsApp (1-3 frases cada)
+- Gere exatamente ${count} ${exampleWord}
 
 Responda APENAS em JSON válido, sem markdown:
-{"examples": [{"lead": "...", "agent": "..."}, {"lead": "...", "agent": "..."}, {"lead": "...", "agent": "..."}]}`;
+{"examples": [${jsonArrayTemplate}]}`;
 
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
@@ -90,10 +111,10 @@ Responda APENAS em JSON válido, sem markdown:
         model: "google/gemini-3-flash-preview",
         messages: [
           { role: "system", content: systemPrompt },
-          { role: "user", content: "Gere os 3 exemplos de conversa agora." },
+          { role: "user", content: `Gere os ${count} ${exampleWord} de conversa agora.` },
         ],
         temperature: 0.7,
-        max_tokens: 1000,
+        max_tokens: 300 * count,
       }),
     });
 

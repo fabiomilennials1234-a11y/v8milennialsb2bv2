@@ -5,20 +5,15 @@ export const AGENDADOR_CONFIG: WizardTypeConfig = {
   label: "Confirmador de Reuniões",
   description: "Maximiza taxa de comparecimento com confirmações inteligentes (D-5 a D-0)",
   steps: [
-    // Identidade e contexto primeiro (impacto máximo no prompt)
+    // Identidade e contexto
     "name",
     "businessContext",
-    "objectiveComposite",
-    // Personalidade e estilo
-    "personality",
-    "skills",
-    "conversationStyle",
+    "objectiveInstructions",
+    // Persona e regras
+    "personaTom",
+    "rulesLimits",
     "examples",
-    "availability",
-    // Configurações operacionais
-    "capabilities",
     "knowledgeBase",
-    "customInstructions",
     // Específico do Agendador
     "confirmationFunnel",
     "confirmerActions",

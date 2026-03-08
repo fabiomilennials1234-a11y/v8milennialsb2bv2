@@ -80,11 +80,11 @@ const navItems: NavItemWithChildren[] = [
   { label: "Central de Comando", icon: Gauge, path: "/" },
   { label: "Campanhas", icon: Target, path: "/campanhas" },
   { label: "Marketing", icon: BarChart2, path: "/marketing" },
-  { label: "Chat", icon: Zap, path: "/chat-whatsapp" },
+  { label: "Chat", icon: Zap, path: "/chat" },
   { label: "Funis", icon: GitBranch, path: "/funis", children: funisSubItems },
   { label: "Agenda", icon: CalendarDays, path: "/agenda" },
   { label: "Revisão", icon: Wrench, path: "/follow-ups" },
-  // { label: "Combustível", icon: Fuel, path: "/leads" }, // DESATIVADO temporariamente
+  { label: "Combustível", icon: Fuel, path: "/leads" },
   { label: "Pódio", icon: Trophy, path: "/performance" },
   { label: "Comissões", icon: DollarSign, path: "/comissoes" },
   { label: "Copilot", icon: Bot, path: "/copilot" },
@@ -163,7 +163,7 @@ export function Sidebar() {
     "/": "dashboard",
     "/campanhas": "campanhas",
     "/marketing": "marketing",
-    "/chat-whatsapp": "chat_whatsapp",
+    "/chat": "chat_whatsapp",
     "/funis": "funis",
     "/follow-ups": "follow_ups",
     "/leads": "leads",
@@ -534,16 +534,16 @@ export function Sidebar() {
                 >
                   {item.label}
                 </span>
-                {open && (item.path === "/chat-whatsapp" ? chatUnreadTotal > 0 : item.badge) && (
+                {open && (item.path === "/chat" ? chatUnreadTotal > 0 : item.badge) && (
                   <span
                     className={cn(
                       "text-xs font-semibold min-w-[1.25rem] h-5 px-1.5 rounded-full flex items-center justify-center",
-                      item.path === "/chat-whatsapp"
+                      item.path === "/chat"
                         ? "bg-amber-500 text-white"
                         : "bg-primary text-primary-foreground"
                     )}
                   >
-                    {item.path === "/chat-whatsapp"
+                    {item.path === "/chat"
                       ? (chatUnreadTotal > 99 ? "99+" : chatUnreadTotal)
                       : item.badge}
                   </span>

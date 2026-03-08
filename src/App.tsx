@@ -56,6 +56,8 @@ const Agenda = lazy(() => lazyRetry(() => import("./pages/Agenda")));
 const Privacidade = lazy(() => lazyRetry(() => import("./pages/Privacidade")));
 const ApiDocs = lazy(() => lazyRetry(() => import("./pages/ApiDocs")));
 const CopilotWizard = lazy(() => lazyRetry(() => import("@/components/copilot/CopilotWizard").then(m => ({ default: m.CopilotWizard }))));
+const CopilotPlayground = lazy(() => lazyRetry(() => import("@/components/copilot/playground").then(m => ({ default: m.CopilotPlayground }))));
+const CopilotWizardTest = lazy(() => lazyRetry(() => import("./pages/CopilotWizardTest")));
 const NotFound = lazy(() => lazyRetry(() => import("./pages/NotFound")));
 
 // Master Admin — lazy loaded (com retry)
@@ -256,8 +258,7 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
-      {/* DESATIVADO temporariamente — descomentar para reativar Combustível */}
-      {/* <Route
+      <Route
         path="/leads"
         element={
           <ProtectedRoute>
@@ -266,7 +267,7 @@ function AppRoutes() {
             </LayoutWrapper>
           </ProtectedRoute>
         }
-      /> */}
+      />
       <Route
         path="/premiacoes"
         element={<Navigate to="/performance" replace />}
@@ -340,6 +341,26 @@ function AppRoutes() {
         }
       />
       <Route
+        path="/copilot/teste-wizard"
+        element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <CopilotWizardTest />
+            </LayoutWrapper>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/chat"
+        element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <ChatWhatsApp />
+            </LayoutWrapper>
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/chat-whatsapp"
         element={
           <ProtectedRoute>
@@ -385,7 +406,7 @@ function AppRoutes() {
           <ProtectedRoute>
             <SubscriptionProtectedRoute requireActive>
               <LayoutWrapper>
-                <CopilotWizard />
+                <CopilotPlayground />
               </LayoutWrapper>
             </SubscriptionProtectedRoute>
           </ProtectedRoute>
@@ -393,6 +414,18 @@ function AppRoutes() {
       />
       <Route
         path="/copilot/:id/editar"
+        element={
+          <ProtectedRoute>
+            <SubscriptionProtectedRoute requireActive>
+              <LayoutWrapper>
+                <CopilotPlayground />
+              </LayoutWrapper>
+            </SubscriptionProtectedRoute>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/copilot/novo-wizard"
         element={
           <ProtectedRoute>
             <SubscriptionProtectedRoute requireActive>

@@ -44,6 +44,8 @@ export function ExamplesStep() {
   const businessContext = watch("businessContext");
   const templateType = watch("templateType");
   const personality = watch("personality");
+  const personaDescription = watch("personaDescription");
+  const skillsAndTopics = watch("skillsAndTopics");
 
   const canGenerate =
     !!businessContext?.productSummary &&
@@ -92,6 +94,8 @@ export function ExamplesStep() {
             templateType,
             personality,
             count: exampleCount,
+            personaDescription: personaDescription || "",
+            skillsAndTopics: skillsAndTopics || "",
           }),
         }
       );

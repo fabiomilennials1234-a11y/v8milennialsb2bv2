@@ -199,6 +199,14 @@ export interface CopilotWizardData {
   // Step 20: Base de Conhecimento (RAG)
   knowledgeBaseFiles: File[];
 
+  // ===== NOVOS CAMPOS (Wizard v3 — Steps Reestruturados) =====
+
+  // Persona e Tom de Voz (campo livre — substitui personality dropdowns + conversationStyle)
+  personaDescription: string;
+
+  // Habilidades e Tópicos (campo livre — substitui skills[] + allowedTopics[] + forbiddenTopics[])
+  skillsAndTopics: string;
+
   // Step 21: Capacidades / Permissões do Agente
   canQualifyLead: boolean;
   canScheduleMeeting: boolean;

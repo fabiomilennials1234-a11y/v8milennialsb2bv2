@@ -32,6 +32,9 @@ import { KnowledgeBaseStep } from "../wizard-steps/KnowledgeBaseStep";
 import { AgentCapabilitiesStep } from "../wizard-steps/AgentCapabilitiesStep";
 import { KanbanRulesReviewStep } from "../wizard-steps/KanbanRulesReviewStep";
 import { TestConversationStep } from "../wizard-steps/TestConversationStep";
+import { PersonaTomStep } from "../wizard-steps/PersonaTomStep";
+import { ObjectiveInstructionsStep } from "../wizard-steps/ObjectiveInstructionsStep";
+import { RulesLimitsStep } from "../wizard-steps/RulesLimitsStep";
 import type { StepRegistryEntry } from "./types";
 
 export const STEP_REGISTRY: Record<string, StepRegistryEntry> = {
@@ -169,5 +172,21 @@ export const STEP_REGISTRY: Record<string, StepRegistryEntry> = {
     component: TestConversationStep,
     title: "Testar",
     fieldToValidate: "name", // step opcional, valida só name
+  },
+  // ===== Wizard v3 — Steps Reestruturados =====
+  personaTom: {
+    component: PersonaTomStep,
+    title: "Persona",
+    fieldToValidate: "personaDescription",
+  },
+  objectiveInstructions: {
+    component: ObjectiveInstructionsStep,
+    title: "Objetivo",
+    fieldToValidate: "objectiveComposite",
+  },
+  rulesLimits: {
+    component: RulesLimitsStep,
+    title: "Regras",
+    fieldToValidate: "skillsAndTopics",
   },
 };

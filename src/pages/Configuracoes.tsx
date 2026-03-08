@@ -19,6 +19,7 @@ import {
   Calendar,
   Webhook,
   Award,
+  HelpCircle,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -56,9 +57,11 @@ import { useOrganization } from "@/hooks/useOrganization";
 import { useOrganizationSettings } from "@/hooks/useOrganizationSettings";
 import { WhatsAppSettings } from "@/components/settings/WhatsAppSettings";
 import { GoogleCalendarSettings } from "@/components/settings/GoogleCalendarSettings";
+import { MetaSettings } from "@/components/settings/MetaSettings";
 import { WebhookSettings } from "@/components/settings/WebhookSettings";
 import { ClienteSidebarConfig } from "@/components/settings/ClienteSidebarConfig";
 import { BadgesConfig } from "@/components/settings/BadgesConfig";
+import { HelpCenter } from "@/components/settings/help/HelpCenter";
 import { toast } from "sonner";
 
 const colorOptions = [
@@ -471,7 +474,7 @@ export default function Configuracoes() {
   const isOutbound = orgType === "outbound";
   const showClienteTab = isOutbound && isAgency;
   const showBadgesTab = isOutbound && isAgency;
-  const extraTabs = (showClienteTab ? 1 : 0) + (showBadgesTab ? 1 : 0);
+  const totalTabs = 8 + (showClienteTab ? 1 : 0) + (showBadgesTab ? 1 : 0);
 
   return (
     <div className="space-y-6">
@@ -491,7 +494,7 @@ export default function Configuracoes() {
       </div>
 
       <Tabs defaultValue="tags" className="w-full">
-        <TabsList className={`grid w-full max-w-4xl ${extraTabs === 2 ? "grid-cols-8" : extraTabs === 1 ? "grid-cols-7" : "grid-cols-6"}`}>
+        <TabsList className={`grid w-full max-w-5xl`} style={{ gridTemplateColumns: `repeat(${totalTabs}, minmax(0, 1fr))` }}>
           <TabsTrigger value="tags" className="gap-2">
             <Tag className="w-4 h-4" />
             Tags
@@ -504,6 +507,10 @@ export default function Configuracoes() {
             <MessageSquare className="w-4 h-4" />
             WhatsApp
           </TabsTrigger>
+          <TabsTrigger value="meta" className="gap-2">
+            <Globe className="w-4 h-4" />
+            Meta
+          </TabsTrigger>
           <TabsTrigger value="webhooks" className="gap-2">
             <Webhook className="w-4 h-4" />
             Webhooks
@@ -515,6 +522,10 @@ export default function Configuracoes() {
           <TabsTrigger value="general" className="gap-2">
             <Settings className="w-4 h-4" />
             Geral
+          </TabsTrigger>
+          <TabsTrigger value="ajuda" className="gap-2">
+            <HelpCircle className="w-4 h-4" />
+            Ajuda
           </TabsTrigger>
           {showClienteTab && (
             <TabsTrigger value="cliente-acesso" className="gap-2">
@@ -555,6 +566,14 @@ export default function Configuracoes() {
             </Card>
           </TabsContent>
 
+          <TabsContent value="meta">
+            <Card className="glass-card">
+              <CardContent className="pt-6">
+                <MetaSettings />
+              </CardContent>
+            </Card>
+          </TabsContent>
+
           <TabsContent value="webhooks">
             <Card className="glass-card">
               <CardContent className="pt-6">
@@ -575,6 +594,14 @@ export default function Configuracoes() {
             <Card className="glass-card">
               <CardContent className="pt-6">
                 <GeneralSettings />
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="ajuda">
+            <Card className="glass-card">
+              <CardContent className="pt-6">
+                <HelpCenter />
               </CardContent>
             </Card>
           </TabsContent>

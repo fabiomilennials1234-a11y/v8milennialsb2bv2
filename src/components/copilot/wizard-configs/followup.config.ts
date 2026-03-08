@@ -5,20 +5,15 @@ export const FOLLOWUP_CONFIG: WizardTypeConfig = {
   label: "Especialista em Follow-up",
   description: "Reengajamento estratégico de leads frios e inativos",
   steps: [
-    // Identidade e contexto primeiro (impacto máximo no prompt)
+    // Identidade e contexto
     "name",
     "businessContext",
-    "objectiveComposite",
-    // Personalidade e estilo
-    "personality",
-    "skills",
-    "conversationStyle",
+    "objectiveInstructions",
+    // Persona e regras
+    "personaTom",
+    "rulesLimits",
     "examples",
-    "availability",
-    // Configurações operacionais
-    "capabilities",
     "knowledgeBase",
-    "customInstructions",
     "kanbanRulesReview",
     // Específico do Follow-up
     "followupActions",

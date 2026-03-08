@@ -70,6 +70,7 @@ import {
 import { useTags } from "@/hooks/useTags";
 import { useIsAdmin } from "@/hooks/useUserRole";
 import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
+import { ChannelBadge, type ChannelType } from "./ChannelBadge";
 import { LeadDetailContent } from "./LeadDetailContent";
 import { WhatsAppSettings } from "@/components/settings/WhatsAppSettings";
 import {
@@ -407,11 +408,14 @@ function ContactList({
                   onClick={() => onSelectContact(contact.phone_number)}
                 >
                   <div className="flex items-start gap-3">
-                    <Avatar className="w-11 h-11 shrink-0 rounded-full border-2 border-background shadow-sm">
-                      <AvatarFallback className="bg-primary/10 text-primary font-medium text-sm">
-                        {(displayName.charAt(0) || "?").toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
+                    <div className="relative shrink-0">
+                      <Avatar className="w-11 h-11 rounded-full border-2 border-background shadow-sm">
+                        <AvatarFallback className="bg-primary/10 text-primary font-medium text-sm">
+                          {(displayName.charAt(0) || "?").toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      <ChannelBadge channel="whatsapp" size={18} overlay />
+                    </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-1">
                         <span className="font-semibold text-foreground truncate text-sm flex items-center gap-1">
@@ -1474,14 +1478,17 @@ function ChatWindow({
           onPointerDown={(e) => { e.stopPropagation(); onOpenLeadModal(); }}
           onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpenLeadModal(); } }}
         >
-          <Avatar className="w-10 h-10 shrink-0 border-2 border-background shadow-sm">
-            <AvatarFallback className={cn(
-              "font-medium text-primary",
-              hasLead ? "bg-primary/15 text-primary" : "bg-primary/10"
-            )}>
-              {(contactName.charAt(0) || "?").toUpperCase()}
-            </AvatarFallback>
-          </Avatar>
+          <div className="relative shrink-0">
+            <Avatar className="w-10 h-10 border-2 border-background shadow-sm">
+              <AvatarFallback className={cn(
+                "font-medium text-primary",
+                hasLead ? "bg-primary/15 text-primary" : "bg-primary/10"
+              )}>
+                {(contactName.charAt(0) || "?").toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            <ChannelBadge channel="whatsapp" size={16} overlay />
+          </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <h3 className="font-semibold truncate text-foreground">{contactName}</h3>

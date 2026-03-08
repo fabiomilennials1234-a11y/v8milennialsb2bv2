@@ -76,10 +76,11 @@ export function useCurrentTeamMember() {
       console.log("🔍 useCurrentTeamMember: Buscando team_member para user:", user.id, { isMaster });
 
       const storedOrgId = getSelectedOrgId();
+      console.log("🔍 useCurrentTeamMember: storedOrgId:", storedOrgId);
 
       // Se tem org selecionada, buscar team_member dessa org
       if (storedOrgId) {
-        const { data } = await supabase
+        const { data, error: storedOrgError } = await supabase
           .from("team_members")
           .select("*")
           .eq("user_id", user.id)
@@ -87,12 +88,18 @@ export function useCurrentTeamMember() {
           .eq("is_active", true)
           .maybeSingle();
 
+        if (storedOrgError) {
+          console.error("❌ useCurrentTeamMember: Erro ao buscar com org selecionada:", storedOrgError);
+        }
+
         if (data) {
           console.log("✅ useCurrentTeamMember: Resultado (org selecionada):", {
             organizationId: data.organization_id,
           });
           return data as TeamMember;
         }
+
+        console.log("⚠️ useCurrentTeamMember: Nenhum team_member encontrado para org selecionada:", storedOrgId);
 
         // Master sem team_member nessa org: criar virtual member
         if (isMaster) {
@@ -108,6 +115,11 @@ export function useCurrentTeamMember() {
             return buildVirtualTeamMember(user.id, storedOrgId);
           }
           // Org não existe mais, limpar e buscar outra
+          console.log("⚠️ useCurrentTeamMember: Org não existe mais, limpando localStorage");
+          localStorage.removeItem(SELECTED_ORG_KEY);
+        } else {
+          // Não-master sem team_member na org selecionada: limpar e tentar fallback
+          console.log("⚠️ useCurrentTeamMember: Non-master sem acesso à org selecionada, limpando localStorage");
           localStorage.removeItem(SELECTED_ORG_KEY);
         }
       }

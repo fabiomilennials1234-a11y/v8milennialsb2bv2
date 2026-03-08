@@ -28,6 +28,8 @@ import { useTeamGoals } from "@/hooks/useGoals";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOrganization } from "@/hooks/useOrganization";
 import { useUserRole } from "@/hooks/useUserRole";
+import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
+import { useMasterAuth } from "@/hooks/useMasterAuth";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { format } from "date-fns";
@@ -44,9 +46,11 @@ function formatCurrency(value: number): string {
 
 export default function Dashboard() {
   const { user } = useAuth();
-  const { orgType } = useOrganization();
+  const { organizationId, orgType, isLoading: orgLoading } = useOrganization();
   const { data: userRole } = useUserRole();
   const role = userRole?.role;
+  const { data: currentTeamMember, isLoading: teamMemberLoading, error: teamMemberError } = useCurrentTeamMember();
+  const { isMaster, isLoading: masterLoading } = useMasterAuth();
 
   const now = new Date();
   const month = now.getMonth() + 1;
@@ -127,8 +131,34 @@ export default function Dashboard() {
     ? Math.round((metrics.reunioesComparecidas / metrics.reunioesMarcadas) * 100)
     : 0;
 
+  // Diagnóstico: mostrar estado da cadeia de dados quando algo está errado
+  const allMetricsZero = metrics &&
+    metrics.totalLeads === 0 &&
+    metrics.reunioesMarcadas === 0 &&
+    metrics.vendaTotal === 0 &&
+    metrics.novosClientes === 0;
+
   return (
     <div className="space-y-8">
+      {/* Diagnóstico — aparece apenas quando todos os dados estão zerados */}
+      {allMetricsZero && (
+        <div className="rounded-lg border border-yellow-500/50 bg-yellow-500/10 p-4 text-sm space-y-2">
+          <p className="font-semibold text-yellow-600">Diagnóstico: Todos os dados estão zerados</p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs font-mono">
+            <div>user.id: <span className={user?.id ? "text-green-500" : "text-red-500"}>{user?.id ? "OK" : "NULL"}</span></div>
+            <div>isMaster: <span className={isMaster ? "text-green-500" : "text-yellow-500"}>{String(isMaster)}</span> {masterLoading && "(loading...)"}</div>
+            <div>teamMember: <span className={currentTeamMember ? "text-green-500" : "text-red-500"}>{currentTeamMember ? "OK" : "NULL"}</span> {teamMemberLoading && "(loading...)"}</div>
+            <div>orgId: <span className={organizationId ? "text-green-500" : "text-red-500"}>{organizationId ? organizationId.slice(0, 8) + "..." : "NULL"}</span> {orgLoading && "(loading...)"}</div>
+            <div>orgType: <span className={orgType ? "text-green-500" : "text-red-500"}>{orgType || "NULL"}</span></div>
+            <div>role: <span className={role ? "text-green-500" : "text-yellow-500"}>{role || "NULL"}</span></div>
+            <div>mês/ano: {month}/{year}</div>
+            <div>teamMemberError: <span className={teamMemberError ? "text-red-500" : "text-green-500"}>{teamMemberError ? String(teamMemberError) : "none"}</span></div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Se orgId está NULL, limpe o localStorage (DevTools → Application → Local Storage → limpar "selected_org_id") e recarregue a página.
+          </p>
+        </div>
+      )}
       {/* Header */}
       <div className="flex items-center justify-between">
         <motion.div

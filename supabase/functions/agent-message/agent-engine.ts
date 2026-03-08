@@ -2133,6 +2133,28 @@ Regras:
       });
     }
 
+    // Tool para criar campos personalizados no CRM em runtime
+    if (capabilities.can_create_custom_field) {
+      tools.push({
+        name: 'create_custom_field',
+        description: 'Cria um novo campo personalizado no CRM para armazenar informacoes do lead que nao existem nos campos padrao. Use quando precisar registrar uma informacao que nao tem campo dedicado. Tipos: text (texto livre), number (numerico), date (data), select (opcoes), boolean (sim/nao).',
+        input_schema: {
+          type: 'object',
+          properties: {
+            field_name: { type: 'string', description: 'Nome do campo (ex: "Orcamento estimado", "Ferramenta atual", "Numero de funcionarios")' },
+            field_type: { type: 'string', enum: ['text', 'number', 'date', 'select', 'boolean'], description: 'Tipo do campo' },
+            field_options: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Opcoes disponiveis (obrigatorio se field_type = select). Ex: ["Pequeno", "Medio", "Grande"]',
+            },
+            initial_value: { type: 'string', description: 'Valor inicial para preencher no lead atual (opcional)' },
+          },
+          required: ['field_name', 'field_type'],
+        },
+      });
+    }
+
     return tools;
   }
 
@@ -2399,6 +2421,7 @@ Regras:
       'advance_stage': 'ADVANCE_STAGE',
       'confirm_meeting': 'CONFIRM_MEETING',
       'advance_confirmation_stage': 'ADVANCE_CONFIRMATION_STAGE',
+      'create_custom_field': 'CREATE_CUSTOM_FIELD',
     };
     return mapping[toolName] || 'UNKNOWN';
   }
@@ -2414,6 +2437,7 @@ Regras:
     if (toolName === 'advance_stage') return currentState;
     if (toolName === 'confirm_meeting') return 'QUALIFIED'; // Confirmação dispara onQualify automation
     if (toolName === 'advance_confirmation_stage') return currentState;
+    if (toolName === 'create_custom_field') return currentState;
     if (currentState === 'NEW_LEAD') return 'QUALIFYING';
     return currentState;
   }
@@ -2463,6 +2487,8 @@ Regras:
           return await this.executeConfirmMeeting(params, tenantId);
         case 'ADVANCE_CONFIRMATION_STAGE':
           return await this.executeAdvanceConfirmationStage(params, tenantId);
+        case 'CREATE_CUSTOM_FIELD':
+          return await this.executeCreateCustomField(params, tenantId);
         default:
           console.warn('[AgentEngine] Action não suportada:', action.action);
           return { success: false, error: `Ação não suportada: ${action.action}` };
@@ -2698,6 +2724,96 @@ Regras:
     }
 
     return { success: true, message: 'Lead atualizado', lead_id };
+  }
+
+  private async executeCreateCustomField(params: any, tenantId: string) {
+    const { field_name, field_type, field_options, initial_value } = params;
+
+    if (!field_name || !field_type) {
+      return { success: false, error: 'field_name e field_type sao obrigatorios' };
+    }
+
+    const validTypes = ['text', 'number', 'date', 'select', 'boolean'];
+    if (!validTypes.includes(field_type)) {
+      return { success: false, error: `field_type invalido. Use: ${validTypes.join(', ')}` };
+    }
+
+    if (field_type === 'select' && (!field_options || !Array.isArray(field_options) || field_options.length === 0)) {
+      return { success: false, error: 'field_options obrigatorio para tipo select' };
+    }
+
+    // Verificar se campo ja existe na org
+    const { data: existing } = await this.supabase
+      .from('lead_custom_fields')
+      .select('id')
+      .eq('organization_id', tenantId)
+      .eq('field_name', field_name)
+      .maybeSingle();
+
+    let fieldId: string;
+
+    if (existing) {
+      // Campo ja existe, usar o ID existente
+      fieldId = existing.id;
+      console.log(`[AgentEngine] Custom field "${field_name}" ja existe (id: ${fieldId}), reutilizando`);
+    } else {
+      // Criar novo campo
+      const { data: maxOrder } = await this.supabase
+        .from('lead_custom_fields')
+        .select('display_order')
+        .eq('organization_id', tenantId)
+        .order('display_order', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      const nextOrder = (maxOrder?.display_order ?? 0) + 1;
+
+      const { data: newField, error: createError } = await this.supabase
+        .from('lead_custom_fields')
+        .insert({
+          organization_id: tenantId,
+          field_name,
+          field_type,
+          field_options: field_type === 'select' ? field_options : null,
+          is_required: false,
+          display_order: nextOrder,
+        })
+        .select('id')
+        .single();
+
+      if (createError) {
+        console.error('[AgentEngine] Erro ao criar campo personalizado:', createError);
+        return { success: false, error: `Erro ao criar campo: ${createError.message}` };
+      }
+
+      fieldId = newField.id;
+      console.log(`[AgentEngine] Novo campo personalizado criado: "${field_name}" (id: ${fieldId}, type: ${field_type})`);
+    }
+
+    // Se tem initial_value e tem lead atual, preencher o valor
+    if (initial_value && this.currentLeadId) {
+      await this.supabase
+        .from('lead_custom_field_values')
+        .upsert(
+          {
+            lead_id: this.currentLeadId,
+            field_id: fieldId,
+            value: String(initial_value).trim(),
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'lead_id,field_id' }
+        );
+      console.log(`[AgentEngine] Campo "${field_name}" preenchido com "${initial_value}" para lead ${this.currentLeadId}`);
+    }
+
+    return {
+      success: true,
+      message: existing
+        ? `Campo "${field_name}" ja existia e foi reutilizado${initial_value ? ` (valor preenchido: ${initial_value})` : ''}`
+        : `Campo "${field_name}" criado com sucesso${initial_value ? ` (valor preenchido: ${initial_value})` : ''}`,
+      field_id: fieldId,
+      field_name,
+    };
   }
 
   private async executeTransferHuman(params: any, _tenantId: string) {

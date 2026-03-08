@@ -8,21 +8,14 @@ export const SDR_CONFIG: WizardTypeConfig = {
     // Identidade e contexto primeiro (impacto máximo no prompt)
     "name",
     "businessContext",
-    "objectiveComposite",
-    // Personalidade e estilo
-    "personality",
-    "skills",
-    "conversationStyle",
+    "objectiveInstructions",
+    // Persona e regras (novos steps unificados)
+    "personaTom",
+    "rulesLimits",
     "examples",
-    "availability",
-    // Configurações operacionais
-    "capabilities",
     "knowledgeBase",
-    "customInstructions",
     "kanbanRulesReview",
     // Específico do SDR
-    "faqs",
-    "qualification",
     "operationMode",
     "activationTriggers",
     "outboundConfig",
