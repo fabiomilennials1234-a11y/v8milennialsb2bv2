@@ -173,7 +173,11 @@ Deno.serve(async (req) => {
           origin,
           segment,
           pipe_whatsapp,
-          lead_tags(tag:tags(name))
+          lead_tags(tag:tags(name)),
+          upsell_clients(tipo_cliente_tempo, gestao_stage),
+          pipe_confirmacao(status),
+          pipe_propostas(status),
+          campanha_leads(stage_id, campanha_stages(name))
         `)
         .in("id", leadIds),
       supabase
@@ -227,13 +231,39 @@ Deno.serve(async (req) => {
         totalSkipped++;
         continue;
       }
-      if (filterPipes.length > 0 && !filterPipes.includes("pipe_whatsapp")) {
-        totalSkipped++;
-        continue;
+      if (filterPipes.length > 0) {
+        // Verificar se o lead está em algum dos pipes filtrados (todos os funis)
+        const upsellClient = (lead as any).upsell_clients?.[0] || (lead as any).upsell_clients || null;
+        const confirmacao = (lead as any).pipe_confirmacao?.[0] || (lead as any).pipe_confirmacao || null;
+        const propostas = (lead as any).pipe_propostas?.[0] || (lead as any).pipe_propostas || null;
+        const campanhaLead = (lead as any).campanha_leads?.[0] || (lead as any).campanha_leads || null;
+        const leadPipes: string[] = [];
+        if (lead.pipe_whatsapp) leadPipes.push("whatsapp");
+        if (upsellClient?.tipo_cliente_tempo) leadPipes.push("upsell_base");
+        if (upsellClient?.gestao_stage) leadPipes.push("upsell_gestao");
+        if (confirmacao?.status) leadPipes.push("confirmacao");
+        if (propostas?.status) leadPipes.push("propostas");
+        if (campanhaLead) leadPipes.push("campanha");
+        const matchesPipe = filterPipes.some((fp: string) => leadPipes.includes(fp));
+        if (!matchesPipe) {
+          totalSkipped++;
+          continue;
+        }
       }
       if (filterStages.length > 0) {
-        const stage = lead.pipe_whatsapp || "";
-        if (!filterStages.includes(stage)) {
+        const upsellClient = (lead as any).upsell_clients?.[0] || (lead as any).upsell_clients || null;
+        const confirmacao = (lead as any).pipe_confirmacao?.[0] || (lead as any).pipe_confirmacao || null;
+        const propostas = (lead as any).pipe_propostas?.[0] || (lead as any).pipe_propostas || null;
+        const campanhaLead = (lead as any).campanha_leads?.[0] || (lead as any).campanha_leads || null;
+        const allStages = [
+          lead.pipe_whatsapp || "",
+          upsellClient?.tipo_cliente_tempo || "",
+          upsellClient?.gestao_stage || "",
+          confirmacao?.status || "",
+          propostas?.status || "",
+          (campanhaLead as any)?.campanha_stages?.name || "",
+        ].filter(Boolean);
+        if (!filterStages.some((fs: string) => allStages.includes(fs))) {
           totalSkipped++;
           continue;
         }

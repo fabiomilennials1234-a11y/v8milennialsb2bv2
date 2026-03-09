@@ -476,6 +476,8 @@ export const PIPE_TYPES = [
   { value: "propostas", label: "Pipe Propostas" },
   { value: "whatsapp", label: "Pipe WhatsApp" },
   { value: "campanha", label: "Campanhas" },
+  { value: "upsell_base", label: "Carteira Base" },
+  { value: "upsell_gestao", label: "Carteira Gestão" },
 ] as const;
 
 /**

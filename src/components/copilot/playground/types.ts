@@ -189,8 +189,11 @@ export const PLAYGROUND_TOOLS: PlaygroundToolDef[] = [
         type: "select",
         options: [
           { value: "whatsapp", label: "Pipe WhatsApp" },
-          { value: "confirmacao", label: "Pipe Confirmacao" },
+          { value: "confirmacao", label: "Pipe Confirmação" },
           { value: "propostas", label: "Pipe Propostas" },
+          { value: "upsell_base", label: "Carteira Base" },
+          { value: "upsell_gestao", label: "Carteira Gestão" },
+          { value: "campanha", label: "Campanhas" },
         ],
       },
       { key: "stages", label: "Etapas disponiveis", type: "text", placeholder: "Ex: novo, abordado, respondeu" },

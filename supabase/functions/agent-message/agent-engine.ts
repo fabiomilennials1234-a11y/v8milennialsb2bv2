@@ -452,10 +452,16 @@ export class AgentEngine {
         }
       }
 
-      // Mover para outro pipe (Confirmação ou Propostas)
+      // Mover para outro pipe (Confirmação, Propostas ou Carteira)
       const moveToPipe = actionConfig.moveToPipe;
-      if (moveToPipe && (moveToPipe.pipe === 'confirmacao' || moveToPipe.pipe === 'propostas') && moveToPipe.stage) {
-        await this.executeMoveToPipe(leadId, moveToPipe.pipe, moveToPipe.stage);
+      if (moveToPipe && moveToPipe.stage) {
+        if (moveToPipe.pipe === 'confirmacao' || moveToPipe.pipe === 'propostas') {
+          await this.executeMoveToPipe(leadId, moveToPipe.pipe, moveToPipe.stage);
+        } else if (moveToPipe.pipe === 'upsell_base') {
+          await this.supabase.from('upsell_clients').update({ tipo_cliente_tempo: moveToPipe.stage }).eq('lead_id', leadId);
+        } else if (moveToPipe.pipe === 'upsell_gestao') {
+          await this.supabase.from('upsell_clients').update({ gestao_stage: moveToPipe.stage }).eq('lead_id', leadId);
+        }
       }
 
       console.log('[AgentEngine] Automation actions executed for:', actionType);
@@ -639,27 +645,68 @@ export class AgentEngine {
     const SELECT = '*, copilot_agent_faqs(*), copilot_agent_kanban_rules(*)';
 
     // Item #4 + #12: Roteamento por etapa, origem e segmento do lead (paralelo)
+    // Inclui stages de todos os funis: whatsapp, confirmacao, propostas, upsell_base, upsell_gestao, campanha
     if (leadId) {
       try {
-        const { data: leadRow } = await this.supabase
-          .from('leads')
-          .select('pipe_whatsapp, origin, segment')
-          .eq('id', leadId)
-          .maybeSingle();
+        // Buscar lead + todos os funis em paralelo
+        const [leadRes, upsellRes, confirmacaoRes, propostasRes, campanhaRes] = await Promise.all([
+          this.supabase
+            .from('leads')
+            .select('pipe_whatsapp, origin, segment')
+            .eq('id', leadId)
+            .maybeSingle(),
+          this.supabase
+            .from('upsell_clients')
+            .select('tipo_cliente_tempo, gestao_stage')
+            .eq('lead_id', leadId)
+            .maybeSingle(),
+          this.supabase
+            .from('pipe_confirmacao')
+            .select('status')
+            .eq('lead_id', leadId)
+            .maybeSingle(),
+          this.supabase
+            .from('pipe_propostas')
+            .select('status')
+            .eq('lead_id', leadId)
+            .maybeSingle(),
+          this.supabase
+            .from('campanha_leads')
+            .select('stage_id, campanha_stages(name)')
+            .eq('lead_id', leadId)
+            .limit(1)
+            .maybeSingle(),
+        ]);
 
-        if (leadRow) {
+        const leadRow = leadRes.data;
+        const upsellRow = upsellRes.data;
+        const confirmacaoRow = confirmacaoRes.data;
+        const propostasRow = propostasRes.data;
+        const campanhaRow = campanhaRes.data;
+
+        if (leadRow || upsellRow || confirmacaoRow || propostasRow || campanhaRow) {
+          // Coletar todas as stages ativas do lead em todos os funis
+          const allStages: string[] = [];
+          if (leadRow?.pipe_whatsapp) allStages.push(leadRow.pipe_whatsapp);
+          if (upsellRow?.tipo_cliente_tempo) allStages.push(upsellRow.tipo_cliente_tempo);
+          if (upsellRow?.gestao_stage) allStages.push(upsellRow.gestao_stage);
+          if (confirmacaoRow?.status) allStages.push(confirmacaoRow.status);
+          if (propostasRow?.status) allStages.push(propostasRow.status);
+          const campanhaStage = (campanhaRow as any)?.campanha_stages?.name;
+          if (campanhaStage) allStages.push(campanhaStage);
+
           // Executar as 3 tentativas de routing em paralelo (prioridade: stage > origin > segment)
           const [stageResult, originResult, segmentResult] = await Promise.all([
-            leadRow.pipe_whatsapp
+            allStages.length > 0
               ? this.supabase
                   .from('copilot_agents')
                   .select(SELECT)
                   .eq('organization_id', this.organizationId)
                   .eq('is_active', true)
-                  .contains('routing_stages', [leadRow.pipe_whatsapp])
+                  .overlaps('routing_stages', allStages)
                   .maybeSingle()
               : Promise.resolve({ data: null }),
-            leadRow.origin
+            leadRow?.origin
               ? this.supabase
                   .from('copilot_agents')
                   .select(SELECT)
@@ -668,7 +715,7 @@ export class AgentEngine {
                   .contains('routing_origins', [leadRow.origin])
                   .maybeSingle()
               : Promise.resolve({ data: null }),
-            leadRow.segment
+            leadRow?.segment
               ? this.supabase
                   .from('copilot_agents')
                   .select(SELECT)
@@ -683,7 +730,7 @@ export class AgentEngine {
           const routedAgent = stageResult.data || originResult.data || segmentResult.data;
           if (routedAgent) {
             const routeType = stageResult.data ? 'etapa' : originResult.data ? 'origem' : 'segmento';
-            console.log(`[AgentEngine] Roteado por ${routeType}:`, { agentId: routedAgent.id });
+            console.log(`[AgentEngine] Roteado por ${routeType}:`, { agentId: routedAgent.id, stages: allStages });
             return routedAgent;
           }
         }
@@ -1020,43 +1067,91 @@ Regras:
         return null;
       }
 
-      // 2. Carregar campos personalizados do lead
-      const { data: customFieldValues, error: customError } = await this.supabase
-        .from('lead_custom_field_values')
-        .select(`
-          value,
-          field:lead_custom_fields(
-            id,
-            field_name,
-            field_type
-          )
-        `)
-        .eq('lead_id', leadId);
+      // 2. Carregar campos personalizados e dados de todos os funis em paralelo
+      const [customFieldsRes, upsellRes, confirmacaoRes, propostasRes, campanhaRes] = await Promise.all([
+        this.supabase
+          .from('lead_custom_field_values')
+          .select(`
+            value,
+            field:lead_custom_fields(
+              id,
+              field_name,
+              field_type
+            )
+          `)
+          .eq('lead_id', leadId),
+        this.supabase
+          .from('upsell_clients')
+          .select('tipo_cliente_tempo, gestao_stage, potencial, is_active')
+          .eq('lead_id', leadId)
+          .maybeSingle(),
+        this.supabase
+          .from('pipe_confirmacao')
+          .select('status, meeting_date, is_confirmed')
+          .eq('lead_id', leadId)
+          .maybeSingle(),
+        this.supabase
+          .from('pipe_propostas')
+          .select('status, sale_value, product_type')
+          .eq('lead_id', leadId)
+          .maybeSingle(),
+        this.supabase
+          .from('campanha_leads')
+          .select('stage_id, campanha_id, campanha_stages(name)')
+          .eq('lead_id', leadId)
+          .limit(1)
+          .maybeSingle(),
+      ]);
 
-      if (customError) {
-        console.warn('[AgentEngine] Error loading custom fields:', customError.message);
-        // Continuar mesmo sem campos personalizados
+      if (customFieldsRes.error) {
+        console.warn('[AgentEngine] Error loading custom fields:', customFieldsRes.error.message);
       }
 
       // 3. Formatar campos personalizados
       const customFields: Record<string, string> = {};
-      if (customFieldValues && customFieldValues.length > 0) {
-        customFieldValues.forEach((cfv: any) => {
+      if (customFieldsRes.data && customFieldsRes.data.length > 0) {
+        customFieldsRes.data.forEach((cfv: any) => {
           if (cfv.field && cfv.value) {
             customFields[cfv.field.field_name] = cfv.value;
           }
         });
       }
 
+      // 4. Dados de todos os funis
+      const upsellData = upsellRes.data || null;
+      const confirmacaoData = confirmacaoRes.data || null;
+      const propostasData = propostasRes.data || null;
+      const campanhaData = campanhaRes.data || null;
+
       console.log('[AgentEngine] Lead data loaded:', {
         leadId,
         hasBasicData: !!lead,
         customFieldsCount: Object.keys(customFields).length,
+        hasUpsellData: !!upsellData,
+        hasConfirmacaoData: !!confirmacaoData,
+        hasPropostasData: !!propostasData,
+        hasCampanhaData: !!campanhaData,
       });
 
       return {
         ...lead,
         customFields,
+        // Carteira: stages e potencial do cliente
+        upsell_base_stage: upsellData?.tipo_cliente_tempo || null,
+        upsell_gestao_stage: upsellData?.gestao_stage || null,
+        upsell_potencial: upsellData?.potencial || null,
+        upsell_is_active: upsellData?.is_active ?? null,
+        // Confirmação
+        confirmacao_status: confirmacaoData?.status || null,
+        confirmacao_meeting_date: confirmacaoData?.meeting_date || null,
+        confirmacao_is_confirmed: confirmacaoData?.is_confirmed ?? null,
+        // Propostas
+        propostas_status: propostasData?.status || null,
+        propostas_sale_value: propostasData?.sale_value || null,
+        propostas_product_type: propostasData?.product_type || null,
+        // Campanhas
+        campanha_stage: (campanhaData as any)?.campanha_stages?.name || null,
+        campanha_id: campanhaData?.campanha_id || null,
       };
     } catch (e) {
       console.error('[AgentEngine] Failed to load lead data:', e);
@@ -1087,16 +1182,16 @@ Regras:
   }
 
   /**
-   * Carrega etapas do pipeline WhatsApp para a organização (pipeline_stages)
+   * Carrega etapas de TODOS os pipelines da organização (pipeline_stages)
    */
-  private async loadPipelineStages(): Promise<{ stage_key: string; name: string }[]> {
+  private async loadPipelineStages(): Promise<{ stage_key: string; name: string; pipeline_type: string }[]> {
     try {
       const { data, error } = await this.supabase
         .from('pipeline_stages')
-        .select('stage_key, name')
+        .select('stage_key, name, pipeline_type')
         .eq('organization_id', this.organizationId)
-        .eq('pipeline_type', 'whatsapp')
         .eq('is_active', true)
+        .order('pipeline_type', { ascending: true })
         .order('position', { ascending: true });
 
       if (error) {
@@ -1595,7 +1690,8 @@ Regras:
         sections.push("Use as ferramentas qualify_lead, disqualify_lead e advance_stage para mover o lead no funil:");
         sections.push("- qualify_lead: quando o lead reuniu os critérios obrigatórios e está pronto (ex: agendou ou demonstrou fit)");
         sections.push("- disqualify_lead: quando o lead não se encaixa (sem necessidade, fora do perfil, sem orçamento, desistiu)");
-        sections.push("- advance_stage: quando o lead progrediu na jornada (ex: respondeu → qualificado, ou qualquer outra transição de etapa)");
+        sections.push("- advance_stage: quando o lead progrediu na jornada — especifique target_stage e target_pipe (whatsapp, confirmacao, propostas, upsell_base, upsell_gestao, campanha)");
+        sections.push("O lead pode estar em MÚLTIPLOS funis simultaneamente (WhatsApp + Carteira + Confirmação etc). Movimente no funil correto.");
         sections.push("Essencial: movimente o lead conforme a conversa evolui. Não deixe leads qualificados ou desqualificados sem usar a ferramenta.");
         sections.push("");
       }
@@ -1881,7 +1977,24 @@ Regras:
       if (leadData.urgency) sections.push(`- Urgência: ${leadData.urgency}`);
       if (leadData.rating) sections.push(`- Rating/Score: ${leadData.rating}/10`);
       if (leadData.origin) sections.push(`- Origem: ${leadData.origin}`);
-      if (leadData.pipe_whatsapp) sections.push(`- Etapa no funil: ${leadData.pipe_whatsapp}`);
+      if (leadData.pipe_whatsapp) sections.push(`- Etapa no funil WhatsApp: ${leadData.pipe_whatsapp}`);
+      if (leadData.confirmacao_status) {
+        let confirmacaoInfo = `- Etapa no funil Confirmação: ${leadData.confirmacao_status}`;
+        if (leadData.confirmacao_meeting_date) confirmacaoInfo += ` (reunião: ${leadData.confirmacao_meeting_date})`;
+        if (leadData.confirmacao_is_confirmed) confirmacaoInfo += ' [CONFIRMADO]';
+        sections.push(confirmacaoInfo);
+      }
+      if (leadData.propostas_status) {
+        let propostasInfo = `- Etapa no funil Propostas: ${leadData.propostas_status}`;
+        if (leadData.propostas_sale_value) propostasInfo += ` (valor: R$${leadData.propostas_sale_value})`;
+        if (leadData.propostas_product_type) propostasInfo += ` (produto: ${leadData.propostas_product_type})`;
+        sections.push(propostasInfo);
+      }
+      if (leadData.upsell_base_stage) sections.push(`- Etapa na Carteira Base: ${leadData.upsell_base_stage}`);
+      if (leadData.upsell_gestao_stage) sections.push(`- Etapa na Carteira Gestão: ${leadData.upsell_gestao_stage}`);
+      if (leadData.upsell_potencial) sections.push(`- Potencial do cliente: ${leadData.upsell_potencial}`);
+      if (leadData.upsell_is_active === false) sections.push(`- ⚠️ Cliente INATIVO na carteira (possível churn)`);
+      if (leadData.campanha_stage) sections.push(`- Etapa na Campanha: ${leadData.campanha_stage}`);
       if (leadData.notes) sections.push(`- Observações: ${leadData.notes}`);
       
       // Campos personalizados
@@ -1898,28 +2011,54 @@ Regras:
 
     // =====================================================
     // 4.1 REGRAS DA ETAPA ATUAL (Kanban) - contexto por stage
+    // Suporta todos os funis: whatsapp, confirmacao, propostas, upsell_base, upsell_gestao
     // =====================================================
     const kanbanRules = capabilities?.copilot_agent_kanban_rules;
-    const currentStage = leadData?.pipe_whatsapp?.trim();
-    if (kanbanRules && Array.isArray(kanbanRules) && kanbanRules.length > 0 && currentStage) {
-      const rule = kanbanRules.find(
-        (r: { pipe_type?: string; stage_name?: string }) =>
-          r?.pipe_type === 'whatsapp' && r?.stage_name?.toLowerCase() === currentStage?.toLowerCase()
-      );
-      if (rule) {
+    if (kanbanRules && Array.isArray(kanbanRules) && kanbanRules.length > 0) {
+      // Montar mapa de pipe → stage atual do lead
+      const pipeLabels: Record<string, string> = {
+        whatsapp: "WhatsApp",
+        confirmacao: "Confirmação",
+        propostas: "Propostas",
+        upsell_base: "Carteira Base",
+        upsell_gestao: "Carteira Gestão",
+        campanha: "Campanhas",
+      };
+      const currentStages: Array<{ pipe: string; stage: string }> = [];
+      if (leadData?.pipe_whatsapp?.trim()) currentStages.push({ pipe: 'whatsapp', stage: leadData.pipe_whatsapp.trim() });
+      if (leadData?.confirmacao_status?.trim()) currentStages.push({ pipe: 'confirmacao', stage: leadData.confirmacao_status.trim() });
+      if (leadData?.propostas_status?.trim()) currentStages.push({ pipe: 'propostas', stage: leadData.propostas_status.trim() });
+      if (leadData?.upsell_base_stage?.trim()) currentStages.push({ pipe: 'upsell_base', stage: leadData.upsell_base_stage.trim() });
+      if (leadData?.upsell_gestao_stage?.trim()) currentStages.push({ pipe: 'upsell_gestao', stage: leadData.upsell_gestao_stage.trim() });
+      if (leadData?.campanha_stage?.trim()) currentStages.push({ pipe: 'campanha', stage: leadData.campanha_stage.trim() });
+
+      // Encontrar regras que matcham qualquer pipe/stage atual
+      const matchedRules: Array<{ rule: any; pipe: string; stage: string }> = [];
+      for (const cs of currentStages) {
+        const rule = kanbanRules.find(
+          (r: { pipe_type?: string; stage_name?: string }) =>
+            r?.pipe_type === cs.pipe && r?.stage_name?.toLowerCase() === cs.stage.toLowerCase()
+        );
+        if (rule) matchedRules.push({ rule, pipe: cs.pipe, stage: cs.stage });
+      }
+
+      if (matchedRules.length > 0) {
         sections.push("# REGRAS DA ETAPA ATUAL (Kanban)");
         sections.push("");
-        sections.push(`Você está conversando com um lead na etapa "${rule.stage_name}" do funil WhatsApp.`);
-        sections.push("");
-        if (rule.goal) sections.push(`**Objetivo desta etapa:** ${rule.goal}`);
-        if (rule.behavior) sections.push(`**Comportamento esperado:** ${rule.behavior}`);
-        if (rule.allowed_actions && Array.isArray(rule.allowed_actions) && rule.allowed_actions.length > 0) {
-          sections.push(`**Ações permitidas:** ${rule.allowed_actions.join(", ")}`);
+        for (const { rule, pipe, stage } of matchedRules) {
+          const pipeLabel = pipeLabels[pipe] || pipe;
+          sections.push(`Você está conversando com um lead na etapa "${rule.stage_name}" do funil ${pipeLabel}.`);
+          sections.push("");
+          if (rule.goal) sections.push(`**Objetivo desta etapa:** ${rule.goal}`);
+          if (rule.behavior) sections.push(`**Comportamento esperado:** ${rule.behavior}`);
+          if (rule.allowed_actions && Array.isArray(rule.allowed_actions) && rule.allowed_actions.length > 0) {
+            sections.push(`**Ações permitidas:** ${rule.allowed_actions.join(", ")}`);
+          }
+          if (rule.forbidden_actions && Array.isArray(rule.forbidden_actions) && rule.forbidden_actions.length > 0) {
+            sections.push(`**Ações proibidas:** ${rule.forbidden_actions.join(", ")}`);
+          }
+          sections.push("");
         }
-        if (rule.forbidden_actions && Array.isArray(rule.forbidden_actions) && rule.forbidden_actions.length > 0) {
-          sections.push(`**Ações proibidas:** ${rule.forbidden_actions.join(", ")}`);
-        }
-        sections.push("");
         sections.push("Siga rigorosamente estas regras ao decidir sua próxima resposta.");
         sections.push("");
       }
@@ -1962,7 +2101,7 @@ Regras:
   private buildDynamicTools(
     capabilities: any,
     orgCustomFields: { field_name: string }[] = [],
-    pipelineStages: { stage_key: string; name: string }[] = []
+    pipelineStages: { stage_key: string; name: string; pipeline_type: string }[] = []
   ) {
     const tools: any[] = [];
 
@@ -2069,16 +2208,38 @@ Regras:
           required: [],
         },
       });
-      const stageKeys = pipelineStages.length > 0
-        ? pipelineStages.map((s) => s.stage_key).join(', ')
-        : 'novo, abordado, respondeu, esfriou, agendado';
+      // Agrupar etapas por pipeline para mostrar ao LLM
+      const pipeLabelsForTool: Record<string, string> = {
+        whatsapp: 'WhatsApp',
+        confirmacao: 'Confirmação',
+        propostas: 'Propostas',
+        upsell_base: 'Carteira Base',
+        upsell_gestao: 'Carteira Gestão',
+        campanha: 'Campanhas',
+      };
+      let stageDescription = '';
+      if (pipelineStages.length > 0) {
+        const grouped: Record<string, string[]> = {};
+        for (const s of pipelineStages) {
+          const key = s.pipeline_type || 'whatsapp';
+          if (!grouped[key]) grouped[key] = [];
+          grouped[key].push(s.stage_key);
+        }
+        const parts = Object.entries(grouped).map(([pipe, stages]) =>
+          `${pipeLabelsForTool[pipe] || pipe}: ${stages.join(', ')}`
+        );
+        stageDescription = parts.join(' | ');
+      } else {
+        stageDescription = 'WhatsApp: novo, abordado, respondeu, esfriou, agendado';
+      }
       tools.push({
         name: 'advance_stage',
-        description: `Avança o lead para outra etapa do funil. Etapas disponíveis: ${stageKeys}. Use quando o lead progredir na jornada.`,
+        description: `Avança o lead para outra etapa do funil. Etapas disponíveis por funil: ${stageDescription}. Use quando o lead progredir na jornada.`,
         input_schema: {
           type: 'object',
           properties: {
-            target_stage: { type: 'string', description: `Etapa de destino (um de: ${stageKeys})` },
+            target_stage: { type: 'string', description: 'Etapa de destino' },
+            target_pipe: { type: 'string', description: `Funil de destino (whatsapp, confirmacao, propostas, upsell_base, upsell_gestao, campanha). Padrão: whatsapp`, enum: ['whatsapp', 'confirmacao', 'propostas', 'upsell_base', 'upsell_gestao', 'campanha'] },
           },
           required: ['target_stage'],
         },
@@ -2834,32 +2995,79 @@ Regras:
   }
 
   private async executeAdvanceStage(params: any, tenantId: string) {
-    const { lead_id, target_stage } = params;
+    const { lead_id, target_stage, target_pipe } = params;
     if (!lead_id || !target_stage) {
       return { success: false, error: 'lead_id e target_stage são obrigatórios' };
     }
 
+    const pipe = target_pipe || 'whatsapp';
+    const normalizedStage = String(target_stage).trim().toLowerCase();
+
+    // Validar etapa contra pipeline_stages
     const { data: stages } = await this.supabase
       .from('pipeline_stages')
       .select('stage_key')
       .eq('organization_id', tenantId)
-      .eq('pipeline_type', 'whatsapp')
+      .eq('pipeline_type', pipe)
       .eq('is_active', true);
 
     const validKeys = (stages || []).map((s: { stage_key: string }) => s.stage_key);
-    const stageKeys = validKeys.length > 0 ? validKeys : ['novo', 'abordado', 'respondeu', 'esfriou', 'agendado'];
+    // Fallback para whatsapp default stages
+    const stageKeys = validKeys.length > 0 ? validKeys : (pipe === 'whatsapp' ? ['novo', 'abordado', 'respondeu', 'esfriou', 'agendado'] : []);
 
-    const normalizedStage = String(target_stage).trim().toLowerCase();
-    if (!stageKeys.some((k: string) => k.toLowerCase() === normalizedStage)) {
-      return { success: false, error: `Etapa inválida. Use um de: ${stageKeys.join(', ')}` };
+    if (stageKeys.length > 0 && !stageKeys.some((k: string) => k.toLowerCase() === normalizedStage)) {
+      return { success: false, error: `Etapa inválida para funil ${pipe}. Use um de: ${stageKeys.join(', ')}` };
     }
 
     const finalStage = stageKeys.find((k: string) => k.toLowerCase() === normalizedStage) || normalizedStage;
 
-    await this.supabase.from('leads').update({ pipe_whatsapp: finalStage }).eq('id', lead_id);
-    await this.upsertPipeWhatsapp(lead_id, tenantId, finalStage);
+    // Executar a movimentação no funil correto
+    switch (pipe) {
+      case 'whatsapp':
+        await this.supabase.from('leads').update({ pipe_whatsapp: finalStage }).eq('id', lead_id);
+        await this.upsertPipeWhatsapp(lead_id, tenantId, finalStage);
+        break;
+      case 'confirmacao':
+      case 'propostas':
+        await this.executeMoveToPipe(lead_id, pipe, finalStage);
+        break;
+      case 'upsell_base':
+        await this.supabase
+          .from('upsell_clients')
+          .update({ tipo_cliente_tempo: finalStage })
+          .eq('lead_id', lead_id);
+        break;
+      case 'upsell_gestao':
+        await this.supabase
+          .from('upsell_clients')
+          .update({ gestao_stage: finalStage })
+          .eq('lead_id', lead_id);
+        break;
+      case 'campanha': {
+        // Para campanhas, buscar o stage_id e atualizar o campanha_leads
+        const { data: campStage } = await this.supabase
+          .from('campanha_stages')
+          .select('id')
+          .ilike('name', finalStage)
+          .limit(1)
+          .maybeSingle();
+        if (campStage) {
+          await this.supabase
+            .from('campanha_leads')
+            .update({ stage_id: campStage.id })
+            .eq('lead_id', lead_id);
+        }
+        break;
+      }
+      default:
+        return { success: false, error: `Funil não suportado: ${pipe}` };
+    }
 
-    return { success: true, message: `Lead movido para ${finalStage}`, target_stage: finalStage };
+    const pipeLabels: Record<string, string> = {
+      whatsapp: 'WhatsApp', confirmacao: 'Confirmação', propostas: 'Propostas',
+      upsell_base: 'Carteira Base', upsell_gestao: 'Carteira Gestão', campanha: 'Campanhas',
+    };
+    return { success: true, message: `Lead movido para ${finalStage} no funil ${pipeLabels[pipe] || pipe}`, target_stage: finalStage, target_pipe: pipe };
   }
 
   /**
