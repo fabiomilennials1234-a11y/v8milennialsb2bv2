@@ -48,25 +48,52 @@ import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
 // HELPER: Build system prompt from playground data
 // =============================================================
 
-function buildSystemPrompt(data: PlaygroundData): string {
-  let prompt = data.prompt;
+/**
+ * Resolve @menções no prompt, substituindo por instruções que o LLM entende.
+ * - @TOOL_ID → instrução de uso da ferramenta (se ativa) ou nome legível
+ * - @link_id → alias (URL)
+ * - @doc_id → referência ao documento
+ */
+function resolveMentions(prompt: string, data: PlaygroundData): string {
+  let resolved = prompt;
 
-  // Resolve @mentions — tools become structured instructions
+  // Resolve @mentions de tools
   for (const toolDef of PLAYGROUND_TOOLS) {
     const state = data.tools[toolDef.id];
-    if (!state?.enabled) continue;
-
     const mentionRegex = new RegExp(`@${toolDef.id}`, "g");
-    // Keep the @mention in the prompt text — it will be part of the instruction
-    // The actual tool availability is handled by the tool definitions sent to the LLM
+
+    if (state?.enabled) {
+      resolved = resolved.replace(mentionRegex, `[usar ferramenta "${toolDef.name}"]`);
+    } else {
+      resolved = resolved.replace(mentionRegex, toolDef.name);
+    }
   }
 
-  // Append links as available resources
+  // Resolve @mentions de links — substituir pelo link real
+  for (const link of data.links) {
+    const linkMentionRegex = new RegExp(`@${link.id}`, "g");
+    resolved = resolved.replace(linkMentionRegex, `${link.alias} (${link.url})`);
+  }
+
+  // Resolve @mentions de documentos
+  for (const doc of data.documents) {
+    const docMentionRegex = new RegExp(`@${doc.id}`, "g");
+    resolved = resolved.replace(docMentionRegex, `[documento: ${doc.name}]`);
+  }
+
+  return resolved;
+}
+
+function buildSystemPrompt(data: PlaygroundData): string {
+  let prompt = resolveMentions(data.prompt, data);
+
+  // Append links como recursos disponíveis para enviar
   if (data.links.length > 0) {
     prompt += "\n\n## Links disponiveis para enviar ao lead:\n";
     for (const link of data.links) {
       prompt += `- ${link.alias}: ${link.url}\n`;
     }
+    prompt += "\nIMPORTANTE: Quando relevante, envie o link completo na mensagem para o lead poder clicar.\n";
   }
 
   return prompt;
@@ -119,7 +146,7 @@ function playgroundToAgentPayload(data: PlaygroundData) {
       max_conversation_turns: 20,
       business_context: {},
       conversation_style: {},
-      custom_instructions: data.prompt,
+      custom_instructions: resolveMentions(data.prompt, data),
     },
     faqs: [],
     kanbanRules: [],
@@ -464,7 +491,7 @@ function createWizardDataFromPlayground(data: PlaygroundData): any {
       onNeedHuman: { moveToStage: "", moveToPipe: null, addTags: [], notifyUserId: null, sendMessage: false, messageTemplate: "" },
     },
     followupRules: [],
-    customInstructions: { dos: data.prompt, donts: "" },
+    customInstructions: { dos: resolveMentions(data.prompt, data), donts: "" },
     knowledgeBaseFiles: [],
     canQualifyLead: data.tools.QUALIFICAR_LEAD?.enabled ?? false,
     canScheduleMeeting: data.tools.AGENDAR_REUNIAO?.enabled ?? false,
