@@ -63,25 +63,22 @@ const POTENCIAL_ALIASES: Record<string, string> = {
   vip: "estrategico",
 };
 
-/** Labels amigáveis para os campos do sistema */
-const FIELD_LABELS: Record<string, string> = {
-  name: "Nome",
-  company: "Empresa",
-  email: "Email",
-  phone: "Telefone",
-  faturamento: "Faturamento",
-  segment: "Segmento",
-  notes: "Notas",
-  rating: "Prioridade",
-  origin: "Origem",
-  stage: "Etapa",
-  vendedor: "Vendedor",
-  temperatura: "Temperatura",
-  valor: "Valor",
-  produto: "Produto",
-  potencial: "Potencial",
-  data_primeira_venda: "Data Primeira Venda",
-};
+/** Campos importantes para importação de clientes da carteira, na ordem que aparecem na tela */
+const UPSELL_SYSTEM_FIELDS: { key: string; label: string; required?: boolean }[] = [
+  { key: "name", label: "Nome", required: true },
+  { key: "company", label: "Empresa" },
+  { key: "email", label: "Email" },
+  { key: "phone", label: "Telefone" },
+  { key: "potencial", label: "Potencial" },
+  { key: "data_primeira_venda", label: "Data Primeira Venda" },
+  { key: "vendedor", label: "Vendedor / Responsável" },
+  { key: "stage", label: "Etapa" },
+  { key: "faturamento", label: "Faturamento" },
+  { key: "segment", label: "Segmento" },
+  { key: "notes", label: "Notas / Observações" },
+  { key: "origin", label: "Origem" },
+  { key: "rating", label: "Prioridade" },
+];
 
 interface PreviewClient {
   name: string;
@@ -134,12 +131,14 @@ export function ImportUpsellClientsContent({
   const memberOptions = (members || []).map((m) => ({ id: m.id, name: m.name || "" }));
   const defaultStage = stages.find((s) => s.position === 0) || stages[0];
 
-  const allKnownFields = [...KNOWN_LEAD_FIELDS, ...UPSELL_EXTRA_FIELDS];
+  /** Colunas do arquivo detectadas */
+  const [fileColumns, setFileColumns] = useState<string[]>([]);
 
   const normalizeCol = (s: string) =>
     s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 
-  /** Carrega preview de uma aba específica e vai direto para mapeamento */
+  /** Carrega preview de uma aba específica e vai direto para mapeamento.
+   *  O mapeamento agora é INVERTIDO: campo do sistema → coluna do arquivo. */
   const loadSheetPreview = useCallback(
     async (targetFile: File, sheet?: string) => {
       try {
@@ -152,50 +151,53 @@ export function ImportUpsellClientsContent({
         const sampleRows = rows.slice(0, 5);
         setSampleData(sampleRows);
         setTotalClients(rows.length);
+        setFileColumns(columns);
 
-        // Build suggested mapping using known aliases + upsell aliases
-        const suggestedMapping: Record<string, string> = {};
+        // Build suggested mapping: coluna arquivo → campo sistema (para inverter depois)
+        const colToField: Record<string, string> = {};
         const preview = await parseFilePreview(targetFile);
-
-        // Merge standard suggestions
         for (const col of columns) {
           if (preview.suggestedMapping[col]) {
-            suggestedMapping[col] = preview.suggestedMapping[col];
+            colToField[col] = preview.suggestedMapping[col];
           }
         }
-
-        // Add upsell-specific aliases
         for (const col of columns) {
           const norm = normalizeCol(col);
-          if (!suggestedMapping[col] && UPSELL_HEADER_ALIASES[norm]) {
-            suggestedMapping[col] = UPSELL_HEADER_ALIASES[norm];
+          if (!colToField[col] && UPSELL_HEADER_ALIASES[norm]) {
+            colToField[col] = UPSELL_HEADER_ALIASES[norm];
           }
         }
 
-        // Pre-fill user mapping with suggestions
+        // Inverter: campo sistema → coluna arquivo
+        const fieldToCol: Record<string, string> = {};
+        for (const [col, field] of Object.entries(colToField)) {
+          if (!fieldToCol[field]) {
+            fieldToCol[field] = col;
+          }
+        }
+
+        // Pre-fill: cada campo do sistema → coluna sugerida ou "none"
         const initialMapping: Record<string, string> = {};
-        for (const col of columns) {
-          initialMapping[col] = suggestedMapping[col] || "ignore";
+        for (const { key } of UPSELL_SYSTEM_FIELDS) {
+          initialMapping[key] = fieldToCol[key] || "none";
         }
 
         setPreviewResult({
           columns,
           sampleRows,
-          suggestedMapping,
-          unmappedColumns: columns.filter((c) => !suggestedMapping[c]),
-          knownFields: [...allKnownFields],
+          suggestedMapping: colToField,
+          unmappedColumns: columns.filter((c) => !colToField[c]),
+          knownFields: [],
           totalRows: rows.length,
         });
         setUserColumnMapping(initialMapping);
-
-        // Always go to map_columns so user can review/adjust
         setStep("map_columns");
       } catch (error) {
         console.error("Error loading sheet:", error);
         toast.error("Erro ao processar a aba selecionada");
       }
     },
-    [allKnownFields]
+    []
   );
 
   const handleFileSelect = useCallback(
@@ -312,23 +314,28 @@ export function ImportUpsellClientsContent({
     return defaultKey;
   };
 
-  /** Verifica se pelo menos a coluna "name" está mapeada */
-  const hasNameMapped = Object.values(userColumnMapping).includes("name");
+  /** Verifica se o campo "name" está mapeado a uma coluna do arquivo */
+  const hasNameMapped = userColumnMapping["name"] != null && userColumnMapping["name"] !== "none";
+
+  /** Converte mapeamento invertido (campo→coluna) para o formato que parseCSV espera (coluna→campo) */
+  const buildColToFieldMapping = (): Record<string, string> => {
+    const mapping: Record<string, string> = {};
+    for (const [field, col] of Object.entries(userColumnMapping)) {
+      if (col && col !== "none") {
+        mapping[col] = field;
+      }
+    }
+    return mapping;
+  };
 
   const handleContinueToPreview = async () => {
     if (!hasNameMapped) {
-      toast.error("Mapeie pelo menos a coluna Nome para continuar");
+      toast.error("Mapeie pelo menos o campo Nome para continuar");
       return;
     }
     try {
-      // Build the final mapping (only non-ignored)
-      const finalMapping: Record<string, string> = {};
-      for (const [col, field] of Object.entries(userColumnMapping)) {
-        if (field && field !== "ignore") {
-          finalMapping[col] = field;
-        }
-      }
-      const leads = await parseCSV(file!, Object.keys(finalMapping).length ? finalMapping : undefined);
+      const colToField = buildColToFieldMapping();
+      const leads = await parseCSV(file!, Object.keys(colToField).length ? colToField : undefined);
       setTotalClients(leads.length);
       setPreviewClients(
         leads.slice(0, 10).map((l) => ({
@@ -341,7 +348,7 @@ export function ImportUpsellClientsContent({
       setSelectedStageKey(defaultStage?.stage_key ?? "");
       setStep("preview");
     } catch {
-      toast.error("Erro ao processar arquivo. Verifique se a coluna Nome está mapeada corretamente.");
+      toast.error("Erro ao processar arquivo. Verifique se o campo Nome está mapeado corretamente.");
     }
   };
 
@@ -355,13 +362,8 @@ export function ImportUpsellClientsContent({
     setProgress(0);
 
     try {
-      const finalMapping: Record<string, string> = {};
-      for (const [col, field] of Object.entries(userColumnMapping)) {
-        if (field && field !== "ignore") {
-          finalMapping[col] = field;
-        }
-      }
-      const leads = await parseCSV(file, Object.keys(finalMapping).length ? finalMapping : undefined);
+      const colToField = buildColToFieldMapping();
+      const leads = await parseCSV(file, Object.keys(colToField).length ? colToField : undefined);
 
       if (leads.length === 0) {
         throw new Error("Nenhum cliente válido encontrado");
@@ -370,14 +372,14 @@ export function ImportUpsellClientsContent({
       // Get raw rows to extract upsell-specific fields
       const rawRows = await parseFileToRows(file, selectedSheet || undefined);
 
-      // Build mapping for upsell fields from user mapping
+      // Build mapping for upsell fields: coluna arquivo → campo upsell
       const upsellFieldMap: Record<string, string> = {};
-      for (const [col, field] of Object.entries(userColumnMapping)) {
-        if (field && field !== "ignore" && (UPSELL_EXTRA_FIELDS as readonly string[]).includes(field)) {
+      for (const [field, col] of Object.entries(userColumnMapping)) {
+        if (col && col !== "none" && (UPSELL_EXTRA_FIELDS as readonly string[]).includes(field)) {
           upsellFieldMap[col] = field;
         }
       }
-      // Also check raw column aliases
+      // Also check raw column aliases for unmapped
       if (rawRows.length > 0) {
         const cols = Object.keys(rawRows[0]);
         for (const col of cols) {
@@ -562,6 +564,7 @@ export function ImportUpsellClientsContent({
     setPreviewResult(null);
     setUserColumnMapping({});
     setSampleData([]);
+    setFileColumns([]);
     setSelectedStageKey("");
     setSelectedCloserId("");
     setSelectedPotencial("medio");
@@ -572,8 +575,8 @@ export function ImportUpsellClientsContent({
 
   const pipeLabel = pipeType === "upsell_base" ? "Carteira Base" : "Carteira Gestão";
 
-  // Count mapped columns (non-ignored)
-  const mappedCount = Object.values(userColumnMapping).filter((v) => v && v !== "ignore").length;
+  // Count mapped fields (non-none)
+  const mappedCount = Object.values(userColumnMapping).filter((v) => v && v !== "none").length;
 
   return (
     <AnimatePresence mode="wait">
@@ -681,7 +684,7 @@ export function ImportUpsellClientsContent({
       )}
 
       {/* ========== STEP: MAP COLUMNS ========== */}
-      {step === "map_columns" && previewResult && (
+      {step === "map_columns" && (
         <motion.div
           key="map_columns"
           initial={{ opacity: 0, y: 10 }}
@@ -693,54 +696,62 @@ export function ImportUpsellClientsContent({
             <FileSpreadsheet className="w-6 h-6 text-primary" />
             <div>
               <p className="font-medium text-sm">{file?.name}{selectedSheet && selectedSheet !== "CSV" ? ` — ${selectedSheet}` : ""}</p>
-              <p className="text-xs text-muted-foreground">{totalClients} linhas • {previewResult.columns.length} colunas • {mappedCount} mapeadas</p>
+              <p className="text-xs text-muted-foreground">{totalClients} linhas • {fileColumns.length} colunas na planilha • {mappedCount} campos mapeados</p>
             </div>
           </div>
 
           <div className="flex items-start gap-3 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
             <AlertTriangle className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
             <div>
-              <p className="font-medium text-sm text-blue-800 dark:text-blue-200">Mapeie as colunas</p>
+              <p className="font-medium text-sm text-blue-800 dark:text-blue-200">Mapeie os campos</p>
               <p className="text-xs text-muted-foreground mt-1">
-                Escolha qual campo do sistema corresponde a cada coluna da planilha. <strong>Nome</strong> é obrigatório. As demais podem ser ignoradas.
+                Para cada campo do sistema, escolha qual coluna da planilha contém o dado. <strong>Nome</strong> é obrigatório.
               </p>
             </div>
           </div>
 
           <div className="space-y-2">
-            <Label>Mapeamento das colunas</Label>
-            <ScrollArea className="h-64 rounded-lg border">
-              <div className="p-3 space-y-2">
-                {previewResult.columns.map((col) => {
-                  const sample = sampleData[0]?.[col] || "";
-                  const currentValue = userColumnMapping[col] ?? "ignore";
+            <Label>Campos do sistema → Coluna da planilha</Label>
+            <ScrollArea className="h-72 rounded-lg border">
+              <div className="p-3 space-y-2.5">
+                {UPSELL_SYSTEM_FIELDS.map(({ key, label, required }) => {
+                  const selectedCol = userColumnMapping[key] || "none";
+                  const sample = selectedCol !== "none" ? sampleData[0]?.[selectedCol] : undefined;
                   return (
-                    <div key={col} className="flex items-center gap-2">
-                      <div className="shrink-0 w-[180px]">
-                        <p className="text-sm font-medium truncate" title={col}>{col}</p>
+                    <div key={key} className="flex items-center gap-2">
+                      <div className="shrink-0 w-[170px]">
+                        <p className="text-sm font-medium">
+                          {label}
+                          {required && <span className="text-red-500 ml-0.5">*</span>}
+                        </p>
+                      </div>
+                      <span className="text-muted-foreground text-xs shrink-0">←</span>
+                      <div className="flex-1 min-w-0">
+                        <Select
+                          value={selectedCol}
+                          onValueChange={(v) => setUserColumnMapping((prev) => ({ ...prev, [key]: v }))}
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Selecionar coluna..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">— Não mapear —</SelectItem>
+                            {fileColumns.map((col) => {
+                              const colSample = sampleData[0]?.[col] || "";
+                              return (
+                                <SelectItem key={col} value={col}>
+                                  {col}{colSample ? ` (ex: ${colSample.slice(0, 30)})` : ""}
+                                </SelectItem>
+                              );
+                            })}
+                          </SelectContent>
+                        </Select>
                         {sample && (
-                          <p className="text-xs text-muted-foreground truncate" title={sample}>
+                          <p className="text-xs text-muted-foreground mt-0.5 truncate pl-1" title={sample}>
                             ex: {sample}
                           </p>
                         )}
                       </div>
-                      <span className="text-muted-foreground text-xs shrink-0">→</span>
-                      <Select
-                        value={currentValue}
-                        onValueChange={(v) => setUserColumnMapping((prev) => ({ ...prev, [col]: v }))}
-                      >
-                        <SelectTrigger className="w-[200px]">
-                          <SelectValue placeholder="Escolher..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="ignore">Ignorar</SelectItem>
-                          {allKnownFields.map((field) => (
-                            <SelectItem key={field} value={field}>
-                              {FIELD_LABELS[field] || field}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
                     </div>
                   );
                 })}
@@ -752,7 +763,7 @@ export function ImportUpsellClientsContent({
             <div className="flex items-start gap-2 p-2 bg-red-500/10 border border-red-500/30 rounded-lg">
               <XCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
               <p className="text-xs text-red-700 dark:text-red-300">
-                Mapeie pelo menos uma coluna como <strong>Nome</strong> para continuar.
+                Mapeie o campo <strong>Nome</strong> a uma coluna da planilha para continuar.
               </p>
             </div>
           )}
