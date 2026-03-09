@@ -171,8 +171,8 @@ export function LeadModal({
     faturamento: lead?.faturamento || "",
     urgency: lead?.urgency || "",
     notes: lead?.notes || "",
-    sdr_id: lead?.sdr_id || defaultSdrId || null,
-    closer_id: lead?.closer_id || defaultCloserId || null,
+    sdr_id: lead?.sdr_id || lead?.sdr?.id || defaultSdrId || null,
+    closer_id: lead?.closer_id || lead?.closer?.id || defaultCloserId || null,
   }));
 
   const [customValues, setCustomValues] = useState<Record<string, string>>({});
@@ -331,8 +331,8 @@ export function LeadModal({
         faturamento: lead?.faturamento || "",
         urgency: lead?.urgency || "",
         notes: lead?.notes || "",
-        sdr_id: lead?.sdr_id || defaultSdrId || null,
-        closer_id: lead?.closer_id || defaultCloserId || null,
+        sdr_id: lead?.sdr_id || lead?.sdr?.id || defaultSdrId || null,
+        closer_id: lead?.closer_id || lead?.closer?.id || defaultCloserId || null,
       });
     }
   }, [open, lead, defaultSdrId, defaultCloserId]);

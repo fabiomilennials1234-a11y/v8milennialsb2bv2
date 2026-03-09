@@ -37,7 +37,7 @@ export function usePipePropostas() {
         .select(`
           *,
           lead:leads(
-            id, name, company, email, phone, rating, origin, segment, faturamento, ai_disabled,
+            id, name, company, email, phone, rating, origin, segment, faturamento, ai_disabled, sdr_id, closer_id,
             sdr:team_members!leads_sdr_id_fkey(id, name),
             closer:team_members!leads_closer_id_fkey(id, name),
             lead_tags(tag:tags(id, name, color))
