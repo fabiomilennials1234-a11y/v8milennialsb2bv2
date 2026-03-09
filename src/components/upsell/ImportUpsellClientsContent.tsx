@@ -14,10 +14,12 @@ import { usePipelineStages } from "@/hooks/usePipelineStages";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
 import { useOrganization } from "@/hooks/useOrganization";
 import { supabase } from "@/integrations/supabase/client";
+import { downloadUpsellImportTemplate } from "@/lib/upsellImportTemplate";
 import { toast } from "sonner";
 import {
   Upload,
   FileSpreadsheet,
+  FileDown,
   CheckCircle2,
   XCircle,
   AlertCircle,
@@ -487,9 +489,18 @@ export function ImportUpsellClientsContent({
             onChange={(e) => e.target.files?.[0] && handleFileSelect(e.target.files[0])}
             className="hidden"
           />
-          <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
-            Selecionar arquivo
-          </Button>
+          <div className="flex items-center gap-3 flex-wrap">
+            <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
+              Selecionar arquivo
+            </Button>
+            <Button variant="ghost" size="sm" className="text-primary gap-2" onClick={downloadUpsellImportTemplate}>
+              <FileDown className="w-4 h-4" />
+              Baixar modelo
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            O modelo traz as colunas certas e uma aba <strong>Instruções</strong> com passos e o que preencher em cada campo.
+          </p>
           <div className="p-3 bg-muted/50 rounded-lg">
             <p className="text-xs text-muted-foreground">
               Colunas reconhecidas: <strong>Nome, Empresa, Email, Telefone, Potencial, Data Primeira Venda, Vendedor/Responsável, Etapa</strong>.
