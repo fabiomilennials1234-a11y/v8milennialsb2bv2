@@ -96,7 +96,8 @@ function buildIdentityLayer(
   sections: string[],
   agent: CopilotAgent,
   businessContext: Record<string, any>,
-  hideAiIdentity?: boolean
+  hideAiIdentity?: boolean,
+  conversationStyle: Record<string, any> = {}
 ) {
   // 1.1 Identidade
   sections.push("# IDENTIDADE DO AGENTE");
@@ -767,7 +768,7 @@ export function generatePrompt(
   const hideAiIdentity = conversationStyle.hideAiIdentity === true;
 
   // Camada 1 — Identidade
-  buildIdentityLayer(sections, agent, businessContext, hideAiIdentity);
+  buildIdentityLayer(sections, agent, businessContext, hideAiIdentity, conversationStyle);
 
   // Camada 2 — Conhecimento
   buildKnowledgeLayer(
