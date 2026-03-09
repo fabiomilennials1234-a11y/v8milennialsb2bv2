@@ -34,14 +34,14 @@ Deno.serve(async (req) => {
     if (!recipientId || !channel || (!message && !mediaUrl)) {
       return new Response(
         JSON.stringify({ error: "recipientId, channel, e message/mediaUrl sao obrigatorios" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     if (channel !== "messenger" && channel !== "instagram") {
       return new Response(
         JSON.stringify({ error: "channel deve ser 'messenger' ou 'instagram'" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -68,7 +68,7 @@ Deno.serve(async (req) => {
     if (pageError || !page) {
       return new Response(
         JSON.stringify({ error: "Pagina Meta nao encontrada ou inativa" }),
-        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -125,7 +125,7 @@ Deno.serve(async (req) => {
     console.error("[send-meta-message] Error:", errorMessage);
     return new Response(
       JSON.stringify({ error: errorMessage }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });

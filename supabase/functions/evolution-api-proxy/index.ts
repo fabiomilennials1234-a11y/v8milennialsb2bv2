@@ -126,6 +126,8 @@ serve(async (req) => {
         message: errorMessage,
       });
 
+      // Retornar 200 para que supabase.functions.invoke entregue o body ao cliente.
+      // Se retornar non-2xx, o Supabase SDK engole a resposta e exibe erro genérico.
       return new Response(
         JSON.stringify({
           error: errorMessage,
@@ -133,7 +135,7 @@ serve(async (req) => {
           details: responseData,
         }),
         {
-          status: response.status,
+          status: 200,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         }
       );

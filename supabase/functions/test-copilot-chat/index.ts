@@ -46,7 +46,7 @@ Deno.serve(async (req) => {
     if (!OPENROUTER_API_KEY) {
       return new Response(
         JSON.stringify({ error: "OpenRouter API key not configured" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -83,7 +83,7 @@ Deno.serve(async (req) => {
     if (!systemPrompt || systemPrompt.trim().length < 20) {
       return new Response(
         JSON.stringify({ error: "systemPrompt is required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -127,7 +127,7 @@ Deno.serve(async (req) => {
         console.error("OpenRouter error (first message):", errText);
         return new Response(
           JSON.stringify({ error: "Failed to generate first message" }),
-          { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
@@ -154,7 +154,7 @@ Deno.serve(async (req) => {
     if (!userMessage || userMessage.trim().length === 0) {
       return new Response(
         JSON.stringify({ error: "userMessage is required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
