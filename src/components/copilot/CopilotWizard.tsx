@@ -79,15 +79,15 @@ const wizardSchema = z.object({
     compliancePolicy: z.string().optional().or(z.literal("")),
   }),
   conversationStyle: z.object({
-    responseLength: z.enum(["curto", "medio", "detalhado"]),
-    maxQuestions: z.enum(["1", "2"]),
-    emojiPolicy: z.enum(["nunca", "raro", "moderado"]),
+    responseLength: z.enum(["curto", "medio", "detalhado"]).optional().default("curto"),
+    maxQuestions: z.enum(["1", "2"]).optional().default("1"),
+    emojiPolicy: z.enum(["nunca", "raro", "moderado"]).optional().default("raro"),
     openingStyle: z.string().optional().or(z.literal("")),
     closingStyle: z.string().optional().or(z.literal("")),
     whatsappGuidelines: z.string().optional().or(z.literal("")),
     humanizationTips: z.string().optional().or(z.literal("")),
     hideAiIdentity: z.boolean().optional().default(false),
-  }),
+  }).optional().default({}),
   qualification: z.object({
     requiredFields: z.array(z.string()).min(1, "Selecione ao menos 1 campo obrigatório"),
     optionalFields: z.array(z.string()),
@@ -728,6 +728,11 @@ export function CopilotWizard() {
       agentPayload.max_conversation_turns = data.maxConversationTurns ?? 20;
       agentPayload.response_delay_ms = data.responseDelayMs ?? 1000;
       agentPayload.llm_temperature_mode = data.llmTemperatureMode ?? 'balanceado';
+
+      // Mensagens Naturais
+      agentPayload.natural_messaging_config = data.naturalMessagingEnabled
+        ? { enabled: true, intensity: data.naturalMessagingIntensity ?? 'natural' }
+        : null;
 
       // Filtrar regras desativadas pelo usuário no funil de confirmação
       const activeKanbanRules = (data.kanbanRules || [])

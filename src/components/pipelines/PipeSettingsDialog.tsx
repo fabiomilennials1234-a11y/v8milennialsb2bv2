@@ -15,6 +15,7 @@ import { ExportLeadsContent } from "@/components/leads/ExportLeadsModal";
 import { PipeDispatchRulesSection } from "./PipeDispatchRulesSection";
 import { PipeDistributionSection } from "./PipeDistributionSection";
 import { UpsellStageRulesTab } from "@/components/upsell/UpsellStageRulesTab";
+import { ImportUpsellClientsContent } from "@/components/upsell/ImportUpsellClientsContent";
 
 const PIPE_LABELS: Record<PipelineType, string> = {
   whatsapp: "Qualificação",
@@ -50,8 +51,8 @@ export function PipeSettingsDialog({
   const isUpsell = isUpsellBase || isUpsellGestao;
   const destination = PIPE_TO_DESTINATION[pipeType];
 
-  // upsell_base: Etapas + Regras (2 tabs). upsell_gestao: Etapas only (1 tab). Others: 6 tabs.
-  const tabCount = isUpsellGestao ? 1 : isUpsellBase ? 2 : 6;
+  // upsell_base: Etapas + Regras + Importar (3 tabs). upsell_gestao: Etapas + Importar (2 tabs). Others: 6 tabs.
+  const tabCount = isUpsellGestao ? 2 : isUpsellBase ? 3 : 6;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -73,6 +74,12 @@ export function PipeSettingsDialog({
               <TabsTrigger value="regras" className="gap-1.5 text-xs">
                 <Clock className="w-3.5 h-3.5" />
                 Regras
+              </TabsTrigger>
+            )}
+            {isUpsell && (
+              <TabsTrigger value="importar" className="gap-1.5 text-xs">
+                <Upload className="w-3.5 h-3.5" />
+                Importar
               </TabsTrigger>
             )}
             {!isUpsell && (
@@ -112,6 +119,12 @@ export function PipeSettingsDialog({
             {isUpsellBase && (
               <TabsContent value="regras" className="mt-0">
                 <UpsellStageRulesTab stages={stages} />
+              </TabsContent>
+            )}
+
+            {isUpsell && (
+              <TabsContent value="importar" className="mt-0">
+                <ImportUpsellClientsContent pipeType={pipeType as "upsell_base" | "upsell_gestao"} />
               </TabsContent>
             )}
 

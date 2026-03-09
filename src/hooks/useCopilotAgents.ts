@@ -782,6 +782,9 @@ export function useCopilotAgentForEdit(agentId?: string) {
         responseDelayMs: (agent as any).response_delay_ms ?? 1000,
         attendUnknownContacts: (agent as any).attend_unknown_contacts ?? false,
         llmTemperatureMode: ((agent as any).llm_temperature_mode as 'criativo' | 'balanceado' | 'preciso') ?? 'balanceado',
+        // Mensagens Naturais
+        naturalMessagingEnabled: ((agent as any).natural_messaging_config as any)?.enabled ?? false,
+        naturalMessagingIntensity: ((agent as any).natural_messaging_config as any)?.intensity ?? 'natural',
         // Wizard v3 — novos campos livres (armazenados em JSONB)
         personaDescription: conversationStyle.personaDescription || "",
         skillsAndTopics: businessContext.skillsAndTopics || "",
@@ -870,6 +873,11 @@ export function useUpdateCopilotAgentFromWizard() {
       agentUpdate.max_conversation_turns = data.maxConversationTurns ?? 20;
       agentUpdate.response_delay_ms = data.responseDelayMs ?? 1000;
       (agentUpdate as any).llm_temperature_mode = data.llmTemperatureMode ?? 'balanceado';
+
+      // Mensagens Naturais
+      (agentUpdate as any).natural_messaging_config = data.naturalMessagingEnabled
+        ? { enabled: true, intensity: data.naturalMessagingIntensity ?? 'natural' }
+        : null;
 
       const { data: updatedAgent, error: agentError } = await supabase
         .from("copilot_agents")

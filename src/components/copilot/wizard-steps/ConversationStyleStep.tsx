@@ -26,6 +26,7 @@ import { Switch } from "@/components/ui/switch";
 import { Card } from "@/components/ui/card";
 import { MessageCircle, ShieldAlert } from "lucide-react";
 import type { CopilotWizardData } from "@/types/copilot";
+import { NaturalMessagingSection } from "./NaturalMessagingSection";
 
 export function ConversationStyleStep() {
   const { control } = useFormContext<CopilotWizardData>();
@@ -213,6 +214,9 @@ export function ConversationStyleStep() {
             </FormItem>
           )}
         />
+
+        {/* Mensagens Naturais */}
+        <NaturalMessagingSection />
       </div>
     </div>
   );

@@ -2,6 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { findLeadByPhoneOrEmail, associateMessagesToLead, getOrCreateLead } from "../_shared/lead-service.ts";
+import { smartSplitMessage, type NaturalMessagingConfig } from "../_shared/natural-messaging.ts";
 
 /**
  * Evolution API Webhook Receiver
@@ -351,33 +352,90 @@ async function sendSingleWhatsAppMessage(
 }
 
 /**
- * Envia resposta do WhatsApp, dividindo em múltiplas mensagens se necessário
+ * Envia typing indicator ("digitando...") via Evolution API
+ */
+async function sendTypingPresence(
+  instanceName: string,
+  phoneNumber: string
+): Promise<void> {
+  try {
+    await fetch(
+      `${EVOLUTION_API_URL}/chat/sendPresence/${instanceName}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", apikey: EVOLUTION_API_KEY },
+        body: JSON.stringify({ number: phoneNumber, delay: 500, presence: "composing" }),
+      }
+    );
+  } catch {
+    // best-effort
+  }
+}
+
+/**
+ * Envia resposta do WhatsApp, dividindo em múltiplas mensagens se necessário.
+ * Quando natural_messaging_config está ativo, usa smart split com delays proporcionais
+ * e typing indicators antes de cada chunk.
  */
 async function sendWhatsAppResponse(
   instanceName: string,
   phoneNumber: string,
-  message: string
+  message: string,
+  naturalMessagingConfig?: NaturalMessagingConfig | null
 ): Promise<boolean> {
   if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY) {
     console.error("[Evolution Webhook] Missing EVOLUTION_API_URL or EVOLUTION_API_KEY for sending response");
     return false;
   }
 
-  // Dividir mensagem em chunks
+  // Usar smart split se natural messaging está habilitado
+  if (naturalMessagingConfig?.enabled) {
+    const { chunks, delays } = await smartSplitMessage(message, naturalMessagingConfig);
+
+    console.log("[Evolution Webhook] Natural messaging: sending", chunks.length, "message(s) to:", phoneNumber);
+
+    let allSent = true;
+
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      const delay = delays[i] || 0;
+
+      // Typing indicator antes de cada chunk
+      await sendTypingPresence(instanceName, phoneNumber);
+
+      // Delay proporcional (exceto primeiro)
+      if (delay > 0) {
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+
+      const sent = await sendSingleWhatsAppMessage(instanceName, phoneNumber, chunk);
+      if (!sent) {
+        allSent = false;
+        console.error("[Evolution Webhook] Failed to send natural chunk", i + 1, "of", chunks.length);
+      } else {
+        console.log("[Evolution Webhook] Sent natural chunk", i + 1, "of", chunks.length, "- length:", chunk.length, "delay:", delay, "ms");
+      }
+    }
+
+    console.log("[Evolution Webhook] Natural messaging response sent to:", phoneNumber);
+    return allSent;
+  }
+
+  // Fallback: split clássico por tamanho
   const chunks = splitMessageIntoChunks(message);
-  
+
   console.log("[Evolution Webhook] Sending response in", chunks.length, "message(s) to:", phoneNumber);
 
   let allSent = true;
-  
+
   for (let i = 0; i < chunks.length; i++) {
     const chunk = chunks[i];
-    
+
     // Delay entre mensagens (exceto a primeira)
     if (i > 0) {
       await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_MESSAGES_MS));
     }
-    
+
     const sent = await sendSingleWhatsAppMessage(instanceName, phoneNumber, chunk);
     if (!sent) {
       allSent = false;
@@ -515,7 +573,8 @@ Deno.serve(async (req) => {
           is_default,
           availability,
           response_delay_seconds,
-          attend_unknown_contacts
+          attend_unknown_contacts,
+          natural_messaging_config
         )
       `)
       .eq("instance_name", payload.instance)
@@ -681,7 +740,7 @@ async function handleMessagesUpsert(
     organization_id: string; 
     instance_name: string;
     copilot_agent_id?: string | null;
-    copilot_agents?: { id: string; name: string; is_active: boolean; is_default: boolean; attend_unknown_contacts?: boolean } | null;
+    copilot_agents?: { id: string; name: string; is_active: boolean; is_default: boolean; attend_unknown_contacts?: boolean; natural_messaging_config?: NaturalMessagingConfig | null } | null;
   },
   data: Record<string, unknown>
 ) {
@@ -968,10 +1027,13 @@ async function handleMessagesUpsert(
 
           // Se o agente retornou uma resposta, enviar de volta via WhatsApp
           if (agentResult.success && agentResult.message) {
+            // @ts-ignore - natural_messaging_config vem do join
+            const naturalConfig = instance.copilot_agents?.natural_messaging_config || null;
             const sent = await sendWhatsAppResponse(
               instance.instance_name,
               phoneNumber,
-              agentResult.message
+              agentResult.message,
+              naturalConfig
             );
 
             // Salvar mensagem de saída no banco

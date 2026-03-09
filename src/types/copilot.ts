@@ -54,6 +54,7 @@ export type AgentResponseLength = "curto" | "medio" | "detalhado";
 export type AgentEmojiPolicy = "nunca" | "raro" | "moderado";
 export type AgentAvailabilityMode = "always" | "scheduled";
 export type AgentOperationMode = "inbound" | "outbound" | "hybrid";
+export type NaturalMessagingIntensity = "suave" | "natural" | "conversacional";
 export type TriggerOperator = "=" | "!=" | ">" | "<" | ">=" | "<=" | "contains" | "not_contains";
 
 // Tipos para Follow-up Rules
@@ -224,6 +225,23 @@ export interface CopilotWizardData {
 
   // Item #7: Temperatura do LLM (Criativo / Balanceado / Preciso)
   llmTemperatureMode: 'criativo' | 'balanceado' | 'preciso';
+
+  // Mensagens Naturais — quebra respostas em múltiplas mensagens curtas
+  naturalMessagingEnabled: boolean;
+  naturalMessagingIntensity: NaturalMessagingIntensity;
+}
+
+// =====================================================
+// NATURAL MESSAGING CONFIG
+// =====================================================
+
+/**
+ * Configuração de mensagens naturais — quebra respostas longas em
+ * múltiplas mensagens curtas para simular conversa real no WhatsApp
+ */
+export interface NaturalMessagingConfig {
+  enabled: boolean;
+  intensity: NaturalMessagingIntensity;
 }
 
 // =====================================================

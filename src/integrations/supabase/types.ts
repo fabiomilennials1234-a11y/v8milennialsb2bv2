@@ -1938,6 +1938,7 @@ export type Database = {
           is_default: boolean | null
           llm_model: string | null
           llm_temperature_mode: string | null
+          natural_messaging_config: Json | null
           main_objective: string
           max_conversation_turns: number | null
           move_rules: Json | null
@@ -2001,6 +2002,7 @@ export type Database = {
           is_default?: boolean | null
           llm_model?: string | null
           llm_temperature_mode?: string | null
+          natural_messaging_config?: Json | null
           main_objective: string
           max_conversation_turns?: number | null
           move_rules?: Json | null
@@ -2064,6 +2066,7 @@ export type Database = {
           is_default?: boolean | null
           llm_model?: string | null
           llm_temperature_mode?: string | null
+          natural_messaging_config?: Json | null
           main_objective?: string
           max_conversation_turns?: number | null
           move_rules?: Json | null
