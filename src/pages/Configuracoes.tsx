@@ -58,6 +58,7 @@ import { useOrganizationSettings } from "@/hooks/useOrganizationSettings";
 import { WhatsAppSettings } from "@/components/settings/WhatsAppSettings";
 import { GoogleCalendarSettings } from "@/components/settings/GoogleCalendarSettings";
 import { MetaSettings } from "@/components/settings/MetaSettings";
+import { TinyErpSettings } from "@/components/settings/TinyErpSettings";
 import { WebhookSettings } from "@/components/settings/WebhookSettings";
 import { ClienteSidebarConfig } from "@/components/settings/ClienteSidebarConfig";
 import { BadgesConfig } from "@/components/settings/BadgesConfig";
@@ -474,7 +475,7 @@ export default function Configuracoes() {
   const isOutbound = orgType === "outbound";
   const showClienteTab = isOutbound && isAgency;
   const showBadgesTab = isOutbound && isAgency;
-  const totalTabs = 8 + (showClienteTab ? 1 : 0) + (showBadgesTab ? 1 : 0);
+  const totalTabs = 9 + (showClienteTab ? 1 : 0) + (showBadgesTab ? 1 : 0);
 
   return (
     <div className="space-y-6">
@@ -514,6 +515,10 @@ export default function Configuracoes() {
           <TabsTrigger value="webhooks" className="gap-2">
             <Webhook className="w-4 h-4" />
             Webhooks
+          </TabsTrigger>
+          <TabsTrigger value="tinyerp" className="gap-2">
+            <Database className="w-4 h-4" />
+            TinyERP
           </TabsTrigger>
           <TabsTrigger value="calendar" className="gap-2">
             <Calendar className="w-4 h-4" />
@@ -578,6 +583,14 @@ export default function Configuracoes() {
             <Card className="glass-card">
               <CardContent className="pt-6">
                 <WebhookSettings />
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="tinyerp">
+            <Card className="glass-card">
+              <CardContent className="pt-6">
+                <TinyErpSettings />
               </CardContent>
             </Card>
           </TabsContent>

@@ -121,6 +121,27 @@ export function useUpdatePipeProposta() {
         await supabase.from("leads").update({ closer_id: updates.closer_id || null }).eq("id", effectiveLeadId);
       }
 
+      // Auto-push order to TinyERP when status changes to "vendido"
+      if (updates.status === "vendido" && data.organization_id) {
+        try {
+          const { data: tinyConn } = await supabase
+            .from("tinyerp_connections")
+            .select("auto_push_orders, status")
+            .eq("organization_id", data.organization_id)
+            .eq("status", "connected")
+            .maybeSingle();
+
+          if (tinyConn?.auto_push_orders) {
+            // Fire-and-forget: don't block the update
+            supabase.functions.invoke("tinyerp-push-order", {
+              body: { pipe_proposta_id: id },
+            }).catch((err) => console.error("[TinyERP Auto-push] Error:", err));
+          }
+        } catch {
+          // Ignore — TinyERP auto-push is best-effort
+        }
+      }
+
       // Trigger automation if status changed
       if (updates.status && effectiveLeadId) {
         await triggerFollowUpAutomation({

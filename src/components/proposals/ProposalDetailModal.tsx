@@ -54,6 +54,7 @@ import {
 import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
+import { TinyErpOrderStatus } from "./TinyErpOrderStatus";
 
 const statusLabels: Record<PipePropostasStatus, string> = {
   marcar_compromisso: "Marcar Compromisso",
@@ -520,6 +521,9 @@ export function ProposalDetailModal({
                   </motion.div>
                 )}
               </div>
+
+              {/* TinyERP Order Status */}
+              {proposta?.id && <TinyErpOrderStatus pipePropostaId={proposta.id} />}
 
               <Separator />
 
