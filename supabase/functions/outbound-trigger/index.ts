@@ -213,7 +213,7 @@ serve(async (req) => {
     // Configurar outbound
     const outboundConfig: OutboundConfig = matchingAgent.outbound_config || {
       delayMinutes: 5,
-      firstMessageTemplate: "Oi {nome}! 👋 Vi que você demonstrou interesse. Posso te ajudar?",
+      firstMessageTemplate: "",
       maxRetries: 3,
       retryIntervalMinutes: 30,
     };
@@ -227,7 +227,7 @@ serve(async (req) => {
     });
 
     const timeVars = getTimeBasedVariables();
-    const messageContent = replaceVariables(outboundConfig.firstMessageTemplate, {
+    const templateVars = {
       nome: lead.name || "você",
       empresa: lead.company || "",
       email: lead.email || "",
@@ -240,7 +240,18 @@ serve(async (req) => {
       data: timeVars.data,
       hora: timeVars.hora,
       ...customFields,
-    });
+    };
+
+    let messageContent: string;
+
+    if (outboundConfig.firstMessageTemplate?.trim()) {
+      // Template definido — substituir variáveis
+      messageContent = replaceVariables(outboundConfig.firstMessageTemplate, templateVars);
+    } else {
+      // Sem template — gerar via IA com base no system_prompt do agente
+      console.log("[outbound-trigger] No template, generating first message via AI");
+      messageContent = await generateFirstMessageWithAI(matchingAgent, lead, templateVars);
+    }
 
     // Calcular horário de disparo
     const scheduledAt = new Date();
@@ -364,5 +375,92 @@ function replaceVariables(template: string, variables: Record<string, string>): 
   // Limpar variáveis não substituídas
   result = result.replace(/\{[^}]+\}/g, "");
   return result.trim();
+}
+
+/**
+ * Gera a primeira mensagem de prospecção via IA quando não há template configurado.
+ * Usa o system_prompt do agente + contexto do lead para gerar uma abordagem personalizada.
+ */
+// deno-lint-ignore no-explicit-any
+async function generateFirstMessageWithAI(
+  agent: any,
+  lead: any,
+  templateVars: Record<string, string>
+): Promise<string> {
+  const openRouterApiKey = Deno.env.get("OPENROUTER_API_KEY");
+  if (!openRouterApiKey) {
+    console.warn("[outbound-trigger] OPENROUTER_API_KEY not configured, using fallback");
+    return `Oi ${templateVars.nome}! Vi que você demonstrou interesse. Posso te ajudar?`;
+  }
+
+  // Montar contexto do lead
+  const leadContext = [
+    templateVars.nome !== "você" ? `Nome: ${templateVars.nome}` : null,
+    templateVars.empresa ? `Empresa: ${templateVars.empresa}` : null,
+    templateVars.segmento ? `Segmento: ${templateVars.segmento}` : null,
+    templateVars.interesse ? `Interesse: ${templateVars.interesse}` : null,
+    templateVars.origem ? `Origem: ${templateVars.origem}` : null,
+    templateVars.campanha ? `Campanha: ${templateVars.campanha}` : null,
+  ].filter(Boolean).join("\n");
+
+  const systemPromptBase = agent.system_prompt || agent.main_objective || "Você é um agente de vendas B2B.";
+
+  const generationPrompt = `Você é um copywriter de vendas B2B via WhatsApp. Sua tarefa é gerar UMA ÚNICA mensagem de primeira abordagem (prospecção outbound) para enviar a um lead.
+
+REGRAS OBRIGATÓRIAS:
+- Mensagem CURTA (2-4 frases no máximo), natural, como um humano escreve no WhatsApp
+- NÃO use saudação formal ("Prezado", "Caro")
+- NÃO use bloco de texto longo
+- Use ${templateVars.saudacao} como saudação se apropriado
+- Personalize com os dados disponíveis do lead
+- Termine com uma pergunta aberta ou convite leve
+- NÃO invente dados que não foram fornecidos
+- Responda APENAS com a mensagem, sem aspas, sem explicação
+
+CONTEXTO DO AGENTE:
+${systemPromptBase.substring(0, 1500)}
+
+DADOS DO LEAD:
+${leadContext || "Nenhum dado adicional disponível"}`;
+
+  try {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${openRouterApiKey}`,
+        "HTTP-Referer": Deno.env.get("OPENROUTER_REFERER_URL") || "https://v8millennials.com",
+        "X-Title": "V8 Millennials Outbound",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.0-flash-001",
+        messages: [
+          { role: "user", content: generationPrompt },
+        ],
+        temperature: 0.8,
+        max_tokens: 300,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("[outbound-trigger] AI generation failed:", response.status, errorText);
+      return `Oi ${templateVars.nome}! Vi que você demonstrou interesse. Posso te ajudar?`;
+    }
+
+    const result = await response.json();
+    const generatedMessage = result.choices?.[0]?.message?.content?.trim();
+
+    if (generatedMessage && generatedMessage.length > 5) {
+      console.log("[outbound-trigger] AI generated message:", generatedMessage.substring(0, 80) + "...");
+      return generatedMessage;
+    }
+
+    console.warn("[outbound-trigger] AI returned empty message, using fallback");
+    return `Oi ${templateVars.nome}! Vi que você demonstrou interesse. Posso te ajudar?`;
+  } catch (err) {
+    console.error("[outbound-trigger] AI generation error:", err);
+    return `Oi ${templateVars.nome}! Vi que você demonstrou interesse. Posso te ajudar?`;
+  }
 }
 

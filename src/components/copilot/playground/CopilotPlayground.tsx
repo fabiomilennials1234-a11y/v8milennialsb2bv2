@@ -240,10 +240,7 @@ export function CopilotPlayground() {
       toast.error("Prompt muito curto", { description: "Escreva pelo menos algumas instrucoes para o agente." });
       return;
     }
-    if (data.isProactive && !data.outboundConfig.firstMessageTemplate?.trim()) {
-      toast.error("Mensagem inicial obrigatoria", { description: "Configure a mensagem inicial para agentes proativos." });
-      return;
-    }
+    // firstMessageTemplate é opcional — se vazio, o copilot gera a mensagem via IA
 
     setIsSaving(true);
 

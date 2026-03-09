@@ -415,7 +415,7 @@ export function PlaygroundSettings({ data, onChange }: PlaygroundSettingsProps) 
 
               {/* Mensagem inicial */}
               <div className="space-y-1">
-                <Label className="text-xs">Mensagem inicial</Label>
+                <Label className="text-xs">Mensagem inicial (opcional)</Label>
                 <Textarea
                   value={data.outboundConfig.firstMessageTemplate}
                   onChange={(e) =>
@@ -423,7 +423,7 @@ export function PlaygroundSettings({ data, onChange }: PlaygroundSettingsProps) 
                       outboundConfig: { ...data.outboundConfig, firstMessageTemplate: e.target.value },
                     })
                   }
-                  placeholder="Oi {nome}! Vi que voce demonstrou interesse em {interesse}..."
+                  placeholder="Deixe vazio para o agente gerar automaticamente com base no prompt. Ou use variaveis: Oi {nome}! Vi que voce demonstrou interesse em {interesse}..."
                   className="text-xs min-h-[60px]"
                 />
                 <div className="flex flex-wrap gap-1 mt-1">

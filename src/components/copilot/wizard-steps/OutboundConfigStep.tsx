@@ -360,17 +360,17 @@ export function OutboundConfigStep() {
             <FormItem>
               <FormLabel className="flex items-center gap-2">
                 <MessageSquare className="w-4 h-4" />
-                Template da Primeira Mensagem
+                Template da Primeira Mensagem (opcional)
               </FormLabel>
               <FormControl>
                 <Textarea
-                  placeholder="Oi {nome}! Vi que você demonstrou interesse em {interesse} através da nossa campanha. O que mais te chamou atenção?"
+                  placeholder="Deixe vazio para o agente gerar automaticamente com base no prompt. Ou use variáveis: Oi {nome}! Vi que você demonstrou interesse em {interesse}..."
                   className="min-h-[120px] font-mono"
                   {...field}
                 />
               </FormControl>
               <FormDescription>
-                Use as variáveis abaixo para personalizar a mensagem
+                Se vazio, o agente gera a mensagem com IA usando o contexto do lead. Ou use as variáveis abaixo para personalizar
               </FormDescription>
               <FormMessage />
             </FormItem>
