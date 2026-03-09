@@ -134,7 +134,31 @@ export interface ColumnMappingOption {
 }
 
 /** Lê CSV ou XLSX e retorna array de linhas (objetos chave = coluna). */
-export async function parseFileToRows(file: File): Promise<Record<string, string>[]> {
+/** Retorna os nomes das abas de um arquivo Excel. Para CSV retorna ["CSV"]. */
+export async function parseExcelSheetNames(file: File): Promise<string[]> {
+  const name = (file.name || "").toLowerCase();
+  if (name.endsWith(".csv")) return ["CSV"];
+  if (name.endsWith(".xlsx") || name.endsWith(".xls")) {
+    const XLSX = await import("xlsx");
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const data = e.target?.result;
+          if (!data) { resolve([]); return; }
+          const wb = XLSX.read(data, { type: "binary" });
+          resolve(wb.SheetNames);
+        } catch (err) { reject(err); }
+      };
+      reader.onerror = () => reject(reader.error);
+      reader.readAsBinaryString(file);
+    });
+  }
+  return [];
+}
+
+/** Lê CSV ou XLSX e retorna array de linhas. Para XLSX, pode escolher a aba pelo nome. */
+export async function parseFileToRows(file: File, sheetName?: string): Promise<Record<string, string>[]> {
   const name = (file.name || "").toLowerCase();
   if (name.endsWith(".csv")) {
     return new Promise((resolve, reject) => {
@@ -169,8 +193,8 @@ export async function parseFileToRows(file: File): Promise<Record<string, string
             return;
           }
           const wb = XLSX.read(data, { type: "binary", cellDates: true });
-          const firstSheet = wb.SheetNames[0];
-          const sheet = wb.Sheets[firstSheet];
+          const targetSheet = sheetName && wb.SheetNames.includes(sheetName) ? sheetName : wb.SheetNames[0];
+          const sheet = wb.Sheets[targetSheet];
           const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
             header: 1,
             defval: "",

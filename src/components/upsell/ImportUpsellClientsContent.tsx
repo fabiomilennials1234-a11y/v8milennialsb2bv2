@@ -7,6 +7,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   useImportLeads,
   parseFilePreview,
+  parseExcelSheetNames,
+  parseFileToRows,
   KNOWN_LEAD_FIELDS,
   type FilePreviewResult,
 } from "@/hooks/useImportLeads";
@@ -28,6 +30,7 @@ import {
   Users,
   RefreshCw,
   AlertTriangle,
+  Table2,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -60,6 +63,26 @@ const POTENCIAL_ALIASES: Record<string, string> = {
   vip: "estrategico",
 };
 
+/** Labels amigáveis para os campos do sistema */
+const FIELD_LABELS: Record<string, string> = {
+  name: "Nome",
+  company: "Empresa",
+  email: "Email",
+  phone: "Telefone",
+  faturamento: "Faturamento",
+  segment: "Segmento",
+  notes: "Notas",
+  rating: "Prioridade",
+  origin: "Origem",
+  stage: "Etapa",
+  vendedor: "Vendedor",
+  temperatura: "Temperatura",
+  valor: "Valor",
+  produto: "Produto",
+  potencial: "Potencial",
+  data_primeira_venda: "Data Primeira Venda",
+};
+
 interface PreviewClient {
   name: string;
   company?: string;
@@ -67,7 +90,7 @@ interface PreviewClient {
   email?: string;
 }
 
-type Step = "upload" | "map_columns" | "preview" | "importing" | "complete";
+type Step = "upload" | "select_sheet" | "map_columns" | "preview" | "importing" | "complete";
 
 interface ImportResult {
   total: number;
@@ -88,6 +111,8 @@ export function ImportUpsellClientsContent({
 }: ImportUpsellClientsContentProps) {
   const [step, setStep] = useState<Step>("upload");
   const [file, setFile] = useState<File | null>(null);
+  const [sheetNames, setSheetNames] = useState<string[]>([]);
+  const [selectedSheet, setSelectedSheet] = useState<string>("");
   const [previewClients, setPreviewClients] = useState<PreviewClient[]>([]);
   const [totalClients, setTotalClients] = useState(0);
   const [previewResult, setPreviewResult] = useState<FilePreviewResult | null>(null);
@@ -98,6 +123,7 @@ export function ImportUpsellClientsContent({
   const [isImporting, setIsImporting] = useState(false);
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState<ImportResult | null>(null);
+  const [sampleData, setSampleData] = useState<Record<string, string>[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { organizationId } = useOrganization();
@@ -110,6 +136,68 @@ export function ImportUpsellClientsContent({
 
   const allKnownFields = [...KNOWN_LEAD_FIELDS, ...UPSELL_EXTRA_FIELDS];
 
+  const normalizeCol = (s: string) =>
+    s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+
+  /** Carrega preview de uma aba específica e vai direto para mapeamento */
+  const loadSheetPreview = useCallback(
+    async (targetFile: File, sheet?: string) => {
+      try {
+        const rows = await parseFileToRows(targetFile, sheet);
+        if (rows.length === 0) {
+          toast.error("A aba selecionada está vazia");
+          return;
+        }
+        const columns = [...new Set(rows.flatMap((r) => Object.keys(r)))].filter(Boolean);
+        const sampleRows = rows.slice(0, 5);
+        setSampleData(sampleRows);
+        setTotalClients(rows.length);
+
+        // Build suggested mapping using known aliases + upsell aliases
+        const suggestedMapping: Record<string, string> = {};
+        const preview = await parseFilePreview(targetFile);
+
+        // Merge standard suggestions
+        for (const col of columns) {
+          if (preview.suggestedMapping[col]) {
+            suggestedMapping[col] = preview.suggestedMapping[col];
+          }
+        }
+
+        // Add upsell-specific aliases
+        for (const col of columns) {
+          const norm = normalizeCol(col);
+          if (!suggestedMapping[col] && UPSELL_HEADER_ALIASES[norm]) {
+            suggestedMapping[col] = UPSELL_HEADER_ALIASES[norm];
+          }
+        }
+
+        // Pre-fill user mapping with suggestions
+        const initialMapping: Record<string, string> = {};
+        for (const col of columns) {
+          initialMapping[col] = suggestedMapping[col] || "ignore";
+        }
+
+        setPreviewResult({
+          columns,
+          sampleRows,
+          suggestedMapping,
+          unmappedColumns: columns.filter((c) => !suggestedMapping[c]),
+          knownFields: [...allKnownFields],
+          totalRows: rows.length,
+        });
+        setUserColumnMapping(initialMapping);
+
+        // Always go to map_columns so user can review/adjust
+        setStep("map_columns");
+      } catch (error) {
+        console.error("Error loading sheet:", error);
+        toast.error("Erro ao processar a aba selecionada");
+      }
+    },
+    [allKnownFields]
+  );
+
   const handleFileSelect = useCallback(
     async (selectedFile: File) => {
       const name = (selectedFile.name || "").toLowerCase();
@@ -120,41 +208,28 @@ export function ImportUpsellClientsContent({
       setFile(selectedFile);
       setPreviewResult(null);
       setUserColumnMapping({});
+      setSampleData([]);
+
       try {
-        const preview = await parseFilePreview(selectedFile);
-        // Add upsell-specific alias matching
-        for (const col of preview.columns) {
-          const norm = col.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
-          if (!preview.suggestedMapping[col] && UPSELL_HEADER_ALIASES[norm]) {
-            preview.suggestedMapping[col] = UPSELL_HEADER_ALIASES[norm];
-            preview.unmappedColumns = preview.unmappedColumns.filter((c) => c !== col);
-          }
+        const sheets = await parseExcelSheetNames(selectedFile);
+
+        if (sheets.length > 1) {
+          // Multiple sheets — let user pick
+          setSheetNames(sheets);
+          setSelectedSheet(sheets[0]);
+          setStep("select_sheet");
+        } else {
+          // Single sheet or CSV — go straight to mapping
+          setSheetNames(sheets);
+          setSelectedSheet(sheets[0] || "");
+          await loadSheetPreview(selectedFile, sheets[0]);
         }
-        setPreviewResult(preview);
-        setTotalClients(preview.totalRows);
-        if (preview.unmappedColumns.length > 0) {
-          setStep("map_columns");
-          return;
-        }
-        const mapping = { ...(preview.suggestedMapping ?? {}), ...userColumnMapping };
-        const leads = await parseCSV(selectedFile, Object.keys(mapping).length ? mapping : undefined);
-        setTotalClients(leads.length);
-        setPreviewClients(
-          leads.slice(0, 10).map((l) => ({
-            name: l.name,
-            company: l.company,
-            phone: l.phone,
-            email: l.email,
-          }))
-        );
-        setSelectedStageKey(defaultStage?.stage_key ?? "");
-        setStep("preview");
       } catch (error) {
         console.error("Error parsing file:", error);
         toast.error("Erro ao processar arquivo. Verifique o formato (CSV ou XLSX).");
       }
     },
-    [parseCSV, defaultStage]
+    [loadSheetPreview]
   );
 
   const handleDrop = useCallback(
@@ -208,14 +283,12 @@ export function ImportUpsellClientsContent({
   const parseDateValue = (value: string | undefined): string => {
     if (!value?.trim()) return new Date().toISOString();
     const trimmed = value.trim();
-    // Try DD/MM/YYYY
     const brMatch = trimmed.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
     if (brMatch) {
       const [, d, m, y] = brMatch;
       const date = new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
       if (!isNaN(date.getTime())) return date.toISOString();
     }
-    // Try YYYY-MM-DD or ISO
     const parsed = new Date(trimmed);
     if (!isNaN(parsed.getTime())) return parsed.toISOString();
     return new Date().toISOString();
@@ -239,6 +312,39 @@ export function ImportUpsellClientsContent({
     return defaultKey;
   };
 
+  /** Verifica se pelo menos a coluna "name" está mapeada */
+  const hasNameMapped = Object.values(userColumnMapping).includes("name");
+
+  const handleContinueToPreview = async () => {
+    if (!hasNameMapped) {
+      toast.error("Mapeie pelo menos a coluna Nome para continuar");
+      return;
+    }
+    try {
+      // Build the final mapping (only non-ignored)
+      const finalMapping: Record<string, string> = {};
+      for (const [col, field] of Object.entries(userColumnMapping)) {
+        if (field && field !== "ignore") {
+          finalMapping[col] = field;
+        }
+      }
+      const leads = await parseCSV(file!, Object.keys(finalMapping).length ? finalMapping : undefined);
+      setTotalClients(leads.length);
+      setPreviewClients(
+        leads.slice(0, 10).map((l) => ({
+          name: l.name,
+          company: l.company,
+          phone: l.phone,
+          email: l.email,
+        }))
+      );
+      setSelectedStageKey(defaultStage?.stage_key ?? "");
+      setStep("preview");
+    } catch {
+      toast.error("Erro ao processar arquivo. Verifique se a coluna Nome está mapeada corretamente.");
+    }
+  };
+
   const handleImport = async () => {
     if (!file || !organizationId) {
       toast.error("Selecione um arquivo");
@@ -249,29 +355,35 @@ export function ImportUpsellClientsContent({
     setProgress(0);
 
     try {
-      const fullMapping = { ...(previewResult?.suggestedMapping ?? {}), ...userColumnMapping };
-      const leads = await parseCSV(file, Object.keys(fullMapping).length ? fullMapping : undefined);
+      const finalMapping: Record<string, string> = {};
+      for (const [col, field] of Object.entries(userColumnMapping)) {
+        if (field && field !== "ignore") {
+          finalMapping[col] = field;
+        }
+      }
+      const leads = await parseCSV(file, Object.keys(finalMapping).length ? finalMapping : undefined);
 
       if (leads.length === 0) {
         throw new Error("Nenhum cliente válido encontrado");
       }
 
-      // Get raw rows again to extract upsell-specific fields
-      const { parseFileToRows } = await import("@/hooks/useImportLeads");
-      const rawRows = await parseFileToRows(file);
+      // Get raw rows to extract upsell-specific fields
+      const rawRows = await parseFileToRows(file, selectedSheet || undefined);
 
-      // Build mapping for upsell fields from raw rows
+      // Build mapping for upsell fields from user mapping
       const upsellFieldMap: Record<string, string> = {};
+      for (const [col, field] of Object.entries(userColumnMapping)) {
+        if (field && field !== "ignore" && (UPSELL_EXTRA_FIELDS as readonly string[]).includes(field)) {
+          upsellFieldMap[col] = field;
+        }
+      }
+      // Also check raw column aliases
       if (rawRows.length > 0) {
         const cols = Object.keys(rawRows[0]);
         for (const col of cols) {
-          const norm = col.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
-          if (UPSELL_HEADER_ALIASES[norm]) {
+          const norm = normalizeCol(col);
+          if (!upsellFieldMap[col] && UPSELL_HEADER_ALIASES[norm]) {
             upsellFieldMap[col] = UPSELL_HEADER_ALIASES[norm];
-          }
-          // Also check user mapping
-          if (fullMapping[col] && UPSELL_EXTRA_FIELDS.includes(fullMapping[col] as any)) {
-            upsellFieldMap[col] = fullMapping[col];
           }
         }
       }
@@ -320,7 +432,6 @@ export function ImportUpsellClientsContent({
             continue;
           }
 
-          // Check if already an upsell client
           if (formattedPhone && existingClientPhones.has(formattedPhone)) {
             duplicates++;
             if (formattedPhone) processedPhones.add(formattedPhone);
@@ -343,14 +454,12 @@ export function ImportUpsellClientsContent({
 
             if (existingLead) {
               leadId = existingLead.id;
-              // Already a client in carteira?
               if (existingClientLeadIds.has(leadId)) {
                 duplicates++;
                 if (formattedPhone) processedPhones.add(formattedPhone);
                 continue;
               }
             } else {
-              // Create new lead
               const { data: newLead, error: leadError } = await supabase
                 .from("leads")
                 .insert({
@@ -382,7 +491,6 @@ export function ImportUpsellClientsContent({
 
             const potencial = resolvePotencial(potencialRaw);
             const firstSaleAt = parseDateValue(dataPrimeiraVendaRaw);
-
             const stageKey = resolveStageFromName(lead.stage, stagesList, selectedStageKey);
 
             const clientInsert: Record<string, unknown> = {
@@ -403,7 +511,6 @@ export function ImportUpsellClientsContent({
               clientInsert.gestao_manual_override = true;
             }
 
-            // Assign closer on lead as well
             if (closerId) {
               await supabase.from("leads").update({ closer_id: closerId }).eq("id", leadId);
             }
@@ -448,10 +555,13 @@ export function ImportUpsellClientsContent({
   const handleClose = () => {
     setStep("upload");
     setFile(null);
+    setSheetNames([]);
+    setSelectedSheet("");
     setPreviewClients([]);
     setTotalClients(0);
     setPreviewResult(null);
     setUserColumnMapping({});
+    setSampleData([]);
     setSelectedStageKey("");
     setSelectedCloserId("");
     setSelectedPotencial("medio");
@@ -462,8 +572,12 @@ export function ImportUpsellClientsContent({
 
   const pipeLabel = pipeType === "upsell_base" ? "Carteira Base" : "Carteira Gestão";
 
+  // Count mapped columns (non-ignored)
+  const mappedCount = Object.values(userColumnMapping).filter((v) => v && v !== "ignore").length;
+
   return (
     <AnimatePresence mode="wait">
+      {/* ========== STEP: UPLOAD ========== */}
       {step === "upload" && (
         <motion.div
           key="upload"
@@ -503,14 +617,71 @@ export function ImportUpsellClientsContent({
           </p>
           <div className="p-3 bg-muted/50 rounded-lg">
             <p className="text-xs text-muted-foreground">
-              Colunas reconhecidas: <strong>Nome, Empresa, Email, Telefone, Potencial, Data Primeira Venda, Vendedor/Responsável, Etapa</strong>.
-              Colunas não reconhecidas serão exibidas para mapeamento.
+              Aceita qualquer planilha. Na próxima tela você escolhe qual coluna corresponde a cada campo (Nome, Telefone, etc).
             </p>
           </div>
         </motion.div>
       )}
 
-      {step === "map_columns" && previewResult && previewResult.unmappedColumns.length > 0 && (
+      {/* ========== STEP: SELECT SHEET ========== */}
+      {step === "select_sheet" && (
+        <motion.div
+          key="select_sheet"
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -10 }}
+          className="space-y-4"
+        >
+          <div className="flex items-center gap-3 p-3 bg-primary/10 rounded-lg">
+            <FileSpreadsheet className="w-8 h-8 text-primary" />
+            <div>
+              <p className="font-medium text-sm">{file?.name}</p>
+              <p className="text-xs text-muted-foreground">{sheetNames.length} abas encontradas</p>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="flex items-center gap-1.5">
+              <Table2 className="w-3.5 h-3.5 text-primary" />
+              Selecione a aba com os dados dos clientes
+            </Label>
+            <div className="space-y-2">
+              {sheetNames.map((name) => (
+                <button
+                  key={name}
+                  onClick={() => setSelectedSheet(name)}
+                  className={`w-full text-left p-3 rounded-lg border transition-all ${
+                    selectedSheet === name
+                      ? "border-primary bg-primary/5 ring-1 ring-primary/30"
+                      : "border-border hover:border-primary/30 hover:bg-muted/50"
+                  }`}
+                >
+                  <span className="text-sm font-medium">{name}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2 border-t">
+            <Button variant="outline" onClick={() => setStep("upload")}>
+              Voltar
+            </Button>
+            <Button
+              onClick={() => {
+                if (selectedSheet && file) {
+                  loadSheetPreview(file, selectedSheet);
+                }
+              }}
+              disabled={!selectedSheet}
+            >
+              Continuar
+            </Button>
+          </div>
+        </motion.div>
+      )}
+
+      {/* ========== STEP: MAP COLUMNS ========== */}
+      {step === "map_columns" && previewResult && (
         <motion.div
           key="map_columns"
           initial={{ opacity: 0, y: 10 }}
@@ -518,78 +689,92 @@ export function ImportUpsellClientsContent({
           exit={{ opacity: 0, y: -10 }}
           className="space-y-4"
         >
-          <div className="flex items-start gap-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
-            <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+          <div className="flex items-center gap-3 p-3 bg-primary/10 rounded-lg">
+            <FileSpreadsheet className="w-6 h-6 text-primary" />
             <div>
-              <p className="font-medium text-sm text-amber-800 dark:text-amber-200">Colunas não reconhecidas</p>
+              <p className="font-medium text-sm">{file?.name}{selectedSheet && selectedSheet !== "CSV" ? ` — ${selectedSheet}` : ""}</p>
+              <p className="text-xs text-muted-foreground">{totalClients} linhas • {previewResult.columns.length} colunas • {mappedCount} mapeadas</p>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-3 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+            <AlertTriangle className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-medium text-sm text-blue-800 dark:text-blue-200">Mapeie as colunas</p>
               <p className="text-xs text-muted-foreground mt-1">
-                Mapeie cada coluna para um campo existente ou ignore.
+                Escolha qual campo do sistema corresponde a cada coluna da planilha. <strong>Nome</strong> é obrigatório. As demais podem ser ignoradas.
               </p>
             </div>
           </div>
+
           <div className="space-y-2">
             <Label>Mapeamento das colunas</Label>
-            <ScrollArea className="h-48 rounded-lg border p-2">
-              <div className="space-y-3">
-                {previewResult.unmappedColumns.map((col) => (
-                  <div key={col} className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-medium shrink-0 w-32 truncate" title={col}>
-                      {col}
-                    </span>
-                    <Select
-                      value={userColumnMapping[col] ?? "ignore"}
-                      onValueChange={(v) => setUserColumnMapping((prev) => ({ ...prev, [col]: v }))}
-                    >
-                      <SelectTrigger className="w-[200px]">
-                        <SelectValue placeholder="Escolher..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="ignore">Ignorar coluna</SelectItem>
-                        {allKnownFields.map((field) => (
-                          <SelectItem key={field} value={field}>
-                            {field}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                ))}
+            <ScrollArea className="h-64 rounded-lg border">
+              <div className="p-3 space-y-2">
+                {previewResult.columns.map((col) => {
+                  const sample = sampleData[0]?.[col] || "";
+                  const currentValue = userColumnMapping[col] ?? "ignore";
+                  return (
+                    <div key={col} className="flex items-center gap-2">
+                      <div className="shrink-0 w-[180px]">
+                        <p className="text-sm font-medium truncate" title={col}>{col}</p>
+                        {sample && (
+                          <p className="text-xs text-muted-foreground truncate" title={sample}>
+                            ex: {sample}
+                          </p>
+                        )}
+                      </div>
+                      <span className="text-muted-foreground text-xs shrink-0">→</span>
+                      <Select
+                        value={currentValue}
+                        onValueChange={(v) => setUserColumnMapping((prev) => ({ ...prev, [col]: v }))}
+                      >
+                        <SelectTrigger className="w-[200px]">
+                          <SelectValue placeholder="Escolher..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="ignore">Ignorar</SelectItem>
+                          {allKnownFields.map((field) => (
+                            <SelectItem key={field} value={field}>
+                              {FIELD_LABELS[field] || field}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  );
+                })}
               </div>
             </ScrollArea>
           </div>
+
+          {!hasNameMapped && (
+            <div className="flex items-start gap-2 p-2 bg-red-500/10 border border-red-500/30 rounded-lg">
+              <XCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+              <p className="text-xs text-red-700 dark:text-red-300">
+                Mapeie pelo menos uma coluna como <strong>Nome</strong> para continuar.
+              </p>
+            </div>
+          )}
+
           <div className="flex justify-end gap-2 pt-2 border-t">
-            <Button variant="outline" onClick={() => setStep("upload")}>
+            <Button variant="outline" onClick={() => {
+              if (sheetNames.length > 1) {
+                setStep("select_sheet");
+              } else {
+                setStep("upload");
+              }
+            }}>
               Voltar
             </Button>
-            <Button
-              onClick={async () => {
-                try {
-                  const mapping = previewResult
-                    ? { ...(previewResult.suggestedMapping ?? {}), ...userColumnMapping }
-                    : userColumnMapping;
-                  const leads = await parseCSV(file!, Object.keys(mapping).length ? mapping : undefined);
-                  setTotalClients(leads.length);
-                  setPreviewClients(
-                    leads.slice(0, 10).map((l) => ({
-                      name: l.name,
-                      company: l.company,
-                      phone: l.phone,
-                      email: l.email,
-                    }))
-                  );
-                  setSelectedStageKey(defaultStage?.stage_key ?? "");
-                  setStep("preview");
-                } catch {
-                  toast.error("Erro ao processar arquivo");
-                }
-              }}
-            >
+            <Button onClick={handleContinueToPreview} disabled={!hasNameMapped}>
               Continuar para preview
             </Button>
           </div>
         </motion.div>
       )}
 
+      {/* ========== STEP: PREVIEW ========== */}
       {step === "preview" && (
         <motion.div
           key="preview"
@@ -672,7 +857,7 @@ export function ImportUpsellClientsContent({
               Reconhecimento automático
             </p>
             <p className="text-xs text-muted-foreground">
-              Use as colunas <strong>Vendedor</strong> (ou Responsável/Closer), <strong>Potencial</strong> e <strong>Data Primeira Venda</strong> na planilha. O sistema identifica automaticamente.
+              As colunas <strong>Vendedor</strong>, <strong>Potencial</strong> e <strong>Data Primeira Venda</strong> são reconhecidas automaticamente quando mapeadas.
             </p>
           </div>
 
@@ -695,7 +880,7 @@ export function ImportUpsellClientsContent({
           </div>
 
           <div className="flex justify-end gap-2 pt-4 border-t">
-            <Button variant="outline" onClick={() => setStep("upload")}>
+            <Button variant="outline" onClick={() => setStep("map_columns")}>
               Voltar
             </Button>
             <Button onClick={handleImport} disabled={stages.length > 0 && !selectedStageKey}>
@@ -705,6 +890,7 @@ export function ImportUpsellClientsContent({
         </motion.div>
       )}
 
+      {/* ========== STEP: IMPORTING ========== */}
       {step === "importing" && (
         <motion.div
           key="importing"
@@ -722,6 +908,7 @@ export function ImportUpsellClientsContent({
         </motion.div>
       )}
 
+      {/* ========== STEP: COMPLETE ========== */}
       {step === "complete" && result && (
         <motion.div
           key="complete"
