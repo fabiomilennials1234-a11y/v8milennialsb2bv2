@@ -20,6 +20,7 @@ import {
   Webhook,
   Award,
   HelpCircle,
+  Plug,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -475,7 +476,7 @@ export default function Configuracoes() {
   const isOutbound = orgType === "outbound";
   const showClienteTab = isOutbound && isAgency;
   const showBadgesTab = isOutbound && isAgency;
-  const totalTabs = 9 + (showClienteTab ? 1 : 0) + (showBadgesTab ? 1 : 0);
+  const totalTabs = 7 + (showClienteTab ? 1 : 0) + (showBadgesTab ? 1 : 0);
 
   return (
     <div className="space-y-6">
@@ -508,21 +509,13 @@ export default function Configuracoes() {
             <MessageSquare className="w-4 h-4" />
             WhatsApp
           </TabsTrigger>
-          <TabsTrigger value="meta" className="gap-2">
-            <Globe className="w-4 h-4" />
-            Meta
+          <TabsTrigger value="integracoes" className="gap-2">
+            <Plug className="w-4 h-4" />
+            Integrações
           </TabsTrigger>
           <TabsTrigger value="webhooks" className="gap-2">
             <Webhook className="w-4 h-4" />
             Webhooks
-          </TabsTrigger>
-          <TabsTrigger value="tinyerp" className="gap-2">
-            <Database className="w-4 h-4" />
-            TinyERP
-          </TabsTrigger>
-          <TabsTrigger value="calendar" className="gap-2">
-            <Calendar className="w-4 h-4" />
-            Calendário
           </TabsTrigger>
           <TabsTrigger value="general" className="gap-2">
             <Settings className="w-4 h-4" />
@@ -571,10 +564,14 @@ export default function Configuracoes() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="meta">
+          <TabsContent value="integracoes">
             <Card className="glass-card">
-              <CardContent className="pt-6">
+              <CardContent className="pt-6 space-y-8">
                 <MetaSettings />
+                <div className="border-t" />
+                <GoogleCalendarSettings />
+                <div className="border-t" />
+                <TinyErpSettings />
               </CardContent>
             </Card>
           </TabsContent>
@@ -583,22 +580,6 @@ export default function Configuracoes() {
             <Card className="glass-card">
               <CardContent className="pt-6">
                 <WebhookSettings />
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="tinyerp">
-            <Card className="glass-card">
-              <CardContent className="pt-6">
-                <TinyErpSettings />
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="calendar">
-            <Card className="glass-card">
-              <CardContent className="pt-6">
-                <GoogleCalendarSettings />
               </CardContent>
             </Card>
           </TabsContent>
