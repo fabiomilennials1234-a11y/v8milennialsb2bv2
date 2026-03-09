@@ -112,13 +112,19 @@ export function useUpdatePipeProposta() {
         .eq("id", id)
         .select()
         .single();
-      
+
       if (error) throw error;
 
+      // Sync closer_id back to leads table
+      const effectiveLeadId = leadId || data.lead_id;
+      if (effectiveLeadId && updates.closer_id !== undefined) {
+        await supabase.from("leads").update({ closer_id: updates.closer_id || null }).eq("id", effectiveLeadId);
+      }
+
       // Trigger automation if status changed
-      if (updates.status && leadId) {
+      if (updates.status && effectiveLeadId) {
         await triggerFollowUpAutomation({
-          leadId: leadId,
+          leadId: effectiveLeadId,
           assignedTo: closerId || data.closer_id,
           pipeType: "propostas",
           stage: updates.status,

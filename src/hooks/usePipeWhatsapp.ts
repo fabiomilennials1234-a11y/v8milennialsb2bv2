@@ -103,13 +103,19 @@ export function useUpdatePipeWhatsapp() {
         .eq("id", id)
         .select()
         .single();
-      
+
       if (error) throw error;
 
+      // Sync sdr_id back to leads table
+      const effectiveLeadId = leadId || data.lead_id;
+      if (effectiveLeadId && updates.sdr_id !== undefined) {
+        await supabase.from("leads").update({ sdr_id: updates.sdr_id || null }).eq("id", effectiveLeadId);
+      }
+
       // Trigger automation if status changed
-      if (updates.status && leadId) {
+      if (updates.status && effectiveLeadId) {
         await triggerFollowUpAutomation({
-          leadId: leadId,
+          leadId: effectiveLeadId,
           assignedTo: sdrId || data.sdr_id,
           pipeType: "whatsapp",
           stage: updates.status,
@@ -122,6 +128,7 @@ export function useUpdatePipeWhatsapp() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["pipe_whatsapp"] });
+      queryClient.invalidateQueries({ queryKey: ["leads"], refetchType: 'active' });
       queryClient.invalidateQueries({ queryKey: ["follow_ups"] });
     },
   });

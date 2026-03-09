@@ -113,8 +113,16 @@ export function useUpdatePipeConfirmacao() {
         .eq("id", id)
         .select()
         .single();
-      
+
       if (error) throw error;
+
+      // Sync SDR/Closer back to leads table
+      if (leadId && (updates.sdr_id !== undefined || updates.closer_id !== undefined)) {
+        const leadUpdate: Record<string, string | null> = {};
+        if (updates.sdr_id !== undefined) leadUpdate.sdr_id = updates.sdr_id || null;
+        if (updates.closer_id !== undefined) leadUpdate.closer_id = updates.closer_id || null;
+        await supabase.from("leads").update(leadUpdate).eq("id", leadId);
+      }
 
       // Trigger automation if status changed
       if (updates.status && leadId) {
@@ -132,6 +140,7 @@ export function useUpdatePipeConfirmacao() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["pipe_confirmacao"] });
+      queryClient.invalidateQueries({ queryKey: ["leads"], refetchType: 'active' });
       queryClient.invalidateQueries({ queryKey: ["follow_ups"] });
     },
   });

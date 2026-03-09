@@ -145,8 +145,28 @@ export function useUpdateLead() {
         .eq("organization_id", organizationId)
         .select()
         .single();
-      
+
       if (error) throw error;
+
+      // Sync SDR/Closer to all pipe tables that contain this lead
+      if (safeUpdates.sdr_id !== undefined || safeUpdates.closer_id !== undefined) {
+        const sdrUpdate = safeUpdates.sdr_id !== undefined ? { sdr_id: safeUpdates.sdr_id || null } : {};
+        const closerUpdate = safeUpdates.closer_id !== undefined ? { closer_id: safeUpdates.closer_id || null } : {};
+
+        // pipe_confirmacao has both sdr_id and closer_id
+        if (Object.keys({ ...sdrUpdate, ...closerUpdate }).length > 0) {
+          await supabase.from("pipe_confirmacao").update({ ...sdrUpdate, ...closerUpdate }).eq("lead_id", id);
+        }
+        // pipe_whatsapp has sdr_id
+        if (safeUpdates.sdr_id !== undefined) {
+          await supabase.from("pipe_whatsapp").update(sdrUpdate).eq("lead_id", id);
+        }
+        // pipe_propostas has closer_id
+        if (safeUpdates.closer_id !== undefined) {
+          await supabase.from("pipe_propostas").update(closerUpdate).eq("lead_id", id);
+        }
+      }
+
       return data;
     },
     onSuccess: () => {
@@ -154,6 +174,7 @@ export function useUpdateLead() {
       queryClient.invalidateQueries({ queryKey: ["leads"], refetchType: 'active' });
       queryClient.invalidateQueries({ queryKey: ["pipe_confirmacao"], refetchType: 'active' });
       queryClient.invalidateQueries({ queryKey: ["pipe_propostas"], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ["pipe_whatsapp"], refetchType: 'active' });
     },
   });
 }
