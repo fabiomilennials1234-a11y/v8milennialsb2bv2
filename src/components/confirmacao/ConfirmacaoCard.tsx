@@ -50,7 +50,7 @@ interface ConfirmacaoCardProps {
     origin: "whatsapp" | "meta_ads" | "outro" | "site" | "remarketing" | "google_ads" | "cal";
     sdr?: string;
     closer?: string;
-    tags: string[];
+    tags: { name: string; color: string }[];
     leadId: string;
     faturamento?: number;
     segment?: string;
@@ -427,8 +427,8 @@ export const ConfirmacaoCard = memo(function ConfirmacaoCard({ card, onClick, on
           </Badge>
         )}
         {card.tags.slice(0, 2).map((tag) => (
-          <Badge key={tag} variant="secondary" className="text-xs">
-            {tag}
+          <Badge key={tag.name} variant="secondary" className="text-xs" style={{ backgroundColor: `${tag.color}20`, color: tag.color }}>
+            {tag.name}
           </Badge>
         ))}
         {card.tags.length > 2 && (
