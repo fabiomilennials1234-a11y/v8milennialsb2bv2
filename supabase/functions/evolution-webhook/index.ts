@@ -1028,7 +1028,11 @@ async function handleMessagesUpsert(
           // Se o agente retornou uma resposta, enviar de volta via WhatsApp
           if (agentResult.success && agentResult.message) {
             // @ts-ignore - natural_messaging_config vem do join
-            const naturalConfig = instance.copilot_agents?.natural_messaging_config || null;
+            const rawNaturalConfig = instance.copilot_agents?.natural_messaging_config;
+            // Default: sempre ativo com intensidade "natural" se config for NULL
+            const naturalConfig: NaturalMessagingConfig = rawNaturalConfig?.enabled != null
+              ? rawNaturalConfig as NaturalMessagingConfig
+              : { enabled: true, intensity: "natural" };
             const sent = await sendWhatsAppResponse(
               instance.instance_name,
               phoneNumber,

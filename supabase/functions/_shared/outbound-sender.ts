@@ -10,6 +10,7 @@
 
 import { humanizeMessage } from "./message-humanizer.ts";
 import { sendWhatsAppAudio } from "./audio-sender.ts";
+import { smartSplitMessage } from "./natural-messaging.ts";
 
 const AUDIO_DELAY_MS = 8000; // 8 seconds between text and audio
 
@@ -135,28 +136,52 @@ export async function sendOutboundDispatch(
     }
 
     // =====================================================
-    // Função auxiliar: enviar texto
+    // Função auxiliar: enviar texto (com smart split natural)
     // =====================================================
     const sendText = async (): Promise<{ ok: boolean; messageId?: string; error?: string }> => {
-      const sendResponse = await fetch(`${evolutionUrl}/message/sendText/${instanceName}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          apikey: evolutionKey,
-        },
-        body: JSON.stringify({
-          number: phone,
-          text: humanizedContent,
-        }),
-      });
+      // Smart split: sempre ativo com intensidade "natural"
+      const { chunks, delays } = await smartSplitMessage(humanizedContent, { enabled: true, intensity: "natural" });
 
-      if (!sendResponse.ok) {
-        const errorText = await sendResponse.text();
-        return { ok: false, error: errorText };
+      let firstMessageId: string | undefined;
+      for (let i = 0; i < chunks.length; i++) {
+        // Typing indicator antes de cada chunk
+        try {
+          await fetch(`${evolutionUrl}/chat/sendPresence/${instanceName}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", apikey: evolutionKey },
+            body: JSON.stringify({ number: phone, delay: 500, presence: "composing" }),
+          });
+        } catch { /* best-effort */ }
+
+        // Delay proporcional
+        if (delays[i] > 0) {
+          await new Promise((r) => setTimeout(r, delays[i]));
+        }
+
+        const sendResponse = await fetch(`${evolutionUrl}/message/sendText/${instanceName}`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: evolutionKey,
+          },
+          body: JSON.stringify({
+            number: phone,
+            text: chunks[i],
+          }),
+        });
+
+        if (!sendResponse.ok) {
+          const errorText = await sendResponse.text();
+          return { ok: false, error: errorText };
+        }
+
+        if (i === 0) {
+          const result = await sendResponse.json();
+          firstMessageId = result?.key?.id;
+        }
       }
 
-      const result = await sendResponse.json();
-      return { ok: true, messageId: result?.key?.id };
+      return { ok: true, messageId: firstMessageId };
     };
 
     // =====================================================

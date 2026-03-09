@@ -3,6 +3,7 @@
  */
 
 import { humanizeMessage } from "./message-humanizer.ts";
+import { smartSplitMessage } from "./natural-messaging.ts";
 
 // deno-lint-ignore no-explicit-any
 export async function sendFollowupMessage(
@@ -39,25 +40,49 @@ export async function sendFollowupMessage(
   // Humanizar mensagem para evitar banimento por mensagens repetitivas
   const humanizedContent = await humanizeMessage(messageContent);
 
-  const sendResponse = await fetch(
-    `${evolutionUrl}/message/sendText/${instanceName}`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        apikey: evolutionKey,
-      },
-      body: JSON.stringify({
-        number: formattedPhone,
-        text: humanizedContent,
-      }),
-    }
-  );
+  // Smart split: sempre ativo com intensidade "natural"
+  const { chunks, delays } = await smartSplitMessage(humanizedContent, { enabled: true, intensity: "natural" });
 
-  if (!sendResponse.ok) {
-    const errText = await sendResponse.text();
-    console.error("[followup-sender] Evolution API error:", errText);
-    return { success: false, error: errText };
+  let allSent = true;
+  for (let i = 0; i < chunks.length; i++) {
+    // Typing indicator antes de cada chunk
+    try {
+      await fetch(`${evolutionUrl}/chat/sendPresence/${instanceName}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", apikey: evolutionKey },
+        body: JSON.stringify({ number: formattedPhone, delay: 500, presence: "composing" }),
+      });
+    } catch { /* best-effort */ }
+
+    // Delay proporcional
+    if (delays[i] > 0) {
+      await new Promise((r) => setTimeout(r, delays[i]));
+    }
+
+    const sendResponse = await fetch(
+      `${evolutionUrl}/message/sendText/${instanceName}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: evolutionKey,
+        },
+        body: JSON.stringify({
+          number: formattedPhone,
+          text: chunks[i],
+        }),
+      }
+    );
+
+    if (!sendResponse.ok) {
+      const errText = await sendResponse.text();
+      console.error("[followup-sender] Evolution API error on chunk", i + 1, ":", errText);
+      allSent = false;
+    }
+  }
+
+  if (!allSent) {
+    return { success: false, error: "Failed to send one or more chunks" };
   }
 
   const messageId = `followup-${crypto.randomUUID()}`;
