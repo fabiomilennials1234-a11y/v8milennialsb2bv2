@@ -105,7 +105,7 @@ export function useUpdatePipeProposta() {
   const queryClient = useQueryClient();
   
   return useMutation({
-    mutationFn: async ({ id, leadId, closerId, ...updates }: PipePropostaUpdate & { id: string; leadId?: string; closerId?: string | null }) => {
+    mutationFn: async ({ id, leadId, closerId, skip_auto_push, ...updates }: PipePropostaUpdate & { id: string; leadId?: string; closerId?: string | null; skip_auto_push?: boolean }) => {
       const { data, error } = await supabase
         .from("pipe_propostas")
         .update(updates)
@@ -121,8 +121,8 @@ export function useUpdatePipeProposta() {
         await supabase.from("leads").update({ closer_id: updates.closer_id || null }).eq("id", effectiveLeadId);
       }
 
-      // Auto-push order to TinyERP when status changes to "vendido"
-      if (updates.status === "vendido" && data.organization_id) {
+      // Auto-push order to TinyERP when status changes to "vendido" (skip if modal already handled it)
+      if (updates.status === "vendido" && data.organization_id && !skip_auto_push) {
         try {
           const { data: tinyConn } = await supabase
             .from("tinyerp_connections")
@@ -132,9 +132,17 @@ export function useUpdatePipeProposta() {
             .maybeSingle();
 
           if (tinyConn?.auto_push_orders) {
-            // Fire-and-forget: don't block the update
+            // Push order and refresh TinyERP queries so UI updates
             supabase.functions.invoke("tinyerp-push-order", {
               body: { pipe_proposta_id: id },
+            }).then(({ data: pushResult, error: pushError }) => {
+              if (pushError || pushResult?.error) {
+                console.error("[TinyERP Auto-push] Error:", pushError || pushResult?.error);
+              } else {
+                // Invalidate TinyERP queries so TinyErpOrderStatus component updates
+                queryClient.invalidateQueries({ queryKey: ["tinyerp-order-mapping"] });
+                queryClient.invalidateQueries({ queryKey: ["tinyerp-sync-logs"] });
+              }
             }).catch((err) => console.error("[TinyERP Auto-push] Error:", err));
           }
         } catch {

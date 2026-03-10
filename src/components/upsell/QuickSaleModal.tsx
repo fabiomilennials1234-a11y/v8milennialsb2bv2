@@ -10,6 +10,8 @@ import { useCreateUpsellOrder } from "@/hooks/useUpsellOrders";
 import { useOrganization } from "@/hooks/useOrganization";
 import { useProducts } from "@/hooks/useProducts";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
+import { useTinyErpStatus } from "@/hooks/useTinyErp";
+import { TinyErpUpsellConfirmDialog } from "./TinyErpUpsellConfirmDialog";
 import { toast } from "sonner";
 
 interface QuickSaleModalProps {
@@ -33,7 +35,16 @@ export function QuickSaleModal({
   const createOrder = useCreateUpsellOrder();
   const { data: products = [] } = useProducts();
   const { data: teamMembers = [] } = useTeamMembers();
+  const { data: tinyStatus } = useTinyErpStatus();
   const activeProducts = products.filter((p) => p.is_active);
+
+  // TinyERP confirmation state
+  const [tinyConfirmOpen, setTinyConfirmOpen] = useState(false);
+  const [pendingTinyData, setPendingTinyData] = useState<{
+    orderId: string;
+    productName: string;
+    saleValue: number;
+  } | null>(null);
 
   const [formData, setFormData] = useState({
     product_id: "",
@@ -72,7 +83,7 @@ export function QuickSaleModal({
     }
 
     try {
-      await createOrder.mutateAsync({
+      const orderData = await createOrder.mutateAsync({
         order: {
           organization_id: organizationId,
           client_id: clientId,
@@ -95,6 +106,18 @@ export function QuickSaleModal({
       });
 
       toast.success("Venda registrada com sucesso!");
+
+      // If TinyERP is connected, show confirmation dialog
+      if (tinyStatus?.connected && orderData?.id) {
+        setPendingTinyData({
+          orderId: orderData.id,
+          productName: formData.product_name,
+          saleValue,
+        });
+        setTinyConfirmOpen(true);
+        return;
+      }
+
       onOpenChange(false);
       onSaleComplete?.();
       setFormData({
@@ -111,6 +134,7 @@ export function QuickSaleModal({
   };
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[450px]">
         <DialogHeader>
@@ -209,5 +233,31 @@ export function QuickSaleModal({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    {/* TinyERP Confirmation Dialog */}
+    {pendingTinyData && (
+      <TinyErpUpsellConfirmDialog
+        open={tinyConfirmOpen}
+        onOpenChange={setTinyConfirmOpen}
+        upsellOrderId={pendingTinyData.orderId}
+        client={{ name: clientName }}
+        productName={pendingTinyData.productName}
+        saleValue={pendingTinyData.saleValue}
+        onComplete={() => {
+          setPendingTinyData(null);
+          onOpenChange(false);
+          onSaleComplete?.();
+          setFormData({
+            product_id: "",
+            product_name: "",
+            product_type: "mrr",
+            sale_value: "",
+            closer_id: "",
+            notes: "",
+          });
+        }}
+      />
+    )}
+    </>
   );
 }

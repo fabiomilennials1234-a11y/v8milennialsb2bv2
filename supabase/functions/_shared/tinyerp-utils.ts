@@ -92,9 +92,33 @@ export interface TinyApiResponse {
     status_processamento: string; // "1" = sucesso, "2" = erro parcial, "3" = erro
     status: string;
     codigo_erro?: number;
-    erros?: Array<{ erro: string }>;
+    erros?: Array<{ erro: string }> | Record<string, string>;
     [key: string]: unknown;
   };
+}
+
+/**
+ * Extracts error message from TinyERP response.
+ * TinyERP `erros` can be an array [{erro: "..."}] OR an object {erro: "..."}.
+ */
+export function getTinyErrorMessage(response: TinyApiResponse): string {
+  const erros = response.retorno.erros;
+  if (Array.isArray(erros) && erros.length > 0) {
+    return erros[0]?.erro || "";
+  }
+  if (erros && typeof erros === "object" && !Array.isArray(erros)) {
+    return (erros as Record<string, string>).erro || "";
+  }
+  return response.retorno.status || "";
+}
+
+/**
+ * Checks if TinyERP error is "no records found" (not an actual error).
+ */
+export function isTinyNoRecordsError(response: TinyApiResponse): boolean {
+  if (response.retorno.status_processamento !== "3") return false;
+  const msg = getTinyErrorMessage(response).toLowerCase();
+  return msg.includes("nenhum registro") || msg.includes("não há registros");
 }
 
 export async function callTinyApi(

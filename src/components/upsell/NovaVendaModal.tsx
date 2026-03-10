@@ -11,6 +11,8 @@ import { useUpsellClients } from "@/hooks/useUpsellClients";
 import { useOrganization } from "@/hooks/useOrganization";
 import { useProducts } from "@/hooks/useProducts";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
+import { useTinyErpStatus } from "@/hooks/useTinyErp";
+import { TinyErpUpsellConfirmDialog } from "./TinyErpUpsellConfirmDialog";
 import { toast } from "sonner";
 
 interface NovaVendaModalProps {
@@ -35,12 +37,24 @@ export function NovaVendaModal({ open, onOpenChange }: NovaVendaModalProps) {
   const { data: clients = [] } = useUpsellClients();
   const { data: products = [] } = useProducts();
   const { data: teamMembers = [] } = useTeamMembers();
+  const { data: tinyStatus } = useTinyErpStatus();
 
   const activeClients = clients.filter((c) => c.is_active);
   const activeProducts = products.filter((p) => p.is_active);
 
   const [formData, setFormData] = useState(initialForm);
   const [clientSearch, setClientSearch] = useState("");
+
+  // TinyERP confirmation state
+  const [tinyConfirmOpen, setTinyConfirmOpen] = useState(false);
+  const [pendingTinyData, setPendingTinyData] = useState<{
+    orderId: string;
+    clientName: string;
+    clientEmail: string;
+    clientPhone: string;
+    productName: string;
+    saleValue: number;
+  } | null>(null);
 
   const filteredClients = clientSearch
     ? activeClients.filter(
@@ -85,7 +99,7 @@ export function NovaVendaModal({ open, onOpenChange }: NovaVendaModalProps) {
     }
 
     try {
-      await createOrder.mutateAsync({
+      const orderData = await createOrder.mutateAsync({
         order: {
           organization_id: organizationId,
           client_id: formData.client_id,
@@ -108,6 +122,23 @@ export function NovaVendaModal({ open, onOpenChange }: NovaVendaModalProps) {
       });
 
       toast.success("Venda registrada com sucesso!");
+
+      // If TinyERP is connected, show confirmation dialog to push order
+      if (tinyStatus?.connected && orderData?.id) {
+        const client = activeClients.find((c) => c.id === formData.client_id);
+        setPendingTinyData({
+          orderId: orderData.id,
+          clientName: client?.name || "",
+          clientEmail: client?.email || "",
+          clientPhone: client?.phone || "",
+          productName: formData.product_name,
+          saleValue,
+        });
+        setTinyConfirmOpen(true);
+        // Don't close the main modal yet — TinyERP dialog will handle it
+        return;
+      }
+
       onOpenChange(false);
       setFormData({ ...initialForm, sold_at: new Date().toISOString().slice(0, 10) });
       setClientSearch("");
@@ -125,6 +156,7 @@ export function NovaVendaModal({ open, onOpenChange }: NovaVendaModalProps) {
   };
 
   return (
+    <>
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
@@ -282,5 +314,28 @@ export function NovaVendaModal({ open, onOpenChange }: NovaVendaModalProps) {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    {/* TinyERP Confirmation Dialog */}
+    {pendingTinyData && (
+      <TinyErpUpsellConfirmDialog
+        open={tinyConfirmOpen}
+        onOpenChange={setTinyConfirmOpen}
+        upsellOrderId={pendingTinyData.orderId}
+        client={{
+          name: pendingTinyData.clientName,
+          email: pendingTinyData.clientEmail,
+          phone: pendingTinyData.clientPhone,
+        }}
+        productName={pendingTinyData.productName}
+        saleValue={pendingTinyData.saleValue}
+        onComplete={() => {
+          setPendingTinyData(null);
+          onOpenChange(false);
+          setFormData({ ...initialForm, sold_at: new Date().toISOString().slice(0, 10) });
+          setClientSearch("");
+        }}
+      />
+    )}
+    </>
   );
 }

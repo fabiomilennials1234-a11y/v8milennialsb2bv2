@@ -1,9 +1,12 @@
 /**
- * tinyerp-push-order
+ * tinyerp-push-upsell-order
  *
- * Envia um pedido (pipe_proposta) para o TinyERP.
- * Mapeia lead → contato, items → itens do pedido.
- * Body: { pipe_proposta_id: string }
+ * Envia um pedido de upsell para o TinyERP.
+ * 1. Busca contato existente no TinyERP (por nome/CNPJ) — se não encontrar, cadastra.
+ * 2. Cria o pedido no TinyERP.
+ * 3. Salva mapeamento em tinyerp_order_mappings.
+ *
+ * Body: { upsell_order_id: string, client_override?: { nome, cpf_cnpj, email, fone, endereco, bairro, cidade, uf, cep } }
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -69,10 +72,10 @@ Deno.serve(async (req) => {
       );
     }
 
-    const { pipe_proposta_id, client_override } = await req.json();
-    if (!pipe_proposta_id) {
+    const { upsell_order_id, client_override } = await req.json();
+    if (!upsell_order_id) {
       return new Response(
-        JSON.stringify({ error: "pipe_proposta_id é obrigatório" }),
+        JSON.stringify({ error: "upsell_order_id é obrigatório" }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -81,7 +84,7 @@ Deno.serve(async (req) => {
     const { data: existingMapping } = await supabaseAdmin
       .from("tinyerp_order_mappings")
       .select("id, tiny_order_id")
-      .eq("pipe_proposta_id", pipe_proposta_id)
+      .eq("upsell_order_id", upsell_order_id)
       .maybeSingle();
 
     if (existingMapping) {
@@ -91,58 +94,32 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Load proposta with lead and items
-    // Tables/columns: pipe_propostas(sale_value, notes), leads(name, company, email, phone, faturamento, segment),
-    // pipe_proposta_items(sale_value, product_id), products(name, sku)
-    const { data: proposta, error: propostaError } = await supabaseAdmin
-      .from("pipe_propostas")
+    // Load upsell order with client data
+    const { data: order, error: orderError } = await supabaseAdmin
+      .from("upsell_orders")
       .select(`
-        id, sale_value, notes,
-        lead:leads(id, name, company, email, phone, faturamento, segment),
-        items:pipe_proposta_items(id, sale_value, product_id, product:products(id, name, sku))
+        id, product_name, product_type, sale_value, notes, sold_at,
+        client:upsell_clients(id, name, company, email, phone, lead_id)
       `)
-      .eq("id", pipe_proposta_id)
+      .eq("id", upsell_order_id)
       .single();
 
-    if (propostaError || !proposta) {
-      console.error("[TinyERP Push] Proposta query error:", propostaError);
+    if (orderError || !order) {
+      console.error("[TinyERP Upsell Push] Order query error:", orderError);
       return new Response(
-        JSON.stringify({ error: "Proposta não encontrada" }),
+        JSON.stringify({ error: "Pedido de upsell não encontrado" }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const lead = proposta.lead as Record<string, unknown> | null;
-    const items = (proposta.items || []) as Array<Record<string, unknown>>;
-
-    if (items.length === 0) {
-      return new Response(
-        JSON.stringify({ error: "Proposta sem itens — adicione produtos antes de enviar" }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    console.log("[TinyERP Push] Pushing order for proposta:", pipe_proposta_id, "items:", items.length);
-
-    // Build TinyERP order payload
-    // pipe_proposta_items has sale_value (total per item), no separate quantity/unit_price
-    const tinyItems = items.map((item, idx) => ({
-      item: {
-        descricao: (item.product as Record<string, unknown>)?.name || `Item ${idx + 1}`,
-        codigo: (item.product as Record<string, unknown>)?.sku || "",
-        unidade: "UN",
-        quantidade: 1,
-        valor_unitario: Number(item.sale_value) || 0,
-      },
-    }));
-
-    // Use client_override (from confirmation modal) if provided, otherwise use lead data
+    const client = order.client as Record<string, unknown> | null;
     const co = client_override as Record<string, string> | undefined;
+
     const clienteData = {
-      nome: co?.nome || lead?.name || lead?.company || "Cliente",
+      nome: co?.nome || (client?.name as string) || (client?.company as string) || "Cliente",
       cpf_cnpj: co?.cpf_cnpj || "",
-      email: co?.email || lead?.email || "",
-      fone: co?.fone || lead?.phone || "",
+      email: co?.email || (client?.email as string) || "",
+      fone: co?.fone || (client?.phone as string) || "",
       endereco: co?.endereco || "",
       bairro: co?.bairro || "",
       cidade: co?.cidade || "",
@@ -150,33 +127,37 @@ Deno.serve(async (req) => {
       cep: co?.cep || "",
     };
 
-    // Search for existing contact in TinyERP, register if not found (best-effort)
+    console.log("[TinyERP Upsell Push] Pushing order:", upsell_order_id, "client:", clienteData.nome);
+
+    // ─── Step 1: Search for existing contact in TinyERP ──────────────────────
+    let contactFound = false;
+
     if (clienteData.nome && clienteData.nome !== "Cliente") {
-      try {
-        let contactFound = false;
+      // Try searching by CNPJ first (most precise), then by name
+      const searchTerms: string[] = [];
+      if (clienteData.cpf_cnpj) searchTerms.push(clienteData.cpf_cnpj.replace(/\D/g, ""));
+      searchTerms.push(clienteData.nome);
 
-        // Search by CNPJ first (most precise), then by name
-        const searchTerms: string[] = [];
-        if (clienteData.cpf_cnpj) searchTerms.push(clienteData.cpf_cnpj.replace(/\D/g, ""));
-        searchTerms.push(clienteData.nome);
+      for (const term of searchTerms) {
+        try {
+          const searchResult = await callTinyApi(tokenData.token, "contatos.pesquisa.php", {
+            pesquisa: term,
+          });
 
-        for (const term of searchTerms) {
-          try {
-            const searchResult = await callTinyApi(tokenData.token, "contatos.pesquisa.php", {
-              pesquisa: term,
-            });
-            const contatos = (searchResult.retorno.contatos as Array<Record<string, unknown>>) || [];
-            if (contatos.length > 0) {
-              contactFound = true;
-              console.log("[TinyERP Push] Contact already exists for:", term);
-              break;
-            }
-          } catch {
-            // Search failed — proceed to create
+          const contatos = (searchResult.retorno.contatos as Array<Record<string, unknown>>) || [];
+          if (contatos.length > 0) {
+            contactFound = true;
+            console.log("[TinyERP Upsell Push] Contact found in TinyERP for:", term, "count:", contatos.length);
+            break;
           }
+        } catch (searchErr) {
+          console.warn("[TinyERP Upsell Push] Contact search failed (non-blocking):", searchErr);
         }
+      }
 
-        if (!contactFound) {
+      // ─── Step 2: Register contact if not found ───────────────────────────
+      if (!contactFound) {
+        try {
           const contato = {
             contato: {
               nome: clienteData.nome,
@@ -196,13 +177,24 @@ Deno.serve(async (req) => {
           const contactResult = await callTinyApi(tokenData.token, "contato.incluir.php", {
             contato: JSON.stringify(contato),
           });
-          console.log("[TinyERP Push] Contact creation:", contactResult.retorno.status);
+          console.log("[TinyERP Upsell Push] Contact creation:", contactResult.retorno.status);
+        } catch (contactErr) {
+          // Best-effort — don't block order creation if contact fails
+          console.warn("[TinyERP Upsell Push] Contact creation failed (non-blocking):", contactErr);
         }
-      } catch (contactErr) {
-        // Best-effort — don't block order creation if contact fails
-        console.warn("[TinyERP Push] Contact handling failed (non-blocking):", contactErr);
       }
     }
+
+    // ─── Step 3: Create order in TinyERP ───────────────────────────────────
+    const tinyItems = [{
+      item: {
+        descricao: order.product_name || "Produto",
+        codigo: "",
+        unidade: "UN",
+        quantidade: 1,
+        valor_unitario: Number(order.sale_value) || 0,
+      },
+    }];
 
     const pedido = {
       pedido: {
@@ -210,7 +202,7 @@ Deno.serve(async (req) => {
         itens: tinyItems,
         valor_frete: 0,
         valor_desconto: 0,
-        obs: proposta.notes || `Pedido gerado via CRM - Proposta ${pipe_proposta_id.substring(0, 8)}`,
+        obs: order.notes || `Venda upsell registrada via CRM`,
         situacao: "aberto",
       },
     };
@@ -219,14 +211,12 @@ Deno.serve(async (req) => {
       pedido: JSON.stringify(pedido),
     });
 
-    console.log("[TinyERP Push] API response:", {
+    console.log("[TinyERP Upsell Push] API response:", {
       status: result.retorno.status,
       status_processamento: result.retorno.status_processamento,
       registros: result.retorno.registros,
     });
 
-    // TinyERP API v2 can return status_processamento "3" even on success (status "OK").
-    // Check for actual data (registros) or status "OK" before declaring failure.
     const registros = (result.retorno.registros || []) as Array<Record<string, unknown>>;
     const registro = (registros[0] as Record<string, unknown>)?.registro as Record<string, unknown> | undefined;
     const isStatusOk = result.retorno.status === "OK" || result.retorno.status === "Sucesso";
@@ -237,11 +227,11 @@ Deno.serve(async (req) => {
 
       await logTinyOp(supabaseAdmin, {
         organization_id: orgId,
-        operation: "order_push",
+        operation: "upsell_order_push",
         status: "failed",
         error_message: errorMsg,
-        local_reference_id: pipe_proposta_id,
-        local_reference_type: "pipe_proposta",
+        local_reference_id: upsell_order_id,
+        local_reference_type: "upsell_order",
         request_payload: pedido,
         response_payload: result,
         initiated_by: "user",
@@ -262,7 +252,7 @@ Deno.serve(async (req) => {
         .from("tinyerp_order_mappings")
         .insert({
           organization_id: orgId,
-          pipe_proposta_id,
+          upsell_order_id,
           tiny_order_id: tinyOrderId,
           tiny_order_number: tinyOrderNumber || null,
         });
@@ -277,30 +267,31 @@ Deno.serve(async (req) => {
     // Log success
     await logTinyOp(supabaseAdmin, {
       organization_id: orgId,
-      operation: "order_push",
+      operation: "upsell_order_push",
       status: "success",
-      items_processed: items.length,
+      items_processed: 1,
       items_created: 1,
-      local_reference_id: pipe_proposta_id,
-      local_reference_type: "pipe_proposta",
+      local_reference_id: upsell_order_id,
+      local_reference_type: "upsell_order",
       tiny_reference_id: tinyOrderId,
       request_payload: pedido,
       response_payload: result,
       initiated_by: "user",
     });
 
-    console.log("[TinyERP Push] Success:", { tinyOrderId, tinyOrderNumber });
+    console.log("[TinyERP Upsell Push] Success:", { tinyOrderId, tinyOrderNumber, contactFound });
 
     return new Response(
       JSON.stringify({
         success: true,
         tiny_order_id: tinyOrderId,
         tiny_order_number: tinyOrderNumber,
+        contact_found: contactFound,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {
-    console.error("[TinyERP Push] Error:", err);
+    console.error("[TinyERP Upsell Push] Error:", err);
     return new Response(
       JSON.stringify({ error: err instanceof Error ? err.message : "Erro desconhecido" }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }

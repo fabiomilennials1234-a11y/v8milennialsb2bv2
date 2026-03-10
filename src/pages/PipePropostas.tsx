@@ -1,4 +1,4 @@
-import { useState, useMemo, memo } from "react";
+import { useState, useMemo, useRef, memo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search, Filter, Plus, Calendar, User, Building2, Star,
@@ -46,7 +46,10 @@ import { FunnelChart } from "@/components/dashboard/FunnelChart";
 import { CalorSlider, CalorBadge } from "@/components/proposals/CalorSlider";
 import { QuickAddDailyAction } from "@/components/proposals/QuickAddDailyAction";
 import { CommitmentDateModal } from "@/components/proposals/CommitmentDateModal";
+import { TinyErpConfirmOrderDialog } from "@/components/proposals/TinyErpConfirmOrderDialog";
 import { DaysUntilMeeting } from "@/components/proposals/DaysUntilMeeting";
+import { useTinyErpStatus } from "@/hooks/useTinyErp";
+import { supabase } from "@/integrations/supabase/client";
 import { CalorAnalyticsChart } from "@/components/proposals/CalorAnalyticsChart";
 import { ProductAnalyticsChart } from "@/components/proposals/ProductAnalyticsChart";
 import { format, formatDistanceToNow } from "date-fns";
@@ -336,6 +339,17 @@ export default function PipePropostas() {
     closerId: string | null;
     leadName: string;
   } | null>(null);
+  // State for TinyERP confirmation modal on drag-to-vendido
+  const [tinyConfirmOpen, setTinyConfirmOpen] = useState(false);
+  const [pendingVendido, setPendingVendido] = useState<{
+    itemId: string;
+    leadId: string;
+    closerId: string | null;
+    lead: any;
+    items: Array<{ product_name: string; sale_value: number }>;
+    totalValue: number;
+  } | null>(null);
+
   const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; pipeId: string; leadId: string } | null>(null);
   const [deleteAllLeadsDialogOpen, setDeleteAllLeadsDialogOpen] = useState(false);
   const [metricsPeriod, setMetricsPeriod] = useState<MetricsPeriod>("all");
@@ -347,6 +361,7 @@ export default function PipePropostas() {
   const { data: pipelineStages = [] } = usePipelineStages("propostas");
   const { data: teamMembers } = useTeamMembers();
   const updatePipeProposta = useUpdatePipeProposta();
+  const { data: tinyStatus } = useTinyErpStatus();
   const deletePipeProposta = useDeletePipeProposta();
   const deleteAllLeadsInPipe = useDeleteAllLeadsInPipe("propostas");
   const logAction = useLogLeadAction();
@@ -682,8 +697,12 @@ export default function PipePropostas() {
 
   // Handle status change from drag-and-drop
   const handleStatusChange = async (itemId: string, newStatus: string) => {
+    console.log("[PipePropostas] handleStatusChange called:", { itemId, newStatus, tinyConnected: tinyStatus?.connected });
     const item = pipeData?.find(p => p.id === itemId);
-    if (!item) return;
+    if (!item) {
+      console.warn("[PipePropostas] Item not found in pipeData:", itemId);
+      return;
+    }
 
     // If moving to "compromisso_marcado", require date selection
     if (newStatus === "compromisso_marcado") {
@@ -697,23 +716,65 @@ export default function PipePropostas() {
       return;
     }
 
+    // If moving to "vendido" and TinyERP is connected, show confirmation modal
+    if (newStatus === "vendido") {
+      // Check TinyERP connection — use cached status or fetch inline
+      let isTinyConnected = tinyStatus?.connected ?? false;
+      if (!tinyStatus) {
+        try {
+          const { data: tinyConn } = await supabase
+            .from("tinyerp_connections")
+            .select("status")
+            .eq("organization_id", item.organization_id)
+            .eq("status", "connected")
+            .maybeSingle();
+          isTinyConnected = !!tinyConn;
+        } catch {
+          // Ignore — proceed without TinyERP modal
+        }
+      }
+
+      console.log("[PipePropostas] Vendido intercept:", { isTinyConnected, tinyStatusCached: tinyStatus?.connected });
+
+      if (isTinyConnected) {
+        const itemsList = (item.items || []).map((it: any) => ({
+          product_name: it.product?.name || "Produto",
+          sale_value: Number(it.sale_value) || 0,
+        }));
+        const total = itemsList.reduce((sum: number, it: any) => sum + it.sale_value, 0);
+
+        setPendingVendido({
+          itemId,
+          leadId: item.lead_id,
+          closerId: item.closer_id,
+          lead: item.lead,
+          items: itemsList,
+          totalValue: total || Number(item.sale_value) || 0,
+        });
+        setTinyConfirmOpen(true);
+        return;
+      }
+    }
+
     await executeStatusChange(itemId, newStatus, item.lead_id, item.closer_id);
   };
 
-  // Execute status change (called directly or after date modal)
+  // Execute status change (called directly or after date/TinyERP modal)
   const executeStatusChange = async (
-    itemId: string, 
-    newStatus: string, 
-    leadId: string, 
+    itemId: string,
+    newStatus: string,
+    leadId: string,
     closerId: string | null,
-    commitmentDate?: Date
+    commitmentDate?: Date,
+    skipAutoPush?: boolean
   ) => {
     try {
-      const updates: any = { 
-        id: itemId, 
+      const updates: any = {
+        id: itemId,
         status: newStatus as PipePropostasStatus,
         leadId,
         closerId,
+        skip_auto_push: skipAutoPush,
       };
 
       // If commitment date is provided, set it
@@ -760,6 +821,31 @@ export default function PipePropostas() {
 
     setIsDateModalOpen(false);
     setPendingStatusChange(null);
+  };
+
+  // Guard ref to prevent double execution of vendido completion
+  const vendidoCompletingRef = useRef(false);
+
+  // Handle TinyERP vendido confirmation (after modal confirms or skips)
+  const handleTinyVendidoComplete = async () => {
+    if (!pendingVendido || vendidoCompletingRef.current) return;
+    vendidoCompletingRef.current = true;
+    const pv = pendingVendido;
+    setPendingVendido(null);
+
+    try {
+      // Execute the status change with skip_auto_push since modal already handled TinyERP
+      await executeStatusChange(
+        pv.itemId,
+        "vendido",
+        pv.leadId,
+        pv.closerId,
+        undefined,
+        true // skip auto-push — modal already sent the order (or user chose to skip)
+      );
+    } finally {
+      vendidoCompletingRef.current = false;
+    }
   };
 
   // Handle commitment date cancel
@@ -1262,6 +1348,25 @@ export default function PipePropostas() {
             refetch();
             setSelectedProposta(null);
           }}
+        />
+      )}
+
+      {/* TinyERP Confirm Order Modal (on drag-to-vendido) */}
+      {pendingVendido && (
+        <TinyErpConfirmOrderDialog
+          open={tinyConfirmOpen}
+          onOpenChange={(open) => {
+            setTinyConfirmOpen(open);
+            if (!open && pendingVendido) {
+              // Dialog closed (overlay/escape) without explicit action — still complete vendido
+              handleTinyVendidoComplete();
+            }
+          }}
+          pipePropostaId={pendingVendido.itemId}
+          lead={pendingVendido.lead}
+          items={pendingVendido.items}
+          totalValue={pendingVendido.totalValue}
+          onSuccess={handleTinyVendidoComplete}
         />
       )}
 

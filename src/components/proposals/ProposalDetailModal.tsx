@@ -55,6 +55,8 @@ import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { TinyErpOrderStatus } from "./TinyErpOrderStatus";
+import { TinyErpConfirmOrderDialog } from "./TinyErpConfirmOrderDialog";
+import { useTinyErpStatus } from "@/hooks/useTinyErp";
 
 const statusLabels: Record<PipePropostasStatus, string> = {
   marcar_compromisso: "Marcar Compromisso",
@@ -100,7 +102,9 @@ export function ProposalDetailModal({
   });
   const [newNote, setNewNote] = useState("");
   const [isAddingNote, setIsAddingNote] = useState(false);
+  const [tinyConfirmOpen, setTinyConfirmOpen] = useState(false);
 
+  const { data: tinyStatus } = useTinyErpStatus();
   const { data: teamMembers = [] } = useTeamMembers();
   const { data: products = [] } = useActiveProducts();
   const { data: itemsData = [], isLoading: itemsLoading } = usePipePropostaItems(proposta?.id);
@@ -264,6 +268,10 @@ export function ProposalDetailModal({
         }
       }
 
+      // If status changed to "vendido" and TinyERP is connected, skip auto-push (modal will handle it)
+      const isNewSale = formData.status === "vendido" && proposta.status !== "vendido";
+      const shouldShowTinyModal = isNewSale && tinyStatus?.connected;
+
       // Update the proposal
       await updateProposta.mutateAsync({
         id: proposta.id,
@@ -275,16 +283,23 @@ export function ProposalDetailModal({
         closer_id: formData.closer_id,
         commitment_date: formData.commitment_date ? new Date(formData.commitment_date).toISOString() : null,
         notes: formData.notes || null,
-        closed_at: formData.status === "vendido" ? new Date().toISOString() : 
+        closed_at: formData.status === "vendido" ? new Date().toISOString() :
                   formData.status === "perdido" ? new Date().toISOString() : null,
+        skip_auto_push: shouldShowTinyModal, // TinyERP dialog will handle the push
       });
-      
-      if (formData.status === "vendido" && proposta.status !== "vendido") {
+      if (shouldShowTinyModal) {
+        toast.success("🎉 Venda fechada com sucesso!");
+        setTinyConfirmOpen(true);
+        // Don't close the main modal yet — TinyERP dialog will handle it
+        return;
+      }
+
+      if (isNewSale) {
         toast.success("🎉 Venda fechada com sucesso!");
       } else {
         toast.success("Proposta atualizada!");
       }
-      
+
       onOpenChange(false);
       onSuccess?.();
     } catch (error) {
@@ -364,6 +379,7 @@ export function ProposalDetailModal({
   const totalValue = localItems.reduce((sum, item) => sum + (Number(item.sale_value) || 0), 0);
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[750px] max-h-[90vh] overflow-hidden flex flex-col p-0 gap-0">
         <DialogHeader className="px-6 pt-6 pb-2 shrink-0">
@@ -981,5 +997,43 @@ export function ProposalDetailModal({
         </div>
       </DialogContent>
     </Dialog>
+
+    {/* TinyERP order confirmation dialog — outside main Dialog to avoid Radix nesting issues */}
+    {tinyConfirmOpen && (
+      <TinyErpConfirmOrderDialog
+        open={tinyConfirmOpen}
+        onOpenChange={(v) => {
+          setTinyConfirmOpen(v);
+          if (!v) {
+            onOpenChange(false);
+            onSuccess?.();
+          }
+        }}
+        pipePropostaId={proposta?.id || ""}
+        lead={proposta?.lead ? {
+          name: proposta.lead.name,
+          company: proposta.lead.company,
+          email: proposta.lead.email,
+          phone: proposta.lead.phone,
+          segment: proposta.lead.segment,
+          faturamento: proposta.lead.faturamento,
+        } : null}
+        items={localItems
+          .filter(item => item.product_id && item.sale_value)
+          .map(item => ({
+            product_name: products.find(p => p.id === item.product_id)?.name || "Produto",
+            sale_value: Number(item.sale_value) || 0,
+          }))}
+        totalValue={localItems
+          .filter(item => item.product_id && item.sale_value)
+          .reduce((sum, item) => sum + Number(item.sale_value), 0)}
+        onSuccess={() => {
+          setTinyConfirmOpen(false);
+          onOpenChange(false);
+          onSuccess?.();
+        }}
+      />
+    )}
+    </>
   );
 }

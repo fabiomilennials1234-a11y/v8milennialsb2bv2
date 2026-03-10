@@ -7,7 +7,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
-import { encryptToken, callTinyApi, logTinyOp, ENCRYPTION_KEY_ID } from "../_shared/tinyerp-utils.ts";
+import { encryptToken, callTinyApi, logTinyOp, getTinyErrorMessage, isTinyNoRecordsError, ENCRYPTION_KEY_ID } from "../_shared/tinyerp-utils.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -75,33 +75,34 @@ Deno.serve(async (req) => {
     let cnpj = "";
 
     try {
-      // Try to get account info — Tiny doesn't have a dedicated info endpoint,
-      // so we list products with limit 1 to validate the token
+      // Validate the token by calling produtos.pesquisa.php
+      // IMPORTANT: TinyERP API v2 returns status_processamento "3" even on SUCCESS
+      // with status "OK" and actual data. We cannot rely on status_processamento alone.
+      // Instead, check if the response has actual error indicators.
       const testResult = await callTinyApi(api_token.trim(), "produtos.pesquisa.php", {
         pesquisa: "",
         pagina: 1,
       });
 
-      if (testResult.retorno.status_processamento === "3") {
-        const errorMsg = testResult.retorno.erros?.[0]?.erro || "Token inválido";
-        return new Response(
-          JSON.stringify({ error: `Token inválido: ${errorMsg}` }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+      console.log("[TinyERP Connect] API response status:", testResult.retorno.status, "processamento:", testResult.retorno.status_processamento);
+
+      const hasData = testResult.retorno.produtos || testResult.retorno.numero_paginas;
+      const isStatusOk = testResult.retorno.status === "OK" || testResult.retorno.status === "Sucesso";
+
+      if (!hasData && !isStatusOk) {
+        // No data and not OK — likely a real auth error
+        const errorMsg = getTinyErrorMessage(testResult) || "Erro de autenticação";
+        // Check if it's just "no records" (valid token, no products)
+        if (!isTinyNoRecordsError(testResult)) {
+          return new Response(
+            JSON.stringify({ error: `Token inválido: ${errorMsg}` }),
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        console.log("[TinyERP Connect] Token valid (no products found)");
       }
 
-      // Try to get CNPJ from contacts
-      try {
-        const contactResult = await callTinyApi(api_token.trim(), "contatos.pesquisa.php", {
-          pesquisa: "",
-          pagina: 1,
-        });
-        if (contactResult.retorno.status_processamento !== "3") {
-          accountName = "TinyERP Conectado";
-        }
-      } catch {
-        // Ignore - not critical
-      }
+      accountName = "TinyERP Conectado";
     } catch (apiError) {
       const msg = apiError instanceof Error ? apiError.message : "Erro ao conectar";
       return new Response(

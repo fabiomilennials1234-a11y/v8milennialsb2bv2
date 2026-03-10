@@ -7,7 +7,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
-import { getOrgTinyToken, callTinyApi, logTinyOp } from "../_shared/tinyerp-utils.ts";
+import { getOrgTinyToken, callTinyApi, logTinyOp, getTinyErrorMessage, isTinyNoRecordsError } from "../_shared/tinyerp-utils.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -97,10 +97,25 @@ Deno.serve(async (req) => {
         pagina: page,
       });
 
-      if (result.retorno.status_processamento === "3") {
-        // No more products or error
-        if (page === 1) {
-          const errorMsg = result.retorno.erros?.[0]?.erro || "Erro ao buscar produtos";
+      // TinyERP API v2 returns status_processamento "3" even on success (with status "OK" and data).
+      // We check for actual data presence rather than relying on status_processamento.
+      const produtos = (result.retorno.produtos as Array<{ produto: TinyProduct }>) || [];
+      const hasData = produtos.length > 0;
+
+      if (page === 1) {
+        console.log("[TinyERP Sync] Page 1 response:", {
+          status: result.retorno.status,
+          status_processamento: result.retorno.status_processamento,
+          numero_paginas: result.retorno.numero_paginas,
+          produtos_count: produtos.length,
+        });
+      }
+      const isStatusOk = result.retorno.status === "OK" || result.retorno.status === "Sucesso";
+
+      if (!hasData && !isStatusOk) {
+        // No data and not OK — real error or end of pages
+        if (page === 1 && !isTinyNoRecordsError(result)) {
+          const errorMsg = getTinyErrorMessage(result) || "Erro ao buscar produtos";
           await logTinyOp(supabaseAdmin, {
             organization_id: orgId,
             operation: "product_import",
@@ -116,8 +131,8 @@ Deno.serve(async (req) => {
         break;
       }
 
-      const produtos = result.retorno.produtos || [];
-      if (produtos.length === 0) {
+      if (!hasData) {
+        // Status OK but no products on this page — we've passed the last page
         hasMore = false;
         break;
       }
@@ -140,6 +155,7 @@ Deno.serve(async (req) => {
             sku: produto.codigo || null,
             ticket: produto.preco || 0,
             base_unit: produto.unidade || "un",
+            type: "unitario" as const,
             organization_id: orgId,
           };
 
@@ -194,8 +210,9 @@ Deno.serve(async (req) => {
         }
       }
 
-      // TinyERP returns max 20 per page
-      if (produtos.length < 20) {
+      // Check if there are more pages using numero_paginas from API response
+      const totalPages = Number(result.retorno.numero_paginas) || 1;
+      if (page >= totalPages || produtos.length < 20) {
         hasMore = false;
       } else {
         page++;
