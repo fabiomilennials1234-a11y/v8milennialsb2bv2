@@ -25,6 +25,7 @@ export interface MasterPermissions {
   features?: boolean;
   impersonation?: boolean;
   audit?: boolean;
+  outbound_only?: boolean;
 }
 
 /**
@@ -70,8 +71,11 @@ export function useMasterAuth() {
     return !!permissions[permission];
   };
 
+  const isOutbounder = !!masterUser && !permissions.all && !!permissions.outbound_only;
+
   return {
     isMaster: !!masterUser,
+    isOutbounder,
     masterUser,
     permissions,
     hasPermission,

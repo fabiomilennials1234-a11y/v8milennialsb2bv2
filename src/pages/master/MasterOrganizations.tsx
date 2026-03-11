@@ -53,8 +53,10 @@ import {
   type OrgType,
 } from "@/hooks/useMasterOrganizations";
 import { BillingOverrideModal } from "@/components/master/BillingOverrideModal";
+import { useMasterAuth } from "@/hooks/useMasterAuth";
 
 export default function MasterOrganizations() {
+  const { isOutbounder } = useMasterAuth();
   const [search, setSearch] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [billingOverrideOpen, setBillingOverrideOpen] = useState(false);
@@ -63,14 +65,19 @@ export default function MasterOrganizations() {
   // Form states
   const [newOrgName, setNewOrgName] = useState("");
   const [newOrgSlug, setNewOrgSlug] = useState("");
-  const [newOrgType, setNewOrgType] = useState<OrgType>("crm");
+  const [newOrgType, setNewOrgType] = useState<OrgType>(isOutbounder ? "outbound" : "crm");
 
   const { data: organizations, isLoading } = useMasterOrganizations();
   const createOrg = useMasterCreateOrganization();
   const updateOrg = useMasterUpdateOrganization();
   const deleteOrg = useMasterDeleteOrganization();
 
-  const filteredOrgs = organizations?.filter(
+  // Outbounder só vê organizações outbound
+  const baseOrgs = isOutbounder
+    ? organizations?.filter((org) => org.org_type === "outbound")
+    : organizations;
+
+  const filteredOrgs = baseOrgs?.filter(
     (org) =>
       org.name.toLowerCase().includes(search.toLowerCase()) ||
       org.slug.toLowerCase().includes(search.toLowerCase())
@@ -115,10 +122,12 @@ export default function MasterOrganizations() {
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <Building2 className="w-6 h-6" />
-            Organizações
+            {isOutbounder ? "Organizações Outbound" : "Organizações"}
           </h1>
           <p className="text-muted-foreground">
-            Gerencie todas as organizações do sistema
+            {isOutbounder
+              ? "Gerencie as organizações de outbound"
+              : "Gerencie todas as organizações do sistema"}
           </p>
         </div>
         <Button onClick={() => setCreateOpen(true)}>
@@ -204,48 +213,52 @@ export default function MasterOrganizations() {
                             <Users className="w-4 h-4 mr-2" />
                             Ver Membros
                           </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            onClick={() => {
-                              setSelectedOrg(org);
-                              setBillingOverrideOpen(true);
-                            }}
-                          >
-                            <CreditCard className="w-4 h-4 mr-2" />
-                            Liberar Plano
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => {
-                              updateOrg.mutate({
-                                id: org.id,
-                                subscription_status: org.subscription_status === "active" ? "suspended" : "active",
-                              });
-                            }}
-                          >
-                            {org.subscription_status === "active" ? (
-                              <>
-                                <PowerOff className="w-4 h-4 mr-2" />
-                                Suspender
-                              </>
-                            ) : (
-                              <>
-                                <Power className="w-4 h-4 mr-2" />
-                                Ativar
-                              </>
-                            )}
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            className="text-destructive focus:text-destructive"
-                            onClick={() => {
-                              if (confirm(`Excluir "${org.name}"? Esta ação não pode ser desfeita.`)) {
-                                deleteOrg.mutate(org.id);
-                              }
-                            }}
-                          >
-                            <Trash2 className="w-4 h-4 mr-2" />
-                            Excluir
-                          </DropdownMenuItem>
+                          {!isOutbounder && (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  setSelectedOrg(org);
+                                  setBillingOverrideOpen(true);
+                                }}
+                              >
+                                <CreditCard className="w-4 h-4 mr-2" />
+                                Liberar Plano
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  updateOrg.mutate({
+                                    id: org.id,
+                                    subscription_status: org.subscription_status === "active" ? "suspended" : "active",
+                                  });
+                                }}
+                              >
+                                {org.subscription_status === "active" ? (
+                                  <>
+                                    <PowerOff className="w-4 h-4 mr-2" />
+                                    Suspender
+                                  </>
+                                ) : (
+                                  <>
+                                    <Power className="w-4 h-4 mr-2" />
+                                    Ativar
+                                  </>
+                                )}
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                className="text-destructive focus:text-destructive"
+                                onClick={() => {
+                                  if (confirm(`Excluir "${org.name}"? Esta ação não pode ser desfeita.`)) {
+                                    deleteOrg.mutate(org.id);
+                                  }
+                                }}
+                              >
+                                <Trash2 className="w-4 h-4 mr-2" />
+                                Excluir
+                              </DropdownMenuItem>
+                            </>
+                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
@@ -264,32 +277,34 @@ export default function MasterOrganizations() {
             <DialogTitle>Nova Organização</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>Tipo de Organização</Label>
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant={newOrgType === "crm" ? "default" : "outline"}
-                  className="flex-1"
-                  onClick={() => setNewOrgType("crm")}
-                >
-                  CRM
-                </Button>
-                <Button
-                  type="button"
-                  variant={newOrgType === "outbound" ? "default" : "outline"}
-                  className="flex-1"
-                  onClick={() => setNewOrgType("outbound")}
-                >
-                  Outbound
-                </Button>
+            {!isOutbounder && (
+              <div className="space-y-2">
+                <Label>Tipo de Organização</Label>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant={newOrgType === "crm" ? "default" : "outline"}
+                    className="flex-1"
+                    onClick={() => setNewOrgType("crm")}
+                  >
+                    CRM
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={newOrgType === "outbound" ? "default" : "outline"}
+                    className="flex-1"
+                    onClick={() => setNewOrgType("outbound")}
+                  >
+                    Outbound
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {newOrgType === "crm"
+                    ? "Fluxo padrão com Admin, SDR e Closer."
+                    : "Agência de prospecção com Agency, BDR e Cliente."}
+                </p>
               </div>
-              <p className="text-xs text-muted-foreground">
-                {newOrgType === "crm"
-                  ? "Fluxo padrão com Admin, SDR e Closer."
-                  : "Agência de prospecção com Agency, BDR e Cliente."}
-              </p>
-            </div>
+            )}
             <div className="space-y-2">
               <Label>Nome</Label>
               <Input
