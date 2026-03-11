@@ -64,6 +64,7 @@ import {
   type UnassignedUser,
 } from "@/hooks/useMasterUsers";
 import { useMasterOrganizations } from "@/hooks/useMasterOrganizations";
+import { useMasterAuth } from "@/hooks/useMasterAuth";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -77,12 +78,13 @@ export default function MasterUsers() {
 
   const [createUserOpen, setCreateUserOpen] = useState(false);
   const [createUserLoading, setCreateUserLoading] = useState(false);
+  const { isOutbounder } = useMasterAuth();
   const [createUserForm, setCreateUserForm] = useState({
     organization_id: "",
     email: "",
     name: "",
     password: "",
-    role: "admin",
+    role: isOutbounder ? "agency" : "admin",
   });
 
   const [assignPendingOpen, setAssignPendingOpen] = useState(false);
@@ -98,14 +100,29 @@ export default function MasterUsers() {
   const queryClient = useQueryClient();
   const { data: users, isLoading } = useMasterUsers();
   const { data: unassignedUsers = [], isLoading: loadingUnassigned } = useMasterUnassignedUsers();
-  const { data: organizations } = useMasterOrganizations();
+  const { data: allOrganizations } = useMasterOrganizations();
+
+  // Outbounder só vê orgs outbound
+  const organizations = isOutbounder
+    ? allOrganizations?.filter((o) => o.org_type === "outbound")
+    : allOrganizations;
+
+  // IDs das orgs outbound para filtrar usuários
+  const outboundOrgIds = isOutbounder
+    ? new Set(organizations?.map((o) => o.id) ?? [])
+    : null;
   const changeRole = useMasterChangeUserRole();
   const toggleActive = useMasterToggleUserActive();
   const moveToOrg = useMasterMoveUserToOrg();
   const assignUserToOrg = useMasterAssignUserToOrg();
   const resetPassword = useMasterResetUserPassword();
 
-  const filteredUsers = users?.filter(
+  // Outbounder só vê usuários de orgs outbound
+  const baseUsers = isOutbounder
+    ? users?.filter((u) => u.org_type === "outbound" || (outboundOrgIds && u.organization_id && outboundOrgIds.has(u.organization_id)))
+    : users;
+
+  const filteredUsers = baseUsers?.filter(
     (user) =>
       user.full_name?.toLowerCase().includes(search.toLowerCase()) ||
       user.organization_name?.toLowerCase().includes(search.toLowerCase())
