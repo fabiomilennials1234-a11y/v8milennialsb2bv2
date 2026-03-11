@@ -71,6 +71,7 @@ export function MetaSettings() {
     instagramPages,
     totalPages,
     totalInstagram,
+    error: queryError,
   } = useMetaConnectionStatus();
   const connectMeta = useConnectMeta();
   const disconnectMeta = useDisconnectMeta();
@@ -110,6 +111,10 @@ export function MetaSettings() {
         <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
       </div>
     );
+  }
+
+  if (queryError) {
+    console.error("[MetaSettings] Query error:", queryError);
   }
 
   return (

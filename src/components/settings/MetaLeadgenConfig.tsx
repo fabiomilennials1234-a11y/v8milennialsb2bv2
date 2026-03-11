@@ -3,7 +3,6 @@
  * Permite configurar o que acontece quando um lead chega via formulario de anuncio
  */
 
-import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/hooks/useOrganization";
@@ -34,8 +33,7 @@ interface LeadgenConfig {
 }
 
 export function MetaLeadgenConfig() {
-  const { organization } = useOrganization();
-  const orgId = organization?.id;
+  const { organizationId: orgId } = useOrganization();
   const { isConnected, pages } = useMetaConnectionStatus();
   const queryClient = useQueryClient();
 
@@ -44,7 +42,7 @@ export function MetaLeadgenConfig() {
     queryKey: ["meta_leadgen_configs", orgId],
     queryFn: async () => {
       if (!orgId) return [];
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from("meta_leadgen_configs")
         .select("*")
         .eq("organization_id", orgId)
@@ -77,7 +75,7 @@ export function MetaLeadgenConfig() {
     mutationFn: async (config: Partial<LeadgenConfig> & { meta_page_id: string }) => {
       if (!orgId) throw new Error("Org nao encontrada");
 
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from("meta_leadgen_configs")
         .upsert(
           {
