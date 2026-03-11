@@ -59,6 +59,8 @@ export function useMetaConnections() {
     queryFn: async () => {
       if (!organizationId) return [];
 
+      console.log("[useMetaConnections] Fetching for org:", organizationId);
+
       const { data, error } = await (supabase as any)
         .from("meta_connections")
         .select("*, meta_pages(*)")
@@ -66,7 +68,12 @@ export function useMetaConnections() {
         .neq("status", "disconnected")
         .order("connected_at", { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error("[useMetaConnections] Query error:", error);
+        throw error;
+      }
+
+      console.log("[useMetaConnections] Result:", data);
       return (data || []) as MetaConnectionWithPages[];
     },
     enabled: !!organizationId,
@@ -77,7 +84,7 @@ export function useMetaConnections() {
  * Status simplificado: se tem alguma conexao ativa
  */
 export function useMetaConnectionStatus() {
-  const { data: connections = [], isLoading } = useMetaConnections();
+  const { data: connections = [], isLoading, error } = useMetaConnections();
 
   const activeConnection = connections.find((c) => c.status === "connected");
   const expiredConnection = connections.find((c) => c.status === "expired");
@@ -87,6 +94,7 @@ export function useMetaConnectionStatus() {
 
   return {
     isLoading,
+    error,
     isConnected: !!activeConnection,
     isExpired: !activeConnection && !!expiredConnection,
     connection: activeConnection || expiredConnection || null,
