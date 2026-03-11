@@ -147,7 +147,15 @@ export function MetaSettings() {
             </p>
           </div>
           <Button
-            onClick={() => connectMeta.mutate()}
+            onClick={() => {
+              console.log("[MetaSettings] Botão clicado, VITE_META_APP_ID:", import.meta.env.VITE_META_APP_ID);
+              connectMeta.mutate(undefined, {
+                onError: (err) => {
+                  console.error("[MetaSettings] Erro ao conectar:", err);
+                  toast.error(err instanceof Error ? err.message : "Erro ao iniciar conexão Meta");
+                },
+              });
+            }}
             disabled={connectMeta.isPending}
             className="gap-2 bg-[#1877F2] hover:bg-[#166FE5] text-white"
           >
