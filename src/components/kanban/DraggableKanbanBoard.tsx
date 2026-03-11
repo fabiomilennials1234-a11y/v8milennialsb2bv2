@@ -46,6 +46,8 @@ interface DraggableKanbanBoardProps<T extends DraggableItem> {
   renderCard: (item: T, isDragging?: boolean) => React.ReactNode;
   columnClassName?: string;
   renderColumnFooter?: (column: KanbanColumn<T>) => React.ReactNode;
+  /** Renders extra content in the column header (e.g. workflow badge) */
+  renderColumnExtra?: (column: KanbanColumn<T>) => React.ReactNode;
   /** When provided, the column header three-dots menu shows "Excluir todos os leads desta etapa" */
   onDeleteAllLeads?: () => void;
 }
@@ -55,12 +57,14 @@ function DroppableColumn<T extends DraggableItem>({
   children,
   className,
   renderColumnFooter,
+  renderColumnExtra,
   onDeleteAllLeads,
 }: {
   column: KanbanColumn<T>;
   children: React.ReactNode;
   className?: string;
   renderColumnFooter?: (column: KanbanColumn<T>) => React.ReactNode;
+  renderColumnExtra?: (column: KanbanColumn<T>) => React.ReactNode;
   onDeleteAllLeads?: () => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({
@@ -89,6 +93,7 @@ function DroppableColumn<T extends DraggableItem>({
           <span className="bg-muted text-muted-foreground text-xs font-medium px-2 py-0.5 rounded-full">
             {column.items.length}
           </span>
+          {renderColumnExtra && renderColumnExtra(column)}
         </div>
         <div className="flex items-center gap-1">
           <button className="p-1.5 rounded-lg hover:bg-background transition-colors">
@@ -181,6 +186,7 @@ export function DraggableKanbanBoard<T extends DraggableItem>({
   renderCard,
   columnClassName,
   renderColumnFooter,
+  renderColumnExtra,
   onDeleteAllLeads,
 }: DraggableKanbanBoardProps<T>) {
   const [activeItem, setActiveItem] = useState<T | null>(null);
@@ -270,6 +276,7 @@ export function DraggableKanbanBoard<T extends DraggableItem>({
             column={column}
             className={columnClassName}
             renderColumnFooter={renderColumnFooter}
+            renderColumnExtra={renderColumnExtra}
             onDeleteAllLeads={onDeleteAllLeads}
           >
             <SortableContext

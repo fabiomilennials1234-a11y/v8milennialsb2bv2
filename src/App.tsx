@@ -58,6 +58,8 @@ const ApiDocs = lazy(() => lazyRetry(() => import("./pages/ApiDocs")));
 const CopilotWizard = lazy(() => lazyRetry(() => import("@/components/copilot/CopilotWizard").then(m => ({ default: m.CopilotWizard }))));
 const CopilotPlayground = lazy(() => lazyRetry(() => import("@/components/copilot/playground").then(m => ({ default: m.CopilotPlayground }))));
 const CopilotWizardTest = lazy(() => lazyRetry(() => import("./pages/CopilotWizardTest")));
+const Automacoes = lazy(() => lazyRetry(() => import("./pages/Automacoes")));
+const AutomacoesEditor = lazy(() => lazyRetry(() => import("./pages/AutomacoesEditor")));
 const NotFound = lazy(() => lazyRetry(() => import("./pages/NotFound")));
 
 // Master Admin — lazy loaded (com retry)
@@ -433,6 +435,36 @@ function AppRoutes() {
                 <CopilotWizard />
               </LayoutWrapper>
             </SubscriptionProtectedRoute>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/automacoes"
+        element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <Automacoes />
+            </LayoutWrapper>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/automacoes/novo"
+        element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <AutomacoesEditor />
+            </LayoutWrapper>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/automacoes/:id"
+        element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <AutomacoesEditor />
+            </LayoutWrapper>
           </ProtectedRoute>
         }
       />

@@ -24,6 +24,7 @@ import {
   Bot,
   GitBranch,
   BarChart2,
+  Workflow,
   TrendingUp,
   Lock,
   Camera,
@@ -88,6 +89,7 @@ const navItems: NavItemWithChildren[] = [
   { label: "Pódio", icon: Trophy, path: "/performance" },
   { label: "Comissões", icon: DollarSign, path: "/comissoes" },
   { label: "Copilot", icon: Bot, path: "/copilot" },
+  { label: "Automações", icon: Workflow, path: "/automacoes" },
 ];
 
 const adminNavItems: NavItem[] = [
@@ -170,6 +172,7 @@ export function Sidebar() {
     "/performance": "performance",
     "/comissoes": "comissoes",
     "/copilot": "copilot",
+    "/automacoes": "automacoes",
     "/equipe": "equipe",
     "/produtos": "produtos",
     "/tv": "tv_dashboard",

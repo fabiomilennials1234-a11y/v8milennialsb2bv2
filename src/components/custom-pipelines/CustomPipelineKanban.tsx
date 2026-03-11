@@ -1,6 +1,8 @@
 import { useMemo } from "react";
 import { DraggableKanbanBoard, type KanbanColumn } from "@/components/kanban/DraggableKanbanBoard";
 import { CustomPipeLeadCard } from "./CustomPipeLeadCard";
+import { StageWorkflowsBadge } from "@/components/kanban/StageWorkflowsBadge";
+import { useCustomPipeStageWorkflows, useCustomPipeWorkflowCounts } from "@/hooks/useStageWorkflows";
 import {
   type CustomPipeline,
   type CustomPipelineStage,
@@ -24,6 +26,33 @@ interface CustomPipelineKanbanProps {
   onClickEntry?: (entry: CustomPipeEntry) => void;
 }
 
+function CustomStageBadge({
+  pipelineId,
+  stageId,
+  stageName,
+  counts,
+}: {
+  pipelineId: string;
+  stageId: string;
+  stageName: string;
+  counts?: { total: number; active: number };
+}) {
+  const total = counts?.total ?? 0;
+  const active = counts?.active ?? 0;
+  const { data: workflows } = useCustomPipeStageWorkflows(pipelineId, stageId);
+
+  return (
+    <StageWorkflowsBadge
+      total={total}
+      active={active}
+      workflows={workflows}
+      pipelineId={pipelineId}
+      stageKey={stageId}
+      stageName={stageName}
+    />
+  );
+}
+
 export function CustomPipelineKanban({
   pipeline,
   stages,
@@ -33,6 +62,7 @@ export function CustomPipelineKanban({
   onClickEntry,
 }: CustomPipelineKanbanProps) {
   const moveLead = useMoveLeadInCustomPipe();
+  const { data: workflowCounts = {} } = useCustomPipeWorkflowCounts(pipeline.id);
 
   // Filtrar entries por busca
   const filteredEntries = useMemo(() => {
@@ -88,6 +118,19 @@ export function CustomPipelineKanban({
     <DraggableKanbanBoard<KanbanItem>
       columns={columns}
       onStatusChange={handleStatusChange}
+      renderColumnExtra={(col) => {
+        const allCounts = workflowCounts["__all__"] || { total: 0, active: 0 };
+        const stageCounts = workflowCounts[col.id] || { total: 0, active: 0 };
+        const merged = { total: stageCounts.total + allCounts.total, active: stageCounts.active + allCounts.active };
+        return (
+          <CustomStageBadge
+            pipelineId={pipeline.id}
+            stageId={col.id}
+            stageName={col.title}
+            counts={merged}
+          />
+        );
+      }}
       renderCard={(item) => (
         <CustomPipeLeadCard
           entry={item.entry}

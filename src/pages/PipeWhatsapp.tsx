@@ -34,6 +34,8 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { DraggableKanbanBoard, DraggableItem, KanbanColumn } from "@/components/kanban/DraggableKanbanBoard";
+import { StageWorkflowsBadgeWrapper } from "@/components/kanban/StageWorkflowsBadgeWrapper";
+import { useStageWorkflowCounts } from "@/hooks/useStageWorkflows";
 import { usePipeWhatsapp, useUpdatePipeWhatsapp, useDeletePipeWhatsapp, type PipeWhatsappStatus } from "@/hooks/usePipeWhatsapp";
 import { usePipeWhatsappMetrics, type MetricsPeriod } from "@/hooks/usePipeMetrics";
 import { usePipelineStages, stagesToColumns, getPipelineTypeName } from "@/hooks/usePipelineStages";
@@ -477,6 +479,7 @@ export default function PipeWhatsapp() {
 
   const { data: pipeData, isLoading, refetch } = usePipeWhatsapp();
   const { data: pipelineStages = [], isLoading: loadingStages } = usePipelineStages("whatsapp");
+  const { data: workflowCounts = {} } = useStageWorkflowCounts("whatsapp");
   const { data: metricsByPeriod } = usePipeWhatsappMetrics(
     metricsPeriod,
     metricsPeriod === "month" ? selectedMetricsMonth : undefined,
@@ -843,9 +846,25 @@ export default function PipeWhatsapp() {
         columns={columns}
         onStatusChange={handleStatusChange}
         onDeleteAllLeads={() => setDeleteAllLeadsDialogOpen(true)}
+        renderColumnExtra={(col) => {
+          const allCounts = workflowCounts["__all__"] || { total: 0, active: 0 };
+          const stageCounts = workflowCounts[col.id] || { total: 0, active: 0 };
+          const merged = {
+            total: stageCounts.total + allCounts.total,
+            active: stageCounts.active + allCounts.active,
+          };
+          return (
+            <StageWorkflowsBadgeWrapper
+              pipeType="whatsapp"
+              stageKey={col.id}
+              stageName={col.title}
+              counts={merged}
+            />
+          );
+        }}
         renderCard={(card) => (
-          <WhatsappCardComponent 
-            card={card} 
+          <WhatsappCardComponent
+            card={card}
             onDelete={handleOpenDeleteDialog}
             isAdmin={isAdmin}
             onQuickAdd={(leadId, leadName, title) => {
