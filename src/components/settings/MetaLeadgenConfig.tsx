@@ -43,6 +43,11 @@ import { toast } from "sonner";
 // Types
 // ---------------------------------------------------------------------------
 
+interface FieldMapping {
+  meta_field: string;
+  lead_field: string;
+}
+
 interface LeadgenConfig {
   id: string;
   meta_page_id: string;
@@ -53,6 +58,7 @@ interface LeadgenConfig {
   assign_to_stage: string | null;
   notify_team: boolean;
   auto_tag: string[];
+  field_mappings: FieldMapping[];
   is_active: boolean;
 }
 
@@ -61,6 +67,28 @@ interface MetaForm {
   name: string;
   status: string;
 }
+
+interface MetaFormField {
+  key: string;
+  label: string;
+  type: string;
+}
+
+const LEAD_FIELD_OPTIONS = [
+  { value: "name", label: "Nome" },
+  { value: "email", label: "Email" },
+  { value: "phone", label: "Telefone" },
+  { value: "company", label: "Empresa" },
+  { value: "segment", label: "Segmento" },
+  { value: "urgency", label: "Urgencia" },
+  { value: "faturamento", label: "Faturamento" },
+  { value: "notes", label: "Observacoes" },
+  { value: "utm_campaign", label: "UTM Campaign" },
+  { value: "utm_source", label: "UTM Source" },
+  { value: "utm_medium", label: "UTM Medium" },
+  { value: "utm_content", label: "UTM Content" },
+  { value: "utm_term", label: "UTM Term" },
+];
 
 const PIPE_OPTIONS = [
   { value: "whatsapp", label: "Pipe WhatsApp (SDR)" },
@@ -104,6 +132,165 @@ function usePageForms(pageId: string, enabled: boolean) {
     staleTime: 5 * 60 * 1000, // 5 min cache
     retry: 1,
   });
+}
+
+/** Busca campos de um formulario especifico via Edge Function */
+function useFormFields(pageId: string, formId: string | null, enabled: boolean) {
+  return useQuery({
+    queryKey: ["meta_form_fields", pageId, formId],
+    queryFn: async (): Promise<MetaFormField[]> => {
+      if (!formId) return [];
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const { data: session } = await supabase.auth.getSession();
+      const token = session?.session?.access_token;
+
+      const res = await fetch(
+        `${supabaseUrl}/functions/v1/list-lead-forms`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ pageId, formId }),
+        }
+      );
+
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: enabled && !!formId,
+    staleTime: 10 * 60 * 1000,
+    retry: 1,
+  });
+}
+
+/** Editor de mapeamento de campos: formulario Meta → campo do lead */
+function FieldMappingEditor({
+  pageId,
+  formId,
+  mappings,
+  onChange,
+}: {
+  pageId: string;
+  formId: string | null;
+  mappings: FieldMapping[];
+  onChange: (mappings: FieldMapping[]) => void;
+}) {
+  const { data: formFields = [], isLoading } = useFormFields(pageId, formId, true);
+
+  if (!formId) {
+    return (
+      <p className="text-xs text-muted-foreground">
+        Selecione um formulario para configurar mapeamento de campos.
+      </p>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <Loader2 className="w-3 h-3 animate-spin" />
+        Carregando campos...
+      </div>
+    );
+  }
+
+  if (formFields.length === 0) {
+    return (
+      <p className="text-xs text-muted-foreground">
+        Nenhum campo encontrado neste formulario.
+      </p>
+    );
+  }
+
+  const addMapping = () => {
+    onChange([...mappings, { meta_field: "", lead_field: "" }]);
+  };
+
+  const updateMapping = (index: number, field: Partial<FieldMapping>) => {
+    const updated = [...mappings];
+    updated[index] = { ...updated[index], ...field };
+    onChange(updated);
+  };
+
+  const removeMapping = (index: number) => {
+    onChange(mappings.filter((_, i) => i !== index));
+  };
+
+  // Campos do lead ja usados
+  const usedLeadFields = new Set(mappings.map((m) => m.lead_field).filter(Boolean));
+
+  return (
+    <div className="space-y-2">
+      {mappings.map((mapping, index) => (
+        <div key={index} className="flex items-center gap-2">
+          {/* Campo do Meta */}
+          <Select
+            value={mapping.meta_field || "select"}
+            onValueChange={(val) =>
+              updateMapping(index, { meta_field: val === "select" ? "" : val })
+            }
+          >
+            <SelectTrigger className="h-7 text-xs flex-1">
+              <SelectValue placeholder="Campo do formulario" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="select" disabled>Campo do formulario</SelectItem>
+              {formFields.map((f) => (
+                <SelectItem key={f.key} value={f.key}>
+                  {f.label || f.key}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <span className="text-xs text-muted-foreground shrink-0">→</span>
+
+          {/* Campo do Lead */}
+          <Select
+            value={mapping.lead_field || "select"}
+            onValueChange={(val) =>
+              updateMapping(index, { lead_field: val === "select" ? "" : val })
+            }
+          >
+            <SelectTrigger className="h-7 text-xs flex-1">
+              <SelectValue placeholder="Campo do lead" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="select" disabled>Campo do lead</SelectItem>
+              {LEAD_FIELD_OPTIONS.filter(
+                (o) => !usedLeadFields.has(o.value) || o.value === mapping.lead_field
+              ).map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 w-7 p-0 shrink-0"
+            onClick={() => removeMapping(index)}
+          >
+            <X className="w-3 h-3" />
+          </Button>
+        </div>
+      ))}
+
+      <Button
+        variant="outline"
+        size="sm"
+        className="h-7 text-xs gap-1"
+        onClick={addMapping}
+      >
+        <Plus className="w-3 h-3" />
+        Adicionar mapeamento
+      </Button>
+    </div>
+  );
 }
 
 /** Componente de tags com input para adicionar */
@@ -311,6 +498,24 @@ function PageLeadgenCard({
             </div>
           </div>
 
+          {/* Mapeamento de campos */}
+          {config.form_id && (
+            <div className="flex items-start gap-3">
+              <Kanban className="w-4 h-4 text-muted-foreground shrink-0 mt-1" />
+              <div className="flex-1">
+                <Label className="text-xs mb-2 block">Mapeamento de campos</Label>
+                <FieldMappingEditor
+                  pageId={page.id}
+                  formId={config.form_id}
+                  mappings={config.field_mappings || []}
+                  onChange={(newMappings) =>
+                    onSave({ ...config, field_mappings: newMappings })
+                  }
+                />
+              </div>
+            </div>
+          )}
+
           {/* Vincular a campanha */}
           <div className="flex items-center gap-3">
             <Target className="w-4 h-4 text-muted-foreground shrink-0" />
@@ -516,17 +721,22 @@ export function MetaLeadgenConfig() {
     mutationFn: async (config: Partial<LeadgenConfig> & { meta_page_id: string }) => {
       if (!orgId) throw new Error("Org nao encontrada");
 
-      const { error } = await (supabase as any)
-        .from("meta_leadgen_configs")
-        .upsert(
-          {
-            ...config,
-            organization_id: orgId,
-          },
-          { onConflict: "id" }
-        );
+      // Se tem id existente, faz update; senao, faz insert
+      const { id, ...rest } = config;
+      const payload = { ...rest, organization_id: orgId };
 
-      if (error) throw error;
+      if (id) {
+        const { error } = await (supabase as any)
+          .from("meta_leadgen_configs")
+          .update(payload)
+          .eq("id", id);
+        if (error) throw error;
+      } else {
+        const { error } = await (supabase as any)
+          .from("meta_leadgen_configs")
+          .insert(payload);
+        if (error) throw error;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["meta_leadgen_configs"] });
@@ -575,6 +785,7 @@ export function MetaLeadgenConfig() {
           assign_to_stage: null,
           notify_team: false,
           auto_tag: [],
+          field_mappings: [],
           is_active: true,
         };
 

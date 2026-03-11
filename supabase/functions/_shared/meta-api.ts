@@ -359,6 +359,30 @@ export async function listLeadForms(
   return data.data || [];
 }
 
+/**
+ * Get the fields/questions of a specific lead form
+ */
+export async function getLeadFormFields(
+  formId: string,
+  pageAccessToken: string
+): Promise<Array<{ key: string; label: string; type: string }>> {
+  const res = await fetch(
+    `${GRAPH_API_BASE}/${formId}?fields=questions&access_token=${pageAccessToken}`
+  );
+
+  const data = await res.json();
+
+  if (data.error) {
+    throw new Error(`Meta getLeadFormFields error: ${data.error.message}`);
+  }
+
+  return (data.questions || []).map((q: { key: string; label: string; type: string }) => ({
+    key: q.key,
+    label: q.label,
+    type: q.type,
+  }));
+}
+
 // ---------------------------------------------------------------------------
 // Webhook Verification
 // ---------------------------------------------------------------------------

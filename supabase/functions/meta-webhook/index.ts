@@ -276,6 +276,58 @@ async function saveIncomingMessage(
 
 // ── Lead Ads Processing ──────────────────────────────────────────────────
 
+// Campos do lead que podem ser mapeados via field_mappings
+const MAPPABLE_LEAD_FIELDS = new Set([
+  "name", "email", "phone", "company", "segment", "urgency",
+  "faturamento", "notes", "utm_campaign", "utm_source", "utm_medium",
+  "utm_content", "utm_term",
+]);
+
+interface FieldMapping {
+  meta_field: string;
+  lead_field: string;
+}
+
+/**
+ * Aplica field_mappings para extrair dados do formulario Meta para campos do lead.
+ * Fallback para mapeamento padrao se nao houver mappings configurados.
+ */
+function applyFieldMappings(
+  formFields: Record<string, string>,
+  mappings: FieldMapping[] | null | undefined
+): Record<string, string | null> {
+  const leadData: Record<string, string | null> = {};
+
+  if (mappings && mappings.length > 0) {
+    // Usar mapeamentos configurados pelo usuario
+    for (const mapping of mappings) {
+      if (MAPPABLE_LEAD_FIELDS.has(mapping.lead_field) && formFields[mapping.meta_field]) {
+        leadData[mapping.lead_field] = formFields[mapping.meta_field];
+      }
+    }
+  }
+
+  // Fallback: campos essenciais se nao foram mapeados
+  if (!leadData.name) {
+    leadData.name = formFields.full_name
+      || (formFields.first_name
+        ? `${formFields.first_name} ${formFields.last_name || ""}`.trim()
+        : null)
+      || "Lead Meta Ads";
+  }
+  if (!leadData.email) {
+    leadData.email = formFields.email || null;
+  }
+  if (!leadData.phone) {
+    leadData.phone = formFields.phone_number || formFields.phone || null;
+  }
+  if (!leadData.company) {
+    leadData.company = formFields.company_name || formFields.company || null;
+  }
+
+  return leadData;
+}
+
 async function processLeadgen(
   supabase: ReturnType<typeof createClient>,
   pageId: string,
@@ -306,16 +358,32 @@ async function processLeadgen(
   }
 
   // Extrair campos do formulario
-  const fields: Record<string, string> = {};
+  const formFields: Record<string, string> = {};
   for (const field of leadData.field_data || []) {
-    fields[field.name] = field.values?.[0] || "";
+    formFields[field.name] = field.values?.[0] || "";
   }
 
-  const name = fields.full_name || fields.first_name
-    ? `${fields.first_name || ""} ${fields.last_name || ""}`.trim()
-    : fields.full_name || "Lead Meta Ads";
-  const email = fields.email || null;
-  const phone = fields.phone_number || fields.phone || null;
+  // Buscar config de leadgen (com field_mappings)
+  const { data: configs } = await supabase
+    .from("meta_leadgen_configs")
+    .select("*")
+    .eq("meta_page_id", page.id)
+    .eq("is_active", true)
+    .or(`form_id.eq.${leadData.form_id},form_id.is.null`);
+
+  const config = configs?.length
+    ? configs.find((c: { form_id: string | null }) => c.form_id === leadData.form_id) || configs[0]
+    : null;
+
+  // Aplicar mapeamento de campos
+  const mappedFields = applyFieldMappings(
+    formFields,
+    config?.field_mappings as FieldMapping[] | null
+  );
+
+  const name = mappedFields.name || "Lead Meta Ads";
+  const email = mappedFields.email || null;
+  const phone = mappedFields.phone || null;
 
   // Verificar se lead ja existe (por email ou telefone)
   let existingLeadId: string | null = null;
@@ -346,29 +414,43 @@ async function processLeadgen(
   }
 
   if (existingLeadId) {
-    console.log(`[meta-webhook] Lead already exists: ${existingLeadId}`);
-    // Atualizar dados se necessario
-    await supabase
-      .from("leads")
-      .update({
-        ...(phone && !email ? {} : {}),
-        metadata: { ...fields, leadgen_id: leadgenId, form_id: leadData.form_id },
-      })
-      .eq("id", existingLeadId);
+    console.log(`[meta-webhook] Lead already exists: ${existingLeadId}, updating...`);
+    // Atualizar com campos mapeados
+    const updateData: Record<string, unknown> = {
+      metadata: { ...formFields, leadgen_id: leadgenId, form_id: leadData.form_id },
+    };
+    // Atualizar campos mapeados no lead existente (exceto name que pode ter sido editado)
+    if (email) updateData.email = email;
+    if (phone) updateData.phone = phone;
+    if (mappedFields.company) updateData.company = mappedFields.company;
+    if (mappedFields.segment) updateData.segment = mappedFields.segment;
+    if (mappedFields.notes) updateData.notes = mappedFields.notes;
+
+    await supabase.from("leads").update(updateData).eq("id", existingLeadId);
     return;
+  }
+
+  // Montar objeto do novo lead com todos os campos mapeados
+  const newLeadData: Record<string, unknown> = {
+    organization_id: page.organization_id,
+    name,
+    email,
+    phone,
+    origin: "meta_ads",
+    metadata: { ...formFields, leadgen_id: leadgenId, form_id: leadData.form_id },
+  };
+
+  // Adicionar campos extras mapeados
+  for (const [field, value] of Object.entries(mappedFields)) {
+    if (value && !["name", "email", "phone"].includes(field) && MAPPABLE_LEAD_FIELDS.has(field)) {
+      newLeadData[field] = value;
+    }
   }
 
   // Criar novo lead
   const { data: newLead, error: leadError } = await supabase
     .from("leads")
-    .insert({
-      organization_id: page.organization_id,
-      name,
-      email,
-      phone,
-      origin: "meta_ads",
-      metadata: { ...fields, leadgen_id: leadgenId, form_id: leadData.form_id },
-    })
+    .insert(newLeadData)
     .select("id")
     .single();
 
@@ -379,17 +461,8 @@ async function processLeadgen(
 
   console.log(`[meta-webhook] Created lead ${newLead.id} from leadgen ${leadgenId}`);
 
-  // Verificar configs de leadgen para acoes pos-captura
-  const { data: configs } = await supabase
-    .from("meta_leadgen_configs")
-    .select("*")
-    .eq("meta_page_id", page.id)
-    .eq("is_active", true)
-    .or(`form_id.eq.${leadData.form_id},form_id.is.null`);
-
-  if (configs?.length) {
-    const config = configs.find((c) => c.form_id === leadData.form_id) || configs[0];
-
+  // Aplicar acoes pos-captura do config
+  if (config) {
     // Aplicar tags automaticas
     if (config.auto_tag?.length) {
       for (const tagName of config.auto_tag) {
@@ -416,6 +489,23 @@ async function processLeadgen(
         lead_id: newLead.id,
         stage: "novo",
       });
+    }
+
+    // Inserir no pipe
+    if (config.assign_to_pipe) {
+      const pipeTable = `pipe_${config.assign_to_pipe}`;
+      const stage = config.assign_to_stage || "novo";
+
+      try {
+        await supabase.from(pipeTable).insert({
+          organization_id: page.organization_id,
+          lead_id: newLead.id,
+          status: stage,
+        });
+        console.log(`[meta-webhook] Lead ${newLead.id} added to ${pipeTable} stage ${stage}`);
+      } catch (pipeErr) {
+        console.error(`[meta-webhook] Error adding to ${pipeTable}:`, pipeErr);
+      }
     }
   }
 }

@@ -1,17 +1,19 @@
 /**
  * list-lead-forms
  *
- * Lista os formularios de Lead Ads (leadgen_forms) de uma pagina Meta.
- * Recebe o UUID interno da meta_pages, busca page_id + token no banco,
- * e chama a Graph API para listar os formularios.
+ * Lista formularios de Lead Ads e/ou campos de um formulario especifico.
  *
- * Body (POST): { pageId: string }   // meta_pages.id (UUID)
- * Response:    [{ id, name, status }]
+ * Body (POST):
+ *   { pageId: string }                    -> lista formularios da pagina
+ *   { pageId: string, formId: string }    -> lista campos do formulario
+ *
+ * Response (formularios): [{ id, name, status }]
+ * Response (campos):      [{ key, label, type }]
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
-import { listLeadForms } from "../_shared/meta-api.ts";
+import { listLeadForms, getLeadFormFields } from "../_shared/meta-api.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -24,7 +26,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { pageId } = await req.json();
+    const { pageId, formId } = await req.json();
 
     if (!pageId) {
       return new Response(
@@ -37,7 +39,7 @@ Deno.serve(async (req) => {
       auth: { persistSession: false },
     });
 
-    // Buscar pagina pelo UUID interno (meta_pages.id)
+    // Buscar pagina pelo UUID interno
     const { data: page, error: pageError } = await supabase
       .from("meta_pages")
       .select("page_id, page_access_token")
@@ -52,9 +54,17 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Chamar Graph API para listar formularios de lead
-    const forms = await listLeadForms(page.page_id, page.page_access_token);
+    // Se formId fornecido, buscar campos do formulario
+    if (formId) {
+      const fields = await getLeadFormFields(formId, page.page_access_token);
+      return new Response(
+        JSON.stringify(fields),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
+    // Senao, listar formularios da pagina
+    const forms = await listLeadForms(page.page_id, page.page_access_token);
     return new Response(
       JSON.stringify(forms),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
