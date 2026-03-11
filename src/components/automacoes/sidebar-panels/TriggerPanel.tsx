@@ -1,0 +1,517 @@
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { TRIGGER_CATEGORIES } from "@/types/workflow";
+import type { TriggerNodeData, WorkflowTriggerType } from "@/types/workflow";
+import { usePipelineStages, getPipelineTypeName, type PipelineType } from "@/hooks/usePipelineStages";
+import { useCustomPipelines, useCustomPipelineStages } from "@/hooks/useCustomPipelines";
+
+interface TriggerPanelProps {
+  data: TriggerNodeData;
+  onUpdate: (updates: Partial<TriggerNodeData>) => void;
+}
+
+export function TriggerPanel({ data, onUpdate }: TriggerPanelProps) {
+  const cfg = (data.config || {}) as Record<string, unknown>;
+
+  const updateConfig = (updates: Record<string, unknown>) => {
+    onUpdate({ config: { ...cfg, ...updates } as any });
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <Label>Nome</Label>
+        <Input
+          value={data.label || ""}
+          onChange={(e) => onUpdate({ label: e.target.value })}
+          placeholder="Ex: Quando lead é criado"
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label>Tipo de Trigger</Label>
+        <Select
+          value={data.triggerType}
+          onValueChange={(v) =>
+            onUpdate({ triggerType: v as WorkflowTriggerType, config: {} as any })
+          }
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="Selecione o trigger" />
+          </SelectTrigger>
+          <SelectContent>
+            {TRIGGER_CATEGORIES.map((cat) => (
+              <SelectGroup key={cat.label}>
+                <SelectLabel className="text-xs font-semibold text-muted-foreground uppercase">
+                  {cat.label}
+                </SelectLabel>
+                {cat.triggers.map((t) => (
+                  <SelectItem key={t} value={t}>
+                    {/* We import TRIGGER_LABELS inline to avoid circular deps */}
+                    {t === "lead_created" ? "Lead Criado" :
+                     t === "stage_changed" ? "Mudança de Estágio" :
+                     t === "tag_added" ? "Tag Adicionada" :
+                     t === "score_reached" ? "Score Atingido" :
+                     t === "cron" ? "Agendamento (Cron)" :
+                     t === "lead_replied" ? "Lead Respondeu" :
+                     t === "lead_no_reply" ? "Lead Não Respondeu" :
+                     t === "meeting_confirmed" ? "Reunião Confirmada" :
+                     t === "meeting_not_confirmed" ? "Reunião Não Confirmada" :
+                     t === "proposal_accepted" ? "Proposta Aceita" :
+                     t === "proposal_lost" ? "Proposta Perdida" :
+                     t === "followup_overdue" ? "Follow-up Vencido" :
+                     t === "webhook_received" ? "Webhook Recebido" :
+                     t === "lead_assigned" ? "Lead Atribuído" :
+                     t === "campaign_status_changed" ? "Status de Campanha Mudou" :
+                     t === "field_changed" ? "Campo do Lead Alterado" :
+                     t}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* ── lead_created ── */}
+      {data.triggerType === "lead_created" && (
+        <>
+          <div className="space-y-2">
+            <Label>Filtrar por origem (opcional)</Label>
+            <Input
+              value={(cfg.filter_origin as string) || ""}
+              onChange={(e) => updateConfig({ filter_origin: e.target.value })}
+              placeholder="Ex: whatsapp, meta_ads, calendly"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Filtrar por pipe (opcional)</Label>
+            <Select
+              value={(cfg.filter_pipe as string) || "__any__"}
+              onValueChange={(v) => updateConfig({ filter_pipe: v === "__any__" ? "" : v })}
+            >
+              <SelectTrigger><SelectValue placeholder="Qualquer pipe" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__any__">Qualquer pipe</SelectItem>
+                <SelectItem value="pipe_whatsapp">Qualificação</SelectItem>
+                <SelectItem value="pipe_confirmacao">Confirmação</SelectItem>
+                <SelectItem value="pipe_propostas">Propostas</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </>
+      )}
+
+      {/* ── stage_changed ── */}
+      {data.triggerType === "stage_changed" && (
+        <StageChangedConfig cfg={cfg} updateConfig={updateConfig} />
+      )}
+
+      {/* ── tag_added ── */}
+      {data.triggerType === "tag_added" && (
+        <div className="space-y-2">
+          <Label>Nome da Tag</Label>
+          <Input
+            value={(cfg.tag_name as string) || ""}
+            onChange={(e) => updateConfig({ tag_name: e.target.value })}
+            placeholder="Ex: quente"
+          />
+        </div>
+      )}
+
+      {/* ── score_reached ── */}
+      {data.triggerType === "score_reached" && (
+        <div className="space-y-2">
+          <Label>Score mínimo</Label>
+          <Input
+            type="number"
+            value={(cfg.min_score as number) ?? ""}
+            onChange={(e) => updateConfig({ min_score: Number(e.target.value) })}
+            placeholder="Ex: 50"
+          />
+        </div>
+      )}
+
+      {/* ── cron ── */}
+      {data.triggerType === "cron" && (
+        <>
+          <div className="space-y-2">
+            <Label>Expressão Cron</Label>
+            <Input
+              value={(cfg.cron_expression as string) || ""}
+              onChange={(e) => updateConfig({ cron_expression: e.target.value })}
+              placeholder="Ex: 0 9 * * 1-5"
+            />
+            <p className="text-xs text-muted-foreground">
+              Formato: minuto hora dia mês dia-da-semana
+            </p>
+          </div>
+          <div className="space-y-2">
+            <Label>Descrição (opcional)</Label>
+            <Input
+              value={(cfg.description as string) || ""}
+              onChange={(e) => updateConfig({ description: e.target.value })}
+              placeholder="Ex: Seg-Sex às 9h"
+            />
+          </div>
+        </>
+      )}
+
+      {/* ── lead_replied ── */}
+      {data.triggerType === "lead_replied" && (
+        <>
+          <div className="space-y-2">
+            <Label>Canal</Label>
+            <Select
+              value={(cfg.channel as string) || "any"}
+              onValueChange={(v) => updateConfig({ channel: v })}
+            >
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="any">Qualquer canal</SelectItem>
+                <SelectItem value="whatsapp">WhatsApp</SelectItem>
+                <SelectItem value="meta">Meta (IG/FB)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Contém texto (opcional)</Label>
+            <Input
+              value={(cfg.contains_text as string) || ""}
+              onChange={(e) => updateConfig({ contains_text: e.target.value })}
+              placeholder="Ex: confirmo, sim"
+            />
+          </div>
+        </>
+      )}
+
+      {/* ── lead_no_reply ── */}
+      {data.triggerType === "lead_no_reply" && (
+        <>
+          <div className="space-y-2">
+            <Label>Timeout (horas)</Label>
+            <Input
+              type="number"
+              min={1}
+              value={(cfg.timeout_hours as number) ?? ""}
+              onChange={(e) => updateConfig({ timeout_hours: Number(e.target.value) })}
+              placeholder="Ex: 24"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Canal</Label>
+            <Select
+              value={(cfg.channel as string) || "any"}
+              onValueChange={(v) => updateConfig({ channel: v })}
+            >
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="any">Qualquer canal</SelectItem>
+                <SelectItem value="whatsapp">WhatsApp</SelectItem>
+                <SelectItem value="meta">Meta (IG/FB)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </>
+      )}
+
+      {/* ── meeting_confirmed ── */}
+      {data.triggerType === "meeting_confirmed" && (
+        <div className="space-y-2">
+          <Label>Pipe (opcional)</Label>
+          <Select
+            value={(cfg.pipe_type as string) || "__any__"}
+            onValueChange={(v) => updateConfig({ pipe_type: v === "__any__" ? "" : v })}
+          >
+            <SelectTrigger><SelectValue placeholder="Qualquer pipe" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__any__">Qualquer</SelectItem>
+              <SelectItem value="pipe_confirmacao">Confirmação</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      {/* ── meeting_not_confirmed ── */}
+      {data.triggerType === "meeting_not_confirmed" && (
+        <div className="space-y-2">
+          <Label>Horas antes da reunião</Label>
+          <Input
+            type="number"
+            min={1}
+            value={(cfg.hours_before as number) ?? ""}
+            onChange={(e) => updateConfig({ hours_before: Number(e.target.value) })}
+            placeholder="Ex: 24"
+          />
+        </div>
+      )}
+
+      {/* ── proposal_accepted / proposal_lost ── */}
+      {(data.triggerType === "proposal_accepted" || data.triggerType === "proposal_lost") && (
+        <div className="p-3 rounded-lg bg-muted text-xs text-muted-foreground">
+          Dispara quando uma proposta muda para "{data.triggerType === "proposal_accepted" ? "vendido" : "perdido"}" no pipe de propostas.
+        </div>
+      )}
+
+      {/* ── followup_overdue ── */}
+      {data.triggerType === "followup_overdue" && (
+        <div className="p-3 rounded-lg bg-muted text-xs text-muted-foreground">
+          Dispara quando um follow-up automático passa do prazo sem ser concluído.
+        </div>
+      )}
+
+      {/* ── webhook_received ── */}
+      {data.triggerType === "webhook_received" && (
+        <>
+          <div className="space-y-2">
+            <Label>Chave do Webhook</Label>
+            <Input
+              value={(cfg.webhook_key as string) || ""}
+              onChange={(e) => updateConfig({ webhook_key: e.target.value })}
+              placeholder="Ex: meu-evento-externo"
+            />
+            <p className="text-xs text-muted-foreground">
+              Identificador único para receber eventos via POST
+            </p>
+          </div>
+          <div className="space-y-2">
+            <Label>Descrição (opcional)</Label>
+            <Input
+              value={(cfg.description as string) || ""}
+              onChange={(e) => updateConfig({ description: e.target.value })}
+              placeholder="Ex: Pagamento confirmado no Stripe"
+            />
+          </div>
+        </>
+      )}
+
+      {/* ── lead_assigned ── */}
+      {data.triggerType === "lead_assigned" && (
+        <div className="space-y-2">
+          <Label>Papel atribuído</Label>
+          <Select
+            value={(cfg.role as string) || "any"}
+            onValueChange={(v) => updateConfig({ role: v })}
+          >
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="any">Qualquer</SelectItem>
+              <SelectItem value="sdr">SDR</SelectItem>
+              <SelectItem value="closer">Closer</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      {/* ── campaign_status_changed ── */}
+      {data.triggerType === "campaign_status_changed" && (
+        <>
+          <div className="space-y-2">
+            <Label>ID da Campanha (opcional)</Label>
+            <Input
+              value={(cfg.campaign_id as string) || ""}
+              onChange={(e) => updateConfig({ campaign_id: e.target.value })}
+              placeholder="Qualquer campanha se vazio"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Novo status</Label>
+            <Select
+              value={(cfg.new_status as string) || "__any__"}
+              onValueChange={(v) => updateConfig({ new_status: v === "__any__" ? "" : v })}
+            >
+              <SelectTrigger><SelectValue placeholder="Qualquer" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__any__">Qualquer</SelectItem>
+                <SelectItem value="active">Ativada</SelectItem>
+                <SelectItem value="paused">Pausada</SelectItem>
+                <SelectItem value="completed">Encerrada</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </>
+      )}
+
+      {/* ── field_changed ── */}
+      {data.triggerType === "field_changed" && (
+        <>
+          <div className="space-y-2">
+            <Label>Nome do Campo</Label>
+            <Input
+              value={(cfg.field_name as string) || ""}
+              onChange={(e) => updateConfig({ field_name: e.target.value })}
+              placeholder="Ex: faturamento, segment, email"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Valor anterior (opcional)</Label>
+            <Input
+              value={(cfg.old_value as string) || ""}
+              onChange={(e) => updateConfig({ old_value: e.target.value })}
+              placeholder="Qualquer valor anterior"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Novo valor (opcional)</Label>
+            <Input
+              value={(cfg.new_value as string) || ""}
+              onChange={(e) => updateConfig({ new_value: e.target.value })}
+              placeholder="Qualquer novo valor"
+            />
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── Sub-componente para stage_changed com carregamento dinâmico de etapas ──
+
+const STANDARD_PIPES: { value: string; label: string }[] = [
+  { value: "whatsapp", label: "Qualificação" },
+  { value: "confirmacao", label: "Confirmação" },
+  { value: "propostas", label: "Propostas" },
+  { value: "upsell_base", label: "Carteira Base" },
+  { value: "upsell_gestao", label: "Carteira Gestão" },
+];
+
+function StageChangedConfig({
+  cfg,
+  updateConfig,
+}: {
+  cfg: Record<string, unknown>;
+  updateConfig: (updates: Record<string, unknown>) => void;
+}) {
+  const pipeType = (cfg.pipe_type as string) || "";
+  const pipelineId = (cfg.pipeline_id as string) || "";
+  const selectedStages = (cfg.stages as string[]) || [];
+  const isCustom = !!pipelineId;
+
+  // Load custom pipelines
+  const { data: customPipelines } = useCustomPipelines();
+
+  // Load stages for selected pipe
+  const isStandardPipe = STANDARD_PIPES.some((p) => p.value === pipeType);
+  const { data: standardStages } = usePipelineStages(
+    isStandardPipe ? (pipeType as PipelineType) : "whatsapp"
+  );
+  const { data: customStages } = useCustomPipelineStages(
+    isCustom ? pipelineId : undefined
+  );
+
+  const stages = isCustom
+    ? (customStages || []).map((s) => ({ key: s.stage_key || s.id, name: s.name }))
+    : isStandardPipe
+    ? (standardStages || []).map((s) => ({
+        key: "stage_key" in s ? s.stage_key : s.id,
+        name: s.name,
+      }))
+    : [];
+
+  const handlePipeChange = (value: string) => {
+    // Check if it's a custom pipeline UUID
+    const isCustomPipe = customPipelines?.some((p) => p.id === value);
+    if (isCustomPipe) {
+      updateConfig({ pipe_type: "", pipeline_id: value, stages: [], from_stage: "", to_stage: "" });
+    } else {
+      updateConfig({ pipe_type: value, pipeline_id: "", stages: [], from_stage: "", to_stage: "" });
+    }
+  };
+
+  const handleStageToggle = (stageKey: string, checked: boolean) => {
+    const current = [...selectedStages];
+    if (checked) {
+      current.push(stageKey);
+    } else {
+      const idx = current.indexOf(stageKey);
+      if (idx >= 0) current.splice(idx, 1);
+    }
+    updateConfig({ stages: current });
+  };
+
+  const currentPipeValue = isCustom ? pipelineId : pipeType || "__none__";
+
+  return (
+    <>
+      <div className="space-y-2">
+        <Label>Pipeline</Label>
+        <Select
+          value={currentPipeValue}
+          onValueChange={handlePipeChange}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="Selecione o pipe" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectLabel className="text-xs font-semibold text-muted-foreground uppercase">
+                Pipes Padrão
+              </SelectLabel>
+              {STANDARD_PIPES.map((p) => (
+                <SelectItem key={p.value} value={p.value}>
+                  {p.label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+            {customPipelines && customPipelines.length > 0 && (
+              <SelectGroup>
+                <SelectLabel className="text-xs font-semibold text-muted-foreground uppercase">
+                  Pipes Custom
+                </SelectLabel>
+                {customPipelines.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.name}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            )}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {stages.length > 0 && (
+        <div className="space-y-2">
+          <Label>Etapas (selecione uma ou mais)</Label>
+          <p className="text-xs text-muted-foreground">
+            Se nenhuma for selecionada, dispara em qualquer etapa deste pipe.
+          </p>
+          <div className="space-y-2 max-h-48 overflow-y-auto rounded-md border p-3">
+            {stages.map((s) => (
+              <label
+                key={s.key}
+                className="flex items-center gap-2 text-sm cursor-pointer hover:bg-muted/50 rounded px-1 py-0.5"
+              >
+                <Checkbox
+                  checked={selectedStages.includes(s.key)}
+                  onCheckedChange={(checked) =>
+                    handleStageToggle(s.key, checked === true)
+                  }
+                />
+                {s.name}
+              </label>
+            ))}
+          </div>
+          {selectedStages.length > 0 && (
+            <p className="text-xs text-muted-foreground">
+              {selectedStages.length} etapa(s) selecionada(s)
+            </p>
+          )}
+        </div>
+      )}
+
+      <div className="p-3 rounded-lg bg-muted text-xs text-muted-foreground">
+        Este workflow será disparado quando um lead entrar nas etapas selecionadas deste pipe.
+      </div>
+    </>
+  );
+}

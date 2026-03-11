@@ -21,6 +21,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { DraggableKanbanBoard, DraggableItem, KanbanColumn } from "@/components/kanban/DraggableKanbanBoard";
+import { StageWorkflowsBadgeWrapper } from "@/components/kanban/StageWorkflowsBadgeWrapper";
+import { useStageWorkflowCounts } from "@/hooks/useStageWorkflows";
 import { usePipeConfirmacao, useUpdatePipeConfirmacao, useCreatePipeConfirmacao, useDeletePipeConfirmacao, PipeConfirmacaoStatus } from "@/hooks/usePipeConfirmacao";
 import { usePipelineStages, stagesToColumns, getPipelineTypeName } from "@/hooks/usePipelineStages";
 import { PipeSettingsDialog } from "@/components/pipelines/PipeSettingsDialog";
@@ -162,6 +164,7 @@ export default function PipeConfirmacao() {
   const overdueDays = useConfirmacaoOverdueDays();
   const { data: pipeData, isLoading, refetch } = usePipeConfirmacao();
   const { data: pipelineStages = [] } = usePipelineStages("confirmacao");
+  const { data: workflowCounts = {} } = useStageWorkflowCounts("confirmacao");
   const { data: teamMembers = [] } = useTeamMembers();
   const updatePipeConfirmacao = useUpdatePipeConfirmacao();
   const createPipeProposta = useCreatePipeProposta();
@@ -594,6 +597,14 @@ export default function PipeConfirmacao() {
           columns={columns}
           onStatusChange={handleStatusChange}
           onDeleteAllLeads={() => setDeleteAllLeadsDialogOpen(true)}
+          renderColumnExtra={(col) => {
+            const allCounts = workflowCounts["__all__"] || { total: 0, active: 0 };
+            const stageCounts = workflowCounts[col.id] || { total: 0, active: 0 };
+            const merged = { total: stageCounts.total + allCounts.total, active: stageCounts.active + allCounts.active };
+            return (
+              <StageWorkflowsBadgeWrapper pipeType="confirmacao" stageKey={col.id} stageName={col.title} counts={merged} />
+            );
+          }}
           renderCard={(card) => (
             <ConfirmacaoCard
               card={card}

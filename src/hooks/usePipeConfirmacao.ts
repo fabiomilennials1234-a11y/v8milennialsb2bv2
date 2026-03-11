@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
 import { triggerFollowUpAutomation } from "./useAutoFollowUp";
+import { triggerStageChangedWorkflows } from "@/lib/workflowTrigger";
 import { useRealtimeSubscription } from "./useRealtimeSubscription";
 import { useOrganization } from "./useOrganization";
 
@@ -90,6 +91,14 @@ export function useCreatePipeConfirmacao() {
         organizationId: data.organization_id,
       });
 
+      // Trigger visual workflow automations
+      triggerStageChangedWorkflows({
+        organizationId: data.organization_id,
+        leadId: data.lead_id,
+        pipeType: "confirmacao",
+        toStage: data.status,
+      });
+
       return data;
     },
     onSuccess: () => {
@@ -133,6 +142,14 @@ export function useUpdatePipeConfirmacao() {
           stage: updates.status,
           sourcePipeId: data.id,
           organizationId: data.organization_id,
+        });
+
+        // Trigger visual workflow automations
+        triggerStageChangedWorkflows({
+          organizationId: data.organization_id,
+          leadId,
+          pipeType: "confirmacao",
+          toStage: updates.status,
         });
       }
 

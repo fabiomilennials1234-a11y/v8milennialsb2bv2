@@ -34,6 +34,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { DraggableKanbanBoard, DraggableItem, KanbanColumn } from "@/components/kanban/DraggableKanbanBoard";
+import { StageWorkflowsBadgeWrapper } from "@/components/kanban/StageWorkflowsBadgeWrapper";
+import { useStageWorkflowCounts } from "@/hooks/useStageWorkflows";
 import { usePipePropostas, useUpdatePipeProposta, useDeletePipeProposta, PipePropostasStatus } from "@/hooks/usePipePropostas";
 import { usePipePropostasMetrics, type MetricsPeriod } from "@/hooks/usePipeMetrics";
 import { useDeleteAllLeadsInPipe } from "@/hooks/useLeads";
@@ -359,6 +361,7 @@ export default function PipePropostas() {
 
   const { data: pipeData, isLoading, refetch } = usePipePropostas();
   const { data: pipelineStages = [] } = usePipelineStages("propostas");
+  const { data: workflowCounts = {} } = useStageWorkflowCounts("propostas");
   const { data: teamMembers } = useTeamMembers();
   const updatePipeProposta = useUpdatePipeProposta();
   const { data: tinyStatus } = useTinyErpStatus();
@@ -1153,6 +1156,14 @@ export default function PipePropostas() {
               columns={columns}
               onStatusChange={handleStatusChange}
               onDeleteAllLeads={() => setDeleteAllLeadsDialogOpen(true)}
+              renderColumnExtra={(col) => {
+                const allCounts = workflowCounts["__all__"] || { total: 0, active: 0 };
+                const stageCounts = workflowCounts[col.id] || { total: 0, active: 0 };
+                const merged = { total: stageCounts.total + allCounts.total, active: stageCounts.active + allCounts.active };
+                return (
+                  <StageWorkflowsBadgeWrapper pipeType="propostas" stageKey={col.id} stageName={col.title} counts={merged} />
+                );
+              }}
               renderCard={(card) => (
                 <div onClick={() => {
                   const item = pipeData?.find(p => p.id === card.id);
