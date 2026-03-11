@@ -52,25 +52,24 @@ export interface MetaConnectionWithPages extends MetaConnection {
  * Lista conexoes Meta da organizacao com suas paginas
  */
 export function useMetaConnections() {
-  const { organization } = useOrganization();
-  const orgId = organization?.id;
+  const { organizationId } = useOrganization();
 
   return useQuery({
-    queryKey: ["meta_connections", orgId],
+    queryKey: ["meta_connections", organizationId],
     queryFn: async () => {
-      if (!orgId) return [];
+      if (!organizationId) return [];
 
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from("meta_connections")
         .select("*, meta_pages(*)")
-        .eq("organization_id", orgId)
+        .eq("organization_id", organizationId)
         .neq("status", "disconnected")
         .order("connected_at", { ascending: false });
 
       if (error) throw error;
       return (data || []) as MetaConnectionWithPages[];
     },
-    enabled: !!orgId,
+    enabled: !!organizationId,
   });
 }
 
@@ -107,16 +106,16 @@ export function useMetaConnectionStatus() {
  */
 export function useConnectMeta() {
   const { user } = useAuth();
-  const { organization } = useOrganization();
+  const { organizationId } = useOrganization();
 
   return useMutation({
     mutationFn: async () => {
-      if (!user?.id || !organization?.id) {
+      if (!user?.id || !organizationId) {
         throw new Error("Usuario ou organizacao nao encontrados");
       }
 
       const state = btoa(
-        JSON.stringify({ userId: user.id, orgId: organization.id })
+        JSON.stringify({ userId: user.id, orgId: organizationId })
       );
 
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -161,7 +160,7 @@ export function useDisconnectMeta() {
   return useMutation({
     mutationFn: async (connectionId: string) => {
       // Marca como desconectado
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from("meta_connections")
         .update({ status: "disconnected" })
         .eq("id", connectionId);
@@ -169,7 +168,7 @@ export function useDisconnectMeta() {
       if (error) throw error;
 
       // Desativa todas as paginas
-      const { error: pagesError } = await supabase
+      const { error: pagesError } = await (supabase as any)
         .from("meta_pages")
         .update({ is_active: false, webhook_subscribed: false })
         .eq("meta_connection_id", connectionId);
@@ -196,7 +195,7 @@ export function useToggleMetaPage() {
       pageId: string;
       isActive: boolean;
     }) => {
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from("meta_pages")
         .update({ is_active: isActive })
         .eq("id", pageId);
