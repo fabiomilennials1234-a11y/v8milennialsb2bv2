@@ -43,15 +43,17 @@ Deno.serve(async (req) => {
       return redirect({ meta: "error", reason: "codigo_ausente" });
     }
 
-    // -- Decodifica state (userId + orgId) ----------------------------------
+    // -- Decodifica state (userId + orgId + connectionType) -----------------
     let userId: string | undefined;
     let orgId: string | undefined;
+    let connectionType: "facebook" | "instagram" = "facebook";
 
     if (state) {
       try {
         const decoded = JSON.parse(atob(state));
         userId = decoded.userId;
         orgId = decoded.orgId;
+        connectionType = decoded.connectionType || "facebook";
       } catch {
         console.warn("[meta-oauth-callback] Could not decode state:", state);
       }
@@ -94,8 +96,9 @@ Deno.serve(async (req) => {
           token_expires_at: tokenExpiresAt,
           status: "connected",
           connected_at: new Date().toISOString(),
+          connection_type: connectionType,
         },
-        { onConflict: "organization_id,facebook_user_id" }
+        { onConflict: "organization_id,facebook_user_id,connection_type" }
       )
       .select("id")
       .single();
@@ -113,6 +116,12 @@ Deno.serve(async (req) => {
     let igAccountsConnected = 0;
 
     for (const page of pages) {
+      // Para conexão Facebook: salvar todas as páginas
+      // Para conexão Instagram: salvar apenas páginas que têm conta Instagram
+      if (connectionType === "instagram" && !page.instagram_business_account?.id) {
+        continue;
+      }
+
       // Subscreve webhook
       const subscribed = await subscribePageWebhook(page.id, page.access_token);
 
@@ -146,11 +155,12 @@ Deno.serve(async (req) => {
     }
 
     console.log(
-      `[meta-oauth-callback] Connected: ${pagesConnected} pages, ${igAccountsConnected} IG accounts`
+      `[meta-oauth-callback] Connected (${connectionType}): ${pagesConnected} pages, ${igAccountsConnected} IG accounts`
     );
 
     return redirect({
       meta: "connected",
+      connectionType,
       pages: String(pagesConnected),
       instagram: String(igAccountsConnected),
     });

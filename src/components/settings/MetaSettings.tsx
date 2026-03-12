@@ -1,8 +1,8 @@
 /**
  * Componente de configuracoes Meta (Facebook/Instagram)
  *
- * Permite ao usuario conectar/desconectar suas paginas do Facebook
- * e contas do Instagram com apenas um clique via OAuth2.
+ * Seções separadas para Facebook e Instagram, permitindo que o usuario
+ * conecte contas diferentes para cada plataforma.
  */
 
 import { useEffect } from "react";
@@ -33,16 +33,22 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import {
-  useMetaConnectionStatus,
+  useMetaConnections,
+  useMetaConnectionStatusByType,
   useConnectMeta,
   useDisconnectMeta,
   useToggleMetaPage,
   useMetaOAuthCallback,
+  type ConnectionType,
+  type MetaPage,
 } from "@/hooks/useMetaConnection";
 import { MetaLeadgenConfig } from "./MetaLeadgenConfig";
 import { toast } from "sonner";
 
-// Icone do Facebook (SVG inline)
+// ---------------------------------------------------------------------------
+// Icons
+// ---------------------------------------------------------------------------
+
 function FacebookIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="currentColor">
@@ -51,7 +57,6 @@ function FacebookIcon({ className }: { className?: string }) {
   );
 }
 
-// Icone do Messenger
 function MessengerIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="currentColor">
@@ -60,43 +65,39 @@ function MessengerIcon({ className }: { className?: string }) {
   );
 }
 
-export function MetaSettings() {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const {
-    isLoading,
-    isConnected,
-    isExpired,
-    connection,
-    pages,
-    instagramPages,
-    totalPages,
-    totalInstagram,
-    error: queryError,
-  } = useMetaConnectionStatus();
+// ---------------------------------------------------------------------------
+// ConnectionSection — reusable section for Facebook or Instagram
+// ---------------------------------------------------------------------------
+
+interface ConnectionSectionProps {
+  type: ConnectionType;
+  icon: React.ReactNode;
+  title: string;
+  subtitle: string;
+  accentColor: string;
+  buttonLabel: string;
+  disconnectLabel: string;
+  renderPage: (page: MetaPage) => React.ReactNode;
+  children?: React.ReactNode;
+}
+
+function ConnectionSection({
+  type,
+  icon,
+  title,
+  subtitle,
+  accentColor,
+  buttonLabel,
+  disconnectLabel,
+  renderPage,
+  children,
+}: ConnectionSectionProps) {
+  const { isLoading, isConnected, isExpired, connection, pages, totalPages } =
+    useMetaConnectionStatusByType(type);
   const connectMeta = useConnectMeta();
   const disconnectMeta = useDisconnectMeta();
   const togglePage = useToggleMetaPage();
-  const { handleCallback } = useMetaOAuthCallback();
 
-  // Processa callback do OAuth
-  useEffect(() => {
-    const result = handleCallback(searchParams);
-    if (result) {
-      if (result.success) {
-        toast.success(result.message);
-      } else {
-        toast.error(result.message);
-      }
-      // Limpa parametros da URL
-      searchParams.delete("meta");
-      searchParams.delete("pages");
-      searchParams.delete("instagram");
-      searchParams.delete("reason");
-      setSearchParams(searchParams, { replace: true });
-    }
-  }, [searchParams]);
-
-  // Token expira em menos de 7 dias?
   const tokenExpiresAt = connection?.token_expires_at
     ? new Date(connection.token_expires_at)
     : null;
@@ -107,73 +108,62 @@ export function MetaSettings() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      <div className="flex items-center justify-center py-8">
+        <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
-  if (queryError) {
-    console.error("[MetaSettings] Query error:", queryError);
-  }
-
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Header */}
       <div>
         <h3 className="text-lg font-medium flex items-center gap-2">
-          <FacebookIcon className="w-5 h-5 text-[#1877F2]" />
-          Meta (Facebook & Instagram)
+          {icon}
+          {title}
         </h3>
-        <p className="text-sm text-muted-foreground">
-          Conecte suas paginas do Facebook e contas do Instagram para receber
-          mensagens e capturar leads de anuncios.
-        </p>
+        <p className="text-sm text-muted-foreground">{subtitle}</p>
       </div>
 
-      {/* Status Card */}
       {!isConnected && !isExpired ? (
-        // Nao conectado
+        /* Not connected */
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           className="flex flex-col items-center gap-4 py-8 border border-dashed rounded-lg"
         >
-          <div className="flex items-center gap-3">
-            <FacebookIcon className="w-10 h-10 text-[#1877F2]" />
-            <div className="text-2xl text-muted-foreground">/</div>
-            <Instagram className="w-10 h-10 text-[#E1306C]" />
-          </div>
+          <div className="opacity-60">{icon}</div>
           <div className="text-center">
             <p className="font-medium">Nenhuma conta conectada</p>
-            <p className="text-sm text-muted-foreground mt-1">
-              Conecte sua conta do Facebook para receber mensagens do Messenger,
-              Instagram Direct e capturar leads de anuncios.
-            </p>
+            <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>
           </div>
           <Button
             onClick={() => {
-              console.log("[MetaSettings] Botão clicado, VITE_META_APP_ID:", import.meta.env.VITE_META_APP_ID);
-              connectMeta.mutate(undefined, {
+              connectMeta.mutate(type, {
                 onError: (err) => {
-                  console.error("[MetaSettings] Erro ao conectar:", err);
-                  toast.error(err instanceof Error ? err.message : "Erro ao iniciar conexão Meta");
+                  console.error(`[MetaSettings] Erro ao conectar ${type}:`, err);
+                  toast.error(
+                    err instanceof Error
+                      ? err.message
+                      : "Erro ao iniciar conexao Meta"
+                  );
                 },
               });
             }}
             disabled={connectMeta.isPending}
-            className="gap-2 bg-[#1877F2] hover:bg-[#166FE5] text-white"
+            className="gap-2 text-white"
+            style={{ backgroundColor: accentColor }}
           >
             {connectMeta.isPending ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
-              <FacebookIcon className="w-4 h-4" />
+              icon
             )}
-            Conectar com Facebook
+            {buttonLabel}
           </Button>
         </motion.div>
       ) : (
-        // Conectado ou expirado
+        /* Connected or expired */
         <div className="space-y-4">
           {/* Connection Status */}
           <motion.div
@@ -182,10 +172,10 @@ export function MetaSettings() {
             className="flex items-center justify-between p-4 border rounded-lg"
           >
             <div className="flex items-center gap-3">
-              <FacebookIcon className="w-8 h-8 text-[#1877F2]" />
+              {icon}
               <div>
                 <p className="font-medium">
-                  {connection?.facebook_user_name || "Conta Facebook"}
+                  {connection?.facebook_user_name || title}
                 </p>
                 <div className="flex items-center gap-2 mt-0.5">
                   {isConnected ? (
@@ -200,7 +190,8 @@ export function MetaSettings() {
                     </Badge>
                   )}
                   <span className="text-xs text-muted-foreground">
-                    {totalPages} pagina(s) | {totalInstagram} Instagram
+                    {totalPages}{" "}
+                    {type === "instagram" ? "conta(s)" : "pagina(s)"}
                   </span>
                 </div>
               </div>
@@ -211,7 +202,7 @@ export function MetaSettings() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => connectMeta.mutate()}
+                  onClick={() => connectMeta.mutate(type)}
                   disabled={connectMeta.isPending}
                   className="gap-1"
                 >
@@ -226,17 +217,20 @@ export function MetaSettings() {
 
               <AlertDialog>
                 <AlertDialogTrigger asChild>
-                  <Button variant="outline" size="sm" className="gap-1 text-destructive hover:text-destructive">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1 text-destructive hover:text-destructive"
+                  >
                     <Unlink className="w-3 h-3" />
                     Desconectar
                   </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
-                    <AlertDialogTitle>Desconectar Meta?</AlertDialogTitle>
+                    <AlertDialogTitle>{disconnectLabel}</AlertDialogTitle>
                     <AlertDialogDescription>
-                      Isso ira desconectar todas as paginas do Facebook e contas do
-                      Instagram. Voce nao recebera mais mensagens desses canais ate
+                      Voce nao recebera mais mensagens desse canal ate
                       reconectar.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
@@ -246,7 +240,8 @@ export function MetaSettings() {
                       onClick={() => {
                         if (connection) {
                           disconnectMeta.mutate(connection.id, {
-                            onSuccess: () => toast.success("Desconectado com sucesso!"),
+                            onSuccess: () =>
+                              toast.success("Desconectado com sucesso!"),
                             onError: () => toast.error("Erro ao desconectar"),
                           });
                         }
@@ -267,16 +262,19 @@ export function MetaSettings() {
               <AlertTriangle className="w-4 h-4 text-warning shrink-0" />
               <span>
                 Seu token expira em{" "}
-                <strong>{daysUntilExpiry} dia(s)</strong>. Reconecte para renovar.
+                <strong>{daysUntilExpiry} dia(s)</strong>. Reconecte para
+                renovar.
               </span>
             </div>
           )}
 
-          {/* Pages List */}
+          {/* Pages / Accounts List */}
           {pages.length > 0 && (
             <div className="space-y-2">
               <h4 className="text-sm font-medium text-muted-foreground">
-                Paginas e Contas Conectadas
+                {type === "instagram"
+                  ? "Contas Instagram Conectadas"
+                  : "Paginas Conectadas"}
               </h4>
               <div className="space-y-2">
                 {pages.map((page) => (
@@ -286,24 +284,7 @@ export function MetaSettings() {
                     animate={{ opacity: 1, x: 0 }}
                     className="flex items-center justify-between p-3 border rounded-lg"
                   >
-                    <div className="flex items-center gap-3">
-                      <div className="flex flex-col gap-1">
-                        <div className="flex items-center gap-2">
-                          <MessengerIcon className="w-4 h-4 text-[#0084FF]" />
-                          <span className="text-sm font-medium">
-                            {page.page_name}
-                          </span>
-                        </div>
-                        {page.instagram_username && (
-                          <div className="flex items-center gap-2">
-                            <Instagram className="w-4 h-4 text-[#E1306C]" />
-                            <span className="text-sm text-muted-foreground">
-                              @{page.instagram_username}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                    {renderPage(page)}
 
                     <div className="flex items-center gap-3">
                       {page.webhook_subscribed ? (
@@ -312,14 +293,20 @@ export function MetaSettings() {
                           Webhook ativo
                         </Badge>
                       ) : (
-                        <Badge variant="outline" className="text-xs text-muted-foreground">
+                        <Badge
+                          variant="outline"
+                          className="text-xs text-muted-foreground"
+                        >
                           Webhook inativo
                         </Badge>
                       )}
                       <Switch
                         checked={page.is_active}
                         onCheckedChange={(checked) =>
-                          togglePage.mutate({ pageId: page.id, isActive: checked })
+                          togglePage.mutate({
+                            pageId: page.id,
+                            isActive: checked,
+                          })
                         }
                       />
                     </div>
@@ -329,12 +316,102 @@ export function MetaSettings() {
             </div>
           )}
 
-          {/* Lead Ads Config */}
-          <div className="pt-4 border-t">
-            <MetaLeadgenConfig />
-          </div>
+          {/* Extra content (e.g. Lead Ads config for Facebook) */}
+          {children}
         </div>
       )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main component
+// ---------------------------------------------------------------------------
+
+export function MetaSettings() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { isLoading } = useMetaConnections();
+  const { handleCallback } = useMetaOAuthCallback();
+
+  // Process OAuth callback
+  useEffect(() => {
+    const result = handleCallback(searchParams);
+    if (result) {
+      if (result.success) {
+        toast.success(result.message);
+      } else {
+        toast.error(result.message);
+      }
+      searchParams.delete("meta");
+      searchParams.delete("pages");
+      searchParams.delete("instagram");
+      searchParams.delete("reason");
+      searchParams.delete("connectionType");
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [searchParams]);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-8">
+      {/* ---- Facebook Section ---- */}
+      <ConnectionSection
+        type="facebook"
+        icon={<FacebookIcon className="w-6 h-6 text-[#1877F2]" />}
+        title="Facebook"
+        subtitle="Conecte suas paginas do Facebook para receber mensagens do Messenger e capturar leads de anuncios."
+        accentColor="#1877F2"
+        buttonLabel="Conectar com Facebook"
+        disconnectLabel="Desconectar Facebook?"
+        renderPage={(page) => (
+          <div className="flex items-center gap-3">
+            <MessengerIcon className="w-4 h-4 text-[#0084FF]" />
+            <span className="text-sm font-medium">{page.page_name}</span>
+          </div>
+        )}
+      >
+        {/* Lead Ads config lives under Facebook */}
+        <div className="pt-4 border-t">
+          <MetaLeadgenConfig />
+        </div>
+      </ConnectionSection>
+
+      <hr className="border-border" />
+
+      {/* ---- Instagram Section ---- */}
+      <ConnectionSection
+        type="instagram"
+        icon={<Instagram className="w-6 h-6 text-[#E1306C]" />}
+        title="Instagram"
+        subtitle="Conecte sua conta do Instagram para receber mensagens do Instagram Direct."
+        accentColor="#E1306C"
+        buttonLabel="Conectar com Instagram"
+        disconnectLabel="Desconectar Instagram?"
+        renderPage={(page) => (
+          <div className="flex items-center gap-3">
+            <Instagram className="w-4 h-4 text-[#E1306C]" />
+            <div className="flex flex-col">
+              <span className="text-sm font-medium">
+                {page.instagram_username
+                  ? `@${page.instagram_username}`
+                  : page.page_name}
+              </span>
+              {page.instagram_username && (
+                <span className="text-xs text-muted-foreground">
+                  {page.page_name}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+      />
     </div>
   );
 }

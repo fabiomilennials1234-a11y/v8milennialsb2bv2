@@ -1,6 +1,7 @@
 /**
  * Hook para gerenciar conexoes Meta (Facebook/Instagram)
  * OAuth, listagem de paginas, desconexao
+ * Suporta conexões separadas para Facebook e Instagram
  */
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -12,6 +13,8 @@ import { useOrganization } from "@/hooks/useOrganization";
 // Types
 // ---------------------------------------------------------------------------
 
+export type ConnectionType = "facebook" | "instagram";
+
 export interface MetaConnection {
   id: string;
   organization_id: string;
@@ -21,6 +24,7 @@ export interface MetaConnection {
   access_token: string;
   token_expires_at: string;
   status: "connected" | "expired" | "disconnected";
+  connection_type: ConnectionType;
   connected_at: string;
   updated_at: string;
 }
@@ -59,8 +63,6 @@ export function useMetaConnections() {
     queryFn: async () => {
       if (!organizationId) return [];
 
-      console.log("[useMetaConnections] Fetching for org:", organizationId);
-
       const { data, error } = await (supabase as any)
         .from("meta_connections")
         .select("*, meta_pages(*)")
@@ -68,12 +70,7 @@ export function useMetaConnections() {
         .neq("status", "disconnected")
         .order("connected_at", { ascending: false });
 
-      if (error) {
-        console.error("[useMetaConnections] Query error:", error);
-        throw error;
-      }
-
-      console.log("[useMetaConnections] Result:", data);
+      if (error) throw error;
       return (data || []) as MetaConnectionWithPages[];
     },
     enabled: !!organizationId,
@@ -81,7 +78,37 @@ export function useMetaConnections() {
 }
 
 /**
- * Status simplificado: se tem alguma conexao ativa
+ * Status filtrado por tipo de conexão (facebook ou instagram)
+ */
+export function useMetaConnectionStatusByType(type: ConnectionType) {
+  const { data: connections = [], isLoading, error } = useMetaConnections();
+
+  const typeConnections = connections.filter((c) => c.connection_type === type);
+  const activeConnection = typeConnections.find((c) => c.status === "connected");
+  const expiredConnection = typeConnections.find((c) => c.status === "expired");
+  const allPages = typeConnections.flatMap((c) => c.meta_pages || []);
+  const activePages = allPages.filter((p) => p.is_active);
+
+  // Para Facebook: mostrar todas as páginas
+  // Para Instagram: mostrar apenas páginas que têm conta Instagram
+  const filteredPages =
+    type === "instagram"
+      ? activePages.filter((p) => p.instagram_account_id)
+      : activePages;
+
+  return {
+    isLoading,
+    error,
+    isConnected: !!activeConnection,
+    isExpired: !activeConnection && !!expiredConnection,
+    connection: activeConnection || expiredConnection || null,
+    pages: filteredPages,
+    totalPages: filteredPages.length,
+  };
+}
+
+/**
+ * Status combinado (compatibilidade com MetaLeadgenConfig e outros)
  */
 export function useMetaConnectionStatus() {
   const { data: connections = [], isLoading, error } = useMetaConnections();
@@ -117,13 +144,17 @@ export function useConnectMeta() {
   const { organizationId } = useOrganization();
 
   return useMutation({
-    mutationFn: async () => {
+    mutationFn: async (connectionType: ConnectionType = "facebook") => {
       if (!user?.id || !organizationId) {
         throw new Error("Usuario ou organizacao nao encontrados");
       }
 
       const state = btoa(
-        JSON.stringify({ userId: user.id, orgId: organizationId })
+        JSON.stringify({
+          userId: user.id,
+          orgId: organizationId,
+          connectionType,
+        })
       );
 
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -134,15 +165,30 @@ export function useConnectMeta() {
         throw new Error("VITE_META_APP_ID nao configurado");
       }
 
-      const scopes = [
+      // Escopos baseados no tipo de conexão
+      const baseScopes = [
         "pages_manage_metadata",
-        "pages_messaging",
         "pages_read_engagement",
+        "public_profile",
+      ];
+
+      const facebookScopes = [
+        ...baseScopes,
+        "pages_messaging",
         "pages_manage_ads",
+        "leads_retrieval",
+      ];
+
+      const instagramScopes = [
+        ...baseScopes,
         "instagram_manage_messages",
         "instagram_basic",
-        "leads_retrieval",
-      ].join(",");
+      ];
+
+      const scopes =
+        connectionType === "instagram"
+          ? instagramScopes.join(",")
+          : facebookScopes.join(",");
 
       const params = new URLSearchParams({
         client_id: appId,
@@ -153,8 +199,6 @@ export function useConnectMeta() {
       });
 
       const loginUrl = `https://www.facebook.com/v21.0/dialog/oauth?${params}`;
-
-      // Redireciona para o Facebook Login
       window.location.href = loginUrl;
     },
   });
@@ -168,7 +212,6 @@ export function useDisconnectMeta() {
 
   return useMutation({
     mutationFn: async (connectionId: string) => {
-      // Marca como desconectado
       const { error } = await (supabase as any)
         .from("meta_connections")
         .update({ status: "disconnected" })
@@ -176,7 +219,6 @@ export function useDisconnectMeta() {
 
       if (error) throw error;
 
-      // Desativa todas as paginas
       const { error: pagesError } = await (supabase as any)
         .from("meta_pages")
         .update({ is_active: false, webhook_subscribed: false })
@@ -231,10 +273,16 @@ export function useMetaOAuthCallback() {
     if (metaStatus === "connected") {
       const pages = searchParams.get("pages") || "0";
       const instagram = searchParams.get("instagram") || "0";
+      const connectionType = searchParams.get("connectionType") || "facebook";
       queryClient.invalidateQueries({ queryKey: ["meta_connections"] });
+
+      const label = connectionType === "instagram" ? "Instagram" : "Facebook";
       return {
         success: true,
-        message: `Conectado! ${pages} pagina(s) e ${instagram} conta(s) Instagram.`,
+        message:
+          connectionType === "instagram"
+            ? `${label} conectado! ${instagram} conta(s) Instagram.`
+            : `${label} conectado! ${pages} pagina(s).`,
       };
     }
 
