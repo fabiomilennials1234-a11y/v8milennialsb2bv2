@@ -439,7 +439,6 @@ export function buildLoginUrl(state?: string): string {
     "pages_manage_metadata",
     "pages_messaging",
     "pages_read_engagement",
-    "pages_manage_ads",
     "instagram_manage_messages",
     "instagram_basic",
     "leads_retrieval",
