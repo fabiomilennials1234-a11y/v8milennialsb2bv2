@@ -123,6 +123,7 @@ function usePageForms(pageId: string, enabled: boolean) {
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: "Erro ao buscar formularios" }));
+        console.error("[usePageForms] Error response:", err);
         throw new Error(err.error || "Erro ao buscar formularios");
       }
 
@@ -450,7 +451,7 @@ function PageLeadgenCard({
               </div>
               {formsError ? (
                 <p className="text-xs text-destructive mt-1">
-                  Erro ao carregar formularios. Clique em Atualizar.
+                  Erro ao carregar formularios: {(formsError as Error)?.message || "Desconhecido"}. Clique em Atualizar.
                 </p>
               ) : (
                 <Select

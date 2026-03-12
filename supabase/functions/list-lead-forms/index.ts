@@ -73,7 +73,7 @@ Deno.serve(async (req) => {
     const errorMessage = err instanceof Error ? err.message : "Erro desconhecido";
     console.error("[list-lead-forms] Error:", errorMessage);
     return new Response(
-      JSON.stringify({ error: errorMessage }),
+      JSON.stringify({ error: errorMessage, detail: String(err) }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
