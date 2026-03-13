@@ -426,7 +426,13 @@ function StagesTabContent({
 // General Settings Tab
 // ────────────────────────────────────────────────────────────
 
-function GeneralTabContent({ pipeline }: { pipeline: CustomPipeline }) {
+function GeneralTabContent({
+  pipeline,
+  onRequestDelete,
+}: {
+  pipeline: CustomPipeline;
+  onRequestDelete?: () => void;
+}) {
   const [name, setName] = useState(pipeline.name);
   const [icon, setIcon] = useState(pipeline.icon);
   const [color, setColor] = useState(pipeline.color);
@@ -495,6 +501,23 @@ function GeneralTabContent({ pipeline }: { pipeline: CustomPipeline }) {
           Salvar Alterações
         </Button>
       )}
+
+      {onRequestDelete && (
+        <div className="pt-6 mt-2 border-t border-destructive/20 space-y-2">
+          <p className="text-sm font-semibold text-destructive">Zona de Perigo</p>
+          <p className="text-xs text-muted-foreground">
+            Excluir o funil o remove da sidebar e de todas as listagens. Os leads permanecerão no sistema.
+          </p>
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={onRequestDelete}
+          >
+            <Trash2 className="w-4 h-4 mr-2" />
+            Excluir Funil
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
@@ -508,6 +531,7 @@ interface CustomPipeSettingsDialogProps {
   onOpenChange: (open: boolean) => void;
   pipeline: CustomPipeline;
   stages: CustomPipelineStage[];
+  onRequestDelete?: () => void;
 }
 
 export function CustomPipeSettingsDialog({
@@ -515,6 +539,7 @@ export function CustomPipeSettingsDialog({
   onOpenChange,
   pipeline,
   stages,
+  onRequestDelete,
 }: CustomPipeSettingsDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -543,7 +568,7 @@ export function CustomPipeSettingsDialog({
               <StagesTabContent pipeline={pipeline} stages={stages} />
             </TabsContent>
             <TabsContent value="geral" className="mt-0">
-              <GeneralTabContent pipeline={pipeline} />
+              <GeneralTabContent pipeline={pipeline} onRequestDelete={onRequestDelete} />
             </TabsContent>
           </div>
         </Tabs>

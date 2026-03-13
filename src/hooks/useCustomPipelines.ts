@@ -245,8 +245,9 @@ export function useCreateCustomPipeline() {
         .single();
 
       if (pipeError) {
-        if (pipeError.message?.includes("duplicate")) {
-          throw new Error("Já existe um funil com esse nome");
+        // code 23505 = unique_violation (PostgreSQL)
+        if (pipeError.code === "23505" || pipeError.message?.includes("duplicate")) {
+          throw new Error("Já existe um funil ativo com esse nome nesta organização");
         }
         throw pipeError;
       }
@@ -309,7 +310,12 @@ export function useUpdateCustomPipeline() {
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        if (error.code === "23505" || error.message?.includes("duplicate")) {
+          throw new Error("Já existe um funil ativo com esse nome nesta organização");
+        }
+        throw error;
+      }
       return data as CustomPipeline;
     },
     onSuccess: () => {
@@ -319,7 +325,7 @@ export function useUpdateCustomPipeline() {
   });
 }
 
-/** Desativar funil customizado */
+/** Desativar funil customizado (soft delete) */
 export function useDeleteCustomPipeline() {
   const queryClient = useQueryClient();
 
@@ -334,6 +340,9 @@ export function useDeleteCustomPipeline() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["custom_pipelines"] });
+      queryClient.invalidateQueries({ queryKey: ["custom_pipeline"] });
+      queryClient.invalidateQueries({ queryKey: ["custom_pipeline_stages"] });
+      queryClient.invalidateQueries({ queryKey: ["custom_pipe_entries"] });
     },
   });
 }
