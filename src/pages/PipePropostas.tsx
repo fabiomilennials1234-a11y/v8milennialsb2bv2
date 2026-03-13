@@ -1,4 +1,5 @@
-import { useState, useMemo, useRef, memo } from "react";
+import { useState, useMemo, useRef, memo, useCallback } from "react";
+import { usePersistedState } from "@/hooks/usePersistedState";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search, Filter, Plus, Calendar, User, Building2, Star,
@@ -37,6 +38,7 @@ import { DraggableKanbanBoard, DraggableItem, KanbanColumn } from "@/components/
 import { StageWorkflowsBadgeWrapper } from "@/components/kanban/StageWorkflowsBadgeWrapper";
 import { useStageWorkflowCounts } from "@/hooks/useStageWorkflows";
 import { usePipePropostas, useUpdatePipeProposta, useDeletePipeProposta, PipePropostasStatus } from "@/hooks/usePipePropostas";
+import { useHasPermission } from "@/hooks/usePermissions";
 import { usePipePropostasMetrics, type MetricsPeriod } from "@/hooks/usePipeMetrics";
 import { useDeleteAllLeadsInPipe } from "@/hooks/useLeads";
 import { usePipelineStages, stagesToColumns } from "@/hooks/usePipelineStages";
@@ -320,17 +322,64 @@ const ProposalCardComponent = memo(function ProposalCardComponent({
   );
 });
 
+// ---------------------------------------------------------------------------
+// Persisted filter state — scoped per org + user, TTL 24 h
+// ---------------------------------------------------------------------------
+type PropostasFilterState = {
+  searchTerm: string;
+  filterCloser: string;
+  filterProductType: string;
+  filterPriority: string;
+  filterCalor: string;
+  viewMode: "kanban" | "analytics";
+};
+
+const DEFAULT_PROPOSTAS_FILTERS: PropostasFilterState = {
+  searchTerm: "",
+  filterCloser: "all",
+  filterProductType: "all",
+  filterPriority: "all",
+  filterCalor: "all",
+  viewMode: "kanban",
+};
+
 export default function PipePropostas() {
-  const [searchTerm, setSearchTerm] = useState("");
-  const [filterCloser, setFilterCloser] = useState("all");
-  const [filterProductType, setFilterProductType] = useState("all");
-  const [filterPriority, setFilterPriority] = useState("all");
-  const [filterCalor, setFilterCalor] = useState("all");
+  const [filterState, setFilterState] = usePersistedState(
+    "propostas",
+    DEFAULT_PROPOSTAS_FILTERS
+  );
+
+  const { searchTerm, filterCloser, filterProductType, filterPriority, filterCalor, viewMode } = filterState;
+
+  const setSearchTerm = useCallback(
+    (v: string) => setFilterState((f) => ({ ...f, searchTerm: v })),
+    [setFilterState]
+  );
+  const setFilterCloser = useCallback(
+    (v: string) => setFilterState((f) => ({ ...f, filterCloser: v })),
+    [setFilterState]
+  );
+  const setFilterProductType = useCallback(
+    (v: string) => setFilterState((f) => ({ ...f, filterProductType: v })),
+    [setFilterState]
+  );
+  const setFilterPriority = useCallback(
+    (v: string) => setFilterState((f) => ({ ...f, filterPriority: v })),
+    [setFilterState]
+  );
+  const setFilterCalor = useCallback(
+    (v: string) => setFilterState((f) => ({ ...f, filterCalor: v })),
+    [setFilterState]
+  );
+  const setViewMode = useCallback(
+    (v: "kanban" | "analytics") => setFilterState((f) => ({ ...f, viewMode: v })),
+    [setFilterState]
+  );
+
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [selectedProposta, setSelectedProposta] = useState<any>(null);
-  const [viewMode, setViewMode] = useState<"kanban" | "analytics">("kanban");
   const [analyticsTab, setAnalyticsTab] = useState<"propostas" | "produtos">("propostas");
   
   // State for commitment date modal
@@ -368,6 +417,7 @@ export default function PipePropostas() {
   const deletePipeProposta = useDeletePipeProposta();
   const deleteAllLeadsInPipe = useDeleteAllLeadsInPipe("propostas");
   const logAction = useLogLeadAction();
+  const { data: canDelete } = useHasPermission("can_delete_leads");
   const { data: metricsByPeriod } = usePipePropostasMetrics(
     metricsPeriod,
     metricsPeriod === "month" ? selectedMetricsMonth : undefined,
@@ -694,7 +744,8 @@ export default function PipePropostas() {
       toast.success("Proposta removida do funil!");
       setDeleteDialog(null);
     } catch (error) {
-      toast.error("Erro ao excluir");
+      const msg = error instanceof Error ? error.message : "Erro ao excluir proposta";
+      toast.error(msg);
     }
   };
 
@@ -1175,7 +1226,7 @@ export default function PipePropostas() {
                   <ProposalCardComponent
                     proposal={card}
                     onCalorChange={(calor) => handleCalorChange(card.id, calor)}
-                    onDelete={handleOpenDeleteDialog}
+                    onDelete={canDelete ? handleOpenDeleteDialog : undefined}
                   />
                 </div>
               )}

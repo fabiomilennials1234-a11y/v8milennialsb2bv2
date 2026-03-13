@@ -195,12 +195,23 @@ export function useDeletePipeProposta() {
 
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
+      // Use .select("id") so PostgREST returns the affected rows.
+      // Without it, Supabase returns { error: null } even when RLS silently
+      // blocks the DELETE — causing the optimistic removal to appear to succeed
+      // while the record remains in the database and reappears on the next refetch.
+      const { data: deleted, error } = await supabase
         .from("pipe_propostas")
         .delete()
-        .eq("id", id);
+        .eq("id", id)
+        .select("id");
 
       if (error) throw error;
+
+      if (!deleted || deleted.length === 0) {
+        throw new Error(
+          "Não foi possível excluir: permissão insuficiente ou registro não encontrado."
+        );
+      }
     },
     onMutate: async (id: string) => {
       // Cancel any in-flight refetches so they don't overwrite the optimistic update

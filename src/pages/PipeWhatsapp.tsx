@@ -1,4 +1,5 @@
-import { useState, useMemo, memo } from "react";
+import { useState, useMemo, memo, useCallback } from "react";
+import { usePersistedState } from "@/hooks/usePersistedState";
 import { motion } from "framer-motion";
 import { Search, Plus, Zap, User, Building2, Star, Phone, Loader2, Globe, Trash2, MoreVertical, Target, MessageCircle, Mail, Calendar, DollarSign, Clock, Briefcase, Settings2, Bot } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -455,11 +456,48 @@ function AIToggle({ leadId, aiDisabled }: { leadId: string; aiDisabled?: boolean
   );
 }
 
+// ---------------------------------------------------------------------------
+// Persisted filter state — scoped per org + user, TTL 24 h
+// ---------------------------------------------------------------------------
+type WhatsappFilterState = {
+  searchTerm: string;
+  filterSdr: string;
+  filterCloser: string;
+  filterOrigin: string;
+};
+
+const DEFAULT_WHATSAPP_FILTERS: WhatsappFilterState = {
+  searchTerm: "",
+  filterSdr: "all",
+  filterCloser: "all",
+  filterOrigin: "all",
+};
+
 export default function PipeWhatsapp() {
-  const [searchTerm, setSearchTerm] = useState("");
-  const [filterSdr, setFilterSdr] = useState("all");
-  const [filterCloser, setFilterCloser] = useState("all");
-  const [filterOrigin, setFilterOrigin] = useState("all");
+  const [filterState, setFilterState] = usePersistedState(
+    "whatsapp",
+    DEFAULT_WHATSAPP_FILTERS
+  );
+
+  const { searchTerm, filterSdr, filterCloser, filterOrigin } = filterState;
+
+  const setSearchTerm = useCallback(
+    (v: string) => setFilterState((f) => ({ ...f, searchTerm: v })),
+    [setFilterState]
+  );
+  const setFilterSdr = useCallback(
+    (v: string) => setFilterState((f) => ({ ...f, filterSdr: v })),
+    [setFilterState]
+  );
+  const setFilterCloser = useCallback(
+    (v: string) => setFilterState((f) => ({ ...f, filterCloser: v })),
+    [setFilterState]
+  );
+  const setFilterOrigin = useCallback(
+    (v: string) => setFilterState((f) => ({ ...f, filterOrigin: v })),
+    [setFilterState]
+  );
+
   const [isLeadModalOpen, setIsLeadModalOpen] = useState(false);
   const [isOpportunityModalOpen, setIsOpportunityModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
