@@ -34,7 +34,13 @@ interface ConversionRate {
   sales: number;
 }
 
-export function useDashboardMetrics(month?: number, year?: number) {
+/**
+ * @param filterMemberId — override the auto-filter logic:
+ *   - undefined (default): auto — non-admins filter by their own id, admins get total
+ *   - null: force total (no member filter, regardless of role)
+ *   - string: filter by that specific team_member_id
+ */
+export function useDashboardMetrics(month?: number, year?: number, filterMemberId?: string | null) {
   const now = new Date();
   const selectedMonth = month ?? now.getMonth() + 1;
   const selectedYear = year ?? now.getFullYear();
@@ -44,12 +50,15 @@ export function useDashboardMetrics(month?: number, year?: number) {
   const myId = currentTeamMember?.id ?? null;
   const filterByMe = !isAdmin && myId;
 
+  // Explicit override takes precedence over auto-logic
+  const effectiveFilter = filterMemberId !== undefined ? filterMemberId : (filterByMe ? myId : null);
+
   const { startStr, endStr } = getMonthRangeUTC(selectedMonth, selectedYear);
 
   return useQuery({
-    queryKey: ["dashboard-metrics", selectedMonth, selectedYear, filterByMe, myId, organizationId],
+    queryKey: ["dashboard-metrics", selectedMonth, selectedYear, effectiveFilter, organizationId],
     queryFn: async (): Promise<DashboardMetrics> => {
-      console.log("🔍 [useDashboardMetrics] Chamando RPC:", { organizationId, startStr, endStr, filterByMe, myId });
+      console.log("🔍 [useDashboardMetrics] Chamando RPC:", { organizationId, startStr, endStr, effectiveFilter });
 
       if (!organizationId) {
         console.warn("⚠️ [useDashboardMetrics] organizationId é null — retornando zeros");
@@ -73,7 +82,7 @@ export function useDashboardMetrics(month?: number, year?: number) {
         p_org_id: organizationId,
         p_start_date: startStr,
         p_end_date: endStr,
-        p_filter_member_id: filterByMe ? myId : null,
+        p_filter_member_id: effectiveFilter,
       });
 
       if (error) {
