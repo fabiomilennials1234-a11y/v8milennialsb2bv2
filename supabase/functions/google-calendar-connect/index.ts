@@ -7,8 +7,10 @@
  * Requer: Authorization: Bearer <supabase_jwt>
  */
 
+import { withSentry } from '../_shared/sentry.ts';
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { logRuntime } from "../_shared/logger.ts";
 import {
   encodeState,
   GOOGLE_CLIENT_ID,
@@ -24,7 +26,7 @@ const SUPABASE_ANON_KEY        =
   Deno.env.get("SUPABASE_ANON_KEY")?.trim() ||
   "";
 
-Deno.serve(async (req) => {
+Deno.serve(withSentry('google-calendar-connect', async (req) => {
   const corsHeaders = getCorsHeaders(req.headers.get("origin"));
 
   if (req.method === "OPTIONS") {
@@ -93,15 +95,34 @@ Deno.serve(async (req) => {
 
     const authorization_url = `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
 
+    await logRuntime({
+      organizationId: orgId,
+      module: "calendar",
+      action: "connect",
+      status: "success",
+      triggeredBy: "user",
+      entityType: "user",
+      entityId: user.id,
+    });
+
     return new Response(
       JSON.stringify({ authorization_url, state }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {
     console.error("[google-calendar-connect]", err);
+
+    await logRuntime({
+      module: "calendar",
+      action: "connect",
+      status: "error",
+      errorMessage: String(err),
+      triggeredBy: "system",
+    });
+
     return new Response(
       JSON.stringify({ error: "Erro interno", message: String(err) }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
-});
+}));

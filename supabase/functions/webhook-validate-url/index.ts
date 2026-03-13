@@ -5,8 +5,10 @@
 
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { validateUrl } from "../_shared/webhook-utils.ts";
+import { withSentry } from '../_shared/sentry.ts';
+import { logRuntime } from "../_shared/logger.ts";
 
-Deno.serve(async (req) => {
+Deno.serve(withSentry('webhook-validate-url', async (req) => {
   const corsHeaders = getCorsHeaders(req.headers.get("origin"));
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders });
@@ -45,8 +47,17 @@ Deno.serve(async (req) => {
   }
 
   const result = await validateUrl(url.trim());
+
+  await logRuntime({
+    module: "webhook",
+    action: "validate_url",
+    status: result.valid ? "success" : "error",
+    payloadSnapshot: { url: url.trim() },
+    errorMessage: result.valid ? undefined : result.error,
+  });
+
   return new Response(
     JSON.stringify(result),
     { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
   );
-});
+}));

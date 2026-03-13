@@ -1,0 +1,965 @@
+/**
+ * Workflow Action Handler — implements all 30 workflow action types
+ *
+ * Each handler returns { success, message?, error?, data? }.
+ * On success, logs to lead_history with source: 'automation'.
+ * Uses existing shared modules (outbound-sender, audio-sender, etc.)
+ */
+
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { sendWhatsAppAudio } from "./audio-sender.ts";
+
+export interface ActionResult {
+  success: boolean;
+  message?: string;
+  error?: string;
+  data?: Record<string, unknown>;
+}
+
+interface ActionContext {
+  supabase: SupabaseClient;
+  organizationId: string;
+  leadId: string;
+  nodeData: Record<string, unknown>;
+  executionContext: Record<string, unknown>;
+}
+
+// ─── Variable substitution ──────────────────────────────────────────────────
+
+async function resolveVariables(
+  supabase: SupabaseClient,
+  leadId: string,
+  template: string,
+): Promise<string> {
+  if (!template || !template.includes("{{")) return template;
+
+  const { data: lead } = await supabase
+    .from("leads")
+    .select("name, company, email, phone, pipe_whatsapp, qualification_score, rating, sdr_id, closer_id")
+    .eq("id", leadId)
+    .maybeSingle();
+
+  if (!lead) return template;
+
+  let result = template;
+
+  // Standard variables
+  const vars: Record<string, string> = {
+    nome: lead.name || "",
+    empresa: lead.company || "",
+    email: lead.email || "",
+    telefone: lead.phone || "",
+    estagio: lead.pipe_whatsapp || "",
+    score: String(lead.qualification_score ?? ""),
+    rating: String(lead.rating ?? ""),
+  };
+
+  // Resolve SDR/Closer names
+  if (template.includes("{{sdr}}") && lead.sdr_id) {
+    const { data: member } = await supabase
+      .from("team_members")
+      .select("name")
+      .eq("id", lead.sdr_id)
+      .maybeSingle();
+    vars.sdr = member?.name || "";
+  }
+  if (template.includes("{{closer}}") && lead.closer_id) {
+    const { data: member } = await supabase
+      .from("team_members")
+      .select("name")
+      .eq("id", lead.closer_id)
+      .maybeSingle();
+    vars.closer = member?.name || "";
+  }
+
+  for (const [key, val] of Object.entries(vars)) {
+    result = result.replaceAll(`{{${key}}}`, val);
+  }
+
+  // Custom fields: {{custom.campo}}
+  const customMatches = result.match(/\{\{custom\.([^}]+)\}\}/g);
+  if (customMatches) {
+    const orgId = (await supabase.from("leads").select("organization_id").eq("id", leadId).maybeSingle())?.data?.organization_id;
+    for (const match of customMatches) {
+      const fieldName = match.replace("{{custom.", "").replace("}}", "");
+      let val = "";
+      if (orgId) {
+        const { data: field } = await supabase
+          .from("lead_custom_fields")
+          .select("id")
+          .eq("organization_id", orgId)
+          .eq("field_name", fieldName)
+          .maybeSingle();
+        if (field) {
+          const { data: fv } = await supabase
+            .from("lead_custom_field_values")
+            .select("value")
+            .eq("lead_id", leadId)
+            .eq("field_id", field.id)
+            .maybeSingle();
+          val = fv?.value || "";
+        }
+      }
+      result = result.replaceAll(match, val);
+    }
+  }
+
+  return result;
+}
+
+// ─── WhatsApp helpers ───────────────────────────────────────────────────────
+
+async function getWhatsAppInstance(
+  supabase: SupabaseClient,
+  organizationId: string,
+  instanceId?: string,
+): Promise<{ instanceName: string; evolutionUrl: string; evolutionKey: string } | null> {
+  const evolutionUrl = Deno.env.get("EVOLUTION_API_URL");
+  const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
+  if (!evolutionUrl || !evolutionKey) return null;
+
+  let instanceName: string | null = null;
+
+  if (instanceId) {
+    const { data } = await supabase
+      .from("whatsapp_instances")
+      .select("instance_name")
+      .eq("id", instanceId)
+      .maybeSingle();
+    instanceName = data?.instance_name ?? null;
+  }
+
+  if (!instanceName) {
+    const { data } = await supabase
+      .from("whatsapp_instances")
+      .select("instance_name")
+      .eq("organization_id", organizationId)
+      .eq("status", "open")
+      .limit(1)
+      .maybeSingle();
+    instanceName = data?.instance_name ?? null;
+  }
+
+  if (!instanceName) return null;
+  return { instanceName, evolutionUrl, evolutionKey };
+}
+
+async function getLeadPhone(supabase: SupabaseClient, leadId: string): Promise<string | null> {
+  const { data } = await supabase.from("leads").select("phone").eq("id", leadId).maybeSingle();
+  if (!data?.phone) return null;
+  let phone = String(data.phone).replace(/\D/g, "");
+  if (!phone.startsWith("55")) phone = "55" + phone;
+  return phone;
+}
+
+// ─── Lead history logger ────────────────────────────────────────────────────
+
+async function logToHistory(
+  supabase: SupabaseClient,
+  leadId: string,
+  organizationId: string,
+  action: string,
+  description: string,
+  metadata?: Record<string, unknown>,
+): Promise<void> {
+  try {
+    await supabase.from("lead_history").insert({
+      lead_id: leadId,
+      organization_id: organizationId,
+      action,
+      description: `Workflow: ${description}`,
+      source: "automation",
+      metadata: metadata || null,
+      created_by: null,
+    });
+  } catch (err) {
+    console.warn("[workflow-action] Failed to log history:", err);
+  }
+}
+
+// ─── Main Router ────────────────────────────────────────────────────────────
+
+export async function executeWorkflowAction(ctx: ActionContext): Promise<ActionResult> {
+  const actionType = ctx.nodeData.actionType as string;
+
+  let result: ActionResult;
+
+  switch (actionType) {
+    // ── Communication ──
+    case "send_whatsapp":
+      result = await handleSendWhatsApp(ctx);
+      break;
+    case "send_whatsapp_audio":
+      result = await handleSendWhatsAppAudio(ctx);
+      break;
+    case "send_whatsapp_image":
+      result = await handleSendWhatsAppImage(ctx);
+      break;
+    case "send_whatsapp_template":
+      result = await handleSendWhatsAppTemplate(ctx);
+      break;
+    case "send_meta_message":
+      result = await handleSendMetaMessage(ctx);
+      break;
+    case "send_semi_automatic":
+      result = await handleSendSemiAutomatic(ctx);
+      break;
+
+    // ── Lead Management ──
+    case "move_stage":
+      result = await handleMoveStage(ctx);
+      break;
+    case "add_tag":
+      result = await handleAddTag(ctx);
+      break;
+    case "remove_tag":
+      result = await handleRemoveTag(ctx);
+      break;
+    case "update_lead_field":
+      result = await handleUpdateLeadField(ctx);
+      break;
+    case "update_custom_field":
+      result = await handleUpdateCustomField(ctx);
+      break;
+    case "update_rating":
+      result = await handleUpdateRating(ctx);
+      break;
+    case "calculate_score":
+      result = await handleCalculateScore(ctx);
+      break;
+    case "duplicate_to_pipe":
+      result = await handleDuplicateToPipe(ctx);
+      break;
+    case "remove_from_pipe":
+      result = await handleRemoveFromPipe(ctx);
+      break;
+    case "mark_as_lost":
+      result = await handleMarkAsLost(ctx);
+      break;
+
+    // ── Campaigns ──
+    case "add_to_campaign":
+      result = await handleAddToCampaign(ctx);
+      break;
+    case "remove_from_campaign":
+      result = await handleRemoveFromCampaign(ctx);
+      break;
+    case "move_campaign_stage":
+      result = await handleMoveCampaignStage(ctx);
+      break;
+
+    // ── Calendar ──
+    case "create_calendar_event":
+      result = await handleCreateCalendarEvent(ctx);
+      break;
+    case "schedule_meeting":
+      result = await handleScheduleMeeting(ctx);
+      break;
+
+    // ── TinyERP ──
+    case "create_tinyerp_order":
+      result = await handleTinyErpOrder(ctx, "tinyerp-push-order");
+      break;
+    case "create_tinyerp_upsell_order":
+      result = await handleTinyErpOrder(ctx, "tinyerp-push-upsell-order");
+      break;
+
+    // ── Team ──
+    case "assign_sdr":
+      result = await handleAssign(ctx, "sdr");
+      break;
+    case "assign_closer":
+      result = await handleAssign(ctx, "closer");
+      break;
+    case "notify_team_member":
+      result = await handleNotifyTeamMember(ctx);
+      break;
+
+    // ── Follow-up ──
+    case "create_followup":
+      result = await handleCreateFollowup(ctx);
+      break;
+
+    // ── AI ──
+    case "generate_ai_message":
+      result = await handleGenerateAiMessage(ctx);
+      break;
+    case "summarize_conversation":
+      result = await handleInvokeEdgeFunction(ctx, "summarize-conversation");
+      break;
+    case "evaluate_conversation":
+      result = await handleInvokeEdgeFunction(ctx, "evaluate-agent-conversation");
+      break;
+
+    default:
+      return { success: false, error: `Unknown action type: ${actionType}` };
+  }
+
+  // Log to lead_history on success
+  // Skip for stage-related actions — PG triggers (trg_pipe_*_stage_change) handle these
+  const STAGE_ACTIONS = ["move_stage", "duplicate_to_pipe", "remove_from_pipe", "mark_as_lost"];
+  if (result.success && !STAGE_ACTIONS.includes(actionType)) {
+    await logToHistory(
+      ctx.supabase,
+      ctx.leadId,
+      ctx.organizationId,
+      actionType,
+      result.message || actionType,
+      { action_type: actionType, ...(result.data || {}) },
+    );
+  }
+
+  return result;
+}
+
+// ─── Communication Handlers ─────────────────────────────────────────────────
+
+async function handleSendWhatsApp(ctx: ActionContext): Promise<ActionResult> {
+  const wa = await getWhatsAppInstance(ctx.supabase, ctx.organizationId, ctx.nodeData.whatsappInstanceId as string);
+  if (!wa) return { success: false, error: "WhatsApp instance not available" };
+
+  const phone = await getLeadPhone(ctx.supabase, ctx.leadId);
+  if (!phone) return { success: false, error: "Lead has no phone" };
+
+  const template = ctx.nodeData.messageTemplate as string || "";
+  const message = await resolveVariables(ctx.supabase, ctx.leadId, template);
+  if (!message) return { success: false, error: "Empty message template" };
+
+  const res = await fetch(`${wa.evolutionUrl}/message/sendText/${wa.instanceName}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", apikey: wa.evolutionKey },
+    body: JSON.stringify({ number: phone, text: message }),
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    return { success: false, error: `WhatsApp send failed: ${err}` };
+  }
+
+  // Record in whatsapp_messages
+  await ctx.supabase.from("whatsapp_messages").insert({
+    organization_id: ctx.organizationId,
+    instance_name: wa.instanceName,
+    remote_jid: phone + "@s.whatsapp.net",
+    from_me: true,
+    message_type: "conversation",
+    content: message,
+    timestamp: new Date().toISOString(),
+    status: "sent",
+  });
+
+  return { success: true, message: "WhatsApp text sent" };
+}
+
+async function handleSendWhatsAppAudio(ctx: ActionContext): Promise<ActionResult> {
+  const wa = await getWhatsAppInstance(ctx.supabase, ctx.organizationId, ctx.nodeData.whatsappInstanceId as string);
+  if (!wa) return { success: false, error: "WhatsApp instance not available" };
+
+  const phone = await getLeadPhone(ctx.supabase, ctx.leadId);
+  if (!phone) return { success: false, error: "Lead has no phone" };
+
+  const audioUrl = ctx.nodeData.audioUrl as string;
+  if (!audioUrl) return { success: false, error: "No audio URL configured" };
+
+  const result = await sendWhatsAppAudio(wa.instanceName, phone, audioUrl);
+  if (!result.success) return { success: false, error: result.error || "Audio send failed" };
+
+  return { success: true, message: "WhatsApp audio sent" };
+}
+
+async function handleSendWhatsAppImage(ctx: ActionContext): Promise<ActionResult> {
+  const wa = await getWhatsAppInstance(ctx.supabase, ctx.organizationId, ctx.nodeData.whatsappInstanceId as string);
+  if (!wa) return { success: false, error: "WhatsApp instance not available" };
+
+  const phone = await getLeadPhone(ctx.supabase, ctx.leadId);
+  if (!phone) return { success: false, error: "Lead has no phone" };
+
+  const imageUrl = ctx.nodeData.imageUrl as string;
+  if (!imageUrl) return { success: false, error: "No image URL configured" };
+
+  const caption = ctx.nodeData.imageCaption as string || "";
+  const resolvedCaption = await resolveVariables(ctx.supabase, ctx.leadId, caption);
+
+  const res = await fetch(`${wa.evolutionUrl}/message/sendMedia/${wa.instanceName}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", apikey: wa.evolutionKey },
+    body: JSON.stringify({ number: phone, mediatype: "image", media: imageUrl, caption: resolvedCaption }),
+  });
+
+  if (!res.ok) return { success: false, error: `Image send failed: ${await res.text()}` };
+  return { success: true, message: "WhatsApp image sent" };
+}
+
+async function handleSendWhatsAppTemplate(ctx: ActionContext): Promise<ActionResult> {
+  const wa = await getWhatsAppInstance(ctx.supabase, ctx.organizationId, ctx.nodeData.whatsappInstanceId as string);
+  if (!wa) return { success: false, error: "WhatsApp instance not available" };
+
+  const phone = await getLeadPhone(ctx.supabase, ctx.leadId);
+  if (!phone) return { success: false, error: "Lead has no phone" };
+
+  const templateId = ctx.nodeData.templateId as string;
+  if (!templateId) return { success: false, error: "No template configured" };
+
+  // Fetch template from DB
+  const { data: tpl } = await ctx.supabase
+    .from("whatsapp_templates")
+    .select("name, content")
+    .eq("id", templateId)
+    .maybeSingle();
+
+  if (!tpl) return { success: false, error: "Template not found" };
+
+  const message = await resolveVariables(ctx.supabase, ctx.leadId, tpl.content || "");
+
+  const res = await fetch(`${wa.evolutionUrl}/message/sendText/${wa.instanceName}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", apikey: wa.evolutionKey },
+    body: JSON.stringify({ number: phone, text: message }),
+  });
+
+  if (!res.ok) return { success: false, error: `Template send failed: ${await res.text()}` };
+  return { success: true, message: `Template "${tpl.name}" sent` };
+}
+
+async function handleSendMetaMessage(ctx: ActionContext): Promise<ActionResult> {
+  const channel = ctx.nodeData.metaChannel as string || "instagram";
+  const message = ctx.nodeData.metaMessage as string || "";
+  const resolved = await resolveVariables(ctx.supabase, ctx.leadId, message);
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+
+  const res = await fetch(`${supabaseUrl}/functions/v1/send-meta-message`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` },
+    body: JSON.stringify({
+      organization_id: ctx.organizationId,
+      lead_id: ctx.leadId,
+      channel,
+      message: resolved,
+    }),
+  });
+
+  if (!res.ok) return { success: false, error: `Meta message failed: ${await res.text()}` };
+  return { success: true, message: `Meta ${channel} message sent` };
+}
+
+async function handleSendSemiAutomatic(ctx: ActionContext): Promise<ActionResult> {
+  const message = ctx.nodeData.semiAutoMessage as string || "";
+  const resolved = await resolveVariables(ctx.supabase, ctx.leadId, message);
+
+  const { error } = await ctx.supabase.from("scheduled_pipe_messages").insert({
+    lead_id: ctx.leadId,
+    organization_id: ctx.organizationId,
+    message_content: resolved,
+    status: "waiting_approval",
+    approver_id: ctx.nodeData.semiAutoApprover || null,
+    source: "workflow",
+    scheduled_at: new Date().toISOString(),
+  });
+
+  if (error) return { success: false, error: error.message };
+  return { success: true, message: "Semi-automatic message queued for approval" };
+}
+
+// ─── Lead Management Handlers ───────────────────────────────────────────────
+
+async function handleMoveStage(ctx: ActionContext): Promise<ActionResult> {
+  const pipeType = ctx.nodeData.pipeType as string || "whatsapp";
+  const targetStage = ctx.nodeData.targetStage as string;
+  if (!targetStage) return { success: false, error: "No target stage configured" };
+
+  switch (pipeType) {
+    case "whatsapp": {
+      await ctx.supabase.from("leads").update({ pipe_whatsapp: targetStage }).eq("id", ctx.leadId);
+      // Upsert pipe_whatsapp
+      const { data: existing } = await ctx.supabase
+        .from("pipe_whatsapp").select("id").eq("lead_id", ctx.leadId).maybeSingle();
+      if (existing) {
+        await ctx.supabase.from("pipe_whatsapp").update({ status: targetStage }).eq("id", existing.id);
+      } else {
+        await ctx.supabase.from("pipe_whatsapp").insert({
+          lead_id: ctx.leadId, organization_id: ctx.organizationId, status: targetStage,
+        });
+      }
+      break;
+    }
+    case "confirmacao": {
+      const { data: existing } = await ctx.supabase
+        .from("pipe_confirmacao").select("id").eq("lead_id", ctx.leadId).maybeSingle();
+      if (existing) {
+        await ctx.supabase.from("pipe_confirmacao").update({ status: targetStage }).eq("id", existing.id);
+      } else {
+        await ctx.supabase.from("pipe_confirmacao").insert({
+          lead_id: ctx.leadId, organization_id: ctx.organizationId, status: targetStage,
+        });
+      }
+      break;
+    }
+    case "propostas": {
+      const { data: existing } = await ctx.supabase
+        .from("pipe_propostas").select("id").eq("lead_id", ctx.leadId).maybeSingle();
+      if (existing) {
+        await ctx.supabase.from("pipe_propostas").update({ status: targetStage }).eq("id", existing.id);
+      } else {
+        await ctx.supabase.from("pipe_propostas").insert({
+          lead_id: ctx.leadId, organization_id: ctx.organizationId, status: targetStage,
+        });
+      }
+      break;
+    }
+    case "upsell_base":
+      await ctx.supabase.from("upsell_clients").update({ tipo_cliente_tempo: targetStage }).eq("lead_id", ctx.leadId);
+      break;
+    case "upsell_gestao":
+      await ctx.supabase.from("upsell_clients").update({ gestao_stage: targetStage }).eq("lead_id", ctx.leadId);
+      break;
+    default: {
+      // Custom pipeline
+      const { data: stageRow } = await ctx.supabase
+        .from("pipeline_stages")
+        .select("id")
+        .eq("pipeline_type", pipeType)
+        .eq("stage_key", targetStage)
+        .eq("organization_id", ctx.organizationId)
+        .maybeSingle();
+      if (stageRow) {
+        await ctx.supabase.from("leads").update({ pipe_whatsapp: targetStage }).eq("id", ctx.leadId);
+      }
+    }
+  }
+
+  return { success: true, message: `Moved to ${targetStage} in ${pipeType}`, data: { pipeType, targetStage } };
+}
+
+async function handleAddTag(ctx: ActionContext): Promise<ActionResult> {
+  const tagName = ctx.nodeData.tagName as string;
+  const tagId = ctx.nodeData.tagId as string;
+
+  let resolvedTagId = tagId;
+  if (!resolvedTagId && tagName) {
+    let { data: tag } = await ctx.supabase.from("tags").select("id").eq("name", tagName).maybeSingle();
+    if (!tag) {
+      const { data: newTag } = await ctx.supabase
+        .from("tags").insert({ name: tagName, color: "#6366f1" }).select("id").single();
+      tag = newTag;
+    }
+    resolvedTagId = tag?.id;
+  }
+  if (!resolvedTagId) return { success: false, error: "No tag configured" };
+
+  await ctx.supabase.from("lead_tags").upsert(
+    { lead_id: ctx.leadId, tag_id: resolvedTagId },
+    { onConflict: "lead_id,tag_id", ignoreDuplicates: true },
+  );
+
+  return { success: true, message: `Tag "${tagName || tagId}" added` };
+}
+
+async function handleRemoveTag(ctx: ActionContext): Promise<ActionResult> {
+  const tagId = ctx.nodeData.tagId as string;
+  const tagName = ctx.nodeData.tagName as string;
+
+  let resolvedTagId = tagId;
+  if (!resolvedTagId && tagName) {
+    const { data: tag } = await ctx.supabase.from("tags").select("id").eq("name", tagName).maybeSingle();
+    resolvedTagId = tag?.id;
+  }
+  if (!resolvedTagId) return { success: false, error: "Tag not found" };
+
+  await ctx.supabase.from("lead_tags").delete().eq("lead_id", ctx.leadId).eq("tag_id", resolvedTagId);
+  return { success: true, message: `Tag "${tagName || tagId}" removed` };
+}
+
+async function handleUpdateLeadField(ctx: ActionContext): Promise<ActionResult> {
+  const fieldName = ctx.nodeData.fieldName as string;
+  const fieldValue = ctx.nodeData.fieldValue as string;
+  if (!fieldName) return { success: false, error: "No field name configured" };
+
+  const resolved = await resolveVariables(ctx.supabase, ctx.leadId, fieldValue || "");
+  await ctx.supabase.from("leads").update({ [fieldName]: resolved }).eq("id", ctx.leadId);
+
+  return { success: true, message: `Field "${fieldName}" updated`, data: { fieldName, fieldValue: resolved } };
+}
+
+async function handleUpdateCustomField(ctx: ActionContext): Promise<ActionResult> {
+  const fieldName = ctx.nodeData.customFieldName as string;
+  const fieldValue = ctx.nodeData.customFieldValue as string || "";
+  if (!fieldName) return { success: false, error: "No custom field name configured" };
+
+  const { data: field } = await ctx.supabase
+    .from("lead_custom_fields")
+    .select("id")
+    .eq("organization_id", ctx.organizationId)
+    .eq("field_name", fieldName)
+    .maybeSingle();
+
+  if (!field) return { success: false, error: `Custom field "${fieldName}" not found` };
+
+  const resolved = await resolveVariables(ctx.supabase, ctx.leadId, fieldValue);
+
+  await ctx.supabase.from("lead_custom_field_values").upsert(
+    { lead_id: ctx.leadId, field_id: field.id, value: resolved, updated_at: new Date().toISOString() },
+    { onConflict: "lead_id,field_id" },
+  );
+
+  return { success: true, message: `Custom field "${fieldName}" updated to "${resolved}"` };
+}
+
+async function handleUpdateRating(ctx: ActionContext): Promise<ActionResult> {
+  const rating = Number(ctx.nodeData.ratingValue ?? 0);
+  const clamped = Math.min(10, Math.max(0, rating));
+
+  await ctx.supabase.from("leads").update({ rating: clamped }).eq("id", ctx.leadId);
+  return { success: true, message: `Rating updated to ${clamped}` };
+}
+
+async function handleCalculateScore(ctx: ActionContext): Promise<ActionResult> {
+  const { error } = await ctx.supabase.from("pending_ai_actions").insert({
+    organization_id: ctx.organizationId,
+    lead_id: ctx.leadId,
+    action_type: "update_qualification_score",
+    payload: { source: "workflow" },
+    status: "pending",
+  });
+
+  if (error) return { success: false, error: error.message };
+  return { success: true, message: "Score calculation queued" };
+}
+
+async function handleDuplicateToPipe(ctx: ActionContext): Promise<ActionResult> {
+  const targetPipeType = ctx.nodeData.targetPipeType as string || "whatsapp";
+  const targetPipeStage = ctx.nodeData.targetPipeStage as string || "novo";
+
+  // Copy lead data to target pipe
+  const { data: lead } = await ctx.supabase
+    .from("leads")
+    .select("*")
+    .eq("id", ctx.leadId)
+    .maybeSingle();
+
+  if (!lead) return { success: false, error: "Lead not found" };
+
+  switch (targetPipeType) {
+    case "confirmacao": {
+      const { data: existing } = await ctx.supabase
+        .from("pipe_confirmacao").select("id").eq("lead_id", ctx.leadId).maybeSingle();
+      if (!existing) {
+        await ctx.supabase.from("pipe_confirmacao").insert({
+          lead_id: ctx.leadId, organization_id: ctx.organizationId, status: targetPipeStage,
+        });
+      }
+      break;
+    }
+    case "propostas": {
+      const { data: existing } = await ctx.supabase
+        .from("pipe_propostas").select("id").eq("lead_id", ctx.leadId).maybeSingle();
+      if (!existing) {
+        await ctx.supabase.from("pipe_propostas").insert({
+          lead_id: ctx.leadId, organization_id: ctx.organizationId, status: targetPipeStage,
+        });
+      }
+      break;
+    }
+    default:
+      // For whatsapp pipe, just update stage
+      await ctx.supabase.from("leads").update({ pipe_whatsapp: targetPipeStage }).eq("id", ctx.leadId);
+  }
+
+  return { success: true, message: `Duplicated to ${targetPipeType}/${targetPipeStage}` };
+}
+
+async function handleRemoveFromPipe(ctx: ActionContext): Promise<ActionResult> {
+  const pipeType = ctx.nodeData.pipeType as string || "whatsapp";
+
+  switch (pipeType) {
+    case "whatsapp":
+      await ctx.supabase.from("pipe_whatsapp").delete().eq("lead_id", ctx.leadId);
+      await ctx.supabase.from("leads").update({ pipe_whatsapp: null }).eq("id", ctx.leadId);
+      break;
+    case "confirmacao":
+      await ctx.supabase.from("pipe_confirmacao").delete().eq("lead_id", ctx.leadId);
+      break;
+    case "propostas":
+      await ctx.supabase.from("pipe_propostas").delete().eq("lead_id", ctx.leadId);
+      break;
+  }
+
+  return { success: true, message: `Removed from ${pipeType}` };
+}
+
+async function handleMarkAsLost(ctx: ActionContext): Promise<ActionResult> {
+  const pipeType = ctx.nodeData.pipeType as string || "propostas";
+  const reason = ctx.nodeData.lostReason as string || "";
+
+  if (pipeType === "propostas") {
+    await ctx.supabase.from("pipe_propostas")
+      .update({ status: "perdido", lost_reason: reason })
+      .eq("lead_id", ctx.leadId);
+  }
+
+  await logToHistory(ctx.supabase, ctx.leadId, ctx.organizationId, "marked_lost",
+    `Marcado como perdido em ${pipeType}: ${reason}`, { pipeType, reason });
+
+  return { success: true, message: `Marked as lost in ${pipeType}` };
+}
+
+// ─── Campaign Handlers ──────────────────────────────────────────────────────
+
+async function handleAddToCampaign(ctx: ActionContext): Promise<ActionResult> {
+  const campaignId = ctx.nodeData.campaignId as string;
+  if (!campaignId) return { success: false, error: "No campaign configured" };
+
+  // Get first stage of campaign
+  const { data: firstStage } = await ctx.supabase
+    .from("campanha_stages")
+    .select("id")
+    .eq("campanha_id", campaignId)
+    .order("position", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  const { error } = await ctx.supabase.from("campanha_leads").upsert(
+    {
+      campanha_id: campaignId,
+      lead_id: ctx.leadId,
+      stage_id: firstStage?.id || null,
+    },
+    { onConflict: "campanha_id,lead_id", ignoreDuplicates: true },
+  );
+
+  if (error) return { success: false, error: error.message };
+  return { success: true, message: `Added to campaign ${ctx.nodeData.campaignName || campaignId}` };
+}
+
+async function handleRemoveFromCampaign(ctx: ActionContext): Promise<ActionResult> {
+  const campaignId = ctx.nodeData.campaignId as string;
+  if (!campaignId) return { success: false, error: "No campaign configured" };
+
+  await ctx.supabase.from("campanha_leads").delete()
+    .eq("campanha_id", campaignId).eq("lead_id", ctx.leadId);
+
+  return { success: true, message: `Removed from campaign` };
+}
+
+async function handleMoveCampaignStage(ctx: ActionContext): Promise<ActionResult> {
+  const campaignId = ctx.nodeData.campaignId as string;
+  const stageName = ctx.nodeData.campaignStageName as string;
+  const stageId = ctx.nodeData.campaignStageId as string;
+
+  if (!campaignId) return { success: false, error: "No campaign configured" };
+
+  let resolvedStageId = stageId;
+  if (!resolvedStageId && stageName) {
+    const { data: stage } = await ctx.supabase
+      .from("campanha_stages")
+      .select("id")
+      .eq("campanha_id", campaignId)
+      .ilike("name", stageName)
+      .maybeSingle();
+    resolvedStageId = stage?.id;
+  }
+
+  if (!resolvedStageId) return { success: false, error: "Campaign stage not found" };
+
+  await ctx.supabase.from("campanha_leads")
+    .update({ stage_id: resolvedStageId })
+    .eq("campanha_id", campaignId)
+    .eq("lead_id", ctx.leadId);
+
+  return { success: true, message: `Moved to campaign stage "${stageName || stageId}"` };
+}
+
+// ─── Calendar Handlers ──────────────────────────────────────────────────────
+
+async function handleCreateCalendarEvent(ctx: ActionContext): Promise<ActionResult> {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+
+  const title = await resolveVariables(ctx.supabase, ctx.leadId, ctx.nodeData.eventTitle as string || "Evento");
+  const description = await resolveVariables(ctx.supabase, ctx.leadId, ctx.nodeData.eventDescription as string || "");
+
+  const res = await fetch(`${supabaseUrl}/functions/v1/google-calendar-events`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` },
+    body: JSON.stringify({
+      organization_id: ctx.organizationId,
+      lead_id: ctx.leadId,
+      title,
+      description,
+      duration_minutes: ctx.nodeData.eventDurationMinutes || 60,
+    }),
+  });
+
+  if (!res.ok) return { success: false, error: `Calendar event failed: ${await res.text()}` };
+  return { success: true, message: "Calendar event created" };
+}
+
+async function handleScheduleMeeting(ctx: ActionContext): Promise<ActionResult> {
+  const { error } = await ctx.supabase.from("pending_ai_actions").insert({
+    organization_id: ctx.organizationId,
+    lead_id: ctx.leadId,
+    action_type: "schedule_meeting",
+    payload: {
+      source: "workflow",
+      preferred_date: ctx.nodeData.meetingDate || null,
+      closer_id: ctx.nodeData.meetingCloserId || null,
+    },
+    status: "pending",
+  });
+
+  if (error) return { success: false, error: error.message };
+  return { success: true, message: "Meeting scheduling queued" };
+}
+
+// ─── TinyERP Handler ────────────────────────────────────────────────────────
+
+async function handleTinyErpOrder(ctx: ActionContext, functionName: string): Promise<ActionResult> {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+
+  const res = await fetch(`${supabaseUrl}/functions/v1/${functionName}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` },
+    body: JSON.stringify({
+      organization_id: ctx.organizationId,
+      lead_id: ctx.leadId,
+      product_id: ctx.nodeData.tinyProductId || null,
+    }),
+  });
+
+  if (!res.ok) return { success: false, error: `TinyERP order failed: ${await res.text()}` };
+  return { success: true, message: `TinyERP order created via ${functionName}` };
+}
+
+// ─── Team Handlers ──────────────────────────────────────────────────────────
+
+async function handleAssign(ctx: ActionContext, role: "sdr" | "closer"): Promise<ActionResult> {
+  let assigneeId = ctx.nodeData.assigneeId as string;
+  const assignMode = ctx.nodeData.assignMode as string || "specific";
+
+  if (assignMode === "round_robin") {
+    // Get all active team members and pick next via round robin
+    const { data: members } = await ctx.supabase
+      .from("team_members")
+      .select("id")
+      .eq("organization_id", ctx.organizationId)
+      .eq("is_active", true);
+
+    if (members && members.length > 0) {
+      // Simple round robin: pick based on lead count
+      const field = role === "sdr" ? "sdr_id" : "closer_id";
+      const counts = await Promise.all(
+        members.map(async (m: { id: string }) => {
+          const { count } = await ctx.supabase
+            .from("leads")
+            .select("*", { count: "exact", head: true })
+            .eq(field, m.id);
+          return { id: m.id, count: count ?? 0 };
+        }),
+      );
+      counts.sort((a, b) => a.count - b.count);
+      assigneeId = counts[0].id;
+    }
+  }
+
+  if (!assigneeId) return { success: false, error: `No ${role} to assign` };
+
+  const field = role === "sdr" ? "sdr_id" : "closer_id";
+  await ctx.supabase.from("leads").update({ [field]: assigneeId }).eq("id", ctx.leadId);
+
+  return { success: true, message: `${role.toUpperCase()} assigned`, data: { assigneeId, role } };
+}
+
+async function handleNotifyTeamMember(ctx: ActionContext): Promise<ActionResult> {
+  const memberId = ctx.nodeData.notifyMemberId as string;
+  if (!memberId) return { success: false, error: "No team member configured" };
+
+  const message = await resolveVariables(ctx.supabase, ctx.leadId, ctx.nodeData.notifyMessage as string || "");
+
+  // Get user_id from team_member
+  const { data: member } = await ctx.supabase
+    .from("team_members")
+    .select("user_id, name")
+    .eq("id", memberId)
+    .maybeSingle();
+
+  if (!member?.user_id) return { success: false, error: "Team member not found" };
+
+  await ctx.supabase.from("notifications").insert({
+    organization_id: ctx.organizationId,
+    user_id: member.user_id,
+    type: "workflow_notification",
+    title: "Notificação de Workflow",
+    description: message || "Ação de workflow executada",
+    lead_id: ctx.leadId,
+    link: "/pipe-whatsapp",
+  });
+
+  return { success: true, message: `Notification sent to ${member.name || memberId}` };
+}
+
+// ─── Follow-up Handler ──────────────────────────────────────────────────────
+
+async function handleCreateFollowup(ctx: ActionContext): Promise<ActionResult> {
+  const title = await resolveVariables(ctx.supabase, ctx.leadId, ctx.nodeData.followupTitle as string || "Follow-up");
+  const description = await resolveVariables(ctx.supabase, ctx.leadId, ctx.nodeData.followupDescription as string || "");
+  const priority = ctx.nodeData.followupPriority as string || "normal";
+
+  // Get lead's SDR as assignee
+  const { data: lead } = await ctx.supabase
+    .from("leads")
+    .select("sdr_id")
+    .eq("id", ctx.leadId)
+    .maybeSingle();
+
+  const { error } = await ctx.supabase.from("follow_ups").insert({
+    lead_id: ctx.leadId,
+    assigned_to: lead?.sdr_id || null,
+    title,
+    description,
+    priority,
+    due_date: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // +1 day
+    is_automated: true,
+  });
+
+  if (error) return { success: false, error: error.message };
+  return { success: true, message: `Follow-up "${title}" created` };
+}
+
+// ─── AI Handlers ────────────────────────────────────────────────────────────
+
+async function handleGenerateAiMessage(ctx: ActionContext): Promise<ActionResult> {
+  const { error } = await ctx.supabase.from("pending_ai_actions").insert({
+    organization_id: ctx.organizationId,
+    lead_id: ctx.leadId,
+    action_type: "generate_message",
+    payload: {
+      source: "workflow",
+      agent_id: ctx.nodeData.aiAgentId || null,
+      prompt: ctx.nodeData.aiPrompt || null,
+      output_variable: ctx.nodeData.aiOutputVariable || null,
+    },
+    status: "pending",
+  });
+
+  if (error) return { success: false, error: error.message };
+  return { success: true, message: "AI message generation queued" };
+}
+
+async function handleInvokeEdgeFunction(ctx: ActionContext, functionName: string): Promise<ActionResult> {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+
+  const res = await fetch(`${supabaseUrl}/functions/v1/${functionName}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` },
+    body: JSON.stringify({
+      organizationId: ctx.organizationId,
+      leadId: ctx.leadId,
+    }),
+  });
+
+  if (!res.ok) return { success: false, error: `${functionName} failed: ${await res.text()}` };
+  return { success: true, message: `${functionName} completed` };
+}

@@ -1,3 +1,4 @@
+import { withSentry } from '../_shared/sentry.ts';
 /**
  * Worker: Processa regras de follow-up baseadas em tempo
  *
@@ -10,6 +11,7 @@
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { logRuntime } from "../_shared/logger.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 
@@ -33,7 +35,7 @@ interface AutomationRule {
   filter_stages: string[] | null;
 }
 
-Deno.serve(async (req: Request) => {
+Deno.serve(withSentry('process-followup-automations', async (req: Request) => {
   const corsHeaders = getCorsHeaders(req.headers.get("origin"));
 
   if (req.method === "OPTIONS") {
@@ -42,7 +44,7 @@ Deno.serve(async (req: Request) => {
 
   // Verificar autenticação do cron
   const cronSecret = req.headers.get("x-cron-secret");
-  if (CRON_SECRET && cronSecret !== CRON_SECRET) {
+  if (!CRON_SECRET || cronSecret !== CRON_SECRET) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 401,
       headers: withSecurityHeaders({ ...corsHeaders, "Content-Type": "application/json" }),
@@ -77,17 +79,32 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    await logRuntime({
+      module: "followup",
+      action: "automation_process",
+      status: "success",
+      payloadSnapshot: { processed: stats.processed, created: stats.created, skipped: stats.skipped, errors: stats.errors },
+    });
+
     return new Response(JSON.stringify({ message: "OK", stats }), {
       headers: withSecurityHeaders({ ...corsHeaders, "Content-Type": "application/json" }),
     });
   } catch (err) {
     console.error("Fatal error:", err);
+
+    await logRuntime({
+      module: "followup",
+      action: "automation_process",
+      status: "error",
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
+
     return new Response(JSON.stringify({ error: String(err) }), {
       status: 500,
       headers: withSecurityHeaders({ ...corsHeaders, "Content-Type": "application/json" }),
     });
   }
-});
+}));
 
 async function processRule(
   supabase: ReturnType<typeof createClient>,

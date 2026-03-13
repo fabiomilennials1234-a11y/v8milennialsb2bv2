@@ -8,7 +8,9 @@
  * URL: ${SUPABASE_URL}/functions/v1/google-calendar-callback?code=...&state=...
  */
 
+import { withSentry } from '../_shared/sentry.ts';
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { logRuntime } from "../_shared/logger.ts";
 import {
   decodeState,
   encryptToken,
@@ -24,7 +26,7 @@ const SUPABASE_URL              = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const APP_URL                   = Deno.env.get("APP_URL") ?? "http://localhost:5173";
 
-Deno.serve(async (req) => {
+Deno.serve(withSentry('google-calendar-callback', async (req) => {
   try {
     const url    = new URL(req.url);
     const code   = url.searchParams.get("code");
@@ -149,13 +151,31 @@ Deno.serve(async (req) => {
       responsePayload: { email: userInfo.email, scopes: scopesArray },
     });
 
+    await logRuntime({
+      organizationId: orgId,
+      module: "calendar",
+      action: "oauth_callback",
+      status: "success",
+      triggeredBy: "user",
+      payloadSnapshot: { email: userInfo.email, scopes: scopesArray },
+    });
+
     return redirect({ google: "connected", email: userInfo.email });
   } catch (err) {
     console.error("[google-calendar-callback] unexpected error:", err);
+
+    await logRuntime({
+      module: "calendar",
+      action: "oauth_callback",
+      status: "error",
+      errorMessage: String(err),
+      triggeredBy: "system",
+    });
+
     const APP_URL_FALLBACK = Deno.env.get("APP_URL") ?? "http://localhost:5173";
     return Response.redirect(
       `${APP_URL_FALLBACK}/configuracoes?google=error&reason=erro_interno`,
       302
     );
   }
-});
+}));

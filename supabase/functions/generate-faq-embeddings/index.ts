@@ -8,15 +8,17 @@
  * Body: { agentId: string }
  */
 
+import { withSentry } from '../_shared/sentry.ts';
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { generateEmbeddingsBatch } from "../_shared/embeddings.ts";
+import { logRuntime } from "../_shared/logger.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-Deno.serve(async (req) => {
+Deno.serve(withSentry('generate-faq-embeddings', async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
@@ -80,6 +82,15 @@ Deno.serve(async (req) => {
 
     console.log(`[FAQ Embeddings] ${updated}/${faqs.length} FAQs atualizadas para agente ${agentId}`);
 
+    await logRuntime({
+      module: "copilot",
+      action: "generate_embeddings",
+      status: "success",
+      entityType: "agent",
+      entityId: agentId,
+      payloadSnapshot: { updated, total: faqs.length },
+    });
+
     return new Response(
       JSON.stringify({ success: true, updated, total: faqs.length }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -87,9 +98,15 @@ Deno.serve(async (req) => {
 
   } catch (error) {
     console.error("[FAQ Embeddings] Erro:", error);
+    await logRuntime({
+      module: "copilot",
+      action: "generate_embeddings",
+      status: "error",
+      errorMessage: error instanceof Error ? error.message : "Unknown error",
+    });
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
-});
+}));

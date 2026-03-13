@@ -9,11 +9,13 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { getOrgTinyToken, callTinyApi, logTinyOp, getTinyErrorMessage } from "../_shared/tinyerp-utils.ts";
+import { withSentry } from '../_shared/sentry.ts';
+import { logRuntime } from "../_shared/logger.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-Deno.serve(async (req) => {
+Deno.serve(withSentry('tinyerp-push-order', async (req) => {
   const corsHeaders = getCorsHeaders(req.headers.get("origin"));
 
   if (req.method === "OPTIONS") {
@@ -291,6 +293,16 @@ Deno.serve(async (req) => {
 
     console.log("[TinyERP Push] Success:", { tinyOrderId, tinyOrderNumber });
 
+    await logRuntime({
+      organizationId: orgId,
+      module: "general",
+      action: "tinyerp_push_order",
+      status: "success",
+      entityType: "pipe_proposta",
+      entityId: pipe_proposta_id,
+      payloadSnapshot: { tinyOrderId, tinyOrderNumber, items: items.length },
+    });
+
     return new Response(
       JSON.stringify({
         success: true,
@@ -301,9 +313,15 @@ Deno.serve(async (req) => {
     );
   } catch (err) {
     console.error("[TinyERP Push] Error:", err);
+    await logRuntime({
+      module: "general",
+      action: "tinyerp_push_order",
+      status: "error",
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
     return new Response(
       JSON.stringify({ error: err instanceof Error ? err.message : "Erro desconhecido" }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
-});
+}));

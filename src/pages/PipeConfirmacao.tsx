@@ -22,6 +22,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { DraggableKanbanBoard, DraggableItem, KanbanColumn } from "@/components/kanban/DraggableKanbanBoard";
+import { useCanPerformAction } from "@/lib/permissions";
 import { StageWorkflowsBadgeWrapper } from "@/components/kanban/StageWorkflowsBadgeWrapper";
 import { useStageWorkflowCounts } from "@/hooks/useStageWorkflows";
 import { usePipeConfirmacao, useUpdatePipeConfirmacao, useCreatePipeConfirmacao, useDeletePipeConfirmacao, PipeConfirmacaoStatus } from "@/hooks/usePipeConfirmacao";
@@ -44,6 +45,8 @@ import { format, isToday, startOfWeek, endOfWeek, isWithinInterval, isTomorrow, 
 import { ptBR } from "date-fns/locale";
 import { useLogLeadAction } from "@/hooks/useLogLeadAction";
 import { toast } from "sonner";
+import { useOrganization } from "@/hooks/useOrganization";
+import { track, trackModuleVisit } from "@/lib/analytics";
 
 interface ConfirmacaoCardData extends DraggableItem {
   name: string;
@@ -228,12 +231,16 @@ export default function PipeConfirmacao() {
   const [selectedMetricsMonth, setSelectedMetricsMonth] = useState(now.getMonth() + 1);
   const [selectedMetricsYear, setSelectedMetricsYear] = useState(now.getFullYear());
 
+  const { organizationId } = useOrganization();
+  useEffect(() => { trackModuleVisit("pipe_confirmacao", organizationId); }, []);
+
   const overdueDays = useConfirmacaoOverdueDays();
   const { data: pipeData, isLoading, refetch } = usePipeConfirmacao();
   const { data: pipelineStages = [] } = usePipelineStages("confirmacao");
   const { data: workflowCounts = {} } = useStageWorkflowCounts("confirmacao");
   const { data: teamMembers = [] } = useTeamMembers();
   const updatePipeConfirmacao = useUpdatePipeConfirmacao();
+  const { allowed: canMovePipe } = useCanPerformAction("move_pipe_record");
   const createPipeProposta = useCreatePipeProposta();
   const createPipeConfirmacao = useCreatePipeConfirmacao();
   const deletePipeConfirmacao = useDeletePipeConfirmacao();
@@ -452,6 +459,7 @@ export default function PipeConfirmacao() {
         }
 
         logAction({ leadId: item.lead_id, action: "stage_changed", description: `Etapa alterada para "${stageLabel}" no Pipe Confirmação` });
+        if (organizationId) track({ event: "card_moved", organizationId, entityType: "pipe_confirmacao", entityId: itemId, metadata: { from_stage: item.status, to_stage: newStatus } });
         toast.success(`Lead movido para ${targetPipeName} automaticamente!`);
       } catch (error) {
         toast.error("Erro ao atualizar status");
@@ -467,6 +475,7 @@ export default function PipeConfirmacao() {
         assignedTo: item.sdr_id || item.closer_id,
       });
       logAction({ leadId: item.lead_id, action: "stage_changed", description: `Etapa alterada para "${stageLabel}" no Pipe Confirmação` });
+      if (organizationId) track({ event: "card_moved", organizationId, entityType: "pipe_confirmacao", entityId: itemId, metadata: { from_stage: item.status, to_stage: newStatus } });
       toast.success("Status atualizado!");
     } catch (error) {
       toast.error("Erro ao atualizar status");
@@ -663,6 +672,7 @@ export default function PipeConfirmacao() {
         <DraggableKanbanBoard
           columns={columns}
           onStatusChange={handleStatusChange}
+          disabled={!canMovePipe}
           onDeleteAllLeads={() => setDeleteAllLeadsDialogOpen(true)}
           renderColumnExtra={(col) => {
             const allCounts = workflowCounts["__all__"] || { total: 0, active: 0 };

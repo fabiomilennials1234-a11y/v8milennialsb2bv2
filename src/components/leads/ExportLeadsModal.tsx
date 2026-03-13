@@ -6,6 +6,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useExportLeads } from "@/hooks/useExportLeads";
 import { toast } from "sonner";
 import { FileDown, Loader2, FileSpreadsheet, FileText } from "lucide-react";
+import { useCanPerformAction } from "@/lib/permissions";
 
 const EXPORT_LIMITS = [
   { value: 100, label: "Os 100 mais recentes" },
@@ -26,8 +27,13 @@ export function ExportLeadsContent({ onDone }: ExportLeadsContentProps) {
   const [format, setFormat] = useState<ExportFormat>("xlsx");
   const [limit, setLimit] = useState<number>(5000);
   const { exportLeads, isExporting } = useExportLeads();
+  const { allowed: canExport } = useCanPerformAction("export_leads");
 
   const handleExport = async () => {
+    if (!canExport) {
+      toast.error("Você não tem permissão para exportar leads");
+      return;
+    }
     try {
       const { count } = await exportLeads({
         format,
@@ -37,7 +43,7 @@ export function ExportLeadsContent({ onDone }: ExportLeadsContentProps) {
       onDone?.();
     } catch (e) {
       console.error("Export error:", e);
-      toast.error("Erro ao exportar. Tente novamente.");
+      toast.error(e instanceof Error ? e.message : "Erro ao exportar. Tente novamente.");
     }
   };
 
@@ -91,7 +97,7 @@ export function ExportLeadsContent({ onDone }: ExportLeadsContentProps) {
         <Button variant="outline" onClick={() => onDone?.()} disabled={isExporting}>
           Cancelar
         </Button>
-        <Button onClick={handleExport} disabled={isExporting}>
+        <Button onClick={handleExport} disabled={isExporting || !canExport}>
           {isExporting ? (
             <>
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />

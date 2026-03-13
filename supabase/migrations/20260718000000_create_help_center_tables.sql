@@ -121,17 +121,30 @@ INSERT INTO storage.buckets (id, name, public)
 VALUES ('help-media', 'help-media', true)
 ON CONFLICT (id) DO NOTHING;
 
+-- Storage policies (sem SET ROLE para compatibilidade)
+
+DO $$ BEGIN
 CREATE POLICY "help_media_read" ON storage.objects
   FOR SELECT USING (bucket_id = 'help-media');
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
 
+DO $$ BEGIN
 CREATE POLICY "help_media_admin_upload" ON storage.objects
   FOR INSERT WITH CHECK (
     bucket_id = 'help-media'
     AND auth.role() = 'authenticated'
   );
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
 
+DO $$ BEGIN
 CREATE POLICY "help_media_admin_delete" ON storage.objects
   FOR DELETE USING (
     bucket_id = 'help-media'
     AND auth.role() = 'authenticated'
   );
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+-- Fim das políticas de storage

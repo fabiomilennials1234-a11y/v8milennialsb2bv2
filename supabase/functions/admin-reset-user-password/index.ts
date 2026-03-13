@@ -5,17 +5,15 @@
  * Usa Supabase Auth Admin API (service_role).
  */
 
+import { withSentry } from '../_shared/sentry.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { requireAuth, AuthError, authErrorResponse } from "../_shared/user-auth.ts";
+import { logRuntime } from "../_shared/logger.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const SUPABASE_ANON_KEY =
-  Deno.env.get("ANON_KEY_2")?.trim() ||
-  Deno.env.get("ANON_KEY")?.trim() ||
-  Deno.env.get("SUPABASE_ANON_KEY")?.trim() ||
-  "";
 
 const CORS_PREFLIGHT_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -40,7 +38,7 @@ interface Body {
   new_password: string;
 }
 
-serve(async (req) => {
+serve(withSentry('admin-reset-user-password', async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("", { status: 200, headers: CORS_PREFLIGHT_HEADERS });
   }
@@ -65,37 +63,15 @@ serve(async (req) => {
       auth: { persistSession: false },
     });
 
-    const userJwt =
-      req.headers.get("X-User-JWT")?.trim() ||
-      req.headers.get("Authorization")?.replace(/^Bearer\s+/i, "")?.trim() ||
-      "";
-    if (!userJwt || !SUPABASE_ANON_KEY) {
-      return jsonResponse(
-        { success: false, error: "Unauthorized", message: "JWT obrigatório" },
-        401,
-        corsHeaders
-      );
+    // Auth via middleware compartilhado — apenas Master
+    let authCtx;
+    try {
+      authCtx = await requireAuth(req);
+    } catch (e) {
+      if (e instanceof AuthError) return authErrorResponse(e, corsHeaders);
+      throw e;
     }
-
-    const anonClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      auth: { persistSession: false },
-    });
-    const { data: { user: caller }, error: userError } = await anonClient.auth.getUser(userJwt);
-    if (userError || !caller?.id) {
-      return jsonResponse(
-        { success: false, error: "Unauthorized", message: "JWT inválido ou expirado" },
-        401,
-        corsHeaders
-      );
-    }
-
-    const { data: masterRow } = await supabase
-      .from("master_users")
-      .select("id")
-      .eq("user_id", caller.id)
-      .eq("is_active", true)
-      .maybeSingle();
-    if (!masterRow?.id) {
+    if (!authCtx.isMaster) {
       return jsonResponse(
         { success: false, error: "Forbidden", message: "Apenas Master pode redefinir senha de usuários" },
         403,
@@ -138,12 +114,30 @@ serve(async (req) => {
 
     if (updateError) {
       console.error("[admin-reset-user-password] updateUserById error:", updateError);
+      await logRuntime({
+        module: "auth",
+        action: "reset_password",
+        status: "error",
+        entityType: "user",
+        entityId: userId,
+        errorMessage: updateError.message,
+        triggeredBy: authCtx.userId,
+      });
       return jsonResponse(
         { success: false, error: "Update failed", message: updateError.message },
         400,
         corsHeaders
       );
     }
+
+    await logRuntime({
+      module: "auth",
+      action: "reset_password",
+      status: "success",
+      entityType: "user",
+      entityId: userId,
+      triggeredBy: authCtx.userId,
+    });
 
     return jsonResponse(
       { success: true, message: "Senha alterada com sucesso" },
@@ -152,10 +146,16 @@ serve(async (req) => {
     );
   } catch (err) {
     console.error("[admin-reset-user-password]", err);
+    await logRuntime({
+      module: "auth",
+      action: "reset_password",
+      status: "error",
+      errorMessage: String(err),
+    });
     return jsonResponse(
       { success: false, error: "Internal server error", message: String(err) },
       500,
       { ...CORS_PREFLIGHT_HEADERS, "Content-Type": "application/json" }
     );
   }
-});
+}));

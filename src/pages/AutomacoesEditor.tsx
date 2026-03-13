@@ -254,6 +254,7 @@ export default function AutomacoesEditor() {
         isSaving={isSaving}
         onAddNode={handleAddNode}
         isNew={isNew}
+        workflowId={id}
       />
 
       <div className="flex flex-1 overflow-hidden">

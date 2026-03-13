@@ -1,4 +1,6 @@
+import { withSentry } from '../_shared/sentry.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { logRuntime } from "../_shared/logger.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -20,7 +22,7 @@ function ensureString(value: unknown): string {
   return "";
 }
 
-serve(async (req) => {
+serve(withSentry('generate-business-context', async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
@@ -163,15 +165,28 @@ Regras:
       socialProof: ensureString(parsed.socialProof),
     };
 
+    await logRuntime({
+      module: "copilot",
+      action: "generate_context",
+      status: "success",
+      payloadSnapshot: { companyName: safeCompanyName, templateType },
+    });
+
     return new Response(
       JSON.stringify({ businessContext }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
     console.error("Unhandled error:", error);
+    await logRuntime({
+      module: "copilot",
+      action: "generate_context",
+      status: "error",
+      errorMessage: error instanceof Error ? error.message : "Unknown error",
+    });
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
-});
+}));

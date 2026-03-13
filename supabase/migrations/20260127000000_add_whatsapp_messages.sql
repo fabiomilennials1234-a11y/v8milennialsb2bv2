@@ -87,7 +87,10 @@ CREATE POLICY "Service role full access"
   USING (auth.jwt() ->> 'role' = 'service_role');
 
 -- Habilitar realtime para atualizações em tempo real
-ALTER PUBLICATION supabase_realtime ADD TABLE whatsapp_messages;
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE whatsapp_messages;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
 
 -- Comentários
 COMMENT ON TABLE whatsapp_messages IS 'Histórico de mensagens do WhatsApp via Evolution API';

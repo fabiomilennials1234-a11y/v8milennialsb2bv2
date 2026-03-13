@@ -1,12 +1,14 @@
+import { withSentry } from '../_shared/sentry.ts';
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
-import { 
-  validateCalcomWebhook, 
-  checkRateLimit, 
+import {
+  validateCalcomWebhook,
+  checkRateLimit,
   getClientIdentifier,
   unauthorizedResponse,
-  rateLimitedResponse 
+  rateLimitedResponse
 } from "../_shared/auth.ts";
+import { logRuntime } from "../_shared/logger.ts";
 
 // Helper function to normalize email (lowercase, trim)
 function normalizeEmail(email: string | null | undefined): string | null {
@@ -34,7 +36,7 @@ function getDayBoundaries(date: Date): { start: string; end: string } {
   };
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withSentry('webhook-calcom', async (req) => {
   const origin = req.headers.get("origin");
   const corsHeaders = getCorsHeaders(origin);
   
@@ -422,9 +424,19 @@ Deno.serve(async (req) => {
         organization_id: targetOrganizationId,
       });
 
+      await logRuntime({
+        organizationId: targetOrganizationId,
+        module: "calendar",
+        action: "calcom_process",
+        status: "success",
+        entityType: "lead",
+        entityId: existingLead.id,
+        payloadSnapshot: { scenario: "unified", deduplicationMethod },
+      });
+
       return new Response(
-        JSON.stringify({ 
-          success: true, 
+        JSON.stringify({
+          success: true,
           message: "Lead existente atualizado com dados do Cal.com",
           lead_id: existingLead.id,
           closer_id: closerId,
@@ -496,9 +508,19 @@ Deno.serve(async (req) => {
         organization_id: targetOrganizationId,
       });
 
+      await logRuntime({
+        organizationId: targetOrganizationId,
+        module: "calendar",
+        action: "calcom_process",
+        status: "success",
+        entityType: "lead",
+        entityId: newLead.id,
+        payloadSnapshot: { scenario: "new_cal_lead" },
+      });
+
       return new Response(
-        JSON.stringify({ 
-          success: true, 
+        JSON.stringify({
+          success: true,
           message: "Novo lead criado via Cal.com",
           lead_id: newLead.id,
           closer_id: closerId,
@@ -511,9 +533,15 @@ Deno.serve(async (req) => {
   } catch (error) {
     console.error("Cal.com webhook error:", error);
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    await logRuntime({
+      module: "calendar",
+      action: "calcom_process",
+      status: "error",
+      errorMessage,
+    });
     return new Response(
       JSON.stringify({ error: "Erro interno", details: errorMessage }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
-});
+}));

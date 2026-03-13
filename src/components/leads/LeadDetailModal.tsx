@@ -1,46 +1,37 @@
 import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
-  X,
   User,
-  UserPlus,
-  UserCheck,
   Building2,
   Mail,
   Phone,
   Calendar,
-  CalendarX,
   Tag,
   MessageSquare,
   Clock,
   TrendingUp,
   DollarSign,
   CheckCircle,
-  CheckSquare,
-  XCircle,
   History,
   Edit2,
   ArrowRight,
-  Zap,
   Bot,
   PhoneCall,
-  Package,
-  FileText,
-  ListTodo,
-  Trash2,
   Loader2,
+  Search,
+  Activity,
+  CalendarDays,
+  BarChart3,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
-  DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
@@ -53,6 +44,9 @@ import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { ConversationHistoryTab } from "./ConversationHistoryTab";
+import { TimelineItem } from "./TimelineItem";
+import { useLeadTimeline } from "@/hooks/useLeadTimeline";
+import type { TimelineSource, TimelinePeriod } from "@/hooks/useLeadTimeline";
 
 interface LeadDetailModalProps {
   open: boolean;
@@ -81,63 +75,28 @@ const originColors: Record<string, string> = {
   cal: "bg-chart-1/10 text-chart-1 border-chart-1/20",
 };
 
-const ACTION_CONFIG: Record<string, { icon: React.ReactNode; label: string; color: string }> = {
-  lead_created: { icon: <UserPlus className="w-3.5 h-3.5" />, label: "Lead criado", color: "bg-blue-500/20 text-blue-600" },
-  stage_changed: { icon: <ArrowRight className="w-3.5 h-3.5" />, label: "Etapa alterada", color: "bg-yellow-500/20 text-yellow-600" },
-  sdr_assigned: { icon: <UserCheck className="w-3.5 h-3.5" />, label: "SDR atribuído", color: "bg-green-500/20 text-green-600" },
-  closer_assigned: { icon: <UserCheck className="w-3.5 h-3.5" />, label: "Closer atribuído", color: "bg-green-500/20 text-green-600" },
-  field_updated: { icon: <Edit2 className="w-3.5 h-3.5" />, label: "Campo atualizado", color: "bg-muted text-muted-foreground" },
-  note_added: { icon: <FileText className="w-3.5 h-3.5" />, label: "Nota adicionada", color: "bg-muted text-muted-foreground" },
-  meeting_scheduled: { icon: <Calendar className="w-3.5 h-3.5" />, label: "Reunião agendada", color: "bg-blue-500/20 text-blue-600" },
-  meeting_attended: { icon: <CheckCircle className="w-3.5 h-3.5" />, label: "Compareceu", color: "bg-green-500/20 text-green-600" },
-  meeting_missed: { icon: <XCircle className="w-3.5 h-3.5" />, label: "Não compareceu", color: "bg-red-500/20 text-red-600" },
-  meeting_deleted: { icon: <CalendarX className="w-3.5 h-3.5" />, label: "Reunião removida", color: "bg-red-500/20 text-red-600" },
-  proposal_created: { icon: <DollarSign className="w-3.5 h-3.5" />, label: "Proposta criada", color: "bg-purple-500/20 text-purple-600" },
-  proposal_status_changed: { icon: <TrendingUp className="w-3.5 h-3.5" />, label: "Status da proposta", color: "bg-yellow-500/20 text-yellow-600" },
-  proposal_deleted: { icon: <Trash2 className="w-3.5 h-3.5" />, label: "Proposta removida", color: "bg-red-500/20 text-red-600" },
-  product_linked: { icon: <Package className="w-3.5 h-3.5" />, label: "Produto vinculado", color: "bg-purple-500/20 text-purple-600" },
-  followup_created: { icon: <ListTodo className="w-3.5 h-3.5" />, label: "Tarefa criada", color: "bg-blue-500/20 text-blue-600" },
-  followup_completed: { icon: <CheckSquare className="w-3.5 h-3.5" />, label: "Tarefa concluída", color: "bg-green-500/20 text-green-600" },
-  ai_toggled: { icon: <Bot className="w-3.5 h-3.5" />, label: "IA Copilot", color: "bg-primary/20 text-primary" },
-  copilot_interaction: { icon: <Bot className="w-3.5 h-3.5" />, label: "Copilot atendeu", color: "bg-primary/20 text-primary" },
+const SOURCE_FILTER_OPTIONS: { value: TimelineSource | "all" | "pipeline"; label: string }[] = [
+  { value: "all", label: "Todos" },
+  { value: "manual", label: "Manual" },
+  { value: "agent", label: "Copilot" },
+  { value: "automation", label: "Automação" },
+  { value: "system", label: "Sistema" },
+  { value: "pipeline", label: "Pipeline" },
+];
+
+const PERIOD_OPTIONS: { value: TimelinePeriod; label: string }[] = [
+  { value: "all", label: "Tudo" },
+  { value: "today", label: "Hoje" },
+  { value: "week", label: "Semana" },
+  { value: "month", label: "Mês" },
+];
+
+const SOURCE_LABELS: Record<string, string> = {
+  manual: "Manual",
+  agent: "Copilot",
+  automation: "Automação",
+  system: "Sistema",
 };
-
-const FALLBACK_CONFIG = { icon: <Clock className="w-3.5 h-3.5" />, label: "", color: "bg-muted text-muted-foreground" };
-
-function TimelineItem({
-  action,
-  description,
-  date,
-  isLast
-}: {
-  action: string;
-  description?: string;
-  date: string;
-  isLast?: boolean;
-}) {
-  const config = ACTION_CONFIG[action] || FALLBACK_CONFIG;
-  const displayLabel = config.label || action;
-
-  return (
-    <div className="flex gap-3">
-      <div className="flex flex-col items-center">
-        <div className={cn("w-8 h-8 rounded-full flex items-center justify-center", config.color)}>
-          {config.icon}
-        </div>
-        {!isLast && <div className="w-px flex-1 bg-border mt-2" />}
-      </div>
-      <div className="flex-1 pb-6">
-        <p className="font-medium text-sm">{displayLabel}</p>
-        {description && (
-          <p className="text-sm text-muted-foreground mt-0.5">{description}</p>
-        )}
-        <p className="text-xs text-muted-foreground mt-1">
-          {formatDistanceToNow(new Date(date), { addSuffix: true, locale: ptBR })}
-        </p>
-      </div>
-    </div>
-  );
-}
 
 function StatCard({ label, value, icon: Icon, variant = "default" }: { 
   label: string; 
@@ -200,24 +159,7 @@ export function LeadDetailModal({ open, onOpenChange, leadId, onEdit }: LeadDeta
     enabled: !!leadId && open,
   });
 
-  const [historyLimit, setHistoryLimit] = useState(50);
-
-  const { data: history, isLoading: historyLoading } = useQuery({
-    queryKey: ["lead-history", leadId],
-    queryFn: async () => {
-      if (!leadId) return [];
-
-      const { data, error } = await supabase
-        .from("lead_history")
-        .select("*")
-        .eq("lead_id", leadId)
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!leadId && open,
-  });
+  const timeline = useLeadTimeline(open ? leadId ?? undefined : undefined);
 
   const { data: pipeData } = useQuery({
     queryKey: ["lead-pipes", leadId],
@@ -672,27 +614,115 @@ export function LeadDetailModal({ open, onOpenChange, leadId, onEdit }: LeadDeta
                 </TabsContent>
 
                 <TabsContent value="history" className="p-6 pt-4 m-0">
-                  {historyLoading ? (
+                  {/* Metrics */}
+                  {timeline.data?.metrics && timeline.data.metrics.total > 0 && (
+                    <div className="grid grid-cols-4 gap-2 mb-4">
+                      <div className="rounded-lg bg-muted p-2.5">
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <Activity className="w-3.5 h-3.5 text-muted-foreground" />
+                          <span className="text-[10px] text-muted-foreground">Interações</span>
+                        </div>
+                        <p className="text-base font-semibold">{timeline.data.metrics.total}</p>
+                      </div>
+                      <div className="rounded-lg bg-muted p-2.5">
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <CalendarDays className="w-3.5 h-3.5 text-muted-foreground" />
+                          <span className="text-[10px] text-muted-foreground">Dias</span>
+                        </div>
+                        <p className="text-base font-semibold">{timeline.data.metrics.daysSinceFirstContact}</p>
+                      </div>
+                      <div className="rounded-lg bg-muted p-2.5">
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <Clock className="w-3.5 h-3.5 text-muted-foreground" />
+                          <span className="text-[10px] text-muted-foreground">Último</span>
+                        </div>
+                        <p className="text-xs font-medium">
+                          {timeline.data.metrics.lastContact
+                            ? formatDistanceToNow(new Date(timeline.data.metrics.lastContact), { addSuffix: true, locale: ptBR })
+                            : "—"}
+                        </p>
+                      </div>
+                      <div className="rounded-lg bg-muted p-2.5">
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <BarChart3 className="w-3.5 h-3.5 text-muted-foreground" />
+                          <span className="text-[10px] text-muted-foreground">Top fonte</span>
+                        </div>
+                        <p className="text-xs font-medium">
+                          {timeline.data.metrics.topSource
+                            ? SOURCE_LABELS[timeline.data.metrics.topSource] || timeline.data.metrics.topSource
+                            : "—"}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Source Filters */}
+                  <div className="flex gap-1 mb-3 flex-wrap">
+                    {SOURCE_FILTER_OPTIONS.map((opt) => (
+                      <button
+                        key={opt.value}
+                        onClick={() => timeline.updateFilters({ source: opt.value })}
+                        className={cn(
+                          "text-xs px-2.5 py-1 rounded-full border transition-colors",
+                          timeline.filters.source === opt.value
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "bg-background text-muted-foreground border-border hover:bg-muted"
+                        )}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Period + Search */}
+                  <div className="flex gap-2 mb-4">
+                    <div className="flex gap-1">
+                      {PERIOD_OPTIONS.map((opt) => (
+                        <button
+                          key={opt.value}
+                          onClick={() => timeline.updateFilters({ period: opt.value })}
+                          className={cn(
+                            "text-[10px] px-2 py-0.5 rounded border transition-colors",
+                            timeline.filters.period === opt.value
+                              ? "bg-muted-foreground/10 text-foreground border-muted-foreground/30"
+                              : "text-muted-foreground border-transparent hover:bg-muted"
+                          )}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="relative flex-1">
+                      <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                      <Input
+                        placeholder="Buscar..."
+                        value={timeline.filters.search}
+                        onChange={(e) => timeline.updateFilters({ search: e.target.value })}
+                        className="h-7 pl-7 text-xs"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Events */}
+                  {timeline.isLoading ? (
                     <div className="flex items-center justify-center py-8">
                       <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
                     </div>
-                  ) : history && history.length > 0 ? (
+                  ) : timeline.data && timeline.data.events.length > 0 ? (
                     <div className="space-y-0">
-                      {history.slice(0, historyLimit).map((item, index) => (
+                      {timeline.data.events.map((event, index) => (
                         <TimelineItem
-                          key={item.id}
-                          action={item.action}
-                          description={item.description || undefined}
-                          date={item.created_at}
-                          isLast={index === Math.min(history.length, historyLimit) - 1}
+                          key={event.id}
+                          event={event}
+                          isLast={index === timeline.data!.events.length - 1 && !timeline.data!.hasMore}
                         />
                       ))}
-                      {history.length > historyLimit && (
+                      {timeline.data.hasMore && (
                         <button
-                          onClick={() => setHistoryLimit((prev) => prev + 50)}
+                          onClick={timeline.loadMore}
                           className="w-full text-center text-sm text-primary hover:underline py-2"
                         >
-                          Carregar mais ({history.length - historyLimit} restantes)
+                          Carregar mais ({timeline.data.totalFiltered - timeline.data.events.length} restantes)
                         </button>
                       )}
                     </div>
@@ -700,7 +730,9 @@ export function LeadDetailModal({ open, onOpenChange, leadId, onEdit }: LeadDeta
                     <div className="text-center py-8">
                       <History className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
                       <p className="text-sm text-muted-foreground">
-                        Nenhum histórico registrado.
+                        {timeline.filters.source !== "all" || timeline.filters.search
+                          ? "Nenhum evento neste filtro."
+                          : "Nenhum histórico registrado."}
                       </p>
                     </div>
                   )}

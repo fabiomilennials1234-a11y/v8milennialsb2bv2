@@ -4,6 +4,9 @@
 -- Role: ceo (acesso total ao dashboard)
 -- ============================================================
 
+-- Garantir extensão pgcrypto
+CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
+
 -- ETAPA 1: Criar o usuário em auth.users
 DO $$
 DECLARE
@@ -25,7 +28,7 @@ BEGIN
       '00000000-0000-0000-0000-000000000000',
       'authenticated', 'authenticated',
       'leonardomilennials@gmail.com',
-      crypt('Milennials123456.', gen_salt('bf')),
+      extensions.crypt('Milennials123456.', extensions.gen_salt('bf')),
       NOW(),
       '{"provider": "email", "providers": ["email"]}'::jsonb,
       '{"name": "Leonardo", "role": "ceo"}'::jsonb,
@@ -50,12 +53,18 @@ BEGIN
 END $$;
 
 -- ETAPA 2: Profile e role CEO
-INSERT INTO public.profiles (user_id, name, email)
-SELECT id, 'Leonardo', 'leonardomilennials@gmail.com'
-FROM auth.users WHERE lower(email) = lower('leonardomilennials@gmail.com')
-ON CONFLICT (user_id) DO UPDATE SET name = 'Leonardo', email = 'leonardomilennials@gmail.com';
+DO $$ BEGIN
+  INSERT INTO public.profiles (id, full_name)
+  SELECT id, 'Leonardo'
+  FROM auth.users WHERE lower(email) = lower('leonardomilennials@gmail.com')
+  ON CONFLICT (id) DO UPDATE SET full_name = 'Leonardo';
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
 
-INSERT INTO public.user_roles (user_id, role)
-SELECT id, 'ceo'::public.user_role
-FROM auth.users WHERE lower(email) = lower('leonardomilennials@gmail.com')
-ON CONFLICT (user_id, role) DO NOTHING;
+DO $$ BEGIN
+  INSERT INTO public.user_roles (user_id, role)
+  SELECT id, 'ceo'::public.user_role
+  FROM auth.users WHERE lower(email) = lower('leonardomilennials@gmail.com')
+  ON CONFLICT (user_id, role) DO NOTHING;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;

@@ -24,13 +24,15 @@ import {
   logCalendarOp,
   registerWatchChannel,
 } from "../_shared/google-calendar-utils.ts";
+import { logRuntime } from "../_shared/logger.ts";
+import { withSentry } from '../_shared/sentry.ts';
 
 const SUPABASE_URL              = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 // ─── Handler principal ────────────────────────────────────────────────────────
 
-Deno.serve(async (req) => {
+Deno.serve(withSentry('google-calendar-webhook', async (req) => {
   // Google usa POST para notificações
   if (req.method !== "POST") {
     return new Response("Method Not Allowed", { status: 405 });
@@ -49,16 +51,41 @@ Deno.serve(async (req) => {
       resourceState,
       resourceId,
       expirationMs,
+    }).then(() => {
+      logRuntime({
+        module: "calendar",
+        action: "sync",
+        status: "success",
+        triggeredBy: "system",
+        payloadSnapshot: { channelId, resourceState },
+      });
     }).catch((err) => {
       console.error("[google-calendar-webhook] Erro no processamento:", err);
+      logRuntime({
+        module: "calendar",
+        action: "sync",
+        status: "error",
+        errorMessage: String(err),
+        triggeredBy: "system",
+        payloadSnapshot: { channelId, resourceState },
+      });
     });
 
     return new Response(null, { status: 200 });
   } catch (err) {
     console.error("[google-calendar-webhook] Erro:", err);
+
+    await logRuntime({
+      module: "calendar",
+      action: "sync",
+      status: "error",
+      errorMessage: String(err),
+      triggeredBy: "system",
+    });
+
     return new Response(null, { status: 200 }); // Sempre 200 para o Google
   }
-});
+}));
 
 // ─── Processamento assíncrono ─────────────────────────────────────────────────
 

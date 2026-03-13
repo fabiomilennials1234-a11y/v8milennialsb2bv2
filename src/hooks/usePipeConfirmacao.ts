@@ -5,6 +5,7 @@ import { triggerFollowUpAutomation } from "./useAutoFollowUp";
 import { triggerStageChangedWorkflows } from "@/lib/workflowTrigger";
 import { useRealtimeSubscription } from "./useRealtimeSubscription";
 import { useOrganization } from "./useOrganization";
+import { useCanPerformActionAsync } from "@/lib/permissions";
 
 export type PipeConfirmacao = Tables<"pipe_confirmacao">;
 export type PipeConfirmacaoInsert = TablesInsert<"pipe_confirmacao">;
@@ -110,9 +111,13 @@ export function useCreatePipeConfirmacao() {
 
 export function useUpdatePipeConfirmacao() {
   const queryClient = useQueryClient();
-  
+  const { data: movePermission } = useCanPerformActionAsync("move_pipe_record");
+
   return useMutation({
     mutationFn: async ({ id, leadId, assignedTo, ...updates }: PipeConfirmacaoUpdate & { id: string; leadId?: string; assignedTo?: string | null }) => {
+      if (updates.status && movePermission && !movePermission.allowed) {
+        throw new Error("Sem permissão para mover registros no pipe");
+      }
       const payload = Object.fromEntries(
         Object.entries(updates).filter(([, v]) => v !== undefined)
       ) as PipeConfirmacaoUpdate;

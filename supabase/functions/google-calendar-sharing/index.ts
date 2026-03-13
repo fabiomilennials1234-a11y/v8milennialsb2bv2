@@ -13,6 +13,8 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { logRuntime } from "../_shared/logger.ts";
+import { withSentry } from '../_shared/sentry.ts';
 
 const SUPABASE_URL              = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -22,7 +24,7 @@ const SUPABASE_ANON_KEY         =
   Deno.env.get("SUPABASE_ANON_KEY")?.trim() ||
   "";
 
-Deno.serve(async (req) => {
+Deno.serve(withSentry('google-calendar-sharing', async (req) => {
   const corsHeaders = getCorsHeaders(req.headers.get("origin"));
 
   if (req.method === "OPTIONS") {
@@ -122,6 +124,15 @@ Deno.serve(async (req) => {
         .neq("user_id", user.id)
         .not("user_id", "in", `(${sharedViewerIds.join(",") || "00000000-0000-0000-0000-000000000000"})`);
 
+      await logRuntime({
+        organizationId: orgId,
+        module: "calendar",
+        action: "share",
+        status: "success",
+        triggeredBy: "user",
+        payloadSnapshot: { method: "GET", outgoingCount: (outgoing ?? []).length, incomingCount: (incoming ?? []).length },
+      });
+
       return json({
         outgoing: outgoing ?? [],
         incoming: incoming ?? [],
@@ -170,6 +181,15 @@ Deno.serve(async (req) => {
         throw error;
       }
 
+      await logRuntime({
+        organizationId: orgId,
+        module: "calendar",
+        action: "share",
+        status: "success",
+        triggeredBy: "user",
+        payloadSnapshot: { method: "POST", viewer_id, can_create_events },
+      });
+
       return json({ success: true, message: "Calendário compartilhado com sucesso" });
     }
 
@@ -188,6 +208,15 @@ Deno.serve(async (req) => {
         .eq("viewer_id", viewer_id);
 
       if (error) throw error;
+
+      await logRuntime({
+        organizationId: orgId,
+        module: "calendar",
+        action: "share",
+        status: "success",
+        triggeredBy: "user",
+        payloadSnapshot: { method: "PATCH", viewer_id, can_create_events },
+      });
 
       return json({ success: true, message: "Permissão atualizada com sucesso" });
     }
@@ -208,12 +237,30 @@ Deno.serve(async (req) => {
 
       if (error) throw error;
 
+      await logRuntime({
+        organizationId: orgId,
+        module: "calendar",
+        action: "share",
+        status: "success",
+        triggeredBy: "user",
+        payloadSnapshot: { method: "DELETE", viewerId },
+      });
+
       return json({ success: true, message: "Acesso ao calendário revogado" });
     }
 
     return json({ error: "Method Not Allowed" }, 405);
   } catch (err) {
     console.error("[google-calendar-sharing]", err);
+
+    await logRuntime({
+      module: "calendar",
+      action: "share",
+      status: "error",
+      errorMessage: String(err),
+      triggeredBy: "system",
+    });
+
     return json({ error: "Erro interno", message: String(err) }, 500);
   }
-});
+}));

@@ -1,3 +1,4 @@
+import { withSentry } from '../_shared/sentry.ts';
 /**
  * meta-webhook
  *
@@ -13,12 +14,13 @@ import {
   verifyWebhookSignature,
   getLeadgenData,
 } from "../_shared/meta-api.ts";
+import { logRuntime } from "../_shared/logger.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const META_WEBHOOK_VERIFY_TOKEN = Deno.env.get("META_WEBHOOK_VERIFY_TOKEN")!;
 
-Deno.serve(async (req) => {
+Deno.serve(withSentry('meta-webhook', async (req) => {
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false },
   });
@@ -74,12 +76,19 @@ Deno.serve(async (req) => {
       }
     }
 
+    await logRuntime({
+      module: "webhook",
+      action: "meta_process",
+      status: "success",
+      payloadSnapshot: { object: payload.object, entries: payload.entry?.length || 0 },
+    });
+
     // Meta espera 200 rapido para nao reenviar
     return new Response("OK", { status: 200 });
   }
 
   return new Response("Method Not Allowed", { status: 405 });
-});
+}));
 
 // ── Types ──────────────────────────────────────────────────────────────────
 

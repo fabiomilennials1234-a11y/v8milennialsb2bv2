@@ -11,6 +11,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { withSentry } from '../_shared/sentry.ts';
+import { logRuntime } from "../_shared/logger.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -19,7 +21,7 @@ const BUCKET = "media";
 // Só permitir paths do chat (evitar expor outros objetos)
 const ALLOWED_PREFIX = "whatsapp-media/";
 
-serve(async (req) => {
+serve(withSentry('stream-media', async (req) => {
   const origin = req.headers.get("origin");
   const corsHeaders = getCorsHeaders(origin);
 
@@ -104,15 +106,29 @@ serve(async (req) => {
     if (finalContentType.startsWith("audio/")) {
       headers["Accept-Ranges"] = "bytes";
     }
+    await logRuntime({
+      module: "media",
+      action: "stream",
+      status: "success",
+      payloadSnapshot: { path, contentType: finalContentType },
+    });
+
     return new Response(data, {
       status: 200,
       headers,
     });
   } catch (e) {
     console.error("[stream-media] Unexpected error", { error: e instanceof Error ? e.message : String(e), path });
+    await logRuntime({
+      module: "media",
+      action: "stream",
+      status: "error",
+      errorMessage: e instanceof Error ? e.message : String(e),
+      payloadSnapshot: { path },
+    });
     return new Response(JSON.stringify({ error: "Internal error", code: "INTERNAL" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
-});
+}));

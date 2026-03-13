@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { format } from "date-fns";
+import { formatDistanceToNow, format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
   Plus,
@@ -18,6 +18,13 @@ import {
   Copy,
   Mail,
   ExternalLink,
+  Lightbulb,
+  ChevronDown,
+  ChevronRight,
+  Clock,
+  AlertTriangle,
+  Flame,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -50,6 +57,11 @@ import {
 } from "@/hooks/useAcoesDoDia";
 import { usePipePropostas } from "@/hooks/usePipePropostas";
 import { useFollowUps } from "@/hooks/useFollowUps";
+import {
+  useDailyPriorities,
+  type PriorityLead,
+  type PriorityFollowUp,
+} from "@/hooks/useDailyPriorities";
 
 export function AcoesDoDia() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -68,8 +80,66 @@ export function AcoesDoDia() {
   const uncompleteAcao = useUncompleteAcaoDoDia();
   const deleteAcao = useDeleteAcaoDoDia();
 
+  // Sugestões automáticas
+  const { data: priorities, isLoading: isPrioritiesLoading } = useDailyPriorities();
+  const [suggestionsOpen, setSuggestionsOpen] = useState(true);
+  const [addingLeadId, setAddingLeadId] = useState<string | null>(null);
+
   const pendingAcoes = acoes?.filter((a) => !a.is_completed) || [];
   const completedAcoes = acoes?.filter((a) => a.is_completed) || [];
+
+  // Lead IDs que já estão nas ações do dia (para filtrar sugestões)
+  const existingLeadIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const acao of acoes || []) {
+      if (acao.lead_id) ids.add(acao.lead_id);
+      if (acao.proposta?.lead) {
+        // proposta.lead doesn't have id in the type, but lead_id on acao covers it
+      }
+      if (acao.follow_up?.lead) {
+        // follow_up.lead doesn't have id in the type
+      }
+    }
+    return ids;
+  }, [acoes]);
+
+  // Follow-up IDs que já estão nas ações do dia
+  const existingFollowUpIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const acao of acoes || []) {
+      if (acao.follow_up_id) ids.add(acao.follow_up_id);
+    }
+    return ids;
+  }, [acoes]);
+
+  // Filtrar sugestões que ainda não foram adicionadas
+  const filteredLeadsSemAcao = useMemo(
+    () => (priorities?.leads_sem_acao || []).filter((l) => !existingLeadIds.has(l.id)),
+    [priorities?.leads_sem_acao, existingLeadIds],
+  );
+  const filteredFollowUpsVencidos = useMemo(
+    () => (priorities?.followups_vencidos || []).filter((f) => !existingFollowUpIds.has(f.id)),
+    [priorities?.followups_vencidos, existingFollowUpIds],
+  );
+  const filteredLeadsQuentes = useMemo(
+    () => (priorities?.leads_quentes || []).filter((l) => !existingLeadIds.has(l.id)),
+    [priorities?.leads_quentes, existingLeadIds],
+  );
+
+  const totalSuggestions = filteredLeadsSemAcao.length + filteredFollowUpsVencidos.length + filteredLeadsQuentes.length;
+
+  const handleAddSuggestion = async (leadId: string, title: string, followUpId?: string) => {
+    setAddingLeadId(leadId);
+    try {
+      await createAcao.mutateAsync({
+        title,
+        lead_id: leadId,
+        follow_up_id: followUpId,
+      });
+    } finally {
+      setAddingLeadId(null);
+    }
+  };
 
   const handleClearCompleted = async () => {
     if (completedAcoes.length === 0) return;
@@ -477,8 +547,156 @@ export function AcoesDoDia() {
               </>
             )}
           </AnimatePresence>
+
+          {/* Sugestões para hoje */}
+          {(totalSuggestions > 0 || isPrioritiesLoading) && (
+            <div className="pt-3 mt-3 border-t">
+              <button
+                onClick={() => setSuggestionsOpen(!suggestionsOpen)}
+                className="flex items-center gap-2 hover:text-foreground transition-colors w-full"
+              >
+                <Lightbulb className="w-4 h-4 text-amber-500" />
+                <span className="text-xs font-medium text-muted-foreground">
+                  Sugestões para hoje
+                </span>
+                {totalSuggestions > 0 && (
+                  <Badge variant="secondary" className="text-xs h-5 px-1.5">
+                    {totalSuggestions}
+                  </Badge>
+                )}
+                <span className="text-xs text-muted-foreground ml-auto">
+                  {suggestionsOpen ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                </span>
+              </button>
+
+              <AnimatePresence>
+                {suggestionsOpen && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    className="space-y-1.5 overflow-hidden mt-2"
+                  >
+                    {isPrioritiesLoading && totalSuggestions === 0 && (
+                      <div className="flex items-center justify-center py-4">
+                        <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                      </div>
+                    )}
+
+                    {/* Leads sem ação */}
+                    {filteredLeadsSemAcao.map((lead) => (
+                      <SuggestionRow
+                        key={`sem-acao-${lead.id}`}
+                        icon={<Clock className="w-3.5 h-3.5 text-orange-500" />}
+                        leadName={lead.name}
+                        reason={
+                          lead.last_action_at
+                            ? `${formatDistanceToNow(new Date(lead.last_action_at), { locale: ptBR })} sem contato`
+                            : "Sem contato registrado"
+                        }
+                        company={lead.company}
+                        isAdding={addingLeadId === lead.id}
+                        onAdd={() => handleAddSuggestion(lead.id, `Contatar ${lead.name}`)}
+                      />
+                    ))}
+
+                    {/* Follow-ups vencidos */}
+                    {filteredFollowUpsVencidos.map((fu) => (
+                      <SuggestionRow
+                        key={`fu-${fu.id}`}
+                        icon={<AlertTriangle className="w-3.5 h-3.5 text-red-500" />}
+                        leadName={fu.lead?.name || "Lead"}
+                        reason={
+                          fu.days_overdue > 0
+                            ? `Follow-up vencido há ${fu.days_overdue} dia${fu.days_overdue !== 1 ? "s" : ""}`
+                            : "Follow-up vence hoje"
+                        }
+                        subtitle={fu.title}
+                        isAdding={fu.lead?.id ? addingLeadId === fu.lead.id : false}
+                        onAdd={() => {
+                          if (!fu.lead?.id) return;
+                          handleAddSuggestion(
+                            fu.lead.id,
+                            `Follow-up: ${fu.title} — ${fu.lead.name || "Lead"}`,
+                            fu.id,
+                          );
+                        }}
+                      />
+                    ))}
+
+                    {/* Leads quentes */}
+                    {filteredLeadsQuentes.map((lead) => (
+                      <SuggestionRow
+                        key={`quente-${lead.id}`}
+                        icon={<Flame className="w-3.5 h-3.5 text-emerald-500" />}
+                        leadName={lead.name}
+                        reason={`Score ${lead.qualification_score}`}
+                        company={lead.company}
+                        isAdding={addingLeadId === lead.id}
+                        onAdd={() => handleAddSuggestion(lead.id, `Contatar ${lead.name}`)}
+                      />
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          )}
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Suggestion Row ────────────────────────────────────
+
+function SuggestionRow({
+  icon,
+  leadName,
+  reason,
+  company,
+  subtitle,
+  isAdding,
+  onAdd,
+}: {
+  icon: React.ReactNode;
+  leadName: string;
+  reason: string;
+  company?: string | null;
+  subtitle?: string;
+  isAdding: boolean;
+  onAdd: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-2 p-2 rounded-md bg-muted/40 hover:bg-muted/60 transition-colors">
+      <div className="shrink-0">{icon}</div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5">
+          <span className="text-sm font-medium truncate">{leadName}</span>
+          {company && (
+            <span className="text-xs text-muted-foreground truncate hidden sm:inline">
+              · {company}
+            </span>
+          )}
+        </div>
+        {subtitle && (
+          <p className="text-xs text-muted-foreground truncate">{subtitle}</p>
+        )}
+        <span className="text-xs text-muted-foreground">{reason}</span>
+      </div>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-7 text-xs shrink-0 gap-1 text-primary hover:text-primary"
+        onClick={onAdd}
+        disabled={isAdding}
+      >
+        {isAdding ? (
+          <Loader2 className="w-3 h-3 animate-spin" />
+        ) : (
+          <Plus className="w-3 h-3" />
+        )}
+        Adicionar
+      </Button>
     </div>
   );
 }

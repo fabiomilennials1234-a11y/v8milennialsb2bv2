@@ -12,6 +12,7 @@ import {
   X,
   ChevronDown,
   GitBranch,
+  History,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -55,9 +56,12 @@ import { useLogLeadAction } from "@/hooks/useLogLeadAction";
 import { useCampanhas, useCampanhaStages } from "@/hooks/useCampanhas";
 import { useTeamMembers, useCurrentTeamMember } from "@/hooks/useTeamMembers";
 import { supabase } from "@/integrations/supabase/client";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { TimelineItem } from "@/components/leads/TimelineItem";
+import { useLeadTimelineCompact } from "@/hooks/useLeadTimeline";
+import type { TimelineEvent } from "@/hooks/useLeadTimeline";
 
 const originOptions = [
   { value: "whatsapp", label: "WhatsApp" },
@@ -128,6 +132,9 @@ export function LeadDetailContent({
   const createLead = useCreateLeadFromWhatsApp();
   const updateLead = useUpdateLead();
   const logAction = useLogLeadAction();
+
+  // Timeline: últimos 8 eventos com refresh automático
+  const { data: recentHistory = [] } = useLeadTimelineCompact(lead?.id);
 
   // Pipeline mutations
   const addToStandard = useAddLeadToStandardPipe();
@@ -695,10 +702,11 @@ export function LeadDetailContent({
       ) : lead ? (
         /* ─── LEAD EXISTS: TABS ─────────────────────────────── */
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 overflow-hidden flex flex-col">
-          <TabsList className="grid w-full grid-cols-3 mx-6 w-[calc(100%-3rem)]">
-            <TabsTrigger value="info">Informações</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-4 mx-6 w-[calc(100%-3rem)]">
+            <TabsTrigger value="info">Info</TabsTrigger>
             <TabsTrigger value="pipeline">Pipeline</TabsTrigger>
             <TabsTrigger value="campanha">Campanhas</TabsTrigger>
+            <TabsTrigger value="history">Histórico</TabsTrigger>
           </TabsList>
 
           <div className="flex-1 overflow-y-auto mt-4 px-6 pb-4">
@@ -1007,6 +1015,35 @@ export function LeadDetailContent({
                 <div className="text-center py-8">
                   <Target className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50" />
                   <p className="text-muted-foreground">Nenhuma campanha ativa no momento</p>
+                </div>
+              )}
+            </TabsContent>
+
+            {/* ─── TAB: HISTÓRICO (últimos 8 eventos) ─── */}
+            <TabsContent value="history" className="mt-0 space-y-0">
+              {recentHistory.length > 0 ? (
+                <>
+                  {recentHistory.map((item, index) => (
+                    <TimelineItem
+                      key={item.id}
+                      event={item as TimelineEvent}
+                      isLast={index === recentHistory.length - 1}
+                      compact
+                    />
+                  ))}
+                  {lead && (
+                    <button
+                      onClick={() => window.open(`/leads?id=${lead.id}`, "_blank")}
+                      className="w-full text-center text-xs text-primary hover:underline py-1"
+                    >
+                      Ver histórico completo
+                    </button>
+                  )}
+                </>
+              ) : (
+                <div className="text-center py-6">
+                  <History className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
+                  <p className="text-xs text-muted-foreground">Nenhum evento registrado.</p>
                 </div>
               )}
             </TabsContent>

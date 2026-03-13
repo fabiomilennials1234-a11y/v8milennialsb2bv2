@@ -21,6 +21,8 @@ BEGIN
   LOOP
     RAISE NOTICE 'CronJob: [%] % schedule=% cmd=%', v_job.jobid, v_job.jobname, v_job.schedule, left(v_job.command, 80);
   END LOOP;
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'Erro ao ler cron.job: %', SQLERRM;
 END $$;
 
 -- 3. Verificar pg_net responses (últimas chamadas HTTP)

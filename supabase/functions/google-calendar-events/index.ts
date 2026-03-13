@@ -23,6 +23,8 @@ import {
   getValidAccessToken,
   logCalendarOp,
 } from "../_shared/google-calendar-utils.ts";
+import { logRuntime } from "../_shared/logger.ts";
+import { withSentry } from '../_shared/sentry.ts';
 
 const SUPABASE_URL              = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -186,7 +188,7 @@ async function canAccessCalendar(
 
 // ─── Handler principal ────────────────────────────────────────────────────────
 
-Deno.serve(async (req) => {
+Deno.serve(withSentry('google-calendar-events', async (req) => {
   const corsHeaders = getCorsHeaders(req.headers.get("origin"));
 
   if (req.method === "OPTIONS") {
@@ -265,6 +267,15 @@ Deno.serve(async (req) => {
           }))
         );
       }
+
+      await logRuntime({
+        organizationId: orgId,
+        module: "calendar",
+        action: "manage_events",
+        status: "success",
+        triggeredBy: "user",
+        payloadSnapshot: { method: "GET", eventCount: allEvents.length },
+      });
 
       return json({ events: allEvents, count: allEvents.length });
     }
@@ -381,6 +392,17 @@ Deno.serve(async (req) => {
         initiatedBy: "user",
       });
 
+      await logRuntime({
+        organizationId: orgId,
+        module: "calendar",
+        action: "manage_events",
+        status: "success",
+        triggeredBy: "user",
+        payloadSnapshot: { method: "POST", eventId: createdEvent.id, meetLink },
+        entityType: "event",
+        entityId: createdEvent.id,
+      });
+
       return json({
         success: true,
         event: createdEvent,
@@ -437,6 +459,17 @@ Deno.serve(async (req) => {
         initiatedBy: "user",
       });
 
+      await logRuntime({
+        organizationId: orgId,
+        module: "calendar",
+        action: "manage_events",
+        status: "success",
+        triggeredBy: "user",
+        payloadSnapshot: { method: "PATCH", eventId: payload.event_id },
+        entityType: "event",
+        entityId: payload.event_id,
+      });
+
       return json({ success: true, event: updatedEvent });
     }
 
@@ -487,12 +520,32 @@ Deno.serve(async (req) => {
         initiatedBy: "user",
       });
 
+      await logRuntime({
+        organizationId: orgId,
+        module: "calendar",
+        action: "manage_events",
+        status: "success",
+        triggeredBy: "user",
+        payloadSnapshot: { method: "DELETE", eventId },
+        entityType: "event",
+        entityId: eventId,
+      });
+
       return json({ success: true });
     }
 
     return json({ error: "Method Not Allowed" }, 405);
   } catch (err) {
     console.error("[google-calendar-events]", err);
+
+    await logRuntime({
+      module: "calendar",
+      action: "manage_events",
+      status: "error",
+      errorMessage: String(err),
+      triggeredBy: "system",
+    });
+
     return json({ error: "Erro interno", message: String(err) }, 500);
   }
-});
+}));

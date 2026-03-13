@@ -1,15 +1,19 @@
+import { withSentry } from '../_shared/sentry.ts';
+import { logRuntime } from '../_shared/logger.ts';
+import { trackEvent } from '../_shared/track.ts';
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { getOrCreateLead, normalizePhoneForSearch } from "../_shared/lead-service.ts";
 import { OpenRouterClient } from "./openrouter-client.ts";
 import { AgentEngine } from "./agent-engine.ts";
+import { fireTrigger } from "../_shared/workflow-trigger.ts";
 
 /**
  * Webhook receptor de mensagens de leads
  * Twilio/WhatsApp → /agent-message
  */
-Deno.serve(async (req) => {
+Deno.serve(withSentry('agent-message', async (req) => {
   const corsHeaders = withSecurityHeaders(getCorsHeaders(req.headers.get("origin")));
 
   if (req.method === "OPTIONS") {
@@ -58,6 +62,15 @@ Deno.serve(async (req) => {
       });
     }
 
+    // 1.6. FIRE lead_replied workflow trigger (fire-and-forget)
+    fireTrigger({
+      supabase,
+      organizationId,
+      triggerType: "lead_replied",
+      leadId: lead.id,
+      context: { trigger: "lead_replied", channel, message },
+    }).catch(() => {});
+
     // 2. INITIALIZE AGENT ENGINE
     const engine = new AgentEngine(supabase, openRouter, organizationId);
 
@@ -83,7 +96,27 @@ Deno.serve(async (req) => {
       }).catch(e => console.warn('[agent-message] Evaluation failed (non-fatal):', e));
     }
 
-    // 4. RETURN RESPONSE (strip internal _eval_meta before sending)
+    // 4. TRACK USAGE EVENT (fire-and-forget)
+    trackEvent({
+      organizationId,
+      eventType: "message_sent",
+      entityType: "lead",
+      entityId: lead.id,
+      metadata: { channel, action: response.action, hasMessage: !!response.message },
+    }).catch(() => {});
+
+    // 5. LOG SUCCESS
+    await logRuntime({
+      organizationId,
+      module: 'copilot',
+      action: response.action || 'process_message',
+      status: 'success',
+      entityType: 'lead',
+      entityId: lead.id,
+      payloadSnapshot: { channel, action: response.action, hasMessage: !!response.message },
+    });
+
+    // 5. RETURN RESPONSE (strip internal _eval_meta before sending)
     const { _eval_meta: _unused, ...publicResponse } = response as any;
     return new Response(JSON.stringify(publicResponse), {
       headers: { ...corsHeaders, "Content-Type": "application/json" }
@@ -91,15 +124,15 @@ Deno.serve(async (req) => {
 
   } catch (error) {
     console.error('[agent-message] Error:', error);
-    return new Response(JSON.stringify({ 
-      error: error instanceof Error ? error.message : "Unknown error",
-      details: error instanceof Error ? error.stack : undefined
-    }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" }
+    await logRuntime({
+      module: 'copilot',
+      action: 'process_message',
+      status: 'error',
+      errorMessage: error instanceof Error ? error.message : String(error),
     });
+    throw error;
   }
-});
+}));
 
 /**
  * Item #10: Typing indicator — envia presença "composing" via Evolution API

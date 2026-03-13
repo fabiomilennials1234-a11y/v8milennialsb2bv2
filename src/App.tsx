@@ -60,6 +60,7 @@ const CopilotPlayground = lazy(() => lazyRetry(() => import("@/components/copilo
 const CopilotWizardTest = lazy(() => lazyRetry(() => import("./pages/CopilotWizardTest")));
 const Automacoes = lazy(() => lazyRetry(() => import("./pages/Automacoes")));
 const AutomacoesEditor = lazy(() => lazyRetry(() => import("./pages/AutomacoesEditor")));
+const AutomacoesExecucoes = lazy(() => lazyRetry(() => import("./pages/AutomacoesExecucoes")));
 const NotFound = lazy(() => lazyRetry(() => import("./pages/NotFound")));
 
 // Master Admin — lazy loaded (com retry)
@@ -69,6 +70,7 @@ const MasterUsers = lazy(() => lazyRetry(() => import("./pages/master/MasterUser
 const MasterPlans = lazy(() => lazyRetry(() => import("./pages/master/MasterPlans")));
 const MasterFeatures = lazy(() => lazyRetry(() => import("./pages/master/MasterFeatures")));
 const MasterAuditLogs = lazy(() => lazyRetry(() => import("./pages/master/MasterAuditLogs")));
+const MasterOperations = lazy(() => lazyRetry(() => import("./pages/master/MasterOperations")));
 
 // Master route/layout — carregam sob demanda quando acessar /master
 import { MasterRoute } from "@/components/master/MasterRoute";
@@ -468,6 +470,16 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/automacoes/:id/execucoes"
+        element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <AutomacoesExecucoes />
+            </LayoutWrapper>
+          </ProtectedRoute>
+        }
+      />
       {/* Master Admin Routes */}
       <Route
         path="/master"
@@ -485,6 +497,7 @@ function AppRoutes() {
         <Route path="plans" element={<MasterPlans />} />
         <Route path="features" element={<MasterFeatures />} />
         <Route path="audit-logs" element={<MasterAuditLogs />} />
+        <Route path="operations" element={<MasterOperations />} />
       </Route>
 
       <Route path="*" element={<NotFound />} />

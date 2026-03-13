@@ -3,6 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
 import { useRealtimeSubscription } from "./useRealtimeSubscription";
 import { useOrganization } from "./useOrganization";
+import { track } from "@/lib/analytics";
+import { useCanPerformActionAsync } from "@/lib/permissions";
 
 export type Lead = Tables<"leads">;
 export type LeadInsert = TablesInsert<"leads">;
@@ -90,11 +92,15 @@ export { LEADS_PAGE_SIZE };
 export function useCreateLead() {
   const queryClient = useQueryClient();
   const { organizationId } = useOrganization();
-  
+  const { data: createPermission } = useCanPerformActionAsync("create_lead");
+
   return useMutation({
     mutationFn: async (lead: LeadInsert) => {
       if (!organizationId) {
         throw new Error("Cannot create lead: No organization context");
+      }
+      if (createPermission && !createPermission.allowed) {
+        throw new Error("Sem permissão para criar leads");
       }
       
       // SECURITY: Always override organization_id with current user's org
@@ -113,8 +119,9 @@ export function useCreateLead() {
       if (error) throw error;
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["leads"] });
+      track({ event: "lead_created", organizationId: organizationId!, entityType: "lead", entityId: data.id });
     },
   });
 }
@@ -192,7 +199,15 @@ export function useDeleteLead() {
       if (!organizationId) {
         throw new Error("Cannot delete lead: No organization context");
       }
-      
+
+      // PERMISSION: Verificar can_delete_leads antes de prosseguir
+      const { data: canDelete } = await supabase.rpc("user_has_org_permission", {
+        p_permission_key: "can_delete_leads",
+      });
+      if (canDelete !== true) {
+        throw new Error("Você não tem permissão para excluir leads");
+      }
+
       // SECURITY: First verify the lead belongs to current organization
       const { data: lead, error: verifyError } = await supabase
         .from("leads")
@@ -375,6 +390,14 @@ export function useDeleteAllLeadsInPipe(pipeType: PipeTypeForDelete) {
         throw new Error("Cannot delete leads: No organization context");
       }
 
+      // PERMISSION: Verificar can_delete_leads
+      const { data: canDelete } = await supabase.rpc("user_has_org_permission", {
+        p_permission_key: "can_delete_leads",
+      });
+      if (canDelete !== true) {
+        throw new Error("Você não tem permissão para excluir leads");
+      }
+
       const ids = await fetchAllLeadIdsInPipe(organizationId, pipeType);
       if (ids.length === 0) return { deleted: 0 };
 
@@ -406,6 +429,14 @@ export function useDeleteAllLeads() {
     mutationFn: async () => {
       if (!organizationId) {
         throw new Error("Cannot delete leads: No organization context");
+      }
+
+      // PERMISSION: Verificar can_delete_leads
+      const { data: canDelete } = await supabase.rpc("user_has_org_permission", {
+        p_permission_key: "can_delete_leads",
+      });
+      if (canDelete !== true) {
+        throw new Error("Você não tem permissão para excluir leads");
       }
 
       const ids = await fetchAllLeadIdsForOrganization(organizationId);

@@ -1,15 +1,20 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { useCampanhas } from "@/hooks/useCampanhas";
-import { useIsAdmin } from "@/hooks/useUserRole";
+import { useCanPerformAction } from "@/lib/permissions";
+import { useOrganization } from "@/hooks/useOrganization";
+import { trackModuleVisit } from "@/lib/analytics";
 import { CampanhaCard } from "@/components/campanhas/CampanhaCard";
 import { CreateCampanhaModal } from "@/components/campanhas/CreateCampanhaModal";
 import { Plus, Target, Loader2 } from "lucide-react";
 
 export default function Campanhas() {
+  const { organizationId } = useOrganization();
+  useEffect(() => { trackModuleVisit("campanhas", organizationId); }, []);
+
   const [createOpen, setCreateOpen] = useState(false);
   const { data: campanhas, isLoading } = useCampanhas();
-  const { isAdmin } = useIsAdmin();
+  const { allowed: canCreateCampaign } = useCanPerformAction("create_campaign");
 
   const activeCampanhas = campanhas?.filter((c) => c.is_active) || [];
   const inactiveCampanhas = campanhas?.filter((c) => !c.is_active) || [];
@@ -28,7 +33,7 @@ export default function Campanhas() {
           </p>
         </div>
         
-        {isAdmin && (
+        {canCreateCampaign && (
           <Button onClick={() => setCreateOpen(true)}>
             <Plus className="w-4 h-4 mr-2" />
             Nova Campanha
@@ -74,7 +79,7 @@ export default function Campanhas() {
               <p className="text-muted-foreground mb-4">
                 Crie sua primeira campanha para começar a gamificar suas vendas
               </p>
-              {isAdmin && (
+              {canCreateCampaign && (
                 <Button onClick={() => setCreateOpen(true)}>
                   <Plus className="w-4 h-4 mr-2" />
                   Criar Campanha

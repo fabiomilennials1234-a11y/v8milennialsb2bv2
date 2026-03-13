@@ -1,3 +1,4 @@
+import { withSentry } from '../_shared/sentry.ts';
 /**
  * meta-oauth-callback
  *
@@ -9,6 +10,7 @@
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { logRuntime } from "../_shared/logger.ts";
 import {
   exchangeCodeForToken,
   exchangeForLongLivedToken,
@@ -21,7 +23,7 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const APP_URL = Deno.env.get("APP_URL") ?? "http://localhost:5173";
 
-Deno.serve(async (req) => {
+Deno.serve(withSentry('meta-oauth-callback', async (req) => {
   try {
     const url = new URL(req.url);
     const code = url.searchParams.get("code");
@@ -158,6 +160,14 @@ Deno.serve(async (req) => {
       `[meta-oauth-callback] Connected (${connectionType}): ${pagesConnected} pages, ${igAccountsConnected} IG accounts`
     );
 
+    await logRuntime({
+      organizationId: orgId,
+      module: "auth",
+      action: "meta_callback",
+      status: "success",
+      payloadSnapshot: { connectionType, pagesConnected, igAccountsConnected },
+    });
+
     return redirect({
       meta: "connected",
       connectionType,
@@ -166,10 +176,16 @@ Deno.serve(async (req) => {
     });
   } catch (err) {
     console.error("[meta-oauth-callback] Unexpected error:", err);
+    await logRuntime({
+      module: "auth",
+      action: "meta_callback",
+      status: "error",
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
     const fallbackUrl = Deno.env.get("APP_URL") ?? "http://localhost:5173";
     return Response.redirect(
       `${fallbackUrl}/configuracoes?meta=error&reason=erro_interno`,
       302
     );
   }
-});
+}));

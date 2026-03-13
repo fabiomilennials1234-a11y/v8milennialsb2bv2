@@ -9,9 +9,12 @@
  * 2) X-Internal-Api-Key: uso por backend que já validou o admin.
  */
 
+import { withSentry } from '../_shared/sentry.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { requireAuth, AuthError, authErrorResponse } from "../_shared/user-auth.ts";
+import { logRuntime } from "../_shared/logger.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -52,7 +55,7 @@ function jsonResponse(
   });
 }
 
-serve(async (req) => {
+serve(withSentry('create-org-user', async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("", { status: 200, headers: CORS_PREFLIGHT_HEADERS });
   }
@@ -119,85 +122,24 @@ serve(async (req) => {
       );
     }
 
-    // ----- Autenticação: X-Internal-Api-Key (backend) OU JWT + user_creation_key (frontend) -----
-    // Frontend: Authorization Bearer <anon_key> (gateway exige) + body.user_jwt (JWT do usuário; body sempre chega).
-    const apiKey = req.headers.get("X-Internal-Api-Key")?.trim();
-    const userJwt =
-      userJwtFromBody ||
-      req.headers.get("X-User-JWT")?.trim() ||
-      req.headers.get("Authorization")?.replace(/^Bearer\s+/i, "")?.trim() ||
-      "";
-    const isBackendCall = Boolean(INTERNAL_API_KEY && apiKey === INTERNAL_API_KEY);
-    let userIdFromAuth: string | null = null;
-
-    if (!isBackendCall) {
-      if (!userJwt) {
-        const hasUserJwtInBody = !!userJwtFromBody;
-        return jsonResponse(
-          {
-            success: false,
-            error: "Unauthorized",
-            message: "Body user_jwt (JWT do usuário) é obrigatório quando não usar X-Internal-Api-Key",
-            detail: hasUserJwtInBody ? "user_jwt veio vazio no body" : "user_jwt não enviado no body",
-          },
-          401,
-          corsHeaders
-        );
-      }
-      if (!SUPABASE_ANON_KEY) {
-        console.error("[create-org-user] Chave anon não encontrada. Use secret SUPABASE_ANON_KEY (injetada) ou ANON_KEY.");
-        return jsonResponse(
-          { success: false, error: "Server misconfiguration", message: "Configure a secret ANON_KEY com a chave anon do projeto (Project Settings → API)." },
-          500,
-          corsHeaders
-        );
-      }
-      const anonClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-        auth: { persistSession: false },
+    // ----- Autenticação via middleware compartilhado -----
+    let authCtx;
+    try {
+      authCtx = await requireAuth(req, {
+        organizationId,
+        body: body as unknown as Record<string, unknown>,
+        allowInternalKey: true,
       });
-      // Validar JWT: getUser(jwt) retorna o usuário associado ao token
-      const { data: { user }, error: userError } = await anonClient.auth.getUser(userJwt);
-      if (userError) {
-        console.error("[create-org-user] getUser error:", userError.message);
-        return jsonResponse(
-          {
-            success: false,
-            error: "Unauthorized",
-            message: "JWT inválido ou expirado",
-            detail: userError.message,
-          },
-          401,
-          corsHeaders
-        );
-      }
-      if (!user?.id) {
-        return jsonResponse(
-          {
-            success: false,
-            error: "Unauthorized",
-            message: "JWT inválido ou expirado",
-            detail: "getUser retornou sem user.id",
-          },
-          401,
-          corsHeaders
-        );
-      }
-      userIdFromAuth = user.id;
+    } catch (e) {
+      if (e instanceof AuthError) return authErrorResponse(e, corsHeaders);
+      throw e;
     }
 
-    // Se chamador for master, pular user_creation_key e checagem de admin da org
-    let isMaster = false;
-    if (!isBackendCall && userIdFromAuth) {
-      const { data: masterRow } = await supabase
-        .from("master_users")
-        .select("id")
-        .eq("user_id", userIdFromAuth)
-        .eq("is_active", true)
-        .maybeSingle();
-      isMaster = Boolean(masterRow?.id);
-    }
+    const isMaster = authCtx.isMaster;
+    const isInternalCall = authCtx.userId === "internal";
 
-    if (!isBackendCall && !isMaster) {
+    // user_creation_key obrigatório para não-master e não-internal
+    if (!isMaster && !isInternalCall) {
       if (!userCreationKey) {
         return jsonResponse(
           { success: false, error: "Bad request", message: "user_creation_key é obrigatório quando usar JWT" },
@@ -205,7 +147,6 @@ serve(async (req) => {
           corsHeaders
         );
       }
-      // Validar user_creation_key contra a organização no Supabase
       const { data: orgRow, error: orgError } = await supabase
         .from("organizations")
         .select("id, user_creation_key")
@@ -227,41 +168,15 @@ serve(async (req) => {
           corsHeaders
         );
       }
-      // Checar admin via user_roles OU team_members.role (consistente com has_role corrigido)
-      const { data: adminCheckRole } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", userIdFromAuth!)
-        .eq("role", "admin")
-        .maybeSingle();
-      const { data: adminCheckTm } = await supabase
-        .from("team_members")
-        .select("id, role")
-        .eq("user_id", userIdFromAuth!)
-        .eq("organization_id", organizationId)
-        .eq("role", "admin")
-        .eq("is_active", true)
-        .maybeSingle();
-      if (!adminCheckRole && !adminCheckTm) {
-        return jsonResponse(
-          { success: false, error: "Forbidden", message: "Apenas administradores podem criar usuários" },
-          403,
-          corsHeaders
-        );
-      }
-      const { data: tm } = await supabase
-        .from("team_members")
-        .select("id")
-        .eq("user_id", userIdFromAuth!)
-        .eq("organization_id", organizationId)
-        .maybeSingle();
-      if (!tm) {
-        return jsonResponse(
-          { success: false, error: "Forbidden", message: "Você não pertence a esta organização" },
-          403,
-          corsHeaders
-        );
-      }
+    }
+
+    // Admin check: requireAuth já resolveu isAdmin
+    if (!authCtx.isAdmin) {
+      return jsonResponse(
+        { success: false, error: "Forbidden", message: "Apenas administradores podem criar usuários" },
+        403,
+        corsHeaders
+      );
     }
 
     // ----- Criar usuário com senha (email + senha para login) -----
@@ -355,6 +270,16 @@ serve(async (req) => {
         corsHeaders
       );
     }
+    await logRuntime({
+      organizationId,
+      module: "auth",
+      action: "create_user",
+      status: "success",
+      entityType: "user",
+      entityId: newUserId,
+      triggeredBy: authCtx.userId,
+    });
+
     return jsonResponse(
       {
         success: true,
@@ -366,10 +291,16 @@ serve(async (req) => {
     );
   } catch (err) {
     console.error("[create-org-user]", err);
+    await logRuntime({
+      module: "auth",
+      action: "create_user",
+      status: "error",
+      errorMessage: String(err),
+    });
     return jsonResponse(
       { success: false, error: "Internal server error", message: String(err) },
       500,
       { ...CORS_PREFLIGHT_HEADERS, "Content-Type": "application/json" }
     );
   }
-});
+}));

@@ -11,6 +11,7 @@ import {
   groupEntriesByStage,
 } from "@/hooks/useCustomPipelines";
 import { toast } from "sonner";
+import { useCanPerformAction } from "@/lib/permissions";
 
 interface KanbanItem {
   id: string;
@@ -62,6 +63,7 @@ export function CustomPipelineKanban({
   onClickEntry,
 }: CustomPipelineKanbanProps) {
   const moveLead = useMoveLeadInCustomPipe();
+  const { allowed: canMovePipe } = useCanPerformAction("move_pipe_record");
   const { data: workflowCounts = {} } = useCustomPipeWorkflowCounts(pipeline.id);
 
   // Filtrar entries por busca
@@ -118,6 +120,7 @@ export function CustomPipelineKanban({
     <DraggableKanbanBoard<KanbanItem>
       columns={columns}
       onStatusChange={handleStatusChange}
+      disabled={!canMovePipe}
       renderColumnExtra={(col) => {
         const allCounts = workflowCounts["__all__"] || { total: 0, active: 0 };
         const stageCounts = workflowCounts[col.id] || { total: 0, active: 0 };

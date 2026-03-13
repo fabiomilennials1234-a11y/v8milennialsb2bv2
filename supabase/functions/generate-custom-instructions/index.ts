@@ -1,4 +1,6 @@
+import { withSentry } from '../_shared/sentry.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { logRuntime } from "../_shared/logger.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -23,7 +25,7 @@ interface GenerateCustomInstructionsRequest {
   objectiveLimits?: string;
 }
 
-serve(async (req) => {
+serve(withSentry('generate-custom-instructions', async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
@@ -185,6 +187,13 @@ IMPORTANTE: Responda SOMENTE com o JSON abaixo, sem texto antes ou depois, sem b
       parsed = { dos: "", donts: lines || rawContent.slice(0, 800) };
     }
 
+    await logRuntime({
+      module: "copilot",
+      action: "generate_instructions",
+      status: "success",
+      payloadSnapshot: { templateType },
+    });
+
     return new Response(
       JSON.stringify({
         dos: typeof parsed.dos === "string" ? parsed.dos.replace(/\\n/g, "\n").trim() : "",
@@ -194,9 +203,15 @@ IMPORTANTE: Responda SOMENTE com o JSON abaixo, sem texto antes ou depois, sem b
     );
   } catch (error) {
     console.error("Error:", error);
+    await logRuntime({
+      module: "copilot",
+      action: "generate_instructions",
+      status: "error",
+      errorMessage: error instanceof Error ? error.message : "Unknown error",
+    });
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
-});
+}));

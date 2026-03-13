@@ -1,5 +1,7 @@
+import { withSentry } from '../_shared/sentry.ts';
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { logRuntime } from "../_shared/logger.ts";
 
 /**
  * Edge Function: summarize-conversation
@@ -25,7 +27,7 @@ interface ConversationSummary {
   message_count: number;
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withSentry('summarize-conversation', async (req) => {
   const corsHeaders = getCorsHeaders(req.headers.get("origin"));
 
   if (req.method === "OPTIONS") {
@@ -281,17 +283,33 @@ IMPORTANTE: Retorne APENAS o JSON, nada mais.`;
 
     console.log('[summarize-conversation] Summary saved:', savedSummary?.id);
 
+    await logRuntime({
+      organizationId: lead.organization_id,
+      module: "copilot",
+      action: "summarize",
+      status: "success",
+      entityType: "lead",
+      entityId: lead_id,
+      payloadSnapshot: { messageCount: messages.length, sentiment: summaryData.sentiment, leadTemperature: summaryData.lead_temperature },
+    });
+
     return new Response(JSON.stringify(savedSummary), {
       headers: { ...corsHeaders, "Content-Type": "application/json" }
     });
 
   } catch (error) {
     console.error('[summarize-conversation] Error:', error);
-    return new Response(JSON.stringify({ 
+    await logRuntime({
+      module: "copilot",
+      action: "summarize",
+      status: "error",
+      errorMessage: error instanceof Error ? error.message : "Unknown error",
+    });
+    return new Response(JSON.stringify({
       error: error instanceof Error ? error.message : "Unknown error",
     }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" }
     });
   }
-});
+}));

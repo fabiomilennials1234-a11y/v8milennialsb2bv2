@@ -1,4 +1,6 @@
+import { withSentry } from '../_shared/sentry.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { logRuntime } from "../_shared/logger.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -25,7 +27,7 @@ interface FaqItem {
   answer: string;
 }
 
-serve(async (req) => {
+serve(withSentry('generate-faqs', async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
@@ -160,15 +162,28 @@ Os valores devem ser STRINGS simples.`;
       }))
       .slice(0, safeCount);
 
+    await logRuntime({
+      module: "copilot",
+      action: "generate_faqs",
+      status: "success",
+      payloadSnapshot: { companyName: businessContext.companyName, templateType, faqCount: faqs.length },
+    });
+
     return new Response(
       JSON.stringify({ faqs }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
     console.error("Unhandled error:", error);
+    await logRuntime({
+      module: "copilot",
+      action: "generate_faqs",
+      status: "error",
+      errorMessage: error instanceof Error ? error.message : "Unknown error",
+    });
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
-});
+}));

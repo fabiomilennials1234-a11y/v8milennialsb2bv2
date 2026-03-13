@@ -169,9 +169,12 @@ CREATE INDEX IF NOT EXISTS idx_scheduled_msgs_status_scheduled
   ON public.scheduled_campaign_messages(status, scheduled_at)
   WHERE status = 'pending';
 
--- lead_memories: busca por lead + importância (long-term memory)
-CREATE INDEX IF NOT EXISTS idx_lead_memories_lead_importance
-  ON public.lead_memories(lead_id, importance DESC);
+-- lead_memories: busca por lead + importância (criado posteriormente)
+DO $$ BEGIN
+  CREATE INDEX IF NOT EXISTS idx_lead_memories_lead_importance
+    ON public.lead_memories(lead_id, importance DESC);
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
 
 -- conversations: busca por lead_id (muito usada no AgentEngine)
 CREATE INDEX IF NOT EXISTS idx_conversations_lead_id
@@ -181,9 +184,12 @@ CREATE INDEX IF NOT EXISTS idx_conversations_lead_id
 CREATE INDEX IF NOT EXISTS idx_conversations_org_state_lastmsg
   ON public.conversations(organization_id, state, last_message_at DESC);
 
--- copilot_conversation_evaluations: busca por conversation_id
-CREATE INDEX IF NOT EXISTS idx_copilot_evals_conversation
-  ON public.copilot_conversation_evaluations(conversation_id);
+-- copilot_conversation_evaluations: busca por conversation_id (criado posteriormente)
+DO $$ BEGIN
+  CREATE INDEX IF NOT EXISTS idx_copilot_evals_conversation
+    ON public.copilot_conversation_evaluations(conversation_id);
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
 
 -- pipe_confirmacao: org + status (dashboard metrics)
 CREATE INDEX IF NOT EXISTS idx_pipe_confirmacao_org_status

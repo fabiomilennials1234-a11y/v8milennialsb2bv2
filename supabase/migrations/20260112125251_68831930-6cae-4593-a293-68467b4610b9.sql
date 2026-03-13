@@ -46,4 +46,7 @@ FOR DELETE
 USING (auth.uid() = user_id);
 
 -- Enable realtime for daily actions
-ALTER PUBLICATION supabase_realtime ADD TABLE public.acoes_do_dia;
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE public.acoes_do_dia;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;

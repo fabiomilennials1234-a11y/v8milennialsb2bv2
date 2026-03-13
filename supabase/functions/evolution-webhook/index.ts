@@ -1,8 +1,10 @@
+import { withSentry } from '../_shared/sentry.ts';
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { findLeadByPhoneOrEmail, associateMessagesToLead, getOrCreateLead } from "../_shared/lead-service.ts";
 import { smartSplitMessage, type NaturalMessagingConfig } from "../_shared/natural-messaging.ts";
+import { logRuntime } from "../_shared/logger.ts";
 
 /**
  * Evolution API Webhook Receiver
@@ -513,7 +515,7 @@ import {
   rateLimitedResponse 
 } from "../_shared/auth.ts";
 
-Deno.serve(async (req) => {
+Deno.serve(withSentry('evolution-webhook', async (req) => {
   const corsHeaders = withSecurityHeaders(getCorsHeaders(req.headers.get("origin")));
 
   // Handle CORS preflight
@@ -629,18 +631,32 @@ Deno.serve(async (req) => {
         console.log("[Evolution Webhook] Unhandled event:", payload.event);
     }
 
+    await logRuntime({
+      organizationId: whatsappInstance?.organization_id,
+      module: "webhook",
+      action: "evolution_process",
+      status: "success",
+      payloadSnapshot: { event: payload.event, instance: payload.instance },
+    });
+
     return new Response(
       JSON.stringify({ success: true, event: payload.event }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
     console.error("[Evolution Webhook] Error:", error);
+    await logRuntime({
+      module: "webhook",
+      action: "evolution_process",
+      status: "error",
+      errorMessage: String(error),
+    });
     return new Response(
       JSON.stringify({ error: "Internal server error", details: String(error) }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
-});
+}));
 
 /**
  * Processa atualização de conexão

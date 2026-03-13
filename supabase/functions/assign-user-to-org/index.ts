@@ -5,9 +5,11 @@
  * criando team_member e user_role. Apenas Master pode chamar.
  */
 
+import { withSentry } from '../_shared/sentry.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { logRuntime } from "../_shared/logger.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -43,7 +45,7 @@ interface AssignBody {
   full_name?: string;
 }
 
-serve(async (req) => {
+serve(withSentry('assign-user-to-org', async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("", { status: 200, headers: CORS_PREFLIGHT_HEADERS });
   }
@@ -200,6 +202,16 @@ serve(async (req) => {
       }
     }
 
+    await logRuntime({
+      organizationId,
+      module: "permission",
+      action: "assign_user",
+      status: "success",
+      entityType: "user",
+      entityId: userId,
+      triggeredBy: user.id,
+    });
+
     return jsonResponse(
       { success: true, message: "Usuário vinculado à organização com sucesso." },
       200,
@@ -207,10 +219,16 @@ serve(async (req) => {
     );
   } catch (err) {
     console.error("[assign-user-to-org]", err);
+    await logRuntime({
+      module: "permission",
+      action: "assign_user",
+      status: "error",
+      errorMessage: String(err),
+    });
     return jsonResponse(
       { success: false, error: "Internal server error", message: String(err) },
       500,
       { ...CORS_PREFLIGHT_HEADERS, "Content-Type": "application/json" }
     );
   }
-});
+}));

@@ -82,7 +82,10 @@ CREATE POLICY "channel_messages_service_role" ON channel_messages
   WITH CHECK (auth.role() = 'service_role');
 
 -- Realtime
-ALTER PUBLICATION supabase_realtime ADD TABLE channel_messages;
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE channel_messages;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
 
 -- -----------------------------------------------------------------------------
 -- 3. Tabela meta_connections (OAuth do usuario com Meta)

@@ -107,4 +107,7 @@ FOR EACH ROW
 EXECUTE FUNCTION trigger_create_default_stages();
 
 -- Habilitar Realtime
-ALTER PUBLICATION supabase_realtime ADD TABLE pipeline_stages;
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE pipeline_stages;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;

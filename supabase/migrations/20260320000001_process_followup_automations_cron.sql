@@ -42,6 +42,11 @@ BEGIN
       body := '{}'::jsonb
     );
   END IF;
+EXCEPTION
+  WHEN undefined_function THEN
+    NULL;
+  WHEN OTHERS THEN
+    NULL;
 END;
 $$;
 
@@ -57,8 +62,11 @@ EXCEPTION WHEN OTHERS THEN
 END;
 $$;
 
-SELECT cron.schedule(
-  'process-followup-automations',
-  '*/5 * * * *',
-  'SELECT public.invoke_process_followup_automations()'
-);
+DO $$ BEGIN
+  PERFORM cron.schedule(
+    'process-followup-automations',
+    '*/5 * * * *',
+    'SELECT public.invoke_process_followup_automations()'
+  );
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;

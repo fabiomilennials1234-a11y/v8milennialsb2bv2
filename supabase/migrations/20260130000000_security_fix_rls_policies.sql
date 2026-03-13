@@ -83,6 +83,7 @@ CREATE POLICY "leads_select_organization"
   );
 
 -- INSERT: Usuário pode criar leads apenas na sua organização
+DROP POLICY IF EXISTS "leads_insert_organization" ON leads;
 CREATE POLICY "leads_insert_organization"
   ON leads FOR INSERT
   TO authenticated
