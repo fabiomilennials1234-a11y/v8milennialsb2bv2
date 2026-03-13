@@ -15,6 +15,8 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { withSentry } from '../_shared/sentry.ts';
+import { logRuntime } from "../_shared/logger.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
@@ -32,7 +34,7 @@ interface LeadFilter {
   exclude_contacted?: boolean;
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withSentry('semi-automatic-dispatch', async (req) => {
   const corsHeaders = getCorsHeaders(req.headers.get("origin"));
 
   if (req.method === "OPTIONS") {
@@ -110,6 +112,13 @@ Deno.serve(async (req) => {
       }
     }
 
+    await logRuntime({
+      module: "campaign",
+      action: "semi_auto_dispatch",
+      status: "success",
+      payloadSnapshot: { processed: results.length, results },
+    });
+
     return new Response(
       JSON.stringify({
         success: true,
@@ -120,6 +129,14 @@ Deno.serve(async (req) => {
     );
   } catch (error) {
     console.error("[semi-automatic-dispatch] Error:", error);
+
+    await logRuntime({
+      module: "campaign",
+      action: "semi_auto_dispatch",
+      status: "error",
+      errorMessage: error instanceof Error ? error.message : String(error),
+    });
+
     return new Response(
       JSON.stringify({
         error: "Internal server error",
@@ -128,7 +145,7 @@ Deno.serve(async (req) => {
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
-});
+}));
 
 /**
  * Processa um batch de disparo

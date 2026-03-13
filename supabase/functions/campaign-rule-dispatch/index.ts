@@ -17,8 +17,12 @@
  * Também processa timeouts de wait_response vencidos.
  */
 
+import { withSentry } from '../_shared/sentry.ts';
+import { trackEvent } from '../_shared/track.ts';
+import { logRuntime } from "../_shared/logger.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { requireAuth, AuthError } from "../_shared/user-auth.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
@@ -42,7 +46,7 @@ interface ProcessResult {
   error?: string;
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withSentry('campaign-rule-dispatch', async (req) => {
   const origin = req.headers.get("origin") ?? req.headers.get("Origin");
   const corsHeaders = getCorsHeaders(origin);
 
@@ -52,7 +56,7 @@ Deno.serve(async (req) => {
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-  // --- Auth ---
+  // --- Auth: CRON_SECRET ou JWT admin via middleware compartilhado ---
   let authorized = false;
   const cronSecret = req.headers.get("x-cron-secret");
   if (CRON_SECRET && cronSecret === CRON_SECRET) {
@@ -60,20 +64,10 @@ Deno.serve(async (req) => {
   }
   if (!authorized) {
     try {
-      const authHeader = req.headers.get("Authorization");
-      if (authHeader?.startsWith("Bearer ")) {
-        const token = authHeader.slice(7);
-        const { data: { user }, error } = await supabase.auth.getUser(token);
-        if (!error && user) {
-          const { data: members } = await supabase
-            .from("team_members")
-            .select("role")
-            .eq("user_id", user.id);
-          if (members?.some((m: { role: string }) => m.role === "admin")) authorized = true;
-        }
-      }
-    } catch (authErr) {
-      console.warn("[campaign-rule-dispatch] Auth check failed:", authErr);
+      const authCtx = await requireAuth(req);
+      if (authCtx.isAdmin || authCtx.isMaster) authorized = true;
+    } catch (e) {
+      if (!(e instanceof AuthError)) console.warn("[campaign-rule-dispatch] Auth check failed:", e);
     }
   }
   if (!authorized) {
@@ -99,6 +93,17 @@ Deno.serve(async (req) => {
       console.log("[campaign-rule-dispatch] Single campaign mode:", campanhaId);
       const result = await processCampaignQueue(supabase, campanhaId);
       const hasError = !!result.error;
+
+      await logRuntime({
+        module: "campaign",
+        action: "dispatch",
+        status: hasError ? "error" : "success",
+        payloadSnapshot: { campanhaId, processed: result.processed, sent: result.sent, failed: result.failed },
+        errorMessage: result.error,
+        entityType: "campanha",
+        entityId: campanhaId,
+      });
+
       return new Response(
         JSON.stringify({ success: !hasError, ...result }),
         { status: hasError ? 500 : 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -142,6 +147,13 @@ Deno.serve(async (req) => {
         totalProcessed += result.processed;
       }
 
+      await logRuntime({
+        module: "campaign",
+        action: "dispatch",
+        status: "success",
+        payloadSnapshot: { campaigns: uniqueCampaignIds.length, processed: totalProcessed, sent: totalSent, failed: totalFailed },
+      });
+
       return new Response(
         JSON.stringify({
           success: true,
@@ -156,6 +168,14 @@ Deno.serve(async (req) => {
     }
   } catch (error) {
     console.error("[campaign-rule-dispatch] Error:", error);
+
+    await logRuntime({
+      module: "campaign",
+      action: "dispatch",
+      status: "error",
+      errorMessage: error instanceof Error ? error.message : String(error),
+    });
+
     return new Response(
       JSON.stringify({
         error: "Internal server error",
@@ -164,7 +184,7 @@ Deno.serve(async (req) => {
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
-});
+}));
 
 // ============================================================
 // Process queue for a SINGLE campaign (isolated)
@@ -396,6 +416,15 @@ async function processCampaignQueue(
               description: `Mensagem enviada via campanha: ${template.name || "template"}`,
             });
           } catch (_) { /* ignore */ }
+
+          // Track usage event (fire-and-forget)
+          trackEvent({
+            organizationId: campanha.organization_id,
+            eventType: "message_sent",
+            entityType: "lead",
+            entityId: lead.id,
+            metadata: { campanha_id: campanhaId, template_name: template.name, is_audio: isAudio },
+          }).catch(() => {});
 
           sent++;
           console.log(`[campaign-rule-dispatch][${campanhaId}] Sent to:`, lead.name, lead.phone);

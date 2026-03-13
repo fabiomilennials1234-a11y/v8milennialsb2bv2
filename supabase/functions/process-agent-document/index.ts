@@ -1,6 +1,8 @@
+import { withSentry } from '../_shared/sentry.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { generateEmbeddingsBatch, chunkText } from "../_shared/embeddings.ts";
+import { logRuntime } from "../_shared/logger.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -11,7 +13,7 @@ interface ProcessDocumentRequest {
   documentId: string;
 }
 
-serve(async (req) => {
+serve(withSentry('process-agent-document', async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
@@ -202,18 +204,34 @@ REGRAS:
       textContent.substring(0, 60000) // max 60k chars para chunking
     ).catch(e => console.warn("[process-agent-document] Chunk embeddings failed (non-fatal):", e));
 
+    await logRuntime({
+      organizationId: doc.organization_id,
+      module: "agent",
+      action: "process_document",
+      status: "success",
+      entityType: "document",
+      entityId: documentId,
+      payloadSnapshot: { agentId: doc.agent_id, fileName: doc.file_name, mimeType: doc.mime_type },
+    });
+
     return new Response(
       JSON.stringify({ success: true, summary: summary.trim() }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
     console.error("Error:", error);
+    await logRuntime({
+      module: "agent",
+      action: "process_document",
+      status: "error",
+      errorMessage: error instanceof Error ? error.message : "Unknown error",
+    });
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
-});
+}));
 
 /**
  * Item #5 RAG: Divide o conteúdo em chunks, gera embeddings e salva na tabela

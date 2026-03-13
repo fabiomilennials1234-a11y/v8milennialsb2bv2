@@ -1,9 +1,7 @@
 import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { OpenRouterClient } from "./openrouter-client.ts";
-import { sanitizeString } from "../_shared/validation.ts";
-import { promoveShadowLead } from "../_shared/lead-service.ts";
-import { getValidAccessToken, logCalendarOp } from "../_shared/google-calendar-utils.ts";
 import { generateEmbedding } from "../_shared/embeddings.ts";
+import { enqueueAiAction } from "../_shared/ai-queue.ts";
 
 /** Parse custom_instructions (JSON ou string legada) para { dos, donts } */
 function parseCustomInstructions(raw: string): { dos: string; donts: string } {
@@ -212,24 +210,23 @@ export class AgentEngine {
     // Versão limpa sem delimitadores (usada para memória e logs)
     const cleanMessage = messageParts.join(' ');
 
-    // 8. Execute Action (via n8n se necessário)
+    // 8. Enqueue Action (via pending_ai_actions → worker assíncrono)
     let executionResult = null;
     if (actionToExecute) {
       // Injetar lead_id para ações que precisam
-      const needsLeadId = ['SCHEDULE_MEETING', 'TRANSFER_HUMAN', 'UPDATE_LEAD', 'QUALIFY_LEAD', 'DISQUALIFY_LEAD', 'ADVANCE_STAGE', 'UPDATE_QUALIFICATION_SCORE'];
+      const needsLeadId = ['SCHEDULE_MEETING', 'TRANSFER_HUMAN', 'UPDATE_LEAD', 'QUALIFY_LEAD', 'DISQUALIFY_LEAD', 'ADVANCE_STAGE', 'UPDATE_QUALIFICATION_SCORE', 'CONFIRM_MEETING', 'ADVANCE_CONFIRMATION_STAGE', 'CREATE_CUSTOM_FIELD'];
       if (this.currentLeadId && needsLeadId.includes(actionToExecute.action)) {
         actionToExecute = {
           ...actionToExecute,
           params: { ...actionToExecute.params, lead_id: this.currentLeadId },
         };
       }
-      console.log('[AgentEngine] Step 9: Executing action:', actionToExecute.action);
+      console.log('[AgentEngine] Step 9: Enqueuing action:', actionToExecute.action);
       try {
-        executionResult = await this.executeAction(actionToExecute);
-      } catch (actionError) {
-        // Não quebrar o fluxo se a action falhar - a resposta deve ser enviada de qualquer forma
-        console.warn('[AgentEngine] Action execution failed (non-fatal):', actionError);
-        executionResult = { error: String(actionError), status: 'failed' };
+        executionResult = await this.enqueueToolAction(actionToExecute, conversation.id);
+      } catch (enqueueError) {
+        console.warn('[AgentEngine] Action enqueue failed (non-fatal):', enqueueError);
+        executionResult = { error: String(enqueueError), status: 'failed' };
       }
     }
 
@@ -241,13 +238,13 @@ export class AgentEngine {
     console.log('[AgentEngine] Step 11: Logging decision...');
     await this.logDecision(conversation.id, conversation.state, nextState, actionToExecute, capabilities);
 
-    // 11. Update Lead Pipeline Stage (Funil WhatsApp)
-    console.log('[AgentEngine] Step 12: Updating lead pipeline stage...');
-    await this.updateLeadPipelineStage(leadId, conversation.turn_count, actionToExecute);
+    // 11. Enqueue Pipeline Stage Update (Funil WhatsApp)
+    console.log('[AgentEngine] Step 12: Enqueuing pipeline stage update...');
+    await this.enqueuePipelineStageUpdate(leadId, conversation.turn_count, actionToExecute);
 
-    // 12. Execute Automation Actions (if configured)
-    console.log('[AgentEngine] Step 13: Checking automation actions...');
-    await this.executeAutomationActions(leadId, nextState, capabilities, cleanMessage);
+    // 12. Enqueue Automation Actions (if configured)
+    console.log('[AgentEngine] Step 13: Enqueuing automation actions...');
+    await this.enqueueAutomationActions(leadId, nextState, capabilities);
 
     console.log('[AgentEngine] Message processing complete', { parts: messageParts.length });
 
@@ -277,13 +274,13 @@ export class AgentEngine {
   }
 
   /**
-   * Executa ações automáticas baseadas no estado/resultado da conversa
+   * Enfileira ações automáticas baseadas no estado da conversa.
+   * A execução real acontece no worker process-ai-actions.
    */
-  private async executeAutomationActions(
+  private async enqueueAutomationActions(
     leadId: string,
     currentState: string,
     capabilities: any,
-    assistantMessage: string
   ) {
     try {
       const automationActions = capabilities.automation_actions;
@@ -292,11 +289,9 @@ export class AgentEngine {
         return;
       }
 
-      // Determinar qual ação executar baseado no estado
       let actionConfig = null;
-      let actionType = null;
+      let actionType: string | null = null;
 
-      // Mapear estados para ações
       const qualifiedStates = ['QUALIFIED', 'SCHEDULED', 'MEETING_SCHEDULED', 'CLOSED_WON'];
       const disqualifiedStates = ['DISQUALIFIED', 'NOT_INTERESTED', 'NO_FIT', 'CLOSED_LOST'];
       const needHumanStates = ['NEED_HUMAN', 'ESCALATED', 'COMPLEX_ISSUE', 'WAITING_HUMAN'];
@@ -312,234 +307,48 @@ export class AgentEngine {
         actionType = 'need_human';
       }
 
-      // Também verificar se a mensagem indica necessidade de humano
-      const needHumanIndicators = [
-        'falar com humano',
-        'atendente',
-        'pessoa real',
-        'supervisor',
-        'gerente',
-        'reclamação',
-        'problema grave',
-      ];
-      
-      const messageNeedsHuman = needHumanIndicators.some(indicator => 
-        assistantMessage.toLowerCase().includes(indicator)
-      );
-
-      if (messageNeedsHuman && !actionConfig) {
-        actionConfig = automationActions.onNeedHuman;
-        actionType = 'need_human';
-      }
-
-      if (!actionConfig) {
+      if (!actionConfig || !actionType) {
         console.log('[AgentEngine] No automation action matches current state:', currentState);
         return;
       }
 
-      console.log('[AgentEngine] Executing automation action:', actionType);
+      const automationActionType = `automation_${actionType}` as string;
+      const idempotencyKey = `auto_${actionType}_${leadId}_${currentState}`;
 
-      // Promover shadow lead antes de executar ações de automação
-      // Shadow leads precisam ser promovidos para aparecer nos pipes
-      if (actionType === 'qualify' || actionType === 'disqualify') {
-        const moveToPipe = actionConfig.moveToPipe;
-        const destination = moveToPipe && moveToPipe.stage
-          ? { pipe: moveToPipe.pipe, stage: moveToPipe.stage }
-          : { pipe: 'whatsapp', stage: actionConfig.moveToStage || (actionType === 'qualify' ? 'respondeu' : 'esfriou') };
-
-        const promoted = await promoveShadowLead(
-          this.supabase,
-          leadId,
-          this.organizationId,
-          destination
-        );
-
-        if (promoted) {
-          console.log('[AgentEngine] Shadow lead promoted to real lead:', { leadId, destination });
-        }
-      }
-
-      // Executar ações configuradas
-      const updates: Record<string, any> = {};
-
-      // Desligar IA quando transferir para humano
-      if (actionType === 'need_human') {
-        updates.ai_disabled = true;
-        updates.ai_disabled_at = new Date().toISOString();
-      }
-
-      // Mover para etapa
-      if (actionConfig.moveToStage) {
-        updates.pipe_whatsapp = actionConfig.moveToStage;
-      }
-
-      // Atualizar lead
-      if (Object.keys(updates).length > 0) {
-        const { error: updateError } = await this.supabase
-          .from('leads')
-          .update(updates)
-          .eq('id', leadId);
-
-        if (updateError) {
-          console.warn('[AgentEngine] Failed to update lead:', updateError);
-        } else {
-          console.log('[AgentEngine] Lead updated with automation:', updates);
-          if (actionConfig.moveToStage) {
-            await this.upsertPipeWhatsapp(leadId, this.organizationId, actionConfig.moveToStage);
-          }
-        }
-      }
-
-      // Adicionar tags
-      if (actionConfig.addTags && actionConfig.addTags.length > 0) {
-        for (const tagName of actionConfig.addTags) {
-          // Buscar ou criar tag
-          let { data: tag } = await this.supabase
-            .from('tags')
-            .select('id')
-            .eq('name', tagName)
-            .maybeSingle();
-
-          if (!tag) {
-            const { data: newTag } = await this.supabase
-              .from('tags')
-              .insert({ name: tagName, color: '#6366f1' })
-              .select()
-              .single();
-            tag = newTag;
-          }
-
-          if (tag) {
-            await this.supabase
-              .from('lead_tags')
-              .upsert({
-                lead_id: leadId,
-                tag_id: tag.id,
-              }, {
-                onConflict: 'lead_id,tag_id',
-                ignoreDuplicates: true,
-              });
-          }
-        }
-        console.log('[AgentEngine] Tags added:', actionConfig.addTags);
-      }
-
-      // Notificar usuário (se configurado)
-      if (actionConfig.notifyUserId && actionType === 'need_human') {
-        try {
-          const { data: lead } = await this.supabase
-            .from('leads')
-            .select('name, company')
-            .eq('id', leadId)
-            .single();
-
-          const leadLabel = lead?.name
-            ? (lead.company ? `${lead.name} - ${lead.company}` : lead.name)
-            : 'Lead';
-
-          await this.supabase.from('notifications').insert({
-            organization_id: this.organizationId,
-            user_id: actionConfig.notifyUserId,
-            type: 'transfer_to_human',
-            title: 'Lead precisa de atendimento humano',
-            description: `${leadLabel} solicitou transferência para um especialista.`,
-            lead_id: leadId,
-            link: '/pipe-whatsapp',
-          });
-          console.log('[AgentEngine] Notification created for user:', actionConfig.notifyUserId);
-        } catch (notifErr) {
-          console.warn('[AgentEngine] Failed to create notification:', notifErr);
-        }
-      }
-
-      // Mover para outro pipe (Confirmação, Propostas ou Carteira)
-      const moveToPipe = actionConfig.moveToPipe;
-      if (moveToPipe && moveToPipe.stage) {
-        if (moveToPipe.pipe === 'confirmacao' || moveToPipe.pipe === 'propostas') {
-          await this.executeMoveToPipe(leadId, moveToPipe.pipe, moveToPipe.stage);
-        } else if (moveToPipe.pipe === 'upsell_base') {
-          await this.supabase.from('upsell_clients').update({ tipo_cliente_tempo: moveToPipe.stage }).eq('lead_id', leadId);
-        } else if (moveToPipe.pipe === 'upsell_gestao') {
-          await this.supabase.from('upsell_clients').update({ gestao_stage: moveToPipe.stage }).eq('lead_id', leadId);
-        }
-      }
-
-      console.log('[AgentEngine] Automation actions executed for:', actionType);
+      console.log('[AgentEngine] Enqueuing automation action:', automationActionType);
+      await enqueueAiAction(this.supabase, {
+        organizationId: this.organizationId,
+        leadId,
+        actionType: automationActionType,
+        payload: {
+          action_type: actionType,
+          action_config: actionConfig,
+          current_state: currentState,
+        },
+        idempotencyKey,
+      });
 
     } catch (error) {
-      console.error('[AgentEngine] Error executing automation actions:', error);
+      console.error('[AgentEngine] Error enqueuing automation actions:', error);
     }
   }
 
   /**
-   * Move lead para pipe Confirmação ou Propostas na etapa indicada
+   * Enfileira atualização de estágio do pipeline WhatsApp.
+   * Calcula a transição (novo→abordado, abordado→respondeu, etc.)
+   * e enfileira para o worker executar.
    */
-  private async executeMoveToPipe(leadId: string, pipe: 'confirmacao' | 'propostas', stage: string) {
-    try {
-      if (pipe === 'confirmacao') {
-        const { data: existing } = await this.supabase
-          .from('pipe_confirmacao')
-          .select('id')
-          .eq('lead_id', leadId)
-          .maybeSingle();
-        if (existing) {
-          await this.supabase
-            .from('pipe_confirmacao')
-            .update({ status: stage })
-            .eq('id', existing.id);
-        } else {
-          await this.supabase
-            .from('pipe_confirmacao')
-            .insert({
-              lead_id: leadId,
-              organization_id: this.organizationId,
-              status: stage,
-            });
-        }
-        console.log('[AgentEngine] Lead moved to pipe_confirmacao:', stage);
-      } else {
-        const { data: existing } = await this.supabase
-          .from('pipe_propostas')
-          .select('id')
-          .eq('lead_id', leadId)
-          .maybeSingle();
-        if (existing) {
-          await this.supabase
-            .from('pipe_propostas')
-            .update({ status: stage })
-            .eq('id', existing.id);
-        } else {
-          await this.supabase
-            .from('pipe_propostas')
-            .insert({
-              lead_id: leadId,
-              organization_id: this.organizationId,
-              status: stage,
-            });
-        }
-        console.log('[AgentEngine] Lead moved to pipe_propostas:', stage);
-      }
-      // Remover do pipe WhatsApp para não aparecer em dois funis
-      await this.supabase
-        .from('pipe_whatsapp')
-        .delete()
-        .eq('lead_id', leadId);
-    } catch (e) {
-      console.warn('[AgentEngine] Failed to execute moveToPipe:', e);
-    }
-  }
-
-  /**
-   * Atualiza o estágio do lead no funil WhatsApp
-   * novo → abordado (agente respondeu) → respondeu (lead respondeu de volta) → agendado
-   */
-  private async updateLeadPipelineStage(
+  private async enqueuePipelineStageUpdate(
     leadId: string,
     turnCount: number,
     actionToExecute: any
   ) {
     try {
-      // Buscar estado atual do lead
+      // advance_stage será enfileirado como tool call — não duplicar
+      if (actionToExecute?.action === 'ADVANCE_STAGE') {
+        return;
+      }
+
       const { data: lead, error: fetchError } = await this.supabase
         .from('leads')
         .select('pipe_whatsapp')
@@ -554,82 +363,31 @@ export class AgentEngine {
       const currentStage = lead?.pipe_whatsapp;
       let newStage: string | null = null;
 
-      // advance_stage já atualizou o pipeline em executeAction - não aplicar regras fixas
-      if (actionToExecute?.action === 'ADVANCE_STAGE') {
-        return;
-      }
-
-      // Regras implícitas só se aplicam a etapas padrão do whatsapp
-      // Etapas customizadas não são movidas automaticamente
       const standardWhatsappStages = ['novo', 'abordado', 'respondeu', 'esfriou', 'agendado'];
       const isStandardStage = standardWhatsappStages.includes(currentStage || '');
 
-      // Se agendou reunião, vai direto para 'agendado'
       if (actionToExecute?.action === 'SCHEDULE_MEETING') {
         newStage = 'agendado';
-      }
-      // Regras implícitas apenas para etapas padrão
-      else if (isStandardStage) {
-        // Se é o primeiro turno (agente respondendo pela primeira vez)
+      } else if (isStandardStage) {
         if (turnCount <= 1 && currentStage === 'novo') {
           newStage = 'abordado';
-        }
-        // Se já foi abordado e lead respondeu novamente
-        else if (currentStage === 'abordado') {
+        } else if (currentStage === 'abordado') {
           newStage = 'respondeu';
         }
       }
 
-      // Atualizar se houver mudança de estágio
       if (newStage && newStage !== currentStage) {
-        const { error: updateError } = await this.supabase
-          .from('leads')
-          .update({ pipe_whatsapp: newStage })
-          .eq('id', leadId);
-
-        if (updateError) {
-          console.warn('[AgentEngine] Error updating lead pipeline stage:', updateError.message);
-        } else {
-          console.log('[AgentEngine] Lead pipeline stage updated:', {
-            leadId,
-            from: currentStage,
-            to: newStage,
-          });
-          await this.upsertPipeWhatsapp(leadId, this.organizationId, newStage);
-        }
+        console.log('[AgentEngine] Enqueuing pipeline stage update:', { leadId, from: currentStage, to: newStage });
+        await enqueueAiAction(this.supabase, {
+          organizationId: this.organizationId,
+          leadId,
+          actionType: 'update_pipeline_stage',
+          payload: { lead_id: leadId, new_stage: newStage, previous_stage: currentStage },
+          idempotencyKey: `pipeline_${leadId}_${newStage}`,
+        });
       }
     } catch (e) {
-      console.warn('[AgentEngine] Failed to update lead pipeline stage:', e);
-    }
-  }
-
-  /**
-   * Sincroniza o estágio do lead na tabela pipe_whatsapp para o Kanban refletir
-   */
-  private async upsertPipeWhatsapp(leadId: string, organizationId: string, status: string) {
-    try {
-      const { data: existing } = await this.supabase
-        .from('pipe_whatsapp')
-        .select('id')
-        .eq('lead_id', leadId)
-        .maybeSingle();
-
-      if (existing) {
-        await this.supabase
-          .from('pipe_whatsapp')
-          .update({ status })
-          .eq('id', existing.id);
-      } else {
-        await this.supabase
-          .from('pipe_whatsapp')
-          .insert({
-            lead_id: leadId,
-            organization_id: organizationId,
-            status,
-          });
-      }
-    } catch (e) {
-      console.warn('[AgentEngine] Failed to upsert pipe_whatsapp:', e);
+      console.warn('[AgentEngine] Failed to enqueue pipeline stage update:', e);
     }
   }
 
@@ -2604,565 +2362,96 @@ Regras:
   }
 
   /**
-   * Execute Action internamente (sem webhook) - toda lógica roda dentro do sistema
+   * Enfileira uma tool call para execução assíncrona via worker.
+   * Mapeia o nome da action (UPPER_CASE) para action_type (snake_case)
+   * e gera idempotency_key baseado nos parâmetros.
    */
-  private async executeAction(action: any) {
-    const tenantId = action.tenant_id || this.organizationId;
+  private async enqueueToolAction(action: any, conversationId: string) {
     const params = action.params || {};
 
-    try {
-      switch (action.action) {
-        case 'SCHEDULE_MEETING':
-          return await this.executeScheduleMeeting(params, tenantId);
-        case 'CREATE_LEAD':
-          return await this.executeCreateLead(params, tenantId);
-        case 'UPDATE_CRM':
-          return await this.executeUpdateCrm(params, tenantId);
-        case 'UPDATE_LEAD':
-          return await this.executeUpdateLead(params, tenantId);
-        case 'TRANSFER_HUMAN':
-          return await this.executeTransferHuman(params, tenantId);
-        case 'UPDATE_QUALIFICATION_SCORE': {
-          // Item #14: Score progressivo de qualificação
-          const leadId = params.lead_id || this.currentLeadId;
-          const score = Math.min(100, Math.max(0, Number(params.score) || 0));
-          if (leadId) {
-            await this.supabase
-              .from('leads')
-              .update({ qualification_score: score })
-              .eq('id', leadId);
-            console.log(`[AgentEngine] Qualification score updated: ${score} for lead ${leadId} | reason: ${params.reason || 'N/A'}`);
-          }
-          return { success: true, score };
-        }
-        case 'QUALIFY_LEAD':
-        case 'DISQUALIFY_LEAD':
-          // A qualificação real acontece via state machine:
-          // processLLMResponse seta nextState = 'QUALIFIED'/'DISQUALIFIED'
-          // executeAutomationActions dispara onQualify/onDisqualify com base no state
-          console.log(`[AgentEngine] ${action.action} - será processada via state machine em executeAutomationActions`);
-          return { success: true, message: `Ação ${action.action} registrada - automação será executada via state machine` };
-        case 'ADVANCE_STAGE':
-          return await this.executeAdvanceStage(params, tenantId);
-        case 'CONFIRM_MEETING':
-          return await this.executeConfirmMeeting(params, tenantId);
-        case 'ADVANCE_CONFIRMATION_STAGE':
-          return await this.executeAdvanceConfirmationStage(params, tenantId);
-        case 'CREATE_CUSTOM_FIELD':
-          return await this.executeCreateCustomField(params, tenantId);
-        default:
-          console.warn('[AgentEngine] Action não suportada:', action.action);
-          return { success: false, error: `Ação não suportada: ${action.action}` };
-      }
-    } catch (err) {
-      console.error('[AgentEngine] executeAction error:', err);
-      return { success: false, error: String(err), status: 'error' };
-    }
-  }
-
-  private async executeScheduleMeeting(params: any, tenantId: string) {
-    const { lead_id, preferred_date, preferred_time } = params;
-    if (!lead_id || !preferred_date) {
-      return { success: false, error: 'lead_id e preferred_date são obrigatórios' };
-    }
-
-    // 1. Atualizar lead e pipe_confirmacao no banco (sempre executa)
-    await this.supabase.from('leads').update({ compromisso_date: preferred_date }).eq('id', lead_id);
-
-    const { data: existing } = await this.supabase
-      .from('pipe_confirmacao')
-      .select('id')
-      .eq('lead_id', lead_id)
-      .maybeSingle();
-
-    let pipeId: string | null = existing?.id ?? null;
-
-    if (existing) {
-      await this.supabase.from('pipe_confirmacao').update({
-        status: 'reuniao_marcada',
-        meeting_date: preferred_date,
-      }).eq('id', existing.id);
-    } else {
-      const { data: inserted } = await this.supabase.from('pipe_confirmacao').insert({
-        lead_id,
-        organization_id: tenantId,
-        status: 'reuniao_marcada',
-        meeting_date: preferred_date,
-      }).select('id').single();
-      pipeId = inserted?.id ?? null;
-    }
-
-    // 2. Tentar criar evento no Google Calendar (graceful degradation)
-    let meetLink: string | null = null;
-    try {
-      // Buscar dados do lead (nome, email, sdr_id)
-      const { data: lead } = await this.supabase
-        .from('leads')
-        .select('name, email, sdr_id')
-        .eq('id', lead_id)
-        .maybeSingle();
-
-      const responsibleUserId = lead?.sdr_id ?? null;
-
-      if (responsibleUserId) {
-        const tokenData = await getValidAccessToken(responsibleUserId, this.supabase);
-
-        if (tokenData) {
-          // Montar datetime ISO a partir de preferred_date + preferred_time
-          const time = preferred_time || '09:00';
-          const startIso = `${preferred_date}T${time}:00`;
-          // Duração padrão: 1 hora
-          const [h, m] = time.split(':').map(Number);
-          const endHour = String(h + 1).padStart(2, '0');
-          const endIso = `${preferred_date}T${endHour}:${String(m).padStart(2, '0')}:00`;
-          const timezone = 'America/Sao_Paulo';
-
-          const googleEvent: Record<string, unknown> = {
-            summary: `Reunião com ${lead?.name || 'Lead'}`,
-            start: { dateTime: startIso, timeZone: timezone },
-            end: { dateTime: endIso, timeZone: timezone },
-            attendees: lead?.email ? [{ email: lead.email }] : [],
-            conferenceData: {
-              createRequest: {
-                requestId: crypto.randomUUID(),
-                conferenceSolutionKey: { type: 'hangoutsMeet' },
-              },
-            },
-            extendedProperties: {
-              private: { lead_id, system: 'v8milennialsb2b' },
-            },
-          };
-
-          const googleRes = await fetch(
-            'https://www.googleapis.com/calendar/v3/calendars/primary/events?conferenceDataVersion=1',
-            {
-              method: 'POST',
-              headers: {
-                Authorization: `Bearer ${tokenData.accessToken}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify(googleEvent),
-            }
-          );
-
-          if (googleRes.ok) {
-            const createdEvent = await googleRes.json();
-            meetLink =
-              createdEvent.conferenceData?.entryPoints?.find(
-                (ep: Record<string, string>) => ep.entryPointType === 'video'
-              )?.uri ??
-              createdEvent.hangoutLink ??
-              null;
-
-            // Salvar meet_link no pipe_confirmacao
-            if (pipeId && meetLink) {
-              await this.supabase
-                .from('pipe_confirmacao')
-                .update({ meet_link: meetLink })
-                .eq('id', pipeId);
-            }
-
-            // Auditoria
-            await logCalendarOp(this.supabase, {
-              userId: responsibleUserId,
-              operation: 'create_event',
-              status: 'success',
-              googleEventId: createdEvent.id,
-              localReferenceId: lead_id,
-              localReferenceType: 'lead',
-              requestPayload: { preferred_date, preferred_time, lead_id },
-              responsePayload: { id: createdEvent.id, meet_link: meetLink },
-              initiatedBy: 'ai_agent',
-            });
-
-            console.log('[AgentEngine] Google Calendar event created:', createdEvent.id, 'meet_link:', meetLink);
-          } else {
-            const errText = await googleRes.text();
-            console.warn('[AgentEngine] Google Calendar event creation failed:', errText);
-            await logCalendarOp(this.supabase, {
-              userId: responsibleUserId,
-              operation: 'create_event',
-              status: 'failed',
-              localReferenceId: lead_id,
-              localReferenceType: 'lead',
-              errorMessage: errText,
-              requestPayload: { preferred_date, preferred_time, lead_id },
-              initiatedBy: 'ai_agent',
-            });
-          }
-        }
-      }
-    } catch (calendarErr) {
-      // Não bloqueia o agendamento — apenas loga
-      console.warn('[AgentEngine] Google Calendar bridge error (non-fatal):', calendarErr);
-    }
-
-    const result: Record<string, unknown> = {
-      success: true,
-      message: meetLink
-        ? `Reunião agendada e evento criado no Google Calendar`
-        : 'Reunião agendada',
-      meeting_date: preferred_date,
+    // Mapeamento de ação para action_type na fila
+    const ACTION_MAP: Record<string, string> = {
+      'SCHEDULE_MEETING': 'schedule_meeting',
+      'CREATE_LEAD': 'create_lead',
+      'UPDATE_CRM': 'update_crm',
+      'UPDATE_LEAD': 'update_lead',
+      'TRANSFER_HUMAN': 'transfer_to_human',
+      'UPDATE_QUALIFICATION_SCORE': 'update_qualification_score',
+      'ADVANCE_STAGE': 'advance_stage',
+      'CONFIRM_MEETING': 'confirm_meeting',
+      'ADVANCE_CONFIRMATION_STAGE': 'advance_confirmation_stage',
+      'CREATE_CUSTOM_FIELD': 'create_custom_field',
     };
-    if (meetLink) result.meet_link = meetLink;
 
-    return result;
+    const actionType = ACTION_MAP[action.action];
+
+    // QUALIFY/DISQUALIFY: processados via state machine + enqueueAutomationActions
+    if (action.action === 'QUALIFY_LEAD' || action.action === 'DISQUALIFY_LEAD') {
+      console.log(`[AgentEngine] ${action.action} - será processada via state machine em enqueueAutomationActions`);
+      return { success: true, queued: false, message: `${action.action} delegada para automação` };
+    }
+
+    // UPDATE_CRM: placeholder, não enfileira
+    if (action.action === 'UPDATE_CRM') {
+      return { success: true, message: 'UPDATE_CRM - integração externa (placeholder)' };
+    }
+
+    if (!actionType) {
+      console.warn('[AgentEngine] Action não suportada para enqueue:', action.action);
+      return { success: false, error: `Ação não suportada: ${action.action}` };
+    }
+
+    // Injetar current_lead_id para create_custom_field
+    if (action.action === 'CREATE_CUSTOM_FIELD' && this.currentLeadId) {
+      params.current_lead_id = this.currentLeadId;
+    }
+
+    // Gerar idempotency_key
+    const leadId = params.lead_id || this.currentLeadId;
+    const idempotencyKey = this.buildIdempotencyKey(actionType, leadId, params);
+
+    const result = await enqueueAiAction(this.supabase, {
+      organizationId: this.organizationId,
+      leadId: leadId || undefined,
+      conversationId: conversationId.startsWith('temp_') ? undefined : conversationId,
+      actionType,
+      payload: params,
+      idempotencyKey,
+    });
+
+    console.log(`[AgentEngine] Action ${action.action} enqueued:`, result);
+    return { success: true, queued: result.queued, action_id: result.id };
   }
 
-  private async executeCreateLead(params: any, tenantId: string) {
-    const { name, email, phone, company } = params;
-    if (!name || !tenantId) {
-      return { success: false, error: 'name e tenant_id são obrigatórios' };
-    }
-
-    const { data: lead, error } = await this.supabase
-      .from('leads')
-      .insert({ name, email, phone, company, origin: 'web', organization_id: tenantId })
-      .select()
-      .single();
-
-    if (error) return { success: false, error: error.message };
-    return { success: true, message: 'Lead criado', lead_id: lead.id };
-  }
-
-  private async executeUpdateCrm(_params: any, _tenantId: string) {
-    return { success: true, message: 'UPDATE_CRM - integração externa (placeholder interno)' };
-  }
-
-  private async executeUpdateLead(params: any, tenantId: string) {
-    const { lead_id, updates } = params;
-    if (!lead_id || !updates || typeof updates !== 'object' || Object.keys(updates).length === 0) {
-      return { success: false, error: 'lead_id e updates são obrigatórios' };
-    }
-
-    const UPDATE_LEAD_STANDARD_FIELDS = ['company', 'segment', 'urgency', 'faturamento', 'rating'];
-
-    const { data: lead } = await this.supabase.from('leads').select('id, notes').eq('id', lead_id).eq('organization_id', tenantId).maybeSingle();
-    if (!lead) return { success: false, error: 'Lead não encontrado' };
-
-    const { data: customFields } = await this.supabase.from('lead_custom_fields').select('id, field_name').eq('organization_id', tenantId);
-    const customFieldMap = new Map((customFields || []).map((f: { id: string; field_name: string }) => [f.field_name, f.id]));
-
-    const leadUpdates: Record<string, unknown> = {};
-    const customFieldUpdates: { field_id: string; value: string }[] = [];
-    const notesToAppend: string[] = [];
-    const now = new Date();
-    const datePrefix = `[IA - ${now.getDate().toString().padStart(2, '0')}/${(now.getMonth() + 1).toString().padStart(2, '0')}/${now.getFullYear()} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}]`;
-
-    for (const [key, rawValue] of Object.entries(updates)) {
-      if (rawValue == null) continue;
-      const strVal = String(rawValue).trim();
-      if (strVal === '') continue;
-      const sanitized = sanitizeString(strVal, 2000) ?? '';
-
-      if (UPDATE_LEAD_STANDARD_FIELDS.includes(key)) {
-        if (key === 'rating') {
-          const num = parseInt(sanitized, 10);
-          if (!isNaN(num) && num >= 0 && num <= 10) leadUpdates[key] = num;
-        } else {
-          leadUpdates[key] = sanitized;
-        }
-      } else if (customFieldMap.has(key)) {
-        customFieldUpdates.push({ field_id: customFieldMap.get(key)!, value: sanitized });
-      } else {
-        notesToAppend.push(`${datePrefix} ${key}: ${sanitized}`);
-      }
-    }
-
-    if (Object.keys(leadUpdates).length > 0) {
-      await this.supabase.from('leads').update(leadUpdates).eq('id', lead_id).eq('organization_id', tenantId);
-    }
-    if (notesToAppend.length > 0) {
-      const newNotes = notesToAppend.join('\n');
-      const updatedNotes = lead.notes ? `${lead.notes}\n\n${newNotes}` : newNotes;
-      await this.supabase.from('leads').update({ notes: sanitizeString(updatedNotes, 5000) ?? updatedNotes }).eq('id', lead_id).eq('organization_id', tenantId);
-    }
-    for (const cf of customFieldUpdates) {
-      await this.supabase.from('lead_custom_field_values').upsert(
-        { lead_id, field_id: cf.field_id, value: cf.value, updated_at: new Date().toISOString() },
-        { onConflict: 'lead_id,field_id' }
-      );
-    }
-
-    return { success: true, message: 'Lead atualizado', lead_id };
-  }
-
-  private async executeCreateCustomField(params: any, tenantId: string) {
-    const { field_name, field_type, field_options, initial_value } = params;
-
-    if (!field_name || !field_type) {
-      return { success: false, error: 'field_name e field_type sao obrigatorios' };
-    }
-
-    const validTypes = ['text', 'number', 'date', 'select', 'boolean'];
-    if (!validTypes.includes(field_type)) {
-      return { success: false, error: `field_type invalido. Use: ${validTypes.join(', ')}` };
-    }
-
-    if (field_type === 'select' && (!field_options || !Array.isArray(field_options) || field_options.length === 0)) {
-      return { success: false, error: 'field_options obrigatorio para tipo select' };
-    }
-
-    // Verificar se campo ja existe na org
-    const { data: existing } = await this.supabase
-      .from('lead_custom_fields')
-      .select('id')
-      .eq('organization_id', tenantId)
-      .eq('field_name', field_name)
-      .maybeSingle();
-
-    let fieldId: string;
-
-    if (existing) {
-      // Campo ja existe, usar o ID existente
-      fieldId = existing.id;
-      console.log(`[AgentEngine] Custom field "${field_name}" ja existe (id: ${fieldId}), reutilizando`);
-    } else {
-      // Criar novo campo
-      const { data: maxOrder } = await this.supabase
-        .from('lead_custom_fields')
-        .select('display_order')
-        .eq('organization_id', tenantId)
-        .order('display_order', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      const nextOrder = (maxOrder?.display_order ?? 0) + 1;
-
-      const { data: newField, error: createError } = await this.supabase
-        .from('lead_custom_fields')
-        .insert({
-          organization_id: tenantId,
-          field_name,
-          field_type,
-          field_options: field_type === 'select' ? field_options : null,
-          is_required: false,
-          display_order: nextOrder,
-        })
-        .select('id')
-        .single();
-
-      if (createError) {
-        console.error('[AgentEngine] Erro ao criar campo personalizado:', createError);
-        return { success: false, error: `Erro ao criar campo: ${createError.message}` };
-      }
-
-      fieldId = newField.id;
-      console.log(`[AgentEngine] Novo campo personalizado criado: "${field_name}" (id: ${fieldId}, type: ${field_type})`);
-    }
-
-    // Se tem initial_value e tem lead atual, preencher o valor
-    if (initial_value && this.currentLeadId) {
-      await this.supabase
-        .from('lead_custom_field_values')
-        .upsert(
-          {
-            lead_id: this.currentLeadId,
-            field_id: fieldId,
-            value: String(initial_value).trim(),
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: 'lead_id,field_id' }
-        );
-      console.log(`[AgentEngine] Campo "${field_name}" preenchido com "${initial_value}" para lead ${this.currentLeadId}`);
-    }
-
-    return {
-      success: true,
-      message: existing
-        ? `Campo "${field_name}" ja existia e foi reutilizado${initial_value ? ` (valor preenchido: ${initial_value})` : ''}`
-        : `Campo "${field_name}" criado com sucesso${initial_value ? ` (valor preenchido: ${initial_value})` : ''}`,
-      field_id: fieldId,
-      field_name,
-    };
-  }
-
-  private async executeTransferHuman(params: any, _tenantId: string) {
-    const { lead_id } = params;
-    if (!lead_id) return { success: false, error: 'lead_id é obrigatório' };
-
-    await this.supabase.from('leads').update({
-      ai_disabled: true,
-      ai_disabled_at: new Date().toISOString(),
-    }).eq('id', lead_id);
-
-    const { data: conversation } = await this.supabase.from('conversations').select('id').eq('lead_id', lead_id).maybeSingle();
-    if (conversation) {
-      await this.supabase.from('conversations').update({ state: 'WAITING_HUMAN' }).eq('id', conversation.id);
-    }
-
-    return { success: true, message: 'Conversa transferida para humano' };
-  }
-
-  private async executeAdvanceStage(params: any, tenantId: string) {
-    const { lead_id, target_stage, target_pipe } = params;
-    if (!lead_id || !target_stage) {
-      return { success: false, error: 'lead_id e target_stage são obrigatórios' };
-    }
-
-    const pipe = target_pipe || 'whatsapp';
-    const normalizedStage = String(target_stage).trim().toLowerCase();
-
-    // Validar etapa contra pipeline_stages
-    const { data: stages } = await this.supabase
-      .from('pipeline_stages')
-      .select('stage_key')
-      .eq('organization_id', tenantId)
-      .eq('pipeline_type', pipe)
-      .eq('is_active', true);
-
-    const validKeys = (stages || []).map((s: { stage_key: string }) => s.stage_key);
-    // Fallback para whatsapp default stages
-    const stageKeys = validKeys.length > 0 ? validKeys : (pipe === 'whatsapp' ? ['novo', 'abordado', 'respondeu', 'esfriou', 'agendado'] : []);
-
-    if (stageKeys.length > 0 && !stageKeys.some((k: string) => k.toLowerCase() === normalizedStage)) {
-      return { success: false, error: `Etapa inválida para funil ${pipe}. Use um de: ${stageKeys.join(', ')}` };
-    }
-
-    const finalStage = stageKeys.find((k: string) => k.toLowerCase() === normalizedStage) || normalizedStage;
-
-    // Executar a movimentação no funil correto
-    switch (pipe) {
-      case 'whatsapp':
-        await this.supabase.from('leads').update({ pipe_whatsapp: finalStage }).eq('id', lead_id);
-        await this.upsertPipeWhatsapp(lead_id, tenantId, finalStage);
-        break;
-      case 'confirmacao':
-      case 'propostas':
-        await this.executeMoveToPipe(lead_id, pipe, finalStage);
-        break;
-      case 'upsell_base':
-        await this.supabase
-          .from('upsell_clients')
-          .update({ tipo_cliente_tempo: finalStage })
-          .eq('lead_id', lead_id);
-        break;
-      case 'upsell_gestao':
-        await this.supabase
-          .from('upsell_clients')
-          .update({ gestao_stage: finalStage })
-          .eq('lead_id', lead_id);
-        break;
-      case 'campanha': {
-        // Para campanhas, buscar o stage_id e atualizar o campanha_leads
-        const { data: campStage } = await this.supabase
-          .from('campanha_stages')
-          .select('id')
-          .ilike('name', finalStage)
-          .limit(1)
-          .maybeSingle();
-        if (campStage) {
-          await this.supabase
-            .from('campanha_leads')
-            .update({ stage_id: campStage.id })
-            .eq('lead_id', lead_id);
-        }
-        break;
-      }
+  /**
+   * Gera chave de idempotência baseada no tipo de ação e parâmetros.
+   */
+  private buildIdempotencyKey(actionType: string, leadId: string | null, params: Record<string, unknown>): string {
+    const ts = Math.floor(Date.now() / 60_000); // granularidade de 1 minuto
+    switch (actionType) {
+      case 'schedule_meeting':
+        return `schedule_meeting_${leadId}_${params.preferred_date}`;
+      case 'transfer_to_human':
+        return `transfer_human_${leadId}`;
+      case 'advance_stage':
+        return `advance_stage_${leadId}_${params.target_pipe || 'whatsapp'}_${params.target_stage}`;
+      case 'confirm_meeting':
+        return `confirm_meeting_${leadId}_${params.confirmation_type || 'pre_confirmed'}`;
+      case 'advance_confirmation_stage':
+        return `advance_confirmation_${leadId}_${params.target_stage}`;
+      case 'create_custom_field':
+        return `create_field_${this.organizationId}_${params.field_name}`;
+      case 'update_qualification_score':
+        return `update_score_${leadId}_${params.score}_${ts}`;
       default:
-        return { success: false, error: `Funil não suportado: ${pipe}` };
+        // update_lead, create_lead: usar timestamp por minuto para agrupar
+        return `${actionType}_${leadId || this.organizationId}_${ts}`;
     }
-
-    const pipeLabels: Record<string, string> = {
-      whatsapp: 'WhatsApp', confirmacao: 'Confirmação', propostas: 'Propostas',
-      upsell_base: 'Carteira Base', upsell_gestao: 'Carteira Gestão', campanha: 'Campanhas',
-    };
-    return { success: true, message: `Lead movido para ${finalStage} no funil ${pipeLabels[pipe] || pipe}`, target_stage: finalStage, target_pipe: pipe };
   }
 
-  /**
-   * Confirma presença do lead na reunião
-   * Atualiza is_confirmed no pipe_confirmacao e opcionalmente move para próxima etapa
-   */
-  private async executeConfirmMeeting(params: any, tenantId: string) {
-    const lead_id = params.lead_id || this.currentLeadId;
-    const confirmationType = params.confirmation_type || 'pre_confirmed';
-
-    if (!lead_id) {
-      return { success: false, error: 'lead_id é obrigatório' };
-    }
-
-    const { data: existing } = await this.supabase
-      .from('pipe_confirmacao')
-      .select('id, status')
-      .eq('lead_id', lead_id)
-      .maybeSingle();
-
-    if (!existing) {
-      return { success: false, error: 'Lead não encontrado no pipe de confirmação' };
-    }
-
-    // Marcar como confirmado
-    await this.supabase
-      .from('pipe_confirmacao')
-      .update({ is_confirmed: true })
-      .eq('id', existing.id);
-
-    // Se for confirmação no dia, mover para etapa adequada
-    if (confirmationType === 'confirmed') {
-      await this.supabase
-        .from('pipe_confirmacao')
-        .update({ status: 'confirmacao_no_dia' })
-        .eq('id', existing.id);
-
-      console.log('[AgentEngine] Reunião confirmada no dia para lead:', lead_id);
-      return { success: true, message: 'Reunião confirmada no dia', confirmation_type: 'confirmed' };
-    }
-
-    console.log('[AgentEngine] Reunião pré-confirmada para lead:', lead_id);
-    return { success: true, message: 'Reunião pré-confirmada', confirmation_type: 'pre_confirmed' };
-  }
-
-  /**
-   * Move o lead entre etapas do pipe de confirmação
-   */
-  private async executeAdvanceConfirmationStage(params: any, tenantId: string) {
-    const lead_id = params.lead_id || this.currentLeadId;
-    const targetStage = params.target_stage;
-
-    if (!lead_id || !targetStage) {
-      return { success: false, error: 'lead_id e target_stage são obrigatórios' };
-    }
-
-    // Buscar etapas válidas dinamicamente do DB (suporta etapas customizadas)
-    const { data: stages } = await this.supabase
-      .from('pipeline_stages')
-      .select('stage_key')
-      .eq('organization_id', tenantId)
-      .eq('pipeline_type', 'confirmacao')
-      .eq('is_active', true);
-
-    const validKeys = (stages || []).map((s: { stage_key: string }) => s.stage_key);
-    const stageKeys = validKeys.length > 0 ? validKeys : [
-      'reuniao_marcada', 'confirmar_d5', 'confirmar_d3', 'confirmar_d1',
-      'confirmacao_no_dia', 'remarcar', 'compareceu', 'perdido',
-    ];
-
-    const normalizedStage = String(targetStage).trim().toLowerCase();
-    if (!stageKeys.some((k: string) => k.toLowerCase() === normalizedStage)) {
-      return { success: false, error: `Etapa inválida. Use um de: ${stageKeys.join(', ')}` };
-    }
-
-    const finalStage = stageKeys.find((k: string) => k.toLowerCase() === normalizedStage) || normalizedStage;
-
-    const { data: existing } = await this.supabase
-      .from('pipe_confirmacao')
-      .select('id')
-      .eq('lead_id', lead_id)
-      .maybeSingle();
-
-    if (!existing) {
-      return { success: false, error: 'Lead não encontrado no pipe de confirmação' };
-    }
-
-    await this.supabase
-      .from('pipe_confirmacao')
-      .update({ status: finalStage })
-      .eq('id', existing.id);
-
-    console.log('[AgentEngine] Lead movido para', finalStage, 'no pipe confirmação');
-    return { success: true, message: `Lead movido para ${finalStage} no pipe de confirmação`, target_stage: finalStage };
-  }
+  // ── Tool execution methods removed — all writes now go through pending_ai_actions queue ──
+  // See: _shared/ai-action-executor.ts for the actual execution logic
+  // See: process-ai-actions/index.ts for the worker that processes the queue
 
   /**
    * Update Conversation State

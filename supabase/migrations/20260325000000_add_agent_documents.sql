@@ -79,7 +79,10 @@ VALUES (
 )
 ON CONFLICT (id) DO NOTHING;
 
+-- Storage policies (sem SET ROLE para compatibilidade)
+
 -- Storage policies
+DO $$ BEGIN
 CREATE POLICY "org_members_upload_agent_docs"
 ON storage.objects
 FOR INSERT
@@ -87,7 +90,10 @@ WITH CHECK (
   bucket_id = 'agent-documents'
   AND auth.role() = 'authenticated'
 );
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
 
+DO $$ BEGIN
 CREATE POLICY "org_members_read_agent_docs"
 ON storage.objects
 FOR SELECT
@@ -95,7 +101,10 @@ USING (
   bucket_id = 'agent-documents'
   AND auth.role() = 'authenticated'
 );
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
 
+DO $$ BEGIN
 CREATE POLICY "org_members_delete_agent_docs"
 ON storage.objects
 FOR DELETE
@@ -103,3 +112,7 @@ USING (
   bucket_id = 'agent-documents'
   AND auth.role() = 'authenticated'
 );
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+-- Fim das políticas de storage

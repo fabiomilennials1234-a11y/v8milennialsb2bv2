@@ -295,6 +295,16 @@ interface ImportResult {
   distribution?: Record<string, number>;
 }
 
+/** Relatório retornado pela Edge Function import-leads */
+export interface EdgeFunctionReport {
+  total: number;
+  created: number;
+  updated: number;
+  rejected: number;
+  errors: { row: number; reason: string }[];
+  distribution?: Record<string, number>;
+}
+
 interface ParsedLead {
   name: string;
   company?: string;
@@ -485,6 +495,7 @@ export function useImportLeads() {
   const [isImporting, setIsImporting] = useState(false);
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState<ImportResult | null>(null);
+  const [lastReport, setLastReport] = useState<EdgeFunctionReport | null>(null);
   const { organizationId } = useOrganization();
 
   const KOMMO_BLOCK_START = "--- Kommo (campos) ---";
@@ -496,16 +507,6 @@ export function useImportLeads() {
       .replace(/[\u0300-\u036f]/g, "")
       .toLowerCase()
       .trim();
-
-  const stripKommoBlock = (notes: string) => {
-    if (!notes) return notes;
-    const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const re = new RegExp(
-      `${escape(KOMMO_BLOCK_START)}[\\s\\S]*?${escape(KOMMO_BLOCK_END)}\\n?`,
-      "g"
-    );
-    return notes.replace(re, "").trim();
-  };
 
   // Normalize faturamento value for consistent storage
   const normalizeFaturamento = (value: string): string => {
@@ -652,62 +653,6 @@ export function useImportLeads() {
 
     lines.push(KOMMO_BLOCK_END);
     return lines.join("\n");
-  };
-
-  const mergeNotes = (
-    existingNotes?: string | null,
-    rawNotes?: string,
-    kommoBlock?: string
-  ): string | undefined => {
-    let out = stripKommoBlock((existingNotes || "").trim());
-
-    if (rawNotes?.trim()) {
-      const incoming = rawNotes.trim();
-      if (!out.includes(incoming)) {
-        out = out
-          ? `${out}\n\n--- Notas Kommo ---\n\n${incoming}`
-          : incoming;
-      }
-    }
-
-    if (kommoBlock?.trim()) {
-      const incomingBlock = kommoBlock.trim();
-      out = out ? `${out}\n\n${incomingBlock}` : incomingBlock;
-    }
-
-    return out.trim() || undefined;
-  };
-
-  const shouldReplaceValue = (
-    existingValue: string | null | undefined,
-    incomingValue: string | undefined,
-    field: "name" | "company" | "email" | "phone" | "faturamento" | "segment" | "utm"
-  ) => {
-    if (!incomingValue?.trim()) return false;
-
-    const isEmptyLike = (v: string | null | undefined) => {
-      if (!v) return true;
-      const t = v.trim();
-      if (!t) return true;
-      return /^(?:-+|n\/a|na|nao informado|não informado|sem info|sem informação|0)$/i.test(t);
-    };
-
-    if (isEmptyLike(existingValue)) return true;
-
-    const existing = (existingValue || "").trim();
-    const incoming = incomingValue.trim();
-    if (existing === incoming) return false;
-
-    if (field === "email") return !existing.includes("@") && incoming.includes("@");
-    if (field === "phone") return existing.replace(/\D/g, "").length < incoming.replace(/\D/g, "").length;
-    if (field === "faturamento") {
-      const eDigits = existing.replace(/\D/g, "").length;
-      const iDigits = incoming.replace(/\D/g, "").length;
-      return iDigits > eDigits || incoming.length > existing.length;
-    }
-
-    // Name/company/segment/utm: prefer the more complete value
-    return incoming.length > existing.length;
   };
 
   const parseCSV = async (file: File, userColumnMapping?: Record<string, string>): Promise<ParsedLead[]> => {
@@ -1113,21 +1058,27 @@ export function useImportLeads() {
     return leads;
   };
 
-  const formatPhone = (phone: string): string => {
-    // Remove all non-numeric characters
-    const digits = phone.replace(/\D/g, "");
-    
-    // If starts with country code, keep it
-    if (digits.startsWith("55") && digits.length >= 12) {
-      return digits;
-    }
-    
-    // Add Brazil country code if not present
-    if (digits.length === 10 || digits.length === 11) {
-      return `55${digits}`;
-    }
-    
-    return digits;
+  /** Chama a Edge Function import-leads e retorna o relatório. */
+  const callImportEdgeFunction = async (
+    parsedLeads: ParsedLead[],
+    payload: Record<string, unknown>,
+  ): Promise<{ report: EdgeFunctionReport }> => {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData?.session?.access_token;
+    if (!token) throw new Error("Sessão expirada. Faça login novamente.");
+
+    const { data, error } = await supabase.functions.invoke("import-leads", {
+      body: {
+        ...payload,
+        leads: parsedLeads,
+        organization_id: organizationId,
+      },
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (error) throw new Error(error.message || "Erro ao chamar Edge Function de importação");
+    if (!data?.success) throw new Error(data?.error || "Erro desconhecido na importação");
+    return { report: data.report as EdgeFunctionReport };
   };
 
   const importLeads = async (
@@ -1137,9 +1088,7 @@ export function useImportLeads() {
     sdrId?: string,
     autoDistribute?: boolean,
     memberIds?: string[],
-    /** Etapas da campanha (id, name) para mapear coluna Etapa da planilha → stage_id. Se informado, cada lead usa a etapa da coluna Etapa quando existir. */
     campaignStages?: { id: string; name: string }[],
-    /** Modo de distribuição quando autoDistribute: round_robin (padrão) ou random */
     distributionMode?: "round_robin" | "random",
     closerMemberIds?: string[],
     closerDistributionMode?: "round_robin" | "random"
@@ -1149,332 +1098,43 @@ export function useImportLeads() {
     setResult(null);
 
     try {
-      // 1. Parse CSV
+      // 1. Parse file locally
       const parsedLeads = await parseCSV(file);
-      console.log(`Parsed ${parsedLeads.length} leads from CSV`);
+      console.log(`Parsed ${parsedLeads.length} leads from file`);
 
       if (parsedLeads.length === 0) {
         throw new Error("Nenhum lead válido encontrado no arquivo");
       }
 
-      // 2. Get existing leads by phone for duplicate check and potential update
-      const phones = parsedLeads
-        .filter(l => l.phone)
-        .map(l => formatPhone(l.phone!));
-      
-      const { data: existingLeads } = await supabase
-        .from("leads")
-        .select("id, phone, name, company, email, faturamento, segment, notes, rating, utm_campaign, utm_source, utm_medium, utm_content, utm_term")
-        .in("phone", phones);
+      setProgress(20); // Parse done
 
-      // Create a map for quick lookup and update
-      const existingLeadsMap = new Map<string, typeof existingLeads extends (infer T)[] ? T : never>();
-      existingLeads?.forEach(l => {
-        if (l.phone) existingLeadsMap.set(l.phone, l);
+      // 2. Send to Edge Function
+      const { report } = await callImportEdgeFunction(parsedLeads, {
+        destination: "campaign",
+        campanha_id: campanhaId,
+        stage_id: stageId,
+        sdr_id: sdrId,
+        auto_distribute: autoDistribute,
+        member_ids: memberIds,
+        distribution_mode: distributionMode,
+        closer_member_ids: closerMemberIds,
+        closer_distribution_mode: closerDistributionMode,
+        campaign_stages: campaignStages,
       });
 
-      // 3. Create or get import tag
-      const tagName = "Importação Kommo - Janeiro 2026";
-      let tagId: string;
-
-      const { data: existingTag } = await supabase
-        .from("tags")
-        .select("id")
-        .eq("name", tagName)
-        .eq("organization_id", organizationId)
-        .maybeSingle();
-
-      if (existingTag) {
-        tagId = existingTag.id;
-      } else {
-        const { data: newTag, error: tagError } = await supabase
-          .from("tags")
-          .insert({ name: tagName, color: "#f59e0b", organization_id: organizationId })
-          .select("id")
-          .single();
-
-        if (tagError) throw tagError;
-        tagId = newTag.id;
-      }
-
-      // 4. Import leads in batches
-      const BATCH_SIZE = 25;
-      let imported = 0;
-      let duplicates = 0;
-      let updated = 0;
-      let invalid = 0;
-      const distribution: Record<string, number> = {};
-      let memberIndex = 0;
-      const processedPhones = new Set<string>(); // Track phones processed in this import
-
-      // Initialize distribution counter for all members; for round_robin, start from current campaign lead count so rotation continues
-      if (autoDistribute && memberIds && memberIds.length > 0) {
-        memberIds.forEach(id => {
-          distribution[id] = 0;
-        });
-        if (distributionMode === "round_robin") {
-          const { count } = await supabase
-            .from("campanha_leads")
-            .select("id", { count: "exact", head: true })
-            .eq("campanha_id", campanhaId);
-          memberIndex = count ?? 0;
-        }
-      }
-
-      // Initialize closer distribution
-      let closerIndex = 0;
-      if (closerMemberIds && closerMemberIds.length > 0) {
-        if (closerDistributionMode === "round_robin") {
-          const { count } = await supabase
-            .from("campanha_leads")
-            .select("id", { count: "exact", head: true })
-            .eq("campanha_id", campanhaId)
-            .not("closer_id", "is", null);
-          closerIndex = count ?? 0;
-        }
-      }
-
-      for (let i = 0; i < parsedLeads.length; i += BATCH_SIZE) {
-        const batch = parsedLeads.slice(i, i + BATCH_SIZE);
-
-        for (const lead of batch) {
-          const formattedPhone = lead.phone ? formatPhone(lead.phone) : undefined;
-          const stageIdForLead =
-            campaignStages && campaignStages.length > 0
-              ? resolveStageFromName(
-                  lead.stage,
-                  campaignStages.map((s) => ({ stage_key: s.id, name: s.name })),
-                  stageId
-                )
-              : stageId;
-
-          // Skip if already processed in this import
-          if (formattedPhone && processedPhones.has(formattedPhone)) {
-            duplicates++;
-            continue;
-          }
-
-          // Check for existing lead
-          const existingLead = formattedPhone ? existingLeadsMap.get(formattedPhone) : null;
-
-          try {
-            if (existingLead) {
-              // Update existing lead with better/missing data
-              const updates: Record<string, string | number | undefined> = {};
-
-              if (shouldReplaceValue(existingLead.name, lead.name, "name")) updates.name = lead.name;
-              if (shouldReplaceValue(existingLead.company, lead.company, "company")) updates.company = lead.company;
-              if (shouldReplaceValue(existingLead.email, lead.email, "email")) updates.email = lead.email;
-              if (shouldReplaceValue(existingLead.faturamento, lead.faturamento, "faturamento")) updates.faturamento = lead.faturamento;
-              if (shouldReplaceValue(existingLead.segment, lead.segment, "segment")) updates.segment = lead.segment;
-
-              if (shouldReplaceValue((existingLead as any).utm_campaign, lead.utm_campaign, "utm")) updates.utm_campaign = lead.utm_campaign;
-              if (shouldReplaceValue((existingLead as any).utm_source, lead.utm_source, "utm")) updates.utm_source = lead.utm_source;
-              if (shouldReplaceValue((existingLead as any).utm_medium, lead.utm_medium, "utm")) updates.utm_medium = lead.utm_medium;
-              if (shouldReplaceValue((existingLead as any).utm_content, lead.utm_content, "utm")) updates.utm_content = lead.utm_content;
-              if (shouldReplaceValue((existingLead as any).utm_term, lead.utm_term, "utm")) updates.utm_term = lead.utm_term;
-
-              // Update rating if incoming is higher or existing is empty/0
-              if (lead.rating && (!existingLead.rating || existingLead.rating < lead.rating)) {
-                updates.rating = lead.rating;
-              }
-
-              // Merge notes (keeps existing notes + updates Kommo block without duplicating)
-              const mergedNotes = mergeNotes(existingLead.notes, lead.notes, lead.kommoBlock);
-              if (mergedNotes && mergedNotes !== (existingLead.notes || "")) {
-                updates.notes = mergedNotes;
-              }
-
-              if (Object.keys(updates).length > 0) {
-                await supabase
-                  .from("leads")
-                  .update(updates)
-                  .eq("id", existingLead.id);
-                updated++;
-              } else {
-                duplicates++;
-              }
-
-              // Check if lead is already in this campaign
-              const { data: existingCampanhaLead } = await supabase
-                .from("campanha_leads")
-                .select("id")
-                .eq("campanha_id", campanhaId)
-                .eq("lead_id", existingLead.id)
-                .maybeSingle();
-
-              if (!existingCampanhaLead) {
-                // Determine SDR for this lead
-                let assignedSdrId: string | null = null;
-                if (autoDistribute && memberIds && memberIds.length > 0) {
-                  if (distributionMode === "random") {
-                    assignedSdrId = memberIds[Math.floor(Math.random() * memberIds.length)];
-                  } else {
-                    assignedSdrId = memberIds[memberIndex % memberIds.length];
-                    memberIndex++;
-                  }
-                  distribution[assignedSdrId] = (distribution[assignedSdrId] || 0) + 1;
-                } else if (sdrId) {
-                  assignedSdrId = sdrId;
-                }
-
-                // Determine Closer for this lead
-                let assignedCloserId: string | null = null;
-                if (closerMemberIds && closerMemberIds.length > 0) {
-                  if (closerDistributionMode === "random") {
-                    assignedCloserId = closerMemberIds[Math.floor(Math.random() * closerMemberIds.length)];
-                  } else {
-                    assignedCloserId = closerMemberIds[closerIndex % closerMemberIds.length];
-                    closerIndex++;
-                  }
-                }
-
-                // Add to campaign
-                await supabase.from("campanha_leads").insert({
-                  campanha_id: campanhaId,
-                  lead_id: existingLead.id,
-                  stage_id: stageIdForLead,
-                  sdr_id: assignedSdrId,
-                  closer_id: assignedCloserId,
-                });
-
-                if (assignedSdrId || assignedCloserId) {
-                  const leadUpdates: Record<string, string> = {};
-                  if (assignedSdrId) leadUpdates.sdr_id = assignedSdrId;
-                  if (assignedCloserId) leadUpdates.closer_id = assignedCloserId;
-                  await supabase
-                    .from("leads")
-                    .update(leadUpdates)
-                    .eq("id", existingLead.id);
-                }
-
-                // Add tag if not exists
-                const { data: existingTagLink } = await supabase
-                  .from("lead_tags")
-                  .select("id")
-                  .eq("lead_id", existingLead.id)
-                  .eq("tag_id", tagId)
-                  .maybeSingle();
-
-                if (!existingTagLink) {
-                  await supabase.from("lead_tags").insert({
-                    lead_id: existingLead.id,
-                    tag_id: tagId,
-                  });
-                }
-              }
-
-              if (formattedPhone) processedPhones.add(formattedPhone);
-              continue;
-            }
-
-            // Insert new lead
-            const { data: newLead, error: leadError } = await supabase
-              .from("leads")
-              .insert({
-                name: lead.name,
-                company: lead.company,
-                phone: formattedPhone,
-                email: lead.email,
-                faturamento: lead.faturamento,
-                segment: lead.segment,
-                notes: mergeNotes(undefined, lead.notes, lead.kommoBlock),
-                origin: "outro" as const,
-                rating: lead.rating || 0,
-                utm_campaign: lead.utm_campaign,
-                utm_source: lead.utm_source,
-                utm_medium: lead.utm_medium,
-                utm_content: lead.utm_content,
-                utm_term: lead.utm_term,
-              })
-              .select("id")
-              .single();
-
-            if (leadError) {
-              console.error("Error inserting lead:", leadError);
-              invalid++;
-              continue;
-            }
-
-            // Determine SDR for this lead
-            let assignedSdrId: string | null = null;
-            if (autoDistribute && memberIds && memberIds.length > 0) {
-              if (distributionMode === "random") {
-                assignedSdrId = memberIds[Math.floor(Math.random() * memberIds.length)];
-              } else {
-                assignedSdrId = memberIds[memberIndex % memberIds.length];
-                memberIndex++;
-              }
-              distribution[assignedSdrId] = (distribution[assignedSdrId] || 0) + 1;
-            } else if (sdrId) {
-              assignedSdrId = sdrId;
-            }
-
-            // Determine Closer for this lead
-            let assignedCloserId: string | null = null;
-            if (closerMemberIds && closerMemberIds.length > 0) {
-              if (closerDistributionMode === "random") {
-                assignedCloserId = closerMemberIds[Math.floor(Math.random() * closerMemberIds.length)];
-              } else {
-                assignedCloserId = closerMemberIds[closerIndex % closerMemberIds.length];
-                closerIndex++;
-              }
-            }
-
-            // Add to campaign
-            await supabase.from("campanha_leads").insert({
-              campanha_id: campanhaId,
-              lead_id: newLead.id,
-              stage_id: stageIdForLead,
-              sdr_id: assignedSdrId,
-              closer_id: assignedCloserId,
-            });
-
-            if (assignedSdrId || assignedCloserId) {
-              const leadUpdates: Record<string, string> = {};
-              if (assignedSdrId) leadUpdates.sdr_id = assignedSdrId;
-              if (assignedCloserId) leadUpdates.closer_id = assignedCloserId;
-              await supabase
-                .from("leads")
-                .update(leadUpdates)
-                .eq("id", newLead.id);
-            }
-
-            // Add tag
-            await supabase.from("lead_tags").insert({
-              lead_id: newLead.id,
-              tag_id: tagId,
-            });
-
-            // Add phone to processed set
-            if (formattedPhone) {
-              processedPhones.add(formattedPhone);
-            }
-
-            imported++;
-          } catch (error) {
-            console.error("Error processing lead:", error);
-            invalid++;
-          }
-        }
-
-        // Update progress
-        const progressPercent = Math.round(((i + batch.length) / parsedLeads.length) * 100);
-        setProgress(progressPercent);
-      }
+      setLastReport(report);
 
       const result: ImportResult = {
-        total: parsedLeads.length,
-        imported,
-        duplicates,
-        updated,
-        invalid,
-        distribution: autoDistribute ? distribution : undefined,
+        total: report.total,
+        imported: report.created,
+        duplicates: report.rejected,
+        updated: report.updated,
+        invalid: report.errors.length,
+        distribution: report.distribution,
       };
 
       setResult(result);
       setProgress(100);
-      
       return result;
     } catch (error) {
       console.error("Import error:", error);
@@ -1491,6 +1151,7 @@ export function useImportLeads() {
     if (!organizationId) {
       throw new Error("Organização não encontrada");
     }
+
     setIsImporting(true);
     setProgress(0);
     setResult(null);
@@ -1501,210 +1162,31 @@ export function useImportLeads() {
         throw new Error("Nenhum lead válido encontrado no arquivo");
       }
 
-      const metricsPeriodAt =
-        options.metricsPeriodMonth != null && options.metricsPeriodYear != null
-          ? new Date(Date.UTC(options.metricsPeriodYear, options.metricsPeriodMonth - 1, 1)).toISOString()
-          : undefined;
+      setProgress(20); // Parse done
 
-      let productsForPropostas = options.products ?? [];
-      if (options.destination === "propostas" && productsForPropostas.length === 0) {
-        const { data: productsFromDb } = await supabase
-          .from("products")
-          .select("id, name")
-          .order("name");
-        productsForPropostas = (productsFromDb || []).map((p) => ({ id: p.id, name: p.name || "" }));
-      }
-
-      const phones = parsedLeads
-        .filter((l) => l.phone)
-        .map((l) => formatPhone(l.phone!));
-      const { data: existingLeads } = await supabase
-        .from("leads")
-        .select("id, phone, name, company, email, faturamento, segment, notes, rating, utm_campaign, utm_source, utm_medium, utm_content, utm_term")
-        .eq("organization_id", organizationId)
-        .in("phone", phones);
-
-      const existingLeadsMap = new Map<string, (typeof existingLeads)[number]>();
-      existingLeads?.forEach((l) => {
-        if (l.phone) existingLeadsMap.set(l.phone, l);
+      const { report } = await callImportEdgeFunction(parsedLeads, {
+        destination: "funnel",
+        funnel_destination: options.destination,
+        stage_key: options.stageKey,
+        stages: options.stages,
+        members: options.members,
+        products: options.products,
+        sdr_id: options.sdrId,
+        closer_id: options.closerId,
+        metrics_period_month: options.metricsPeriodMonth,
+        metrics_period_year: options.metricsPeriodYear,
       });
 
-      let imported = 0;
-      let duplicates = 0;
-      let updated = 0;
-      let invalid = 0;
-      const processedPhones = new Set<string>();
-      const BATCH_SIZE = 25;
-
-      for (let i = 0; i < parsedLeads.length; i += BATCH_SIZE) {
-        const batch = parsedLeads.slice(i, i + BATCH_SIZE);
-        for (const lead of batch) {
-          const formattedPhone = lead.phone ? formatPhone(lead.phone) : undefined;
-          if (formattedPhone && processedPhones.has(formattedPhone)) {
-            duplicates++;
-            continue;
-          }
-          const existingLead = formattedPhone ? existingLeadsMap.get(formattedPhone) : null;
-
-          try {
-            let leadId: string;
-            if (existingLead) {
-              leadId = existingLead.id;
-              const updates: Record<string, unknown> = {};
-              if (shouldReplaceValue(existingLead.name, lead.name, "name")) updates.name = lead.name;
-              if (shouldReplaceValue(existingLead.company, lead.company, "company")) updates.company = lead.company;
-              if (shouldReplaceValue(existingLead.email, lead.email, "email")) updates.email = lead.email;
-              if (shouldReplaceValue(existingLead.faturamento, lead.faturamento, "faturamento")) updates.faturamento = lead.faturamento;
-              if (shouldReplaceValue(existingLead.segment, lead.segment, "segment")) updates.segment = lead.segment;
-              if (metricsPeriodAt != null) updates.metrics_period_at = metricsPeriodAt;
-              if (Object.keys(updates).length > 0) {
-                await supabase.from("leads").update(updates).eq("id", existingLead.id);
-                updated++;
-              } else {
-                duplicates++;
-              }
-            } else {
-              const leadInsert: Record<string, unknown> = {
-                organization_id: organizationId,
-                name: lead.name,
-                company: lead.company,
-                phone: formattedPhone,
-                email: lead.email,
-                faturamento: lead.faturamento,
-                segment: lead.segment,
-                notes: mergeNotes(undefined, lead.notes, lead.kommoBlock),
-                origin: "outro" as const,
-                rating: lead.rating || 0,
-                utm_campaign: lead.utm_campaign,
-                utm_source: lead.utm_source,
-                utm_medium: lead.utm_medium,
-                utm_content: lead.utm_content,
-                utm_term: lead.utm_term,
-              };
-              if (metricsPeriodAt != null) leadInsert.metrics_period_at = metricsPeriodAt;
-              const { data: newLead, error: leadError } = await supabase
-                .from("leads")
-                .insert(leadInsert)
-                .select("id")
-                .single();
-              if (leadError) {
-                invalid++;
-                continue;
-              }
-              leadId = newLead.id;
-              imported++;
-            }
-
-            const stageKeyForLead =
-              options.stages && options.stages.length > 0
-                ? resolveStageFromName(lead.stage, options.stages, options.stageKey)
-                : options.stageKey;
-
-            const members = options.members ?? [];
-            const defaultSdrId = options.sdrId ?? null;
-            const defaultCloserId = options.closerId ?? null;
-            const assignedSdrId = (destination: "qualificacao" | "confirmacao") =>
-              resolveSellerToId(lead.seller_name, members, destination === "qualificacao" ? defaultSdrId : defaultSdrId);
-            const assignedCloserId = () =>
-              resolveSellerToId(lead.seller_name, members, defaultCloserId);
-
-            const sdrIdForLead = options.destination === "qualificacao" ? assignedSdrId("qualificacao") : options.destination === "confirmacao" ? assignedSdrId("confirmacao") : null;
-            const closerIdForLead = options.destination === "propostas" ? assignedCloserId() : options.destination === "confirmacao" ? assignedCloserId() : null;
-            if (sdrIdForLead !== null || closerIdForLead !== null) {
-              const leadUpdates: Record<string, unknown> = {};
-              if (sdrIdForLead !== null) leadUpdates.sdr_id = sdrIdForLead;
-              if (closerIdForLead !== null) leadUpdates.closer_id = closerIdForLead;
-              if (Object.keys(leadUpdates).length > 0) {
-                await supabase.from("leads").update(leadUpdates).eq("id", leadId);
-              }
-            }
-
-            if (options.destination === "qualificacao") {
-              await supabase.from("pipe_whatsapp").insert({
-                lead_id: leadId,
-                status: stageKeyForLead,
-                organization_id: organizationId,
-                sdr_id: assignedSdrId("qualificacao"),
-              });
-            } else if (options.destination === "propostas") {
-              const productNamesRaw = (lead.product_name || "").trim();
-              const productNames = productNamesRaw
-                ? productNamesRaw.split(/[\n,;]+/).map((s) => s.trim()).filter(Boolean)
-                : [];
-              const productIds: string[] = [];
-              for (const name of productNames) {
-                const id = resolveProductToId(name, productsForPropostas, null);
-                if (id) productIds.push(id);
-              }
-              const firstProductId = productIds.length > 0 ? productIds[0] : null;
-              const totalValue = lead.valor_proposta ?? null;
-
-              const propostaInsert: Record<string, unknown> = {
-                lead_id: leadId,
-                status: stageKeyForLead,
-                organization_id: organizationId,
-                closer_id: assignedCloserId(),
-                sale_value: totalValue,
-                calor: lead.calor ?? null,
-                commitment_date: lead.commitment_date ?? null,
-                contract_duration: lead.contract_duration ?? null,
-                notes: lead.pipe_notes ?? null,
-                product_id: firstProductId,
-              };
-              if (metricsPeriodAt != null) propostaInsert.metrics_period_at = metricsPeriodAt;
-              const { data: newProposta, error: propostaError } = await supabase
-                .from("pipe_propostas")
-                .insert(propostaInsert)
-                .select("id")
-                .single();
-              if (propostaError) {
-                invalid++;
-                continue;
-              }
-              const pipePropostaId = newProposta.id;
-              if (productIds.length > 0) {
-                const n = productIds.length;
-                const valuePerItem = totalValue != null && n > 0 ? Math.floor(totalValue / n) : null;
-                const remainder = totalValue != null && n > 0 ? totalValue - (valuePerItem ?? 0) * n : 0;
-                const itemsToInsert = productIds.map((product_id, index) => ({
-                  pipe_proposta_id: pipePropostaId,
-                  product_id,
-                  sale_value: totalValue != null && valuePerItem != null
-                    ? (index < n - 1 ? valuePerItem : valuePerItem + remainder)
-                    : null,
-                }));
-                await supabase.from("pipe_proposta_items").insert(itemsToInsert);
-              }
-            } else {
-              const confirmacaoInsert: Record<string, unknown> = {
-                lead_id: leadId,
-                status: stageKeyForLead,
-                organization_id: organizationId,
-                sdr_id: assignedSdrId("confirmacao"),
-                closer_id: assignedCloserId(),
-                meeting_date: lead.commitment_date ?? null,
-                notes: lead.pipe_notes ?? null,
-              };
-              if (metricsPeriodAt != null) confirmacaoInsert.metrics_period_at = metricsPeriodAt;
-              await supabase.from("pipe_confirmacao").insert(confirmacaoInsert);
-            }
-
-            if (formattedPhone) processedPhones.add(formattedPhone);
-          } catch (err) {
-            console.error("Error processing lead:", err);
-            invalid++;
-          }
-        }
-        setProgress(Math.round(((i + batch.length) / parsedLeads.length) * 100));
-      }
+      setLastReport(report);
 
       const funnelResult: ImportFunnelResult = {
-        total: parsedLeads.length,
-        imported,
-        duplicates,
-        updated,
-        invalid,
+        total: report.total,
+        imported: report.created,
+        duplicates: report.rejected,
+        updated: report.updated,
+        invalid: report.errors.length,
       };
+
       setProgress(100);
       setResult(funnelResult as ImportResult);
       return funnelResult;
@@ -1719,6 +1201,7 @@ export function useImportLeads() {
   const resetImport = () => {
     setProgress(0);
     setResult(null);
+    setLastReport(null);
   };
 
   // Função para corrigir leads existentes extraindo nome da pessoa do bloco Kommo
@@ -1811,5 +1294,7 @@ export function useImportLeads() {
     isImporting,
     progress,
     result,
+    /** Relatório detalhado da última importação (com erros por linha) */
+    lastReport,
   };
 }

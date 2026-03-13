@@ -112,6 +112,13 @@ export function useCompleteAcaoDoDia() {
 
   return useMutation({
     mutationFn: async (id: string) => {
+      // Fetch acao to get follow_up_id and lead_id before completing
+      const { data: acao } = await supabase
+        .from("acoes_do_dia")
+        .select("follow_up_id, lead_id")
+        .eq("id", id)
+        .single();
+
       const { error } = await supabase
         .from("acoes_do_dia")
         .update({
@@ -121,6 +128,15 @@ export function useCompleteAcaoDoDia() {
         .eq("id", id);
 
       if (error) throw error;
+
+      // Log follow-up completion to lead_history (fire-and-forget)
+      if (acao?.follow_up_id && acao?.lead_id) {
+        supabase.from("lead_history").insert({
+          lead_id: acao.lead_id,
+          action: "followup_completed",
+          description: "Follow-up concluído via Ações do Dia",
+        }).then(() => {}, () => {});
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["acoes_do_dia"] });

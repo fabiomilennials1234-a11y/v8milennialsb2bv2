@@ -9,9 +9,10 @@ import { Switch } from "@/components/ui/switch";
 import { CampanhaStage, CampanhaMember, type Campanha } from "@/hooks/useCampanhas";
 import { useImportLeads, parseFilePreview, KNOWN_LEAD_FIELDS, type FilePreviewResult } from "@/hooks/useImportLeads";
 import { useLeadCustomFields } from "@/hooks/useLeadCustomFields";
+import { useCanPerformAction } from "@/lib/permissions";
 import { downloadLeadsImportTemplate } from "@/lib/leadsImportTemplate";
 import { toast } from "sonner";
-import { Upload, FileSpreadsheet, CheckCircle2, XCircle, AlertCircle, Loader2, Sparkles, Users, RefreshCw, AlertTriangle, FileDown } from "lucide-react";
+import { Upload, FileSpreadsheet, CheckCircle2, XCircle, AlertCircle, Loader2, Sparkles, Users, RefreshCw, AlertTriangle, FileDown, ChevronDown, ChevronUp } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface ImportLeadsModalProps {
@@ -70,9 +71,11 @@ export function ImportLeadsModal({
     if (!open) setHasInitializedFromCampaign(false);
   }, [open, campanha, hasInitializedFromCampaign]);
   
+  const [showErrors, setShowErrors] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { parseCSV, importLeads, resetImport, isImporting, progress, result } = useImportLeads();
+  const { parseCSV, importLeads, resetImport, isImporting, progress, result, lastReport } = useImportLeads();
   const { data: customFields = [] } = useLeadCustomFields();
+  const { allowed: canImport, isLoading: permLoading } = useCanPerformAction("import_leads");
   const customFieldNames = customFields.map((f) => f.field_name);
   const sdrMembers = members.filter((m) => m.role === "sdr");
 
@@ -475,10 +478,15 @@ export function ImportLeadsModal({
                 <Button variant="outline" onClick={() => setStep("upload")}>
                   Voltar
                 </Button>
-                <Button onClick={handleImport} disabled={!selectedStageId}>
-                  Importar {totalLeads} leads
+                <Button onClick={handleImport} disabled={!selectedStageId || !canImport || permLoading}>
+                  {permLoading ? "Verificando permissão..." : !canImport ? "Sem permissão" : `Importar ${totalLeads} leads`}
                 </Button>
               </div>
+              {!canImport && !permLoading && (
+                <p className="text-xs text-destructive text-center">
+                  Você não tem permissão para importar leads. Contate um administrador.
+                </p>
+              )}
             </motion.div>
           )}
 
@@ -598,6 +606,42 @@ export function ImportLeadsModal({
                       );
                     })}
                   </div>
+                </motion.div>
+              )}
+
+              {/* Rejection details (collapsible) */}
+              {lastReport && lastReport.errors.length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.7 }}
+                  className="rounded-xl border border-red-200 dark:border-red-900"
+                >
+                  <button
+                    type="button"
+                    className="w-full flex items-center justify-between p-3 text-sm font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-xl"
+                    onClick={() => setShowErrors(!showErrors)}
+                  >
+                    <span className="flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4" />
+                      {lastReport.errors.length} {lastReport.errors.length === 1 ? "erro" : "erros"} encontrados
+                    </span>
+                    {showErrors ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </button>
+                  {showErrors && (
+                    <ScrollArea className="max-h-48 px-3 pb-3">
+                      <div className="space-y-1">
+                        {lastReport.errors.map((err, i) => (
+                          <div key={i} className="text-xs text-muted-foreground flex gap-2">
+                            <span className="text-red-500 font-mono shrink-0">
+                              {err.row > 0 ? `L${err.row}` : ""}
+                            </span>
+                            <span>{err.reason}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                  )}
                 </motion.div>
               )}
 

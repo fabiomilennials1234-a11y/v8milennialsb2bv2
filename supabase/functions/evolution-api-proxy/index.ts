@@ -1,3 +1,5 @@
+import { withSentry } from '../_shared/sentry.ts';
+import { logRuntime } from "../_shared/logger.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 
@@ -25,7 +27,7 @@ interface ProxyRequest {
   body?: Record<string, unknown>;
 }
 
-serve(async (req) => {
+serve(withSentry('evolution-api-proxy', async (req) => {
   const corsHeaders = getCorsHeaders(req.headers.get("origin"));
 
   // Handle CORS preflight
@@ -142,6 +144,13 @@ serve(async (req) => {
     }
 
     // Sucesso - retornar dados
+    await logRuntime({
+      module: "general",
+      action: "evolution_proxy",
+      status: "success",
+      payloadSnapshot: { endpoint, method, responseStatus: response.status },
+    });
+
     return new Response(JSON.stringify(responseData), {
       status: response.status,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -156,6 +165,13 @@ serve(async (req) => {
       errorMessage.includes("network") ||
       errorMessage.includes("ECONNREFUSED");
 
+    await logRuntime({
+      module: "general",
+      action: "evolution_proxy",
+      status: "error",
+      errorMessage,
+    });
+
     return new Response(
       JSON.stringify({
         error: isNetworkError
@@ -169,7 +185,7 @@ serve(async (req) => {
       }
     );
   }
-});
+}));
 
 function getErrorMessage(status: number, data: unknown): string {
   const details = typeof data === "object" && data !== null

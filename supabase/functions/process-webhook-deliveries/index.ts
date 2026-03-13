@@ -10,6 +10,8 @@ import {
   sendWebhook,
   nextRetryDelayMinutes,
 } from "../_shared/webhook-utils.ts";
+import { withSentry } from '../_shared/sentry.ts';
+import { logRuntime } from "../_shared/logger.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -33,14 +35,14 @@ interface DeliveryRow {
   max_attempts: number;
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withSentry('process-webhook-deliveries', async (req) => {
   const corsHeaders = getCorsHeaders(req.headers.get("origin"));
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders });
   }
 
   const cronSecret = req.headers.get("x-cron-secret");
-  if (CRON_SECRET && cronSecret !== CRON_SECRET) {
+  if (!CRON_SECRET || cronSecret !== CRON_SECRET) {
     return new Response(
       JSON.stringify({ error: "Unauthorized" }),
       { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -59,6 +61,12 @@ Deno.serve(async (req) => {
 
   if (fetchError) {
     console.error("[process-webhook-deliveries] Fetch error:", fetchError);
+    await logRuntime({
+      module: "webhook",
+      action: "deliver",
+      status: "error",
+      errorMessage: fetchError.message,
+    });
     return new Response(
       JSON.stringify({ error: "Failed to fetch deliveries", details: fetchError.message }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -158,8 +166,15 @@ Deno.serve(async (req) => {
     processed++;
   }
 
+  await logRuntime({
+    module: "webhook",
+    action: "deliver",
+    status: "success",
+    payloadSnapshot: { processed },
+  });
+
   return new Response(
     JSON.stringify({ processed }),
     { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
   );
-});
+}));

@@ -8,11 +8,13 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { logTinyOp } from "../_shared/tinyerp-utils.ts";
+import { withSentry } from '../_shared/sentry.ts';
+import { logRuntime } from "../_shared/logger.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-Deno.serve(async (req) => {
+Deno.serve(withSentry('tinyerp-webhook', async (req) => {
   const corsHeaders = getCorsHeaders(req.headers.get("origin"));
 
   if (req.method === "OPTIONS") {
@@ -93,16 +95,32 @@ Deno.serve(async (req) => {
 
     console.log("[TinyERP Webhook] Processed for order:", tinyOrderId, "type:", tipo);
 
+    await logRuntime({
+      organizationId: mapping.organization_id,
+      module: "general",
+      action: "tinyerp_sync",
+      status: "success",
+      entityType: "tinyerp_order",
+      entityId: tinyOrderId,
+      payloadSnapshot: { tipo },
+    });
+
     return new Response(
       JSON.stringify({ ok: true }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {
     console.error("[TinyERP Webhook] Error:", err);
+    await logRuntime({
+      module: "general",
+      action: "tinyerp_sync",
+      status: "error",
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
     // Always return 200 for webhooks to prevent retries
     return new Response(
       JSON.stringify({ ok: false, error: err instanceof Error ? err.message : "Erro" }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
-});
+}));

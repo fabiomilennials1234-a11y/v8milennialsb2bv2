@@ -1,3 +1,4 @@
+import { withSentry } from '../_shared/sentry.ts';
 /**
  * Outbound Trigger - Disparo Automático de Primeira Mensagem
  *
@@ -10,6 +11,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { sendOutboundDispatch } from "../_shared/outbound-sender.ts";
+import { logRuntime } from "../_shared/logger.ts";
 
 interface OutboundTriggerPayload {
   lead_id: string;
@@ -40,7 +42,7 @@ interface OutboundConfig {
   retryIntervalMinutes: number;
 }
 
-serve(async (req) => {
+serve(withSentry('outbound-trigger', async (req) => {
   const corsHeaders = withSecurityHeaders(getCorsHeaders(req.headers.get("origin")));
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -288,6 +290,16 @@ serve(async (req) => {
       await sendOutboundDispatch(supabase, dispatch.id, payload.organization_id);
     }
 
+    await logRuntime({
+      organizationId: payload.organization_id,
+      module: "outbound",
+      action: "trigger",
+      status: "success",
+      entityType: "lead",
+      entityId: payload.lead_id,
+      payloadSnapshot: { dispatch_id: dispatch.id, agent_name: matchingAgent.name, scheduled_at: scheduledAt.toISOString() },
+    });
+
     return new Response(
       JSON.stringify({
         success: true,
@@ -301,12 +313,18 @@ serve(async (req) => {
 
   } catch (error) {
     console.error("[outbound-trigger] Error:", error);
+    await logRuntime({
+      module: "outbound",
+      action: "trigger",
+      status: "error",
+      errorMessage: error instanceof Error ? error.message : String(error),
+    });
     return new Response(
       JSON.stringify({ error: "Internal server error", details: String(error) }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
-});
+}));
 
 /**
  * Avalia uma condição de gatilho

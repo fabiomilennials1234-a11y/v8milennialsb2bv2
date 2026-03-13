@@ -1,4 +1,4 @@
-import { useState, useMemo, memo } from "react";
+import { useState, useMemo, memo, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Search, Plus, Zap, User, Building2, Star, Phone, Loader2, Globe, Trash2, MoreVertical, Target, MessageCircle, Mail, Calendar, DollarSign, Clock, Briefcase, Settings2, Bot } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -34,6 +34,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { DraggableKanbanBoard, DraggableItem, KanbanColumn } from "@/components/kanban/DraggableKanbanBoard";
+import { useCanPerformAction } from "@/lib/permissions";
 import { StageWorkflowsBadgeWrapper } from "@/components/kanban/StageWorkflowsBadgeWrapper";
 import { useStageWorkflowCounts } from "@/hooks/useStageWorkflows";
 import { usePipeWhatsapp, useUpdatePipeWhatsapp, useDeletePipeWhatsapp, type PipeWhatsappStatus } from "@/hooks/usePipeWhatsapp";
@@ -55,6 +56,8 @@ import { ptBR } from "date-fns/locale";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { openWhatsApp, formatPhoneForWhatsApp } from "@/lib/whatsapp";
+import { useOrganization } from "@/hooks/useOrganization";
+import { track, trackModuleVisit } from "@/lib/analytics";
 
 // Origin labels and colors mapping (origens do enum lead_origin)
 const originLabels: Record<string, { label: string; color: string }> = {
@@ -477,6 +480,9 @@ export default function PipeWhatsapp() {
   const [selectedMetricsMonth, setSelectedMetricsMonth] = useState(now.getMonth() + 1);
   const [selectedMetricsYear, setSelectedMetricsYear] = useState(now.getFullYear());
 
+  const { organizationId } = useOrganization();
+  useEffect(() => { trackModuleVisit("pipe_whatsapp", organizationId); }, []);
+
   const { data: pipeData, isLoading, refetch } = usePipeWhatsapp();
   const { data: pipelineStages = [], isLoading: loadingStages } = usePipelineStages("whatsapp");
   const { data: workflowCounts = {} } = useStageWorkflowCounts("whatsapp");
@@ -488,6 +494,7 @@ export default function PipeWhatsapp() {
   const { data: teamMembers } = useTeamMembers();
   const { data: userRole } = useUserRole();
   const updatePipeWhatsapp = useUpdatePipeWhatsapp();
+  const { allowed: canMovePipe } = useCanPerformAction("move_pipe_record");
   const deletePipeWhatsapp = useDeletePipeWhatsapp();
   const deleteAllLeadsInPipe = useDeleteAllLeadsInPipe("whatsapp");
   const createPipeConfirmacao = useCreatePipeConfirmacao();
@@ -625,6 +632,7 @@ export default function PipeWhatsapp() {
       });
 
       logAction({ leadId: item.lead_id, action: "stage_changed", description: `Etapa alterada para "${stageLabel}" no Funil WhatsApp` });
+      if (organizationId) track({ event: "card_moved", organizationId, entityType: "pipe_whatsapp", entityId: itemId, metadata: { from_stage: item.status, to_stage: newStatus } });
 
       // If moved to a success stage, automatically create entry in the target pipe
       const movedStage = pipelineStages.find(s => s.stage_key === newStatus);
@@ -845,6 +853,7 @@ export default function PipeWhatsapp() {
       <DraggableKanbanBoard
         columns={columns}
         onStatusChange={handleStatusChange}
+        disabled={!canMovePipe}
         onDeleteAllLeads={() => setDeleteAllLeadsDialogOpen(true)}
         renderColumnExtra={(col) => {
           const allCounts = workflowCounts["__all__"] || { total: 0, active: 0 };

@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { FollowUpAutomation } from "./useFollowUps";
+import { track } from "@/lib/analytics";
 
 interface TriggerAutomationParams {
   leadId: string;
@@ -61,6 +62,7 @@ export async function triggerFollowUpAutomation({
       console.error("Error creating automated follow ups:", error);
     } else {
       console.log(`Created ${followUps.length} automated follow-ups for stage "${stage}" in pipe "${pipeType}"`);
+      track({ event: "automation_triggered", organizationId, entityType: "follow_up_automation", metadata: { pipe_type: pipeType, stage, count: followUps.length } });
     }
   } catch (error) {
     console.error("Error in triggerFollowUpAutomation:", error);

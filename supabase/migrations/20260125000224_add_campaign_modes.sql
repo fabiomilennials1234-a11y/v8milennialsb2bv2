@@ -97,10 +97,14 @@ COMMENT ON TABLE public.campaign_dispatch_batches IS 'Lotes de disparo agendados
 -- FASE 5: Atualizar outbound_dispatch_log
 -- ============================================
 
-ALTER TABLE public.outbound_dispatch_log
-ADD COLUMN IF NOT EXISTS campanha_id UUID REFERENCES public.campanhas(id) ON DELETE SET NULL,
-ADD COLUMN IF NOT EXISTS template_id UUID REFERENCES public.campaign_templates(id) ON DELETE SET NULL,
-ADD COLUMN IF NOT EXISTS batch_id UUID REFERENCES public.campaign_dispatch_batches(id) ON DELETE SET NULL;
+DO $$
+BEGIN
+  ALTER TABLE public.outbound_dispatch_log
+  ADD COLUMN IF NOT EXISTS campanha_id UUID REFERENCES public.campanhas(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS template_id UUID REFERENCES public.campaign_templates(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS batch_id UUID REFERENCES public.campaign_dispatch_batches(id) ON DELETE SET NULL;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
 
 -- ============================================
 -- FASE 6: Rate Limiting por Organização
@@ -148,8 +152,12 @@ CREATE INDEX IF NOT EXISTS idx_campanha_templates_template ON public.campanha_te
 CREATE INDEX IF NOT EXISTS idx_dispatch_batches_status ON public.campaign_dispatch_batches(status, scheduled_at);
 CREATE INDEX IF NOT EXISTS idx_dispatch_batches_campanha ON public.campaign_dispatch_batches(campanha_id);
 
-CREATE INDEX IF NOT EXISTS idx_dispatch_log_campanha ON public.outbound_dispatch_log(campanha_id) WHERE campanha_id IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_dispatch_log_batch ON public.outbound_dispatch_log(batch_id) WHERE batch_id IS NOT NULL;
+DO $$
+BEGIN
+  CREATE INDEX IF NOT EXISTS idx_dispatch_log_campanha ON public.outbound_dispatch_log(campanha_id) WHERE campanha_id IS NOT NULL;
+  CREATE INDEX IF NOT EXISTS idx_dispatch_log_batch ON public.outbound_dispatch_log(batch_id) WHERE batch_id IS NOT NULL;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_rate_tracking_org ON public.whatsapp_rate_tracking(organization_id, hour_key);
 

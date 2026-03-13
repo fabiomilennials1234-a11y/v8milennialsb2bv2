@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   Fuel,
@@ -53,6 +53,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useLeads, useLeadsCount, useCreateLead, useUpdateLead, useDeleteLead, LEADS_PAGE_SIZE, type Lead } from "@/hooks/useLeads";
 import { ExportLeadsModal } from "@/components/leads/ExportLeadsModal";
+import { useCanPerformAction } from "@/lib/permissions";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -68,6 +69,8 @@ import { useTeamMembers, useCurrentTeamMember } from "@/hooks/useTeamMembers";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { useOrganization } from "@/hooks/useOrganization";
+import { trackModuleVisit } from "@/lib/analytics";
 
 const originLabels: Record<string, string> = {
   whatsapp: "WhatsApp",
@@ -151,8 +154,13 @@ export default function Leads() {
   const [filterRating, setFilterRating] = useState<string>("all");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const { allowed: canExport } = useCanPerformAction("export_leads");
+  const { allowed: canCreateLead } = useCanPerformAction("create_lead");
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [formData, setFormData] = useState<LeadFormData>(initialFormData);
+
+  const { organizationId } = useOrganization();
+  useEffect(() => { trackModuleVisit("leads", organizationId); }, []);
 
   const [page, setPage] = useState(0);
   const { data: leads = [], isLoading } = useLeads(page);
@@ -312,11 +320,11 @@ export default function Leads() {
           </p>
         </div>
 
-        <Button variant="outline" onClick={() => setIsExportModalOpen(true)} className="gap-2">
+        <Button variant="outline" onClick={() => setIsExportModalOpen(true)} disabled={!canExport} className="gap-2">
           <FileDown className="w-4 h-4" />
           Exportar
         </Button>
-        <Button onClick={() => handleOpenDialog()} className="gap-2">
+        <Button onClick={() => handleOpenDialog()} className="gap-2" disabled={!canCreateLead}>
           <Plus className="w-4 h-4" />
           Novo Lead
         </Button>

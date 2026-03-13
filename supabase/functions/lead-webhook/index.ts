@@ -5,11 +5,13 @@
  * e dispara o fluxo de outbound se houver agente configurado.
  */
 
+import { withSentry } from '../_shared/sentry.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getOrCreateLead } from "../_shared/lead-service.ts";
 import { enqueueWebhookDeliveries } from "../_shared/webhook-utils.ts";
 import { getCampaignLeadAssignment, getCampaignCloserAssignment } from "../_shared/campaign-distribution.ts";
+import { logRuntime } from "../_shared/logger.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -63,7 +65,7 @@ interface LeadWebhookPayload {
   assigned_user_id?: string;
 }
 
-serve(async (req) => {
+serve(withSentry('lead-webhook', async (req) => {
   // CORS
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -632,6 +634,16 @@ serve(async (req) => {
       if (placeInCampaignError) responseBody.place_in_campaign_error = placeInCampaignError;
     }
 
+    await logRuntime({
+      organizationId: organizationId,
+      module: "lead",
+      action: "webhook_ingest",
+      status: "success",
+      entityType: "lead",
+      entityId: leadId,
+      payloadSnapshot: { source: payload.source, is_new: isNewLead },
+    });
+
     return new Response(
       JSON.stringify(responseBody),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -639,9 +651,15 @@ serve(async (req) => {
 
   } catch (error) {
     console.error("[lead-webhook] Error:", error);
+    await logRuntime({
+      module: "lead",
+      action: "webhook_ingest",
+      status: "error",
+      errorMessage: String(error),
+    });
     return new Response(
       JSON.stringify({ error: "Internal server error", details: String(error) }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
-});
+}));

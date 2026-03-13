@@ -1,4 +1,6 @@
+import { withSentry } from '../_shared/sentry.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { logRuntime } from "../_shared/logger.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -24,7 +26,7 @@ interface GenerateExamplesRequest {
   skillsAndTopics?: string;
 }
 
-serve(async (req) => {
+serve(withSentry('generate-agent-examples', async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
@@ -143,15 +145,28 @@ Responda APENAS em JSON válido, sem markdown:
       );
     }
 
+    await logRuntime({
+      module: "copilot",
+      action: "generate_examples",
+      status: "success",
+      payloadSnapshot: { templateType, count, generatedCount: (parsed.examples || []).length },
+    });
+
     return new Response(
       JSON.stringify({ examples: parsed.examples || [] }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
     console.error("Error:", error);
+    await logRuntime({
+      module: "copilot",
+      action: "generate_examples",
+      status: "error",
+      errorMessage: error instanceof Error ? error.message : "Unknown error",
+    });
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
-});
+}));

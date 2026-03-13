@@ -5,6 +5,7 @@ import { triggerFollowUpAutomation } from "./useAutoFollowUp";
 import { triggerStageChangedWorkflows } from "@/lib/workflowTrigger";
 import { useRealtimeSubscription } from "./useRealtimeSubscription";
 import { useOrganization } from "./useOrganization";
+import { useCanPerformActionAsync } from "@/lib/permissions";
 
 export type PipeWhatsapp = Tables<"pipe_whatsapp">;
 export type PipeWhatsappInsert = TablesInsert<"pipe_whatsapp">;
@@ -95,9 +96,13 @@ export function useCreatePipeWhatsapp() {
 
 export function useUpdatePipeWhatsapp() {
   const queryClient = useQueryClient();
-  
+  const { data: movePermission } = useCanPerformActionAsync("move_pipe_record");
+
   return useMutation({
     mutationFn: async ({ id, leadId, sdrId, ...updates }: PipeWhatsappUpdate & { id: string; leadId?: string; sdrId?: string | null }) => {
+      if (updates.status && movePermission && !movePermission.allowed) {
+        throw new Error("Sem permissão para mover registros no pipe");
+      }
       const { data, error } = await supabase
         .from("pipe_whatsapp")
         .update(updates)

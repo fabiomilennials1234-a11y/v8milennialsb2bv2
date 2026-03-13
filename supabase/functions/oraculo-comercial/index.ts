@@ -1,4 +1,6 @@
+import { withSentry } from '../_shared/sentry.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { logRuntime } from "../_shared/logger.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -21,7 +23,7 @@ interface MetricsData {
   diasRestantes?: number;
 }
 
-serve(async (req) => {
+serve(withSentry('oraculo-comercial', async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -143,14 +145,27 @@ Qual o problema principal e qual a tarefa prioritária de hoje?`;
       };
     }
 
+    await logRuntime({
+      module: "copilot",
+      action: "oraculo_analyze",
+      status: "success",
+      payloadSnapshot: { role: metrics.role },
+    });
+
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
     console.error("oraculo-comercial error:", e);
+    await logRuntime({
+      module: "copilot",
+      action: "oraculo_analyze",
+      status: "error",
+      errorMessage: e instanceof Error ? e.message : "Unknown error",
+    });
     return new Response(
       JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
-});
+}));

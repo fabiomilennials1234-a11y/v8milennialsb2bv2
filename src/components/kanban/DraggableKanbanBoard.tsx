@@ -50,6 +50,8 @@ interface DraggableKanbanBoardProps<T extends DraggableItem> {
   renderColumnExtra?: (column: KanbanColumn<T>) => React.ReactNode;
   /** When provided, the column header three-dots menu shows "Excluir todos os leads desta etapa" */
   onDeleteAllLeads?: () => void;
+  /** When true, drag-and-drop is disabled (permission denied) */
+  disabled?: boolean;
 }
 
 function DroppableColumn<T extends DraggableItem>({
@@ -188,6 +190,7 @@ export function DraggableKanbanBoard<T extends DraggableItem>({
   renderColumnFooter,
   renderColumnExtra,
   onDeleteAllLeads,
+  disabled,
 }: DraggableKanbanBoardProps<T>) {
   const [activeItem, setActiveItem] = useState<T | null>(null);
 
@@ -225,7 +228,7 @@ export function DraggableKanbanBoard<T extends DraggableItem>({
     const { active, over } = event;
     setActiveItem(null);
 
-    if (!over) return;
+    if (!over || disabled) return;
 
     const activeId = active.id as string;
     const overId = over.id as string;

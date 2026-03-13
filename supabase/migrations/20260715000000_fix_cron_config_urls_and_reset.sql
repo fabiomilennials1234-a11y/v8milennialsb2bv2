@@ -66,4 +66,6 @@ BEGIN
     ) INTO v_request_id;
     RAISE NOTICE '✅ Disparo iniciado! request_id=%', v_request_id;
   END IF;
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'Erro pg_net: %', SQLERRM;
 END $$;

@@ -44,6 +44,9 @@ END $$;
 -- ============================================
 
 ALTER TABLE public.scheduled_pipe_messages
+DROP CONSTRAINT IF EXISTS scheduled_pipe_messages_status_check;
+
+ALTER TABLE public.scheduled_pipe_messages
 ADD CONSTRAINT scheduled_pipe_messages_status_check CHECK (
   status IN ('scheduled', 'processing', 'sent', 'failed', 'cancelled', 'waiting_response', 'response_received', 'timed_out', 'executed')
 );

@@ -33,7 +33,10 @@ FOR EACH ROW
 EXECUTE FUNCTION public.update_updated_at();
 
 -- Enable realtime for lead_scores
-ALTER PUBLICATION supabase_realtime ADD TABLE public.lead_scores;
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE public.lead_scores;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
 
 -- Create index for faster lookups
 CREATE INDEX idx_lead_scores_lead_id ON public.lead_scores(lead_id);

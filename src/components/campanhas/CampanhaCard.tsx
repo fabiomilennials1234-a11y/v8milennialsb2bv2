@@ -25,7 +25,7 @@ import { Campanha, useUpdateCampanha, useDeleteCampanha } from "@/hooks/useCampa
 import { Calendar, Target, Users, ArrowRight, Trophy, Clock, MoreVertical, Trash2, Power, PowerOff } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useCampanhaLeads, useCampanhaStages, useCampanhaMembers } from "@/hooks/useCampanhas";
-import { useIsAdmin } from "@/hooks/useUserRole";
+import { useCanPerformAction } from "@/lib/permissions";
 import { useState, memo } from "react";
 import { toast } from "sonner";
 
@@ -35,7 +35,8 @@ interface CampanhaCardProps {
 
 export const CampanhaCard = memo(function CampanhaCard({ campanha }: CampanhaCardProps) {
   const navigate = useNavigate();
-  const { isAdmin } = useIsAdmin();
+  const { allowed: canEditCampaign } = useCanPerformAction("edit_campaign");
+  const { allowed: canDeleteCampaign } = useCanPerformAction("delete_campaign");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   
   const { data: leads } = useCampanhaLeads(campanha.id);
@@ -97,7 +98,7 @@ export const CampanhaCard = memo(function CampanhaCard({ campanha }: CampanhaCar
             <Badge variant={isExpired ? "destructive" : campanha.is_active ? "default" : "secondary"}>
               {isExpired ? "Encerrada" : campanha.is_active ? "Ativa" : "Inativa"}
             </Badge>
-            {isAdmin && (
+            {(canEditCampaign || canDeleteCampaign) && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -105,27 +106,31 @@ export const CampanhaCard = memo(function CampanhaCard({ campanha }: CampanhaCar
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={handleToggleActive}>
-                    {campanha.is_active ? (
-                      <>
-                        <PowerOff className="w-4 h-4 mr-2" />
-                        Desativar
-                      </>
-                    ) : (
-                      <>
-                        <Power className="w-4 h-4 mr-2" />
-                        Ativar
-                      </>
-                    )}
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem 
-                    onClick={() => setDeleteDialogOpen(true)}
-                    className="text-destructive focus:text-destructive"
-                  >
-                    <Trash2 className="w-4 h-4 mr-2" />
-                    Excluir
-                  </DropdownMenuItem>
+                  {canEditCampaign && (
+                    <DropdownMenuItem onClick={handleToggleActive}>
+                      {campanha.is_active ? (
+                        <>
+                          <PowerOff className="w-4 h-4 mr-2" />
+                          Desativar
+                        </>
+                      ) : (
+                        <>
+                          <Power className="w-4 h-4 mr-2" />
+                          Ativar
+                        </>
+                      )}
+                    </DropdownMenuItem>
+                  )}
+                  {canEditCampaign && canDeleteCampaign && <DropdownMenuSeparator />}
+                  {canDeleteCampaign && (
+                    <DropdownMenuItem
+                      onClick={() => setDeleteDialogOpen(true)}
+                      className="text-destructive focus:text-destructive"
+                    >
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Excluir
+                    </DropdownMenuItem>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
             )}

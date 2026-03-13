@@ -1,7 +1,9 @@
+import { withSentry } from '../_shared/sentry.ts';
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { validateLeadInput, sanitizeString } from "../_shared/validation.ts";
 import { enqueueWebhookDeliveries } from "../_shared/webhook-utils.ts";
+import { logRuntime } from "../_shared/logger.ts";
 
 // Helper functions (reutilizadas do webhook-new-lead)
 function normalizeEmail(email: string | null | undefined): string | null {
@@ -596,7 +598,7 @@ async function routeAction(
 }
 
 // Main handler
-Deno.serve(async (req) => {
+Deno.serve(withSentry('webhook-orchestrator', async (req) => {
   const origin = req.headers.get("origin");
   const corsHeaders = getCorsHeaders(origin);
   
@@ -635,6 +637,17 @@ Deno.serve(async (req) => {
     // Roteia para handler apropriado
     const result = await routeAction(action, supabase, data || body, tenantId);
 
+    await logRuntime({
+      organizationId: tenantId || undefined,
+      module: "webhook",
+      action: "orchestrate",
+      status: result.success ? "success" : "error",
+      payloadSnapshot: { routed_action: action },
+      errorMessage: result.success ? undefined : result.error,
+      entityType: result.lead_id ? "lead" : undefined,
+      entityId: result.lead_id || undefined,
+    });
+
     const status = result.success ? 200 : 400;
     return new Response(
       JSON.stringify(result),
@@ -643,9 +656,15 @@ Deno.serve(async (req) => {
 
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    await logRuntime({
+      module: "webhook",
+      action: "orchestrate",
+      status: "error",
+      errorMessage,
+    });
     return new Response(
       JSON.stringify({ success: false, error: "Erro interno", details: errorMessage }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
-});
+}));

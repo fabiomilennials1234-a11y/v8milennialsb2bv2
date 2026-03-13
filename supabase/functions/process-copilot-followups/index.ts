@@ -1,3 +1,4 @@
+import { withSentry } from '../_shared/sentry.ts';
 /**
  * Worker: Processa regras de follow-up do Copilot (no_response)
  *
@@ -8,6 +9,7 @@
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { logRuntime } from "../_shared/logger.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { getNextSendTime } from "../_shared/followupSchedule.ts";
@@ -53,14 +55,14 @@ function getTimeVars(now: Date): { saudacao: string; data: string; hora: string 
   return { saudacao, data, hora };
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withSentry('process-copilot-followups', async (req) => {
   const corsHeaders = withSecurityHeaders(getCorsHeaders(req.headers.get("origin")));
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders });
   }
 
   const cronSecret = req.headers.get("x-cron-secret");
-  if (CRON_SECRET && cronSecret !== CRON_SECRET) {
+  if (!CRON_SECRET || cronSecret !== CRON_SECRET) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 401,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -337,8 +339,15 @@ Deno.serve(async (req) => {
     }
   }
 
+  await logRuntime({
+    module: "followup",
+    action: "copilot_send",
+    status: "success",
+    payloadSnapshot: { sent: totalSent, skipped: totalSkipped },
+  });
+
   return new Response(
     JSON.stringify({ sent: totalSent, skipped: totalSkipped }),
     { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
   );
-});
+}));

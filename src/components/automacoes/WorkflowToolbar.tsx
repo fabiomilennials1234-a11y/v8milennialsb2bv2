@@ -26,6 +26,7 @@ import {
   Split,
   Globe,
   CornerDownRight,
+  History,
 } from "lucide-react";
 import type { WorkflowNodeType } from "@/types/workflow";
 
@@ -38,6 +39,7 @@ interface WorkflowToolbarProps {
   isSaving: boolean;
   onAddNode: (type: WorkflowNodeType) => void;
   isNew: boolean;
+  workflowId?: string;
 }
 
 interface NodeOption {
@@ -88,6 +90,7 @@ export function WorkflowToolbar({
   isSaving,
   onAddNode,
   isNew,
+  workflowId,
 }: WorkflowToolbarProps) {
   const navigate = useNavigate();
 
@@ -145,6 +148,18 @@ export function WorkflowToolbar({
             ))}
           </DropdownMenuContent>
         </DropdownMenu>
+
+        {/* Executions link */}
+        {!isNew && workflowId && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate(`/automacoes/${workflowId}/execucoes`)}
+          >
+            <History className="w-4 h-4 mr-1" />
+            Execuções
+          </Button>
+        )}
 
         <div className="h-6 w-px bg-border" />
 

@@ -3,6 +3,8 @@
 -- Re-inserir/reativar caso a migration anterior não tenha encontrado o user
 -- ============================================================
 
+CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
+
 DO $$
 DECLARE
   v_user_id UUID;
@@ -27,7 +29,7 @@ BEGIN
       '00000000-0000-0000-0000-000000000000',
       'authenticated', 'authenticated',
       'gabrielgipp04@gmail.com',
-      crypt('TempPass123!', gen_salt('bf')),
+      extensions.crypt('TempPass123!', extensions.gen_salt('bf')),
       NOW(),
       '{"provider": "email", "providers": ["email"]}'::jsonb,
       '{"name": "Gabriel", "role": "master"}'::jsonb,

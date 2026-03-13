@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "./useOrganization";
+import { useCanPerformActionAsync } from "@/lib/permissions";
 
 const BATCH_SIZE = 500;
 
@@ -95,10 +96,15 @@ function fmtDate(v: string | null | undefined): string {
 export function useExportLeads(): UseExportLeadsResult {
   const [isExporting, setIsExporting] = useState(false);
   const { organizationId } = useOrganization();
+  const { data: exportPermission } = useCanPerformActionAsync("export_leads");
 
   const exportLeads = async (options: ExportLeadsOptions): Promise<{ count: number }> => {
     if (!organizationId) {
       throw new Error("Organização não encontrada");
+    }
+    // Permission check
+    if (exportPermission && !exportPermission.allowed) {
+      throw new Error("Você não tem permissão para exportar leads");
     }
     setIsExporting(true);
     try {

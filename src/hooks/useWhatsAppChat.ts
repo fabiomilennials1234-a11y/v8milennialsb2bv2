@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember, isVirtualTeamMember } from "@/hooks/useTeamMembers";
+import { track } from "@/lib/analytics";
 
 export interface WhatsAppMessage {
   id: string;
@@ -507,6 +508,9 @@ export function useSendWhatsAppMessage() {
           context.previousMessages
         );
       }
+    },
+    onSuccess: () => {
+      if (teamMember?.organization_id) track({ event: "message_sent", organizationId: teamMember.organization_id, entityType: "conversation" });
     },
     onSettled: (_, __, variables) => {
       // Sempre refetch após completar (sucesso ou erro) para sincronizar com o banco

@@ -13,6 +13,7 @@ import {
   type FunnelDestination,
 } from "@/hooks/useImportLeads";
 import { useLeadCustomFields } from "@/hooks/useLeadCustomFields";
+import { useCanPerformAction } from "@/lib/permissions";
 import { usePipelineStages } from "@/hooks/usePipelineStages";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
 import { useProducts } from "@/hooks/useProducts";
@@ -31,6 +32,8 @@ import {
   AlertTriangle,
   FileDown,
   Calendar,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -99,8 +102,10 @@ export function ImportLeadsFunnelContent({
   const { data: stages = [] } = usePipelineStages(pipelineType);
   const { data: members = [] } = useTeamMembers();
   const { data: products = [] } = useProducts();
-  const { parseCSV, importLeadsToFunnel, resetImport, isImporting, progress, result } = useImportLeads();
+  const [showErrors, setShowErrors] = useState(false);
+  const { parseCSV, importLeadsToFunnel, resetImport, isImporting, progress, result, lastReport } = useImportLeads();
   const { data: customFields = [] } = useLeadCustomFields();
+  const { allowed: canImport, isLoading: permLoading } = useCanPerformAction("import_leads");
   const customFieldNames = customFields.map((f) => f.field_name);
   const productOptions = (products || []).map((p) => ({ id: p.id, name: p.name || "" }));
 
@@ -462,10 +467,15 @@ export function ImportLeadsFunnelContent({
                 <Button variant="outline" onClick={() => setStep("upload")}>
                   Voltar
                 </Button>
-                <Button onClick={handleImport} disabled={!selectedStageKey}>
-                  Importar {totalLeads} leads
+                <Button onClick={handleImport} disabled={!selectedStageKey || !canImport || permLoading}>
+                  {permLoading ? "Verificando permissão..." : !canImport ? "Sem permissão" : `Importar ${totalLeads} leads`}
                 </Button>
               </div>
+              {!canImport && !permLoading && (
+                <p className="text-xs text-destructive text-center">
+                  Você não tem permissão para importar leads. Contate um administrador.
+                </p>
+              )}
             </motion.div>
           )}
 
@@ -522,6 +532,37 @@ export function ImportLeadsFunnelContent({
                   <p className="text-xs text-muted-foreground">Inválidos</p>
                 </div>
               </div>
+              {/* Rejection details (collapsible) */}
+              {lastReport && lastReport.errors.length > 0 && (
+                <div className="rounded-xl border border-red-200 dark:border-red-900">
+                  <button
+                    type="button"
+                    className="w-full flex items-center justify-between p-3 text-sm font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-xl"
+                    onClick={() => setShowErrors(!showErrors)}
+                  >
+                    <span className="flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4" />
+                      {lastReport.errors.length} {lastReport.errors.length === 1 ? "erro" : "erros"} encontrados
+                    </span>
+                    {showErrors ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </button>
+                  {showErrors && (
+                    <ScrollArea className="max-h-48 px-3 pb-3">
+                      <div className="space-y-1">
+                        {lastReport.errors.map((err, i) => (
+                          <div key={i} className="text-xs text-muted-foreground flex gap-2">
+                            <span className="text-red-500 font-mono shrink-0">
+                              {err.row > 0 ? `L${err.row}` : ""}
+                            </span>
+                            <span>{err.reason}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                  )}
+                </div>
+              )}
+
               <p className="text-sm text-center text-muted-foreground">
                 Os leads já estão em {DESTINATION_LABELS[destination]}.
               </p>

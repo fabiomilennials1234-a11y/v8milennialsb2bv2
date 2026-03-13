@@ -1,3 +1,7 @@
+import { withSentry } from '../_shared/sentry.ts';
+import { logRuntime } from '../_shared/logger.ts';
+import { trackEvent } from '../_shared/track.ts';
+import { startJob, finishJob, failJob } from '../_shared/job-tracker.ts';
 /**
  * Pipe Rule Dispatch - Processa fila scheduled_pipe_messages
  *
@@ -41,7 +45,7 @@ interface ProcessResult {
   error?: string;
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withSentry('pipe-rule-dispatch', async (req) => {
   const origin = req.headers.get("origin") ?? req.headers.get("Origin");
   const corsHeaders = getCorsHeaders(origin);
 
@@ -60,11 +64,7 @@ Deno.serve(async (req) => {
     authorized = true;
   }
 
-  // 2. Internal call from pg_net (has cron secret header but env not set — trust internal calls)
-  if (!authorized && cronSecret && !CRON_SECRET) {
-    console.warn("[pipe-rule-dispatch] CRON_SECRET env not set but x-cron-secret header present — authorizing as internal call");
-    authorized = true;
-  }
+  // CRON_SECRET must be set in env — no fallback for missing secret
 
   // 3. Bearer token auth (frontend calls)
   if (!authorized) {
@@ -113,6 +113,14 @@ Deno.serve(async (req) => {
     if (pipeType) {
       console.log("[pipe-rule-dispatch] Single pipe mode:", pipeType);
       const result = await processPipeQueue(supabase, pipeType);
+      await logRuntime({
+        organizationId: result.organization_id,
+        module: 'pipe_dispatch',
+        action: 'execute_rule',
+        status: 'success',
+        entityType: 'pipe_record',
+        payloadSnapshot: { pipe_type: pipeType, processed: result.processed, sent: result.sent, failed: result.failed },
+      });
       return new Response(
         JSON.stringify({ success: true, ...result }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -166,6 +174,12 @@ Deno.serve(async (req) => {
         totalProcessed += result.processed;
       }
 
+      await logRuntime({
+        module: 'pipe_dispatch',
+        action: 'execute_rule',
+        status: 'success',
+        payloadSnapshot: { pipes: uniquePipeTypes.length, processed: totalProcessed, sent: totalSent, failed: totalFailed },
+      });
       return new Response(
         JSON.stringify({
           success: true,
@@ -180,15 +194,16 @@ Deno.serve(async (req) => {
     }
   } catch (error) {
     console.error("[pipe-rule-dispatch] Error:", error);
-    return new Response(
-      JSON.stringify({
-        error: "Internal server error",
-        details: error instanceof Error ? error.message : String(error),
-      }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    await logRuntime({
+      module: 'pipe_dispatch',
+      action: 'execute_rule',
+      status: 'error',
+      errorMessage: error instanceof Error ? error.message : String(error),
+      payloadSnapshot: { pipe_type: pipeType },
+    });
+    throw error;
   }
-});
+}));
 
 // ============================================================
 // Process queue for a pipe_type
@@ -295,6 +310,7 @@ async function processPipeQueue(
   console.log(`[pipe-rule-dispatch][${pipeType}] Processing ${rows.length} item(s)`);
 
   for (const row of rows) {
+    let jobId: string | null = null;
     try {
       const actionType = (row as any).action_type || "send_template";
       const orgId = row.organization_id as string;
@@ -306,6 +322,18 @@ async function processPipeQueue(
         continue;
       }
 
+      // Job tracking: registrar início
+      jobId = await startJob(supabase, {
+        organizationId: orgId,
+        sourceEngine: 'pipe_dispatch',
+        entityType: 'pipe_record',
+        entityId: row.pipe_record_id || lead.id,
+        actionType,
+        sourceTable: 'scheduled_pipe_messages',
+        sourceId: row.id,
+        payloadSnapshot: { pipe_type: pipeType, lead_name: lead.name, lead_phone: lead.phone },
+      });
+
       // =========================
       // ACTION: send_template
       // =========================
@@ -313,11 +341,13 @@ async function processPipeQueue(
         const template = (row as any).campaign_templates as { id: string; name?: string; content?: string; message_type?: string; audio_url?: string } | null;
         if (!template) {
           await markFailed(supabase, row.id, "Missing template");
+          if (jobId) await failJob(supabase, jobId, "Missing template");
           failed++;
           continue;
         }
         if (!lead.phone) {
           await markFailed(supabase, row.id, "Lead has no phone");
+          if (jobId) await failJob(supabase, jobId, "Lead has no phone");
           failed++;
           continue;
         }
@@ -325,6 +355,7 @@ async function processPipeQueue(
         const instance = await resolveInstance(supabase, row.whatsapp_instance_id, orgId);
         if (!instance) {
           await markFailed(supabase, row.id, "No active WhatsApp instance");
+          if (jobId) await failJob(supabase, jobId, "No active WhatsApp instance");
           failed++;
           continue;
         }
@@ -336,6 +367,7 @@ async function processPipeQueue(
         });
         if (rateCheck?.[0] && !rateCheck[0].can_send) {
           console.log(`[pipe-rule-dispatch][${pipeType}] Rate limit exceeded, stopping`);
+          if (jobId) await failJob(supabase, jobId, "Rate limit exceeded — reagendado automaticamente");
           break;
         }
 
@@ -413,10 +445,21 @@ async function processPipeQueue(
             });
           } catch (_) { /* ignore */ }
 
+          // Track usage event (fire-and-forget)
+          trackEvent({
+            organizationId: orgId,
+            eventType: "message_sent",
+            entityType: "lead",
+            entityId: lead.id,
+            metadata: { pipe_type: pipeType, template_name: template.name, is_audio: isAudio },
+          }).catch(() => {});
+
           sent++;
+          if (jobId) await finishJob(supabase, jobId);
           console.log(`[pipe-rule-dispatch][${pipeType}] Sent to:`, lead.name, lead.phone);
         } else {
           await markFailed(supabase, row.id, sendResult.error ?? "Send failed");
+          if (jobId) await failJob(supabase, jobId, sendResult.error ?? "Send failed");
           failed++;
         }
 
@@ -442,6 +485,7 @@ async function processPipeQueue(
         }).eq("id", row.id);
 
         actionsExecuted++;
+        if (jobId) await finishJob(supabase, jobId);
         console.log(`[pipe-rule-dispatch][${pipeType}] Wait response started for lead ${lead.name}`);
 
         try {
@@ -460,6 +504,7 @@ async function processPipeQueue(
         const targetStageId = (row as any).target_stage_id;
         if (!targetStageId) {
           await markFailed(supabase, row.id, "No target_stage_id for change_stage action");
+          if (jobId) await failJob(supabase, jobId, "No target_stage_id for change_stage action");
           failed++;
           continue;
         }
@@ -473,6 +518,7 @@ async function processPipeQueue(
 
         if (!stageData?.stage_key) {
           await markFailed(supabase, row.id, "Target stage not found");
+          if (jobId) await failJob(supabase, jobId, "Target stage not found");
           failed++;
           continue;
         }
@@ -485,6 +531,7 @@ async function processPipeQueue(
 
         if (stageErr) {
           await markFailed(supabase, row.id, `change_stage failed: ${stageErr.message}`);
+          if (jobId) await failJob(supabase, jobId, `change_stage failed: ${stageErr.message}`);
           failed++;
         } else {
           await supabase.from("scheduled_pipe_messages").update({
@@ -492,16 +539,10 @@ async function processPipeQueue(
             sent_at: new Date().toISOString(),
           }).eq("id", row.id);
 
-          try {
-            await supabase.from("lead_history").insert({
-              lead_id: lead.id,
-              organization_id: orgId,
-              action: "pipe_stage_change",
-              description: `Etapa alterada automaticamente para: ${stageData.name || stageData.stage_key} (funil ${pipeType})`,
-            });
-          } catch (_) { /* ignore */ }
+          // lead_history is registered automatically by PG trigger (trg_pipe_*_stage_change)
 
           actionsExecuted++;
+          if (jobId) await finishJob(supabase, jobId);
           console.log(`[pipe-rule-dispatch][${pipeType}] Changed stage for lead ${lead.name} to ${stageData.name}`);
         }
 
@@ -547,6 +588,7 @@ async function processPipeQueue(
 
         if (!sdrId) {
           await markFailed(supabase, row.id, "No SDR available for assignment");
+          if (jobId) await failJob(supabase, jobId, "No SDR available for assignment");
           failed++;
           continue;
         }
@@ -559,6 +601,7 @@ async function processPipeQueue(
 
         if (sdrErr) {
           await markFailed(supabase, row.id, `assign_sdr failed: ${sdrErr.message}`);
+          if (jobId) await failJob(supabase, jobId, `assign_sdr failed: ${sdrErr.message}`);
           failed++;
         } else {
           await supabase.from("scheduled_pipe_messages").update({
@@ -582,6 +625,7 @@ async function processPipeQueue(
           } catch (_) { /* ignore */ }
 
           actionsExecuted++;
+          if (jobId) await finishJob(supabase, jobId);
           console.log(`[pipe-rule-dispatch][${pipeType}] Assigned SDR ${sdrData?.name || sdrId} to lead ${lead.name}`);
         }
 
@@ -613,6 +657,7 @@ async function processPipeQueue(
         } catch (_) { /* ignore */ }
 
         actionsExecuted++;
+        if (jobId) await finishJob(supabase, jobId);
         console.log(`[pipe-rule-dispatch][${pipeType}] Cancelled sequence for lead ${lead.name}`);
       }
     } catch (rowError) {
@@ -620,6 +665,7 @@ async function processPipeQueue(
       try {
         await markFailed(supabase, row.id, rowError instanceof Error ? rowError.message : String(rowError));
       } catch (_) { /* ignore */ }
+      if (jobId) await failJob(supabase, jobId, rowError instanceof Error ? rowError.message : String(rowError));
       failed++;
     }
   }

@@ -10,6 +10,8 @@
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { withSentry } from '../_shared/sentry.ts';
+import { logRuntime } from "../_shared/logger.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -36,7 +38,7 @@ interface TestCopilotChatRequest {
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
-Deno.serve(async (req) => {
+Deno.serve(withSentry('test-copilot-chat', async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
@@ -141,6 +143,13 @@ Deno.serve(async (req) => {
 
       const cleanMessage = messageParts.join(" ");
 
+      await logRuntime({
+        module: "copilot",
+        action: "test_chat",
+        status: "success",
+        payloadSnapshot: { mode: "proactive", hasTemplate: !!firstMessageTemplate },
+      });
+
       return new Response(
         JSON.stringify({
           message: cleanMessage,
@@ -199,6 +208,13 @@ Deno.serve(async (req) => {
 
     const cleanMessage = messageParts.join(" ");
 
+    await logRuntime({
+      module: "copilot",
+      action: "test_chat",
+      status: "success",
+      payloadSnapshot: { mode: "reactive", historyLength: recentHistory.length },
+    });
+
     return new Response(
       JSON.stringify({
         message: cleanMessage,
@@ -208,9 +224,15 @@ Deno.serve(async (req) => {
     );
   } catch (error) {
     console.error("Error:", error);
+    await logRuntime({
+      module: "copilot",
+      action: "test_chat",
+      status: "error",
+      errorMessage: error instanceof Error ? error.message : "Unknown error",
+    });
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
-});
+}));

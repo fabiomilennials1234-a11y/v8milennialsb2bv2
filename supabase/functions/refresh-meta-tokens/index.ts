@@ -10,11 +10,13 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { refreshLongLivedToken } from "../_shared/meta-api.ts";
+import { withSentry } from '../_shared/sentry.ts';
+import { logRuntime } from "../_shared/logger.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-Deno.serve(async (req) => {
+Deno.serve(withSentry('refresh-meta-tokens', async (req) => {
   // Validar que e um cron job (opcional: verificar header x-cron-secret)
   const cronSecret = req.headers.get("x-cron-secret");
   const expectedSecret = Deno.env.get("CRON_SECRET");
@@ -39,6 +41,12 @@ Deno.serve(async (req) => {
 
   if (error) {
     console.error("[refresh-meta-tokens] Error fetching connections:", error);
+    await logRuntime({
+      module: "general",
+      action: "refresh_tokens",
+      status: "error",
+      errorMessage: error.message,
+    });
     return new Response(JSON.stringify({ error: error.message }), { status: 500 });
   }
 
@@ -97,8 +105,16 @@ Deno.serve(async (req) => {
   const result = { refreshed, expired, total: connections.length };
   console.log("[refresh-meta-tokens] Job complete:", result);
 
+  await logRuntime({
+    module: "general",
+    action: "refresh_tokens",
+    status: expired > 0 && refreshed === 0 ? "error" : "success",
+    payloadSnapshot: result,
+    errorMessage: expired > 0 ? `${expired} token(s) expired` : undefined,
+  });
+
   return new Response(JSON.stringify(result), {
     status: 200,
     headers: { "Content-Type": "application/json" },
   });
-});
+}));

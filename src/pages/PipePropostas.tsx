@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, memo } from "react";
+import { useState, useMemo, useRef, memo, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search, Filter, Plus, Calendar, User, Building2, Star,
@@ -34,6 +34,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { DraggableKanbanBoard, DraggableItem, KanbanColumn } from "@/components/kanban/DraggableKanbanBoard";
+import { useCanPerformAction } from "@/lib/permissions";
 import { StageWorkflowsBadgeWrapper } from "@/components/kanban/StageWorkflowsBadgeWrapper";
 import { useStageWorkflowCounts } from "@/hooks/useStageWorkflows";
 import { usePipePropostas, useUpdatePipeProposta, useDeletePipeProposta, PipePropostasStatus } from "@/hooks/usePipePropostas";
@@ -59,6 +60,8 @@ import { ptBR } from "date-fns/locale";
 import { useLogLeadAction } from "@/hooks/useLogLeadAction";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { useOrganization } from "@/hooks/useOrganization";
+import { track, trackModuleVisit } from "@/lib/analytics";
 
 interface ProposalItem {
   id: string;
@@ -359,11 +362,15 @@ export default function PipePropostas() {
   const [selectedMetricsMonth, setSelectedMetricsMonth] = useState(now.getMonth() + 1);
   const [selectedMetricsYear, setSelectedMetricsYear] = useState(now.getFullYear());
 
+  const { organizationId } = useOrganization();
+  useEffect(() => { trackModuleVisit("pipe_propostas", organizationId); }, []);
+
   const { data: pipeData, isLoading, refetch } = usePipePropostas();
   const { data: pipelineStages = [] } = usePipelineStages("propostas");
   const { data: workflowCounts = {} } = useStageWorkflowCounts("propostas");
   const { data: teamMembers } = useTeamMembers();
   const updatePipeProposta = useUpdatePipeProposta();
+  const { allowed: canMovePipe } = useCanPerformAction("move_pipe_record");
   const { data: tinyStatus } = useTinyErpStatus();
   const deletePipeProposta = useDeletePipeProposta();
   const deleteAllLeadsInPipe = useDeleteAllLeadsInPipe("propostas");
@@ -794,6 +801,7 @@ export default function PipePropostas() {
 
       const stageLabel = statusColumns.find(c => c.id === newStatus)?.title || newStatus;
       logAction({ leadId, action: "proposal_status_changed", description: `Etapa alterada para "${stageLabel}" no Pipe Propostas` });
+      if (organizationId) track({ event: "card_moved", organizationId, entityType: "pipe_propostas", entityId: itemId, metadata: { to_stage: newStatus } });
 
       if (newStatus === "vendido") {
         toast.success("🎉 Venda fechada com sucesso!");
@@ -1155,6 +1163,7 @@ export default function PipePropostas() {
             <DraggableKanbanBoard
               columns={columns}
               onStatusChange={handleStatusChange}
+              disabled={!canMovePipe}
               onDeleteAllLeads={() => setDeleteAllLeadsDialogOpen(true)}
               renderColumnExtra={(col) => {
                 const allCounts = workflowCounts["__all__"] || { total: 0, active: 0 };

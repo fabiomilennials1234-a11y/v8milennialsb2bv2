@@ -8,8 +8,10 @@
  * Método: POST
  */
 
+import { withSentry } from '../_shared/sentry.ts';
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { logRuntime } from "../_shared/logger.ts";
 import {
   cancelWatchChannels,
   decryptToken,
@@ -25,7 +27,7 @@ const SUPABASE_ANON_KEY         =
   Deno.env.get("SUPABASE_ANON_KEY")?.trim() ||
   "";
 
-Deno.serve(async (req) => {
+Deno.serve(withSentry('google-calendar-disconnect', async (req) => {
   const corsHeaders = getCorsHeaders(req.headers.get("origin"));
 
   if (req.method === "OPTIONS") {
@@ -131,9 +133,28 @@ Deno.serve(async (req) => {
       initiatedBy: "user",
     });
 
+    await logRuntime({
+      organizationId: tokenRecord.organization_id ?? undefined,
+      module: "calendar",
+      action: "disconnect",
+      status: "success",
+      triggeredBy: "user",
+      entityType: "user",
+      entityId: user.id,
+    });
+
     return json({ success: true, message: "Google Calendar desconectado com sucesso" });
   } catch (err) {
     console.error("[google-calendar-disconnect]", err);
+
+    await logRuntime({
+      module: "calendar",
+      action: "disconnect",
+      status: "error",
+      errorMessage: String(err),
+      triggeredBy: "system",
+    });
+
     return json({ error: "Erro interno", message: String(err) }, 500);
   }
-});
+}));

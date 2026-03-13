@@ -5,9 +5,11 @@
  * (não estão em team_members). Apenas Master pode chamar.
  */
 
+import { withSentry } from '../_shared/sentry.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { logRuntime } from "../_shared/logger.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -42,7 +44,7 @@ export interface UnassignedUser {
   full_name: string | null;
 }
 
-serve(async (req) => {
+serve(withSentry('list-unassigned-users', async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("", { status: 200, headers: CORS_PREFLIGHT_HEADERS });
   }
@@ -139,6 +141,14 @@ serve(async (req) => {
       page++;
     }
 
+    await logRuntime({
+      module: "permission",
+      action: "list_unassigned",
+      status: "success",
+      triggeredBy: user.id,
+      payloadSnapshot: { count: allUsers.length },
+    });
+
     return jsonResponse(
       { success: true, users: allUsers },
       200,
@@ -146,10 +156,16 @@ serve(async (req) => {
     );
   } catch (err) {
     console.error("[list-unassigned-users]", err);
+    await logRuntime({
+      module: "permission",
+      action: "list_unassigned",
+      status: "error",
+      errorMessage: String(err),
+    });
     return jsonResponse(
       { success: false, error: "Internal server error", message: String(err) },
       500,
       { ...CORS_PREFLIGHT_HEADERS, "Content-Type": "application/json" }
     );
   }
-});
+}));

@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
 import { triggerStageChangedWorkflows } from "@/lib/workflowTrigger";
+import { useCanPerformActionAsync } from "@/lib/permissions";
 
 // ────────────────────────────────────────────────────────────
 // Types
@@ -539,6 +540,7 @@ export function useAddLeadToCustomPipe() {
 /** Mover lead entre etapas (drag-and-drop) */
 export function useMoveLeadInCustomPipe() {
   const queryClient = useQueryClient();
+  const { data: movePermission } = useCanPerformActionAsync("move_pipe_record");
 
   return useMutation({
     mutationFn: async ({
@@ -550,6 +552,9 @@ export function useMoveLeadInCustomPipe() {
       pipeline_id: string;
       stage_id: string;
     }) => {
+      if (movePermission && !movePermission.allowed) {
+        throw new Error("Sem permissão para mover registros no pipe");
+      }
       const { data, error } = await supabase
         .from("custom_pipe_entries")
         .update({

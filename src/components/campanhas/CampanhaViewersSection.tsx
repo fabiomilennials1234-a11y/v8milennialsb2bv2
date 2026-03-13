@@ -15,7 +15,7 @@ import {
   type CampanhaViewer,
 } from "@/hooks/useCampanhas";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
-import { useIsAdmin } from "@/hooks/useUserRole";
+import { useCanPerformAction } from "@/lib/permissions";
 import { UserPlus, X, Users } from "lucide-react";
 import { toast } from "sonner";
 
@@ -24,7 +24,7 @@ interface CampanhaViewersSectionProps {
 }
 
 export function CampanhaViewersSection({ campanhaId }: CampanhaViewersSectionProps) {
-  const { isAdmin } = useIsAdmin();
+  const { allowed: isAdmin } = useCanPerformAction("trigger_campaign");
   const { data: viewers = [] } = useCampanhaViewers(campanhaId);
   const { data: teamMembers = [] } = useTeamMembers();
   const addViewer = useAddCampanhaViewer();

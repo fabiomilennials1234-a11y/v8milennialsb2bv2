@@ -10,11 +10,14 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { sendMessage, sendMediaMessage } from "../_shared/meta-api.ts";
+import { withSentry } from '../_shared/sentry.ts';
+import { requireAuth, AuthError, authErrorResponse } from "../_shared/user-auth.ts";
+import { logRuntime } from "../_shared/logger.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-Deno.serve(async (req) => {
+Deno.serve(withSentry('send-meta-message', async (req) => {
   const corsHeaders = getCorsHeaders(req.headers.get("origin"));
 
   if (req.method === "OPTIONS") {
@@ -22,6 +25,7 @@ Deno.serve(async (req) => {
   }
 
   try {
+    const body = await req.json();
     const {
       recipientId,
       channel,
@@ -29,7 +33,18 @@ Deno.serve(async (req) => {
       pageId,
       mediaUrl,
       mediaType,
-    } = await req.json();
+    } = body;
+
+    // Authenticate user
+    let auth;
+    try {
+      auth = await requireAuth(req, { body });
+    } catch (err) {
+      if (err instanceof AuthError) {
+        return authErrorResponse(err, corsHeaders);
+      }
+      throw err;
+    }
 
     if (!recipientId || !channel || (!message && !mediaUrl)) {
       return new Response(
@@ -49,17 +64,16 @@ Deno.serve(async (req) => {
       auth: { persistSession: false },
     });
 
-    // Buscar pagina pelo page_id para obter token e org
+    // Buscar pagina pelo page_id (scoped to user's org)
     let pageQuery = supabase
       .from("meta_pages")
       .select("id, organization_id, page_id, page_access_token, instagram_account_id")
-      .eq("is_active", true);
+      .eq("is_active", true)
+      .eq("organization_id", auth.organizationId);
 
     if (pageId) {
       pageQuery = pageQuery.eq("page_id", pageId);
     } else if (channel === "instagram") {
-      // Tentar encontrar a pagina pelo instagram_account_id
-      // Se nao tiver pageId, buscar qualquer pagina com IG ativo
       pageQuery = pageQuery.not("instagram_account_id", "is", null);
     }
 
@@ -69,6 +83,23 @@ Deno.serve(async (req) => {
       return new Response(
         JSON.stringify({ error: "Pagina Meta nao encontrada ou inativa" }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Defense-in-depth: verify org match
+    if (page.organization_id !== auth.organizationId) {
+      await logRuntime({
+        organizationId: auth.organizationId,
+        module: "permission",
+        action: "send_meta_message",
+        status: "error",
+        errorMessage: `Org mismatch: user org ${auth.organizationId} vs page org ${page.organization_id}`,
+        entityType: "meta_page",
+        entityId: page.page_id,
+      });
+      return new Response(
+        JSON.stringify({ error: "Você não tem permissão para enviar mensagens desta página" }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -128,4 +159,4 @@ Deno.serve(async (req) => {
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
-});
+}));

@@ -1,7 +1,9 @@
+import { withSentry } from '../_shared/sentry.ts';
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { logRuntime } from "../_shared/logger.ts";
 
-Deno.serve(async (req) => {
+Deno.serve(withSentry('webhook-confirmacao', async (req) => {
   const origin = req.headers.get("origin");
   const corsHeaders = getCorsHeaders(origin);
   
@@ -114,11 +116,20 @@ Deno.serve(async (req) => {
       description: `Lead ${name} adicionado automaticamente no pipe de confirmação${meeting_date ? ` com reunião em ${meeting_date}` : ""}`,
     });
 
+    await logRuntime({
+      module: "lead",
+      action: "confirmacao_ingest",
+      status: "success",
+      entityType: "lead",
+      entityId: lead.id,
+      payloadSnapshot: { name, origin, meeting_date },
+    });
+
     return new Response(
-      JSON.stringify({ 
-        success: true, 
+      JSON.stringify({
+        success: true,
         message: "Lead criado com sucesso no pipe de confirmação",
-        lead_id: lead.id 
+        lead_id: lead.id
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
@@ -126,9 +137,15 @@ Deno.serve(async (req) => {
   } catch (error) {
     console.error("Webhook confirmacao error:", error);
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    await logRuntime({
+      module: "lead",
+      action: "confirmacao_ingest",
+      status: "error",
+      errorMessage,
+    });
     return new Response(
       JSON.stringify({ error: "Erro interno", details: errorMessage }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
-});
+}));

@@ -6,9 +6,11 @@
  * e remove o registro de pending. Idempotente.
  */
 
+import { withSentry } from '../_shared/sentry.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { logRuntime } from "../_shared/logger.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -36,7 +38,7 @@ function jsonResponse(
   });
 }
 
-serve(async (req) => {
+serve(withSentry('attach-to-org-by-pending-invite', async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("", { status: 200, headers: CORS_PREFLIGHT_HEADERS });
   }
@@ -177,6 +179,16 @@ serve(async (req) => {
 
     await supabase.from("pending_org_invites").delete().eq("id", pending.id);
 
+    await logRuntime({
+      organizationId: orgId,
+      module: "auth",
+      action: "attach_invite",
+      status: "success",
+      entityType: "user",
+      entityId: user.id,
+      triggeredBy: user.id,
+    });
+
     return jsonResponse(
       {
         success: true,
@@ -189,10 +201,16 @@ serve(async (req) => {
     );
   } catch (err) {
     console.error("[attach-to-org-by-pending-invite]", err);
+    await logRuntime({
+      module: "auth",
+      action: "attach_invite",
+      status: "error",
+      errorMessage: String(err),
+    });
     return jsonResponse(
       { success: false, error: "Internal server error", message: String(err) },
       500,
       { ...CORS_PREFLIGHT_HEADERS, "Content-Type": "application/json" }
     );
   }
-});
+}));

@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { useOrganization } from "@/hooks/useOrganization";
 import { triggerFollowUpAutomation } from "@/hooks/useAutoFollowUp";
+import { assertIsAdmin, useCanPerformActionAsync } from "@/lib/permissions";
 
 // Tipos para os objetivos de campanha
 export type CampaignObjective = 'qualificacao' | 'agendamentos' | 'propostas' | 'livre';
@@ -402,6 +403,9 @@ export function useCreateCampanha() {
       memberRoles?: Record<string, CampanhaMemberRole>; // memberId -> 'sdr' | 'closer'
       templateIds?: string[]; // Para SEMI-AUTOMÁTICA
     }) => {
+      // PERMISSION: Apenas admin pode criar campanhas
+      await assertIsAdmin();
+
       // Buscar organization_id do usuário
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Usuário não autenticado");
@@ -514,9 +518,13 @@ export function useCreateCampanha() {
 // Hook to update a campaign
 export function useUpdateCampanha() {
   const queryClient = useQueryClient();
+  const { data: editPermission } = useCanPerformActionAsync("edit_campaign");
 
   return useMutation({
     mutationFn: async ({ id, ...updates }: Partial<Campanha> & { id: string }) => {
+      if (editPermission && !editPermission.allowed) {
+        throw new Error("Sem permissão para editar campanhas");
+      }
       const newAgentId = updates.agent_id !== undefined ? updates.agent_id : undefined;
 
       if (newAgentId !== undefined) {
@@ -564,9 +572,13 @@ export function useUpdateCampanha() {
 // Hook to delete a campaign
 export function useDeleteCampanha() {
   const queryClient = useQueryClient();
+  const { data: deletePermission } = useCanPerformActionAsync("delete_campaign");
 
   return useMutation({
     mutationFn: async (id: string) => {
+      if (deletePermission && !deletePermission.allowed) {
+        throw new Error("Sem permissão para excluir campanhas");
+      }
       const { error } = await supabase
         .from("campanhas")
         .delete()

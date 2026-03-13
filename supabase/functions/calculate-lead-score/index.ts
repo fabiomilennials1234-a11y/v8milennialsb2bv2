@@ -1,5 +1,7 @@
+import { withSentry } from '../_shared/sentry.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.89.0";
+import { logRuntime } from "../_shared/logger.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -33,7 +35,7 @@ interface HistoryData {
   last_interaction?: string;
 }
 
-serve(async (req) => {
+serve(withSentry('calculate-lead-score', async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -282,6 +284,13 @@ IMPORTANTE: Responda APENAS com JSON válido, sem texto adicional.`;
       });
     }
 
+    await logRuntime({
+      module: "copilot",
+      action: "calculate_score",
+      status: "success",
+      payloadSnapshot: { processed: results.length, leadIds: leadIds.slice(0, 5) },
+    });
+
     return new Response(
       JSON.stringify({
         message: "Scores calculated successfully",
@@ -293,9 +302,15 @@ IMPORTANTE: Responda APENAS com JSON válido, sem texto adicional.`;
 
   } catch (error) {
     console.error("Error calculating lead scores:", error);
+    await logRuntime({
+      module: "copilot",
+      action: "calculate_score",
+      status: "error",
+      errorMessage: error instanceof Error ? error.message : "Unknown error",
+    });
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
-});
+}));

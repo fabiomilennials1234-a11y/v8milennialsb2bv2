@@ -31,4 +31,7 @@ FROM public.pipe_propostas
 WHERE product_id IS NOT NULL;
 
 -- Enable realtime
-ALTER PUBLICATION supabase_realtime ADD TABLE public.pipe_proposta_items;
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE public.pipe_proposta_items;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;

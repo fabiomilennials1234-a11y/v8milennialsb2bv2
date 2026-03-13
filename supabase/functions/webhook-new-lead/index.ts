@@ -1,7 +1,10 @@
+import { withSentry } from '../_shared/sentry.ts';
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { validateLeadInput, sanitizeString } from "../_shared/validation.ts";
 import { normalizePhoneForSearch } from "../_shared/lead-service.ts";
+import { logRuntime } from "../_shared/logger.ts";
+import { fireTrigger } from "../_shared/workflow-trigger.ts";
 
 // Helper function to normalize email (lowercase, trim)
 function normalizeEmail(email: string | null | undefined): string | null {
@@ -29,7 +32,7 @@ function getDayBoundaries(date: Date): { start: string; end: string } {
   };
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withSentry('webhook-new-lead', async (req) => {
   const origin = req.headers.get("origin");
   const corsHeaders = getCorsHeaders(origin);
   
@@ -296,9 +299,18 @@ Deno.serve(async (req) => {
         created_by: null,
       });
 
+      await logRuntime({
+        module: "lead",
+        action: "webhook_create",
+        status: "success",
+        entityType: "lead",
+        entityId: existingLead.id,
+        payloadSnapshot: { deduplicationMethod, pipe: newCompromissoDate ? "confirmacao" : "whatsapp" },
+      });
+
       return new Response(
-        JSON.stringify({ 
-          success: true, 
+        JSON.stringify({
+          success: true,
           message: "Lead existente atualizado (duplicado unificado)",
           lead_id: existingLead.id,
           deduplication_method: deduplicationMethod,
@@ -369,9 +381,18 @@ Deno.serve(async (req) => {
         created_by: null,
       });
 
+      await logRuntime({
+        module: "lead",
+        action: "webhook_create",
+        status: "success",
+        entityType: "lead",
+        entityId: lead.id,
+        payloadSnapshot: { pipe: "confirmacao" },
+      });
+
       return new Response(
-        JSON.stringify({ 
-          success: true, 
+        JSON.stringify({
+          success: true,
           message: "Lead criado com sucesso no pipe de confirmação",
           lead_id: lead.id,
           pipe: "confirmacao"
@@ -404,9 +425,27 @@ Deno.serve(async (req) => {
       created_by: null,
     });
 
+    await logRuntime({
+      module: "lead",
+      action: "webhook_create",
+      status: "success",
+      entityType: "lead",
+      entityId: lead.id,
+      payloadSnapshot: { pipe: "whatsapp" },
+    });
+
+    // Fire webhook_received workflow trigger (fire-and-forget)
+    fireTrigger({
+      supabase,
+      organizationId: organization_id,
+      triggerType: "webhook_received",
+      leadId: lead.id,
+      context: { trigger: "webhook_received", webhook_key: "new_lead", origin: origin || "webhook" },
+    }).catch(() => {});
+
     return new Response(
-      JSON.stringify({ 
-        success: true, 
+      JSON.stringify({
+        success: true,
         message: "Lead criado com sucesso",
         lead_id: lead.id,
         pipe: "whatsapp"
@@ -416,9 +455,15 @@ Deno.serve(async (req) => {
 
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    await logRuntime({
+      module: "lead",
+      action: "webhook_create",
+      status: "error",
+      errorMessage,
+    });
     return new Response(
       JSON.stringify({ error: "Erro interno", details: errorMessage }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
-});
+}));

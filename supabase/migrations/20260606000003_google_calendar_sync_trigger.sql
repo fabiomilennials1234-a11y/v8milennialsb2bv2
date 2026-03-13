@@ -10,7 +10,10 @@
 -- ============================================================
 
 -- Extensão necessária para HTTP requests assíncronos no Postgres
-create extension if not exists pg_net;
+DO $$ BEGIN
+  CREATE EXTENSION IF NOT EXISTS pg_net;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
 
 -- ──────────────────────────────────────────────────────────────
 -- Função do trigger

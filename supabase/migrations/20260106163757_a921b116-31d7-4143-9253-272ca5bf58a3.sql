@@ -494,9 +494,27 @@ CREATE TRIGGER update_goals_updated_at
   EXECUTE FUNCTION public.update_updated_at();
 
 -- Enable realtime para tabelas principais
-ALTER PUBLICATION supabase_realtime ADD TABLE public.leads;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.pipe_confirmacao;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.pipe_propostas;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.pipe_whatsapp;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.goals;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.commissions;
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE public.leads;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE public.pipe_confirmacao;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE public.pipe_propostas;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE public.pipe_whatsapp;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE public.goals;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE public.commissions;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;

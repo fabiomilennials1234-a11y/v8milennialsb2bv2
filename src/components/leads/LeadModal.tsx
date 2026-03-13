@@ -94,20 +94,41 @@ const ACTION_CONFIG: Record<string, { icon: React.ReactNode; label: string; colo
 
 const FALLBACK_CONFIG = { icon: <Clock className="w-3.5 h-3.5" />, label: "", color: "bg-muted text-muted-foreground" };
 
-function TimelineItem({ action, description, date, isLast }: { action: string; description?: string; date: string; isLast?: boolean }) {
+const SOURCE_BADGE_LM: Record<string, { label: string; className: string }> = {
+  agent: { label: "Copilot", className: "bg-purple-500/15 text-purple-600 border-purple-500/20" },
+  automation: { label: "Automação", className: "bg-blue-500/15 text-blue-600 border-blue-500/20" },
+  system: { label: "Sistema", className: "bg-muted text-muted-foreground border-border" },
+};
+
+const SOURCE_ICON_COLOR_LM: Record<string, string> = {
+  agent: "bg-purple-500/20 text-purple-600",
+  automation: "bg-blue-500/20 text-blue-600",
+  system: "bg-muted text-muted-foreground",
+};
+
+function TimelineItem({ action, description, date, source, isLast }: { action: string; description?: string; date: string; source?: string; isLast?: boolean }) {
   const config = ACTION_CONFIG[action] || FALLBACK_CONFIG;
   const displayLabel = config.label || action;
+  const iconColor = (source && source !== "manual" && SOURCE_ICON_COLOR_LM[source]) || config.color;
+  const badge = source && source !== "manual" ? SOURCE_BADGE_LM[source] : null;
 
   return (
     <div className="flex gap-3">
       <div className="flex flex-col items-center">
-        <div className={cn("w-8 h-8 rounded-full flex items-center justify-center", config.color)}>
+        <div className={cn("w-8 h-8 rounded-full flex items-center justify-center", iconColor)}>
           {config.icon}
         </div>
         {!isLast && <div className="w-px flex-1 bg-border mt-2" />}
       </div>
       <div className="flex-1 pb-6">
-        <p className="font-medium text-sm">{displayLabel}</p>
+        <div className="flex items-center gap-2">
+          <p className="font-medium text-sm">{displayLabel}</p>
+          {badge && (
+            <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full border font-medium", badge.className)}>
+              {badge.label}
+            </span>
+          )}
+        </div>
         {description && <p className="text-sm text-muted-foreground mt-0.5">{description}</p>}
         <p className="text-xs text-muted-foreground mt-1">
           {formatDistanceToNow(new Date(date), { addSuffix: true, locale: ptBR })}
@@ -279,6 +300,29 @@ export function LeadModal({
           logAction({ leadId: lead.id, action: "closer_assigned", description: `Closer alterado para "${closerName}"` });
         }
       } else {
+        // Dedup check: verify if lead with same phone/email already exists
+        if (formData.phone || formData.email) {
+          const filters: string[] = [];
+          if (formData.phone) filters.push(`phone.eq.${formData.phone}`);
+          if (formData.email) filters.push(`email.eq.${formData.email}`);
+
+          const { data: existingLeads } = await supabase
+            .from("leads")
+            .select("id, name, phone, email")
+            .eq("organization_id", currentTeamMember.organization_id)
+            .or(filters.join(","))
+            .limit(1);
+
+          if (existingLeads && existingLeads.length > 0) {
+            const existing = existingLeads[0];
+            const matchField = existing.phone === formData.phone ? "telefone" : "email";
+            const confirmed = window.confirm(
+              `Já existe um lead com este ${matchField}: "${existing.name}". Deseja criar mesmo assim?`
+            );
+            if (!confirmed) return;
+          }
+        }
+
         const newLead = await createLead.mutateAsync(payload);
         leadId = newLead.id;
         logAction({ leadId: newLead.id, action: "lead_created", description: `Lead "${formData.name}" criado` });
@@ -700,6 +744,7 @@ export function LeadModal({
                           action={item.action}
                           description={item.description || undefined}
                           date={item.created_at}
+                          source={(item as Record<string, unknown>).source as string || "manual"}
                           isLast={index === Math.min(history.length, historyLimit) - 1}
                         />
                       ))}

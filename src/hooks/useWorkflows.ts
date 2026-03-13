@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/hooks/useOrganization";
 import { useAuth } from "@/contexts/AuthContext";
+import { assertIsAdmin } from "@/lib/permissions";
 import type {
   Workflow,
   WorkflowInsert,
@@ -60,6 +61,9 @@ export function useCreateWorkflow() {
     mutationFn: async (input: WorkflowInsert) => {
       if (!organizationId || !user?.id) throw new Error("Sem organização ou usuário");
 
+      // PERMISSION: Apenas admin pode criar workflows
+      await assertIsAdmin();
+
       const { data, error } = await supabase
         .from("workflows")
         .insert({
@@ -85,6 +89,9 @@ export function useUpdateWorkflow() {
 
   return useMutation({
     mutationFn: async ({ id, ...updates }: WorkflowUpdate & { id: string }) => {
+      // PERMISSION: Apenas admin pode editar workflows
+      await assertIsAdmin();
+
       const { data, error } = await supabase
         .from("workflows")
         .update(updates as any)
@@ -109,6 +116,9 @@ export function useDeleteWorkflow() {
 
   return useMutation({
     mutationFn: async (id: string) => {
+      // PERMISSION: Apenas admin pode excluir workflows
+      await assertIsAdmin();
+
       const { error } = await supabase
         .from("workflows")
         .delete()
@@ -129,6 +139,9 @@ export function useToggleWorkflow() {
 
   return useMutation({
     mutationFn: async ({ id, is_active }: { id: string; is_active: boolean }) => {
+      // PERMISSION: Apenas admin pode ativar/desativar workflows
+      await assertIsAdmin();
+
       const { error } = await supabase
         .from("workflows")
         .update({ is_active } as any)

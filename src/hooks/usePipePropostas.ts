@@ -5,6 +5,7 @@ import { triggerFollowUpAutomation } from "./useAutoFollowUp";
 import { triggerStageChangedWorkflows } from "@/lib/workflowTrigger";
 import { useRealtimeSubscription } from "./useRealtimeSubscription";
 import { useOrganization } from "./useOrganization";
+import { useCanPerformActionAsync } from "@/lib/permissions";
 
 export type PipeProposta = Tables<"pipe_propostas">;
 export type PipePropostaInsert = TablesInsert<"pipe_propostas">;
@@ -112,9 +113,13 @@ export function useCreatePipeProposta() {
 
 export function useUpdatePipeProposta() {
   const queryClient = useQueryClient();
-  
+  const { data: movePermission } = useCanPerformActionAsync("move_pipe_record");
+
   return useMutation({
     mutationFn: async ({ id, leadId, closerId, skip_auto_push, ...updates }: PipePropostaUpdate & { id: string; leadId?: string; closerId?: string | null; skip_auto_push?: boolean }) => {
+      if (updates.status && movePermission && !movePermission.allowed) {
+        throw new Error("Sem permissão para mover registros no pipe");
+      }
       const { data, error } = await supabase
         .from("pipe_propostas")
         .update(updates)
