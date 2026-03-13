@@ -38,6 +38,7 @@ import { DraggableKanbanBoard, DraggableItem, KanbanColumn } from "@/components/
 import { StageWorkflowsBadgeWrapper } from "@/components/kanban/StageWorkflowsBadgeWrapper";
 import { useStageWorkflowCounts } from "@/hooks/useStageWorkflows";
 import { usePipePropostas, useUpdatePipeProposta, useDeletePipeProposta, PipePropostasStatus } from "@/hooks/usePipePropostas";
+import { useHasPermission } from "@/hooks/usePermissions";
 import { usePipePropostasMetrics, type MetricsPeriod } from "@/hooks/usePipeMetrics";
 import { useDeleteAllLeadsInPipe } from "@/hooks/useLeads";
 import { usePipelineStages, stagesToColumns } from "@/hooks/usePipelineStages";
@@ -416,6 +417,7 @@ export default function PipePropostas() {
   const deletePipeProposta = useDeletePipeProposta();
   const deleteAllLeadsInPipe = useDeleteAllLeadsInPipe("propostas");
   const logAction = useLogLeadAction();
+  const { data: canDelete } = useHasPermission("can_delete_leads");
   const { data: metricsByPeriod } = usePipePropostasMetrics(
     metricsPeriod,
     metricsPeriod === "month" ? selectedMetricsMonth : undefined,
@@ -742,7 +744,8 @@ export default function PipePropostas() {
       toast.success("Proposta removida do funil!");
       setDeleteDialog(null);
     } catch (error) {
-      toast.error("Erro ao excluir");
+      const msg = error instanceof Error ? error.message : "Erro ao excluir proposta";
+      toast.error(msg);
     }
   };
 
@@ -1223,7 +1226,7 @@ export default function PipePropostas() {
                   <ProposalCardComponent
                     proposal={card}
                     onCalorChange={(calor) => handleCalorChange(card.id, calor)}
-                    onDelete={handleOpenDeleteDialog}
+                    onDelete={canDelete ? handleOpenDeleteDialog : undefined}
                   />
                 </div>
               )}
