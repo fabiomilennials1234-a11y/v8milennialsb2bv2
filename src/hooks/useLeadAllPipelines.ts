@@ -223,6 +223,7 @@ export function useAddLeadToStandardPipe() {
         const { error } = await supabase.from("pipe_whatsapp").insert({
           lead_id: leadId,
           status: stageId,
+          responsible_id: teamMember.id,
           sdr_id: teamMember.id,
           organization_id: teamMember.organization_id,
         });
@@ -231,6 +232,7 @@ export function useAddLeadToStandardPipe() {
         const { error } = await supabase.from("pipe_confirmacao").insert({
           lead_id: leadId,
           status: stageId,
+          responsible_id: teamMember.id,
           sdr_id: teamMember.id,
           organization_id: teamMember.organization_id,
         });
@@ -239,6 +241,7 @@ export function useAddLeadToStandardPipe() {
         const { error } = await supabase.from("pipe_propostas").insert({
           lead_id: leadId,
           status: stageId,
+          responsible_id: teamMember.id,
           closer_id: teamMember.id,
           organization_id: teamMember.organization_id,
         });

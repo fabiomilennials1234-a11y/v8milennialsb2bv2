@@ -49,8 +49,8 @@ import {
 
 const ROLE_LABELS: Record<string, string> = {
   admin:   "Admin",
-  sdr:     "SDR",
-  closer:  "Closer",
+  sdr:     "Vendedor",
+  closer:  "Vendedor",
   bdr:     "BDR",
   agency:  "Agência",
   cliente: "Cliente",

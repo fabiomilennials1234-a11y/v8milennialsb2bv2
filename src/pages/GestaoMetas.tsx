@@ -459,7 +459,7 @@ export default function GestaoMetas() {
                   <SelectItem value="team">🏢 Meta do Time</SelectItem>
                   {teamMembers.filter(m => m.is_active).map((member) => (
                     <SelectItem key={member.id} value={member.id}>
-                      {member.name} ({member.role === "closer" ? "Closer" : "SDR"})
+                      {member.name}
                     </SelectItem>
                   ))}
                 </SelectContent>

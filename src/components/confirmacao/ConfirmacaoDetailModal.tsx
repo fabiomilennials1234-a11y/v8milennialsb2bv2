@@ -54,7 +54,7 @@ import { useCreatePipeProposta } from "@/hooks/usePipePropostas";
 import { useLeadHistory } from "@/hooks/useLeadHistory";
 import { useLogLeadAction } from "@/hooks/useLogLeadAction";
 import { useDeleteLead } from "@/hooks/useLeads";
-import { useTeamMembers } from "@/hooks/useTeamMembers";
+import { useResponsibleMembers } from "@/hooks/useTeamMembers";
 import { CompareceuModal } from "./CompareceuModal";
 import { toast } from "sonner";
 
@@ -116,8 +116,7 @@ export function ConfirmacaoDetailModal({ open, onOpenChange, item, onSuccess }: 
   const [editedStatus, setEditedStatus] = useState<PipeConfirmacaoStatus>("reuniao_marcada");
   const [editedDate, setEditedDate] = useState<Date | undefined>();
   const [editedTime, setEditedTime] = useState("10:00");
-  const [editedSdrId, setEditedSdrId] = useState<string | null>(null);
-  const [editedCloserId, setEditedCloserId] = useState<string | null>(null);
+  const [editedResponsibleId, setEditedResponsibleId] = useState<string | null>(null);
   const [isSavingMeeting, setIsSavingMeeting] = useState(false);
   const [isSavingOwners, setIsSavingOwners] = useState(false);
   const [newNote, setNewNote] = useState("");
@@ -135,10 +134,7 @@ export function ConfirmacaoDetailModal({ open, onOpenChange, item, onSuccess }: 
   const createPipeProposta = useCreatePipeProposta();
   const { data: leadHistory, isLoading: historyLoading } = useLeadHistory(item?.lead_id);
   const logAction = useLogLeadAction();
-  const { data: teamMembers } = useTeamMembers();
-
-  const sdrs = teamMembers?.filter(m => m.role === "sdr" && m.is_active) || [];
-  const closers = teamMembers?.filter(m => m.role === "closer" && m.is_active) || [];
+  const { data: responsibleMembers = [] } = useResponsibleMembers();
 
   // Sync state with item when it changes
   useEffect(() => {
@@ -147,8 +143,7 @@ export function ConfirmacaoDetailModal({ open, onOpenChange, item, onSuccess }: 
       setEditedStatus(item.status || "reuniao_marcada");
       setEditedDate(item.meeting_date ? new Date(item.meeting_date) : undefined);
       setEditedTime(item.meeting_date ? format(new Date(item.meeting_date), "HH:mm") : "10:00");
-      setEditedSdrId(item.sdr_id || null);
-      setEditedCloserId(item.closer_id || null);
+      setEditedResponsibleId(item?.responsible_id || null);
       setIsEditingMeeting(false);
       setIsEditingOwners(false);
       setNewNote("");
@@ -170,10 +165,9 @@ export function ConfirmacaoDetailModal({ open, onOpenChange, item, onSuccess }: 
   const currentStatus = statusColumns.find(s => s.id === item.status);
 
   const getMemberName = (id: string | null | undefined) =>
-    teamMembers?.find((m) => m.id === id)?.name;
+    responsibleMembers.find((m) => m.id === id)?.name;
 
-  const currentSdrName = getMemberName(editedSdrId) || item.sdr?.name || lead?.sdr?.name || "Não atribuído";
-  const currentCloserName = getMemberName(editedCloserId) || item.closer?.name || lead?.closer?.name || "Não atribuído";
+  const responsibleName = getMemberName(editedResponsibleId) || "Não atribuído";
 
   const handleSaveMeeting = async () => {
     // If changing to compareceu, open the compareceu modal instead
@@ -189,7 +183,7 @@ export function ConfirmacaoDetailModal({ open, onOpenChange, item, onSuccess }: 
         notes: editedNotes ?? null,
         status: editedStatus,
         leadId: item.lead_id,
-        assignedTo: editedSdrId || editedCloserId || item.sdr_id || item.closer_id,
+        assignedTo: editedResponsibleId || item.responsible_id,
       };
 
       if (editedDate) {
@@ -233,23 +227,22 @@ export function ConfirmacaoDetailModal({ open, onOpenChange, item, onSuccess }: 
     }
   };
 
-  const handleCompareceuConfirm = async (sdrId: string | null, closerId: string | null) => {
+  const handleCompareceuConfirm = async (responsibleId: string | null) => {
     setIsProcessingCompareceu(true);
     try {
-      // Update confirmacao with SDR, Closer and status
-      await updatePipeConfirmacao.mutateAsync({ 
-        id: item.id, 
+      // Update confirmacao with responsible and status
+      await updatePipeConfirmacao.mutateAsync({
+        id: item.id,
         status: "compareceu" as PipeConfirmacaoStatus,
-        sdr_id: sdrId,
-        closer_id: closerId,
+        responsible_id: responsibleId,
         leadId: item.lead_id,
-        assignedTo: sdrId || closerId,
+        assignedTo: responsibleId,
       });
 
-      // Create proposta with selected closer
+      // Create proposta with selected responsible
       await createPipeProposta.mutateAsync({
         lead_id: item.lead_id,
-        closer_id: closerId,
+        responsible_id: responsibleId,
         status: "marcar_compromisso",
       });
 
@@ -269,22 +262,16 @@ export function ConfirmacaoDetailModal({ open, onOpenChange, item, onSuccess }: 
   const handleSaveOwners = async () => {
     setIsSavingOwners(true);
     try {
-      if (editedSdrId !== item.sdr_id) {
-        const sdrName = getMemberName(editedSdrId) || "Nenhum";
-        logAction({ leadId: item.lead_id, action: "sdr_assigned", description: `SDR alterado para "${sdrName}"` });
-      }
-
-      if (editedCloserId !== item.closer_id) {
-        const closerName = getMemberName(editedCloserId) || "Nenhum";
-        logAction({ leadId: item.lead_id, action: "closer_assigned", description: `Closer alterado para "${closerName}"` });
+      if (editedResponsibleId !== item.responsible_id) {
+        const name = getMemberName(editedResponsibleId) || "Nenhum";
+        logAction({ leadId: item.lead_id, action: "responsible_assigned", description: `Responsável alterado para "${name}"` });
       }
 
       await updatePipeConfirmacao.mutateAsync({
         id: item.id,
-        sdr_id: editedSdrId,
-        closer_id: editedCloserId,
+        responsible_id: editedResponsibleId,
         leadId: item.lead_id,
-        assignedTo: editedSdrId || editedCloserId || null,
+        assignedTo: editedResponsibleId || null,
       });
 
       toast.success("Responsáveis atualizados!");
@@ -313,7 +300,7 @@ export function ConfirmacaoDetailModal({ open, onOpenChange, item, onSuccess }: 
         id: item.id,
         notes: updatedNotes,
         leadId: item.lead_id,
-        assignedTo: item.sdr_id || item.closer_id,
+        assignedTo: item.responsible_id,
       });
 
       toast.success("Nota adicionada!");
@@ -342,7 +329,7 @@ export function ConfirmacaoDetailModal({ open, onOpenChange, item, onSuccess }: 
         id: item.id,
         status: newStatus,
         leadId: item.lead_id,
-        assignedTo: item.sdr_id || item.closer_id,
+        assignedTo: item.responsible_id,
       });
       toast.success("Status atualizado!");
       onSuccess?.();
@@ -540,46 +527,24 @@ export function ConfirmacaoDetailModal({ open, onOpenChange, item, onSuccess }: 
 
                   {isEditingOwners ? (
                     <div className="space-y-4 p-4 border border-primary/20 rounded-xl bg-primary/5">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label>SDR Responsável</Label>
-                          <Select
-                            value={editedSdrId || "none"}
-                            onValueChange={(v) => setEditedSdrId(v === "none" ? null : v)}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Selecionar SDR" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="none">Nenhum</SelectItem>
-                              {sdrs.map((sdr) => (
-                                <SelectItem key={sdr.id} value={sdr.id}>
-                                  {sdr.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label>Closer Responsável</Label>
-                          <Select
-                            value={editedCloserId || "none"}
-                            onValueChange={(v) => setEditedCloserId(v === "none" ? null : v)}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Selecionar Closer" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="none">Nenhum</SelectItem>
-                              {closers.map((closer) => (
-                                <SelectItem key={closer.id} value={closer.id}>
-                                  {closer.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
+                      <div className="space-y-2">
+                        <Label>Responsável</Label>
+                        <Select
+                          value={editedResponsibleId || "none"}
+                          onValueChange={(v) => setEditedResponsibleId(v === "none" ? null : v)}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">Nenhum</SelectItem>
+                            {responsibleMembers.map((m) => (
+                              <SelectItem key={m.id} value={m.id}>
+                                {m.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
 
                       <div className="flex justify-end gap-2">
@@ -599,21 +564,12 @@ export function ConfirmacaoDetailModal({ open, onOpenChange, item, onSuccess }: 
                   ) : (
                     <div className="space-y-3">
                       <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
-                        <div className="w-8 h-8 rounded-full bg-chart-2/20 flex items-center justify-center">
-                          <span className="text-xs font-bold text-chart-2">SDR</span>
+                        <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
+                          <UserCheck className="w-4 h-4 text-primary" />
                         </div>
                         <div>
-                          <p className="text-sm font-medium">{currentSdrName}</p>
-                          <p className="text-xs text-muted-foreground">SDR Responsável</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
-                        <div className="w-8 h-8 rounded-full bg-chart-5/20 flex items-center justify-center">
-                          <span className="text-xs font-bold text-chart-5">CL</span>
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium">{currentCloserName}</p>
-                          <p className="text-xs text-muted-foreground">Closer Responsável</p>
+                          <p className="text-sm font-medium">{responsibleName}</p>
+                          <p className="text-xs text-muted-foreground">Responsável</p>
                         </div>
                       </div>
                     </div>
@@ -923,8 +879,7 @@ export function ConfirmacaoDetailModal({ open, onOpenChange, item, onSuccess }: 
         onOpenChange={setIsCompareceuModalOpen}
         onConfirm={handleCompareceuConfirm}
         leadName={lead?.name || "Lead"}
-        currentSdrId={editedSdrId || item.sdr_id}
-        currentCloserId={editedCloserId || item.closer_id}
+        currentResponsibleId={editedResponsibleId || item.responsible_id}
         isLoading={isProcessingCompareceu}
       />
     </Dialog>

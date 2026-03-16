@@ -93,8 +93,7 @@ export function ImportLeadsFunnelContent({
   const [previewResult, setPreviewResult] = useState<FilePreviewResult | null>(null);
   const [userColumnMapping, setUserColumnMapping] = useState<Record<string, string>>({});
   const [selectedStageKey, setSelectedStageKey] = useState<string>("");
-  const [selectedSdrId, setSelectedSdrId] = useState<string>("");
-  const [selectedCloserId, setSelectedCloserId] = useState<string>("");
+  const [selectedResponsibleId, setSelectedResponsibleId] = useState<string>("");
   const [selectedMetricsPeriod, setSelectedMetricsPeriod] = useState<string>("current");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -179,8 +178,7 @@ export function ImportLeadsFunnelContent({
         members: memberOptions,
         products: destination === "propostas" ? productOptions : undefined,
         userColumnMapping: Object.keys(fullMapping).length ? fullMapping : undefined,
-        sdrId: selectedSdrId === "none" ? undefined : selectedSdrId || undefined,
-        closerId: selectedCloserId === "none" ? undefined : selectedCloserId || undefined,
+        sdrId: selectedResponsibleId === "none" ? undefined : selectedResponsibleId || undefined,
         metricsPeriodMonth: metricsOpt?.month,
         metricsPeriodYear: metricsOpt?.year,
       });
@@ -200,8 +198,7 @@ export function ImportLeadsFunnelContent({
     setPreviewResult(null);
     setUserColumnMapping({});
     setSelectedStageKey("");
-    setSelectedSdrId("");
-    setSelectedCloserId("");
+    setSelectedResponsibleId("");
     setSelectedMetricsPeriod("current");
     resetImport();
     onDone?.();
@@ -425,44 +422,23 @@ export function ImportLeadsFunnelContent({
                   Use as colunas <strong>Etapa</strong> (ou Stage/Fase) e <strong>Vendedor</strong> (ou Time/Equipe/Responsável) na planilha. O sistema identifica automaticamente e posiciona cada lead na etapa correta e associa ao vendedor mais parecido da equipe. Se estiver vazio, usa os padrões selecionados abaixo.
                 </p>
               </div>
-              {(destination === "qualificacao" || destination === "confirmacao") && (
-                <div className="space-y-2">
-                  <Label>Responsável padrão (SDR)</Label>
-                  <p className="text-xs text-muted-foreground -mt-1">Usado quando a coluna Vendedor estiver vazia ou não corresponder a ninguém.</p>
-                  <Select value={selectedSdrId} onValueChange={setSelectedSdrId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Escolher vendedor..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Sem atribuição</SelectItem>
-                      {memberOptions.map((m) => (
-                        <SelectItem key={m.id} value={m.id}>
-                          {m.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-              {(destination === "propostas" || destination === "confirmacao") && (
-                <div className="space-y-2">
-                  <Label>Responsável padrão (Closer)</Label>
-                  <p className="text-xs text-muted-foreground -mt-1">Usado quando a coluna Vendedor estiver vazia ou não corresponder a ninguém.</p>
-                  <Select value={selectedCloserId} onValueChange={setSelectedCloserId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Escolher vendedor..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Sem atribuição</SelectItem>
-                      {memberOptions.map((m) => (
-                        <SelectItem key={m.id} value={m.id}>
-                          {m.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
+              <div className="space-y-2">
+                <Label>Responsável padrão</Label>
+                <p className="text-xs text-muted-foreground -mt-1">Usado quando a coluna Vendedor estiver vazia ou não corresponder a ninguém.</p>
+                <Select value={selectedResponsibleId} onValueChange={setSelectedResponsibleId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Escolher vendedor..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Sem atribuição</SelectItem>
+                    {memberOptions.map((m) => (
+                      <SelectItem key={m.id} value={m.id}>
+                        {m.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="flex justify-end gap-2 pt-4 border-t">
                 <Button variant="outline" onClick={() => setStep("upload")}>
                   Voltar

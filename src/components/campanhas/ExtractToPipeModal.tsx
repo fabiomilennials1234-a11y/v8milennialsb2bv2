@@ -16,9 +16,9 @@ import { MessageSquare, CalendarCheck, FileText, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 const PIPE_OPTIONS: { target: ExtractLeadToPipeTarget; label: string; pipelineType: PipelineType; icon: typeof MessageSquare }[] = [
-  { target: "pipe_whatsapp", label: "Pipe WhatsApp (SDR)", pipelineType: "whatsapp", icon: MessageSquare },
+  { target: "pipe_whatsapp", label: "Pipe de Qualificação", pipelineType: "whatsapp", icon: MessageSquare },
   { target: "pipe_confirmacao", label: "Pipe Confirmação", pipelineType: "confirmacao", icon: CalendarCheck },
-  { target: "pipe_propostas", label: "Pipe Propostas", pipelineType: "propostas", icon: FileText },
+  { target: "pipe_propostas", label: "Pipe de Propostas", pipelineType: "propostas", icon: FileText },
 ];
 
 interface ExtractToPipeModalProps {
@@ -84,8 +84,7 @@ export function ExtractToPipeModal({
         target_pipe: selectedPipe,
         stage: selectedStage,
         organization_id: organizationId,
-        sdr_id: lead.sdr_id ?? undefined,
-        closer_id: lead.lead?.closer_id ?? undefined,
+        responsible_id: lead.responsible_id ?? lead.sdr_id ?? lead.lead?.closer_id ?? undefined,
         campaign_name: campanhaName,
       });
       const pipeLabel = PIPE_OPTIONS.find((o) => o.target === selectedPipe)?.label ?? selectedPipe;

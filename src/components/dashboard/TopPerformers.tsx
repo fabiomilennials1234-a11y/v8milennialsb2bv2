@@ -145,7 +145,7 @@ function TopPerformersBase() {
               );
             }) : (
               <p className="text-sm text-muted-foreground text-center py-2">
-                Nenhum SDR com reuniões
+                Nenhum vendedor com reuniões
               </p>
             )}
           </div>

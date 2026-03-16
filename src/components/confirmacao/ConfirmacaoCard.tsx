@@ -48,8 +48,7 @@ interface ConfirmacaoCardProps {
     meetingDateTime?: Date;
     rating: number;
     origin: "whatsapp" | "meta_ads" | "outro" | "site" | "remarketing" | "google_ads" | "cal";
-    sdr?: string;
-    closer?: string;
+    responsible?: string;
     tags: { name: string; color: string }[];
     leadId: string;
     faturamento?: number;
@@ -515,24 +514,16 @@ export const ConfirmacaoCard = memo(function ConfirmacaoCard({ card, onClick, on
             )}
           </Button>
           
-          {card.sdr && (
+          {card.responsible && (
             <div className="flex items-center gap-1.5">
               <div className="w-5 h-5 rounded-full bg-chart-2/20 flex items-center justify-center">
-                <span className="text-[8px] font-bold text-chart-2">S</span>
+                <span className="text-[8px] font-bold text-chart-2">R</span>
               </div>
-              <span className="text-xs text-muted-foreground truncate max-w-[50px]">{card.sdr}</span>
+              <span className="text-xs text-muted-foreground truncate max-w-[80px]">{card.responsible}</span>
             </div>
           )}
         </div>
         <div className="flex items-center gap-2">
-          {card.closer && (
-            <div className="flex items-center gap-1.5">
-              <div className="w-5 h-5 rounded-full bg-chart-5/20 flex items-center justify-center">
-                <span className="text-[8px] font-bold text-chart-5">C</span>
-              </div>
-              <span className="text-xs text-muted-foreground truncate max-w-[50px]">{card.closer}</span>
-            </div>
-          )}
           {formatPhoneForWhatsApp(card.phone) && (
             <button
               onClick={(e) => openWhatsApp(card.phone, e)}

@@ -15,6 +15,7 @@ export interface WebhookLeadInput {
   rating?: number | string | null;
   sdr_id?: string | null;
   closer_id?: string | null;
+  responsible_id?: string | null;
   meeting_date?: string | null;
   compromisso_date?: string | null;
   utm_source?: string | null;

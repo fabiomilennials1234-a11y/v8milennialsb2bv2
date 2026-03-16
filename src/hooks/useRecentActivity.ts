@@ -55,6 +55,7 @@ export function useRecentActivity(limit: number = 10) {
         .select(`
           id, status, updated_at,
           lead:leads(name, company),
+          responsible:team_members!pipe_confirmacao_responsible_id_fkey(name),
           sdr:team_members!pipe_confirmacao_sdr_id_fkey(name)
         `)
         .eq("organization_id", organizationId)
@@ -67,7 +68,7 @@ export function useRecentActivity(limit: number = 10) {
           id: `meeting-${meeting.id}`,
           type: "meeting",
           title: "Reunião realizada",
-          description: `${meeting.lead?.name}${meeting.sdr?.name ? ` com ${meeting.sdr.name}` : ""}`,
+          description: `${meeting.lead?.name}${(meeting.responsible?.name || meeting.sdr?.name) ? ` com ${meeting.responsible?.name || meeting.sdr?.name}` : ""}`,
           timestamp: meeting.updated_at,
           relativeTime: formatDistanceToNow(new Date(meeting.updated_at), {
             addSuffix: true,
@@ -75,7 +76,7 @@ export function useRecentActivity(limit: number = 10) {
           }),
           icon: "calendar",
           color: "success",
-          personName: meeting.lead?.name,
+          personName: meeting.responsible?.name || meeting.sdr?.name || meeting.lead?.name,
         });
       });
 
@@ -84,6 +85,7 @@ export function useRecentActivity(limit: number = 10) {
         .select(`
           id, sale_value, product_type, closed_at,
           lead:leads(name, company),
+          responsible:team_members!pipe_propostas_responsible_id_fkey(name),
           closer:team_members!pipe_propostas_closer_id_fkey(name)
         `)
         .eq("organization_id", organizationId)
@@ -97,7 +99,7 @@ export function useRecentActivity(limit: number = 10) {
           id: `sale-${sale.id}`,
           type: "sale",
           title: "Venda fechada! 🎉",
-          description: `${sale.lead?.name} - R$ ${value.toLocaleString("pt-BR")}${sale.closer?.name ? ` por ${sale.closer.name}` : ""}`,
+          description: `${sale.lead?.name} - R$ ${value.toLocaleString("pt-BR")}${(sale.responsible?.name || sale.closer?.name) ? ` por ${sale.responsible?.name || sale.closer?.name}` : ""}`,
           timestamp: sale.closed_at,
           relativeTime: formatDistanceToNow(new Date(sale.closed_at), {
             addSuffix: true,
@@ -106,7 +108,7 @@ export function useRecentActivity(limit: number = 10) {
           icon: "dollar",
           color: "success",
           value,
-          personName: sale.closer?.name,
+          personName: sale.responsible?.name || sale.closer?.name,
         });
       });
 

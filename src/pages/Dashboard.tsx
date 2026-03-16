@@ -35,8 +35,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import boltIcon from "@/assets/bolt-icon.png";
-import DashboardBDR from "./DashboardBDR";
-import DashboardCliente from "./DashboardCliente";
 
 function formatCurrency(value: number): string {
   if (value >= 1000000) return `R$ ${(value / 1000000).toFixed(1)}M`;
@@ -65,13 +63,6 @@ export default function Dashboard() {
   const { data: rankingData, isLoading: rankingLoading } = useRankingData(month, year);
   const { data: conversionRates, isLoading: conversionLoading } = useConversionRates(month, year);
   const { data: teamGoals, isLoading: goalsLoading } = useTeamGoals(month, year);
-
-  // Roteamento condicional para orgs OUTBOUND (após todos os hooks)
-  if (orgType === "outbound") {
-    if (role === "bdr") return <DashboardBDR />;
-    if (role === "cliente") return <DashboardCliente />;
-    // agency → usa o dashboard padrão (abaixo)
-  }
 
   const userName = user?.user_metadata?.full_name?.split(" ")[0] || user?.email?.split("@")[0] || "Usuário";
 

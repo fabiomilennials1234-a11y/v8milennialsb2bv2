@@ -215,16 +215,19 @@ export default function MasterUsers() {
     switch (role) {
       case "admin":
         return <Badge variant="destructive">Admin</Badge>;
-      case "sdr":
-        return <Badge variant="default">SDR</Badge>;
-      case "closer":
-        return <Badge variant="secondary">Closer</Badge>;
+      case "member":
+        return <Badge variant="default">Membro</Badge>;
       case "agency":
         return <Badge variant="destructive">Agency</Badge>;
+      // Legacy roles (pre-migration data)
+      case "sdr":
+        return <Badge variant="default">Membro (SDR)</Badge>;
+      case "closer":
+        return <Badge variant="secondary">Membro (Closer)</Badge>;
       case "bdr":
-        return <Badge variant="default">BDR</Badge>;
+        return <Badge variant="default">Membro (BDR)</Badge>;
       case "cliente":
-        return <Badge variant="secondary">Cliente</Badge>;
+        return <Badge variant="secondary">Membro (Cliente)</Badge>;
       default:
         return <Badge variant="outline">-</Badge>;
     }
@@ -241,8 +244,7 @@ export default function MasterUsers() {
     }
     return [
       { value: "admin", label: "Admin" },
-      { value: "sdr", label: "SDR" },
-      { value: "closer", label: "Closer" },
+      { value: "member", label: "Membro" },
     ];
   };
 
@@ -695,8 +697,7 @@ export default function MasterUsers() {
                     ) : (
                       <>
                         <SelectItem value="admin">Admin</SelectItem>
-                        <SelectItem value="sdr">SDR</SelectItem>
-                        <SelectItem value="closer">Closer</SelectItem>
+                        <SelectItem value="member">Membro</SelectItem>
                       </>
                     )}
                   </SelectContent>

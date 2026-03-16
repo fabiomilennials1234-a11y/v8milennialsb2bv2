@@ -91,9 +91,9 @@ const LEAD_FIELD_OPTIONS = [
 ];
 
 const PIPE_OPTIONS = [
-  { value: "whatsapp", label: "Pipe WhatsApp (SDR)" },
-  { value: "confirmacao", label: "Pipe Confirmacao" },
-  { value: "propostas", label: "Pipe Propostas" },
+  { value: "whatsapp", label: "Pipe de Qualificação" },
+  { value: "confirmacao", label: "Pipe Confirmação" },
+  { value: "propostas", label: "Pipe de Propostas" },
 ];
 
 // ---------------------------------------------------------------------------

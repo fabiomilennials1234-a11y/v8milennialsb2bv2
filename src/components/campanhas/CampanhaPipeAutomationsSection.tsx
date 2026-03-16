@@ -31,9 +31,9 @@ const PIPE_OPTIONS: {
   pipelineType: PipelineType;
   icon: typeof MessageSquare;
 }[] = [
-  { target: "pipe_whatsapp", label: "Pipe WhatsApp (SDR)", pipelineType: "whatsapp", icon: MessageSquare },
+  { target: "pipe_whatsapp", label: "Pipe de Qualificação", pipelineType: "whatsapp", icon: MessageSquare },
   { target: "pipe_confirmacao", label: "Pipe Confirmação", pipelineType: "confirmacao", icon: CalendarCheck },
-  { target: "pipe_propostas", label: "Pipe Propostas", pipelineType: "propostas", icon: FileText },
+  { target: "pipe_propostas", label: "Pipe de Propostas", pipelineType: "propostas", icon: FileText },
 ];
 
 interface CampanhaPipeAutomationsSectionProps {

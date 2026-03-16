@@ -11,14 +11,12 @@ import {
   Palette,
   Shield,
   Bell,
-  Users,
   Database,
   Globe,
   MoreHorizontal,
   MessageSquare,
   Calendar,
   Webhook,
-  Award,
   HelpCircle,
   Plug,
 } from "lucide-react";
@@ -53,16 +51,13 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useTags, useCreateTag, useUpdateTag, useDeleteTag, Tag as TagType } from "@/hooks/useTags";
-import { useIsAdmin, useIsAgency } from "@/hooks/useUserRole";
-import { useOrganization } from "@/hooks/useOrganization";
+import { useIsAdmin } from "@/hooks/useUserRole";
 import { useOrganizationSettings } from "@/hooks/useOrganizationSettings";
 import { WhatsAppSettings } from "@/components/settings/WhatsAppSettings";
 import { GoogleCalendarSettings } from "@/components/settings/GoogleCalendarSettings";
 import { MetaSettings } from "@/components/settings/MetaSettings";
 import { TinyErpSettings } from "@/components/settings/TinyErpSettings";
 import { WebhookSettings } from "@/components/settings/WebhookSettings";
-import { ClienteSidebarConfig } from "@/components/settings/ClienteSidebarConfig";
-import { BadgesConfig } from "@/components/settings/BadgesConfig";
 import { HelpCenter } from "@/components/settings/help/HelpCenter";
 import { toast } from "sonner";
 
@@ -471,12 +466,7 @@ function GeneralSettings() {
 }
 
 export default function Configuracoes() {
-  const { orgType } = useOrganization();
-  const { isAgency } = useIsAgency();
-  const isOutbound = orgType === "outbound";
-  const showClienteTab = isOutbound && isAgency;
-  const showBadgesTab = isOutbound && isAgency;
-  const totalTabs = 7 + (showClienteTab ? 1 : 0) + (showBadgesTab ? 1 : 0);
+  const totalTabs = 7;
 
   return (
     <div className="space-y-6">
@@ -525,18 +515,6 @@ export default function Configuracoes() {
             <HelpCircle className="w-4 h-4" />
             Ajuda
           </TabsTrigger>
-          {showClienteTab && (
-            <TabsTrigger value="cliente-acesso" className="gap-2">
-              <Users className="w-4 h-4" />
-              Cliente
-            </TabsTrigger>
-          )}
-          {showBadgesTab && (
-            <TabsTrigger value="badges" className="gap-2">
-              <Award className="w-4 h-4" />
-              Badges
-            </TabsTrigger>
-          )}
         </TabsList>
 
         <div className="mt-6">
@@ -600,25 +578,6 @@ export default function Configuracoes() {
             </Card>
           </TabsContent>
 
-          {showClienteTab && (
-            <TabsContent value="cliente-acesso">
-              <Card className="glass-card">
-                <CardContent className="pt-6">
-                  <ClienteSidebarConfig />
-                </CardContent>
-              </Card>
-            </TabsContent>
-          )}
-
-          {showBadgesTab && (
-            <TabsContent value="badges">
-              <Card className="glass-card">
-                <CardContent className="pt-6">
-                  <BadgesConfig />
-                </CardContent>
-              </Card>
-            </TabsContent>
-          )}
         </div>
       </Tabs>
 

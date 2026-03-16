@@ -39,9 +39,7 @@ import {
 import torqueLogo from "@/assets/torque-logo.png";
 import torqueIcon from "@/assets/torque-icon.png";
 import { useAuth } from "@/contexts/AuthContext";
-import { useUserRole } from "@/hooks/useUserRole";
-import { useOrganization } from "@/hooks/useOrganization";
-import { useVisibleSidebarKeys } from "@/hooks/useClientSidebarPermissions";
+import { useUserRole, useJobTitle } from "@/hooks/useUserRole";
 // useWhatsAppContacts/Realtime removidos da Sidebar para performance (eram no-op com instanceId=null)
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
 import { SIDEBAR_FEATURE_MAP, type FeatureKey } from "@/lib/feature-registry";
@@ -138,8 +136,7 @@ export function Sidebar() {
   const open = isOnFunisPage ? !collapsed : !collapsed || hovered;
   const { user, signOut } = useAuth();
   const { data: userRole } = useUserRole();
-  const { orgType } = useOrganization();
-  const visibleSidebarKeys = useVisibleSidebarKeys();
+  const { jobTitle } = useJobTitle();
   const { hasFeature } = useOrgFeatures();
   const [showCreatePipeline, setShowCreatePipeline] = useState(false);
 
@@ -151,59 +148,12 @@ export function Sidebar() {
   }, [location.pathname]);
   const { data: customPipelines = [] } = useCustomPipelines();
   const role = userRole?.role;
-  const isOutbound = orgType === "outbound";
 
   /** Verifica se um nav item está bloqueado pela feature flag */
   const isLocked = (path: string): boolean => {
     const featureKey = SIDEBAR_FEATURE_MAP[path];
     if (!featureKey) return false;
     return !hasFeature(featureKey);
-  };
-
-  // Mapeamento path → sidebar_key para filtragem OUTBOUND (todos os itens)
-  const PATH_TO_SIDEBAR_KEY: Record<string, string> = {
-    "/": "dashboard",
-    "/campanhas": "campanhas",
-    "/marketing": "marketing",
-    "/chat": "chat_whatsapp",
-    "/funis": "funis",
-    "/follow-ups": "follow_ups",
-    "/leads": "leads",
-    "/performance": "performance",
-    "/comissoes": "comissoes",
-    "/copilot": "copilot",
-    "/automacoes": "automacoes",
-    "/equipe": "equipe",
-    "/produtos": "produtos",
-    "/tv": "tv_dashboard",
-    "/configuracoes": "configuracoes",
-  };
-
-  // Paths que o BDR nunca vê (hardcoded)
-  const BDR_HIDDEN_PATHS = new Set([
-    "/comissoes",
-    "/configuracoes",
-  ]);
-
-  /** Verifica se um nav item deve ser escondido baseado no org_type e role */
-  const isHiddenByOrgRole = (path: string): boolean => {
-    if (!isOutbound) return false; // CRM: sem filtro
-    if (role === "agency") return false; // Agency vê tudo
-
-    if (role === "bdr") {
-      return BDR_HIDDEN_PATHS.has(path);
-    }
-
-    if (role === "cliente") {
-      // Tudo controlado pelas permissões do banco
-      const sidebarKey = PATH_TO_SIDEBAR_KEY[path];
-      if (sidebarKey) {
-        return !visibleSidebarKeys.has(sidebarKey);
-      }
-      return false;
-    }
-
-    return false;
   };
 
   /** Abre modal de upgrade para uma feature bloqueada */
@@ -250,16 +200,9 @@ export function Sidebar() {
   };
 
   const getRoleLabel = () => {
-    if (!role) return "Piloto";
-    const labels: Record<string, string> = {
-      admin: "Chefe de Equipe",
-      sdr: "Piloto SDR",
-      closer: "Piloto Closer",
-      agency: "Agency",
-      bdr: "BDR",
-      cliente: "Cliente",
-    };
-    return labels[role] || "Piloto";
+    if (jobTitle) return jobTitle;
+    if (role === "admin") return "Administrador";
+    return "Membro";
   };
 
   // Avatar URL do user metadata
@@ -389,9 +332,6 @@ export function Sidebar() {
       {/* Main Navigation */}
       <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
         {navItems.map((item) => {
-          // Filtrar por org_type + role (OUTBOUND)
-          if (isHiddenByOrgRole(item.path)) return null;
-
           const locked = isLocked(item.path);
 
           return (
@@ -557,8 +497,8 @@ export function Sidebar() {
           );
         })}
         
-        {/* Admin Navigation — com label ADMIN para admin/agency, sem label para CLIENTE */}
-        {(role === "admin" || role === "agency") && (
+        {/* Admin Navigation */}
+        {role === "admin" && (
           <>
             {open && (
               <div className="pt-3 pb-1">
@@ -566,9 +506,6 @@ export function Sidebar() {
               </div>
             )}
             {adminNavItems.map((item) => {
-              // Filtrar por org_type + role (OUTBOUND)
-              if (isHiddenByOrgRole(item.path)) return null;
-
               const adminLocked = isLocked(item.path);
               return adminLocked ? (
                 <button
@@ -610,65 +547,33 @@ export function Sidebar() {
           </>
         )}
 
-        {/* Itens admin habilitados pelo AGENCY para CLIENTE (sem label ADMIN) */}
-        {role === "cliente" && isOutbound && adminNavItems.some((item) => !isHiddenByOrgRole(item.path)) && (
-          <>
-            {adminNavItems.map((item) => {
-              if (isHiddenByOrgRole(item.path)) return null;
-              return (
-                <NavLink
-                  key={item.path}
-                  to={item.path}
-                  className={`sidebar-item ${
-                    isActive(item.path) ? "sidebar-item-active" : ""
-                  }`}
-                >
-                  <item.icon className="w-5 h-5 flex-shrink-0" />
-                  <span
-                    className={cn(
-                      "overflow-hidden whitespace-nowrap flex-1 text-sm min-w-0 transition-opacity duration-400 ease-out group-hover/sidebar:translate-x-0.5 transition-transform",
-                      open ? "opacity-100" : "opacity-0"
-                    )}
-                  >
-                    {item.label}
-                  </span>
-                </NavLink>
-              );
-            })}
-          </>
-        )}
       </nav>
 
       {/* Performance Widget */}
       <SidebarPerformanceWidget collapsed={!open} />
 
-      {/* Bottom Navigation — filtrado por org_type + role */}
-      {bottomNavItems.some((item) => !isHiddenByOrgRole(item.path)) && (
+      {/* Bottom Navigation */}
       <div className="p-3 border-t border-sidebar-border space-y-1">
-        {bottomNavItems.map((item) => {
-          if (isHiddenByOrgRole(item.path)) return null;
-          return (
-            <NavLink
-              key={item.path}
-              to={item.path}
-              className={`sidebar-item ${
-                isActive(item.path) ? "sidebar-item-active" : ""
-              }`}
+        {bottomNavItems.map((item) => (
+          <NavLink
+            key={item.path}
+            to={item.path}
+            className={`sidebar-item ${
+              isActive(item.path) ? "sidebar-item-active" : ""
+            }`}
+          >
+            <item.icon className="w-5 h-5 flex-shrink-0" />
+            <span
+              className={cn(
+                "overflow-hidden whitespace-nowrap text-sm min-w-0 transition-opacity duration-400 ease-out group-hover/sidebar:translate-x-0.5 transition-transform",
+                open ? "opacity-100" : "opacity-0"
+              )}
             >
-              <item.icon className="w-5 h-5 flex-shrink-0" />
-              <span
-                className={cn(
-                  "overflow-hidden whitespace-nowrap text-sm min-w-0 transition-opacity duration-400 ease-out group-hover/sidebar:translate-x-0.5 transition-transform",
-                  open ? "opacity-100" : "opacity-0"
-                )}
-              >
-                {item.label}
-              </span>
-            </NavLink>
-          );
-        })}
+              {item.label}
+            </span>
+          </NavLink>
+        ))}
       </div>
-      )}
 
       {/* User Section */}
       <div className="p-3 border-t border-sidebar-border">

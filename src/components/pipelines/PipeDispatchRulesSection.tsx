@@ -53,7 +53,7 @@ const ACTION_LABELS: Record<PipeDispatchRuleStepActionType, string> = {
   send_template: "Enviar template",
   wait_response: "Esperar resposta",
   change_stage: "Mudar etapa",
-  assign_sdr: "Atribuir SDR",
+  assign_sdr: "Atribuir Responsável",
   cancel_sequence: "Cancelar sequência",
 };
 
@@ -331,7 +331,7 @@ export function PipeDispatchRulesSection({ pipeType, stages }: PipeDispatchRules
     <div className="space-y-4">
       <p className="text-xs text-muted-foreground">
         Automações disparadas quando um lead é adicionado ou movido de etapa neste funil.
-        Configure sequências com templates, espera de resposta, mudança de etapa, atribuição de SDR e mais.
+        Configure sequências com templates, espera de resposta, mudança de etapa, atribuição de responsável e mais.
       </p>
       {isLoading ? (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -618,19 +618,19 @@ function StepEditorRow({
         </Select>
       )}
 
-      {/* assign_sdr fields */}
+      {/* assign_sdr (Atribuir Responsável) fields */}
       {step.action_type === "assign_sdr" && (
         <div className="space-y-2 pl-6">
           <Select value={step.sdr_assignment_mode} onValueChange={(v) => onChange({ sdr_assignment_mode: v as SdrAssignmentMode })}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="specific">SDR específico</SelectItem>
+              <SelectItem value="specific">Responsável específico</SelectItem>
               <SelectItem value="round_robin">Round-robin (distribuir)</SelectItem>
             </SelectContent>
           </Select>
           {step.sdr_assignment_mode === "specific" && (
             <Select value={step.target_sdr_id} onValueChange={(v) => onChange({ target_sdr_id: v })}>
-              <SelectTrigger><SelectValue placeholder="Selecione o SDR" /></SelectTrigger>
+              <SelectTrigger><SelectValue placeholder="Selecione o responsável" /></SelectTrigger>
               <SelectContent>
                 {teamMembers.filter((m) => m.id).map((m) => (
                   <SelectItem key={m.id} value={m.id}>{m.name || "Sem nome"}{m.role ? ` (${m.role})` : ""}</SelectItem>

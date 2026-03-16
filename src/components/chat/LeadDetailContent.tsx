@@ -315,6 +315,7 @@ export function LeadDetailContent({
         campanha_id: selectedCampanhaId,
         lead_id: lead.id,
         stage_id: firstStage.id,
+        responsible_id: teamMember?.id || null,
         sdr_id: teamMember?.id || null,
       });
 

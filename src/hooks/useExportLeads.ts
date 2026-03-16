@@ -5,7 +5,7 @@ import { useCanPerformActionAsync } from "@/lib/permissions";
 
 const BATCH_SIZE = 500;
 
-/** Cabeçalhos completos: lead + pipe WhatsApp + pipe Confirmação + pipe Propostas */
+/** Cabeçalhos completos: lead + pipe Qualificação + pipe Confirmação + pipe Propostas */
 export const EXPORT_LEAD_HEADERS = [
   // Lead
   "ID Lead",
@@ -27,20 +27,18 @@ export const EXPORT_LEAD_HEADERS = [
   "Data criação lead",
   "Data atualização lead",
   "Data período métricas lead",
-  "SDR (lead)",
-  "Closer (lead)",
+  "Responsável (lead)",
   "Data compromisso (lead)",
   // Pipe WhatsApp
-  "Etapa Pipe WhatsApp",
-  "SDR Pipe WhatsApp",
-  "Data agendada (WhatsApp)",
-  "Notas Pipe WhatsApp",
-  "Data criação Pipe WhatsApp",
-  "Data atualização Pipe WhatsApp",
+  "Etapa Pipe Qualificação",
+  "Responsável Pipe Qualificação",
+  "Data agendada (Qualificação)",
+  "Notas Pipe Qualificação",
+  "Data criação Pipe Qualificação",
+  "Data atualização Pipe Qualificação",
   // Pipe Confirmação
   "Etapa Pipe Confirmação",
-  "SDR Pipe Confirmação",
-  "Closer Pipe Confirmação",
+  "Responsável Pipe Confirmação",
   "Data reunião",
   "Reunião confirmada (sim/não)",
   "Notas Pipe Confirmação",
@@ -49,7 +47,7 @@ export const EXPORT_LEAD_HEADERS = [
   "Data período métricas Confirmação",
   // Pipe Propostas
   "Etapa Pipe Propostas",
-  "Closer Pipe Propostas",
+  "Responsável Pipe Propostas",
   "Valor venda (R$)",
   "Tipo produto",
   "Calor (0-100)",
@@ -114,7 +112,7 @@ export function useExportLeads(): UseExportLeadsResult {
       const { data: leads, error: leadsError } = await supabase
         .from("leads")
         .select(
-          "id, name, company, email, phone, faturamento, segment, urgency, notes, rating, origin, sdr_id, closer_id, compromisso_date, utm_campaign, utm_source, utm_medium, utm_content, utm_term, created_at, updated_at, metrics_period_at"
+          "id, name, company, email, phone, faturamento, segment, urgency, notes, rating, origin, responsible_id, sdr_id, closer_id, compromisso_date, utm_campaign, utm_source, utm_medium, utm_content, utm_term, created_at, updated_at, metrics_period_at"
         )
         .eq("organization_id", organizationId)
         .order("created_at", { ascending: false })
@@ -191,18 +189,16 @@ export function useExportLeads(): UseExportLeadsResult {
           "Data criação lead": fmtDate(lead.created_at as string),
           "Data atualização lead": fmtDate(lead.updated_at as string),
           "Data período métricas lead": fmtDate(lead.metrics_period_at as string),
-          "SDR (lead)": memberByName[lead.sdr_id as string] ?? "",
-          "Closer (lead)": memberByName[lead.closer_id as string] ?? "",
+          "Responsável (lead)": memberByName[lead.responsible_id as string] ?? "",
           "Data compromisso (lead)": fmtDate(lead.compromisso_date as string),
-          "Etapa Pipe WhatsApp": pw?.status ?? "",
-          "SDR Pipe WhatsApp": memberByName[pw?.sdr_id as string] ?? "",
-          "Data agendada (WhatsApp)": fmtDate(pw?.scheduled_date as string),
-          "Notas Pipe WhatsApp": pw?.notes ?? "",
-          "Data criação Pipe WhatsApp": fmtDate(pw?.created_at as string),
-          "Data atualização Pipe WhatsApp": fmtDate(pw?.updated_at as string),
+          "Etapa Pipe Qualificação": pw?.status ?? "",
+          "Responsável Pipe Qualificação": memberByName[(pw?.responsible_id || pw?.sdr_id) as string] ?? "",
+          "Data agendada (Qualificação)": fmtDate(pw?.scheduled_date as string),
+          "Notas Pipe Qualificação": pw?.notes ?? "",
+          "Data criação Pipe Qualificação": fmtDate(pw?.created_at as string),
+          "Data atualização Pipe Qualificação": fmtDate(pw?.updated_at as string),
           "Etapa Pipe Confirmação": pc?.status ?? "",
-          "SDR Pipe Confirmação": memberByName[pc?.sdr_id as string] ?? "",
-          "Closer Pipe Confirmação": memberByName[pc?.closer_id as string] ?? "",
+          "Responsável Pipe Confirmação": memberByName[(pc?.responsible_id || pc?.closer_id || pc?.sdr_id) as string] ?? "",
           "Data reunião": fmtDate(pc?.meeting_date as string),
           "Reunião confirmada (sim/não)": pc?.is_confirmed ? "sim" : (pc ? "não" : ""),
           "Notas Pipe Confirmação": pc?.notes ?? "",
@@ -210,7 +206,7 @@ export function useExportLeads(): UseExportLeadsResult {
           "Data atualização Pipe Confirmação": fmtDate(pc?.updated_at as string),
           "Data período métricas Confirmação": fmtDate(pc?.metrics_period_at as string),
           "Etapa Pipe Propostas": pp?.status ?? "",
-          "Closer Pipe Propostas": memberByName[pp?.closer_id as string] ?? "",
+          "Responsável Pipe Propostas": memberByName[(pp?.responsible_id || pp?.closer_id) as string] ?? "",
           "Valor venda (R$)": pp?.sale_value != null ? Number(pp.sale_value) : "",
           "Tipo produto": pp?.product_type ?? "",
           "Calor (0-100)": pp?.calor != null ? Number(pp.calor) : "",

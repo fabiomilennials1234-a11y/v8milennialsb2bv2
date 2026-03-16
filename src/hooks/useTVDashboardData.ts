@@ -82,16 +82,16 @@ export function useTVDashboardData() {
     queryFn: () => {
       // Dashboard da central de controle: só admin vê todos; outros veem apenas seus números
       const myId = currentTeamMember?.id ?? null;
-      const propostasFiltradas = isAdmin ? (propostas ?? []) : (propostas ?? []).filter(p => p.closer_id === myId);
-      const confirmacoesFiltradas = isAdmin ? (confirmacoes ?? []) : (confirmacoes ?? []).filter(c => c.sdr_id === myId);
-      const whatsappFiltrado = isAdmin ? (whatsapp ?? []) : (whatsapp ?? []).filter(w => w.sdr_id === myId);
+      const propostasFiltradas = isAdmin ? (propostas ?? []) : (propostas ?? []).filter(p => (p as any).responsible_id === myId || p.closer_id === myId);
+      const confirmacoesFiltradas = isAdmin ? (confirmacoes ?? []) : (confirmacoes ?? []).filter(c => (c as any).responsible_id === myId || c.sdr_id === myId);
+      const whatsappFiltrado = isAdmin ? (whatsapp ?? []) : (whatsapp ?? []).filter(w => (w as any).responsible_id === myId || w.sdr_id === myId);
       
       const closers = isAdmin
-        ? (teamMembers?.filter(m => m.role === "closer" && m.is_active) || [])
-        : (currentTeamMember && currentTeamMember.role === "closer" ? [currentTeamMember] : []);
+        ? (teamMembers?.filter(m => (m as any).metric_type === "sales" && m.is_active) || [])
+        : (currentTeamMember && (currentTeamMember as any).metric_type === "sales" ? [currentTeamMember] : []);
       const sdrs = isAdmin
-        ? (teamMembers?.filter(m => m.role === "sdr" && m.is_active) || [])
-        : (currentTeamMember && currentTeamMember.role === "sdr" ? [currentTeamMember] : []);
+        ? (teamMembers?.filter(m => (m as any).metric_type === "meetings" && m.is_active) || [])
+        : (currentTeamMember && (currentTeamMember as any).metric_type === "meetings" ? [currentTeamMember] : []);
       
       // Meta: admin vê meta do time (fonte canônica); não-admin vê meta individual
       const salesGoalVendas = teamGoals?.find(g => g.type === "vendas" && !g.team_member_id);

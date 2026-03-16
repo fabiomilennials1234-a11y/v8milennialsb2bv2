@@ -131,6 +131,7 @@ export interface CampanhaLead {
   campanha_id: string;
   lead_id: string;
   stage_id: string;
+  responsible_id: string | null;
   sdr_id: string | null;
   closer_id: string | null;
   notes: string | null;
@@ -147,7 +148,12 @@ export interface CampanhaLead {
     rating: number | null;
     origin: string;
     notes: string | null;
+    responsible_id: string | null;
     closer_id: string | null;
+    responsible?: {
+      id: string;
+      name: string;
+    };
     closer?: {
       id: string;
       name: string;
@@ -159,6 +165,10 @@ export interface CampanhaLead {
         color: string | null;
       };
     }>;
+  };
+  responsible?: {
+    id: string;
+    name: string;
   };
   sdr?: {
     id: string;
@@ -374,10 +384,12 @@ export function useCampanhaLeads(campanhaId: string | undefined) {
         .select(`
           *,
           lead:leads(
-            id, name, company, phone, email, faturamento, segment, rating, origin, notes, closer_id,
+            id, name, company, phone, email, faturamento, segment, rating, origin, notes, responsible_id, closer_id,
+            responsible:team_members!leads_responsible_id_fkey(id, name),
             closer:team_members!leads_closer_id_fkey(id, name),
             lead_tags(tag:tags(id, name, color))
           ),
+          responsible:team_members!campanha_leads_responsible_id_fkey(id, name),
           sdr:team_members!campanha_leads_sdr_id_fkey(id, name),
           closer:team_members!campanha_leads_closer_id_fkey(id, name),
           stage:campanha_stages(*)
@@ -685,7 +697,7 @@ export function useAddCampanhaLead() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (data: { campanha_id: string; lead_id: string; stage_id: string; sdr_id?: string; closer_id?: string }) => {
+    mutationFn: async (data: { campanha_id: string; lead_id: string; stage_id: string; responsible_id?: string; sdr_id?: string; closer_id?: string }) => {
       const { data: newLead, error } = await supabase
         .from("campanha_leads")
         .insert(data)
@@ -706,7 +718,7 @@ export function useUpdateCampanhaLead() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ id, campanha_id, ...updates }: { id: string; campanha_id: string; stage_id?: string; sdr_id?: string; closer_id?: string; notes?: string }) => {
+    mutationFn: async ({ id, campanha_id, ...updates }: { id: string; campanha_id: string; stage_id?: string; responsible_id?: string; sdr_id?: string; closer_id?: string; notes?: string }) => {
       const { data, error } = await supabase
         .from("campanha_leads")
         .update(updates)
@@ -714,10 +726,12 @@ export function useUpdateCampanhaLead() {
         .select(`
           *,
           lead:leads(
-            id, name, company, phone, email, faturamento, segment, rating, origin, notes, closer_id,
+            id, name, company, phone, email, faturamento, segment, rating, origin, notes, responsible_id, closer_id,
+            responsible:team_members!leads_responsible_id_fkey(id, name),
             closer:team_members!leads_closer_id_fkey(id, name),
             lead_tags(tag:tags(id, name, color))
           ),
+          responsible:team_members!campanha_leads_responsible_id_fkey(id, name),
           sdr:team_members!campanha_leads_sdr_id_fkey(id, name),
           closer:team_members!campanha_leads_closer_id_fkey(id, name),
           stage:campanha_stages(*)
@@ -740,7 +754,7 @@ export function useUpdateCampanhaLead() {
           ["campanha_leads", variables.campanha_id],
           previousLeads.map((lead) =>
             lead.id === variables.id
-              ? { ...lead, stage_id: variables.stage_id || lead.stage_id, sdr_id: variables.sdr_id ?? lead.sdr_id, notes: variables.notes ?? lead.notes }
+              ? { ...lead, stage_id: variables.stage_id || lead.stage_id, responsible_id: variables.responsible_id ?? lead.responsible_id, sdr_id: variables.sdr_id ?? lead.sdr_id, notes: variables.notes ?? lead.notes }
               : lead
           )
         );
@@ -1280,6 +1294,7 @@ export function useExtractLeadToPipe() {
       target_pipe,
       stage,
       organization_id,
+      responsible_id,
       sdr_id,
       closer_id,
       campaign_name,
@@ -1291,6 +1306,7 @@ export function useExtractLeadToPipe() {
       /** Etapa (status) do pipe para onde o lead deve ir. Ex: "novo", "reuniao_marcada", "marcar_compromisso" */
       stage: string;
       organization_id: string;
+      responsible_id?: string | null;
       sdr_id?: string | null;
       closer_id?: string | null;
       campaign_name?: string;
@@ -1308,11 +1324,13 @@ export function useExtractLeadToPipe() {
           .eq("lead_id", lead_id)
           .maybeSingle();
         if (!existing) {
+          const effectiveResponsible = responsible_id ?? sdr_id ?? null;
           const { data: row, error } = await supabase
             .from("pipe_whatsapp")
             .insert({
               lead_id,
               status: stageVal,
+              responsible_id: effectiveResponsible,
               sdr_id: sdr_id ?? null,
               organization_id,
               notes: notes ?? null,
@@ -1322,7 +1340,7 @@ export function useExtractLeadToPipe() {
           if (error) throw error;
           await triggerFollowUpAutomation({
             leadId: lead_id,
-            assignedTo: sdr_id ?? null,
+            assignedTo: effectiveResponsible,
             pipeType: "whatsapp",
             stage: stageVal,
             sourcePipeId: row.id,
@@ -1342,11 +1360,13 @@ export function useExtractLeadToPipe() {
           .eq("lead_id", lead_id)
           .maybeSingle();
         if (!existing) {
+          const effectiveResponsible = responsible_id ?? sdr_id ?? closer_id ?? null;
           const { data: row, error } = await supabase
             .from("pipe_confirmacao")
             .insert({
               lead_id,
               status: stageVal,
+              responsible_id: effectiveResponsible,
               sdr_id: sdr_id ?? null,
               organization_id,
               notes: notes ?? null,
@@ -1356,7 +1376,7 @@ export function useExtractLeadToPipe() {
           if (error) throw error;
           await triggerFollowUpAutomation({
             leadId: lead_id,
-            assignedTo: sdr_id ?? closer_id ?? null,
+            assignedTo: effectiveResponsible,
             pipeType: "confirmacao",
             stage: stageVal,
             sourcePipeId: row.id,
@@ -1376,11 +1396,13 @@ export function useExtractLeadToPipe() {
           .eq("lead_id", lead_id)
           .maybeSingle();
         if (!existing) {
+          const effectiveResponsible = responsible_id ?? closer_id ?? null;
           const { data: row, error } = await supabase
             .from("pipe_propostas")
             .insert({
               lead_id,
               status: stageVal,
+              responsible_id: effectiveResponsible,
               closer_id: closer_id ?? null,
               organization_id,
               notes: notes ?? null,
@@ -1390,7 +1412,7 @@ export function useExtractLeadToPipe() {
           if (error) throw error;
           await triggerFollowUpAutomation({
             leadId: lead_id,
-            assignedTo: closer_id ?? null,
+            assignedTo: effectiveResponsible,
             pipeType: "propostas",
             stage: stageVal,
             sourcePipeId: row.id,

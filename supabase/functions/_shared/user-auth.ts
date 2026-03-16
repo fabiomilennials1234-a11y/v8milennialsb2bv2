@@ -20,6 +20,8 @@ export interface AuthContext {
   role: string;
   isMaster: boolean;
   isAdmin: boolean;
+  jobTitle: string;
+  metricType: "meetings" | "sales";
 }
 
 export class AuthError extends Error {
@@ -109,6 +111,8 @@ export async function requireAuth(
         role: "admin",
         isMaster: false,
         isAdmin: true,
+        jobTitle: "Internal",
+        metricType: "sales",
       };
     }
   }
@@ -144,12 +148,12 @@ export async function requireAuth(
 
   // Resolve organization + team member
   const orgId = (body?.organization_id as string) || options?.organizationId || "";
-  let teamMember: { id: string; role: string; organization_id: string } | null = null;
+  let teamMember: { id: string; role: string; organization_id: string; job_title: string | null; metric_type: string | null } | null = null;
 
   if (orgId) {
     const { data } = await supabase
       .from("team_members")
-      .select("id, role, organization_id")
+      .select("id, role, organization_id, job_title, metric_type")
       .eq("user_id", user.id)
       .eq("organization_id", orgId)
       .eq("is_active", true)
@@ -159,7 +163,7 @@ export async function requireAuth(
     // Sem org específica — pega o primeiro team_member ativo
     const { data } = await supabase
       .from("team_members")
-      .select("id, role, organization_id")
+      .select("id, role, organization_id, job_title, metric_type")
       .eq("user_id", user.id)
       .eq("is_active", true)
       .order("created_at", { ascending: true })
@@ -173,7 +177,7 @@ export async function requireAuth(
   }
 
   const role = teamMember?.role || (isMaster ? "admin" : "member");
-  const isAdmin = isMaster || role === "admin" || role === "agency";
+  const isAdmin = isMaster || role === "admin";
 
   return {
     userId: user.id,
@@ -182,6 +186,8 @@ export async function requireAuth(
     role,
     isMaster,
     isAdmin,
+    jobTitle: teamMember?.job_title || "",
+    metricType: (teamMember?.metric_type as "meetings" | "sales") || "meetings",
   };
 }
 
@@ -252,7 +258,7 @@ export async function resolvePermission(
     .maybeSingle();
 
   if (!tm) return false;
-  if (tm.role === "admin" || tm.role === "agency") return true;
+  if (tm.role === "admin") return true;
 
   // 3. Override individual (team_member_org_permissions)
   const { data: override } = await supabase

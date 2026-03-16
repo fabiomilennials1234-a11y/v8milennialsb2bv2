@@ -263,10 +263,10 @@ export function NovaVendaModal({ open, onOpenChange }: NovaVendaModalProps) {
             </div>
           </div>
 
-          {/* Closer + Data */}
+          {/* Responsável + Data */}
           <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-2">
-              <Label>Closer</Label>
+              <Label>Responsável</Label>
               <Select
                 value={formData.closer_id || "none"}
                 onValueChange={(v) => setFormData((prev) => ({ ...prev, closer_id: v === "none" ? "" : v }))}

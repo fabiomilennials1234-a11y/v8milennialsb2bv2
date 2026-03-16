@@ -5,13 +5,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 interface OraculoComercialProps {
-  role: "sdr" | "closer";
+  metricType: "meetings" | "sales";
   metrics: {
-    // SDR
+    // Meetings (formerly SDR)
     confirmados?: number;
     metaReuniao?: number;
     percentualMeta?: number;
-    // Closer
+    // Sales (formerly Closer)
     faturamento?: number;
     metaVendas?: number;
     numeroVendas?: number;
@@ -25,7 +25,9 @@ interface OraculoResponse {
   tarefa: string;
 }
 
-export function OraculoComercial({ role, metrics, collapsed }: OraculoComercialProps) {
+export function OraculoComercial({ metricType, metrics, collapsed }: OraculoComercialProps) {
+  // Map metricType to role for the Edge Function API (which still uses sdr/closer)
+  const role = metricType === "meetings" ? "sdr" : "closer";
   const [isLoading, setIsLoading] = useState(false);
   const [response, setResponse] = useState<OraculoResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -46,7 +48,7 @@ export function OraculoComercial({ role, metrics, collapsed }: OraculoComercialP
           role,
           confirmados: metrics.confirmados,
           metaReuniao: metrics.metaReuniao,
-          percentualMeta: role === "sdr" ? metrics.percentualMeta : metrics.percentualMetaCloser,
+          percentualMeta: metricType === "meetings" ? metrics.percentualMeta : metrics.percentualMetaCloser,
           faturamento: metrics.faturamento,
           metaVendas: metrics.metaVendas,
           numeroVendas: metrics.numeroVendas,

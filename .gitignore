@@ -43,3 +43,9 @@ supabase/.branches/
 CRIAR_ORGANIZACAO*.sql
 VINCULAR_ORGANIZACAO.sql
 SOLUCAO_DEFINITIVA_RLS.sql
+
+# Test artifacts
+.playwright-auth/
+test-results/
+playwright-report/
+coverage/

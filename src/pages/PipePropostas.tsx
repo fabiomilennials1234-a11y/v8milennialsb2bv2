@@ -42,7 +42,7 @@ import { usePipePropostasMetrics, type MetricsPeriod } from "@/hooks/usePipeMetr
 import { useDeleteAllLeadsInPipe } from "@/hooks/useLeads";
 import { usePipelineStages, stagesToColumns } from "@/hooks/usePipelineStages";
 import { PipeSettingsDialog } from "@/components/pipelines/PipeSettingsDialog";
-import { useTeamMembers } from "@/hooks/useTeamMembers";
+import { useTeamMembers, useResponsibleMembers } from "@/hooks/useTeamMembers";
 import { CreateProposalModal } from "@/components/proposals/CreateProposalModal";
 import { ProposalDetailModal } from "@/components/proposals/ProposalDetailModal";
 import { FunnelChart } from "@/components/dashboard/FunnelChart";
@@ -62,6 +62,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useOrganization } from "@/hooks/useOrganization";
 import { track, trackModuleVisit } from "@/lib/analytics";
+import { useFeaturePermission } from "@/hooks/useUserRole";
 
 interface ProposalItem {
   id: string;
@@ -325,7 +326,7 @@ const ProposalCardComponent = memo(function ProposalCardComponent({
 
 export default function PipePropostas() {
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterCloser, setFilterCloser] = useState("all");
+  const [filterResponsible, setFilterResponsible] = useState("all");
   const [filterProductType, setFilterProductType] = useState("all");
   const [filterPriority, setFilterPriority] = useState("all");
   const [filterCalor, setFilterCalor] = useState("all");
@@ -375,15 +376,14 @@ export default function PipePropostas() {
   const deletePipeProposta = useDeletePipeProposta();
   const deleteAllLeadsInPipe = useDeleteAllLeadsInPipe("propostas");
   const logAction = useLogLeadAction();
+  const { allowed: canDeleteCards } = useFeaturePermission("pipeline.delete_cards");
   const { data: metricsByPeriod } = usePipePropostasMetrics(
     metricsPeriod,
     metricsPeriod === "month" ? selectedMetricsMonth : undefined,
     metricsPeriod === "month" ? selectedMetricsYear : undefined
   );
 
-  const closers = useMemo(() => {
-    return teamMembers?.filter(m => m.role === "closer" && m.is_active) || [];
-  }, [teamMembers]);
+  const responsibleMembers = useResponsibleMembers();
 
   // Transform pipe data to ProposalCard format
   const transformToCard = (item: any): ProposalCard => {
@@ -432,7 +432,7 @@ export default function PipePropostas() {
       phone: lead?.phone,
       rating: lead?.rating || 0,
       calor: item.calor ?? 5,
-      closer: item.closer?.name || lead?.closer?.name,
+      closer: item.closer?.name || lead?.closer?.name,  // displayed as "Resp" in card
       closerId: item.closer_id,
       productType: productTypes.length === 1 ? productTypes[0] : (productTypes.length > 0 ? null : item.product_type),
       value: totalValue,
@@ -485,8 +485,8 @@ export default function PipePropostas() {
             lead?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
             lead?.company?.toLowerCase().includes(searchTerm.toLowerCase());
           
-          // Closer filter
-          const matchesCloser = filterCloser === "all" || item.closer_id === filterCloser;
+          // Responsible filter
+          const matchesResponsible = filterResponsible === "all" || item.responsible_id === filterResponsible;
           
           // Product type filter
           const matchesType = filterProductType === "all" || item.product_type === filterProductType;
@@ -513,7 +513,7 @@ export default function PipePropostas() {
             matchesCalor = calor < 4;
           }
           
-          return matchesSearch && matchesCloser && matchesType && matchesPriority && matchesCalor;
+          return matchesSearch && matchesResponsible && matchesType && matchesPriority && matchesCalor;
         })
         .map(transformToCard)
         .toSorted((a, b) => {
@@ -526,7 +526,7 @@ export default function PipePropostas() {
         items: columnItems,
       };
     });
-  }, [pipeData, searchTerm, filterCloser, filterProductType, filterPriority, filterCalor]);
+  }, [pipeData, searchTerm, filterResponsible, filterProductType, filterPriority, filterCalor]);
 
   // Calculate stats (Vendas Total / MRR Vendido / Projetos Vendidos por item quando houver items)
   const stats = useMemo(() => {
@@ -1080,15 +1080,15 @@ export default function PipePropostas() {
                   className="pl-9"
                 />
               </div>
-              <Select value={filterCloser} onValueChange={setFilterCloser}>
+              <Select value={filterResponsible} onValueChange={setFilterResponsible}>
                 <SelectTrigger className="w-[160px]">
                   <User className="w-4 h-4 mr-2" />
-                  <SelectValue placeholder="Closer" />
+                  <SelectValue placeholder="Responsável" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Todos Closers</SelectItem>
-                  {closers.map(closer => (
-                    <SelectItem key={closer.id} value={closer.id}>{closer.name}</SelectItem>
+                  <SelectItem value="all">Todos os responsáveis</SelectItem>
+                  {responsibleMembers.map(member => (
+                    <SelectItem key={member.id} value={member.id}>{member.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -1184,7 +1184,7 @@ export default function PipePropostas() {
                   <ProposalCardComponent
                     proposal={card}
                     onCalorChange={(calor) => handleCalorChange(card.id, calor)}
-                    onDelete={handleOpenDeleteDialog}
+                    onDelete={canDeleteCards ? handleOpenDeleteDialog : undefined}
                   />
                 </div>
               )}
@@ -1247,45 +1247,45 @@ export default function PipePropostas() {
                     <CalorAnalyticsChart data={calorData} />
                   </div>
 
-                  {/* By Closer */}
+                  {/* By Responsible */}
                   <div className="glass-card p-6">
                     <h3 className="font-semibold mb-6 flex items-center gap-2">
                       <User className="w-5 h-5 text-primary" />
-                      Performance por Closer
+                      Performance por Responsável
                     </h3>
                     <div className="space-y-4">
-                      {closers.map(closer => {
-                        const closerProposals = pipeData?.filter(p => p.closer_id === closer.id) || [];
-                        const closerValue = closerProposals.reduce((sum, p) => sum + (p.sale_value || 0), 0);
-                        const closerSold = closerProposals.filter(p => p.status === "vendido");
-                        const closerSoldValue = closerSold.reduce((sum, p) => sum + (p.sale_value || 0), 0);
+                      {responsibleMembers.map(member => {
+                        const memberProposals = pipeData?.filter(p => p.responsible_id === member.id) || [];
+                        const memberValue = memberProposals.reduce((sum, p) => sum + (p.sale_value || 0), 0);
+                        const memberSold = memberProposals.filter(p => p.status === "vendido");
+                        const memberSoldValue = memberSold.reduce((sum, p) => sum + (p.sale_value || 0), 0);
 
                         return (
-                          <div key={closer.id} className="flex items-center justify-between p-3 rounded-lg border">
+                          <div key={member.id} className="flex items-center justify-between p-3 rounded-lg border">
                             <div className="flex items-center gap-3">
                               <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
                                 <User className="w-5 h-5 text-primary" />
                               </div>
                               <div>
-                                <p className="font-medium">{closer.name}</p>
+                                <p className="font-medium">{member.name}</p>
                                 <p className="text-xs text-muted-foreground">
-                                  {closerProposals.length} propostas
+                                  {memberProposals.length} propostas
                                 </p>
                               </div>
                             </div>
                             <div className="text-right">
-                              <p className="font-semibold text-success">{formatCurrency(closerSoldValue)}</p>
+                              <p className="font-semibold text-success">{formatCurrency(memberSoldValue)}</p>
                               <p className="text-xs text-muted-foreground">
-                                {closerSold.length} vendas
+                                {memberSold.length} vendas
                               </p>
                             </div>
                           </div>
                         );
                       })}
 
-                      {closers.length === 0 && (
+                      {responsibleMembers.length === 0 && (
                         <p className="text-center text-muted-foreground py-4">
-                          Nenhum closer cadastrado
+                          Nenhum responsável cadastrado
                         </p>
                       )}
                     </div>
@@ -1315,7 +1315,7 @@ export default function PipePropostas() {
                               <div>
                                 <p className="font-medium">{sale.lead?.name}</p>
                                 <p className="text-xs text-muted-foreground">
-                                  {sale.lead?.company} • {sale.closer?.name}
+                                  {sale.lead?.company}{sale.closer?.name ? ` • ${sale.closer.name}` : ""}
                                 </p>
                               </div>
                             </div>

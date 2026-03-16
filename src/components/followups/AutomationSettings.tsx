@@ -48,7 +48,7 @@ import {
 
 const pipeConfig = {
   whatsapp: {
-    label: "WhatsApp SDR",
+    label: "Qualificação",
     icon: MessageSquare,
     color: "text-success",
     stages: [

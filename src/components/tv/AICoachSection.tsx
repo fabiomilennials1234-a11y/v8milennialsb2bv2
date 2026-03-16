@@ -10,7 +10,7 @@ import { useIndividualGoals } from "@/hooks/useGoals";
 interface TeamMemberTask {
   memberId: string;
   memberName: string;
-  role: "sdr" | "closer";
+  metricType: "meetings" | "sales";
   tarefa: string;
   isLoading: boolean;
   error: string | null;
@@ -35,11 +35,12 @@ export function AICoachSection() {
   const diasRestantes = lastDayOfMonth - dayOfMonth;
 
   const fetchTaskForMember = async (member: any) => {
-    const role = member.role as "sdr" | "closer";
-    
+    const metricType = (member.metric_type || "sales") as "meetings" | "sales";
+    const role = metricType === "meetings" ? "sdr" : "closer";
+
     let metrics: any = { role, diaDoMes: dayOfMonth, diasRestantes };
-    
-    if (role === "sdr") {
+
+    if (metricType === "meetings") {
       const sdrConfirmacoes = confirmacoes?.filter(c => 
         c.sdr_id === member.id && 
         c.status === "compareceu" &&
@@ -78,7 +79,7 @@ export function AICoachSection() {
       return {
         memberId: member.id,
         memberName: member.name,
-        role,
+        metricType,
         tarefa: data.tarefa || "",
         isLoading: false,
         error: null
@@ -87,7 +88,7 @@ export function AICoachSection() {
       return {
         memberId: member.id,
         memberName: member.name,
-        role,
+        metricType,
         tarefa: "",
         isLoading: false,
         error: err.message || "Erro ao consultar IA"
@@ -99,14 +100,14 @@ export function AICoachSection() {
     if (!teamMembers) return;
     
     setIsRefreshing(true);
-    const activeMembers = teamMembers.filter(m => 
-      m.is_active && (m.role === "sdr" || m.role === "closer")
+    const activeMembers = teamMembers.filter(m =>
+      m.is_active && ((m as any).metric_type === "meetings" || (m as any).metric_type === "sales")
     );
 
     setTasks(activeMembers.map(m => ({
       memberId: m.id,
       memberName: m.name,
-      role: m.role as "sdr" | "closer",
+      metricType: ((m as any).metric_type || "sales") as "meetings" | "sales",
       tarefa: "",
       isLoading: true,
       error: null
@@ -144,7 +145,7 @@ export function AICoachSection() {
     return () => clearInterval(interval);
   }, [teamMembers, confirmacoes, propostas, individualGoals]);
 
-  const allTasks = [...tasks.filter(t => t.role === "closer"), ...tasks.filter(t => t.role === "sdr")];
+  const allTasks = [...tasks.filter(t => t.metricType === "sales"), ...tasks.filter(t => t.metricType === "meetings")];
 
   return (
     <div className="space-y-2">
@@ -161,8 +162,8 @@ export function AICoachSection() {
 }
 
 function TaskCard({ task, index }: { task: TeamMemberTask; index: number }) {
-  const roleColor = task.role === "closer" ? "text-primary" : "text-amber-400";
-  const roleBg = task.role === "closer" ? "bg-primary/10" : "bg-amber-400/10";
+  const roleColor = task.metricType === "sales" ? "text-primary" : "text-amber-400";
+  const roleBg = task.metricType === "sales" ? "bg-primary/10" : "bg-amber-400/10";
 
   return (
     <motion.div
@@ -179,7 +180,7 @@ function TaskCard({ task, index }: { task: TeamMemberTask; index: number }) {
         </div>
         <span className="text-xs font-medium text-white/80 flex-1 truncate">{task.memberName}</span>
         <span className={`text-[9px] uppercase tracking-wider ${roleColor}`}>
-          {task.role}
+          {task.metricType === "sales" ? "Vendas" : "Reuniões"}
         </span>
       </div>
 

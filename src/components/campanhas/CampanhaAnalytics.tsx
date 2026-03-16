@@ -391,7 +391,7 @@ export function CampanhaAnalytics({
   const memberData = members
     .map((member) => {
       const memberMeetings = leads.filter(
-        (l) => l.sdr_id === member.team_member_id && l.stage_id === reuniaoStage?.id
+        (l) => (l.responsible_id === member.team_member_id || l.sdr_id === member.team_member_id) && l.stage_id === reuniaoStage?.id
       ).length;
 
       return {

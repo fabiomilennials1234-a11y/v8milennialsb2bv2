@@ -6,7 +6,7 @@
  * - Subscription expirou
  * - Subscription está suspensa/cancelada
  *
- * Admin, Closer e Master bypassam requireActive (podem criar copilots mesmo em trial).
+ * Admin e Master bypassam requireActive (podem criar copilots mesmo em trial).
  * Master bypassa TODA verificação de subscription.
  */
 
@@ -20,7 +20,7 @@ import { Loader2 } from 'lucide-react';
 
 interface SubscriptionProtectedRouteProps {
   children: ReactNode;
-  requireActive?: boolean; // Se true, requer subscription ativa (não trial). Admin, Closer e Master bypassam.
+  requireActive?: boolean; // Se true, requer subscription ativa (não trial). Admin e Master bypassam.
 }
 
 export function SubscriptionProtectedRoute({
@@ -33,7 +33,7 @@ export function SubscriptionProtectedRoute({
   const [subscription, setSubscription] = useState<SubscriptionStatus | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const canBypassSubscription = isMaster || userRole?.role === 'admin' || userRole?.role === 'closer';
+  const canBypassSubscription = isMaster || userRole?.role === 'admin';
 
   useEffect(() => {
     // Master bypassa toda verificação de subscription
@@ -82,7 +82,7 @@ export function SubscriptionProtectedRoute({
   }
 
   if (requireActive && subscription.status === 'trial' && !canBypassSubscription) {
-    // Requer subscription ativa mas está em trial (admin e closer bypassam)
+    // Requer subscription ativa mas está em trial (admin bypassa)
     return <Navigate to="/subscription-required?reason=trial_expired" replace />;
   }
 

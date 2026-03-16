@@ -1,12 +1,10 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { 
-  Users, 
-  Search, 
-  Edit2, 
-  Trash2, 
-  DollarSign,
-  Percent,
+import {
+  Users,
+  Search,
+  Edit2,
+  Trash2,
   UserCheck,
   UserX,
   Mail,
@@ -52,25 +50,18 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTeamMembers, useUpdateTeamMember, TeamMember } from "@/hooks/useTeamMembers";
 import { useOrganization } from "@/hooks/useOrganization";
 import { useIsAdmin } from "@/hooks/useUserRole";
-import {
-  useTeamMemberOrgPermissions,
-  useSaveTeamMemberOrgPermissions,
-  PERMISSION_LABELS,
-  type PermissionKey,
-} from "@/hooks/usePermissions";
-import { PermissoesEquipe } from "@/components/team/PermissoesEquipe";
+import { MemberPermissions } from "@/components/team/MemberPermissions";
 import { useProfiles } from "@/hooks/useProfiles";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Checkbox } from "@/components/ui/checkbox";
-import { useEffect } from "react";
-
-type TeamRole = "sdr" | "closer" | "agency" | "bdr" | "cliente";
+type TeamRole = "admin" | "member";
 
 interface TeamMemberFormData {
   name: string;
   email: string;
-  role: TeamRole;
+  role: "admin" | "member";
+  job_title: string;
+  metric_type: "meetings" | "sales";
   ote_base: number;
   ote_bonus: number;
   commission_mrr_percent: number;
@@ -82,7 +73,9 @@ interface TeamMemberFormData {
 const initialFormData: TeamMemberFormData = {
   name: "",
   email: "",
-  role: "sdr",
+  role: "member",
+  job_title: "",
+  metric_type: "meetings",
   ote_base: 0,
   ote_bonus: 0,
   commission_mrr_percent: 1.0,
@@ -99,32 +92,16 @@ export default function Equipe() {
   const [formData, setFormData] = useState<TeamMemberFormData>(initialFormData);
 
   const [isCreateUserDialogOpen, setIsCreateUserDialogOpen] = useState(false);
-  const [createUserForm, setCreateUserForm] = useState({ email: "", name: "", role: "sdr" as TeamRole, password: "" });
+  const [createUserForm, setCreateUserForm] = useState({ email: "", name: "", role: "member" as TeamRole, job_title: "", metric_type: "meetings" as "meetings" | "sales", password: "" });
   const [createUserLoading, setCreateUserLoading] = useState(false);
   const [createdUserEmail, setCreatedUserEmail] = useState<string | null>(null);
   const [removingMemberId, setRemovingMemberId] = useState<string | null>(null);
-  const [memberPermissions, setMemberPermissions] = useState<Record<PermissionKey, boolean>>({
-    see_unassigned_cards: false,
-    see_subordinates_cards: false,
-    see_general_info: false,
-    see_all_leads: false,
-    can_delete_leads: false,
-  });
 
   const { data: members = [], isLoading } = useTeamMembers();
   const updateMember = useUpdateTeamMember();
-  const savePermissions = useSaveTeamMemberOrgPermissions();
-  const { organizationId, orgType } = useOrganization();
+  const { organizationId } = useOrganization();
   const { isAdmin } = useIsAdmin();
-  const isOutbound = orgType === "outbound";
   const queryClient = useQueryClient();
-  const { data: editingMemberPerms } = useTeamMemberOrgPermissions(editingMember?.id ?? null);
-
-  useEffect(() => {
-    if (editingMember && editingMemberPerms) {
-      setMemberPermissions(editingMemberPerms);
-    }
-  }, [editingMember?.id, editingMemberPerms]);
 
   const { data: orgKeyData } = useQuery({
     queryKey: ["organization", "user_creation_key", organizationId],
@@ -166,7 +143,9 @@ export default function Equipe() {
     setFormData({
       name: member.name,
       email: (member as any).email || "",
-      role: member.role as TeamRole,
+      role: (member.role === "admin" ? "admin" : "member") as TeamRole,
+      job_title: (member as any).job_title || "",
+      metric_type: ((member as any).metric_type as "meetings" | "sales") || "meetings",
       ote_base: Number(member.ote_base) || 0,
       ote_bonus: Number(member.ote_bonus) || 0,
       commission_mrr_percent:
@@ -195,7 +174,7 @@ export default function Equipe() {
         ...sanitizedData,
         role: sanitizedData.role as any,
       });
-      // Sincronizar user_roles para que RLS e UI vejam a role correta (admin/closer/sdr)
+      // Sincronizar user_roles para que RLS e UI vejam a role correta (admin/member)
       // GUARD: só sincroniza se o membro editado tem user_id e a role mudou
       if (editingMember.user_id && formData.role !== editingMember.role) {
         const { error: delErr } = await supabase.from("user_roles").delete().eq("user_id", editingMember.user_id);
@@ -211,11 +190,6 @@ export default function Equipe() {
         }
         queryClient.invalidateQueries({ queryKey: ["user_role"] });
       }
-      // Salvar permissões (seleção múltipla) do membro
-      await savePermissions.mutateAsync({
-        teamMemberId: editingMember.id,
-        permissions: memberPermissions,
-      });
       toast.success("Membro atualizado com sucesso!");
       setIsDialogOpen(false);
       setEditingMember(null);
@@ -286,7 +260,7 @@ export default function Equipe() {
   };
 
   const handleCreateUserSubmit = async () => {
-    const { email, name, role, password } = createUserForm;
+    const { email, name, role, job_title, metric_type, password } = createUserForm;
     if (!email.trim()) {
       toast.error("Email é obrigatório");
       return;
@@ -343,6 +317,8 @@ export default function Equipe() {
         email: email.trim(),
         name: name.trim(),
         role,
+        job_title: job_title.trim(),
+        metric_type,
         organization_id: organizationId,
         password: password.trim(),
       };
@@ -386,27 +362,19 @@ export default function Equipe() {
   const handleCreateUserDialogOpen = (open: boolean) => {
     setIsCreateUserDialogOpen(open);
     if (!open) {
-      setCreateUserForm({ email: "", name: "", role: isOutbound ? "bdr" : "sdr", password: "" });
+      setCreateUserForm({ email: "", name: "", role: "member", job_title: "", metric_type: "meetings", password: "" });
       setCreatedUserEmail(null);
     }
   };
 
   const roleLabels: Record<string, string> = {
-    sdr: "SDR",
-    closer: "Closer",
-    admin: "Admin",
-    agency: "Agency",
-    bdr: "BDR",
-    cliente: "Cliente",
+    admin: "Administrador",
+    member: "Membro",
   };
 
   const roleColors: Record<string, string> = {
-    sdr: "bg-chart-5/10 text-chart-5 border-chart-5/20",
-    closer: "bg-primary/10 text-primary border-primary/20",
     admin: "bg-purple-500/10 text-purple-500 border-purple-500/20",
-    agency: "bg-purple-500/10 text-purple-500 border-purple-500/20",
-    bdr: "bg-chart-5/10 text-chart-5 border-chart-5/20",
-    cliente: "bg-blue-500/10 text-blue-500 border-blue-500/20",
+    member: "bg-primary/10 text-primary border-primary/20",
   };
 
   return (
@@ -423,9 +391,7 @@ export default function Equipe() {
             Equipe
           </motion.h1>
           <p className="text-muted-foreground mt-1">
-            {isOutbound
-              ? "Gerencie BDRs, Clientes e suas configurações"
-              : "Gerencie SDRs, Closers e suas configurações de OTE"}
+            Gerencie membros da equipe e suas permissões
           </p>
         </div>
 
@@ -482,18 +448,32 @@ export default function Equipe() {
                       <SelectValue placeholder="Selecione a função" />
                     </SelectTrigger>
                     <SelectContent>
-                      {isOutbound ? (
-                        <>
-                          <SelectItem value="agency">Agency</SelectItem>
-                          <SelectItem value="bdr">BDR</SelectItem>
-                          <SelectItem value="cliente">Cliente</SelectItem>
-                        </>
-                      ) : (
-                        <>
-                          <SelectItem value="sdr">SDR</SelectItem>
-                          <SelectItem value="closer">Closer</SelectItem>
-                        </>
-                      )}
+                      <SelectItem value="admin">Administrador</SelectItem>
+                      <SelectItem value="member">Membro</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="job_title">Cargo</Label>
+                  <Input
+                    id="job_title"
+                    value={formData.job_title}
+                    onChange={(e) => setFormData(prev => ({ ...prev, job_title: e.target.value }))}
+                    placeholder="Ex: Vendedor, Representante"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="metric_type">Tipo de Métrica</Label>
+                  <Select
+                    value={formData.metric_type}
+                    onValueChange={(value: "meetings" | "sales") => setFormData(prev => ({ ...prev, metric_type: value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione o tipo" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="meetings">Reuniões</SelectItem>
+                      <SelectItem value="sales">Vendas</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -587,31 +567,6 @@ export default function Equipe() {
                     onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_active: checked }))}
                   />
                 </div>
-                <div className="space-y-3 border-t pt-4">
-                  <Label>Permissões (seleção múltipla)</Label>
-                  <p className="text-xs text-muted-foreground">
-                    Marque as features que este membro pode acessar. Admin sempre tem todas.
-                  </p>
-                  <div className="grid gap-2">
-                    {(Object.keys(PERMISSION_LABELS) as PermissionKey[]).map((key) => (
-                      <div key={key} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={`perm-${key}`}
-                          checked={memberPermissions[key]}
-                          onCheckedChange={(checked) =>
-                            setMemberPermissions((p) => ({ ...p, [key]: !!checked }))
-                          }
-                        />
-                        <label
-                          htmlFor={`perm-${key}`}
-                          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                        >
-                          {PERMISSION_LABELS[key]}
-                        </label>
-                      </div>
-                    ))}
-                  </div>
-                </div>
               </div>
                 <DialogFooter>
                   <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
@@ -619,9 +574,9 @@ export default function Equipe() {
                   </Button>
                   <Button
                     onClick={handleSubmitEdit}
-                    disabled={updateMember.isPending || savePermissions.isPending}
+                    disabled={updateMember.isPending}
                   >
-                    {updateMember.isPending || savePermissions.isPending ? "Salvando..." : "Salvar"}
+                    {updateMember.isPending ? "Salvando..." : "Salvar"}
                   </Button>
                 </DialogFooter>
               </DialogContent>
@@ -650,7 +605,7 @@ export default function Equipe() {
                     </p>
                     <DialogFooter>
                       <Button variant="outline" onClick={() => handleCreateUserDialogOpen(false)}>Fechar</Button>
-                      <Button onClick={() => { setCreatedUserEmail(null); setCreateUserForm({ email: "", name: "", role: isOutbound ? "bdr" : "sdr", password: "" }); }}>
+                      <Button onClick={() => { setCreatedUserEmail(null); setCreateUserForm({ email: "", name: "", role: "member", job_title: "", metric_type: "meetings", password: "" }); }}>
                         Criar outro usuário
                       </Button>
                     </DialogFooter>
@@ -678,7 +633,7 @@ export default function Equipe() {
                         />
                       </div>
                       <div className="grid gap-2">
-                        <Label htmlFor="create-user-role">Posição na organização</Label>
+                        <Label htmlFor="create-user-role">Função</Label>
                         <Select
                           value={createUserForm.role}
                           onValueChange={(v) => setCreateUserForm((p) => ({ ...p, role: v as TeamRole }))}
@@ -687,18 +642,32 @@ export default function Equipe() {
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            {isOutbound ? (
-                              <>
-                                <SelectItem value="agency">Agency</SelectItem>
-                                <SelectItem value="bdr">BDR</SelectItem>
-                                <SelectItem value="cliente">Cliente</SelectItem>
-                              </>
-                            ) : (
-                              <>
-                                <SelectItem value="sdr">SDR</SelectItem>
-                                <SelectItem value="closer">Closer</SelectItem>
-                              </>
-                            )}
+                            <SelectItem value="admin">Administrador</SelectItem>
+                            <SelectItem value="member">Membro</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="create-user-job-title">Cargo</Label>
+                        <Input
+                          id="create-user-job-title"
+                          value={createUserForm.job_title}
+                          onChange={(e) => setCreateUserForm((p) => ({ ...p, job_title: e.target.value }))}
+                          placeholder="Ex: Vendedor, Representante"
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="create-user-metric-type">Tipo de Métrica</Label>
+                        <Select
+                          value={createUserForm.metric_type}
+                          onValueChange={(v) => setCreateUserForm((p) => ({ ...p, metric_type: v as "meetings" | "sales" }))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="meetings">Reuniões</SelectItem>
+                            <SelectItem value="sales">Vendas</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
@@ -746,11 +715,9 @@ export default function Equipe() {
           transition={{ delay: 0.05 }}
           className="glass-card p-4"
         >
-          <p className="text-xs text-muted-foreground mb-1">
-            {isOutbound ? "BDRs Ativos" : "SDRs Ativos"}
-          </p>
+          <p className="text-xs text-muted-foreground mb-1">Reuniões</p>
           <p className="text-xl font-bold text-chart-5">
-            {members.filter((m) => m.role === (isOutbound ? "bdr" : "sdr") && m.is_active).length}
+            {members.filter((m) => (m as any).metric_type === "meetings" && m.is_active).length}
           </p>
         </motion.div>
         <motion.div
@@ -759,11 +726,9 @@ export default function Equipe() {
           transition={{ delay: 0.1 }}
           className="glass-card p-4"
         >
-          <p className="text-xs text-muted-foreground mb-1">
-            {isOutbound ? "Clientes Ativos" : "Closers Ativos"}
-          </p>
+          <p className="text-xs text-muted-foreground mb-1">Vendas</p>
           <p className="text-xl font-bold text-primary">
-            {members.filter((m) => m.role === (isOutbound ? "cliente" : "closer") && m.is_active).length}
+            {members.filter((m) => (m as any).metric_type === "sales" && m.is_active).length}
           </p>
         </motion.div>
         <motion.div
@@ -800,18 +765,8 @@ export default function Equipe() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todas Funções</SelectItem>
-            {isOutbound ? (
-              <>
-                <SelectItem value="agency">Agency</SelectItem>
-                <SelectItem value="bdr">BDR</SelectItem>
-                <SelectItem value="cliente">Cliente</SelectItem>
-              </>
-            ) : (
-              <>
-                <SelectItem value="sdr">SDR</SelectItem>
-                <SelectItem value="closer">Closer</SelectItem>
-              </>
-            )}
+            <SelectItem value="admin">Administrador</SelectItem>
+            <SelectItem value="member">Membro</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -825,6 +780,7 @@ export default function Equipe() {
               <TableHead className="font-mono text-xs">ID</TableHead>
               <TableHead>Email</TableHead>
               <TableHead>Função</TableHead>
+              <TableHead>Cargo</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">OTE Base</TableHead>
               <TableHead className="text-right">OTE Bônus</TableHead>
@@ -836,13 +792,13 @@ export default function Equipe() {
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
                   Carregando...
                 </TableCell>
               </TableRow>
             ) : filteredMembers.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
                   Nenhum membro encontrado
                 </TableCell>
               </TableRow>
@@ -864,9 +820,19 @@ export default function Equipe() {
                     )}
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline" className={roleColors[member.role as TeamRole]}>
-                      {roleLabels[member.role as TeamRole]}
+                    <Badge variant="outline" className={roleColors[member.role] || roleColors.member}>
+                      {roleLabels[member.role] || member.role}
                     </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-sm">{(member as any).job_title || <span className="text-xs text-muted-foreground/50 italic">-</span>}</span>
+                      {(member as any).metric_type && (
+                        <Badge variant="outline" className="text-[10px] px-1 py-0 w-fit">
+                          {(member as any).metric_type === "meetings" ? "Reuniões" : "Vendas"}
+                        </Badge>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell>
                     {member.is_active ? (
@@ -924,7 +890,7 @@ export default function Equipe() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
         >
-          <PermissoesEquipe />
+          <MemberPermissions />
         </motion.div>
       )}
     </div>

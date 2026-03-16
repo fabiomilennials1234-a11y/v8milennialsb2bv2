@@ -103,8 +103,7 @@ export default function CampanhaDetail() {
         target_pipe: target.pipe,
         stage: target.stage,
         organization_id: organizationId,
-        sdr_id: lead.sdr_id ?? undefined,
-        closer_id: lead.closer_id ?? undefined,
+        responsible_id: lead.responsible_id ?? lead.sdr_id ?? lead.closer_id ?? undefined,
         campaign_name: campanha.name,
       });
       toast.success(`Lead enviado para o pipe com sucesso`);
@@ -158,16 +157,17 @@ export default function CampanhaDetail() {
       }
 
       // 3. Create confirmation entry
+      const effectiveResponsible = lead.responsible_id ?? lead.sdr_id;
       await createConfirmacao.mutateAsync({
         lead_id: lead.lead_id,
-        sdr_id: lead.sdr_id,
+        sdr_id: effectiveResponsible,
         status: "reuniao_marcada",
         notes: `Campanha: ${campanha?.name}`,
       });
 
-      // 4. Update member meetings count if SDR is a member
-      if (lead.sdr_id && campanha?.id) {
-        const member = members.find(m => m.team_member_id === lead.sdr_id);
+      // 4. Update member meetings count if responsible is a member
+      if (effectiveResponsible && campanha?.id) {
+        const member = members.find(m => m.team_member_id === effectiveResponsible);
         if (member) {
           const newCount = (member.meetings_count || 0) + 1;
           const shouldEarnBonus = campanha.individual_goal
@@ -176,7 +176,7 @@ export default function CampanhaDetail() {
 
           await updateMember.mutateAsync({
             campanha_id: campanha.id,
-            team_member_id: lead.sdr_id,
+            team_member_id: effectiveResponsible,
             meetings_count: newCount,
             bonus_earned: shouldEarnBonus || member.bonus_earned,
           });

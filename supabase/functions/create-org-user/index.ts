@@ -241,7 +241,10 @@ serve(withSentry('create-org-user', async (req) => {
       { id: newUserId, full_name: name || email.split("@")[0] },
       { onConflict: "id" }
     );
-    const roleForInsert = role === "member" ? "sdr" : role;
+    // Normalizar roles legados para o novo sistema: admin ou member
+    const validRoles = ["admin", "member"];
+    const adminRoles = ["admin", "agency"];
+    const roleForInsert = adminRoles.includes(role) ? "admin" : validRoles.includes(role) ? role : "member";
     const { error: tmErr } = await supabase.from("team_members").insert({
       user_id: newUserId,
       organization_id: organizationId,

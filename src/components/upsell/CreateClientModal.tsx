@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useCreateUpsellClient } from "@/hooks/useUpsellClients";
 import { useOrganization } from "@/hooks/useOrganization";
-import { useTeamMembers } from "@/hooks/useTeamMembers";
+import { useResponsibleMembers } from "@/hooks/useTeamMembers";
 import { useLeads } from "@/hooks/useLeads";
 import { toast } from "sonner";
 
@@ -19,7 +19,7 @@ interface CreateClientModalProps {
 export function CreateClientModal({ open, onOpenChange }: CreateClientModalProps) {
   const { organizationId } = useOrganization();
   const createClient = useCreateUpsellClient();
-  const { data: teamMembers = [] } = useTeamMembers();
+  const responsibleMembers = useResponsibleMembers();
   const { data: leads = [] } = useLeads();
 
   const [formData, setFormData] = useState({
@@ -29,7 +29,7 @@ export function CreateClientModal({ open, onOpenChange }: CreateClientModalProps
     email: "",
     phone: "",
     potencial: "medio" as "baixo" | "medio" | "alto" | "estrategico",
-    closer_id: "" as string,
+    responsible_id: "" as string,
     first_sale_at: new Date().toISOString().split("T")[0],
   });
 
@@ -45,7 +45,7 @@ export function CreateClientModal({ open, onOpenChange }: CreateClientModalProps
         company: lead.company || "",
         email: lead.email || "",
         phone: lead.phone || "",
-        closer_id: lead.closer_id || prev.closer_id,
+        responsible_id: lead.responsible_id || prev.responsible_id,
       }));
     }
   };
@@ -65,7 +65,7 @@ export function CreateClientModal({ open, onOpenChange }: CreateClientModalProps
         email: formData.email || null,
         phone: formData.phone || null,
         potencial: formData.potencial,
-        closer_id: formData.closer_id || null,
+        responsible_id: formData.responsible_id || null,
         first_sale_at: new Date(formData.first_sale_at).toISOString(),
       });
       toast.success("Cliente adicionado a base");
@@ -77,7 +77,7 @@ export function CreateClientModal({ open, onOpenChange }: CreateClientModalProps
         email: "",
         phone: "",
         potencial: "medio",
-        closer_id: "",
+        responsible_id: "",
         first_sale_at: new Date().toISOString().split("T")[0],
       });
     } catch (err: any) {
@@ -172,17 +172,17 @@ export function CreateClientModal({ open, onOpenChange }: CreateClientModalProps
               </Select>
             </div>
             <div className="grid gap-2">
-              <Label>Closer Responsavel</Label>
+              <Label>Responsável</Label>
               <Select
-                value={formData.closer_id || "none"}
-                onValueChange={(v) => setFormData((prev) => ({ ...prev, closer_id: v === "none" ? "" : v }))}
+                value={formData.responsible_id || "none"}
+                onValueChange={(v) => setFormData((prev) => ({ ...prev, responsible_id: v === "none" ? "" : v }))}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione..." />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Nenhum</SelectItem>
-                  {teamMembers.map((m) => (
+                  {responsibleMembers.map((m) => (
                     <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
                   ))}
                 </SelectContent>

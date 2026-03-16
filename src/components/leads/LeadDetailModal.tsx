@@ -144,6 +144,7 @@ export function LeadDetailModal({ open, onOpenChange, leadId, onEdit }: LeadDeta
         .from("leads")
         .select(`
           *,
+          responsible:team_members!leads_responsible_id_fkey(id, name),
           sdr:team_members!leads_sdr_id_fkey(id, name),
           closer:team_members!leads_closer_id_fkey(id, name),
           lead_tags(
@@ -381,14 +382,10 @@ export function LeadDetailModal({ open, onOpenChange, leadId, onEdit }: LeadDeta
                       <User className="w-4 h-4 text-muted-foreground" />
                       Equipe
                     </h3>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 gap-3">
                       <div className="p-3 bg-muted rounded-lg">
-                        <p className="text-xs text-muted-foreground mb-1">SDR</p>
-                        <p className="font-medium">{lead.sdr?.name || "Não atribuído"}</p>
-                      </div>
-                      <div className="p-3 bg-muted rounded-lg">
-                        <p className="text-xs text-muted-foreground mb-1">Closer</p>
-                        <p className="font-medium">{lead.closer?.name || "Não atribuído"}</p>
+                        <p className="text-xs text-muted-foreground mb-1">Responsável</p>
+                        <p className="font-medium">{lead.responsible?.name || lead.closer?.name || lead.sdr?.name || "Não atribuído"}</p>
                       </div>
                     </div>
                   </div>
@@ -537,7 +534,7 @@ export function LeadDetailModal({ open, onOpenChange, leadId, onEdit }: LeadDeta
                           <MessageSquare className="w-5 h-5 text-success" />
                         </div>
                         <div className="flex-1">
-                          <p className="font-medium text-sm">WhatsApp SDR</p>
+                          <p className="font-medium text-sm">Qualificação</p>
                           <p className="text-xs text-muted-foreground">
                             Status: {item.status}
                           </p>

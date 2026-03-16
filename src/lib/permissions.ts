@@ -1,13 +1,11 @@
 /**
  * Ponto central de permissões no frontend.
  *
- * Componentes NÃO devem chamar Supabase diretamente para checar permissão.
- * Em vez disso, usam os hooks deste módulo que seguem a cascata:
- * master → admin → team_member_org_permissions → organization_role_permissions
- *                 → team_member_permissions → false
+ * Cascata:
+ * master → admin → feature_permissions → member_feature_permissions
  *
  * Hooks disponíveis:
- * - usePermission(key)         → boolean | undefined (single org permission)
+ * - usePermission(key)          → boolean | undefined (single org permission)
  * - useCanPerformAction(action) → { allowed, reason, isLoading }
  * - useAllPermissions()         → Record<PermissionKey, boolean>
  */
@@ -15,7 +13,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/hooks/useOrganization";
-import { useUserRole } from "@/hooks/useUserRole";
+import { useUserRole, useFeaturePermissions } from "@/hooks/useUserRole";
 import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
 import { useMasterAuth } from "@/hooks/useMasterAuth";
 import type { PermissionKey } from "@/hooks/usePermissions";
@@ -51,7 +49,7 @@ const ACTION_TO_ORG_PERMISSION: Partial<Record<AppAction, PermissionKey>> = {
   view_lead: "see_all_leads",
 };
 
-// Mapeamento de ação para resource_key + action_key na matriz
+// Mapeamento de ação para resource_key + action_key na matriz legada
 const ACTION_TO_MATRIX: Partial<Record<AppAction, { resource: string; action: string }>> = {
   import_leads: { resource: "leads", action: "create" },
   create_lead: { resource: "leads", action: "create" },
@@ -63,17 +61,13 @@ const ACTION_TO_MATRIX: Partial<Record<AppAction, { resource: string; action: st
   delete_campaign: { resource: "campanhas", action: "delete" },
 };
 
-// Ações que requerem admin obrigatório
-const ADMIN_ONLY_ACTIONS: AppAction[] = [
-  "edit_workflow",
-  "create_workflow",
-  "manage_team",
-];
-
-// Ações que admin/closer/master podem executar
-const ADMIN_OR_CLOSER_ACTIONS: AppAction[] = [
-  "manage_copilot",
-];
+// Mapeamento de ação para feature_key no novo sistema
+const ACTION_TO_FEATURE: Partial<Record<AppAction, string>> = {
+  edit_workflow: "workflows.edit",
+  create_workflow: "workflows.create",
+  manage_team: "team.view",
+  manage_copilot: "copilot.create",
+};
 
 // ─── usePermission ───────────────────────────────────────
 
@@ -91,7 +85,7 @@ export function usePermission(permissionKey: PermissionKey) {
     queryFn: async (): Promise<boolean> => {
       if (!organizationId) return false;
       if (isMaster) return true;
-      if (userRole?.role === "admin" || userRole?.role === "agency") return true;
+      if (userRole?.role === "admin") return true;
 
       const { data, error } = await supabase.rpc("user_has_org_permission", {
         p_permission_key: permissionKey,
@@ -108,33 +102,33 @@ export function usePermission(permissionKey: PermissionKey) {
 
 /**
  * Verifica se o usuário pode executar uma ação específica.
- * Segue a cascata completa de permissões.
+ * Usa feature_permissions para ações mapeadas.
  */
 export function useCanPerformAction(action: AppAction): ActionResult {
   const { data: userRole, isLoading: roleLoading } = useUserRole();
   const { data: teamMember, isLoading: tmLoading } = useCurrentTeamMember();
   const { organizationId, isReady } = useOrganization();
   const { isMaster, isLoading: masterLoading } = useMasterAuth();
+  const { data: featurePerms, isLoading: featureLoading } = useFeaturePermissions();
 
-  const isLoading = roleLoading || tmLoading || masterLoading || !isReady;
+  const isLoading = roleLoading || tmLoading || masterLoading || !isReady || featureLoading;
   const role = userRole?.role ?? teamMember?.role;
-  const isAdmin = isMaster || role === "admin" || role === "agency";
+  const isAdmin = isMaster || role === "admin";
 
-  // Resolução síncrona para casos simples
   if (isLoading) return { allowed: false, isLoading: true };
 
   // Master/admin sempre pode
   if (isAdmin) return { allowed: true, reason: "admin", isLoading: false };
 
-  // Admin-only actions
-  if (ADMIN_ONLY_ACTIONS.includes(action)) {
-    return { allowed: false, reason: "Apenas administradores", isLoading: false };
-  }
-
-  // Admin/closer actions
-  if (ADMIN_OR_CLOSER_ACTIONS.includes(action)) {
-    if (role === "closer") return { allowed: true, reason: "closer", isLoading: false };
-    return { allowed: false, reason: "Apenas administradores e closers", isLoading: false };
+  // Feature-based actions
+  const featureKey = ACTION_TO_FEATURE[action];
+  if (featureKey) {
+    const allowed = featurePerms?.[featureKey] === true;
+    return {
+      allowed,
+      reason: allowed ? `feature:${featureKey}` : `Sem permissão: ${featureKey}`,
+      isLoading: false,
+    };
   }
 
   // Ações abertas
@@ -142,8 +136,7 @@ export function useCanPerformAction(action: AppAction): ActionResult {
     return { allowed: true, reason: "open", isLoading: false };
   }
 
-  // Para permissões que precisam de query assíncrona, usamos o hook separado
-  // abaixo (useCanPerformActionAsync)
+  // Fallback — usa feature_permissions default
   return { allowed: true, reason: "fallback", isLoading: false };
 }
 
@@ -152,16 +145,16 @@ export function useCanPerformAction(action: AppAction): ActionResult {
 /**
  * Versão assíncrona de useCanPerformAction que consulta a cascata
  * completa incluindo team_member_permissions e org_permissions.
- * Use quando precisar de verificação exata (ex: antes de importar leads).
  */
 export function useCanPerformActionAsync(action: AppAction) {
   const { data: userRole, isLoading: roleLoading } = useUserRole();
   const { data: teamMember, isLoading: tmLoading } = useCurrentTeamMember();
   const { organizationId, isReady } = useOrganization();
   const { isMaster, isLoading: masterLoading } = useMasterAuth();
+  const { data: featurePerms } = useFeaturePermissions();
 
   const role = userRole?.role ?? teamMember?.role;
-  const isAdmin = isMaster || role === "admin" || role === "agency";
+  const isAdmin = isMaster || role === "admin";
 
   return useQuery({
     queryKey: ["can-perform", action, organizationId, role, teamMember?.id, isMaster],
@@ -169,15 +162,11 @@ export function useCanPerformActionAsync(action: AppAction) {
       if (!organizationId) return { allowed: false, reason: "no_org" };
       if (isAdmin) return { allowed: true, reason: "admin" };
 
-      // Admin-only
-      if (ADMIN_ONLY_ACTIONS.includes(action)) {
-        return { allowed: false, reason: "Apenas administradores" };
-      }
-
-      // Admin/closer
-      if (ADMIN_OR_CLOSER_ACTIONS.includes(action)) {
-        if (role === "closer") return { allowed: true, reason: "closer" };
-        return { allowed: false, reason: "Apenas administradores e closers" };
+      // Feature-based
+      const featureKey = ACTION_TO_FEATURE[action];
+      if (featureKey) {
+        const allowed = featurePerms?.[featureKey] === true;
+        return { allowed, reason: allowed ? `feature:${featureKey}` : `Sem permissão` };
       }
 
       // Open
@@ -197,7 +186,7 @@ export function useCanPerformActionAsync(action: AppAction) {
         return { allowed: true, reason: orgPermKey };
       }
 
-      // Check matrix permission
+      // Check matrix permission (legacy)
       const matrixMapping = ACTION_TO_MATRIX[action];
       if (matrixMapping && teamMember?.id) {
         const { data } = await supabase
@@ -208,7 +197,7 @@ export function useCanPerformActionAsync(action: AppAction) {
           .eq("action_key", matrixMapping.action)
           .maybeSingle();
 
-        const value = data?.value || "allowed"; // default = allowed (compatibilidade)
+        const value = data?.value || "allowed";
         if (value === "denied") {
           return { allowed: false, reason: `${matrixMapping.resource}.${matrixMapping.action} negado` };
         }
@@ -224,20 +213,10 @@ export function useCanPerformActionAsync(action: AppAction) {
 
 // ─── useAllPermissions ───────────────────────────────────
 
-/**
- * Carrega todas as permissões organizacionais do usuário.
- * Reutiliza useMyPermissions de usePermissions.ts.
- * Admin/master tem tudo true.
- */
 export { useMyPermissions as useAllPermissions } from "@/hooks/usePermissions";
 
 // ─── Imperative helpers (for use inside mutations) ───────
 
-/**
- * Verifica via RPC se o usuário atual é admin.
- * Para uso dentro de mutationFn (onde hooks não podem ser chamados).
- * @throws Error se não for admin.
- */
 export async function assertIsAdmin(): Promise<void> {
   const { data } = await supabase.rpc("is_user_admin");
   if (data !== true) {
@@ -245,10 +224,6 @@ export async function assertIsAdmin(): Promise<void> {
   }
 }
 
-/**
- * Verifica via RPC se o usuário tem uma permissão organizacional.
- * @throws Error se não tiver.
- */
 export async function assertOrgPermission(permissionKey: string, message?: string): Promise<void> {
   const { data } = await supabase.rpc("user_has_org_permission", {
     p_permission_key: permissionKey,
@@ -258,10 +233,6 @@ export async function assertOrgPermission(permissionKey: string, message?: strin
   }
 }
 
-/**
- * Verifica na matriz team_member_permissions se o membro pode executar ação.
- * Retorna true se não existe registro (default = allowed por compatibilidade).
- */
 export async function checkMatrixPermission(
   teamMemberId: string,
   resource: string,

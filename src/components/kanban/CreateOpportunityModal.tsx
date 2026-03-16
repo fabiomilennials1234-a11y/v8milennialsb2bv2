@@ -54,7 +54,7 @@ export function CreateOpportunityModal({
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   
   const [formData, setFormData] = useState({
-    sdr_id: "",
+    responsible_id: "",
     scheduled_date: "",
     notes: "",
   });
@@ -65,7 +65,7 @@ export function CreateOpportunityModal({
   const { data: teamMembers = [] } = useTeamMembers();
   const createPipeWhatsapp = useCreatePipeWhatsapp();
 
-  const sdrs = teamMembers.filter(m => m.role === "sdr" && m.is_active);
+  const activeMembers = teamMembers.filter(m => m.is_active);
 
   // Get lead IDs that are already in the pipe
   const leadsInPipe = useMemo(() => {
@@ -96,7 +96,7 @@ export function CreateOpportunityModal({
         setSearchTerm("");
         setSelectedLeadId(null);
         setFormData({
-          sdr_id: "",
+          responsible_id: "",
           scheduled_date: "",
           notes: "",
         });
@@ -104,10 +104,10 @@ export function CreateOpportunityModal({
     }
   }, [open]);
 
-  // Auto-fill SDR from lead
+  // Auto-fill responsible from lead
   useEffect(() => {
-    if (selectedLead?.sdr_id && !formData.sdr_id) {
-      setFormData(prev => ({ ...prev, sdr_id: selectedLead.sdr_id || "" }));
+    if (selectedLead?.responsible_id && !formData.responsible_id) {
+      setFormData(prev => ({ ...prev, responsible_id: selectedLead.responsible_id || "" }));
     }
   }, [selectedLead]);
 
@@ -130,7 +130,7 @@ export function CreateOpportunityModal({
       await createPipeWhatsapp.mutateAsync({
         lead_id: selectedLeadId,
         status: "novo",
-        sdr_id: formData.sdr_id || null,
+        responsible_id: formData.responsible_id || null,
         scheduled_date: formData.scheduled_date ? new Date(formData.scheduled_date).toISOString() : null,
         notes: formData.notes || null,
         organization_id: organizationId,
@@ -302,18 +302,18 @@ export function CreateOpportunityModal({
               {/* Opportunity Form */}
               <div className="space-y-4">
                 <div className="grid gap-2">
-                  <Label>SDR Responsável</Label>
+                  <Label>Responsável</Label>
                   <Select
-                    value={formData.sdr_id}
-                    onValueChange={(v) => setFormData({ ...formData, sdr_id: v })}
+                    value={formData.responsible_id}
+                    onValueChange={(v) => setFormData({ ...formData, responsible_id: v })}
                   >
                     <SelectTrigger>
                       <User className="w-4 h-4 mr-2 text-muted-foreground" />
-                      <SelectValue placeholder="Selecionar SDR (opcional)" />
+                      <SelectValue placeholder="Selecionar responsável (opcional)" />
                     </SelectTrigger>
                     <SelectContent>
-                      {sdrs.map(sdr => (
-                        <SelectItem key={sdr.id} value={sdr.id}>{sdr.name}</SelectItem>
+                      {activeMembers.map(member => (
+                        <SelectItem key={member.id} value={member.id}>{member.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>

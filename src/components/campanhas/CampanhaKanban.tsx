@@ -319,16 +319,10 @@ function KanbanCardItem({ lead, isReuniao, onMoveToConfirmacao, onExtractToPipe,
 
           {/* Team Assignment */}
           <div className="flex items-center gap-3 pt-1 border-t border-border text-xs">
-            {lead.sdr && (
+            {(lead.responsible || lead.sdr || lead.closer) && (
               <div className="flex items-center gap-1 text-muted-foreground">
                 <User className="w-3 h-3" />
-                <span className="truncate max-w-[70px]">SDR: {lead.sdr.name}</span>
-              </div>
-            )}
-            {lead.closer && (
-              <div className="flex items-center gap-1 text-muted-foreground">
-                <User className="w-3 h-3" />
-                <span className="truncate max-w-[70px]">Closer: {lead.closer.name}</span>
+                <span className="truncate max-w-[100px]">{lead.responsible?.name || lead.sdr?.name || lead.closer?.name}</span>
               </div>
             )}
           </div>
@@ -516,8 +510,7 @@ export function CampanhaKanban({
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [editLeadId, setEditLeadId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<CampanhaLead | null>(null);
-  const [sdrFilter, setSdrFilter] = useState<string>("all");
-  const [closerFilter, setCloserFilter] = useState<string>("all");
+  const [responsibleFilter, setResponsibleFilter] = useState<string>("all");
   const [nameFilter, setNameFilter] = useState("");
   const updateLead = useUpdateCampanhaLead();
   const deleteCampanhaLead = useDeleteCampanhaLead();
@@ -525,43 +518,28 @@ export function CampanhaKanban({
   const extractToPipe = useExtractLeadToPipe();
   const { data: teamMembers = [] } = useTeamMembers();
 
-  // Get unique SDRs from campaign leads
-  const sdrs = useMemo(() => {
-    const sdrMap = new Map<string, { id: string; name: string }>();
+  // Get unique responsible members from campaign leads
+  const responsibles = useMemo(() => {
+    const map = new Map<string, { id: string; name: string }>();
     leads.forEach((l) => {
-      if (l.sdr) {
-        sdrMap.set(l.sdr.id, l.sdr);
-      }
+      if (l.responsible) map.set(l.responsible.id, l.responsible);
+      else if (l.sdr) map.set(l.sdr.id, l.sdr);
+      if (l.closer) map.set(l.closer.id, l.closer);
     });
-    return Array.from(sdrMap.values());
-  }, [leads]);
-
-  // Get unique Closers from campaign leads
-  const closers = useMemo(() => {
-    const closerMap = new Map<string, { id: string; name: string }>();
-    leads.forEach((l) => {
-      if (l.closer) {
-        closerMap.set(l.closer.id, l.closer);
-      }
-    });
-    return Array.from(closerMap.values());
+    return Array.from(map.values());
   }, [leads]);
 
   // Normaliza texto para busca (sem acentos, minúsculo)
   const normalizeForSearch = (s: string) =>
     (s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
-  // Filter leads by SDR and by name
+  // Filter leads by responsible and by name
   // Also filter out "ghost leads" where RLS blocks the lead data (lead relation is null)
   const filteredLeads = useMemo(() => {
     let list = leads.filter((l) => l.lead != null);
-    if (sdrFilter !== "all") {
-      if (sdrFilter === "none") list = list.filter((l) => !l.sdr_id);
-      else list = list.filter((l) => l.sdr_id === sdrFilter);
-    }
-    if (closerFilter !== "all") {
-      if (closerFilter === "none") list = list.filter((l) => !l.closer_id);
-      else list = list.filter((l) => l.closer_id === closerFilter);
+    if (responsibleFilter !== "all") {
+      if (responsibleFilter === "none") list = list.filter((l) => !l.responsible_id && !l.sdr_id && !l.closer_id);
+      else list = list.filter((l) => l.responsible_id === responsibleFilter || l.sdr_id === responsibleFilter || l.closer_id === responsibleFilter);
     }
     const search = nameFilter.trim();
     if (search) {
@@ -573,7 +551,7 @@ export function CampanhaKanban({
       });
     }
     return list;
-  }, [leads, sdrFilter, closerFilter, nameFilter]);
+  }, [leads, responsibleFilter, nameFilter]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -643,8 +621,7 @@ export function CampanhaKanban({
             target_pipe: automation.target_pipe,
             stage: automation.pipe_stage,
             organization_id: organizationId,
-            sdr_id: lead.sdr_id ?? undefined,
-            closer_id: lead.closer_id ?? lead.lead?.closer_id ?? undefined,
+            responsible_id: lead.responsible_id ?? lead.sdr_id ?? lead.closer_id ?? lead.lead?.closer_id ?? undefined,
             campaign_name: campanhaName,
           });
           toast.success("Lead enviado para o pipe pela automação");
@@ -681,8 +658,7 @@ export function CampanhaKanban({
           target_pipe: automation.target_pipe,
           stage: automation.pipe_stage,
           organization_id: organizationId,
-          sdr_id: lead.sdr_id ?? undefined,
-          closer_id: lead.closer_id ?? lead.lead?.closer_id ?? undefined,
+          responsible_id: lead.responsible_id ?? lead.sdr_id ?? lead.closer_id ?? lead.lead?.closer_id ?? undefined,
           campaign_name: campanhaName,
         });
         toast.success("Lead enviado para o pipe pela automação");
@@ -749,51 +725,28 @@ export function CampanhaKanban({
         </div>
         <div className="flex items-center gap-2">
           <Filter className="w-4 h-4 text-muted-foreground" />
-          <span className="text-sm font-medium">Vendedor:</span>
+          <span className="text-sm font-medium">Responsável:</span>
         </div>
-        <Select value={sdrFilter} onValueChange={setSdrFilter}>
+        <Select value={responsibleFilter} onValueChange={setResponsibleFilter}>
           <SelectTrigger className="w-[200px] h-9">
-            <SelectValue placeholder="Todos os vendedores" />
+            <SelectValue placeholder="Todos os responsáveis" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Todos os vendedores</SelectItem>
-            <SelectItem value="none">Sem vendedor atribuído</SelectItem>
-            {sdrs.map((sdr) => (
-              <SelectItem key={sdr.id} value={sdr.id}>
-                {sdr.name}
+            <SelectItem value="all">Todos os responsáveis</SelectItem>
+            <SelectItem value="none">Sem responsável atribuído</SelectItem>
+            {responsibles.map((member) => (
+              <SelectItem key={member.id} value={member.id}>
+                {member.name}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
-        {closers.length > 0 && (
-          <>
-            <div className="flex items-center gap-2">
-              <Filter className="w-4 h-4 text-muted-foreground" />
-              <span className="text-sm font-medium">Closer:</span>
-            </div>
-            <Select value={closerFilter} onValueChange={setCloserFilter}>
-              <SelectTrigger className="w-[200px] h-9">
-                <SelectValue placeholder="Todos os closers" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos os closers</SelectItem>
-                <SelectItem value="none">Sem closer atribuído</SelectItem>
-                {closers.map((closer) => (
-                  <SelectItem key={closer.id} value={closer.id}>
-                    {closer.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </>
-        )}
-        {(sdrFilter !== "all" || closerFilter !== "all" || nameFilter.trim()) && (
+        {(responsibleFilter !== "all" || nameFilter.trim()) && (
           <Button
             variant="ghost"
             size="sm"
             onClick={() => {
-              setSdrFilter("all");
-              setCloserFilter("all");
+              setResponsibleFilter("all");
               setNameFilter("");
             }}
           >

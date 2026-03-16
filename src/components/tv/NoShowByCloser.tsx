@@ -22,7 +22,7 @@ export function NoShowByCloser({ data, geral }: NoShowByCloserProps) {
           <div className="p-2 rounded-lg bg-amber-500/20">
             <AlertTriangle className="w-5 h-5 text-amber-500" />
           </div>
-          <h3 className="text-lg font-bold text-foreground">No-Show por Closer</h3>
+          <h3 className="text-lg font-bold text-foreground">No-Show por Vendedor</h3>
         </div>
         <div className={`px-3 py-1 rounded-full text-sm font-semibold ${
           geral <= 20 ? "bg-success/20 text-success" :

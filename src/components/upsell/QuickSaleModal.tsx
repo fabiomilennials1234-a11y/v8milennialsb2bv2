@@ -197,7 +197,7 @@ export function QuickSaleModal({
           </div>
 
           <div className="grid gap-2">
-            <Label>Closer</Label>
+            <Label>Responsável</Label>
             <Select
               value={formData.closer_id || "none"}
               onValueChange={(v) => setFormData((prev) => ({ ...prev, closer_id: v === "none" ? "" : v }))}

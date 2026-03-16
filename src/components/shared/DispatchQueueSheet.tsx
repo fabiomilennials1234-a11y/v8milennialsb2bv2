@@ -246,7 +246,7 @@ function QueueItemCard({
           <p>Etapa destino: <span className="text-foreground">{item.target_stage_name}</span></p>
         )}
         {item.sdr_name && (
-          <p>SDR: <span className="text-foreground">{item.sdr_name}</span></p>
+          <p>Resp: <span className="text-foreground">{item.sdr_name}</span></p>
         )}
         <p>
           {item.sent_at

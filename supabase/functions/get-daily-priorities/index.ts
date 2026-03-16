@@ -59,19 +59,19 @@ Deno.serve(
           .from("pipe_whatsapp")
           .select("lead_id, status")
           .eq("organization_id", orgId)
-          .eq("sdr_id", teamMemberId)
+          .eq("responsible_id", teamMemberId)
           .not("status", "in", "(compareceu)"),
         supabase
           .from("pipe_confirmacao")
           .select("lead_id, status")
           .eq("organization_id", orgId)
-          .or(`sdr_id.eq.${teamMemberId},closer_id.eq.${teamMemberId}`)
+          .eq("responsible_id", teamMemberId)
           .not("status", "in", "(compareceu,perdido)"),
         supabase
           .from("pipe_propostas")
           .select("lead_id, status")
           .eq("organization_id", orgId)
-          .eq("closer_id", teamMemberId)
+          .eq("responsible_id", teamMemberId)
           .not("status", "in", "(vendido,perdido)"),
         supabase
           .from("follow_ups")

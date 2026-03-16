@@ -182,15 +182,15 @@ export default function MasterDashboard() {
             </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Badge variant="default">SDR</Badge>
-                <span>SDRs</span>
+                <Badge variant="default">Reuniões</Badge>
+                <span>Responsáveis (Reuniões)</span>
               </div>
               <span className="font-semibold">{userStats?.sdrs || 0}</span>
             </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Badge variant="secondary">Closer</Badge>
-                <span>Closers</span>
+                <Badge variant="secondary">Vendas</Badge>
+                <span>Responsáveis (Vendas)</span>
               </div>
               <span className="font-semibold">{userStats?.closers || 0}</span>
             </div>
