@@ -72,7 +72,7 @@ BEGIN
     NEW.id,
     jsonb_build_object(
       'trigger', 'lead_created',
-      'origin', COALESCE(NEW.origin, 'unknown'),
+      'origin', COALESCE(NEW.origin::text, 'outro'),
       'pipe_whatsapp', COALESCE(NEW.pipe_whatsapp, '')
     )
   );
