@@ -180,10 +180,10 @@ async function processRule(
         continue;
       }
 
-      // Buscar responsável do lead
+      // Buscar responsável do lead (prefer responsible_id, fallback to legacy fields)
       const { data: lead } = await supabase
         .from("leads")
-        .select("id, name, sdr_id, closer_id")
+        .select("id, name, responsible_id, sdr_id, closer_id")
         .eq("id", candidate.lead_id)
         .single();
 
@@ -192,12 +192,14 @@ async function processRule(
         continue;
       }
 
-      // Determinar responsável baseado no pipe
-      let assignedTo: string | null = null;
-      if (rule.pipe_type === "whatsapp") {
-        assignedTo = lead.sdr_id;
-      } else if (rule.pipe_type === "confirmacao" || rule.pipe_type === "propostas") {
-        assignedTo = lead.closer_id || lead.sdr_id;
+      // Determinar responsável: prefer unified responsible_id, fallback to legacy pipe-based logic
+      let assignedTo: string | null = lead.responsible_id || null;
+      if (!assignedTo) {
+        if (rule.pipe_type === "whatsapp") {
+          assignedTo = lead.sdr_id;
+        } else if (rule.pipe_type === "confirmacao" || rule.pipe_type === "propostas") {
+          assignedTo = lead.closer_id || lead.sdr_id;
+        }
       }
 
       // Criar follow_up

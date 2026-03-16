@@ -5,7 +5,6 @@ import {
   Filter, 
   X, 
   Calendar,
-  Users,
   Tag,
   ChevronDown,
   RotateCcw,
@@ -46,10 +45,8 @@ interface ConfirmacaoFiltersProps {
   statusOptions: { id: string; title: string; color: string }[];
   // New props for team member filtering
   teamMembers?: TeamMemberOption[];
-  selectedSdrId?: string;
-  onSdrFilterChange?: (value: string) => void;
-  selectedCloserId?: string;
-  onCloserFilterChange?: (value: string) => void;
+  selectedResponsibleId?: string;
+  onResponsibleFilterChange?: (value: string) => void;
 }
 
 const originOptions: { value: OriginFilter; label: string; icon: string }[] = [
@@ -92,23 +89,17 @@ export function ConfirmacaoFilters({
   onStatusesChange,
   statusOptions,
   teamMembers = [],
-  selectedSdrId = "all",
-  onSdrFilterChange,
-  selectedCloserId = "all",
-  onCloserFilterChange,
+  selectedResponsibleId = "all",
+  onResponsibleFilterChange,
 }: ConfirmacaoFiltersProps) {
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
 
-  const sdrs = teamMembers.filter(m => m.role === "sdr" || m.role === "admin");
-  const closers = teamMembers.filter(m => m.role === "closer" || m.role === "admin");
-
-  const activeFiltersCount = 
-    (originFilter !== "all" ? 1 : 0) + 
-    (timeFilter !== "all" ? 1 : 0) + 
+  const activeFiltersCount =
+    (originFilter !== "all" ? 1 : 0) +
+    (timeFilter !== "all" ? 1 : 0) +
     (urgencyFilter !== "all" ? 1 : 0) +
     (selectedStatuses.length > 0 && selectedStatuses.length < statusOptions.length ? 1 : 0) +
-    (selectedSdrId !== "all" ? 1 : 0) +
-    (selectedCloserId !== "all" ? 1 : 0);
+    (selectedResponsibleId !== "all" ? 1 : 0);
 
   const handleStatusToggle = (statusId: string) => {
     if (selectedStatuses.includes(statusId)) {
@@ -124,8 +115,7 @@ export function ConfirmacaoFilters({
     onUrgencyFilterChange("all");
     onStatusesChange([]);
     onSearchChange("");
-    onSdrFilterChange?.("all");
-    onCloserFilterChange?.("all");
+    onResponsibleFilterChange?.("all");
   };
 
   return (
@@ -254,41 +244,21 @@ export function ConfirmacaoFilters({
 
               <Separator />
 
-              {/* Team Member Filters */}
+              {/* Responsible Filter */}
               {teamMembers.length > 0 && (
                 <>
                   <div className="space-y-2">
                     <Label className="flex items-center gap-2">
                       <UserCheck className="w-4 h-4" />
-                      SDR
+                      Responsável
                     </Label>
-                    <Select value={selectedSdrId} onValueChange={(value) => onSdrFilterChange?.(value)}>
+                    <Select value={selectedResponsibleId} onValueChange={(value) => onResponsibleFilterChange?.(value)}>
                       <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Todos os SDRs" />
+                        <SelectValue placeholder="Todos" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="all">Todos os SDRs</SelectItem>
-                        {sdrs.map((member) => (
-                          <SelectItem key={member.id} value={member.id}>
-                            {member.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label className="flex items-center gap-2">
-                      <Users className="w-4 h-4" />
-                      Closer
-                    </Label>
-                    <Select value={selectedCloserId} onValueChange={(value) => onCloserFilterChange?.(value)}>
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Todos os Closers" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Todos os Closers</SelectItem>
-                        {closers.map((member) => (
+                        <SelectItem value="all">Todos</SelectItem>
+                        {teamMembers.map((member) => (
                           <SelectItem key={member.id} value={member.id}>
                             {member.name}
                           </SelectItem>
@@ -400,23 +370,12 @@ export function ConfirmacaoFilters({
                 </button>
               </Badge>
             )}
-            {selectedSdrId !== "all" && (
+            {selectedResponsibleId !== "all" && (
               <Badge variant="secondary" className="pl-2 pr-1 py-1 gap-1">
-                SDR: {teamMembers.find(m => m.id === selectedSdrId)?.name}
+                Responsável: {teamMembers.find(m => m.id === selectedResponsibleId)?.name}
                 <button
                   className="ml-1 hover:bg-muted rounded-full p-0.5"
-                  onClick={() => onSdrFilterChange?.("all")}
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </Badge>
-            )}
-            {selectedCloserId !== "all" && (
-              <Badge variant="secondary" className="pl-2 pr-1 py-1 gap-1">
-                Closer: {teamMembers.find(m => m.id === selectedCloserId)?.name}
-                <button
-                  className="ml-1 hover:bg-muted rounded-full p-0.5"
-                  onClick={() => onCloserFilterChange?.("all")}
+                  onClick={() => onResponsibleFilterChange?.("all")}
                 >
                   <X className="w-3 h-3" />
                 </button>

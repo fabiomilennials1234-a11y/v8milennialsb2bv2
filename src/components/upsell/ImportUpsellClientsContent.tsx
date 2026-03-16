@@ -115,7 +115,7 @@ export function ImportUpsellClientsContent({
   const [previewResult, setPreviewResult] = useState<FilePreviewResult | null>(null);
   const [userColumnMapping, setUserColumnMapping] = useState<Record<string, string>>({});
   const [selectedStageKey, setSelectedStageKey] = useState<string>("");
-  const [selectedCloserId, setSelectedCloserId] = useState<string>("");
+  const [selectedResponsibleId, setSelectedResponsibleId] = useState<string>("");
   const [selectedPotencial, setSelectedPotencial] = useState<string>("medio");
   const [isImporting, setIsImporting] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -485,10 +485,10 @@ export function ImportUpsellClientsContent({
               leadId = newLead.id;
             }
 
-            const closerId = resolveSellerToId(
+            const responsibleId = resolveSellerToId(
               lead.seller_name,
               memberOptions,
-              selectedCloserId === "none" ? null : selectedCloserId || null
+              selectedResponsibleId === "none" ? null : selectedResponsibleId || null
             );
 
             const potencial = resolvePotencial(potencialRaw);
@@ -503,7 +503,8 @@ export function ImportUpsellClientsContent({
               email: lead.email || null,
               phone: formattedPhone || null,
               potencial,
-              closer_id: closerId,
+              responsible_id: responsibleId,
+              closer_id: responsibleId,
               first_sale_at: firstSaleAt,
               tipo_cliente_tempo: pipeType === "upsell_base" ? stageKey : "0_3m",
             };
@@ -513,8 +514,8 @@ export function ImportUpsellClientsContent({
               clientInsert.gestao_manual_override = true;
             }
 
-            if (closerId) {
-              await supabase.from("leads").update({ closer_id: closerId }).eq("id", leadId);
+            if (responsibleId) {
+              await supabase.from("leads").update({ responsible_id: responsibleId, closer_id: responsibleId }).eq("id", leadId);
             }
 
             const { error: clientError } = await supabase
@@ -566,7 +567,7 @@ export function ImportUpsellClientsContent({
     setSampleData([]);
     setFileColumns([]);
     setSelectedStageKey("");
-    setSelectedCloserId("");
+    setSelectedResponsibleId("");
     setSelectedPotencial("medio");
     setProgress(0);
     setResult(null);
@@ -873,9 +874,9 @@ export function ImportUpsellClientsContent({
           </div>
 
           <div className="space-y-2">
-            <Label>Responsável padrão (Closer)</Label>
+            <Label>Responsável padrão</Label>
             <p className="text-xs text-muted-foreground -mt-1">Usado quando a coluna Vendedor estiver vazia.</p>
-            <Select value={selectedCloserId} onValueChange={setSelectedCloserId}>
+            <Select value={selectedResponsibleId} onValueChange={setSelectedResponsibleId}>
               <SelectTrigger>
                 <SelectValue placeholder="Escolher vendedor..." />
               </SelectTrigger>

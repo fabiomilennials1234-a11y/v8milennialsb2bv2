@@ -221,6 +221,15 @@ export function useTeamMembers() {
 }
 
 /**
+ * Retorna todos os membros ativos da organização — pool unificado de responsáveis.
+ * Sem filtro por role/metric_type — qualquer membro ativo pode ser responsável.
+ */
+export function useResponsibleMembers() {
+  const { data: members = [] } = useTeamMembers();
+  return members.filter((m) => m.is_active);
+}
+
+/**
  * Busca um membro por ID apenas se pertencer à organização atual.
  * SECURITY: Filtra por organization_id para evitar vazamento entre organizações.
  */

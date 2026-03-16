@@ -29,7 +29,9 @@ export interface UserStats {
   total: number;
   active: number;
   admins: number;
+  /** Members with metric_type "meetings" (ex-SDR) */
   sdrs: number;
+  /** Members with metric_type "sales" (ex-Closer) */
   closers: number;
   withoutOrg: number;
 }
@@ -95,7 +97,7 @@ export function useMasterUserStats() {
     queryFn: async (): Promise<UserStats> => {
       const { data, error } = await supabase
         .from("team_members")
-        .select("role, is_active, organization_id");
+        .select("role, is_active, organization_id, metric_type");
 
       if (error) throw error;
 
@@ -104,8 +106,8 @@ export function useMasterUserStats() {
         total: members.length,
         active: members.filter((m) => m.is_active).length,
         admins: members.filter((m) => m.role === "admin").length,
-        sdrs: members.filter((m) => m.role === "sdr").length,
-        closers: members.filter((m) => m.role === "closer").length,
+        sdrs: members.filter((m) => m.metric_type === "meetings").length,
+        closers: members.filter((m) => m.metric_type === "sales").length,
         withoutOrg: members.filter((m) => !m.organization_id).length,
       };
     },

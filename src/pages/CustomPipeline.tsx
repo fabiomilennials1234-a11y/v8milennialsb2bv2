@@ -41,6 +41,7 @@ import { AddLeadToPipeModal } from "@/components/custom-pipelines/AddLeadToPipeM
 import { CustomPipeSettingsDialog } from "@/components/custom-pipelines/CustomPipeSettingsDialog";
 import { toast } from "sonner";
 import type { LucideIcon } from "lucide-react";
+import { useFeaturePermission } from "@/hooks/useUserRole";
 
 const ICON_MAP: Record<string, LucideIcon> = {
   kanban: Kanban,
@@ -70,6 +71,8 @@ export default function CustomPipelinePage() {
 
   const removeLead = useRemoveLeadFromCustomPipe();
   const deletePipeline = useDeleteCustomPipeline();
+  const { allowed: canDeletePipeline } = useFeaturePermission("pipeline.delete");
+  const { allowed: canDeleteCards } = useFeaturePermission("pipeline.delete_cards");
 
   const isLoading = loadingPipeline || loadingStages || loadingEntries;
 
@@ -175,7 +178,7 @@ export default function CustomPipelinePage() {
           stages={stages}
           entries={entries}
           searchQuery={searchQuery}
-          onRemoveEntry={(id) => setRemoveEntryId(id)}
+          onRemoveEntry={canDeleteCards ? (id) => setRemoveEntryId(id) : undefined}
         />
       ) : (
         <div className="text-center py-16 text-muted-foreground">

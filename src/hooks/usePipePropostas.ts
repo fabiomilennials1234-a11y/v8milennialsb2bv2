@@ -39,11 +39,13 @@ export function usePipePropostas() {
         .select(`
           *,
           lead:leads(
-            id, name, company, email, phone, rating, origin, segment, faturamento, ai_disabled, sdr_id, closer_id,
+            id, name, company, email, phone, rating, origin, segment, faturamento, ai_disabled, sdr_id, closer_id, responsible_id,
+            responsible:team_members!leads_responsible_id_fkey(id, name),
             sdr:team_members!leads_sdr_id_fkey(id, name),
             closer:team_members!leads_closer_id_fkey(id, name),
             lead_tags(tag:tags(id, name, color))
           ),
+          responsible:team_members!pipe_propostas_responsible_id_fkey(id, name),
           closer:team_members!pipe_propostas_closer_id_fkey(id, name),
           product:products(id, name, type, ticket, ticket_minimo),
           items:pipe_proposta_items(
@@ -85,7 +87,7 @@ export function useCreatePipeProposta() {
       // Trigger automation for the initial status
       await triggerFollowUpAutomation({
         leadId: data.lead_id,
-        assignedTo: data.closer_id,
+        assignedTo: data.responsible_id || data.closer_id,
         pipeType: "propostas",
         stage: data.status,
         sourcePipeId: data.id,
@@ -129,10 +131,10 @@ export function useUpdatePipeProposta() {
 
       if (error) throw error;
 
-      // Sync closer_id back to leads table
+      // Sync responsible_id back to leads table
       const effectiveLeadId = leadId || data.lead_id;
-      if (effectiveLeadId && updates.closer_id !== undefined) {
-        await supabase.from("leads").update({ closer_id: updates.closer_id || null }).eq("id", effectiveLeadId);
+      if (effectiveLeadId && updates.responsible_id !== undefined) {
+        await supabase.from("leads").update({ responsible_id: updates.responsible_id || null }).eq("id", effectiveLeadId);
       }
 
       // Auto-push order to TinyERP when status changes to "vendido" (skip if modal already handled it)

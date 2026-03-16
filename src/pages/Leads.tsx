@@ -55,6 +55,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useLeads, useLeadsCount, useCreateLead, useUpdateLead, useDeleteLead, LEADS_PAGE_SIZE, type Lead } from "@/hooks/useLeads";
 import { ExportLeadsModal } from "@/components/leads/ExportLeadsModal";
 import { useCanPerformAction } from "@/lib/permissions";
+import { useFeaturePermission } from "@/hooks/useUserRole";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -66,7 +67,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Trash2 } from "lucide-react";
-import { useTeamMembers, useCurrentTeamMember } from "@/hooks/useTeamMembers";
+import { useTeamMembers, useCurrentTeamMember, useResponsibleMembers } from "@/hooks/useTeamMembers";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -104,8 +105,7 @@ interface LeadFormData {
   faturamento: string;
   urgency: string;
   notes: string;
-  sdr_id: string | null;
-  closer_id: string | null;
+  responsible_id: string | null;
   compromisso_date: string;
 }
 
@@ -120,8 +120,7 @@ const initialFormData: LeadFormData = {
   faturamento: "",
   urgency: "",
   notes: "",
-  sdr_id: null,
-  closer_id: null,
+  responsible_id: null,
   compromisso_date: "",
 };
 
@@ -206,9 +205,9 @@ export default function Leads() {
   const deleteLead = useDeleteLead();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [leadToDelete, setLeadToDelete] = useState<Lead | null>(null);
+  const { allowed: canDeleteLead } = useFeaturePermission("leads.delete");
 
-  const sdrs = teamMembers.filter(m => m.role === "sdr" && m.is_active);
-  const closers = teamMembers.filter(m => m.role === "closer" && m.is_active);
+  const responsibleMembers = useResponsibleMembers();
 
   const filteredLeads = useMemo(() => {
     return leads.filter((lead: Lead) => {
@@ -236,7 +235,7 @@ export default function Leads() {
       const now = new Date();
       return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
     }).length;
-    const withSDR = leads.filter((l: Lead) => l.sdr_id).length;
+    const withSDR = leads.filter((l: Lead) => l.responsible_id).length;
 
     return { total, highRating, thisMonth, withSDR };
   }, [leads, totalLeads]);
@@ -255,8 +254,7 @@ export default function Leads() {
         faturamento: lead.faturamento,
         urgency: lead.urgency || "",
         notes: lead.notes || "",
-        sdr_id: lead.sdr_id,
-        closer_id: lead.closer_id,
+        responsible_id: lead.responsible_id,
         compromisso_date: lead.compromisso_date ? lead.compromisso_date.slice(0, 16) : "",
       });
     } else {
@@ -299,8 +297,7 @@ export default function Leads() {
         ...formData,
         origin: formData.origin as any,
         faturamento: formData.faturamento || null,
-        sdr_id: formData.sdr_id || null,
-        closer_id: formData.closer_id || null,
+        responsible_id: formData.responsible_id || null,
         compromisso_date: formData.compromisso_date ? new Date(formData.compromisso_date).toISOString() : null,
         organization_id: currentTeamMember.organization_id,
       };
@@ -397,7 +394,7 @@ export default function Leads() {
           transition={{ delay: 0.15 }}
           className="glass-card p-4"
         >
-          <p className="text-xs text-muted-foreground mb-1">Com SDR Atribuído</p>
+          <p className="text-xs text-muted-foreground mb-1">Com Responsável</p>
           <p className="text-xl font-bold text-success">{stats.withSDR}</p>
         </motion.div>
       </div>
@@ -446,8 +443,7 @@ export default function Leads() {
               <TableHead>Contato</TableHead>
               <TableHead>Origem</TableHead>
               <TableHead>Rating</TableHead>
-              <TableHead>SDR</TableHead>
-              <TableHead>Closer</TableHead>
+              <TableHead>Responsável</TableHead>
               <TableHead>Criado em</TableHead>
               <TableHead className="w-[50px]"></TableHead>
             </TableRow>
@@ -456,14 +452,14 @@ export default function Leads() {
             {isLoading ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <TableRow key={i}>
-                  <TableCell colSpan={8}>
+                  <TableCell colSpan={7}>
                     <Skeleton className="h-10 w-full" />
                   </TableCell>
                 </TableRow>
               ))
             ) : filteredLeads.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                   Nenhum lead encontrado
                 </TableCell>
               </TableRow>
@@ -506,18 +502,9 @@ export default function Leads() {
                     <StarRating rating={lead.rating || 0} readonly />
                   </TableCell>
                   <TableCell>
-                    {lead.sdr?.name ? (
+                    {lead.responsible?.name ? (
                       <Badge variant="outline" className="text-xs">
-                        {lead.sdr.name}
-                      </Badge>
-                    ) : (
-                      <span className="text-muted-foreground text-xs">-</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {lead.closer?.name ? (
-                      <Badge variant="outline" className="text-xs">
-                        {lead.closer.name}
+                        {lead.responsible.name}
                       </Badge>
                     ) : (
                       <span className="text-muted-foreground text-xs">-</span>
@@ -540,12 +527,13 @@ export default function Leads() {
                           <Edit2 className="w-4 h-4 mr-2" />
                           Editar
                         </DropdownMenuItem>
-                        <DropdownMenuItem 
+                        <DropdownMenuItem
                           onClick={() => {
                             setLeadToDelete(lead);
                             setDeleteConfirmOpen(true);
                           }}
                           className="text-destructive focus:text-destructive"
+                          disabled={!canDeleteLead}
                         >
                           <Trash2 className="w-4 h-4 mr-2" />
                           Excluir
@@ -690,41 +678,22 @@ export default function Leads() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="sdr">SDR Responsável</Label>
-                <Select
-                  value={formData.sdr_id || "none"}
-                  onValueChange={(v) => setFormData({ ...formData, sdr_id: v === "none" ? null : v })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecionar SDR" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Nenhum</SelectItem>
-                    {sdrs.map(sdr => (
-                      <SelectItem key={sdr.id} value={sdr.id}>{sdr.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="closer">Closer Responsável</Label>
-                <Select
-                  value={formData.closer_id || "none"}
-                  onValueChange={(v) => setFormData({ ...formData, closer_id: v === "none" ? null : v })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecionar Closer" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Nenhum</SelectItem>
-                    {closers.map(closer => (
-                      <SelectItem key={closer.id} value={closer.id}>{closer.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            <div className="grid gap-2">
+              <Label htmlFor="responsible">Responsável</Label>
+              <Select
+                value={formData.responsible_id || "none"}
+                onValueChange={(v) => setFormData({ ...formData, responsible_id: v === "none" ? null : v })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecionar Responsável" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Nenhum</SelectItem>
+                  {responsibleMembers.map(member => (
+                    <SelectItem key={member.id} value={member.id}>{member.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="grid grid-cols-2 gap-4">

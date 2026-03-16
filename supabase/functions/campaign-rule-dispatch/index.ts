@@ -549,15 +549,15 @@ async function processCampaignQueue(
               // Round robin: pick SDR with fewest leads (least loaded)
               const { data: sdrCounts } = await supabase
                 .from("campanha_leads")
-                .select("sdr_id")
+                .select("responsible_id")
                 .eq("campanha_id", campanhaId)
-                .not("sdr_id", "is", null);
+                .not("responsible_id", "is", null);
 
               const countMap: Record<string, number> = {};
               for (const s of sdrs) countMap[s.id] = 0;
               for (const cl of sdrCounts || []) {
-                if (cl.sdr_id && countMap[cl.sdr_id] !== undefined) {
-                  countMap[cl.sdr_id]++;
+                if (cl.responsible_id && countMap[cl.responsible_id] !== undefined) {
+                  countMap[cl.responsible_id]++;
                 }
               }
 
@@ -581,7 +581,7 @@ async function processCampaignQueue(
 
         const { error: sdrErr } = await supabase
           .from("campanha_leads")
-          .update({ sdr_id: sdrId })
+          .update({ sdr_id: sdrId, responsible_id: sdrId })
           .eq("id", row.campanha_lead_id);
 
         if (sdrErr) {
@@ -603,8 +603,8 @@ async function processCampaignQueue(
             await supabase.from("lead_history").insert({
               lead_id: lead.id,
               organization_id: campanha.organization_id,
-              action: "campaign_sdr_assigned",
-              description: `SDR atribuído automaticamente: ${sdrData?.name || sdrId} (${mode})`,
+              action: "responsible_assigned",
+              description: `Responsável atribuído automaticamente: ${sdrData?.name || sdrId} (${mode})`,
             });
           } catch (_) { /* ignore */ }
 

@@ -21,7 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useLeads } from "@/hooks/useLeads";
-import { useTeamMembers } from "@/hooks/useTeamMembers";
+import { useResponsibleMembers } from "@/hooks/useTeamMembers";
 import { useCreatePipeProposta } from "@/hooks/usePipePropostas";
 import { useActiveProducts } from "@/hooks/useProducts";
 import { useCreateManyPipePropostaItems } from "@/hooks/usePipePropostaItems";
@@ -54,7 +54,7 @@ export function CreateProposalModal({
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(preselectedLeadId || null);
   
   const [formData, setFormData] = useState({
-    closer_id: "",
+    responsible_id: "",
     contract_duration: "",
     commitment_date: "",
     notes: "",
@@ -66,12 +66,10 @@ export function CreateProposalModal({
   ]);
 
   const { data: leads = [], isLoading: leadsLoading } = useLeads();
-  const { data: teamMembers = [] } = useTeamMembers();
+  const responsibleMembers = useResponsibleMembers();
   const { data: products = [] } = useActiveProducts();
   const createProposta = useCreatePipeProposta();
   const createManyItems = useCreateManyPipePropostaItems();
-
-  const closers = teamMembers.filter(m => m.role === "closer" && m.is_active);
 
   // Filter leads
   const filteredLeads = useMemo(() => {
@@ -94,7 +92,7 @@ export function CreateProposalModal({
         setSearchTerm("");
         if (!preselectedLeadId) setSelectedLeadId(null);
         setFormData({
-          closer_id: "",
+          responsible_id: "",
           contract_duration: "",
           commitment_date: "",
           notes: "",
@@ -107,10 +105,10 @@ export function CreateProposalModal({
     }
   }, [open, preselectedLeadId]);
 
-  // Auto-fill closer from lead
+  // Auto-fill responsible from lead
   useEffect(() => {
-    if (selectedLead?.closer_id && !formData.closer_id) {
-      setFormData(prev => ({ ...prev, closer_id: selectedLead.closer_id || "" }));
+    if (selectedLead?.responsible_id && !formData.responsible_id) {
+      setFormData(prev => ({ ...prev, responsible_id: selectedLead.responsible_id || "" }));
     }
   }, [selectedLead]);
 
@@ -158,8 +156,8 @@ export function CreateProposalModal({
       return;
     }
 
-    if (!formData.closer_id) {
-      toast.error("Closer responsável é obrigatório");
+    if (!formData.responsible_id) {
+      toast.error("Responsável é obrigatório");
       return;
     }
 
@@ -183,7 +181,7 @@ export function CreateProposalModal({
         product_id: validProducts.length === 1 ? validProducts[0].product_id : null,
         sale_value: totalValue,
         contract_duration: formData.contract_duration ? Number(formData.contract_duration) : null,
-        closer_id: formData.closer_id,
+        responsible_id: formData.responsible_id,
         commitment_date: formData.commitment_date ? new Date(formData.commitment_date).toISOString() : null,
         notes: formData.notes || null,
       });
@@ -464,16 +462,16 @@ export function CreateProposalModal({
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="grid gap-2">
-                    <Label>Closer Responsável *</Label>
+                    <Label>Responsável *</Label>
                     <Select
-                      value={formData.closer_id}
-                      onValueChange={(v) => setFormData({ ...formData, closer_id: v })}
+                      value={formData.responsible_id}
+                      onValueChange={(v) => setFormData({ ...formData, responsible_id: v })}
                     >
-                      <SelectTrigger className={!formData.closer_id ? "border-destructive/50" : ""}>
-                        <SelectValue placeholder="Selecionar closer" />
+                      <SelectTrigger className={!formData.responsible_id ? "border-destructive/50" : ""}>
+                        <SelectValue placeholder="Selecionar responsável" />
                       </SelectTrigger>
                       <SelectContent>
-                        {closers.map(c => (
+                        {responsibleMembers.map(c => (
                           <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                         ))}
                       </SelectContent>

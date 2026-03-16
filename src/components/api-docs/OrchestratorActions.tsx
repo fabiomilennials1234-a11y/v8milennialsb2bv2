@@ -15,7 +15,7 @@ const actions: ActionExample[] = [
   {
     action: "process_lead",
     description: "Cria ou atualiza lead com deduplicação automática (email e nome+mesmo dia). Inclui roteamento para pipes.",
-    dataFields: "name, email, phone, company, origin, segment, faturamento, urgency, notes, rating, sdr_id, compromisso_date, utm_*",
+    dataFields: "name, email, phone, company, origin, segment, faturamento, urgency, notes, rating, sdr_id (also sets responsible_id), compromisso_date, utm_*",
     example: {
       action: "process_lead",
       api_key: "sua-api-key",

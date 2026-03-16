@@ -85,14 +85,13 @@ export async function syncTeamFaturamentoGoal(
   year: number,
   organizationId: string
 ): Promise<void> {
-  const { data: closers } = await supabase
+  const { data: salesMembers } = await supabase
     .from("team_members")
-    .select("id")
+    .select("id, metric_type")
     .eq("organization_id", organizationId)
-    .eq("role", "closer")
     .eq("is_active", true);
 
-  const closerIds = closers?.map((c) => c.id) ?? [];
+  const closerIds = (salesMembers ?? []).filter((m) => (m as any).metric_type === "sales").map((c) => c.id);
   if (closerIds.length === 0) return;
 
   const { data: vendasGoals } = await supabase
@@ -155,10 +154,10 @@ export function useIndividualGoals(month?: number, year?: number) {
   return useQuery({
     queryKey: ["individual-goals", selectedMonth, selectedYear, organizationId],
     queryFn: async () => {
-      if (!organizationId) return { closerGoals: [], sdrGoals: [] };
+      if (!organizationId) return { closerGoals: [], sdrGoals: [] } as { closerGoals: any[]; sdrGoals: any[] };
       const { data: teamMembers } = await supabase
         .from("team_members")
-        .select("id, name, role")
+        .select("id, name, role, metric_type")
         .eq("organization_id", organizationId)
         .eq("is_active", true);
 
@@ -211,21 +210,21 @@ export function useIndividualGoals(month?: number, year?: number) {
       const salesData = [...(salesRes1.data || []), ...(salesRes2.data || [])];
       const confData = [...(confRes1.data || []), ...(confRes2.data || [])];
 
-      const closers = teamMembers?.filter((m) => m.role === "closer") || [];
-      const sdrs = teamMembers?.filter((m) => m.role === "sdr") || [];
+      const closers = teamMembers?.filter((m) => (m as any).metric_type === "sales") || [];
+      const sdrs = teamMembers?.filter((m) => (m as any).metric_type === "meetings") || [];
 
       const closerGoals = closers.map((closer) => {
         const goal = goals?.find(
           (g) => g.team_member_id === closer.id && g.type === "vendas"
         );
         const currentValue = salesData
-          .filter((s) => s.closer_id === closer.id)
+          .filter((s) => (s.responsible_id || s.closer_id) === closer.id)
           .reduce((sum, s) => sum + (Number(s.sale_value) || 0), 0);
         const targetValue = goal?.target_value || 0;
         return {
           id: closer.id,
           name: closer.name,
-          role: "closer",
+          metricType: "sales",
           current: currentValue,
           goal: targetValue,
           percentage: targetValue
@@ -238,12 +237,12 @@ export function useIndividualGoals(month?: number, year?: number) {
         const goal = goals?.find(
           (g) => g.team_member_id === sdr.id && g.type === "reunioes"
         );
-        const currentValue = confData.filter((c) => c.sdr_id === sdr.id).length;
+        const currentValue = confData.filter((c) => (c.responsible_id || c.sdr_id) === sdr.id).length;
         const targetValue = goal?.target_value || 0;
         return {
           id: sdr.id,
           name: sdr.name,
-          role: "sdr",
+          metricType: "meetings",
           current: currentValue,
           goal: targetValue,
           percentage: targetValue

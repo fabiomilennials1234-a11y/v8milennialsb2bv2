@@ -679,6 +679,7 @@ export type Database = {
           id: string
           lead_id: string
           notes: string | null
+          responsible_id: string | null
           sdr_id: string | null
           stage_id: string
           updated_at: string | null
@@ -690,6 +691,7 @@ export type Database = {
           id?: string
           lead_id: string
           notes?: string | null
+          responsible_id?: string | null
           sdr_id?: string | null
           stage_id: string
           updated_at?: string | null
@@ -701,6 +703,7 @@ export type Database = {
           id?: string
           lead_id?: string
           notes?: string | null
+          responsible_id?: string | null
           sdr_id?: string | null
           stage_id?: string
           updated_at?: string | null
@@ -725,6 +728,13 @@ export type Database = {
             columns: ["lead_id"]
             isOneToOne: false
             referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campanha_leads_responsible_id_fkey"
+            columns: ["responsible_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
             referencedColumns: ["id"]
           },
           {
@@ -3226,6 +3236,7 @@ export type Database = {
           pipe_whatsapp: string | null
           qualification_score: number | null
           rating: number | null
+          responsible_id: string | null
           sdr_id: string | null
           segment: string | null
           updated_at: string
@@ -3258,6 +3269,7 @@ export type Database = {
           pipe_whatsapp?: string | null
           qualification_score?: number | null
           rating?: number | null
+          responsible_id?: string | null
           sdr_id?: string | null
           segment?: string | null
           updated_at?: string
@@ -3290,6 +3302,7 @@ export type Database = {
           pipe_whatsapp?: string | null
           qualification_score?: number | null
           rating?: number | null
+          responsible_id?: string | null
           sdr_id?: string | null
           segment?: string | null
           updated_at?: string
@@ -3313,6 +3326,13 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leads_responsible_id_fkey"
+            columns: ["responsible_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
             referencedColumns: ["id"]
           },
           {
@@ -3768,6 +3788,7 @@ export type Database = {
           metrics_period_at: string | null
           notes: string | null
           organization_id: string | null
+          responsible_id: string | null
           sdr_id: string | null
           status: string
           updated_at: string
@@ -3783,6 +3804,7 @@ export type Database = {
           metrics_period_at?: string | null
           notes?: string | null
           organization_id?: string | null
+          responsible_id?: string | null
           sdr_id?: string | null
           status?: string
           updated_at?: string
@@ -3798,6 +3820,7 @@ export type Database = {
           metrics_period_at?: string | null
           notes?: string | null
           organization_id?: string | null
+          responsible_id?: string | null
           sdr_id?: string | null
           status?: string
           updated_at?: string
@@ -3822,6 +3845,13 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pipe_confirmacao_responsible_id_fkey"
+            columns: ["responsible_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
             referencedColumns: ["id"]
           },
           {
@@ -4126,6 +4156,7 @@ export type Database = {
           organization_id: string | null
           product_id: string | null
           product_type: Database["public"]["Enums"]["product_type"] | null
+          responsible_id: string | null
           sale_value: number | null
           status: string
           updated_at: string
@@ -4144,6 +4175,7 @@ export type Database = {
           organization_id?: string | null
           product_id?: string | null
           product_type?: Database["public"]["Enums"]["product_type"] | null
+          responsible_id?: string | null
           sale_value?: number | null
           status?: string
           updated_at?: string
@@ -4162,6 +4194,7 @@ export type Database = {
           organization_id?: string | null
           product_id?: string | null
           product_type?: Database["public"]["Enums"]["product_type"] | null
+          responsible_id?: string | null
           sale_value?: number | null
           status?: string
           updated_at?: string
@@ -4195,6 +4228,13 @@ export type Database = {
             referencedRelation: "products"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "pipe_propostas_responsible_id_fkey"
+            columns: ["responsible_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
         ]
       }
       pipe_whatsapp: {
@@ -4204,6 +4244,7 @@ export type Database = {
           lead_id: string
           notes: string | null
           organization_id: string | null
+          responsible_id: string | null
           scheduled_date: string | null
           sdr_id: string | null
           status: string
@@ -4215,6 +4256,7 @@ export type Database = {
           lead_id: string
           notes?: string | null
           organization_id?: string | null
+          responsible_id?: string | null
           scheduled_date?: string | null
           sdr_id?: string | null
           status?: string
@@ -4226,6 +4268,7 @@ export type Database = {
           lead_id?: string
           notes?: string | null
           organization_id?: string | null
+          responsible_id?: string | null
           scheduled_date?: string | null
           sdr_id?: string | null
           status?: string
@@ -4244,6 +4287,13 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pipe_whatsapp_responsible_id_fkey"
+            columns: ["responsible_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
             referencedColumns: ["id"]
           },
           {
@@ -4931,6 +4981,8 @@ export type Database = {
           email: string | null
           id: string
           is_active: boolean
+          job_title: string | null
+          metric_type: string | null
           name: string
           organization_id: string | null
           ote_base: number | null
@@ -4946,6 +4998,8 @@ export type Database = {
           email?: string | null
           id?: string
           is_active?: boolean
+          job_title?: string | null
+          metric_type?: string | null
           name: string
           organization_id?: string | null
           ote_base?: number | null
@@ -4961,6 +5015,8 @@ export type Database = {
           email?: string | null
           id?: string
           is_active?: boolean
+          job_title?: string | null
+          metric_type?: string | null
           name?: string
           organization_id?: string | null
           ote_base?: number | null
@@ -6135,7 +6191,7 @@ export type Database = {
         | "amigavel"
         | "energetico"
         | "consultivo"
-      app_role: "admin" | "sdr" | "closer" | "agency" | "bdr" | "cliente"
+      app_role: "admin" | "member" | "sdr" | "closer" | "agency" | "bdr" | "cliente"
       lead_origin:
         | "whatsapp"
         | "meta_ads"

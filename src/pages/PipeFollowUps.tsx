@@ -45,7 +45,7 @@ import {
 import { useFollowUps, useCompleteFollowUp, useArchiveFollowUp, useArchiveManyFollowUps, useDeleteFollowUp, type FollowUp } from "@/hooks/useFollowUps";
 import { toast } from "sonner";
 import { useTeamMembers, useCurrentTeamMember } from "@/hooks/useTeamMembers";
-import { useUserRole } from "@/hooks/useUserRole";
+import { useUserRole, useFeaturePermission } from "@/hooks/useUserRole";
 import { useLogLeadAction } from "@/hooks/useLogLeadAction";
 import { cn } from "@/lib/utils";
 
@@ -111,6 +111,8 @@ export default function PipeFollowUps() {
   const archiveFollowUp = useArchiveFollowUp();
   const archiveManyFollowUps = useArchiveManyFollowUps();
   const deleteFollowUp = useDeleteFollowUp();
+  const { allowed: canDeleteFollowUp } = useFeaturePermission("followups.delete");
+  const { allowed: canBulkArchive } = useFeaturePermission("followups.bulk_archive");
 
   // Query filtrada para exibição da lista
   const { data: followUps, isLoading } = useFollowUps({
@@ -394,7 +396,7 @@ export default function PipeFollowUps() {
               variant="outline"
               size="sm"
               onClick={handleArchiveOverdue}
-              disabled={archiveManyFollowUps.isPending}
+              disabled={archiveManyFollowUps.isPending || !canBulkArchive}
               className="gap-1.5 text-destructive border-destructive/50 hover:bg-destructive/10"
             >
               <Archive className="h-4 w-4" />
@@ -406,7 +408,7 @@ export default function PipeFollowUps() {
               variant="outline"
               size="sm"
               onClick={handleArchiveCompleted}
-              disabled={archiveManyFollowUps.isPending}
+              disabled={archiveManyFollowUps.isPending || !canBulkArchive}
               className="gap-1.5 text-success border-success/50 hover:bg-success/10"
             >
               <Archive className="h-4 w-4" />
@@ -465,7 +467,7 @@ export default function PipeFollowUps() {
                       followUp={followUp}
                       onComplete={handleComplete}
                       onArchive={handleArchive}
-                      onRemove={handleOpenRemoveDialog}
+                      onRemove={canDeleteFollowUp ? handleOpenRemoveDialog : undefined}
                     />
                   ))}
                 </div>

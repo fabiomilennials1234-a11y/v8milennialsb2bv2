@@ -198,6 +198,7 @@ serve(withSentry('lead-webhook', async (req) => {
       if (payload.assigned_user_id) {
         insertData.sdr_id = payload.assigned_user_id;
         insertData.closer_id = payload.assigned_user_id;
+        insertData.responsible_id = payload.assigned_user_id;
       }
       const { data: newLead, error: createError } = await supabase
         .from("leads")
@@ -259,6 +260,7 @@ serve(withSentry('lead-webhook', async (req) => {
     if (payload.assigned_user_id) {
       updateData.sdr_id = payload.assigned_user_id;
       updateData.closer_id = payload.assigned_user_id;
+      updateData.responsible_id = payload.assigned_user_id;
     }
     if (payload.place_in_pipe?.meeting_date) {
       updateData.compromisso_date = payload.place_in_pipe.meeting_date;
@@ -398,11 +400,13 @@ serve(withSentry('lead-webhook', async (req) => {
           const pipeUpdate: Record<string, unknown> = {};
           if (sdrId) pipeUpdate.sdr_id = sdrId;
 
+          let closerId: string | null = null;
           if (pipeTypeName !== "whatsapp") {
-            const { data: closerId } = await supabase.rpc("get_next_pipe_closer", {
+            const { data: cId } = await supabase.rpc("get_next_pipe_closer", {
               p_pipe_type: pipeTypeName,
               p_organization_id: organizationId,
             });
+            closerId = cId;
             if (closerId) pipeUpdate.closer_id = closerId;
           }
 
@@ -411,6 +415,15 @@ serve(withSentry('lead-webhook', async (req) => {
               .eq("lead_id", leadId)
               .eq("organization_id", organizationId);
             console.log(`[lead-webhook] Auto-distributed in ${pipeTable}:`, pipeUpdate);
+
+            // Also update lead-level responsible_id (closer takes priority over sdr)
+            const responsibleId = closerId || sdrId;
+            if (responsibleId) {
+              const leadAssign: Record<string, unknown> = { responsible_id: responsibleId };
+              if (sdrId) leadAssign.sdr_id = sdrId;
+              if (closerId) leadAssign.closer_id = closerId;
+              await supabase.from("leads").update(leadAssign).eq("id", leadId);
+            }
           }
         } catch (e) {
           console.warn(`[lead-webhook] Auto-distribute failed for ${pipeTable}:`, e);
@@ -553,15 +566,18 @@ serve(withSentry('lead-webhook', async (req) => {
               const leadUpdate: Record<string, unknown> = {};
               if (sdrId) leadUpdate.sdr_id = sdrId;
               if (closerId) leadUpdate.closer_id = closerId;
+              // Set responsible_id to closer (if assigned) or sdr
+              const responsibleId = closerId || sdrId;
+              if (responsibleId) leadUpdate.responsible_id = responsibleId;
               if (Object.keys(leadUpdate).length > 0) {
                 const { error: leadUpdateErr } = await supabase
                   .from("leads")
                   .update(leadUpdate)
                   .eq("id", leadId);
                 if (leadUpdateErr) {
-                  console.warn("[lead-webhook] leads sdr_id/closer_id update failed:", leadUpdateErr);
+                  console.warn("[lead-webhook] leads assignment update failed:", leadUpdateErr);
                 } else {
-                  console.log("[lead-webhook] Lead assigned SDR:", sdrId, "Closer:", closerId);
+                  console.log("[lead-webhook] Lead assigned responsible:", responsibleId, "SDR:", sdrId, "Closer:", closerId);
                 }
               }
             }

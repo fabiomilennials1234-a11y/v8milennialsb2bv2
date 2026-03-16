@@ -55,8 +55,8 @@ const CAMPAIGN_OBJECTIVES = [
     type: "qualificacao" as CampaignObjective,
     title: OBJECTIVE_LABELS.qualificacao,
     description: "Aborde e qualifique leads frios",
-    detail: "Lead entra como Novo no SDR Pipeline",
-    pipeLabel: "Pipe WhatsApp",
+    detail: "Lead entra como Novo no Pipe de Qualificação",
+    pipeLabel: "Pipe de Qualificação",
     icon: ClipboardList,
     iconColor: "text-blue-500",
     badge: "Mais comum",
@@ -76,7 +76,7 @@ const CAMPAIGN_OBJECTIVES = [
     title: OBJECTIVE_LABELS.propostas,
     description: "Envie propostas e feche negócios",
     detail: "Lead entra em Marcar Compromisso no Pipeline de Propostas",
-    pipeLabel: "Pipe Propostas",
+    pipeLabel: "Pipe de Propostas",
     icon: HandCoins,
     iconColor: "text-amber-500",
     badge: null,
@@ -94,9 +94,9 @@ const CAMPAIGN_OBJECTIVES = [
 ];
 
 const PIPE_OPTIONS: { value: TargetPipe; label: string }[] = [
-  { value: "pipe_whatsapp", label: "Pipe WhatsApp (SDR)" },
+  { value: "pipe_whatsapp", label: "Pipe de Qualificação" },
   { value: "pipe_confirmacao", label: "Pipe Confirmação (Reuniões)" },
-  { value: "pipe_propostas", label: "Pipe Propostas (Closer)" },
+  { value: "pipe_propostas", label: "Pipe de Propostas" },
 ];
 
 const PIPE_STAGE_OPTIONS: Record<TargetPipe, { value: string; label: string }[]> = {
@@ -137,7 +137,7 @@ const CAMPAIGN_MODES = [
     color: "text-blue-600 dark:text-blue-300",
     bgColor: "bg-blue-50 dark:bg-blue-900/30",
     borderColor: "border-blue-200 dark:border-blue-700/50",
-    features: ["Disparo imediato ou agendado", "Templates personalizados", "SDR trabalha respostas"],
+    features: ["Disparo imediato ou agendado", "Templates personalizados", "Vendedor trabalha respostas"],
     badge: null,
   },
   {
@@ -148,7 +148,7 @@ const CAMPAIGN_MODES = [
     color: "text-gray-600 dark:text-muted-foreground",
     bgColor: "bg-muted",
     borderColor: "border-gray-200 dark:border-border",
-    features: ["Kanban drag-drop", "Sem automação", "Controle total do SDR"],
+    features: ["Kanban drag-drop", "Sem automação", "Controle total do vendedor"],
     badge: null,
   },
 ];
@@ -892,8 +892,8 @@ export function CreateCampanhaModal({ open, onOpenChange }: CreateCampanhaModalP
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="sdr">SDR</SelectItem>
-                        <SelectItem value="closer">Closer</SelectItem>
+                        <SelectItem value="sdr">Qualificação</SelectItem>
+                        <SelectItem value="closer">Propostas</SelectItem>
                       </SelectContent>
                     </Select>
                   )}
@@ -910,14 +910,14 @@ export function CreateCampanhaModal({ open, onOpenChange }: CreateCampanhaModalP
               </div>
             )}
 
-            {/* Distribuição automática de leads - SDR */}
+            {/* Distribuição automática de leads - Qualificação */}
             <div className="space-y-3 pt-4 border-t mt-4">
               <h3 className="font-semibold flex items-center gap-2">
                 <Shuffle className="w-4 h-4" />
-                Distribuição de SDRs
+                Distribuição de Vendedores (Qualificação)
               </h3>
               <p className="text-xs text-muted-foreground">
-                Quando leads forem importados ou chegarem via integrações, como atribuir o SDR?
+                Quando leads forem importados ou chegarem via integrações, como atribuir o vendedor?
               </p>
               <div className="space-y-2">
                 <label className="flex items-center gap-2 p-3 rounded-lg border cursor-pointer hover:bg-muted/50">
@@ -970,7 +970,7 @@ export function CreateCampanhaModal({ open, onOpenChange }: CreateCampanhaModalP
                       onValueChange={(v) => setLeadAssignedTo(v || null)}
                     >
                       <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Selecione o SDR" />
+                        <SelectValue placeholder="Selecione o vendedor" />
                       </SelectTrigger>
                       <SelectContent>
                         {teamMembers?.filter((m) => selectedMembers.includes(m.id) && (memberRoles[m.id] || "sdr") === "sdr").map((m) => (
@@ -988,14 +988,14 @@ export function CreateCampanhaModal({ open, onOpenChange }: CreateCampanhaModalP
               </div>
             </div>
 
-            {/* Distribuição automática de leads - Closer */}
+            {/* Distribuição automática de leads - Propostas */}
             <div className="space-y-3 pt-4 border-t mt-4">
               <h3 className="font-semibold flex items-center gap-2">
                 <Shuffle className="w-4 h-4" />
-                Distribuição de Closers
+                Distribuição de Vendedores (Propostas)
               </h3>
               <p className="text-xs text-muted-foreground">
-                Como atribuir o Closer responsável por fechar o negócio?
+                Como atribuir o vendedor responsável por fechar o negócio?
               </p>
               <div className="space-y-2">
                 <label className="flex items-center gap-2 p-3 rounded-lg border cursor-pointer hover:bg-muted/50">
@@ -1018,7 +1018,7 @@ export function CreateCampanhaModal({ open, onOpenChange }: CreateCampanhaModalP
                     className="rounded-full"
                   />
                   <span className="text-sm">Aleatório</span>
-                  <span className="text-xs text-muted-foreground">— distribui entre closers da campanha</span>
+                  <span className="text-xs text-muted-foreground">— distribui entre vendedores da campanha</span>
                 </label>
                 <label className="flex items-center gap-2 p-3 rounded-lg border cursor-pointer hover:bg-muted/50">
                   <input
@@ -1029,7 +1029,7 @@ export function CreateCampanhaModal({ open, onOpenChange }: CreateCampanhaModalP
                     className="rounded-full"
                   />
                   <span className="text-sm">Rotativo</span>
-                  <span className="text-xs text-muted-foreground">— alterna entre os closers</span>
+                  <span className="text-xs text-muted-foreground">— alterna entre os vendedores</span>
                 </label>
                 <label className="flex items-center gap-2 p-3 rounded-lg border cursor-pointer hover:bg-muted/50">
                   <input
@@ -1048,7 +1048,7 @@ export function CreateCampanhaModal({ open, onOpenChange }: CreateCampanhaModalP
                       onValueChange={(v) => setCloserAssignedTo(v || null)}
                     >
                       <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Selecione o closer" />
+                        <SelectValue placeholder="Selecione o vendedor" />
                       </SelectTrigger>
                       <SelectContent>
                         {teamMembers?.filter((m) => selectedMembers.includes(m.id) && memberRoles[m.id] === "closer").map((m) => (

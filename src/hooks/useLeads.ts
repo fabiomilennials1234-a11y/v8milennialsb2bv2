@@ -37,6 +37,7 @@ export function useLeads(page: number = 0) {
         .from("leads")
         .select(`
           *,
+          responsible:team_members!leads_responsible_id_fkey(id, name),
           sdr:team_members!leads_sdr_id_fkey(id, name),
           closer:team_members!leads_closer_id_fkey(id, name),
           lead_tags(
@@ -155,23 +156,12 @@ export function useUpdateLead() {
 
       if (error) throw error;
 
-      // Sync SDR/Closer to all pipe tables that contain this lead
-      if (safeUpdates.sdr_id !== undefined || safeUpdates.closer_id !== undefined) {
-        const sdrUpdate = safeUpdates.sdr_id !== undefined ? { sdr_id: safeUpdates.sdr_id || null } : {};
-        const closerUpdate = safeUpdates.closer_id !== undefined ? { closer_id: safeUpdates.closer_id || null } : {};
-
-        // pipe_confirmacao has both sdr_id and closer_id
-        if (Object.keys({ ...sdrUpdate, ...closerUpdate }).length > 0) {
-          await supabase.from("pipe_confirmacao").update({ ...sdrUpdate, ...closerUpdate }).eq("lead_id", id);
-        }
-        // pipe_whatsapp has sdr_id
-        if (safeUpdates.sdr_id !== undefined) {
-          await supabase.from("pipe_whatsapp").update(sdrUpdate).eq("lead_id", id);
-        }
-        // pipe_propostas has closer_id
-        if (safeUpdates.closer_id !== undefined) {
-          await supabase.from("pipe_propostas").update(closerUpdate).eq("lead_id", id);
-        }
+      // Sync responsible_id to all pipe tables that contain this lead
+      if (safeUpdates.responsible_id !== undefined) {
+        const responsibleUpdate = { responsible_id: safeUpdates.responsible_id || null };
+        await supabase.from("pipe_whatsapp").update(responsibleUpdate).eq("lead_id", id);
+        await supabase.from("pipe_confirmacao").update(responsibleUpdate).eq("lead_id", id);
+        await supabase.from("pipe_propostas").update(responsibleUpdate).eq("lead_id", id);
       }
 
       return data;

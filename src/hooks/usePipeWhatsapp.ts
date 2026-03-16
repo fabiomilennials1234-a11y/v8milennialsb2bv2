@@ -37,11 +37,13 @@ export function usePipeWhatsapp() {
         .select(`
           *,
           lead:leads(
-            id, name, company, email, phone, rating, origin, segment, faturamento, urgency, notes, compromisso_date, ai_disabled, sdr_id, closer_id,
+            id, name, company, email, phone, rating, origin, segment, faturamento, urgency, notes, compromisso_date, ai_disabled, sdr_id, closer_id, responsible_id,
+            responsible:team_members!leads_responsible_id_fkey(id, name),
             sdr:team_members!leads_sdr_id_fkey(id, name),
             closer:team_members!leads_closer_id_fkey(id, name),
             lead_tags(tag:tags(id, name, color))
           ),
+          responsible:team_members!pipe_whatsapp_responsible_id_fkey(id, name),
           sdr:team_members!pipe_whatsapp_sdr_id_fkey(id, name)
         `)
         .eq("organization_id", organizationId)

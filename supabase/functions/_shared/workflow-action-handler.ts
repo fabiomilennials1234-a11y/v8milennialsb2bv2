@@ -35,7 +35,7 @@ async function resolveVariables(
 
   const { data: lead } = await supabase
     .from("leads")
-    .select("name, company, email, phone, pipe_whatsapp, qualification_score, rating, sdr_id, closer_id")
+    .select("name, company, email, phone, pipe_whatsapp, qualification_score, rating, sdr_id, closer_id, responsible_id")
     .eq("id", leadId)
     .maybeSingle();
 
@@ -70,6 +70,15 @@ async function resolveVariables(
       .eq("id", lead.closer_id)
       .maybeSingle();
     vars.closer = member?.name || "";
+  }
+  // Resolve responsible name (unified)
+  if (template.includes("{{responsavel}}") && lead.responsible_id) {
+    const { data: member } = await supabase
+      .from("team_members")
+      .select("name")
+      .eq("id", lead.responsible_id)
+      .maybeSingle();
+    vars.responsavel = member?.name || "";
   }
 
   for (const [key, val] of Object.entries(vars)) {
@@ -837,24 +846,26 @@ async function handleTinyErpOrder(ctx: ActionContext, functionName: string): Pro
 async function handleAssign(ctx: ActionContext, role: "sdr" | "closer"): Promise<ActionResult> {
   let assigneeId = ctx.nodeData.assigneeId as string;
   const assignMode = ctx.nodeData.assignMode as string || "specific";
+  // Mapeia o tipo de atribuição para a coluna de dados correta (sdr_id ou closer_id)
+  const field = role === "sdr" ? "sdr_id" : "closer_id";
 
   if (assignMode === "round_robin") {
-    // Get all active team members and pick next via round robin
+    // Get all active team members with matching metric_type and pick next via round robin
+    const targetMetric = role === "sdr" ? "meetings" : "sales";
     const { data: members } = await ctx.supabase
       .from("team_members")
       .select("id")
       .eq("organization_id", ctx.organizationId)
-      .eq("is_active", true);
+      .eq("is_active", true)
+      .eq("metric_type", targetMetric);
 
     if (members && members.length > 0) {
-      // Simple round robin: pick based on lead count
-      const field = role === "sdr" ? "sdr_id" : "closer_id";
       const counts = await Promise.all(
         members.map(async (m: { id: string }) => {
           const { count } = await ctx.supabase
             .from("leads")
             .select("*", { count: "exact", head: true })
-            .eq(field, m.id);
+            .eq("responsible_id", m.id);
           return { id: m.id, count: count ?? 0 };
         }),
       );
@@ -865,10 +876,9 @@ async function handleAssign(ctx: ActionContext, role: "sdr" | "closer"): Promise
 
   if (!assigneeId) return { success: false, error: `No ${role} to assign` };
 
-  const field = role === "sdr" ? "sdr_id" : "closer_id";
-  await ctx.supabase.from("leads").update({ [field]: assigneeId }).eq("id", ctx.leadId);
+  await ctx.supabase.from("leads").update({ [field]: assigneeId, responsible_id: assigneeId }).eq("id", ctx.leadId);
 
-  return { success: true, message: `${role.toUpperCase()} assigned`, data: { assigneeId, role } };
+  return { success: true, message: `Responsável atribuído`, data: { assigneeId, role } };
 }
 
 async function handleNotifyTeamMember(ctx: ActionContext): Promise<ActionResult> {
@@ -906,16 +916,16 @@ async function handleCreateFollowup(ctx: ActionContext): Promise<ActionResult> {
   const description = await resolveVariables(ctx.supabase, ctx.leadId, ctx.nodeData.followupDescription as string || "");
   const priority = ctx.nodeData.followupPriority as string || "normal";
 
-  // Get lead's SDR as assignee
+  // Get lead's responsible as assignee (fallback to legacy sdr_id)
   const { data: lead } = await ctx.supabase
     .from("leads")
-    .select("sdr_id")
+    .select("responsible_id, sdr_id")
     .eq("id", ctx.leadId)
     .maybeSingle();
 
   const { error } = await ctx.supabase.from("follow_ups").insert({
     lead_id: ctx.leadId,
-    assigned_to: lead?.sdr_id || null,
+    assigned_to: lead?.responsible_id || lead?.sdr_id || null,
     title,
     description,
     priority,

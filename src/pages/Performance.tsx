@@ -48,7 +48,7 @@ import { useTeamGoals, useGoals, useCreateGoal, useUpdateGoal, Goal } from "@/ho
 import { useAwards, useCreateAward, useUpdateAward, useDeleteAward, Award as AwardType } from "@/hooks/useAwards";
 import { useDashboardMetrics, useRankingData } from "@/hooks/useDashboardMetrics";
 import { useTeamMembers, type TeamMember } from "@/hooks/useTeamMembers";
-import { useUserRole, useIsAdmin } from "@/hooks/useUserRole";
+import { useUserRole, useFeaturePermission } from "@/hooks/useUserRole";
 import { useOrganization } from "@/hooks/useOrganization";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -88,7 +88,7 @@ const positionStyles = {
 interface RankingUser {
   id: string;
   name: string;
-  role: "Closer" | "SDR";
+  role: string;
   value: number;
   conversions?: number;
   meetings?: number;
@@ -430,7 +430,7 @@ function GoalFormDialog({
                 <SelectItem value="team">🏢 Meta do Time</SelectItem>
                 {teamMembers.filter(m => m.is_active).map((member) => (
                   <SelectItem key={member.id} value={member.id}>
-                    {member.name} ({member.role === "closer" ? "Closer" : "SDR"})
+                    {member.name} ({(member as any).job_title || member.role})
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -536,7 +536,7 @@ function AwardFormDialog({
               <Input
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="Ex: Closer do Mês"
+                placeholder="Ex: Vendedor do Mês"
                 required
               />
             </div>
@@ -619,7 +619,8 @@ export default function Performance() {
   const [deleteGoalId, setDeleteGoalId] = useState<string | null>(null);
 
   // Hooks
-  const { isAdmin } = useIsAdmin();
+  const { allowed: canManageGoals } = useFeaturePermission('performance.manage_goals');
+  const { allowed: canManageAwards } = useFeaturePermission('performance.manage_awards');
   const { organizationId } = useOrganization();
   const { data: teamGoals, isLoading: goalsLoading } = useTeamGoals(selectedMonth, selectedYear);
   const { data: allGoals = [] } = useGoals(selectedMonth, selectedYear);
@@ -873,7 +874,7 @@ export default function Performance() {
             <Gift className="w-4 h-4" />
             <span className="hidden sm:inline">Prêmios</span>
           </TabsTrigger>
-          {isAdmin && (
+          {canManageGoals && (
             <TabsTrigger value="gestao" className="flex items-center gap-1.5">
               <Users className="w-4 h-4" />
               <span className="hidden sm:inline">Gestão</span>
@@ -928,7 +929,7 @@ export default function Performance() {
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
                   <TrendingUp className="w-4 h-4 text-primary" />
-                  Ranking Closers
+                  Ranking Vendas
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
@@ -939,7 +940,7 @@ export default function Performance() {
                     <RankingCard key={user.id} user={user} avatarUrl={avatarMap.get(user.id)} />
                   ))
                 ) : (
-                  <p className="text-muted-foreground text-center py-8">Nenhum closer com vendas.</p>
+                  <p className="text-muted-foreground text-center py-8">Nenhum membro de vendas com faturamento.</p>
                 )}
               </CardContent>
             </Card>
@@ -949,7 +950,7 @@ export default function Performance() {
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
                   <Calendar className="w-4 h-4 text-chart-5" />
-                  Ranking SDRs
+                  Ranking Reuniões
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
@@ -960,7 +961,7 @@ export default function Performance() {
                     <RankingCard key={user.id} user={user} showValue={false} avatarUrl={avatarMap.get(user.id)} />
                   ))
                 ) : (
-                  <p className="text-muted-foreground text-center py-8">Nenhum SDR com reuniões.</p>
+                  <p className="text-muted-foreground text-center py-8">Nenhum membro de reuniões com dados.</p>
                 )}
               </CardContent>
             </Card>
@@ -1094,7 +1095,7 @@ export default function Performance() {
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
                   <Trophy className="w-4 h-4 text-primary" />
-                  Metas Closers
+                  Metas Vendas
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
@@ -1167,7 +1168,7 @@ export default function Performance() {
                       );
                     })
                 ) : (
-                  <p className="text-muted-foreground text-center py-4">Nenhuma meta individual para closers.</p>
+                  <p className="text-muted-foreground text-center py-4">Nenhuma meta individual para vendas.</p>
                 )}
               </CardContent>
             </Card>
@@ -1177,7 +1178,7 @@ export default function Performance() {
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
                   <Calendar className="w-4 h-4 text-chart-5" />
-                  Metas SDRs
+                  Metas Reuniões
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
@@ -1250,7 +1251,7 @@ export default function Performance() {
                       );
                     })
                 ) : (
-                  <p className="text-muted-foreground text-center py-4">Nenhuma meta individual para SDRs.</p>
+                  <p className="text-muted-foreground text-center py-4">Nenhuma meta individual para reuniões.</p>
                 )}
               </CardContent>
             </Card>
@@ -1317,7 +1318,7 @@ export default function Performance() {
           </div>
 
           {/* Admin add button */}
-          {isAdmin && (
+          {canManageAwards && (
             <div className="flex justify-end">
               <Button onClick={() => { setEditingAward(null); setAwardDialogOpen(true); }}>
                 <Plus className="w-4 h-4 mr-2" />
@@ -1337,7 +1338,7 @@ export default function Performance() {
                 {achievements.map((achievement, index) => (
                   <div key={achievement.award.id} className="relative">
                     <AchievementCard achievement={achievement} index={index} />
-                    {isAdmin && (
+                    {canManageAwards && (
                       <div className="absolute top-2 right-2 flex gap-1 opacity-0 hover:opacity-100 transition-opacity">
                         <Button
                           variant="ghost"
@@ -1366,14 +1367,14 @@ export default function Performance() {
               <Gift className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
               <h3 className="font-semibold">Nenhuma premiação configurada</h3>
               <p className="text-muted-foreground text-sm mt-1">
-                {isAdmin ? "Clique em 'Nova Premiação' para criar." : "Aguarde o admin configurar as premiações."}
+                {canManageAwards ? "Clique em 'Nova Premiação' para criar." : "Aguarde o admin configurar as premiações."}
               </p>
             </div>
           )}
         </TabsContent>
 
         {/* ========== GESTÃO TAB (Admin only) ========== */}
-        {isAdmin && (
+        {canManageGoals && (
           <TabsContent value="gestao" className="space-y-6">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold flex items-center gap-2">

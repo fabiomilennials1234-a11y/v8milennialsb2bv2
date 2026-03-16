@@ -135,12 +135,12 @@ export function useConversionRates(month?: number, year?: number) {
       if (!organizationId) return { sdrRates: [], closerRates: [] };
       const { data: teamMembers } = await supabase
         .from("team_members")
-        .select("id, name, role")
+        .select("id, name, role, metric_type")
         .eq("organization_id", organizationId)
         .eq("is_active", true);
 
-      const closers = teamMembers?.filter((m) => m.role === "closer") || [];
-      const sdrs = teamMembers?.filter((m) => m.role === "sdr") || [];
+      const closers = teamMembers?.filter((m) => m.metric_type === "sales") || [];
+      const sdrs = teamMembers?.filter((m) => m.metric_type === "meetings") || [];
 
       const [{ data: conf1 }, { data: conf2 }] = await Promise.all([
         supabase.from("pipe_confirmacao").select("sdr_id, status").eq("organization_id", organizationId).not("metrics_period_at", "is", null).gte("metrics_period_at", startStr).lte("metrics_period_at", endStr),
@@ -151,14 +151,14 @@ export function useConversionRates(month?: number, year?: number) {
       // Propostas: TODOS os leads no pipe (sem filtro de período) para taxa de conversão correta
       const { data: propostasData } = await supabase
         .from("pipe_propostas")
-        .select("closer_id, status")
+        .select("closer_id, responsible_id, status")
         .eq("organization_id", organizationId);
 
       // Calculate SDR conversion (reuniões marcadas -> comparecidas)
       const sdrRates: ConversionRate[] = sdrs.map((sdr) => {
-        const total = confirmacaoData?.filter((c) => c.sdr_id === sdr.id).length || 0;
+        const total = confirmacaoData?.filter((c) => (c.responsible_id || c.sdr_id) === sdr.id).length || 0;
         const comparecidas = confirmacaoData?.filter(
-          (c) => c.sdr_id === sdr.id && c.status === "compareceu"
+          (c) => (c.responsible_id || c.sdr_id) === sdr.id && c.status === "compareceu"
         ).length || 0;
         return {
           id: sdr.id,
@@ -171,9 +171,9 @@ export function useConversionRates(month?: number, year?: number) {
 
       // Calculate Closer conversion: TODOS no pipe X vendido
       const closerRates: ConversionRate[] = closers.map((closer) => {
-        const total = (propostasData || []).filter((p) => p.closer_id === closer.id).length;
+        const total = (propostasData || []).filter((p) => (p.responsible_id || p.closer_id) === closer.id).length;
         const vendidas = (propostasData || []).filter(
-          (p) => p.closer_id === closer.id && p.status === "vendido"
+          (p) => (p.responsible_id || p.closer_id) === closer.id && p.status === "vendido"
         ).length || 0;
         return {
           id: closer.id,
@@ -275,7 +275,7 @@ export function useRankingData(month?: number, year?: number) {
           goal: number;
           goalProgress: number;
           position: number;
-          role: "Closer";
+          role: string;
         }>,
         sdrRanking: (raw?.sdrRanking ?? []) as Array<{
           id: string;
@@ -285,7 +285,7 @@ export function useRankingData(month?: number, year?: number) {
           goal: number;
           goalProgress: number;
           position: number;
-          role: "SDR";
+          role: string;
         }>,
       };
     },

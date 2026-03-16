@@ -221,10 +221,10 @@ export function useCommissionSummary(teamMemberId: string, month: number, year: 
       const commissionProjeto = totalProjeto * (commissionProjetoPercent / 100);
       const totalCommission = commissionMRR + commissionProjeto;
 
-      // Get goal progress based on member role
+      // Get goal progress based on member metric_type
       // Prefer: individual goal; fallback: team goal (team_member_id null)
-      // SDR: "reunioes" based on confirmed meetings
-      // Closer: prefer "vendas" (count). If not found, fallback to "clientes" (count) then "faturamento" (R$)
+      // Meetings (ex-SDR): "reunioes" based on confirmed meetings
+      // Sales (ex-Closer): prefer "vendas" (count). If not found, fallback to "clientes" (count) then "faturamento" (R$)
       let goalProgress = 0;
       let goalTarget = 0;
       let goalCurrent = 0;
@@ -263,7 +263,7 @@ export function useCommissionSummary(teamMemberId: string, month: number, year: 
         return Number(teamGoal?.target_value) || 0;
       };
 
-      if (member.role === "sdr") {
+      if ((member as any).metric_type === "meetings") {
         // Meta de reuniões (quantidade)
         goalTarget = await fetchGoalTarget("reunioes");
 
@@ -292,7 +292,7 @@ export function useCommissionSummary(teamMemberId: string, month: number, year: 
         goalCurrent = confirmations?.length || 0;
         goalProgress = goalTarget > 0 ? (goalCurrent / goalTarget) * 100 : 0;
       } else {
-        // Closer: tenta usar meta em ordem de prioridade
+        // Sales (ex-Closer): tenta usar meta em ordem de prioridade
         const vendasTarget = await fetchGoalTarget("vendas");
         const clientesTarget = vendasTarget > 0 ? 0 : await fetchGoalTarget("clientes");
         const faturamentoTarget = vendasTarget > 0 || clientesTarget > 0 ? 0 : await fetchGoalTarget("faturamento");

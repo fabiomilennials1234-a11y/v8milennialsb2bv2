@@ -34,8 +34,9 @@ import type { TimelineEvent, TimelineSource } from "@/hooks/useLeadTimeline";
 const ACTION_CONFIG: Record<string, { icon: React.ElementType; label: string; color: string }> = {
   lead_created: { icon: UserPlus, label: "Lead criado", color: "bg-blue-500/20 text-blue-600" },
   stage_changed: { icon: ArrowRight, label: "Etapa alterada", color: "bg-yellow-500/20 text-yellow-600" },
-  sdr_assigned: { icon: UserCheck, label: "SDR atribuído", color: "bg-green-500/20 text-green-600" },
-  closer_assigned: { icon: UserCheck, label: "Closer atribuído", color: "bg-green-500/20 text-green-600" },
+  sdr_assigned: { icon: UserCheck, label: "Responsável atribuído", color: "bg-green-500/20 text-green-600" },
+  closer_assigned: { icon: UserCheck, label: "Responsável atribuído", color: "bg-green-500/20 text-green-600" },
+  responsible_assigned: { icon: UserCheck, label: "Responsável atribuído", color: "bg-green-500/20 text-green-600" },
   field_updated: { icon: Edit2, label: "Campo atualizado", color: "bg-muted text-muted-foreground" },
   note_added: { icon: FileText, label: "Nota adicionada", color: "bg-muted text-muted-foreground" },
   meeting_scheduled: { icon: Calendar, label: "Reunião agendada", color: "bg-blue-500/20 text-blue-600" },

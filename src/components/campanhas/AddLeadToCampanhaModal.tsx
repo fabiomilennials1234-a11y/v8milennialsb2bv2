@@ -33,14 +33,14 @@ export function AddLeadToCampanhaModal({
   const [search, setSearch] = useState("");
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [selectedStageId, setSelectedStageId] = useState<string>("");
-  const [selectedSdrId, setSelectedSdrId] = useState<string>("");
+  const [selectedResponsibleId, setSelectedResponsibleId] = useState<string>("");
 
   const { data: allLeads } = useLeads();
   const { data: campanha } = useCampanha(campanhaId);
   const addLead = useAddCampanhaLead();
   const canAutoDistribute =
     campanha?.lead_distribution_mode === "round_robin" || campanha?.lead_distribution_mode === "random";
-  const sdrMembers = members.filter((m) => m.role === "sdr");
+  const allMembers = members;
 
   // Filter leads that are not already in the campaign
   const availableLeads = allLeads?.filter(
@@ -58,8 +58,8 @@ export function AddLeadToCampanhaModal({
     }
 
     try {
-      let sdrId: string | undefined = selectedSdrId && selectedSdrId !== AUTO_DISTRIBUTE_VALUE ? selectedSdrId : undefined;
-      if (selectedSdrId === AUTO_DISTRIBUTE_VALUE) {
+      let responsibleId: string | undefined = selectedResponsibleId && selectedResponsibleId !== AUTO_DISTRIBUTE_VALUE ? selectedResponsibleId : undefined;
+      if (selectedResponsibleId === AUTO_DISTRIBUTE_VALUE) {
         const { data: nextSdrId, error: rpcError } = await supabase.rpc("get_next_campaign_sdr", {
           p_campaign_id: campanhaId,
         });
@@ -68,24 +68,14 @@ export function AddLeadToCampanhaModal({
           console.error("[AddLeadToCampanha] get_next_campaign_sdr error:", rpcError);
           return;
         }
-        sdrId = nextSdrId ?? undefined;
-      }
-
-      // Resolve closer via campaign distribution
-      let closerId: string | undefined = undefined;
-      if (campanha?.closer_distribution_mode) {
-        const { data: nextCloserId } = await supabase.rpc("get_next_campaign_closer", {
-          p_campaign_id: campanhaId,
-        });
-        if (nextCloserId) closerId = nextCloserId;
+        responsibleId = nextSdrId ?? undefined;
       }
 
       await addLead.mutateAsync({
         campanha_id: campanhaId,
         lead_id: selectedLeadId,
         stage_id: selectedStageId,
-        sdr_id: sdrId,
-        closer_id: closerId,
+        responsible_id: responsibleId,
       });
 
       toast.success("Lead adicionado à campanha!");
@@ -101,7 +91,7 @@ export function AddLeadToCampanhaModal({
     setSearch("");
     setSelectedLeadId(null);
     setSelectedStageId("");
-    setSelectedSdrId("");
+    setSelectedResponsibleId("");
   };
 
   const selectedLead = allLeads?.find((l) => l.id === selectedLeadId);
@@ -192,10 +182,10 @@ export function AddLeadToCampanhaModal({
             </Select>
           </div>
 
-          {/* SDR Selection */}
+          {/* Responsible Selection */}
           <div className="space-y-2">
-            <Label>Vendedor Responsável</Label>
-            <Select value={selectedSdrId} onValueChange={setSelectedSdrId}>
+            <Label>Responsável</Label>
+            <Select value={selectedResponsibleId} onValueChange={setSelectedResponsibleId}>
               <SelectTrigger>
                 <SelectValue placeholder="Selecione o vendedor (opcional)" />
               </SelectTrigger>
@@ -208,7 +198,7 @@ export function AddLeadToCampanhaModal({
                     </span>
                   </SelectItem>
                 )}
-                {(sdrMembers.length > 0 ? sdrMembers : members).map((member) => (
+                {allMembers.map((member) => (
                   <SelectItem key={member.team_member_id} value={member.team_member_id}>
                     {member.team_member?.name}
                   </SelectItem>

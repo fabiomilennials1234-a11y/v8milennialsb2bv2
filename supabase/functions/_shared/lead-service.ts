@@ -204,9 +204,10 @@ export async function getOrCreateLead(
     insertData.pipe_whatsapp = "novo";
   }
 
-  // Add sdr_id if provided
+  // Add sdr_id and responsible_id if provided
   if (sdrId) {
     insertData.sdr_id = sdrId;
+    insertData.responsible_id = sdrId;
   }
 
   const { data: newLead, error: createError } = await supabase

@@ -71,6 +71,7 @@ Deno.serve(withSentry('webhook-confirmacao', async (req) => {
         rating: rating ? parseInt(String(rating), 10) : 0,
         sdr_id,
         closer_id,
+        responsible_id: closer_id || sdr_id || null,
         meeting_date: meeting_date || null,
         utm_source,
         utm_medium,
@@ -97,6 +98,7 @@ Deno.serve(withSentry('webhook-confirmacao', async (req) => {
         status: "reuniao_marcada",
         sdr_id: sdr_id || null,
         closer_id: closer_id || null,
+        responsible_id: closer_id || sdr_id || null,
         meeting_date: meeting_date || null,
         notes: notes || null,
       });

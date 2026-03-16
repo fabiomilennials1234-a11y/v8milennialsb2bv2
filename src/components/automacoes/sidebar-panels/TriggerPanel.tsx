@@ -298,7 +298,7 @@ export function TriggerPanel({ data, onUpdate }: TriggerPanelProps) {
       {/* ── lead_assigned ── */}
       {data.triggerType === "lead_assigned" && (
         <div className="space-y-2">
-          <Label>Papel atribuído</Label>
+          <Label>Tipo de atribuição</Label>
           <Select
             value={(cfg.role as string) || "any"}
             onValueChange={(v) => updateConfig({ role: v })}
@@ -306,8 +306,8 @@ export function TriggerPanel({ data, onUpdate }: TriggerPanelProps) {
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="any">Qualquer</SelectItem>
-              <SelectItem value="sdr">SDR</SelectItem>
-              <SelectItem value="closer">Closer</SelectItem>
+              <SelectItem value="sdr">Responsável (Qualificação)</SelectItem>
+              <SelectItem value="closer">Responsável (Propostas)</SelectItem>
             </SelectContent>
           </Select>
         </div>

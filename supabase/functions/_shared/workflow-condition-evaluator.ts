@@ -26,6 +26,7 @@ interface LeadData {
   origin?: string;
   sdr_id?: string;
   closer_id?: string;
+  responsible_id?: string;
   urgency?: string;
   faturamento?: string;
   notes?: string;
@@ -73,7 +74,7 @@ export async function evaluateCondition(
   return compare(fieldValue, operator, value);
 }
 
-function compare(fieldValue: unknown, operator: string, conditionValue: string): boolean {
+export function compare(fieldValue: unknown, operator: string, conditionValue: string): boolean {
   const strField = fieldValue == null ? "" : String(fieldValue);
   const numField = Number(fieldValue);
   const numCondition = Number(conditionValue);

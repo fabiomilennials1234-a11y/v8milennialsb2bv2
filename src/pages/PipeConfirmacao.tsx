@@ -30,7 +30,7 @@ import { usePipelineStages, stagesToColumns, getPipelineTypeName } from "@/hooks
 import { PipeSettingsDialog } from "@/components/pipelines/PipeSettingsDialog";
 import { useDeleteAllLeadsInPipe } from "@/hooks/useLeads";
 import { useCreatePipeProposta } from "@/hooks/usePipePropostas";
-import { useTeamMembers } from "@/hooks/useTeamMembers";
+import { useResponsibleMembers } from "@/hooks/useTeamMembers";
 import { LeadModal } from "@/components/leads/LeadModal";
 import { AddMeetingModal } from "@/components/confirmacao/AddMeetingModal";
 import { ConfirmacaoDetailModal } from "@/components/confirmacao/ConfirmacaoDetailModal";
@@ -47,6 +47,7 @@ import { useLogLeadAction } from "@/hooks/useLogLeadAction";
 import { toast } from "sonner";
 import { useOrganization } from "@/hooks/useOrganization";
 import { track, trackModuleVisit } from "@/lib/analytics";
+import { useFeaturePermission } from "@/hooks/useUserRole";
 
 interface ConfirmacaoCardData extends DraggableItem {
   name: string;
@@ -57,8 +58,7 @@ interface ConfirmacaoCardData extends DraggableItem {
   meetingDateTime?: Date;
   rating: number;
   origin: "whatsapp" | "meta_ads" | "outro" | "site" | "remarketing" | "google_ads" | "cal";
-  sdr?: string;
-  closer?: string;
+  responsible?: string;
   sdrId?: string | null;
   closerId?: string | null;
   tags: { name: string; color: string }[];
@@ -147,8 +147,7 @@ type ConfirmacaoFilterState = {
   timeFilter: TimeFilter;
   urgencyFilter: UrgencyFilter;
   selectedStatuses: string[];
-  selectedSdrId: string;
-  selectedCloserId: string;
+  selectedResponsibleId: string;
   viewMode: "kanban" | "timeline";
 };
 
@@ -158,8 +157,7 @@ const DEFAULT_CONFIRMACAO_FILTERS: ConfirmacaoFilterState = {
   timeFilter: "all",
   urgencyFilter: "all",
   selectedStatuses: [],
-  selectedSdrId: "all",
-  selectedCloserId: "all",
+  selectedResponsibleId: "all",
   viewMode: "kanban",
 };
 
@@ -175,8 +173,7 @@ export default function PipeConfirmacao() {
     timeFilter,
     urgencyFilter,
     selectedStatuses,
-    selectedSdrId,
-    selectedCloserId,
+    selectedResponsibleId,
     viewMode,
   } = filterState;
 
@@ -200,19 +197,14 @@ export default function PipeConfirmacao() {
     (v: string[]) => setFilterState((f) => ({ ...f, selectedStatuses: v })),
     [setFilterState]
   );
-  const setSelectedSdrId = useCallback(
-    (v: string) => setFilterState((f) => ({ ...f, selectedSdrId: v })),
-    [setFilterState]
-  );
-  const setSelectedCloserId = useCallback(
-    (v: string) => setFilterState((f) => ({ ...f, selectedCloserId: v })),
+  const setSelectedResponsibleId = useCallback(
+    (v: string) => setFilterState((f) => ({ ...f, selectedResponsibleId: v })),
     [setFilterState]
   );
   const setViewMode = useCallback(
     (v: "kanban" | "timeline") => setFilterState((f) => ({ ...f, viewMode: v })),
     [setFilterState]
   );
-
   const [isLeadModalOpen, setIsLeadModalOpen] = useState(false);
   const [isMeetingModalOpen, setIsMeetingModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -238,7 +230,7 @@ export default function PipeConfirmacao() {
   const { data: pipeData, isLoading, refetch } = usePipeConfirmacao();
   const { data: pipelineStages = [] } = usePipelineStages("confirmacao");
   const { data: workflowCounts = {} } = useStageWorkflowCounts("confirmacao");
-  const { data: teamMembers = [] } = useTeamMembers();
+  const responsibleMembers = useResponsibleMembers();
   const updatePipeConfirmacao = useUpdatePipeConfirmacao();
   const { allowed: canMovePipe } = useCanPerformAction("move_pipe_record");
   const createPipeProposta = useCreatePipeProposta();
@@ -246,15 +238,12 @@ export default function PipeConfirmacao() {
   const deletePipeConfirmacao = useDeletePipeConfirmacao();
   const deleteAllLeadsInPipe = useDeleteAllLeadsInPipe("confirmacao");
   const logAction = useLogLeadAction();
+  const { allowed: canDeleteCards } = useFeaturePermission("pipeline.delete_cards");
 
   // Transform team members for filter
-  const teamMemberOptions = useMemo(() => 
-    teamMembers.map(m => ({
-      id: m.id,
-      name: m.name,
-      role: m.role as "sdr" | "closer" | "admin"
-    })), 
-    [teamMembers]
+  const teamMemberOptions = useMemo(() =>
+    responsibleMembers.map(m => ({ id: m.id, name: m.name, role: m.role })),
+    [responsibleMembers]
   );
 
   // Auto-update statuses based on meeting dates
@@ -326,8 +315,7 @@ export default function PipeConfirmacao() {
       meetingDateTime: item.meeting_date ? new Date(item.meeting_date) : undefined,
       rating: lead?.rating || 0,
       origin: lead?.origin || "outro",
-      sdr: item.sdr?.name || lead?.sdr?.name,
-      closer: item.closer?.name || lead?.closer?.name,
+      responsible: item.sdr?.name || item.closer?.name || lead?.sdr?.name || lead?.closer?.name,
       sdrId: item.sdr_id,
       closerId: item.closer_id,
       tags: lead?.lead_tags?.map((lt: any) => ({ name: lt.tag?.name, color: lt.tag?.color || "#888" })).filter((t: any) => t.name) || [],
@@ -401,11 +389,10 @@ export default function PipeConfirmacao() {
 
           const matchesStatus = selectedStatuses.length === 0 || selectedStatuses.includes(item.status);
           
-          // SDR/Closer filters
-          const matchesSdr = selectedSdrId === "all" || item.sdr_id === selectedSdrId;
-          const matchesCloser = selectedCloserId === "all" || item.closer_id === selectedCloserId;
-          
-          return matchesSearch && matchesOrigin && matchesUrgency && matchesTime && matchesStatus && matchesSdr && matchesCloser;
+          // Responsible filter
+          const matchesResponsible = selectedResponsibleId === "all" || item.responsible_id === selectedResponsibleId;
+
+          return matchesSearch && matchesOrigin && matchesUrgency && matchesTime && matchesStatus && matchesResponsible;
         })
         // Sort by created_at — leads mais recentes primeiro
         .sort((a, b) => {
@@ -417,7 +404,7 @@ export default function PipeConfirmacao() {
 
       return { ...col, items: columnItems };
     });
-  }, [pipeData, searchQuery, originFilter, urgencyFilter, timeFilter, selectedStatuses, selectedSdrId, selectedCloserId, overdueDays]);
+  }, [pipeData, searchQuery, originFilter, urgencyFilter, timeFilter, selectedStatuses, selectedResponsibleId, overdueDays]);
 
   const handleStatusChange = async (itemId: string, newStatus: string) => {
     const item = pipeData?.find(p => p.id === itemId);
@@ -661,10 +648,8 @@ export default function PipeConfirmacao() {
         onStatusesChange={setSelectedStatuses}
         statusOptions={statusColumns}
         teamMembers={teamMemberOptions}
-        selectedSdrId={selectedSdrId}
-        onSdrFilterChange={setSelectedSdrId}
-        selectedCloserId={selectedCloserId}
-        onCloserFilterChange={setSelectedCloserId}
+        selectedResponsibleId={selectedResponsibleId}
+        onResponsibleFilterChange={setSelectedResponsibleId}
       />
 
       {/* Content */}
@@ -686,7 +671,7 @@ export default function PipeConfirmacao() {
             <ConfirmacaoCard
               card={card}
               onClick={() => handleCardClick(card)}
-              onDelete={handleOpenDeleteDialog}
+              onDelete={canDeleteCards ? handleOpenDeleteDialog : undefined}
             />
           )}
         />
@@ -729,8 +714,7 @@ export default function PipeConfirmacao() {
         onOpenChange={setIsCompareceuModalOpen}
         onConfirm={handleCompareceuConfirm}
         leadName={pendingCompareceuItem?.lead?.name || "Lead"}
-        currentSdrId={pendingCompareceuItem?.sdr_id}
-        currentCloserId={pendingCompareceuItem?.closer_id}
+        currentResponsibleId={pendingCompareceuItem?.responsible_id || pendingCompareceuItem?.sdr_id || pendingCompareceuItem?.closer_id}
         isLoading={isProcessingCompareceu}
       />
 

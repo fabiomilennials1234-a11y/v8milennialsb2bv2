@@ -44,9 +44,9 @@ import { usePipelineStages, stagesToColumns, getPipelineTypeName } from "@/hooks
 import { PipeSettingsDialog } from "@/components/pipelines/PipeSettingsDialog";
 import { useCreatePipeConfirmacao } from "@/hooks/usePipeConfirmacao";
 import { useCreatePipeProposta } from "@/hooks/usePipePropostas";
-import { useTeamMembers } from "@/hooks/useTeamMembers";
+import { useResponsibleMembers } from "@/hooks/useTeamMembers";
 import { useDeleteAllLeadsInPipe, useToggleLeadAI } from "@/hooks/useLeads";
-import { useUserRole } from "@/hooks/useUserRole";
+import { useUserRole, useFeaturePermission } from "@/hooks/useUserRole";
 import { useLogLeadAction } from "@/hooks/useLogLeadAction";
 import { useCreateAcaoDoDia } from "@/hooks/useAcoesDoDia";
 import { LeadModal } from "@/components/leads/LeadModal";
@@ -82,8 +82,8 @@ interface WhatsappCard extends DraggableItem {
   phone?: string;
   email?: string;
   rating: number;
-  sdr?: string;
-  sdrId?: string;
+  responsible?: string;
+  responsibleId?: string;
   tags: { name: string; color: string }[];
   scheduledDate?: string;
   createdAt: string;
@@ -99,7 +99,7 @@ interface WhatsappCard extends DraggableItem {
 
 interface WhatsappCardComponentProps {
   card: WhatsappCard;
-  onDelete: (pipeId: string, leadId: string) => void;
+  onDelete?: (pipeId: string, leadId: string) => void;
   isAdmin: boolean;
   onQuickAdd: (leadId: string, leadName: string, title: string) => void;
   onCardClick?: () => void;
@@ -206,6 +206,7 @@ const WhatsappCardComponent = memo(function WhatsappCardComponent({ card, onDele
           </PopoverContent>
         </Popover>
 
+        {onDelete && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
             <Button variant="ghost" size="icon" className="h-6 w-6">
@@ -213,7 +214,7 @@ const WhatsappCardComponent = memo(function WhatsappCardComponent({ card, onDele
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem 
+            <DropdownMenuItem
               className="text-destructive focus:text-destructive"
               onClick={(e) => {
                 e.stopPropagation();
@@ -225,6 +226,7 @@ const WhatsappCardComponent = memo(function WhatsappCardComponent({ card, onDele
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        )}
       </div>
 
       {/* Header: Name, Company, Rating */}
@@ -334,7 +336,7 @@ const WhatsappCardComponent = memo(function WhatsappCardComponent({ card, onDele
         </div>
       )}
 
-      {/* Footer: SDR & Time */}
+      {/* Footer: Responsible & Time */}
       <div className="flex items-center justify-between gap-2 pt-2 border-t border-border min-w-0">
         <span className="text-[10px] text-muted-foreground truncate min-w-0">
           {formatDistanceToNow(new Date(card.createdAt), { addSuffix: true, locale: ptBR })}
@@ -349,10 +351,10 @@ const WhatsappCardComponent = memo(function WhatsappCardComponent({ card, onDele
               <MessageCircle className="w-3 h-3" />
             </button>
           )}
-          {card.sdr && (
+          {card.responsible && (
             <div className="flex items-center gap-1 min-w-0">
               <User className="w-3 h-3 text-muted-foreground shrink-0" />
-              <span className="text-[10px] text-muted-foreground truncate max-w-[100px]" title={card.sdr}>{card.sdr}</span>
+              <span className="text-[10px] text-muted-foreground truncate max-w-[100px]" title={card.responsible}>{card.responsible}</span>
             </div>
           )}
         </div>
@@ -464,15 +466,13 @@ function AIToggle({ leadId, aiDisabled }: { leadId: string; aiDisabled?: boolean
 // ---------------------------------------------------------------------------
 type WhatsappFilterState = {
   searchTerm: string;
-  filterSdr: string;
-  filterCloser: string;
+  filterResponsible: string;
   filterOrigin: string;
 };
 
 const DEFAULT_WHATSAPP_FILTERS: WhatsappFilterState = {
   searchTerm: "",
-  filterSdr: "all",
-  filterCloser: "all",
+  filterResponsible: "all",
   filterOrigin: "all",
 };
 
@@ -482,25 +482,20 @@ export default function PipeWhatsapp() {
     DEFAULT_WHATSAPP_FILTERS
   );
 
-  const { searchTerm, filterSdr, filterCloser, filterOrigin } = filterState;
+  const { searchTerm, filterResponsible, filterOrigin } = filterState;
 
   const setSearchTerm = useCallback(
     (v: string) => setFilterState((f) => ({ ...f, searchTerm: v })),
     [setFilterState]
   );
-  const setFilterSdr = useCallback(
-    (v: string) => setFilterState((f) => ({ ...f, filterSdr: v })),
-    [setFilterState]
-  );
-  const setFilterCloser = useCallback(
-    (v: string) => setFilterState((f) => ({ ...f, filterCloser: v })),
+  const setFilterResponsible = useCallback(
+    (v: string) => setFilterState((f) => ({ ...f, filterResponsible: v })),
     [setFilterState]
   );
   const setFilterOrigin = useCallback(
     (v: string) => setFilterState((f) => ({ ...f, filterOrigin: v })),
     [setFilterState]
   );
-
   const [isLeadModalOpen, setIsLeadModalOpen] = useState(false);
   const [isOpportunityModalOpen, setIsOpportunityModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -529,7 +524,7 @@ export default function PipeWhatsapp() {
     metricsPeriod === "month" ? selectedMetricsMonth : undefined,
     metricsPeriod === "month" ? selectedMetricsYear : undefined
   );
-  const { data: teamMembers } = useTeamMembers();
+
   const { data: userRole } = useUserRole();
   const updatePipeWhatsapp = useUpdatePipeWhatsapp();
   const { allowed: canMovePipe } = useCanPerformAction("move_pipe_record");
@@ -541,14 +536,9 @@ export default function PipeWhatsapp() {
   const logAction = useLogLeadAction();
 
   const isAdmin = userRole?.role === "admin";
+  const { allowed: canDeleteCards } = useFeaturePermission("pipeline.delete_cards");
 
-  const sdrs = useMemo(() => {
-    return teamMembers?.filter(m => m.role === "sdr" && m.is_active) || [];
-  }, [teamMembers]);
-
-  const closers = useMemo(() => {
-    return teamMembers?.filter(m => m.role === "closer" && m.is_active) || [];
-  }, [teamMembers]);
+  const responsibleMembers = useResponsibleMembers();
 
   // Transform pipe data to WhatsappCard format
   const transformToCard = (item: any): WhatsappCard => {
@@ -560,8 +550,8 @@ export default function PipeWhatsapp() {
       phone: lead?.phone,
       email: lead?.email,
       rating: lead?.rating || 0,
-      sdr: item.sdr?.name || lead?.sdr?.name,
-      sdrId: item.sdr_id,
+      responsible: item.sdr?.name || lead?.sdr?.name,
+      responsibleId: item.sdr_id,
       tags: lead?.lead_tags?.map((lt: any) => ({ name: lt.tag?.name, color: lt.tag?.color || "#888" })).filter((t: any) => t.name) || [],
       scheduledDate: item.scheduled_date,
       createdAt: item.created_at,
@@ -590,16 +580,13 @@ export default function PipeWhatsapp() {
       lead?.company?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       lead?.phone?.includes(searchTerm);
 
-    // SDR filter
-    const matchesSdr = filterSdr === "all" || item.sdr_id === filterSdr;
-
-    // Closer filter (lead.closer_id)
-    const matchesCloser = filterCloser === "all" || lead?.closer_id === filterCloser;
+    // Responsible filter
+    const matchesResponsible = filterResponsible === "all" || item.responsible_id === filterResponsible || item.lead?.responsible_id === filterResponsible;
 
     // Origin filter
     const matchesOrigin = filterOrigin === "all" || lead?.origin === filterOrigin;
 
-    return matchesSearch && matchesSdr && matchesCloser && matchesOrigin;
+    return matchesSearch && matchesResponsible && matchesOrigin;
   };
 
   // Converte etapas do banco para o formato do Kanban (com fallback)
@@ -632,7 +619,7 @@ export default function PipeWhatsapp() {
         items: columnItems,
       };
     });
-  }, [pipeData, pipelineStages, statusColumns, searchTerm, filterSdr, filterCloser, filterOrigin]);
+  }, [pipeData, pipelineStages, statusColumns, searchTerm, filterResponsible, filterOrigin]);
 
   // Calculate stats based on FILTERED data (excludes ghost leads)
   const stats = useMemo(() => {
@@ -647,7 +634,7 @@ export default function PipeWhatsapp() {
     const pending = filteredData.filter(item => item.status === "novo").length;
 
     return { total, abordado, respondeu, scheduled, pending };
-  }, [pipeData, searchTerm, filterSdr, filterCloser, filterOrigin]);
+  }, [pipeData, searchTerm, filterResponsible, filterOrigin]);
 
   const displayStats = useMemo(() => {
     if (metricsPeriod === "all" || !metricsByPeriod) return stats;
@@ -858,30 +845,14 @@ export default function PipeWhatsapp() {
           </SelectContent>
         </Select>
 
-        {/* SDR Filter */}
-        <Select value={filterSdr} onValueChange={setFilterSdr}>
+        <Select value={filterResponsible} onValueChange={setFilterResponsible}>
           <SelectTrigger className="w-[180px]">
-            <User className="w-4 h-4 mr-2" />
-            <SelectValue placeholder="SDR" />
+            <SelectValue placeholder="Responsável" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Todos SDRs</SelectItem>
-            {sdrs.map(sdr => (
-              <SelectItem key={sdr.id} value={sdr.id}>{sdr.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        {/* Closer Filter */}
-        <Select value={filterCloser} onValueChange={setFilterCloser}>
-          <SelectTrigger className="w-[180px]">
-            <User className="w-4 h-4 mr-2" />
-            <SelectValue placeholder="Closer" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos Closers</SelectItem>
-            {closers.map(closer => (
-              <SelectItem key={closer.id} value={closer.id}>{closer.name}</SelectItem>
+            <SelectItem value="all">Todos os responsáveis</SelectItem>
+            {responsibleMembers.map((m) => (
+              <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -912,7 +883,7 @@ export default function PipeWhatsapp() {
         renderCard={(card) => (
           <WhatsappCardComponent
             card={card}
-            onDelete={handleOpenDeleteDialog}
+            onDelete={canDeleteCards ? handleOpenDeleteDialog : undefined}
             isAdmin={isAdmin}
             onQuickAdd={(leadId, leadName, title) => {
               createAcaoDoDia.mutate({ title, lead_id: leadId });

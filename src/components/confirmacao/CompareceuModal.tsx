@@ -15,16 +15,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useTeamMembers } from "@/hooks/useTeamMembers";
-import { Loader2, Users, UserCheck } from "lucide-react";
+import { useResponsibleMembers } from "@/hooks/useTeamMembers";
+import { Loader2, UserCheck } from "lucide-react";
 
 interface CompareceuModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onConfirm: (sdrId: string | null, closerId: string | null) => void;
+  onConfirm: (responsibleId: string | null) => void;
   leadName: string;
-  currentSdrId?: string | null;
-  currentCloserId?: string | null;
+  currentResponsibleId?: string | null;
   isLoading?: boolean;
 }
 
@@ -33,27 +32,21 @@ export function CompareceuModal({
   onOpenChange,
   onConfirm,
   leadName,
-  currentSdrId,
-  currentCloserId,
+  currentResponsibleId,
   isLoading,
 }: CompareceuModalProps) {
-  const { data: teamMembers } = useTeamMembers();
-  const [sdrId, setSdrId] = useState<string | null>(null);
-  const [closerId, setCloserId] = useState<string | null>(null);
+  const responsibleMembers = useResponsibleMembers();
+  const [responsibleId, setResponsibleId] = useState<string | null>(null);
 
-  // Sync state when modal opens or currentIds change
+  // Sync state when modal opens or currentId changes
   useEffect(() => {
     if (open) {
-      setSdrId(currentSdrId || null);
-      setCloserId(currentCloserId || null);
+      setResponsibleId(currentResponsibleId || null);
     }
-  }, [open, currentSdrId, currentCloserId]);
-
-  const sdrs = teamMembers?.filter((m) => m.role === "sdr" && m.is_active) || [];
-  const closers = teamMembers?.filter((m) => m.role === "closer" && m.is_active) || [];
+  }, [open, currentResponsibleId]);
 
   const handleConfirm = () => {
-    onConfirm(sdrId, closerId);
+    onConfirm(responsibleId);
   };
 
   return (
@@ -68,51 +61,28 @@ export function CompareceuModal({
 
         <div className="space-y-4 py-4">
           <p className="text-sm text-muted-foreground">
-            <strong>{leadName}</strong> compareceu à reunião. Selecione o SDR e
-            Closer responsáveis para criar a proposta.
+            <strong>{leadName}</strong> compareceu à reunião. Selecione o
+            responsável para criar a proposta.
           </p>
 
           <div className="space-y-3">
             <div className="space-y-2">
               <Label className="flex items-center gap-2">
-                <Users className="w-4 h-4" />
-                SDR Responsável
-              </Label>
-              <Select
-                value={sdrId || "none"}
-                onValueChange={(v) => setSdrId(v === "none" ? null : v)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione o SDR" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Nenhum</SelectItem>
-                  {sdrs.map((sdr) => (
-                    <SelectItem key={sdr.id} value={sdr.id}>
-                      {sdr.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label className="flex items-center gap-2">
                 <UserCheck className="w-4 h-4" />
-                Closer Responsável
+                Responsável
               </Label>
               <Select
-                value={closerId || "none"}
-                onValueChange={(v) => setCloserId(v === "none" ? null : v)}
+                value={responsibleId || "none"}
+                onValueChange={(v) => setResponsibleId(v === "none" ? null : v)}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Selecione o Closer" />
+                  <SelectValue placeholder="Selecione o responsável" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Nenhum</SelectItem>
-                  {closers.map((closer) => (
-                    <SelectItem key={closer.id} value={closer.id}>
-                      {closer.name}
+                  {responsibleMembers.map((member) => (
+                    <SelectItem key={member.id} value={member.id}>
+                      {member.name}
                     </SelectItem>
                   ))}
                 </SelectContent>

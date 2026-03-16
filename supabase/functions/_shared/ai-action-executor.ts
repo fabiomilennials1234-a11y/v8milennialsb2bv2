@@ -277,11 +277,11 @@ async function executeScheduleMeeting(
   try {
     const { data: lead } = await supabase
       .from("leads")
-      .select("name, email, sdr_id")
+      .select("name, email, responsible_id, sdr_id")
       .eq("id", lead_id)
       .maybeSingle();
 
-    const responsibleUserId = lead?.sdr_id ?? null;
+    const responsibleUserId = lead?.responsible_id ?? lead?.sdr_id ?? null;
 
     if (responsibleUserId) {
       const tokenData = await getValidAccessToken(responsibleUserId, supabase);

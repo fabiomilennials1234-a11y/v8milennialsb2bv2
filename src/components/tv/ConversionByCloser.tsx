@@ -22,7 +22,7 @@ export function ConversionByCloser({ data }: ConversionByCloserProps) {
         <div className="p-2 rounded-lg bg-success/20">
           <TrendingUp className="w-5 h-5 text-success" />
         </div>
-        <h3 className="text-lg font-bold text-foreground">Conversão por Closer</h3>
+        <h3 className="text-lg font-bold text-foreground">Conversão por Vendedor</h3>
       </div>
 
       <div className="space-y-3">

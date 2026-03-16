@@ -222,8 +222,9 @@ interface SidebarPerformanceWidgetProps {
 export function SidebarPerformanceWidget({ collapsed }: SidebarPerformanceWidgetProps) {
   const { data: currentMember, isLoading: memberLoading } = useCurrentTeamMember();
 
-  // Use role from team_member instead of user_roles table
+  // Use metric_type to determine widget type (meetings = ex-SDR, sales = ex-Closer)
   const memberRole = currentMember?.role;
+  const metricType = (currentMember as any)?.metric_type as "meetings" | "sales" | null;
 
   const now = new Date();
   const month = now.getMonth() + 1;
@@ -237,17 +238,18 @@ export function SidebarPerformanceWidget({ collapsed }: SidebarPerformanceWidget
   );
 
   const { data: sdrData, isLoading: sdrLoading } = useSDRConfirmations(
-    memberRole === "sdr" ? currentMember?.id : undefined
+    metricType === "meetings" ? currentMember?.id : undefined
   );
 
   const { data: closerSales, isLoading: closerSalesLoading } = useCloserSales(
-    memberRole === "closer" ? currentMember?.id : undefined
+    metricType === "sales" ? currentMember?.id : undefined
   );
 
   const { hidden: widgetsHidden, toggle: toggleWidgets } = useWidgetsVisibility();
 
-  // Admin e agency não veem o widget
-  if (memberRole === "admin" || memberRole === "agency") return null;
+  // Admin sem metric_type e agency não veem o widget
+  if (memberRole === "admin" && !metricType) return null;
+  if (memberRole === "agency") return null;
 
   // Se não tem membro associado, não mostra
   if (!currentMember && !memberLoading) return null;
@@ -265,8 +267,8 @@ export function SidebarPerformanceWidget({ collapsed }: SidebarPerformanceWidget
     );
   }
 
-  // Widget para SDR
-  if (memberRole === "sdr" && sdrData && commissionSummary) {
+  // Widget para membros com metric_type "meetings" (ex-SDR)
+  if (metricType === "meetings" && sdrData && commissionSummary) {
     const percentage = sdrData.goal > 0 ? (sdrData.confirmed / sdrData.goal) * 100 : 0;
     const isOnTrack = percentage >= 50;
 
@@ -369,9 +371,9 @@ export function SidebarPerformanceWidget({ collapsed }: SidebarPerformanceWidget
           </motion.div>
         )}
 
-        {/* Oráculo Comercial para SDR */}
+        {/* Oráculo Comercial para Reuniões */}
         <OraculoComercial
-          role="sdr"
+          metricType="meetings"
           metrics={{
             confirmados: sdrData.confirmed,
             metaReuniao: sdrData.goal,
@@ -383,8 +385,8 @@ export function SidebarPerformanceWidget({ collapsed }: SidebarPerformanceWidget
     );
   }
 
-  // Widget para Closer - SEMPRE em valor (R$)
-  if (memberRole === "closer" && commissionSummary && closerSales) {
+  // Widget para membros com metric_type "sales" (ex-Closer) - SEMPRE em valor (R$)
+  if (metricType === "sales" && commissionSummary && closerSales) {
     const percentage = closerSales.goal > 0 ? (closerSales.salesValue / closerSales.goal) * 100 : 0;
     const isOnTrack = percentage >= 70;
 
@@ -487,9 +489,9 @@ export function SidebarPerformanceWidget({ collapsed }: SidebarPerformanceWidget
           </motion.div>
         )}
 
-        {/* Oráculo Comercial para Closer */}
+        {/* Oráculo Comercial para Vendas */}
         <OraculoComercial
-          role="closer"
+          metricType="sales"
           metrics={{
             faturamento: closerSales.salesValue,
             metaVendas: closerSales.goal,
@@ -527,7 +529,7 @@ const CRITERIA_LABELS: Record<string, string> = {
   vendas_recorrentes: "vendas recorrentes",
 };
 
-// Badges placeholder — mesmos usados no DashboardCliente quando a org não tem badges no banco
+// Badges placeholder — usados quando a org não tem badges no banco
 const PLACEHOLDER_BADGES: { id: string; name: string; description: string; icon: string; criteria_type: string; criteria_value: number }[] = [
   { id: "ph-1", name: "Primeiro Lead Quente", description: "Receba o primeiro lead quente", icon: "flame", criteria_type: "leads_quentes", criteria_value: 1 },
   { id: "ph-2", name: "Primeira Venda", description: "Feche sua primeira venda", icon: "target", criteria_type: "vendas_count", criteria_value: 1 },
@@ -566,7 +568,7 @@ function SidebarBadgesWidget({
   // Se não há badges no banco, usa placeholders
   const badges = dbBadges.length > 0 ? dbBadges : PLACEHOLDER_BADGES;
 
-  // Mapa de progresso — mesmo usado no DashboardCliente
+  // Mapa de progresso por tipo de badge
   const progressMap: Record<string, number> = {
     leads_quentes: metrics?.reunioesMarcadas ?? 0,
     vendas_count: metrics?.novosClientes ?? 0,

@@ -54,14 +54,19 @@ interface TeamMemberCardProps {
 
 const roleConfig = {
   sdr: {
-    label: "SDR",
+    label: "Vendedor",
     color: "bg-chart-5/10 text-chart-5 border-chart-5/20",
     icon: Calendar,
   },
   closer: {
-    label: "Closer",
+    label: "Vendedor",
     color: "bg-primary/10 text-primary border-primary/20",
     icon: DollarSign,
+  },
+  member: {
+    label: "Membro",
+    color: "bg-muted text-muted-foreground border-border",
+    icon: Calendar,
   },
   admin: {
     label: "Admin",
@@ -187,10 +192,10 @@ export function TeamMemberCard({
         <div className="grid grid-cols-3 gap-3 mb-4">
           <div className="text-center p-2 rounded-lg bg-muted/50">
             <p className="text-lg font-bold text-foreground">
-              {member.role === "closer" ? formatCurrency(stats.sales) : stats.meetings}
+              {(member as any).metric_type === "sales" ? formatCurrency(stats.sales) : stats.meetings}
             </p>
             <p className="text-xs text-muted-foreground">
-              {member.role === "closer" ? "Vendas" : "Reuniões"}
+              {(member as any).metric_type === "sales" ? "Vendas" : "Reuniões"}
             </p>
           </div>
           <div className="text-center p-2 rounded-lg bg-muted/50">

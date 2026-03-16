@@ -17,6 +17,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { useFeaturePermission } from "@/hooks/useUserRole";
 
 export default function Produtos() {
   const { data: products, isLoading } = useProductsWithVariants();
@@ -25,6 +26,9 @@ export default function Produtos() {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [deletingProductId, setDeletingProductId] = useState<string | null>(null);
+  const { allowed: canCreateProduct } = useFeaturePermission("products.create");
+  const { allowed: canEditProduct } = useFeaturePermission("products.edit");
+  const { allowed: canDeleteProduct } = useFeaturePermission("products.delete");
 
   const formatCurrency = (value: number | null) => {
     if (!value) return "—";
@@ -64,7 +68,7 @@ export default function Produtos() {
               <FileSpreadsheet className="mr-2 h-4 w-4" />
               Importar
             </Button>
-            <Button onClick={() => setIsCreateModalOpen(true)}>
+            <Button onClick={() => setIsCreateModalOpen(true)} disabled={!canCreateProduct}>
               <Plus className="mr-2 h-4 w-4" />
               Novo Produto
             </Button>
@@ -132,6 +136,7 @@ export default function Produtos() {
                       <Button
                         variant="ghost"
                         size="icon"
+                        disabled={!canEditProduct}
                         onClick={(e) => {
                           e.stopPropagation();
                           setEditingProduct(product);
@@ -142,6 +147,7 @@ export default function Produtos() {
                       <Button
                         variant="ghost"
                         size="icon"
+                        disabled={!canDeleteProduct}
                         onClick={(e) => {
                           e.stopPropagation();
                           setDeletingProductId(product.id);
@@ -267,7 +273,7 @@ export default function Produtos() {
                 <FileSpreadsheet className="mr-2 h-4 w-4" />
                 Importar
               </Button>
-              <Button onClick={() => setIsCreateModalOpen(true)}>
+              <Button onClick={() => setIsCreateModalOpen(true)} disabled={!canCreateProduct}>
                 <Plus className="mr-2 h-4 w-4" />
                 Novo Produto
               </Button>

@@ -59,7 +59,7 @@ export function UpsellBaseList({ searchQuery, filterPotencial, filterActive }: U
               <TableHead>Empresa</TableHead>
               <TableHead>Potencial</TableHead>
               <TableHead className="text-right">Vendas Total</TableHead>
-              <TableHead>Closer</TableHead>
+              <TableHead>Responsável</TableHead>
               <TableHead>Etapa</TableHead>
               <TableHead>Status</TableHead>
             </TableRow>

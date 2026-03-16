@@ -307,6 +307,9 @@ Deno.serve(withSentry('webhook-calcom', async (req) => {
         updateData.closer_id = closerId;
         console.log("Assigning closer to existing lead:", closerId);
       }
+      if (closerId && !existingLead.responsible_id) {
+        updateData.responsible_id = closerId;
+      }
       
       if (shouldUpdateDate) {
         // Only update compromisso_date if lead doesn't have one
@@ -463,6 +466,7 @@ Deno.serve(withSentry('webhook-calcom', async (req) => {
       
       if (closerId) {
         leadInsert.closer_id = closerId;
+        leadInsert.responsible_id = closerId;
         console.log("Creating new lead with closer:", closerId);
       }
       

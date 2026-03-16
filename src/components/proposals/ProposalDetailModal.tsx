@@ -95,8 +95,8 @@ export function ProposalDetailModal({
   const [formData, setFormData] = useState({
     status: proposta?.status || "marcar_compromisso",
     contract_duration: proposta?.contract_duration || "",
-    closer_id: proposta?.closer_id || "",
-    commitment_date: proposta?.commitment_date 
+    responsible_id: proposta?.responsible_id || proposta?.closer_id || "",
+    commitment_date: proposta?.commitment_date
       ? format(new Date(proposta.commitment_date), "yyyy-MM-dd'T'HH:mm")
       : "",
     notes: proposta?.notes || "",
@@ -119,7 +119,7 @@ export function ProposalDetailModal({
   const updateItem = useUpdatePipePropostaItem();
   const deleteItem = useDeletePipePropostaItem();
 
-  const closers = teamMembers.filter(m => m.role === "closer" && m.is_active);
+  const activeMembers = teamMembers.filter(m => m.is_active);
 
   // Local state for editing items
   const [localItems, setLocalItems] = useState<Array<{
@@ -137,7 +137,7 @@ export function ProposalDetailModal({
       setFormData({
         status: proposta.status || "marcar_compromisso",
         contract_duration: proposta.contract_duration || "",
-        closer_id: proposta.closer_id || "",
+        responsible_id: proposta.responsible_id || proposta.closer_id || "",
         commitment_date: proposta.commitment_date
           ? format(new Date(proposta.commitment_date), "yyyy-MM-dd'T'HH:mm")
           : "",
@@ -218,8 +218,8 @@ export function ProposalDetailModal({
   };
 
   const handleSubmit = async () => {
-    if (!formData.closer_id) {
-      toast.error("Closer responsável é obrigatório");
+    if (!formData.responsible_id) {
+      toast.error("Responsável é obrigatório");
       return;
     }
 
@@ -282,7 +282,8 @@ export function ProposalDetailModal({
         product_id: validItems.length === 1 ? validItems[0].product_id : null,
         sale_value: totalValue,
         contract_duration: formData.contract_duration ? Number(formData.contract_duration) : null,
-        closer_id: formData.closer_id,
+        responsible_id: formData.responsible_id,
+        closer_id: formData.responsible_id,
         commitment_date: formData.commitment_date ? new Date(formData.commitment_date).toISOString() : null,
         notes: formData.notes || null,
         closed_at: formData.status === "vendido" ? new Date().toISOString() :
@@ -610,17 +611,17 @@ export function ProposalDetailModal({
               {/* Form Fields */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
-                  <Label>Closer Responsável *</Label>
+                  <Label>Responsável *</Label>
                   <Select
-                    value={formData.closer_id || "none"}
-                    onValueChange={(v) => setFormData({ ...formData, closer_id: v === "none" ? "" : v })}
+                    value={formData.responsible_id || "none"}
+                    onValueChange={(v) => setFormData({ ...formData, responsible_id: v === "none" ? "" : v })}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Selecionar" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">Nenhum</SelectItem>
-                      {closers.map(c => (
+                      {activeMembers.map(c => (
                         <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                       ))}
                     </SelectContent>
@@ -750,21 +751,12 @@ export function ProposalDetailModal({
 
                   {/* Team */}
                   <div className="grid grid-cols-2 gap-4">
-                    {lead.sdr && (
-                      <div className="flex items-center gap-3 p-3 rounded-lg border">
-                        <User className="w-4 h-4 text-chart-5" />
-                        <div>
-                          <p className="text-xs text-muted-foreground">SDR</p>
-                          <p className="text-sm font-medium">{lead.sdr.name}</p>
-                        </div>
-                      </div>
-                    )}
-                    {lead.closer && (
+                    {(lead.responsible || lead.closer || lead.sdr) && (
                       <div className="flex items-center gap-3 p-3 rounded-lg border">
                         <User className="w-4 h-4 text-primary" />
                         <div>
-                          <p className="text-xs text-muted-foreground">Closer</p>
-                          <p className="text-sm font-medium">{lead.closer.name}</p>
+                          <p className="text-xs text-muted-foreground">Responsável</p>
+                          <p className="text-sm font-medium">{(lead.responsible || lead.closer || lead.sdr)?.name}</p>
                         </div>
                       </div>
                     )}

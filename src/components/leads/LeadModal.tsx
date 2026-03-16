@@ -21,7 +21,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { useTeamMembers, useCurrentTeamMember } from "@/hooks/useTeamMembers";
+import { useTeamMembers, useCurrentTeamMember, useResponsibleMembers } from "@/hooks/useTeamMembers";
 import { useCreateLead, useUpdateLead } from "@/hooks/useLeads";
 import { useLogLeadAction } from "@/hooks/useLogLeadAction";
 import {
@@ -52,8 +52,7 @@ interface LeadModalProps {
   onOpenChange: (open: boolean) => void;
   lead?: any;
   onSuccess?: () => void;
-  defaultSdrId?: string;
-  defaultCloserId?: string;
+  defaultResponsibleId?: string | null;
 }
 
 interface FormData {
@@ -67,15 +66,13 @@ interface FormData {
   faturamento: string;
   urgency: string;
   notes: string;
-  sdr_id: string | null;
-  closer_id: string | null;
+  responsible_id: string | null;
 }
 
 const ACTION_CONFIG: Record<string, { icon: React.ReactNode; label: string; color: string }> = {
   lead_created: { icon: <UserPlus className="w-3.5 h-3.5" />, label: "Lead criado", color: "bg-blue-500/20 text-blue-600" },
   stage_changed: { icon: <ArrowRight className="w-3.5 h-3.5" />, label: "Etapa alterada", color: "bg-yellow-500/20 text-yellow-600" },
-  sdr_assigned: { icon: <UserCheck className="w-3.5 h-3.5" />, label: "SDR atribuido", color: "bg-green-500/20 text-green-600" },
-  closer_assigned: { icon: <UserCheck className="w-3.5 h-3.5" />, label: "Closer atribuido", color: "bg-green-500/20 text-green-600" },
+  responsible_assigned: { icon: <UserCheck className="w-3.5 h-3.5" />, label: "Responsavel atribuido", color: "bg-green-500/20 text-green-600" },
   field_updated: { icon: <Edit2 className="w-3.5 h-3.5" />, label: "Campo atualizado", color: "bg-muted text-muted-foreground" },
   note_added: { icon: <FileText className="w-3.5 h-3.5" />, label: "Nota adicionada", color: "bg-muted text-muted-foreground" },
   meeting_scheduled: { icon: <Calendar className="w-3.5 h-3.5" />, label: "Reuniao agendada", color: "bg-blue-500/20 text-blue-600" },
@@ -176,8 +173,7 @@ export function LeadModal({
   onOpenChange,
   lead,
   onSuccess,
-  defaultSdrId,
-  defaultCloserId
+  defaultResponsibleId
 }: LeadModalProps) {
   const isEditing = !!lead;
 
@@ -192,8 +188,7 @@ export function LeadModal({
     faturamento: lead?.faturamento || "",
     urgency: lead?.urgency || "",
     notes: lead?.notes || "",
-    sdr_id: lead?.sdr_id || lead?.sdr?.id || defaultSdrId || null,
-    closer_id: lead?.closer_id || lead?.closer?.id || defaultCloserId || null,
+    responsible_id: lead?.responsible_id || defaultResponsibleId || "",
   }));
 
   const [customValues, setCustomValues] = useState<Record<string, string>>({});
@@ -227,8 +222,7 @@ export function LeadModal({
     }
   }, [fieldValuesKey, fieldValuesSnapshot]);
 
-  const sdrs = teamMembers.filter(m => m.role === "sdr" && m.is_active);
-  const closers = teamMembers.filter(m => m.role === "closer" && m.is_active);
+  const responsibleMembers = useResponsibleMembers();
 
   const handleSubmit = async () => {
     if (!formData.name.trim()) {
@@ -270,8 +264,7 @@ export function LeadModal({
         ...formData,
         origin: formData.origin as any,
         faturamento: formData.faturamento || null,
-        sdr_id: formData.sdr_id || null,
-        closer_id: formData.closer_id || null,
+        responsible_id: formData.responsible_id || null,
         organization_id: currentTeamMember.organization_id,
       };
 
@@ -286,18 +279,13 @@ export function LeadModal({
         if (formData.phone !== (lead.phone || "")) changes.push("telefone");
         if (formData.segment !== (lead.segment || "")) changes.push("segmento");
         if (formData.notes !== (lead.notes || "")) changes.push("observacoes");
-        if (formData.sdr_id !== (lead.sdr_id || null)) changes.push("SDR");
-        if (formData.closer_id !== (lead.closer_id || null)) changes.push("Closer");
+        if (formData.responsible_id !== (lead.responsible_id || null)) changes.push("Responsavel");
         if (changes.length > 0) {
           logAction({ leadId: lead.id, action: "field_updated", description: `Campos atualizados: ${changes.join(", ")}` });
         }
-        if (formData.sdr_id !== (lead.sdr_id || null)) {
-          const sdrName = teamMembers.find(m => m.id === formData.sdr_id)?.name || "Nenhum";
-          logAction({ leadId: lead.id, action: "sdr_assigned", description: `SDR alterado para "${sdrName}"` });
-        }
-        if (formData.closer_id !== (lead.closer_id || null)) {
-          const closerName = teamMembers.find(m => m.id === formData.closer_id)?.name || "Nenhum";
-          logAction({ leadId: lead.id, action: "closer_assigned", description: `Closer alterado para "${closerName}"` });
+        if (formData.responsible_id !== (lead.responsible_id || null)) {
+          const responsibleName = responsibleMembers.find(m => m.id === formData.responsible_id)?.name || "Nenhum";
+          logAction({ leadId: lead.id, action: "responsible_assigned", description: `Responsavel alterado para "${responsibleName}"` });
         }
       } else {
         // Dedup check: verify if lead with same phone/email already exists
@@ -375,11 +363,10 @@ export function LeadModal({
         faturamento: lead?.faturamento || "",
         urgency: lead?.urgency || "",
         notes: lead?.notes || "",
-        sdr_id: lead?.sdr_id || lead?.sdr?.id || defaultSdrId || null,
-        closer_id: lead?.closer_id || lead?.closer?.id || defaultCloserId || null,
+        responsible_id: lead?.responsible_id || defaultResponsibleId || "",
       });
     }
-  }, [open, lead, defaultSdrId, defaultCloserId]);
+  }, [open, lead, defaultResponsibleId]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -633,42 +620,23 @@ export function LeadModal({
                   <p className="text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-3">Acoes</p>
 
                   {/* Responsaveis */}
-                  <SidebarSection icon={Users} label="Responsaveis">
+                  <SidebarSection icon={Users} label="Responsavel">
                     <div className="grid gap-2">
-                      <div>
-                        <Label className="text-xs text-muted-foreground">SDR</Label>
-                        <Select
-                          value={formData.sdr_id || "none"}
-                          onValueChange={(v) => setFormData({ ...formData, sdr_id: v === "none" ? null : v })}
-                        >
-                          <SelectTrigger className="h-8 text-xs">
-                            <SelectValue placeholder="Selecionar" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="none">Nenhum</SelectItem>
-                            {sdrs.map(sdr => (
-                              <SelectItem key={sdr.id} value={sdr.id}>{sdr.name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div>
-                        <Label className="text-xs text-muted-foreground">Closer</Label>
-                        <Select
-                          value={formData.closer_id || "none"}
-                          onValueChange={(v) => setFormData({ ...formData, closer_id: v === "none" ? null : v })}
-                        >
-                          <SelectTrigger className="h-8 text-xs">
-                            <SelectValue placeholder="Selecionar" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="none">Nenhum</SelectItem>
-                            {closers.map(closer => (
-                              <SelectItem key={closer.id} value={closer.id}>{closer.name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
+                      <Label>Responsavel</Label>
+                      <Select
+                        value={formData.responsible_id || "none"}
+                        onValueChange={(v) => setFormData(prev => ({ ...prev, responsible_id: v === "none" ? null : v }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione o responsavel" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Nenhum</SelectItem>
+                          {responsibleMembers.map((m) => (
+                            <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   </SidebarSection>
 
@@ -701,7 +669,7 @@ export function LeadModal({
                     <ScheduleFollowUpButton
                       leadId={lead.id}
                       leadName={lead.name}
-                      defaultAssignedTo={formData.sdr_id || formData.closer_id || undefined}
+                      defaultAssignedTo={formData.responsible_id || undefined}
                       variant="button"
                       size="sm"
                     />

@@ -564,15 +564,15 @@ async function processPipeQueue(
             const pipeTable = `pipe_${pipeType}`;
             const { data: sdrCounts } = await supabase
               .from(pipeTable)
-              .select("sdr_id")
+              .select("responsible_id")
               .eq("organization_id", orgId)
-              .not("sdr_id", "is", null);
+              .not("responsible_id", "is", null);
 
             const countMap: Record<string, number> = {};
             for (const s of sdrs) countMap[s.id] = 0;
             for (const cl of sdrCounts || []) {
-              if (cl.sdr_id && countMap[cl.sdr_id] !== undefined) {
-                countMap[cl.sdr_id]++;
+              if (cl.responsible_id && countMap[cl.responsible_id] !== undefined) {
+                countMap[cl.responsible_id]++;
               }
             }
 
@@ -596,7 +596,7 @@ async function processPipeQueue(
         const pipeTable = `pipe_${pipeType}`;
         const { error: sdrErr } = await supabase
           .from(pipeTable)
-          .update({ sdr_id: sdrId })
+          .update({ sdr_id: sdrId, responsible_id: sdrId })
           .eq("id", row.pipe_record_id);
 
         if (sdrErr) {
@@ -619,8 +619,8 @@ async function processPipeQueue(
             await supabase.from("lead_history").insert({
               lead_id: lead.id,
               organization_id: orgId,
-              action: "pipe_sdr_assigned",
-              description: `SDR atribuído automaticamente: ${sdrData?.name || sdrId} (${mode}) no funil ${pipeType}`,
+              action: "responsible_assigned",
+              description: `Responsável atribuído automaticamente: ${sdrData?.name || sdrId} (${mode}) no funil ${pipeType}`,
             });
           } catch (_) { /* ignore */ }
 

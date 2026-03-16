@@ -26,7 +26,7 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useTeamMembers, useCurrentTeamMember } from "@/hooks/useTeamMembers";
 import { useCommissions, useCommissionSummary } from "@/hooks/useCommissions";
-import { useIsAdmin } from "@/hooks/useUserRole";
+import { useFeaturePermission } from "@/hooks/useUserRole";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { useAvatarMap } from "@/hooks/useAvatarMap";
@@ -93,7 +93,7 @@ function MemberCommissionCard({ memberId, memberName, memberRole, month, year, a
               <div>
                 <CardTitle className="text-base">{memberName}</CardTitle>
                 <Badge variant="outline" className="text-xs mt-0.5">
-                  {memberRole === "closer" ? "Closer" : "SDR"}
+                  {memberRole}
                 </Badge>
               </div>
             </div>
@@ -209,47 +209,47 @@ export default function Comissoes() {
   const [selectedMonth, setSelectedMonth] = useState(currentDate.getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(currentDate.getFullYear());
 
-  const { isAdmin, isLoading: isLoadingAdmin } = useIsAdmin();
+  const { allowed: canViewAll, isLoading: isLoadingAdmin } = useFeaturePermission('commissions.view_all');
   const { data: currentMember, isLoading: isLoadingCurrentMember } = useCurrentTeamMember();
   const { data: teamMembers = [], isLoading: isLoadingMembers } = useTeamMembers();
   const { data: commissions = [], isLoading: isLoadingCommissions } = useCommissions(selectedMonth, selectedYear);
   const avatarMap = useAvatarMap();
 
-  // Filter members based on admin status
-  const visibleClosers = useMemo(() => {
-    const allClosers = teamMembers.filter(m => m.role === "closer" && m.is_active);
-    if (isAdmin) return allClosers;
-    if (currentMember?.role === "closer") {
-      return allClosers.filter(m => m.id === currentMember.id);
+  // Filter members based on metric_type and permission
+  const visibleVendas = useMemo(() => {
+    const allVendas = teamMembers.filter(m => (m as any).metric_type === "sales" && m.is_active);
+    if (canViewAll) return allVendas;
+    if ((currentMember as any)?.metric_type === "sales") {
+      return allVendas.filter(m => m.id === currentMember!.id);
     }
     return [];
-  }, [teamMembers, isAdmin, currentMember]);
+  }, [teamMembers, canViewAll, currentMember]);
 
-  const visibleSdrs = useMemo(() => {
-    const allSdrs = teamMembers.filter(m => m.role === "sdr" && m.is_active);
-    if (isAdmin) return allSdrs;
-    if (currentMember?.role === "sdr") {
-      return allSdrs.filter(m => m.id === currentMember.id);
+  const visibleReunioes = useMemo(() => {
+    const allReunioes = teamMembers.filter(m => (m as any).metric_type === "meetings" && m.is_active);
+    if (canViewAll) return allReunioes;
+    if ((currentMember as any)?.metric_type === "meetings") {
+      return allReunioes.filter(m => m.id === currentMember!.id);
     }
     return [];
-  }, [teamMembers, isAdmin, currentMember]);
+  }, [teamMembers, canViewAll, currentMember]);
 
-  // Determine which tab to show based on user role
+  // Determine which tab to show based on metric_type
   const defaultTab = useMemo(() => {
-    if (isAdmin) return "closers";
-    if (currentMember?.role === "sdr") return "sdrs";
-    return "closers";
-  }, [isAdmin, currentMember]);
+    if (canViewAll) return "vendas";
+    if ((currentMember as any)?.metric_type === "meetings") return "reunioes";
+    return "vendas";
+  }, [canViewAll, currentMember]);
 
-  // Summary stats (only for admins)
-  const totalPaidCommissions = useMemo(() => 
-    isAdmin ? commissions.filter(c => c.paid).reduce((sum, c) => sum + Number(c.amount || 0), 0) : 0,
-    [commissions, isAdmin]
+  // Summary stats (only for users with view_all permission)
+  const totalPaidCommissions = useMemo(() =>
+    canViewAll ? commissions.filter(c => c.paid).reduce((sum, c) => sum + Number(c.amount || 0), 0) : 0,
+    [commissions, canViewAll]
   );
 
-  const totalPendingCommissions = useMemo(() => 
-    isAdmin ? commissions.filter(c => !c.paid).reduce((sum, c) => sum + Number(c.amount || 0), 0) : 0,
-    [commissions, isAdmin]
+  const totalPendingCommissions = useMemo(() =>
+    canViewAll ? commissions.filter(c => !c.paid).reduce((sum, c) => sum + Number(c.amount || 0), 0) : 0,
+    [commissions, canViewAll]
   );
 
   const years = Array.from({ length: 5 }, (_, i) => currentDate.getFullYear() - i);
@@ -257,7 +257,7 @@ export default function Comissoes() {
   const isLoading = isLoadingAdmin || isLoadingCurrentMember || isLoadingMembers;
 
   // Check if user has no team member record
-  const hasNoAccess = !isAdmin && !currentMember && !isLoading;
+  const hasNoAccess = !canViewAll && !currentMember && !isLoading;
 
   return (
     <div className="space-y-6">
@@ -341,16 +341,16 @@ export default function Comissoes() {
         </CardContent>
       </Card>
 
-      {/* Stats Cards - Only for admins */}
-      {isAdmin && (
+      {/* Stats Cards - Only for users with view_all permission */}
+      {canViewAll && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             className="glass-card p-4"
           >
-            <p className="text-xs text-muted-foreground mb-1">Total Closers</p>
-            <p className="text-xl font-bold">{visibleClosers.length}</p>
+            <p className="text-xs text-muted-foreground mb-1">Total Vendas</p>
+            <p className="text-xl font-bold">{visibleVendas.length}</p>
           </motion.div>
           <motion.div
             initial={{ opacity: 0, y: 10 }}
@@ -358,8 +358,8 @@ export default function Comissoes() {
             transition={{ delay: 0.05 }}
             className="glass-card p-4"
           >
-            <p className="text-xs text-muted-foreground mb-1">Total SDRs</p>
-            <p className="text-xl font-bold">{visibleSdrs.length}</p>
+            <p className="text-xs text-muted-foreground mb-1">Total Reuniões</p>
+            <p className="text-xl font-bold">{visibleReunioes.length}</p>
           </motion.div>
           <motion.div
             initial={{ opacity: 0, y: 10 }}
@@ -398,37 +398,37 @@ export default function Comissoes() {
       {/* Commission Cards by Role */}
       {!hasNoAccess && (
         <Tabs defaultValue={defaultTab} className="w-full">
-          <TabsList className={`grid w-full max-w-md ${isAdmin ? 'grid-cols-2' : 'grid-cols-1'}`}>
-            {(isAdmin || currentMember?.role === "closer") && (
-              <TabsTrigger value="closers" className="gap-2">
+          <TabsList className={`grid w-full max-w-md ${canViewAll ? 'grid-cols-2' : 'grid-cols-1'}`}>
+            {(canViewAll || (currentMember as any)?.metric_type === "sales") && (
+              <TabsTrigger value="vendas" className="gap-2">
                 <Users className="w-4 h-4" />
-                {isAdmin ? `Closers (${visibleClosers.length})` : "Minha Comissão"}
+                {canViewAll ? `Vendas (${visibleVendas.length})` : "Minha Comissão"}
               </TabsTrigger>
             )}
-            {(isAdmin || currentMember?.role === "sdr") && (
-              <TabsTrigger value="sdrs" className="gap-2">
+            {(canViewAll || (currentMember as any)?.metric_type === "meetings") && (
+              <TabsTrigger value="reunioes" className="gap-2">
                 <Users className="w-4 h-4" />
-                {isAdmin ? `SDRs (${visibleSdrs.length})` : "Minha Comissão"}
+                {canViewAll ? `Reuniões (${visibleReunioes.length})` : "Minha Comissão"}
               </TabsTrigger>
             )}
           </TabsList>
 
-          <TabsContent value="closers" className="mt-4">
+          <TabsContent value="vendas" className="mt-4">
             {isLoading ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {[1, 2, 3].map(i => (
                   <Skeleton key={i} className="h-[300px]" />
                 ))}
               </div>
-            ) : visibleClosers.length === 0 ? (
+            ) : visibleVendas.length === 0 ? (
               <Card className="glass-card">
                 <CardContent className="py-8 text-center text-muted-foreground">
-                  {isAdmin ? "Nenhum closer cadastrado" : "Sem dados de comissão"}
+                  {canViewAll ? "Nenhum membro de vendas cadastrado" : "Sem dados de comissão"}
                 </CardContent>
               </Card>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {visibleClosers.map(member => (
+                {visibleVendas.map(member => (
                   <MemberCommissionCard
                     key={member.id}
                     memberId={member.id}
@@ -443,22 +443,22 @@ export default function Comissoes() {
             )}
           </TabsContent>
 
-          <TabsContent value="sdrs" className="mt-4">
+          <TabsContent value="reunioes" className="mt-4">
             {isLoading ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {[1, 2, 3].map(i => (
                   <Skeleton key={i} className="h-[300px]" />
                 ))}
               </div>
-            ) : visibleSdrs.length === 0 ? (
+            ) : visibleReunioes.length === 0 ? (
               <Card className="glass-card">
                 <CardContent className="py-8 text-center text-muted-foreground">
-                  {isAdmin ? "Nenhum SDR cadastrado" : "Sem dados de comissão"}
+                  {canViewAll ? "Nenhum membro de reuniões cadastrado" : "Sem dados de comissão"}
                 </CardContent>
               </Card>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {visibleSdrs.map(member => (
+                {visibleReunioes.map(member => (
                   <MemberCommissionCard
                     key={member.id}
                     memberId={member.id}

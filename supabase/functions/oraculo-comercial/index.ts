@@ -8,12 +8,13 @@ const corsHeaders = {
 };
 
 interface MetricsData {
-  role: "sdr" | "closer";
-  // SDR metrics
+  role?: "sdr" | "closer"; // deprecated, use metric_type
+  metric_type?: "meetings" | "sales";
+  // Meetings (SDR) metrics
   confirmados?: number;
   metaReuniao?: number;
   percentualMeta?: number;
-  // Closer metrics
+  // Sales (Closer) metrics
   faturamento?: number;
   metaVendas?: number;
   totalGanhos?: number;
@@ -55,7 +56,10 @@ FORMATO OBRIGATÓRIO (JSON):
 
     let userPrompt = "";
 
-    if (metrics.role === "sdr") {
+    // Suporta novo campo metric_type com fallback para role legado
+    const isMeetings = metrics.metric_type === "meetings" || (!metrics.metric_type && metrics.role === "sdr");
+
+    if (isMeetings) {
       const progresso = metrics.percentualMeta || 0;
       const confirmados = metrics.confirmados || 0;
       const meta = metrics.metaReuniao || 20;
@@ -149,7 +153,7 @@ Qual o problema principal e qual a tarefa prioritária de hoje?`;
       module: "copilot",
       action: "oraculo_analyze",
       status: "success",
-      payloadSnapshot: { role: metrics.role },
+      payloadSnapshot: { metric_type: metrics.metric_type || (metrics.role === "sdr" ? "meetings" : "sales"), role: metrics.role },
     });
 
     return new Response(JSON.stringify(result), {

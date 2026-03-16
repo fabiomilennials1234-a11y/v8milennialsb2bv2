@@ -11,7 +11,7 @@ type CampanhaStatus = Database["public"]["Enums"]["upsell_campanha_status"];
 interface UpsellCampanhasKanbanProps {
   searchQuery: string;
   filterStatus: string;
-  filterCloser: string;
+  filterResponsible: string;
 }
 
 const CAMPANHA_COLUMNS: { id: CampanhaStatus; title: string; color: string }[] = [
@@ -25,7 +25,7 @@ const CAMPANHA_COLUMNS: { id: CampanhaStatus; title: string; color: string }[] =
   { id: "perdido", title: "Perdido", color: "#EF4444" },
 ];
 
-export function UpsellCampanhasKanban({ searchQuery, filterStatus, filterCloser }: UpsellCampanhasKanbanProps) {
+export function UpsellCampanhasKanban({ searchQuery, filterStatus, filterResponsible }: UpsellCampanhasKanbanProps) {
   const { data: campanhas = [] } = useUpsellCampanhas();
   const updateCampanha = useUpdateUpsellCampanha();
 
@@ -45,7 +45,7 @@ export function UpsellCampanhasKanban({ searchQuery, filterStatus, filterCloser 
           !(client?.company || "").toLowerCase().includes(q)) return false;
     }
     if (filterStatus !== "all" && c.status !== filterStatus) return false;
-    if (filterCloser !== "all" && c.closer_id !== filterCloser) return false;
+    if (filterResponsible !== "all" && (c as any).responsible_id !== filterResponsible && c.closer_id !== filterResponsible) return false;
     return true;
   });
 

@@ -13,7 +13,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { useLeads } from "@/hooks/useLeads";
-import { useTeamMembers } from "@/hooks/useTeamMembers";
+import { useResponsibleMembers } from "@/hooks/useTeamMembers";
 import { useCreatePipeConfirmacao, PipeConfirmacaoStatus } from "@/hooks/usePipeConfirmacao";
 import { useLogLeadAction } from "@/hooks/useLogLeadAction";
 import { useGoogleCalendarStatus } from "@/hooks/useGoogleCalendar";
@@ -27,10 +27,8 @@ interface AddMeetingModalProps {
   onSuccess?: () => void;
   /** When provided, the lead is pre-selected and locked (no email search / dropdown) */
   prefilledLeadId?: string;
-  /** When provided, the SDR is pre-selected */
-  prefilledSdrId?: string;
-  /** When provided, the closer is pre-selected */
-  prefilledCloserId?: string;
+  /** When provided, the responsible member is pre-selected */
+  prefilledResponsibleId?: string | null;
 }
 
 export function AddMeetingModal({
@@ -38,15 +36,13 @@ export function AddMeetingModal({
   onOpenChange,
   onSuccess,
   prefilledLeadId,
-  prefilledSdrId,
-  prefilledCloserId,
+  prefilledResponsibleId,
 }: AddMeetingModalProps) {
   const [email, setEmail] = useState("");
   const [selectedLeadId, setSelectedLeadId] = useState<string>(prefilledLeadId ?? "");
   const [meetingDate, setMeetingDate] = useState<Date | undefined>();
   const [meetingTime, setMeetingTime] = useState("10:00");
-  const [sdrId, setSdrId] = useState<string>(prefilledSdrId ?? "");
-  const [closerId, setCloserId] = useState<string>(prefilledCloserId ?? "");
+  const [responsibleId, setResponsibleId] = useState<string>(prefilledResponsibleId ?? "");
   const [notes, setNotes] = useState("");
   const [status, setStatus] = useState<PipeConfirmacaoStatus>("reuniao_marcada");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -57,7 +53,7 @@ export function AddMeetingModal({
 
   const { session } = useAuth();
   const { data: leads, isLoading: leadsLoading } = useLeads();
-  const { data: teamMembers, isLoading: membersLoading } = useTeamMembers();
+  const responsibleMembers = useResponsibleMembers();
   const createPipeConfirmacao = useCreatePipeConfirmacao();
   const logAction = useLogLeadAction();
 
@@ -66,9 +62,6 @@ export function AddMeetingModal({
   const { data: sharingData } = useCalendarSharing();
 
   const ownUserId = session?.user?.id ?? "";
-
-  const sdrs = teamMembers?.filter(m => m.role === "sdr" && m.is_active) || [];
-  const closers = teamMembers?.filter(m => m.role === "closer" && m.is_active) || [];
 
   // Build list of calendars available to create events in
   const calendarOptions = useMemo(() => {
@@ -114,10 +107,9 @@ export function AddMeetingModal({
   useEffect(() => {
     if (open) {
       if (prefilledLeadId) setSelectedLeadId(prefilledLeadId);
-      if (prefilledSdrId)  setSdrId(prefilledSdrId);
-      if (prefilledCloserId) setCloserId(prefilledCloserId);
+      if (prefilledResponsibleId) setResponsibleId(prefilledResponsibleId);
     }
-  }, [open, prefilledLeadId, prefilledSdrId, prefilledCloserId]);
+  }, [open, prefilledLeadId, prefilledResponsibleId]);
 
   // Reset form when modal closes
   useEffect(() => {
@@ -126,8 +118,7 @@ export function AddMeetingModal({
       setSelectedLeadId(prefilledLeadId ?? "");
       setMeetingDate(undefined);
       setMeetingTime("10:00");
-      setSdrId(prefilledSdrId ?? "");
-      setCloserId(prefilledCloserId ?? "");
+      setResponsibleId(prefilledResponsibleId ?? "");
       setNotes("");
       setStatus("reuniao_marcada");
       setCreateGoogleEvent(true);
@@ -157,8 +148,7 @@ export function AddMeetingModal({
       const pipeData = await createPipeConfirmacao.mutateAsync({
         lead_id: selectedLeadId,
         meeting_date: meetingDateTime.toISOString(),
-        sdr_id: sdrId || null,
-        closer_id: closerId || null,
+        responsible_id: responsibleId || null,
         notes: notes || null,
         status,
       });
@@ -397,41 +387,22 @@ export function AddMeetingModal({
             </Select>
           </div>
 
-          {/* SDR & Closer */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>SDR Responsável</Label>
-              <Select value={sdrId || "none"} onValueChange={(v) => setSdrId(v === "none" ? "" : v)}>
-                <SelectTrigger>
-                  <SelectValue placeholder={membersLoading ? "Carregando..." : "Selecione"} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Nenhum</SelectItem>
-                  {sdrs.filter(sdr => sdr.id).map((sdr) => (
-                    <SelectItem key={sdr.id} value={sdr.id}>
-                      {sdr.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Closer Responsável</Label>
-              <Select value={closerId || "none"} onValueChange={(v) => setCloserId(v === "none" ? "" : v)}>
-                <SelectTrigger>
-                  <SelectValue placeholder={membersLoading ? "Carregando..." : "Selecione"} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Nenhum</SelectItem>
-                  {closers.filter(closer => closer.id).map((closer) => (
-                    <SelectItem key={closer.id} value={closer.id}>
-                      {closer.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          {/* Responsável */}
+          <div className="space-y-2">
+            <Label>Responsável</Label>
+            <Select value={responsibleId || "none"} onValueChange={(v) => setResponsibleId(v === "none" ? "" : v)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Nenhum</SelectItem>
+                {responsibleMembers.filter(m => m.id).map((member) => (
+                  <SelectItem key={member.id} value={member.id}>
+                    {member.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Notes */}

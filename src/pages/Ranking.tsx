@@ -12,13 +12,18 @@ import { useRankingData } from "@/hooks/useDashboardMetrics";
 interface RankingUser {
   id: string;
   name: string;
-  role: "Closer" | "SDR";
+  role: string;
   value: number;
   conversions?: number;
   meetings?: number;
   goalProgress: number;
   position: number;
 }
+
+const roleDisplayLabels: Record<string, string> = {
+  Closer: "Vendas",
+  SDR: "Reuniões",
+};
 
 const positionStyles = {
   1: { icon: Crown, color: "text-yellow-500", bg: "bg-gradient-to-br from-yellow-400 to-amber-500", border: "border-yellow-400" },
@@ -100,7 +105,7 @@ function RankingCard({ user, showValue = true, avatarUrl }: { user: RankingUser;
               </div>
             )}
           </div>
-          <p className="text-sm text-muted-foreground">{user.role}</p>
+          <p className="text-sm text-muted-foreground">{roleDisplayLabels[user.role] || user.role}</p>
         </div>
 
         {/* Stats */}
@@ -169,7 +174,7 @@ export default function Ranking() {
         <img src={badgeIcon} alt="" className="w-16 h-16 opacity-80" />
       </div>
 
-      {/* Podium for Top 3 Closers */}
+      {/* Podium for Top 3 */}
       {isLoading ? (
         <Skeleton className="h-[300px] rounded-2xl" />
       ) : closers.length >= 3 ? (
@@ -214,7 +219,7 @@ export default function Ranking() {
       ) : (
         <div className="bg-muted/50 rounded-2xl p-8 text-center">
           <p className="text-muted-foreground">Nenhum dado de ranking disponível.</p>
-          <p className="text-sm text-muted-foreground mt-2">Cadastre closers e registre vendas.</p>
+          <p className="text-sm text-muted-foreground mt-2">Cadastre membros e registre vendas.</p>
         </div>
       )}
 
@@ -223,11 +228,11 @@ export default function Ranking() {
         <TabsList className="grid w-full max-w-md grid-cols-2">
           <TabsTrigger value="closers" className="flex items-center gap-2">
             <TrendingUp className="w-4 h-4" />
-            Closers ({closers.length})
+            Vendas ({closers.length})
           </TabsTrigger>
           <TabsTrigger value="sdrs" className="flex items-center gap-2">
             <Calendar className="w-4 h-4" />
-            SDRs ({sdrs.length})
+            Agendamentos ({sdrs.length})
           </TabsTrigger>
         </TabsList>
 
@@ -239,7 +244,7 @@ export default function Ranking() {
               <RankingCard key={user.id} user={user} avatarUrl={avatarMap.get(user.id)} />
             ))
           ) : (
-            <p className="text-muted-foreground text-center py-8">Nenhum closer cadastrado.</p>
+            <p className="text-muted-foreground text-center py-8">Nenhum vendedor cadastrado.</p>
           )}
         </TabsContent>
 
@@ -251,7 +256,7 @@ export default function Ranking() {
               <RankingCard key={user.id} user={user} showValue={false} avatarUrl={avatarMap.get(user.id)} />
             ))
           ) : (
-            <p className="text-muted-foreground text-center py-8">Nenhum SDR cadastrado.</p>
+            <p className="text-muted-foreground text-center py-8">Nenhum membro cadastrado.</p>
           )}
         </TabsContent>
       </Tabs>

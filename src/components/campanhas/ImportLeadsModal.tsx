@@ -48,7 +48,7 @@ export function ImportLeadsModal({
   const [previewResult, setPreviewResult] = useState<FilePreviewResult | null>(null);
   const [userColumnMapping, setUserColumnMapping] = useState<Record<string, string>>({});
   const [selectedStageId, setSelectedStageId] = useState<string>("");
-  const [selectedSdrId, setSelectedSdrId] = useState<string>("");
+  const [selectedResponsibleId, setSelectedResponsibleId] = useState<string>("");
   const [autoDistribute, setAutoDistribute] = useState(false);
   const [distributionMode, setDistributionMode] = useState<"round_robin" | "random">("round_robin");
   const [isDragging, setIsDragging] = useState(false);
@@ -61,7 +61,7 @@ export function ImportLeadsModal({
       const distAssignedTo = (campanha as any)?.lead_assigned_to;
       if (distMode === "single" && distAssignedTo) {
         setAutoDistribute(false);
-        setSelectedSdrId(distAssignedTo);
+        setSelectedResponsibleId(distAssignedTo);
       } else if (distMode === "random" || distMode === "round_robin") {
         setAutoDistribute(true);
         setDistributionMode(distMode);
@@ -77,7 +77,7 @@ export function ImportLeadsModal({
   const { data: customFields = [] } = useLeadCustomFields();
   const { allowed: canImport, isLoading: permLoading } = useCanPerformAction("import_leads");
   const customFieldNames = customFields.map((f) => f.field_name);
-  const sdrMembers = members.filter((m) => m.role === "sdr");
+  const allMembers = members;
 
   // Set default stage to first stage (Lead)
   const defaultStage = stages.find(s => s.position === 0) || stages[0];
@@ -149,20 +149,18 @@ export function ImportLeadsModal({
     setStep("importing");
 
     try {
-      const sdrMemberIds = sdrMembers.length > 0 ? sdrMembers.map(m => m.team_member_id) : members.map(m => m.team_member_id);
-      const closerMemberIds = members.filter(m => m.role === "closer").map(m => m.team_member_id);
-      const closerDistMode = campanha?.closer_distribution_mode as "round_robin" | "random" | undefined;
+      const memberIds = allMembers.map(m => m.team_member_id);
       await importLeads(
         file,
         campanhaId,
         selectedStageId,
-        autoDistribute ? undefined : (selectedSdrId === "none" ? undefined : selectedSdrId || undefined),
+        autoDistribute ? undefined : (selectedResponsibleId === "none" ? undefined : selectedResponsibleId || undefined),
         autoDistribute,
-        autoDistribute ? sdrMemberIds : undefined,
+        autoDistribute ? memberIds : undefined,
         stages.map((s) => ({ id: s.id, name: s.name })),
         autoDistribute ? distributionMode : undefined,
-        closerMemberIds.length > 0 ? closerMemberIds : undefined,
-        closerDistMode === "round_robin" || closerDistMode === "random" ? closerDistMode : undefined
+        undefined,
+        undefined
       );
       setStep("complete");
     } catch (error) {
@@ -180,7 +178,7 @@ export function ImportLeadsModal({
     setPreviewResult(null);
     setUserColumnMapping({});
     setSelectedStageId("");
-    setSelectedSdrId("");
+    setSelectedResponsibleId("");
     setAutoDistribute(false);
     resetImport();
     onOpenChange(false);
@@ -407,7 +405,7 @@ export function ImportLeadsModal({
                     <div>
                       <Label className="font-medium">Distribuição Automática</Label>
                       <p className="text-xs text-muted-foreground">
-                        Distribuir leads igualmente entre {sdrMembers.length > 0 ? sdrMembers.length : members.length} SDRs
+                        Distribuir leads igualmente entre {allMembers.length} responsáveis
                       </p>
                     </div>
                   </div>
@@ -415,17 +413,17 @@ export function ImportLeadsModal({
                     checked={autoDistribute}
                     onCheckedChange={(checked) => {
                       setAutoDistribute(checked);
-                      if (checked) setSelectedSdrId("");
+                      if (checked) setSelectedResponsibleId("");
                     }}
                   />
                 </div>
               )}
 
-              {/* SDR Selection - Only show if not auto distributing */}
+              {/* Responsible Selection - Only show if not auto distributing */}
               {!autoDistribute && (
                 <div className="space-y-2">
-                  <Label>Atribuir a Vendedor (opcional)</Label>
-                  <Select value={selectedSdrId} onValueChange={setSelectedSdrId}>
+                  <Label>Atribuir a Responsável (opcional)</Label>
+                  <Select value={selectedResponsibleId} onValueChange={setSelectedResponsibleId}>
                     <SelectTrigger>
                       <SelectValue placeholder="Sem atribuição" />
                     </SelectTrigger>

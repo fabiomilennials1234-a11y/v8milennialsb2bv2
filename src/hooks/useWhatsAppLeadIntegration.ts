@@ -24,6 +24,7 @@ export function useLeadByPhone(phone: string | null) {
         .from("leads")
         .select(`
           *,
+          responsible:team_members!leads_responsible_id_fkey(id, name),
           sdr:team_members!leads_sdr_id_fkey(id, name),
           closer:team_members!leads_closer_id_fkey(id, name),
           lead_tags(tag:tags(id, name, color))
@@ -131,13 +132,15 @@ export function useCreateLeadFromWhatsApp() {
         console.log("[WhatsApp Lead] Promovendo shadow lead:", existingLead.id);
 
         // Atualizar shadow lead com dados completos
+        const effectiveSdr = sdrId || teamMember.id;
         await supabase
           .from("leads")
           .update({
             is_shadow: false,
             name: pushName || `WhatsApp ${normalizedPhone.slice(-4)}`,
             origin: origin || "whatsapp",
-            sdr_id: sdrId || teamMember.id,
+            responsible_id: effectiveSdr,
+            sdr_id: effectiveSdr,
             notes: "Lead criado via WhatsApp (promovido de shadow)",
           })
           .eq("id", existingLead.id);
@@ -155,6 +158,7 @@ export function useCreateLeadFromWhatsApp() {
             await supabase.from("pipe_whatsapp").insert({
               lead_id: existingLead.id,
               status: "novo",
+              responsible_id: effectiveSdrIdForShadow,
               sdr_id: effectiveSdrIdForShadow,
               organization_id: teamMember.organization_id,
             });
@@ -163,6 +167,7 @@ export function useCreateLeadFromWhatsApp() {
           await supabase.from("pipe_confirmacao").insert({
             lead_id: existingLead.id,
             status: "pre_confirmacao",
+            responsible_id: effectiveSdrIdForShadow,
             sdr_id: effectiveSdrIdForShadow,
             organization_id: teamMember.organization_id,
           });
@@ -170,6 +175,7 @@ export function useCreateLeadFromWhatsApp() {
           await supabase.from("pipe_propostas").insert({
             lead_id: existingLead.id,
             status: "proposta_enviada",
+            responsible_id: effectiveSdrIdForShadow,
             closer_id: effectiveSdrIdForShadow,
             organization_id: teamMember.organization_id,
           });
@@ -186,6 +192,7 @@ export function useCreateLeadFromWhatsApp() {
               campanha_id: campanhaId,
               lead_id: existingLead.id,
               stage_id: stages[0].id,
+              responsible_id: effectiveSdrIdForShadow,
               sdr_id: effectiveSdrIdForShadow,
             });
           }
@@ -207,6 +214,7 @@ export function useCreateLeadFromWhatsApp() {
         name: pushName || `WhatsApp ${normalizedPhone.slice(-4)}`,
         phone: normalizedPhone,
         origin: origin || "whatsapp",
+        responsible_id: effectiveSdrId,
         sdr_id: effectiveSdrId,
         notes: `Lead criado via WhatsApp`,
         organization_id: teamMember.organization_id,
@@ -236,6 +244,7 @@ export function useCreateLeadFromWhatsApp() {
           const { error: pipeError } = await supabase.from("pipe_whatsapp").insert({
             lead_id: newLead.id,
             status: "novo",
+            responsible_id: effectiveSdrId,
             sdr_id: effectiveSdrId,
             organization_id: teamMember.organization_id,
           });
@@ -249,6 +258,7 @@ export function useCreateLeadFromWhatsApp() {
         const { error: pipeError } = await supabase.from("pipe_confirmacao").insert({
           lead_id: newLead.id,
           status: "pre_confirmacao",
+          responsible_id: effectiveSdrId,
           sdr_id: effectiveSdrId,
           organization_id: teamMember.organization_id,
         });
@@ -259,6 +269,7 @@ export function useCreateLeadFromWhatsApp() {
         const { error: pipeError } = await supabase.from("pipe_propostas").insert({
           lead_id: newLead.id,
           status: "proposta_enviada",
+          responsible_id: effectiveSdrId,
           closer_id: effectiveSdrId,
           organization_id: teamMember.organization_id,
         });
@@ -279,6 +290,7 @@ export function useCreateLeadFromWhatsApp() {
             campanha_id: campanhaId,
             lead_id: newLead.id,
             stage_id: stages[0].id,
+            responsible_id: effectiveSdrId,
             sdr_id: effectiveSdrId,
           });
           if (campError) {
@@ -368,6 +380,7 @@ export function useLinkLeadToWhatsApp() {
         const { error: pipeError } = await supabase.from("pipe_whatsapp").insert({
           lead_id: leadId,
           status: "novo",
+          responsible_id: teamMember.id,
           sdr_id: teamMember.id,
           organization_id: teamMember.organization_id,
         });

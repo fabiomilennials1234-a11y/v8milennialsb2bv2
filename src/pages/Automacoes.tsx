@@ -31,6 +31,7 @@ import {
   Timer,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useFeaturePermission } from "@/hooks/useUserRole";
 import { TRIGGER_LABELS } from "@/types/workflow";
 import type { Workflow as WorkflowType } from "@/types/workflow";
 import { formatDistanceToNow } from "date-fns";
@@ -50,6 +51,9 @@ export default function Automacoes() {
   const toggleWorkflow = useToggleWorkflow();
   const deleteWorkflow = useDeleteWorkflow();
   const [deleteTarget, setDeleteTarget] = useState<WorkflowType | null>(null);
+  const { allowed: canCreateAutomation } = useFeaturePermission("automations.create");
+  const { allowed: canEditAutomation } = useFeaturePermission("automations.edit");
+  const { allowed: canDeleteAutomation } = useFeaturePermission("automations.delete");
 
   const activeWorkflows = workflows?.filter((w) => w.is_active) || [];
   const inactiveWorkflows = workflows?.filter((w) => !w.is_active) || [];
@@ -126,6 +130,7 @@ export default function Automacoes() {
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8"
+                disabled={!canEditAutomation}
                 onClick={(e) => {
                   e.stopPropagation();
                   navigate(`/automacoes/${workflow.id}`);
@@ -137,6 +142,7 @@ export default function Automacoes() {
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8 text-destructive hover:text-destructive"
+                disabled={!canDeleteAutomation}
                 onClick={(e) => {
                   e.stopPropagation();
                   setDeleteTarget(workflow);
@@ -170,7 +176,7 @@ export default function Automacoes() {
             Crie e gerencie workflows visuais para automatizar ações no CRM
           </p>
         </div>
-        <Button onClick={() => navigate("/automacoes/novo")}>
+        <Button onClick={() => navigate("/automacoes/novo")} disabled={!canCreateAutomation}>
           <Plus className="w-4 h-4 mr-2" />
           Novo Workflow
         </Button>
@@ -191,7 +197,7 @@ export default function Automacoes() {
               Crie seu primeiro workflow visual para automatizar ações como enviar mensagens,
               mover leads e mais.
             </p>
-            <Button onClick={() => navigate("/automacoes/novo")}>
+            <Button onClick={() => navigate("/automacoes/novo")} disabled={!canCreateAutomation}>
               <Plus className="w-4 h-4 mr-2" />
               Criar Primeiro Workflow
             </Button>

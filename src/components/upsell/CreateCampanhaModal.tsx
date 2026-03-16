@@ -28,7 +28,7 @@ export function CreateCampanhaModal({ open, onOpenChange }: CreateCampanhaModalP
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState({
     client_id: "",
-    closer_id: "",
+    responsible_id: "",
     mrr_planejado: "",
     projeto_planejado: "",
     notes: "",
@@ -46,7 +46,7 @@ export function CreateCampanhaModal({ open, onOpenChange }: CreateCampanhaModalP
       await createCampanha.mutateAsync({
         organization_id: organizationId,
         client_id: formData.client_id,
-        closer_id: formData.closer_id || null,
+        responsible_id: formData.responsible_id || null,
         mrr_planejado: formData.mrr_planejado ? parseFloat(formData.mrr_planejado) : 0,
         projeto_planejado: formData.projeto_planejado ? parseFloat(formData.projeto_planejado) : 0,
         notes: formData.notes || null,
@@ -56,7 +56,7 @@ export function CreateCampanhaModal({ open, onOpenChange }: CreateCampanhaModalP
       toast.success("Campanha criada!");
       onOpenChange(false);
       setStep(1);
-      setFormData({ client_id: "", closer_id: "", mrr_planejado: "", projeto_planejado: "", notes: "" });
+      setFormData({ client_id: "", responsible_id: "", mrr_planejado: "", projeto_planejado: "", notes: "" });
     } catch (err: any) {
       toast.error("Erro ao criar campanha: " + (err?.message || ""));
     }
@@ -110,10 +110,10 @@ export function CreateCampanhaModal({ open, onOpenChange }: CreateCampanhaModalP
           {step === 2 && (
             <div className="grid gap-4">
               <div className="grid gap-2">
-                <Label>Closer Responsavel</Label>
+                <Label>Responsável</Label>
                 <Select
-                  value={formData.closer_id || "none"}
-                  onValueChange={(v) => setFormData((prev) => ({ ...prev, closer_id: v === "none" ? "" : v }))}
+                  value={formData.responsible_id || "none"}
+                  onValueChange={(v) => setFormData((prev) => ({ ...prev, responsible_id: v === "none" ? "" : v }))}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione..." />
@@ -166,7 +166,7 @@ export function CreateCampanhaModal({ open, onOpenChange }: CreateCampanhaModalP
               <h4 className="font-medium">Confirmar Campanha</h4>
               <div className="p-3 bg-muted rounded-lg space-y-1">
                 <p><strong>Cliente:</strong> {selectedClient?.name}</p>
-                <p><strong>Closer:</strong> {teamMembers.find((m) => m.id === formData.closer_id)?.name || "Nenhum"}</p>
+                <p><strong>Responsável:</strong> {teamMembers.find((m) => m.id === formData.responsible_id)?.name || "Nenhum"}</p>
                 <p><strong>MRR Planejado:</strong> R$ {formData.mrr_planejado || "0"}</p>
                 <p><strong>Projeto Planejado:</strong> R$ {formData.projeto_planejado || "0"}</p>
                 {formData.notes && <p><strong>Notas:</strong> {formData.notes}</p>}

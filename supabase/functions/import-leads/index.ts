@@ -418,11 +418,14 @@ async function importToCampaign(
               stage_id: stageIdForLead,
               sdr_id: assignedSdrId,
               closer_id: assignedCloserId,
+              responsible_id: assignedCloserId || assignedSdrId,
             });
 
             const leadUpdates: Record<string, string> = {};
             if (assignedSdrId) leadUpdates.sdr_id = assignedSdrId;
             if (assignedCloserId) leadUpdates.closer_id = assignedCloserId;
+            const responsibleId = assignedCloserId || assignedSdrId;
+            if (responsibleId) leadUpdates.responsible_id = responsibleId;
             if (Object.keys(leadUpdates).length > 0) {
               await supabase.from("leads").update(leadUpdates).eq("id", existingLead.id);
             }
@@ -481,11 +484,14 @@ async function importToCampaign(
           stage_id: stageIdForLead,
           sdr_id: assignedSdrId,
           closer_id: assignedCloserId,
+          responsible_id: assignedCloserId || assignedSdrId,
         });
 
         const leadUpdates: Record<string, string> = {};
         if (assignedSdrId) leadUpdates.sdr_id = assignedSdrId;
         if (assignedCloserId) leadUpdates.closer_id = assignedCloserId;
+        const responsibleId2 = assignedCloserId || assignedSdrId;
+        if (responsibleId2) leadUpdates.responsible_id = responsibleId2;
         if (Object.keys(leadUpdates).length > 0) {
           await supabase.from("leads").update(leadUpdates).eq("id", newLead.id);
         }
@@ -691,6 +697,8 @@ async function importToFunnel(
         const leadUpdates: Record<string, unknown> = {};
         if (sdrIdForLead) leadUpdates.sdr_id = sdrIdForLead;
         if (closerIdForLead) leadUpdates.closer_id = closerIdForLead;
+        const responsibleIdForLead = closerIdForLead || sdrIdForLead;
+        if (responsibleIdForLead) leadUpdates.responsible_id = responsibleIdForLead;
         if (Object.keys(leadUpdates).length > 0) {
           await supabase.from("leads").update(leadUpdates).eq("id", leadId);
         }
@@ -702,6 +710,7 @@ async function importToFunnel(
             status: stageKeyForLead,
             organization_id: organizationId,
             sdr_id: sdrIdForLead,
+            responsible_id: sdrIdForLead,
           });
         } else if (destination === "propostas") {
           const productNamesRaw = (lead.product_name || "").trim();
@@ -721,6 +730,7 @@ async function importToFunnel(
             status: stageKeyForLead,
             organization_id: organizationId,
             closer_id: closerIdForLead,
+            responsible_id: closerIdForLead,
             sale_value: totalValue,
             calor: lead.calor ?? null,
             commitment_date: lead.commitment_date ?? null,

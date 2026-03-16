@@ -154,7 +154,10 @@ async function handleProcessLead(supabase: any, data: any, tenantId: string | nu
     if (segment && !existingLead.segment) updatedData.segment = segment;
     if (faturamento && !existingLead.faturamento) updatedData.faturamento = faturamento;
     if (urgency && !existingLead.urgency) updatedData.urgency = urgency;
-    if (sdr_id && !existingLead.sdr_id) updatedData.sdr_id = sdr_id;
+    if (sdr_id && !existingLead.sdr_id) {
+      updatedData.sdr_id = sdr_id;
+      if (!existingLead.responsible_id) updatedData.responsible_id = sdr_id;
+    }
     if (deduplicationMethod === "name_same_day" && normalizedEmail && !existingLead.email) {
       updatedData.email = email;
     }
@@ -257,6 +260,7 @@ async function handleProcessLead(supabase: any, data: any, tenantId: string | nu
       name, email, phone, company, origin, segment,
       faturamento: faturamento || null, urgency, notes,
       rating: rating ? parseInt(String(rating), 10) : 0, sdr_id,
+      responsible_id: sdr_id || null,
       compromisso_date: compromisso_date || null,
       utm_source, utm_medium, utm_campaign, utm_term, utm_content,
       organization_id: tenantId,

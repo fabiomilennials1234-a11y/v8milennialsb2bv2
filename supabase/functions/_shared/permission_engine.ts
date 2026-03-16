@@ -1,9 +1,12 @@
 /**
  * Permission Engine — resolução granular de permissões
  *
- * Segue a cascata completa:
- * master → admin → team_member_org_permissions → organization_role_permissions
- *                 → team_member_permissions (matriz recurso×ação) → false
+ * Cascata:
+ * master → admin → feature_permissions (is_admin_only) →
+ *   member_feature_permissions → feature_permissions.default_value
+ *
+ * Mantém compatibilidade com a matriz legada (team_member_permissions)
+ * para as 9 recursos × 5 ações da matriz legada.
  *
  * Toda tentativa bloqueada é logada em runtime_logs.
  */
@@ -31,31 +34,28 @@ export interface PermissionResult {
   reason?: string;
 }
 
-// Mapeamento de ação para recurso+ação na matriz team_member_permissions
+// Mapeamento de ação legada para recurso+ação na matriz team_member_permissions
 const ACTION_TO_MATRIX: Record<PermissionAction, { resource: string; action: string } | null> = {
   move_pipe_record: null, // Usa permissão contextual por pipe
   import_leads:     { resource: "leads", action: "create" },
   create_lead:      { resource: "leads", action: "create" },
   delete_lead:      { resource: "leads", action: "delete" },
   trigger_campaign: { resource: "campanhas", action: "edit" },
-  edit_workflow:    null, // Admin-only
+  edit_workflow:    null, // Usa feature_permissions
   export_leads:     { resource: "leads", action: "export" },
   view_lead:        { resource: "leads", action: "view" },
   send_message:     null, // Qualquer membro autenticado pode enviar
-  manage_team:      null, // Admin-only
-  manage_copilot:   null, // Admin/closer
+  manage_team:      null, // Usa feature_permissions
+  manage_copilot:   null, // Usa feature_permissions
 };
 
-// Ações que requerem admin obrigatório (não verificam matriz)
-const ADMIN_ONLY_ACTIONS: PermissionAction[] = [
-  "edit_workflow",
-  "manage_team",
-];
-
-// Ações que qualquer membro autenticado pode executar
-const OPEN_ACTIONS: PermissionAction[] = [
-  "send_message",
-];
+// Mapeamento de ação legada para feature_key no novo sistema
+const ACTION_TO_FEATURE: Partial<Record<PermissionAction, string>> = {
+  edit_workflow:  "workflows.edit",
+  manage_team:    "team.view",
+  manage_copilot: "copilot.create",
+  send_message:   "whatsapp.send_messages",
+};
 
 // ─── Helper ──────────────────────────────────────────────
 
@@ -103,34 +103,25 @@ export async function canUserPerformAction(params: {
     return { allowed: false, reason: "Você não pertence a esta organização" };
   }
 
-  const isAdmin = tm.role === "admin" || tm.role === "agency";
+  const isAdmin = tm.role === "admin";
 
   // 3. Admin — sempre permitido
   if (isAdmin) {
     return { allowed: true, reason: "admin" };
   }
 
-  // 4. Ações admin-only: bloquear não-admins
-  if (ADMIN_ONLY_ACTIONS.includes(action)) {
-    await logDenied(userId, organizationId, action, `role_${tm.role}_not_admin`);
-    return { allowed: false, reason: "Apenas administradores podem realizar esta ação" };
-  }
-
-  // 5. Ações abertas: qualquer membro
-  if (OPEN_ACTIONS.includes(action)) {
-    return { allowed: true, reason: "open_action" };
-  }
-
-  // 6. Copilot: admin ou closer
-  if (action === "manage_copilot") {
-    if (tm.role === "closer") {
-      return { allowed: true, reason: "closer_can_manage_copilot" };
+  // 4. Verificar no novo sistema de feature_permissions
+  const featureKey = ACTION_TO_FEATURE[action];
+  if (featureKey) {
+    const allowed = await checkFeaturePermission(supabase, tm.id, featureKey);
+    if (!allowed) {
+      await logDenied(userId, organizationId, action, `feature_denied:${featureKey}`);
+      return { allowed: false, reason: `Sem permissão: ${featureKey}` };
     }
-    await logDenied(userId, organizationId, action, `role_${tm.role}_not_allowed`);
-    return { allowed: false, reason: "Apenas administradores e closers podem gerenciar o copilot" };
+    return { allowed: true, reason: `feature:${featureKey}` };
   }
 
-  // 7. Permissões baseadas em org_permission_key (can_delete_leads, etc.)
+  // 5. Permissões baseadas em org_permission_key (can_delete_leads, etc.)
   if (action === "delete_lead") {
     const allowed = await checkOrgPermission(supabase, tm.id, organizationId, tm.role, "can_delete_leads");
     if (!allowed) {
@@ -140,7 +131,7 @@ export async function canUserPerformAction(params: {
     return { allowed: true, reason: "can_delete_leads" };
   }
 
-  // 8. Verificar na matriz team_member_permissions
+  // 6. Verificar na matriz legada team_member_permissions
   const matrixMapping = ACTION_TO_MATRIX[action];
   if (matrixMapping) {
     const matrixResult = await checkMatrixPermission(
@@ -152,14 +143,11 @@ export async function canUserPerformAction(params: {
       return { allowed: false, reason: `Sem permissão: ${matrixMapping.resource}.${matrixMapping.action}` };
     }
 
-    // allowed, if_responsible, team_access — para estas, permitir
-    // (o filtro mais fino de scope é feito via RLS)
     return { allowed: true, reason: `matrix_${matrixResult}` };
   }
 
-  // 9. Para move_pipe_record, verificar se tem alguma permissão no pipe
+  // 7. Para move_pipe_record, verificar se tem alguma permissão no pipe
   if (action === "move_pipe_record" && resourceId) {
-    // resourceId = tipo do pipe (pipe_whatsapp, pipe_confirmacao, pipe_propostas)
     const matrixResult = await checkMatrixPermission(supabase, tm.id, resourceId, "edit");
     if (matrixResult === "denied") {
       await logDenied(userId, organizationId, action, `matrix_denied_${resourceId}`);
@@ -168,11 +156,78 @@ export async function canUserPerformAction(params: {
     return { allowed: true, reason: `matrix_${matrixResult}` };
   }
 
-  // 10. Fallback: se não há regra específica, permitir (compatibilidade)
+  // 8. Fallback: consultar feature_permissions.default_value
   return { allowed: true, reason: "fallback_allowed" };
 }
 
+// ─── canUserAccessFeature ────────────────────────────────
+
+/**
+ * Verifica se um usuário pode acessar uma feature específica.
+ * Consulta feature_permissions + member_feature_permissions.
+ */
+export async function canUserAccessFeature(
+  supabase: SupabaseClient,
+  userId: string,
+  organizationId: string,
+  featureKey: string,
+): Promise<boolean> {
+  // 1. Master sempre pode
+  const { data: masterRow } = await supabase
+    .from("master_users")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("is_active", true)
+    .maybeSingle();
+  if (masterRow) return true;
+
+  // 2. Buscar team_member
+  const { data: tm } = await supabase
+    .from("team_members")
+    .select("id, role")
+    .eq("user_id", userId)
+    .eq("organization_id", organizationId)
+    .eq("is_active", true)
+    .maybeSingle();
+
+  if (!tm) return false;
+
+  // 3. Admin sempre pode
+  if (tm.role === "admin") return true;
+
+  return checkFeaturePermission(supabase, tm.id, featureKey);
+}
+
 // ─── Helpers internos ────────────────────────────────────
+
+async function checkFeaturePermission(
+  supabase: SupabaseClient,
+  teamMemberId: string,
+  featureKey: string,
+): Promise<boolean> {
+  // 1. Buscar definição da feature
+  const { data: feature } = await supabase
+    .from("feature_permissions")
+    .select("is_admin_only, default_value")
+    .eq("key", featureKey)
+    .maybeSingle();
+
+  if (!feature) return false;
+  if (feature.is_admin_only) return false;
+
+  // 2. Buscar override do membro
+  const { data: override } = await supabase
+    .from("member_feature_permissions")
+    .select("enabled")
+    .eq("team_member_id", teamMemberId)
+    .eq("feature_key", featureKey)
+    .maybeSingle();
+
+  if (override) return override.enabled;
+
+  // 3. Usar default da feature
+  return feature.default_value;
+}
 
 async function checkOrgPermission(
   supabase: SupabaseClient,

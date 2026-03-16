@@ -64,7 +64,7 @@ export function ObjectiveStep() {
             avançar no funil."
           </li>
           <li>
-            <span className="font-medium">SDR:</span> "Agendar reuniões
+            <span className="font-medium">Qualificação:</span> "Agendar reuniões
             qualificadas com decisores, superando objeções iniciais."
           </li>
           <li>

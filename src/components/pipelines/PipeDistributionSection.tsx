@@ -1,5 +1,5 @@
 /**
- * PipeDistributionSection — configuração de distribuição de SDRs/Closers por pipe.
+ * PipeDistributionSection — configuração de distribuição de Responsáveis por pipe.
  * Modos: Manual, Aleatório, Rotativo, Pessoa específica.
  */
 
@@ -39,81 +39,50 @@ export function PipeDistributionSection({ pipeType }: PipeDistributionSectionPro
   const { data: distData, isLoading } = usePipeDistributionRule(pipeType);
   const saveMutation = useSavePipeDistribution();
 
-  // Local state
-  const [sdrMode, setSdrMode] = useState<string>("none");
-  const [sdrAssignedTo, setSdrAssignedTo] = useState<string | null>(null);
-  const [sdrMemberIds, setSdrMemberIds] = useState<string[]>([]);
+  // Local state — single "Responsável" distribution
+  const [mode, setMode] = useState<string>("none");
+  const [assignedTo, setAssignedTo] = useState<string | null>(null);
+  const [memberIds, setMemberIds] = useState<string[]>([]);
 
-  const [closerMode, setCloserMode] = useState<string>("none");
-  const [closerAssignedTo, setCloserAssignedTo] = useState<string | null>(null);
-  const [closerMemberIds, setCloserMemberIds] = useState<string[]>([]);
-
-  const showCloser = pipeType === "confirmacao" || pipeType === "propostas";
-
-  // Sync from fetched data
+  // Sync from fetched data (read sdr_mode for backward compat)
   useEffect(() => {
     if (distData?.rule) {
-      setSdrMode(distData.rule.sdr_mode ?? "none");
-      setSdrAssignedTo(distData.rule.sdr_assigned_to);
-      setCloserMode(distData.rule.closer_mode ?? "none");
-      setCloserAssignedTo(distData.rule.closer_assigned_to);
+      setMode(distData.rule.sdr_mode ?? "none");
+      setAssignedTo(distData.rule.sdr_assigned_to);
 
-      const sdrIds = distData.members
-        .filter((m) => m.role === "sdr")
-        .map((m) => m.team_member_id);
-      const closerIds = distData.members
-        .filter((m) => m.role === "closer")
-        .map((m) => m.team_member_id);
-      setSdrMemberIds(sdrIds);
-      setCloserMemberIds(closerIds);
+      const ids = distData.members.map((m) => m.team_member_id);
+      setMemberIds(ids);
     } else if (distData === null) {
-      setSdrMode("none");
-      setSdrAssignedTo(null);
-      setSdrMemberIds([]);
-      setCloserMode("none");
-      setCloserAssignedTo(null);
-      setCloserMemberIds([]);
+      setMode("none");
+      setAssignedTo(null);
+      setMemberIds([]);
     }
   }, [distData]);
 
   const handleSave = () => {
     saveMutation.mutate({
       pipeType,
-      sdrMode: sdrMode === "none" ? null : (sdrMode as DistributionMode),
-      sdrAssignedTo: sdrMode === "single" ? sdrAssignedTo : null,
-      closerMode: showCloser && closerMode !== "none"
-        ? (closerMode as DistributionMode)
-        : null,
-      closerAssignedTo:
-        showCloser && closerMode === "single" ? closerAssignedTo : null,
+      sdrMode: mode === "none" ? null : (mode as DistributionMode),
+      sdrAssignedTo: mode === "single" ? assignedTo : null,
+      closerMode: null,
+      closerAssignedTo: null,
       sdrMemberIds:
-        sdrMode === "round_robin" || sdrMode === "random" ? sdrMemberIds : [],
-      closerMemberIds:
-        showCloser && (closerMode === "round_robin" || closerMode === "random")
-          ? closerMemberIds
-          : [],
+        mode === "round_robin" || mode === "random" ? memberIds : [],
+      closerMemberIds: [],
     });
   };
 
-  const toggleMember = (
-    id: string,
-    list: string[],
-    setList: (ids: string[]) => void
-  ) => {
-    if (list.includes(id)) {
-      setList(list.filter((x) => x !== id));
+  const toggleMember = (id: string) => {
+    if (memberIds.includes(id)) {
+      setMemberIds(memberIds.filter((x) => x !== id));
     } else {
-      setList([...list, id]);
+      setMemberIds([...memberIds, id]);
     }
   };
 
-  const needsSdrPool =
-    (sdrMode === "round_robin" || sdrMode === "random") &&
-    sdrMemberIds.length === 0;
-  const needsCloserPool =
-    showCloser &&
-    (closerMode === "round_robin" || closerMode === "random") &&
-    closerMemberIds.length === 0;
+  const needsPool =
+    (mode === "round_robin" || mode === "random") &&
+    memberIds.length === 0;
 
   if (isLoading) {
     return (
@@ -126,25 +95,25 @@ export function PipeDistributionSection({ pipeType }: PipeDistributionSectionPro
   return (
     <div className="space-y-6">
       <p className="text-sm text-muted-foreground">
-        Configure como SDRs e Closers são atribuídos automaticamente quando um
+        Configure como o responsável é atribuído automaticamente quando um
         lead entra neste funil.
       </p>
 
-      {/* ─── SDR Distribution ──────────────────────────────── */}
+      {/* ─── Distribuição de Responsáveis ──────────────────── */}
       <div className="space-y-3">
         <Label className="flex items-center gap-2 text-base font-semibold">
           <Shuffle className="w-4 h-4" />
-          Distribuição de SDRs
+          Distribuição de Responsáveis
         </Label>
         <Select
-          value={sdrMode}
+          value={mode}
           onValueChange={(v) => {
-            setSdrMode(v);
-            if (v !== "single") setSdrAssignedTo(null);
+            setMode(v);
+            if (v !== "single") setAssignedTo(null);
           }}
         >
           <SelectTrigger>
-            <SelectValue placeholder="Como distribuir SDRs" />
+            <SelectValue placeholder="Como distribuir responsáveis" />
           </SelectTrigger>
           <SelectContent>
             {MODE_OPTIONS.map((opt) => (
@@ -155,13 +124,13 @@ export function PipeDistributionSection({ pipeType }: PipeDistributionSectionPro
           </SelectContent>
         </Select>
 
-        {sdrMode === "single" && (
+        {mode === "single" && (
           <Select
-            value={sdrAssignedTo ?? ""}
-            onValueChange={(v) => setSdrAssignedTo(v || null)}
+            value={assignedTo ?? ""}
+            onValueChange={(v) => setAssignedTo(v || null)}
           >
             <SelectTrigger>
-              <SelectValue placeholder="Selecione o SDR" />
+              <SelectValue placeholder="Selecione o responsável" />
             </SelectTrigger>
             <SelectContent>
               {teamMembers?.map((m) => (
@@ -176,10 +145,10 @@ export function PipeDistributionSection({ pipeType }: PipeDistributionSectionPro
           </Select>
         )}
 
-        {(sdrMode === "round_robin" || sdrMode === "random") && (
+        {(mode === "round_robin" || mode === "random") && (
           <div className="space-y-2 pl-1">
             <p className="text-sm text-muted-foreground">
-              Pool de SDRs — selecione quem participa da distribuição:
+              Pool de responsáveis — selecione quem participa da distribuição:
             </p>
             <div className="space-y-1.5 max-h-48 overflow-y-auto">
               {teamMembers?.map((m) => (
@@ -188,121 +157,24 @@ export function PipeDistributionSection({ pipeType }: PipeDistributionSectionPro
                   className="flex items-center gap-2 p-2 rounded-md hover:bg-muted/50 cursor-pointer"
                 >
                   <Checkbox
-                    checked={sdrMemberIds.includes(m.id)}
-                    onCheckedChange={() =>
-                      toggleMember(m.id, sdrMemberIds, setSdrMemberIds)
-                    }
+                    checked={memberIds.includes(m.id)}
+                    onCheckedChange={() => toggleMember(m.id)}
                   />
                   <User className="w-3.5 h-3.5 text-muted-foreground" />
                   <span className="text-sm">{m.name}</span>
-                  {m.role && (
-                    <span className="text-xs text-muted-foreground ml-auto">
-                      {m.role}
-                    </span>
-                  )}
                 </label>
               ))}
             </div>
           </div>
         )}
 
-        {needsSdrPool && (
+        {needsPool && (
           <p className="text-sm text-amber-600 dark:text-amber-500 flex items-center gap-2">
             <AlertTriangle className="w-4 h-4 shrink-0" />
-            Selecione ao menos um SDR para a distribuição funcionar.
+            Selecione ao menos um responsável para a distribuição funcionar.
           </p>
         )}
       </div>
-
-      {/* ─── Closer Distribution ───────────────────────────── */}
-      {showCloser && (
-        <div className="space-y-3 pt-4 border-t">
-          <Label className="flex items-center gap-2 text-base font-semibold">
-            <Shuffle className="w-4 h-4" />
-            Distribuição de Closers
-          </Label>
-          <Select
-            value={closerMode}
-            onValueChange={(v) => {
-              setCloserMode(v);
-              if (v !== "single") setCloserAssignedTo(null);
-            }}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Como distribuir Closers" />
-            </SelectTrigger>
-            <SelectContent>
-              {MODE_OPTIONS.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value}>
-                  {opt.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          {closerMode === "single" && (
-            <Select
-              value={closerAssignedTo ?? ""}
-              onValueChange={(v) => setCloserAssignedTo(v || null)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione o Closer" />
-              </SelectTrigger>
-              <SelectContent>
-                {teamMembers?.map((m) => (
-                  <SelectItem key={m.id} value={m.id}>
-                    <span className="flex items-center gap-2">
-                      <User className="w-3 h-3" />
-                      {m.name}
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-
-          {(closerMode === "round_robin" || closerMode === "random") && (
-            <div className="space-y-2 pl-1">
-              <p className="text-sm text-muted-foreground">
-                Pool de Closers — selecione quem participa da distribuição:
-              </p>
-              <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                {teamMembers?.map((m) => (
-                  <label
-                    key={m.id}
-                    className="flex items-center gap-2 p-2 rounded-md hover:bg-muted/50 cursor-pointer"
-                  >
-                    <Checkbox
-                      checked={closerMemberIds.includes(m.id)}
-                      onCheckedChange={() =>
-                        toggleMember(
-                          m.id,
-                          closerMemberIds,
-                          setCloserMemberIds
-                        )
-                      }
-                    />
-                    <User className="w-3.5 h-3.5 text-muted-foreground" />
-                    <span className="text-sm">{m.name}</span>
-                    {m.role && (
-                      <span className="text-xs text-muted-foreground ml-auto">
-                        {m.role}
-                      </span>
-                    )}
-                  </label>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {needsCloserPool && (
-            <p className="text-sm text-amber-600 dark:text-amber-500 flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 shrink-0" />
-              Selecione ao menos um Closer para a distribuição funcionar.
-            </p>
-          )}
-        </div>
-      )}
 
       {/* ─── Save ──────────────────────────────────────────── */}
       <div className="pt-4 border-t flex justify-end">

@@ -58,10 +58,10 @@ export const ACTION_DESCRIPTIONS: Record<ActionKey, string> = {
 /** Opções para "Ver" — escopo de visibilidade (pode marcar mais de uma) */
 export const VIEW_OPTIONS: { value: PermissionValue; label: string; description: string }[] = [
   { value: "denied", label: "Nenhum", description: "Não vê nenhum registro deste recurso" },
-  { value: "if_responsible", label: "Se responsável", description: "Vê onde sou SDR ou Closer responsável" },
+  { value: "if_responsible", label: "Se responsável", description: "Vê onde sou responsável atribuído" },
   { value: "team_access", label: "Equipe", description: "Vê registros atribuídos a outros membros da equipe" },
   { value: "allowed", label: "Todos", description: "Vê todos os registros do recurso na organização" },
-  { value: "unassigned", label: "Sem responsável", description: "Vê cards/leads que não têm SDR ou Closer atribuído" },
+  { value: "unassigned", label: "Sem responsável", description: "Vê cards/leads que não têm responsável atribuído" },
 ];
 
 /** Opções para "Exportar" */

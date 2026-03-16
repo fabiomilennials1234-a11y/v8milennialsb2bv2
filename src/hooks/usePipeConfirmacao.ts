@@ -43,11 +43,13 @@ export function usePipeConfirmacao() {
         .select(`
           *,
           lead:leads(
-            id, name, company, email, phone, rating, origin, segment, faturamento, urgency, ai_disabled, sdr_id, closer_id,
+            id, name, company, email, phone, rating, origin, segment, faturamento, urgency, ai_disabled, sdr_id, closer_id, responsible_id,
+            responsible:team_members!leads_responsible_id_fkey(id, name),
             sdr:team_members!leads_sdr_id_fkey(id, name),
             closer:team_members!leads_closer_id_fkey(id, name),
             lead_tags(tag:tags(id, name, color))
           ),
+          responsible:team_members!pipe_confirmacao_responsible_id_fkey(id, name),
           sdr:team_members!pipe_confirmacao_sdr_id_fkey(id, name),
           closer:team_members!pipe_confirmacao_closer_id_fkey(id, name)
         `)
@@ -85,7 +87,7 @@ export function useCreatePipeConfirmacao() {
       // Trigger automation for the initial status
       await triggerFollowUpAutomation({
         leadId: data.lead_id,
-        assignedTo: data.sdr_id || data.closer_id,
+        assignedTo: data.responsible_id || data.sdr_id || data.closer_id,
         pipeType: "confirmacao",
         stage: data.status,
         sourcePipeId: data.id,
@@ -130,19 +132,16 @@ export function useUpdatePipeConfirmacao() {
 
       if (error) throw error;
 
-      // Sync SDR/Closer back to leads table
-      if (leadId && (updates.sdr_id !== undefined || updates.closer_id !== undefined)) {
-        const leadUpdate: Record<string, string | null> = {};
-        if (updates.sdr_id !== undefined) leadUpdate.sdr_id = updates.sdr_id || null;
-        if (updates.closer_id !== undefined) leadUpdate.closer_id = updates.closer_id || null;
-        await supabase.from("leads").update(leadUpdate).eq("id", leadId);
+      // Sync responsible_id back to leads table
+      if (leadId && updates.responsible_id !== undefined) {
+        await supabase.from("leads").update({ responsible_id: updates.responsible_id || null }).eq("id", leadId);
       }
 
       // Trigger automation if status changed
       if (updates.status && leadId) {
         await triggerFollowUpAutomation({
           leadId: leadId,
-          assignedTo: assignedTo || data.sdr_id || data.closer_id,
+          assignedTo: assignedTo || data.responsible_id || data.sdr_id || data.closer_id,
           pipeType: "confirmacao",
           stage: updates.status,
           sourcePipeId: data.id,

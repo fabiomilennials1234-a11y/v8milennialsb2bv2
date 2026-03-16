@@ -50,12 +50,11 @@ export function EditCampanhaModal({
   const { data: teamMembers } = useTeamMembers();
   const { data: whatsappInstances = [] } = useWhatsAppInstances();
   const { data: campanhaMembers = [] } = useCampanhaMembers(campanha?.id);
-  const sdrMembers = campanhaMembers.filter((m) => m.role === "sdr");
-  const closerMembers = campanhaMembers.filter((m) => m.role === "closer");
-  const needsSdrMembers =
-    (leadDistributionMode === "round_robin" || leadDistributionMode === "random") && sdrMembers.length === 0;
+  const allCampanhaMembers = campanhaMembers;
+  const needsMembers =
+    (leadDistributionMode === "round_robin" || leadDistributionMode === "random") && allCampanhaMembers.length === 0;
   const needsCloserMembers =
-    (closerDistributionMode === "round_robin" || closerDistributionMode === "random") && closerMembers.length === 0;
+    (closerDistributionMode === "round_robin" || closerDistributionMode === "random") && allCampanhaMembers.length === 0;
 
   const outboundAgents =
     agents?.filter(
@@ -161,7 +160,7 @@ export function EditCampanhaModal({
                 Membros da Campanha — Papel
               </Label>
               <p className="text-xs text-muted-foreground">
-                Defina quem é SDR e quem é Closer. A distribuição automática usa esses papéis.
+                Defina o papel de cada membro. A distribuição automática usa esses papéis.
               </p>
               <div className="space-y-2">
                 {campanhaMembers.map((m) => (
@@ -183,8 +182,8 @@ export function EditCampanhaModal({
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="sdr">SDR</SelectItem>
-                        <SelectItem value="closer">Closer</SelectItem>
+                        <SelectItem value="sdr">Qualificação</SelectItem>
+                        <SelectItem value="closer">Propostas</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -193,11 +192,11 @@ export function EditCampanhaModal({
             </div>
           )}
 
-          {/* Distribuição de SDRs */}
+          {/* Distribuição de vendedores (qualificação) */}
           <div className="space-y-3 pt-4 border-t">
             <Label className="flex items-center gap-2">
               <Shuffle className="w-4 h-4" />
-              Distribuição de SDRs
+              Distribuição de Vendedores (Qualificação)
             </Label>
             <Select
               value={leadDistributionMode ?? "none"}
@@ -207,7 +206,7 @@ export function EditCampanhaModal({
               }}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Como distribuir SDRs" />
+                <SelectValue placeholder="Como distribuir vendedores" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">Manual (definir na importação)</SelectItem>
@@ -219,18 +218,17 @@ export function EditCampanhaModal({
             {leadDistributionMode === "single" && (
               <Select value={leadAssignedTo ?? ""} onValueChange={(v) => setLeadAssignedTo(v || null)}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Selecione o SDR" />
+                  <SelectValue placeholder="Selecione o vendedor" />
                 </SelectTrigger>
                 <SelectContent>
-                  {sdrMembers.map((m) => (
+                  {allCampanhaMembers.length > 0 ? allCampanhaMembers.map((m) => (
                     <SelectItem key={m.team_member_id} value={m.team_member_id}>
                       <span className="flex items-center gap-2">
                         <User className="w-3 h-3" />
                         {m.team_member?.name}
                       </span>
                     </SelectItem>
-                  ))}
-                  {sdrMembers.length === 0 && teamMembers?.map((m) => (
+                  )) : teamMembers?.map((m) => (
                     <SelectItem key={m.id} value={m.id}>
                       <span className="flex items-center gap-2">
                         <User className="w-3 h-3" />
@@ -241,19 +239,19 @@ export function EditCampanhaModal({
                 </SelectContent>
               </Select>
             )}
-            {needsSdrMembers && (
+            {needsMembers && (
               <p className="text-sm text-amber-600 dark:text-amber-500 flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 shrink-0" />
-                Adicione membros com papel SDR para a distribuição funcionar.
+                Adicione membros para a distribuição funcionar.
               </p>
             )}
           </div>
 
-          {/* Distribuição de Closers */}
+          {/* Distribuição de vendedores (propostas) */}
           <div className="space-y-3 pt-4 border-t">
             <Label className="flex items-center gap-2">
               <Shuffle className="w-4 h-4" />
-              Distribuição de Closers
+              Distribuição de Vendedores (Propostas)
             </Label>
             <Select
               value={closerDistributionMode ?? "none"}
@@ -263,7 +261,7 @@ export function EditCampanhaModal({
               }}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Como distribuir Closers" />
+                <SelectValue placeholder="Como distribuir vendedores" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">Manual</SelectItem>
@@ -275,18 +273,17 @@ export function EditCampanhaModal({
             {closerDistributionMode === "single" && (
               <Select value={closerAssignedTo ?? ""} onValueChange={(v) => setCloserAssignedTo(v || null)}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Selecione o Closer" />
+                  <SelectValue placeholder="Selecione o vendedor" />
                 </SelectTrigger>
                 <SelectContent>
-                  {closerMembers.map((m) => (
+                  {allCampanhaMembers.length > 0 ? allCampanhaMembers.map((m) => (
                     <SelectItem key={m.team_member_id} value={m.team_member_id}>
                       <span className="flex items-center gap-2">
                         <User className="w-3 h-3" />
                         {m.team_member?.name}
                       </span>
                     </SelectItem>
-                  ))}
-                  {closerMembers.length === 0 && teamMembers?.map((m) => (
+                  )) : teamMembers?.map((m) => (
                     <SelectItem key={m.id} value={m.id}>
                       <span className="flex items-center gap-2">
                         <User className="w-3 h-3" />
@@ -300,7 +297,7 @@ export function EditCampanhaModal({
             {needsCloserMembers && (
               <p className="text-sm text-amber-600 dark:text-amber-500 flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 shrink-0" />
-                Adicione membros com papel Closer para a distribuição funcionar.
+                Adicione membros para a distribuição funcionar.
               </p>
             )}
           </div>
