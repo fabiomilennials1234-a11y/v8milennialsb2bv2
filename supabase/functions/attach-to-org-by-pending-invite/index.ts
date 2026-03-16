@@ -159,22 +159,19 @@ serve(withSentry('attach-to-org-by-pending-invite', async (req) => {
       );
     }
 
-    const { error: urError } = await supabase.from("user_roles").insert({
-      user_id: user.id,
-      role: roleForInsert,
-    });
+    const { error: urError } = await supabase.from("user_roles").upsert(
+      { user_id: user.id, role: roleForInsert },
+      { onConflict: "user_id,role", ignoreDuplicates: true }
+    );
 
     if (urError) {
-      // Pode já existir (ex.: outro org); ignorar conflito
-      if (!String(urError.message).toLowerCase().includes("duplicate")) {
-        console.error("[attach-to-org-by-pending-invite] user_roles insert:", urError);
-        await supabase.from("team_members").delete().eq("user_id", user.id).eq("organization_id", orgId);
-        return jsonResponse(
-          { success: false, error: "Insert failed", message: urError.message },
-          500,
-          corsHeaders
-        );
-      }
+      console.error("[attach-to-org-by-pending-invite] user_roles upsert:", urError);
+      await supabase.from("team_members").delete().eq("user_id", user.id).eq("organization_id", orgId);
+      return jsonResponse(
+        { success: false, error: "Insert failed", message: urError.message },
+        500,
+        corsHeaders
+      );
     }
 
     await supabase.from("pending_org_invites").delete().eq("id", pending.id);

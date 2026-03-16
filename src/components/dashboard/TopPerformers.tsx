@@ -21,8 +21,8 @@ function TopPerformersBase() {
   const navigate = useNavigate();
   const { data: rankingData, isLoading } = useRankingData(now.getMonth() + 1, now.getFullYear());
 
-  const topClosers = rankingData?.closerRanking?.slice(0, 3) || [];
-  const topSDRs = rankingData?.sdrRanking?.slice(0, 3) || [];
+  const topClosers = rankingData?.salesRanking?.slice(0, 3) || [];
+  const topSDRs = rankingData?.meetingsRanking?.slice(0, 3) || [];
 
   if (isLoading) {
     return (

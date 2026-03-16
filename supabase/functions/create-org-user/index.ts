@@ -261,10 +261,11 @@ serve(withSentry('create-org-user', async (req) => {
         corsHeaders
       );
     }
-    const { error: urErr } = await supabase.from("user_roles").insert({
-      user_id: newUserId,
-      role: roleForInsert,
-    });
+    // Upsert into user_roles (may already exist via trg_sync_user_roles trigger)
+    const { error: urErr } = await supabase.from("user_roles").upsert(
+      { user_id: newUserId, role: roleForInsert },
+      { onConflict: "user_id,role", ignoreDuplicates: true }
+    );
     if (urErr) {
       await supabase.auth.admin.deleteUser(newUserId);
       return jsonResponse(

@@ -640,15 +640,15 @@ export default function Performance() {
   const expectedProgress = (dayOfMonth / daysInMonth) * 100;
 
   // Calculated data
-  const closers: RankingUser[] = rankingData?.closerRanking || [];
-  const sdrs: RankingUser[] = rankingData?.sdrRanking || [];
+  const closers: RankingUser[] = rankingData?.salesRanking || [];
+  const sdrs: RankingUser[] = rankingData?.meetingsRanking || [];
 
   // Metas cards: dados públicos da organização via RPC (SECURITY DEFINER) — todos veem metas e vendas de todos
   const closerGoals = useMemo(() =>
     closers.map((c) => ({
       id: c.id,
       name: c.name ?? "",
-      role: "closer" as const,
+      role: "Vendas" as const,
       current: c.value,
       goal: c.goal ?? 0,
       percentage: c.goalProgress,
@@ -659,7 +659,7 @@ export default function Performance() {
     sdrs.map((s) => ({
       id: s.id,
       name: s.name ?? "",
-      role: "sdr" as const,
+      role: "Reuniões" as const,
       current: s.meetings ?? 0,
       goal: s.goal ?? 0,
       percentage: s.goalProgress,

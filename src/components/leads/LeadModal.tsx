@@ -51,7 +51,7 @@ interface LeadModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   lead?: any;
-  onSuccess?: () => void;
+  onSuccess?: (newLeadId?: string) => void;
   defaultResponsibleId?: string | null;
 }
 
@@ -330,7 +330,7 @@ export function LeadModal({
 
       toast.success(isEditing ? "Lead atualizado!" : "Lead criado!");
       onOpenChange(false);
-      onSuccess?.();
+      onSuccess?.(isEditing ? undefined : leadId);
     } catch (error: any) {
       console.error("Erro ao salvar lead:", {
         message: error?.message,

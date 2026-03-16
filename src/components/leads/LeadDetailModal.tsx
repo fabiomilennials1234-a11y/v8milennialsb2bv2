@@ -1,3 +1,6 @@
+/**
+ * @deprecated Use LeadDetailDrawer instead. This component is kept for reference only.
+ */
 import { useState } from "react";
 import { motion } from "framer-motion";
 import {

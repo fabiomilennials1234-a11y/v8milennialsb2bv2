@@ -1,10 +1,8 @@
-import { useState, useMemo, memo, useEffect } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Search, Plus, Zap, User, Building2, Star, Phone, Loader2, Globe, Trash2, MoreVertical, Target, MessageCircle, Mail, Calendar, DollarSign, Clock, Briefcase, Settings2, Bot } from "lucide-react";
+import { Search, Plus, Zap, Loader2, Globe, Calendar, Settings2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -12,12 +10,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,34 +20,30 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { DraggableKanbanBoard, DraggableItem, KanbanColumn } from "@/components/kanban/DraggableKanbanBoard";
+import { DraggableKanbanBoard, KanbanColumn } from "@/components/kanban/DraggableKanbanBoard";
 import { useCanPerformAction } from "@/lib/permissions";
 import { StageWorkflowsBadgeWrapper } from "@/components/kanban/StageWorkflowsBadgeWrapper";
 import { useStageWorkflowCounts } from "@/hooks/useStageWorkflows";
-import { usePipeWhatsapp, useUpdatePipeWhatsapp, useDeletePipeWhatsapp, type PipeWhatsappStatus } from "@/hooks/usePipeWhatsapp";
+import { usePipeWhatsapp, useCreatePipeWhatsapp, useUpdatePipeWhatsapp, useDeletePipeWhatsapp, type PipeWhatsappStatus } from "@/hooks/usePipeWhatsapp";
 import { usePipeWhatsappMetrics, type MetricsPeriod } from "@/hooks/usePipeMetrics";
 import { usePipelineStages, stagesToColumns, getPipelineTypeName } from "@/hooks/usePipelineStages";
 import { PipeSettingsDialog } from "@/components/pipelines/PipeSettingsDialog";
-import { useCreatePipeConfirmacao } from "@/hooks/usePipeConfirmacao";
 import { useCreatePipeProposta } from "@/hooks/usePipePropostas";
 import { useResponsibleMembers } from "@/hooks/useTeamMembers";
-import { useDeleteAllLeadsInPipe, useToggleLeadAI } from "@/hooks/useLeads";
+import { useDeleteAllLeadsInPipe, useUpdateLead } from "@/hooks/useLeads";
 import { useUserRole, useFeaturePermission } from "@/hooks/useUserRole";
 import { useLogLeadAction } from "@/hooks/useLogLeadAction";
 import { useCreateAcaoDoDia } from "@/hooks/useAcoesDoDia";
+import { LeadCard, type LeadCardData } from "@/components/leads/LeadCard";
+import { LeadDetailDrawer } from "@/components/leads/LeadDetailDrawer";
+import { WhatsAppContext } from "@/components/leads/funnel-contexts";
 import { LeadModal } from "@/components/leads/LeadModal";
 import { CreateOpportunityModal } from "@/components/kanban/CreateOpportunityModal";
 import { AddMeetingModal } from "@/components/confirmacao/AddMeetingModal";
-import { formatDistanceToNow, format } from "date-fns";
+import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { openWhatsApp, formatPhoneForWhatsApp } from "@/lib/whatsapp";
 import { useOrganization } from "@/hooks/useOrganization";
 import { track, trackModuleVisit } from "@/lib/analytics";
 
@@ -75,399 +63,16 @@ const ALL_ORIGIN_OPTIONS = [
   "whatsapp", "meta_ads", "outro", "site", "remarketing", "google_ads", "cal",
 ];
 
-interface WhatsappCard extends DraggableItem {
-  name: string;
-  company: string;
-  phone?: string;
-  email?: string;
-  rating: number;
-  responsible?: string;
-  responsibleId?: string;
-  tags: { name: string; color: string }[];
-  scheduledDate?: string;
-  createdAt: string;
-  segment?: string;
-  faturamento?: string;
-  urgency?: string;
-  compromissoDate?: string;
-  leadId: string;
-  closerId?: string;
-  origin?: string;
-  ai_disabled?: boolean;
-}
-
-interface WhatsappCardComponentProps {
-  card: WhatsappCard;
-  onDelete?: (pipeId: string, leadId: string) => void;
-  isAdmin: boolean;
-  onQuickAdd: (leadId: string, leadName: string, title: string) => void;
-  onCardClick?: () => void;
-}
-
-const WhatsappCardComponent = memo(function WhatsappCardComponent({ card, onDelete, isAdmin, onQuickAdd, onCardClick }: WhatsappCardComponentProps) {
-  const originInfo = originLabels[card.origin || "outro"] || originLabels.outro;
-  const [popoverOpen, setPopoverOpen] = useState(false);
-  const [customTitle, setCustomTitle] = useState("");
-
-  const quickActions = [
-    { label: "Ligar", icon: "📞" },
-    { label: "WhatsApp", icon: "💬" },
-    { label: "Confirmar interesse", icon: "✅" },
-    { label: "Agendar reunião", icon: "📅" },
-  ];
-
-  const handleQuickAdd = (title: string) => {
-    onQuickAdd(card.leadId, card.name, `${title} - ${card.name}`);
-    setPopoverOpen(false);
-  };
-
-  const handleCustomAdd = () => {
-    if (customTitle.trim()) {
-      onQuickAdd(card.leadId, card.name, customTitle);
-      setCustomTitle("");
-      setPopoverOpen(false);
-    }
-  };
-
-  // Format faturamento label
-  const formatFaturamento = (value?: string) => {
-    const labels: Record<string, string> = {
-      "ate-50k": "Até 50k",
-      "50k-100k": "50k - 100k",
-      "100k-500k": "100k - 500k",
-      "500k-1m": "500k - 1M",
-      "acima-1m": "Acima de 1M",
-    };
-    return labels[value || ""] || value;
-  };
-
-  // Format urgency label
-  const formatUrgency = (value?: string) => {
-    const labels: Record<string, { label: string; color: string }> = {
-      "imediato": { label: "Imediato", color: "text-red-500" },
-      "1-mes": { label: "1 mês", color: "text-orange-500" },
-      "2-3-meses": { label: "2-3 meses", color: "text-yellow-500" },
-      "6-meses": { label: "6+ meses", color: "text-muted-foreground" },
-    };
-    return labels[value || ""] || { label: value, color: "text-muted-foreground" };
-  };
-
-  return (
-    <motion.div
-      whileHover={{ scale: 1.02, y: -2 }}
-      className="kanban-card group cursor-pointer relative w-full"
-      onClick={onCardClick}
-    >
-      {/* Actions Menu */}
-      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
-        {/* Quick Add Button */}
-        <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
-          <PopoverTrigger asChild onClick={(e) => e.stopPropagation()}>
-            <Button variant="ghost" size="icon" className="h-6 w-6 text-primary hover:text-primary">
-              <Target className="h-4 w-4" />
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-64 p-3" align="end" onClick={(e) => e.stopPropagation()}>
-            <div className="space-y-3">
-              <p className="text-sm font-medium text-muted-foreground">
-                Ação rápida para {card.name}
-              </p>
-              
-              <div className="flex flex-wrap gap-2">
-                {quickActions.map((action) => (
-                  <Button
-                    key={action.label}
-                    variant="outline"
-                    size="sm"
-                    className="text-xs"
-                    onClick={() => handleQuickAdd(action.label)}
-                  >
-                    {action.icon} {action.label}
-                  </Button>
-                ))}
-              </div>
-
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Ação personalizada..."
-                  value={customTitle}
-                  onChange={(e) => setCustomTitle(e.target.value)}
-                  className="text-sm"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") handleCustomAdd();
-                  }}
-                />
-                <Button size="sm" onClick={handleCustomAdd} disabled={!customTitle.trim()}>
-                  <Plus className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          </PopoverContent>
-        </Popover>
-
-        {onDelete && (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-            <Button variant="ghost" size="icon" className="h-6 w-6">
-              <MoreVertical className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem
-              className="text-destructive focus:text-destructive"
-              onClick={(e) => {
-                e.stopPropagation();
-                onDelete(card.id, card.leadId);
-              }}
-            >
-              <Trash2 className="w-4 h-4 mr-2" />
-              Remover do Funil
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-        )}
-      </div>
-
-      {/* Header: Name, Company, Rating */}
-      <div className="flex items-start justify-between gap-2 mb-2 pr-16">
-        <div className="flex-1 min-w-0">
-          <h4 className="font-medium text-sm break-words line-clamp-2 group-hover:text-primary transition-colors" title={card.name}>
-            {card.name}
-          </h4>
-          {card.company && (
-            <div className="flex items-center gap-1 text-muted-foreground mt-0.5 min-w-0">
-              <Building2 className="w-3 h-3 flex-shrink-0" />
-              <span className="text-xs break-words line-clamp-2" title={card.company}>{card.company}</span>
-            </div>
-          )}
-        </div>
-        <div className="flex items-center gap-0.5 shrink-0">
-          {[...Array(5)].map((_, i) => (
-            <Star
-              key={i}
-              className={`w-3 h-3 ${
-                i < card.rating
-                  ? "text-primary fill-primary"
-                  : "text-muted-foreground/30"
-              }`}
-            />
-          ))}
-        </div>
-      </div>
-
-      {/* Origin & Urgency Badges */}
-      <div className="flex flex-wrap gap-1.5 mb-2">
-        <Badge 
-          variant="outline" 
-          className={`text-xs text-white border-0 ${originInfo.color}`}
-        >
-          <Globe className="w-3 h-3 mr-1" />
-          {originInfo.label}
-        </Badge>
-        {card.urgency && (
-          <Badge variant="outline" className={`text-xs ${formatUrgency(card.urgency).color}`}>
-            <Clock className="w-3 h-3 mr-1" />
-            {formatUrgency(card.urgency).label}
-          </Badge>
-        )}
-      </div>
-
-      {/* Contact Info */}
-      <div className="space-y-1 mb-2 min-w-0">
-        {card.phone && (
-          <div className="flex items-center gap-1.5 text-muted-foreground min-w-0">
-            <Phone className="w-3 h-3 flex-shrink-0" />
-            <span className="text-xs break-all truncate" title={card.phone}>{card.phone}</span>
-          </div>
-        )}
-        {card.email && (
-          <div className="flex items-center gap-1.5 text-muted-foreground min-w-0">
-            <Mail className="w-3 h-3 flex-shrink-0" />
-            <span className="text-xs break-all truncate" title={card.email}>{card.email}</span>
-          </div>
-        )}
-      </div>
-
-      {/* Business Info: Segment & Faturamento */}
-      {(card.segment || card.faturamento) && (
-        <div className="flex flex-wrap gap-2 mb-2 text-xs text-muted-foreground">
-          {card.segment && (
-            <div className="flex items-center gap-1">
-              <Briefcase className="w-3 h-3" />
-              <span className="capitalize">{card.segment}</span>
-            </div>
-          )}
-          {card.faturamento && (
-            <div className="flex items-center gap-1">
-              <DollarSign className="w-3 h-3" />
-              <span>{formatFaturamento(card.faturamento)}</span>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Compromisso Date */}
-      {card.compromissoDate && (
-        <div className="flex items-center gap-1.5 text-primary mb-2">
-          <Calendar className="w-3.5 h-3.5" />
-          <span className="text-xs font-medium">
-            {new Date(card.compromissoDate).toLocaleDateString("pt-BR", {
-              day: "2-digit",
-              month: "short",
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
-          </span>
-        </div>
-      )}
-
-      {/* Tags coloridas estilo Trello */}
-      {card.tags.length > 0 && (
-        <div className="flex gap-1 mb-2 flex-wrap">
-          {card.tags.slice(0, 4).map((tag) => (
-            <div
-              key={tag.name}
-              className="h-2 rounded-full min-w-[40px] flex-1 max-w-[60px]"
-              style={{ backgroundColor: tag.color }}
-              title={tag.name}
-            />
-          ))}
-        </div>
-      )}
-
-      {/* Footer: Responsible & Time */}
-      <div className="flex items-center justify-between gap-2 pt-2 border-t border-border min-w-0">
-        <span className="text-[10px] text-muted-foreground truncate min-w-0">
-          {formatDistanceToNow(new Date(card.createdAt), { addSuffix: true, locale: ptBR })}
-        </span>
-        <div className="flex items-center gap-2 shrink-0">
-          {formatPhoneForWhatsApp(card.phone) && (
-            <button
-              onClick={(e) => openWhatsApp(card.phone, e)}
-              className="p-1 rounded-md bg-[#25D366]/10 hover:bg-[#25D366]/20 text-[#25D366] transition-colors"
-              title="Abrir WhatsApp"
-            >
-              <MessageCircle className="w-3 h-3" />
-            </button>
-          )}
-          {card.responsible && (
-            <div className="flex items-center gap-1 min-w-0">
-              <User className="w-3 h-3 text-muted-foreground shrink-0" />
-              <span className="text-[10px] text-muted-foreground truncate max-w-[100px]" title={card.responsible}>{card.responsible}</span>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* AI Toggle - sempre visível */}
-      <AIToggle leadId={card.leadId} aiDisabled={card.ai_disabled} />
-    </motion.div>
-  );
-});
-
-// Componente de toggle de IA separado para evitar re-renders
-function AIToggle({ leadId, aiDisabled }: { leadId: string; aiDisabled?: boolean }) {
-  const toggleAIMutation = useToggleLeadAI();
-  const [optimisticAiDisabled, setOptimisticAiDisabled] = useState<boolean | null>(null);
-  
-  // Usar estado otimista se disponível, senão usar o valor da prop
-  const currentAiDisabled = optimisticAiDisabled !== null ? optimisticAiDisabled : (aiDisabled ?? false);
-  
-  const handleToggle = (checked: boolean) => {
-    // Atualização otimista local imediata
-    setOptimisticAiDisabled(!checked);
-    toggleAIMutation.mutate(
-      { leadId, disabled: !checked },
-      {
-        onSuccess: () => {
-          toast.success(checked ? "IA ativada" : "IA desativada", {
-            description: checked 
-              ? "O Copilot voltará a responder mensagens deste lead."
-              : "O Copilot não responderá mais mensagens deste lead.",
-          });
-          // Resetar estado otimista após sucesso
-          setOptimisticAiDisabled(null);
-        },
-        onError: () => {
-          toast.error("Não foi possível alterar o status da IA");
-          // Reverter estado otimista em caso de erro
-          setOptimisticAiDisabled(null);
-        },
-      }
-    );
-  };
-
-  // Previne propagação em todos os níveis
-  const stopAllPropagation = (e: React.MouseEvent | React.PointerEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
-  };
-  
-  return (
-    <motion.div 
-      className="flex items-center justify-between pt-2 mt-2 border-t border-border cursor-pointer"
-      onClick={stopAllPropagation}
-      onPointerDown={stopAllPropagation}
-      onMouseDown={stopAllPropagation}
-      initial={false}
-      animate={{
-        opacity: toggleAIMutation.isPending ? 0.7 : 1,
-      }}
-      transition={{ duration: 0.2 }}
-    >
-      <div className="flex items-center gap-1.5">
-        <motion.div
-          animate={{
-            scale: toggleAIMutation.isPending ? [1, 1.2, 1] : 1,
-            rotate: toggleAIMutation.isPending ? [0, 10, -10, 0] : 0,
-          }}
-          transition={{ 
-            duration: 0.5,
-            repeat: toggleAIMutation.isPending ? Infinity : 0,
-          }}
-        >
-          <Bot className={`w-3.5 h-3.5 transition-colors duration-200 ${currentAiDisabled ? "text-muted-foreground" : "text-primary"}`} />
-        </motion.div>
-        <motion.span 
-          className="text-[10px] text-muted-foreground"
-          animate={{
-            opacity: currentAiDisabled ? 0.5 : 1,
-          }}
-          transition={{ duration: 0.2 }}
-        >
-          IA Copilot
-        </motion.span>
-      </div>
-      <div 
-        onClick={stopAllPropagation}
-        onPointerDown={stopAllPropagation}
-      >
-        <motion.div
-          animate={{
-            scale: toggleAIMutation.isPending ? 0.95 : 1,
-          }}
-          transition={{ duration: 0.15 }}
-        >
-          <Switch
-            checked={!currentAiDisabled}
-            onCheckedChange={handleToggle}
-            disabled={toggleAIMutation.isPending}
-            className="scale-75"
-          />
-        </motion.div>
-      </div>
-    </motion.div>
-  );
-}
 
 export default function PipeWhatsapp() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterResponsible, setFilterResponsible] = useState("all");
   const [filterOrigin, setFilterOrigin] = useState("all");
-  const [isLeadModalOpen, setIsLeadModalOpen] = useState(false);
+  const [isCreateLeadModalOpen, setIsCreateLeadModalOpen] = useState(false);
   const [isOpportunityModalOpen, setIsOpportunityModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [editingLead, setEditingLead] = useState<any>(null);
+  const [isDetailDrawerOpen, setIsDetailDrawerOpen] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<any>(null);
   const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; pipeId: string; leadId: string } | null>(null);
   const [deleteAllLeadsDialogOpen, setDeleteAllLeadsDialogOpen] = useState(false);
   const [meetingModal, setMeetingModal] = useState<{
@@ -494,22 +99,22 @@ export default function PipeWhatsapp() {
   );
 
   const { data: userRole } = useUserRole();
+  const createPipeWhatsapp = useCreatePipeWhatsapp();
   const updatePipeWhatsapp = useUpdatePipeWhatsapp();
   const { allowed: canMovePipe } = useCanPerformAction("move_pipe_record");
   const deletePipeWhatsapp = useDeletePipeWhatsapp();
   const deleteAllLeadsInPipe = useDeleteAllLeadsInPipe("whatsapp");
-  const createPipeConfirmacao = useCreatePipeConfirmacao();
   const createPipeProposta = useCreatePipeProposta();
-  const createAcaoDoDia = useCreateAcaoDoDia();
   const logAction = useLogLeadAction();
+  const createAcaoDoDia = useCreateAcaoDoDia();
+  const updateLead = useUpdateLead();
 
-  const isAdmin = userRole?.role === "admin";
   const { allowed: canDeleteCards } = useFeaturePermission("pipeline.delete_cards");
 
   const responsibleMembers = useResponsibleMembers();
 
-  // Transform pipe data to WhatsappCard format
-  const transformToCard = (item: any): WhatsappCard => {
+  // Transform pipe data to LeadCardData format
+  const transformToCard = (item: any): LeadCardData => {
     const lead = item.lead;
     return {
       id: item.id,
@@ -518,19 +123,15 @@ export default function PipeWhatsapp() {
       phone: lead?.phone,
       email: lead?.email,
       rating: lead?.rating || 0,
-      responsible: item.sdr?.name || lead?.sdr?.name,
-      responsibleId: item.sdr_id,
+      responsible: item.responsible?.name || item.sdr?.name || lead?.responsible?.name || lead?.sdr?.name,
       tags: lead?.lead_tags?.map((lt: any) => ({ name: lt.tag?.name, color: lt.tag?.color || "#888" })).filter((t: any) => t.name) || [],
-      scheduledDate: item.scheduled_date,
       createdAt: item.created_at,
-      segment: lead?.segment,
       faturamento: lead?.faturamento,
       urgency: lead?.urgency,
-      compromissoDate: lead?.compromisso_date,
+      date: lead?.compromisso_date ? new Date(lead.compromisso_date) : null,
+      dateLabel: lead?.compromisso_date ? format(new Date(lead.compromisso_date), "dd MMM, HH:mm", { locale: ptBR }) : undefined,
       leadId: item.lead_id,
-      closerId: lead?.closer_id,
       origin: lead?.origin,
-      ai_disabled: lead?.ai_disabled,
     };
   };
 
@@ -573,7 +174,7 @@ export default function PipeWhatsapp() {
   }, [pipelineStages]);
 
   // Organize data by status columns
-  const columns = useMemo((): KanbanColumn<WhatsappCard>[] => {
+  const columns = useMemo((): KanbanColumn<LeadCardData>[] => {
     if (!pipeData) return statusColumns.map(col => ({ ...col, items: [] }));
 
     return statusColumns.map(col => {
@@ -710,7 +311,7 @@ export default function PipeWhatsapp() {
             <Settings2 className="w-4 h-4 mr-2" />
             Configurações
           </Button>
-          <Button size="sm" variant="outline" onClick={() => { setEditingLead(null); setIsLeadModalOpen(true); }}>
+          <Button size="sm" variant="outline" onClick={() => setIsCreateLeadModalOpen(true)}>
             <Plus className="w-4 h-4 mr-2" />
             Novo Lead
           </Button>
@@ -849,19 +450,22 @@ export default function PipeWhatsapp() {
           );
         }}
         renderCard={(card) => (
-          <WhatsappCardComponent
-            card={card}
-            onDelete={canDeleteCards ? handleOpenDeleteDialog : undefined}
-            isAdmin={isAdmin}
-            onQuickAdd={(leadId, leadName, title) => {
-              createAcaoDoDia.mutate({ title, lead_id: leadId });
-            }}
-            onCardClick={() => {
+          <LeadCard
+            lead={card}
+            variant="whatsapp"
+            onClick={() => {
               const item = pipeData?.find(p => p.id === card.id);
-              if (item?.lead) {
-                setEditingLead(item.lead);
-                setIsLeadModalOpen(true);
+              if (item) {
+                setSelectedItem(item);
+                setIsDetailDrawerOpen(true);
               }
+            }}
+            onRemove={canDeleteCards ? () => handleOpenDeleteDialog(card.id, card.leadId || "") : undefined}
+            onQuickAction={(title) => {
+              createAcaoDoDia.mutate({ title, lead_id: card.leadId || undefined });
+            }}
+            onCalorChange={(calor) => {
+              if (card.leadId) updateLead.mutate({ id: card.leadId, rating: calor });
             }}
           />
         )}
@@ -882,15 +486,42 @@ export default function PipeWhatsapp() {
         onSuccess={() => refetch()}
       />
 
-      {/* Lead Modal */}
+      {/* Create Lead Modal */}
       <LeadModal
-        open={isLeadModalOpen}
-        onOpenChange={setIsLeadModalOpen}
-        lead={editingLead}
-        onSuccess={() => {
+        open={isCreateLeadModalOpen}
+        onOpenChange={setIsCreateLeadModalOpen}
+        lead={null}
+        onSuccess={async (newLeadId) => {
+          if (newLeadId && organizationId) {
+            try {
+              const firstStage = pipelineStages.length > 0
+                ? pipelineStages.sort((a, b) => a.position - b.position)[0].stage_key
+                : "novo";
+              await createPipeWhatsapp.mutateAsync({
+                lead_id: newLeadId,
+                status: firstStage,
+                organization_id: organizationId,
+              });
+            } catch (err) {
+              console.error("[PipeWhatsapp] Erro ao inserir no funil:", err);
+              toast.error("Lead criado, mas não foi possível adicioná-lo ao funil.");
+            }
+          }
           refetch();
-          setEditingLead(null);
         }}
+      />
+
+      {/* Lead Detail Drawer */}
+      <LeadDetailDrawer
+        open={isDetailDrawerOpen}
+        onOpenChange={setIsDetailDrawerOpen}
+        leadId={selectedItem?.lead_id || null}
+        variant="whatsapp"
+        pipeData={selectedItem}
+        onSuccess={refetch}
+        renderFunnelContext={({ lead, pipeData: pd, onSuccess: onCtxSuccess }) => (
+          <WhatsAppContext lead={lead} pipeData={pd} onSuccess={onCtxSuccess} />
+        )}
       />
 
       {/* Delete Confirmation Dialog */}

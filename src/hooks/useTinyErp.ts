@@ -240,7 +240,7 @@ export function useTinyErpOrderMapping(pipePropostaId: string | null) {
 
       const { data, error } = await supabase
         .from("tinyerp_order_mappings")
-        .select("tiny_order_id, tiny_order_number, tiny_nfe_id, tiny_nfe_status, last_synced_at")
+        .select("tiny_order_id, tiny_order_number, tiny_nfe_id, tiny_nfe_status, last_synced_at, nfe_link, nfe_numero, nfe_chave, nfe_status, nfe_updated_at")
         .eq("pipe_proposta_id", pipePropostaId)
         .maybeSingle();
 
@@ -248,5 +248,42 @@ export function useTinyErpOrderMapping(pipePropostaId: string | null) {
       return data;
     },
     enabled: !!pipePropostaId && !!organizationId,
+  });
+}
+
+// ─── Fetch NF-e (manual trigger) ─────────────────────────────────────────────
+
+export function useTinyErpFetchNfe() {
+  const { organizationId } = useOrganization();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ tinyOrderId, idNotaFiscal }: { tinyOrderId: string; idNotaFiscal?: string }) => {
+      if (!organizationId) throw new Error("Sem organização");
+
+      const { data, error } = await supabase.functions.invoke("tinyerp-fetch-nfe", {
+        body: {
+          organizationId,
+          tinyOrderId,
+          idNotaFiscal: idNotaFiscal || tinyOrderId,
+        },
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["tinyerp-order-mapping"] });
+      queryClient.invalidateQueries({ queryKey: ["tinyerp-sync-logs"] });
+      if (data?.nfe_link) {
+        toast.success("NF-e encontrada!", { description: `NF-e #${data.nfe_numero || ""}` });
+      } else {
+        toast.info("NF-e ainda não disponível", { description: "Tente novamente mais tarde" });
+      }
+    },
+    onError: (error: Error) => {
+      toast.error("Erro ao buscar NF-e", { description: error.message });
+    },
   });
 }

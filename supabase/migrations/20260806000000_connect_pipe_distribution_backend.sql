@@ -77,7 +77,8 @@ BEGIN
           'leadId', NEW.lead_id::text,
           'pipeRecordId', NEW.id::text,
           'pipeType', v_pipe_type
-        )
+        ),
+        timeout_milliseconds := 15000
       );
     END IF;
   EXCEPTION WHEN OTHERS THEN

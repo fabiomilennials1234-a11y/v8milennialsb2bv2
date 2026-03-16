@@ -1,3 +1,6 @@
+/**
+ * @deprecated Use LeadDetailDrawer + UpsellClientContext instead. This component is kept for reference only.
+ */
 import { useState } from "react";
 import {
   User, Building2, Mail, Phone, Calendar, DollarSign, Package,

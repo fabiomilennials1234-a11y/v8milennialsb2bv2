@@ -182,24 +182,22 @@ serve(withSentry('assign-user-to-org', async (req) => {
       );
     }
 
-    const { error: urErr } = await supabase.from("user_roles").insert({
-      user_id: userId,
-      role: roleForInsert,
-    });
+    const { error: urErr } = await supabase.from("user_roles").upsert(
+      { user_id: userId, role: roleForInsert },
+      { onConflict: "user_id,role", ignoreDuplicates: true }
+    );
     if (urErr) {
-      if (!String(urErr.message).toLowerCase().includes("duplicate")) {
-        console.error("[assign-user-to-org] user_roles insert:", urErr);
-        await supabase
-          .from("team_members")
-          .delete()
-          .eq("user_id", userId)
-          .eq("organization_id", organizationId);
-        return jsonResponse(
-          { success: false, error: "Insert failed", message: urErr.message },
-          500,
-          corsHeaders
-        );
-      }
+      console.error("[assign-user-to-org] user_roles upsert:", urErr);
+      await supabase
+        .from("team_members")
+        .delete()
+        .eq("user_id", userId)
+        .eq("organization_id", organizationId);
+      return jsonResponse(
+        { success: false, error: "Insert failed", message: urErr.message },
+        500,
+        corsHeaders
+      );
     }
 
     await logRuntime({

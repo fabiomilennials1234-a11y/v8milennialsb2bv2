@@ -5,11 +5,14 @@ import { Button } from "@/components/ui/button";
 import { usePipelineStages, stagesToColumns, type PipelineStage } from "@/hooks/usePipelineStages";
 import { useUpsellClients, useUpdateUpsellClient } from "@/hooks/useUpsellClients";
 import { useUpsellOrders } from "@/hooks/useUpsellOrders";
-import { UpsellClientCard } from "./UpsellClientCard";
-import { ClientDetailModal } from "./ClientDetailModal";
+import { LeadCard, type LeadCardData } from "@/components/leads/LeadCard";
+import { LeadDetailDrawer } from "@/components/leads/LeadDetailDrawer";
+import { UpsellClientContext } from "@/components/leads/funnel-contexts";
 import { QuickSaleModal } from "./QuickSaleModal";
 import { PipeSettingsDialog } from "@/components/pipelines/PipeSettingsDialog";
 import { useIsAdmin } from "@/hooks/useUserRole";
+import { useCreateAcaoDoDia } from "@/hooks/useAcoesDoDia";
+import { useUpdateLead } from "@/hooks/useLeads";
 import { toast } from "sonner";
 
 interface UpsellGestaoKanbanProps {
@@ -31,10 +34,12 @@ export function UpsellGestaoKanban({ searchQuery, filterPotencial }: UpsellGesta
   const { data: clients = [] } = useUpsellClients();
   const { data: orders = [] } = useUpsellOrders();
   const updateClient = useUpdateUpsellClient();
+  const createAcaoDoDia = useCreateAcaoDoDia();
+  const updateLead = useUpdateLead();
   const isAdmin = useIsAdmin();
 
-  const [detailClientId, setDetailClientId] = useState<string>();
   const [detailOpen, setDetailOpen] = useState(false);
+  const [selectedClient, setSelectedClient] = useState<any>(null);
   const [quickSaleClientId, setQuickSaleClientId] = useState<string>();
   const [quickSaleClientName, setQuickSaleClientName] = useState("");
   const [quickSaleOpen, setQuickSaleOpen] = useState(false);
@@ -81,8 +86,8 @@ export function UpsellGestaoKanban({ searchQuery, filterPotencial }: UpsellGesta
     setDragOverCol(null);
   };
 
-  const openDetail = (clientId: string) => {
-    setDetailClientId(clientId);
+  const openDetail = (client: any) => {
+    setSelectedClient(client);
     setDetailOpen(true);
   };
 
@@ -167,10 +172,28 @@ export function UpsellGestaoKanban({ searchQuery, filterPotencial }: UpsellGesta
                     draggable
                     onDragStart={(e) => handleDragStart(e as any, client.id)}
                   >
-                    <UpsellClientCard
-                      client={client}
-                      totalVendas={vendasPorCliente[client.id] || 0}
-                      onClick={() => openDetail(client.id)}
+                    <LeadCard
+                      lead={{
+                        id: client.id,
+                        name: client.name,
+                        company: client.company,
+                        phone: client.phone,
+                        value: vendasPorCliente[client.id] || 0,
+                        valueLabel: formatCurrency(vendasPorCliente[client.id] || 0),
+                        responsible: (client.closer as any)?.name,
+                        potencial: client.potencial,
+                        isInactive: !client.is_active,
+                        createdAt: client.created_at,
+                        leadId: (client as any).lead_id,
+                      }}
+                      variant="upsell_client"
+                      onClick={() => openDetail(client)}
+                      onQuickAction={(title) => {
+                        createAcaoDoDia.mutate({ title, lead_id: (client as any).lead_id || undefined });
+                      }}
+                      onCalorChange={(calor) => {
+                        if ((client as any).lead_id || client.leadId) updateLead.mutate({ id: (client as any).lead_id || client.leadId!, rating: calor });
+                      }}
                     />
                   </motion.div>
                 ))}
@@ -180,19 +203,25 @@ export function UpsellGestaoKanban({ searchQuery, filterPotencial }: UpsellGesta
         })}
       </div>
 
-      <ClientDetailModal
+      <LeadDetailDrawer
         open={detailOpen}
         onOpenChange={setDetailOpen}
-        clientId={detailClientId}
-        onQuickSale={() => {
-          if (detailClientId) {
-            const client = clients.find((c) => c.id === detailClientId);
-            if (client) {
-              setDetailOpen(false);
-              openQuickSale(client.id, client.name);
-            }
-          }
-        }}
+        leadId={(selectedClient as any)?.lead_id || selectedClient?.lead?.id || null}
+        variant="upsell_client"
+        pipeData={selectedClient}
+        renderFunnelContext={({ lead, pipeData: client, onSuccess }) => (
+          <UpsellClientContext
+            lead={lead}
+            pipeData={client}
+            onSuccess={onSuccess}
+            onQuickSale={() => {
+              if (selectedClient) {
+                setDetailOpen(false);
+                openQuickSale(selectedClient.id, selectedClient.name);
+              }
+            }}
+          />
+        )}
       />
 
       {quickSaleClientId && (

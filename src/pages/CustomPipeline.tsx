@@ -37,6 +37,7 @@ import {
   useDeleteCustomPipeline,
 } from "@/hooks/useCustomPipelines";
 import { CustomPipelineKanban } from "@/components/custom-pipelines/CustomPipelineKanban";
+import { LeadDetailDrawer } from "@/components/leads/LeadDetailDrawer";
 import { AddLeadToPipeModal } from "@/components/custom-pipelines/AddLeadToPipeModal";
 import { CustomPipeSettingsDialog } from "@/components/custom-pipelines/CustomPipeSettingsDialog";
 import { toast } from "sonner";
@@ -64,6 +65,8 @@ export default function CustomPipelinePage() {
   const [showSettings, setShowSettings] = useState(false);
   const [removeEntryId, setRemoveEntryId] = useState<string | null>(null);
   const [showDeletePipeline, setShowDeletePipeline] = useState(false);
+  const [isDetailDrawerOpen, setIsDetailDrawerOpen] = useState(false);
+  const [selectedEntry, setSelectedEntry] = useState<any>(null);
 
   const { data: pipeline, isLoading: loadingPipeline } = useCustomPipeline(slug);
   const { data: stages = [], isLoading: loadingStages } = useCustomPipelineStages(pipeline?.id);
@@ -179,6 +182,10 @@ export default function CustomPipelinePage() {
           entries={entries}
           searchQuery={searchQuery}
           onRemoveEntry={canDeleteCards ? (id) => setRemoveEntryId(id) : undefined}
+          onClickEntry={(entry) => {
+            setSelectedEntry(entry);
+            setIsDetailDrawerOpen(true);
+          }}
         />
       ) : (
         <div className="text-center py-16 text-muted-foreground">
@@ -211,6 +218,15 @@ export default function CustomPipelinePage() {
           stages={stages}
         />
       )}
+
+      {/* Lead Detail Drawer */}
+      <LeadDetailDrawer
+        open={isDetailDrawerOpen}
+        onOpenChange={setIsDetailDrawerOpen}
+        leadId={selectedEntry?.lead_id || null}
+        variant="custom"
+        pipeData={selectedEntry}
+      />
 
       {/* Confirmar remoção de lead */}
       <AlertDialog open={!!removeEntryId} onOpenChange={() => setRemoveEntryId(null)}>

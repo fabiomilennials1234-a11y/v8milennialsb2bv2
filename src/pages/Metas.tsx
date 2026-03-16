@@ -284,15 +284,15 @@ export default function Metas() {
         >
           <h2 className="text-lg font-semibold mb-6 flex items-center gap-2">
             <Trophy className="w-5 h-5 text-primary" />
-            Ranking Closers
+            Ranking Vendas
           </h2>
           {individualLoading ? (
             <div className="space-y-4">
               {Array(3).fill(0).map((_, i) => <Skeleton key={i} className="h-20" />)}
             </div>
-          ) : individualGoals?.closerGoals && individualGoals.closerGoals.length > 0 ? (
+          ) : individualGoals?.salesGoals && individualGoals.salesGoals.length > 0 ? (
             <div className="space-y-3">
-              {individualGoals.closerGoals
+              {individualGoals.salesGoals
                 .sort((a, b) => b.percentage - a.percentage)
                 .map((vendedor, index) => {
                   const position = index + 1;
@@ -367,7 +367,7 @@ export default function Metas() {
             </div>
           ) : (
             <p className="text-muted-foreground text-center py-4">
-              Nenhuma meta individual para closers.
+              Nenhum membro de vendas cadastrado.
             </p>
           )}
         </motion.div>
@@ -381,15 +381,15 @@ export default function Metas() {
         >
           <h2 className="text-lg font-semibold mb-6 flex items-center gap-2">
             <Calendar className="w-5 h-5 text-chart-5" />
-            Ranking SDRs (Reuniões)
+            Ranking Reuniões
           </h2>
           {individualLoading ? (
             <div className="space-y-4">
               {Array(3).fill(0).map((_, i) => <Skeleton key={i} className="h-20" />)}
             </div>
-          ) : individualGoals?.sdrGoals && individualGoals.sdrGoals.length > 0 ? (
+          ) : individualGoals?.meetingsGoals && individualGoals.meetingsGoals.length > 0 ? (
             <div className="space-y-3">
-              {individualGoals.sdrGoals
+              {individualGoals.meetingsGoals
                 .sort((a, b) => b.percentage - a.percentage)
                 .map((sdr, index) => {
                   const position = index + 1;
@@ -464,7 +464,7 @@ export default function Metas() {
             </div>
           ) : (
             <p className="text-muted-foreground text-center py-4">
-              Nenhuma meta individual para SDRs.
+              Nenhum membro de reuniões cadastrado.
             </p>
           )}
         </motion.div>

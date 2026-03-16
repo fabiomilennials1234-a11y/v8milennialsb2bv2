@@ -1,3 +1,6 @@
+/**
+ * @deprecated Use LeadCard variant="upsell_campanha" instead. This component is kept for reference only.
+ */
 import { motion } from "framer-motion";
 import { Calendar, User, DollarSign, Building2, Clock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";

@@ -84,7 +84,7 @@ export default function Dashboard() {
     : 0;
 
   // Transform ranking data for preview
-  const topClosers = rankingData?.closerRanking?.slice(0, 5).map(c => ({
+  const topClosers = rankingData?.salesRanking?.slice(0, 5).map(c => ({
     id: c.id,
     name: c.name,
     value: c.value,

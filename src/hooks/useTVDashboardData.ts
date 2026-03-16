@@ -97,15 +97,15 @@ export function useTVDashboardData() {
       const salesGoalVendas = teamGoals?.find(g => g.type === "vendas" && !g.team_member_id);
       const salesGoalFaturamento = teamGoals?.find(g => g.type === "faturamento" || g.name.toLowerCase().includes("faturamento"));
       const salesGoal = salesGoalVendas || salesGoalFaturamento;
-      const somaMetasClosers =
-        individualGoals?.closerGoals?.reduce((s, g) => s + (g.goal || 0), 0) ?? 0;
-      const myGoal = myId && individualGoals?.closerGoals
-        ? individualGoals.closerGoals.find(g => g.id === myId)
-        : myId && individualGoals?.sdrGoals
-          ? individualGoals.sdrGoals.find(g => g.id === myId)
+      const somaMetasSales =
+        individualGoals?.salesGoals?.reduce((s, g) => s + (g.goal || 0), 0) ?? 0;
+      const myGoal = myId && individualGoals?.salesGoals
+        ? individualGoals.salesGoals.find(g => g.id === myId)
+        : myId && individualGoals?.meetingsGoals
+          ? individualGoals.meetingsGoals.find(g => g.id === myId)
           : null;
       const metaVendasMes = isAdmin
-        ? (salesGoal?.target_value || somaMetasClosers || 0)
+        ? (salesGoal?.target_value || somaMetasSales || 0)
         : (myGoal?.goal ?? 0);
       
       // Filter proposals for current month (já filtradas por usuário se não admin)
@@ -224,22 +224,22 @@ export function useTVDashboardData() {
       
       // ========== INDIVIDUAL GOALS - CALCULATE DYNAMICALLY ==========
       // Não-admin: só metas do próprio usuário
-      const closerGoalsSource = isAdmin ? (individualGoals?.closerGoals || []) : (myId && individualGoals?.closerGoals?.find(g => g.id === myId) ? [individualGoals.closerGoals.find(g => g.id === myId)!] : []);
-      const sdrGoalsSource = isAdmin ? (individualGoals?.sdrGoals || []) : (myId && individualGoals?.sdrGoals?.find(g => g.id === myId) ? [individualGoals.sdrGoals.find(g => g.id === myId)!] : []);
-      
-      const closerGoals = closerGoalsSource.map(g => {
-        const closerSales = currentMonthPropostas
-          .filter(p => p.closer_id === g.id)
+      const salesGoalsSource = isAdmin ? (individualGoals?.salesGoals || []) : (myId && individualGoals?.salesGoals?.find(g => g.id === myId) ? [individualGoals.salesGoals.find(g => g.id === myId)!] : []);
+      const meetingsGoalsSource = isAdmin ? (individualGoals?.meetingsGoals || []) : (myId && individualGoals?.meetingsGoals?.find(g => g.id === myId) ? [individualGoals.meetingsGoals.find(g => g.id === myId)!] : []);
+
+      const salesGoals = salesGoalsSource.map(g => {
+        const memberSales = currentMonthPropostas
+          .filter(p => (p.responsible_id || p.closer_id) === g.id)
           .reduce((sum, p) => sum + (p.sale_value || 0), 0);
-        const currentValue = closerSales;
+        const currentValue = memberSales;
         const goalValue = g.goal || 0;
         const percentage = goalValue > 0 ? Math.round((currentValue / goalValue) * 100) : 0;
         return { name: g.name, id: g.id, current: currentValue, goal: goalValue, percentage };
       });
-      
-      const sdrGoals = sdrGoalsSource.map(g => {
-        const sdrMeetings = currentMonthConfirmacoes.filter(c => c.sdr_id === g.id && c.status === "compareceu").length;
-        const currentValue = sdrMeetings;
+
+      const meetingsGoalsCalc = meetingsGoalsSource.map(g => {
+        const memberMeetings = currentMonthConfirmacoes.filter(c => (c.responsible_id || c.sdr_id) === g.id && c.status === "compareceu").length;
+        const currentValue = memberMeetings;
         const goalValue = g.goal || 0;
         const percentage = goalValue > 0 ? Math.round((currentValue / goalValue) * 100) : 0;
         return { name: g.name, id: g.id, current: currentValue, goal: goalValue, percentage };
@@ -284,8 +284,8 @@ export function useTVDashboardData() {
         propostasQuentes,
         vendasDoMes,
         individualGoals: {
-          closers: closerGoals,
-          sdrs: sdrGoals
+          closers: salesGoals,
+          sdrs: meetingsGoalsCalc
         },
         funnel: {
           reunioesMarcadas: reunioesMarcadasFunnel,

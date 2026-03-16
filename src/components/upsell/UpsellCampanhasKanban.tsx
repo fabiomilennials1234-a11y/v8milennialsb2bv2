@@ -1,8 +1,12 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { useUpsellCampanhas, useUpdateUpsellCampanha } from "@/hooks/useUpsellCampanhas";
-import { UpsellCampanhaCard } from "./UpsellCampanhaCard";
+import { LeadCard } from "@/components/leads/LeadCard";
+import { LeadDetailDrawer } from "@/components/leads/LeadDetailDrawer";
+import { UpsellClientContext } from "@/components/leads/funnel-contexts";
 import { QuickSaleModal } from "./QuickSaleModal";
+import { useCreateAcaoDoDia } from "@/hooks/useAcoesDoDia";
+import { useUpdateLead } from "@/hooks/useLeads";
 import { toast } from "sonner";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -28,7 +32,11 @@ const CAMPANHA_COLUMNS: { id: CampanhaStatus; title: string; color: string }[] =
 export function UpsellCampanhasKanban({ searchQuery, filterStatus, filterResponsible }: UpsellCampanhasKanbanProps) {
   const { data: campanhas = [] } = useUpsellCampanhas();
   const updateCampanha = useUpdateUpsellCampanha();
+  const createAcaoDoDia = useCreateAcaoDoDia();
+  const updateLead = useUpdateLead();
 
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [selectedCampanha, setSelectedCampanha] = useState<any>(null);
   const [quickSaleOpen, setQuickSaleOpen] = useState(false);
   const [quickSaleCampanha, setQuickSaleCampanha] = useState<{
     id: string;
@@ -153,7 +161,32 @@ export function UpsellCampanhasKanban({ searchQuery, filterStatus, filterRespons
                     draggable
                     onDragStart={(e) => handleDragStart(e as any, campanha.id)}
                   >
-                    <UpsellCampanhaCard campanha={campanha} />
+                    <LeadCard
+                      lead={{
+                        id: campanha.id,
+                        name: (campanha.client as any)?.name || "Cliente",
+                        company: (campanha.client as any)?.company,
+                        potencial: (campanha.client as any)?.potencial,
+                        responsible: (campanha.closer as any)?.name,
+                        value: Number(campanha.mrr_planejado || 0) + Number(campanha.projeto_planejado || 0),
+                        valueLabel: `R$ ${(Number(campanha.mrr_planejado || 0) + Number(campanha.projeto_planejado || 0)).toLocaleString("pt-BR")}`,
+                        date: campanha.data_abordagem ? new Date(campanha.data_abordagem) : null,
+                        dateLabel: campanha.data_abordagem ? new Date(campanha.data_abordagem).toLocaleDateString("pt-BR") : undefined,
+                        createdAt: campanha.created_at,
+                        leadId: (campanha.client as any)?.lead_id,
+                      }}
+                      variant="upsell_campanha"
+                      onClick={() => {
+                        setSelectedCampanha(campanha);
+                        setDetailOpen(true);
+                      }}
+                      onQuickAction={(title) => {
+                        createAcaoDoDia.mutate({ title, lead_id: (campanha.client as any)?.lead_id || undefined });
+                      }}
+                      onCalorChange={(calor) => {
+                        if ((campanha as any).lead_id || (campanha.client as any)?.lead_id) updateLead.mutate({ id: (campanha as any).lead_id || (campanha.client as any)?.lead_id!, rating: calor });
+                      }}
+                    />
                   </motion.div>
                 ))}
               </div>
@@ -161,6 +194,17 @@ export function UpsellCampanhasKanban({ searchQuery, filterStatus, filterRespons
           );
         })}
       </div>
+
+      <LeadDetailDrawer
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+        leadId={(selectedCampanha?.client as any)?.lead_id || null}
+        variant="upsell_campanha"
+        pipeData={selectedCampanha?.client}
+        renderFunnelContext={({ lead, pipeData: client, onSuccess }) => (
+          <UpsellClientContext lead={lead} pipeData={client} onSuccess={onSuccess} />
+        )}
+      />
 
       {quickSaleCampanha && (
         <QuickSaleModal
