@@ -14,9 +14,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Shuffle, User, AlertTriangle, Save, Loader2 } from "lucide-react";
+import { Shuffle, User, AlertTriangle, Save, Loader2, CheckCircle2 } from "lucide-react";
 import { type PipelineType } from "@/hooks/usePipelineStages";
-import { useTeamMembers } from "@/hooks/useTeamMembers";
+import { useResponsibleMembers } from "@/hooks/useTeamMembers";
 import {
   usePipeDistributionRule,
   useSavePipeDistribution,
@@ -35,7 +35,7 @@ const MODE_OPTIONS = [
 ];
 
 export function PipeDistributionSection({ pipeType }: PipeDistributionSectionProps) {
-  const { data: teamMembers } = useTeamMembers();
+  const teamMembers = useResponsibleMembers();
   const { data: distData, isLoading } = usePipeDistributionRule(pipeType);
   const saveMutation = useSavePipeDistribution();
 
@@ -62,13 +62,9 @@ export function PipeDistributionSection({ pipeType }: PipeDistributionSectionPro
   const handleSave = () => {
     saveMutation.mutate({
       pipeType,
-      sdrMode: mode === "none" ? null : (mode as DistributionMode),
-      sdrAssignedTo: mode === "single" ? assignedTo : null,
-      closerMode: null,
-      closerAssignedTo: null,
-      sdrMemberIds:
-        mode === "round_robin" || mode === "random" ? memberIds : [],
-      closerMemberIds: [],
+      mode: mode === "none" ? null : (mode as DistributionMode),
+      assignedTo: mode === "single" ? assignedTo : null,
+      memberIds: mode === "round_robin" || mode === "random" ? memberIds : [],
     });
   };
 
@@ -92,12 +88,25 @@ export function PipeDistributionSection({ pipeType }: PipeDistributionSectionPro
     );
   }
 
+  const isActive = mode !== "none" && distData?.rule?.sdr_mode;
+  const poolCount = distData?.members?.length ?? 0;
+
   return (
     <div className="space-y-6">
       <p className="text-sm text-muted-foreground">
         Configure como o responsável é atribuído automaticamente quando um
         lead entra neste funil.
       </p>
+
+      {isActive && (
+        <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950/30 px-4 py-2.5">
+          <CheckCircle2 className="w-4 h-4 text-green-600 dark:text-green-400 shrink-0" />
+          <span className="text-sm text-green-700 dark:text-green-300">
+            Distribuição automática ativa
+            {poolCount > 0 && ` \u2014 ${poolCount} membro${poolCount > 1 ? "s" : ""} no pool`}
+          </span>
+        </div>
+      )}
 
       {/* ─── Distribuição de Responsáveis ──────────────────── */}
       <div className="space-y-3">
@@ -133,7 +142,7 @@ export function PipeDistributionSection({ pipeType }: PipeDistributionSectionPro
               <SelectValue placeholder="Selecione o responsável" />
             </SelectTrigger>
             <SelectContent>
-              {teamMembers?.map((m) => (
+              {teamMembers.map((m) => (
                 <SelectItem key={m.id} value={m.id}>
                   <span className="flex items-center gap-2">
                     <User className="w-3 h-3" />
@@ -151,7 +160,7 @@ export function PipeDistributionSection({ pipeType }: PipeDistributionSectionPro
               Pool de responsáveis — selecione quem participa da distribuição:
             </p>
             <div className="space-y-1.5 max-h-48 overflow-y-auto">
-              {teamMembers?.map((m) => (
+              {teamMembers.map((m) => (
                 <label
                   key={m.id}
                   className="flex items-center gap-2 p-2 rounded-md hover:bg-muted/50 cursor-pointer"

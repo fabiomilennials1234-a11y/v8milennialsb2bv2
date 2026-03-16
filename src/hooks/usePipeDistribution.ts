@@ -24,7 +24,7 @@ export interface PipeDistributionMember {
   id: string;
   rule_id: string;
   team_member_id: string;
-  role: "sdr" | "closer";
+  role: "sdr" | "closer" | "member";
 }
 
 const QUERY_KEY = "pipe-distribution";
@@ -77,26 +77,23 @@ export function useSavePipeDistribution() {
   return useMutation({
     mutationFn: async (payload: {
       pipeType: string;
-      sdrMode: DistributionMode;
-      sdrAssignedTo: string | null;
-      closerMode: DistributionMode;
-      closerAssignedTo: string | null;
-      sdrMemberIds: string[];
-      closerMemberIds: string[];
+      mode: DistributionMode;
+      assignedTo: string | null;
+      memberIds: string[];
     }) => {
       if (!organizationId) throw new Error("Sem organização");
 
-      // Upsert da regra
+      // Upsert da regra (uses sdr_mode/sdr_assigned_to for backward compat)
       const { data: rule, error: ruleError } = await supabase
         .from("pipe_distribution_rules")
         .upsert(
           {
             organization_id: organizationId,
             pipe_type: payload.pipeType,
-            sdr_mode: payload.sdrMode,
-            sdr_assigned_to: payload.sdrAssignedTo,
-            closer_mode: payload.closerMode,
-            closer_assigned_to: payload.closerAssignedTo,
+            sdr_mode: payload.mode,
+            sdr_assigned_to: payload.mode === "single" ? payload.assignedTo : null,
+            closer_mode: null,
+            closer_assigned_to: null,
             updated_at: new Date().toISOString(),
           },
           { onConflict: "organization_id,pipe_type" }
@@ -114,18 +111,11 @@ export function useSavePipeDistribution() {
 
       if (deleteError) throw deleteError;
 
-      const membersToInsert = [
-        ...payload.sdrMemberIds.map((id) => ({
-          rule_id: rule.id,
-          team_member_id: id,
-          role: "sdr" as const,
-        })),
-        ...payload.closerMemberIds.map((id) => ({
-          rule_id: rule.id,
-          team_member_id: id,
-          role: "closer" as const,
-        })),
-      ];
+      const membersToInsert = payload.memberIds.map((id) => ({
+        rule_id: rule.id,
+        team_member_id: id,
+        role: "member" as const,
+      }));
 
       if (membersToInsert.length > 0) {
         const { error: insertError } = await supabase
