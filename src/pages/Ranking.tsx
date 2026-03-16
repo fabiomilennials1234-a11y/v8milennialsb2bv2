@@ -21,6 +21,8 @@ interface RankingUser {
 }
 
 const roleDisplayLabels: Record<string, string> = {
+  Vendas: "Vendas",
+  "Reuniões": "Reuniões",
   Closer: "Vendas",
   SDR: "Reuniões",
 };
@@ -140,8 +142,8 @@ export default function Ranking() {
   const { data: rankingData, isLoading } = useRankingData(now.getMonth() + 1, now.getFullYear());
   const avatarMap = useAvatarMap();
 
-  const closers: RankingUser[] = rankingData?.closerRanking || [];
-  const sdrs: RankingUser[] = rankingData?.sdrRanking || [];
+  const closers: RankingUser[] = rankingData?.salesRanking || [];
+  const sdrs: RankingUser[] = rankingData?.meetingsRanking || [];
   const leader = closers[0];
 
   // Transform for podium

@@ -132,15 +132,15 @@ export function useConversionRates(month?: number, year?: number) {
   return useQuery({
     queryKey: ["conversion-rates", selectedMonth, selectedYear, organizationId],
     queryFn: async () => {
-      if (!organizationId) return { sdrRates: [], closerRates: [] };
+      if (!organizationId) return { meetingsRates: [], salesRates: [] };
       const { data: teamMembers } = await supabase
         .from("team_members")
         .select("id, name, role, metric_type")
         .eq("organization_id", organizationId)
         .eq("is_active", true);
 
-      const closers = teamMembers?.filter((m) => m.metric_type === "sales") || [];
-      const sdrs = teamMembers?.filter((m) => m.metric_type === "meetings") || [];
+      const salesMembers = teamMembers?.filter((m) => m.metric_type === "sales") || [];
+      const meetingsMembers = teamMembers?.filter((m) => m.metric_type === "meetings") || [];
 
       const [{ data: conf1 }, { data: conf2 }] = await Promise.all([
         supabase.from("pipe_confirmacao").select("sdr_id, status").eq("organization_id", organizationId).not("metrics_period_at", "is", null).gte("metrics_period_at", startStr).lte("metrics_period_at", endStr),
@@ -154,37 +154,37 @@ export function useConversionRates(month?: number, year?: number) {
         .select("closer_id, responsible_id, status")
         .eq("organization_id", organizationId);
 
-      // Calculate SDR conversion (reuniões marcadas -> comparecidas)
-      const sdrRates: ConversionRate[] = sdrs.map((sdr) => {
-        const total = confirmacaoData?.filter((c) => (c.responsible_id || c.sdr_id) === sdr.id).length || 0;
+      // Calculate meetings conversion (reuniões marcadas -> comparecidas)
+      const meetingsRates: ConversionRate[] = meetingsMembers.map((member) => {
+        const total = confirmacaoData?.filter((c) => (c.responsible_id || c.sdr_id) === member.id).length || 0;
         const comparecidas = confirmacaoData?.filter(
-          (c) => (c.responsible_id || c.sdr_id) === sdr.id && c.status === "compareceu"
+          (c) => (c.responsible_id || c.sdr_id) === member.id && c.status === "compareceu"
         ).length || 0;
         return {
-          id: sdr.id,
-          name: sdr.name,
+          id: member.id,
+          name: member.name,
           meetings: total,
           sales: comparecidas,
           rate: total > 0 ? (comparecidas / total) * 100 : 0,
         };
       });
 
-      // Calculate Closer conversion: TODOS no pipe X vendido
-      const closerRates: ConversionRate[] = closers.map((closer) => {
-        const total = (propostasData || []).filter((p) => (p.responsible_id || p.closer_id) === closer.id).length;
+      // Calculate sales conversion: TODOS no pipe X vendido
+      const salesRates: ConversionRate[] = salesMembers.map((member) => {
+        const total = (propostasData || []).filter((p) => (p.responsible_id || p.closer_id) === member.id).length;
         const vendidas = (propostasData || []).filter(
-          (p) => (p.responsible_id || p.closer_id) === closer.id && p.status === "vendido"
+          (p) => (p.responsible_id || p.closer_id) === member.id && p.status === "vendido"
         ).length || 0;
         return {
-          id: closer.id,
-          name: closer.name,
+          id: member.id,
+          name: member.name,
           meetings: total,
           sales: vendidas,
           rate: total > 0 ? (vendidas / total) * 100 : 0,
         };
       });
 
-      return { sdrRates, closerRates };
+      return { meetingsRates, salesRates };
     },
     enabled: !!organizationId,
   });
@@ -261,15 +261,17 @@ export function useRankingData(month?: number, year?: number) {
 
       if (error) {
         console.error("[useRankingData] RPC error:", error);
-        return { closerRanking: [], sdrRanking: [] };
+        return { salesRanking: [], meetingsRanking: [] };
       }
 
       const raw = Array.isArray(data) && data.length > 0 ? data[0] : data;
 
       return {
-        closerRanking: (raw?.closerRanking ?? []) as Array<{
+        salesRanking: (raw?.salesRanking ?? []) as Array<{
           id: string;
           name: string | null;
+          job_title: string | null;
+          metric_type: string;
           value: number;
           conversions: number;
           goal: number;
@@ -277,9 +279,11 @@ export function useRankingData(month?: number, year?: number) {
           position: number;
           role: string;
         }>,
-        sdrRanking: (raw?.sdrRanking ?? []) as Array<{
+        meetingsRanking: (raw?.meetingsRanking ?? []) as Array<{
           id: string;
           name: string | null;
+          job_title: string | null;
+          metric_type: string;
           value: number;
           meetings: number;
           goal: number;

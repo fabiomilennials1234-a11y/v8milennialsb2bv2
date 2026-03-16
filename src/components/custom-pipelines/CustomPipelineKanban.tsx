@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { DraggableKanbanBoard, type KanbanColumn } from "@/components/kanban/DraggableKanbanBoard";
-import { CustomPipeLeadCard } from "./CustomPipeLeadCard";
+import { LeadCard, type LeadCardData } from "@/components/leads/LeadCard";
 import { StageWorkflowsBadge } from "@/components/kanban/StageWorkflowsBadge";
 import { useCustomPipeStageWorkflows, useCustomPipeWorkflowCounts } from "@/hooks/useStageWorkflows";
 import {
@@ -12,11 +12,10 @@ import {
 } from "@/hooks/useCustomPipelines";
 import { toast } from "sonner";
 import { useCanPerformAction } from "@/lib/permissions";
-
-interface KanbanItem {
-  id: string;
-  entry: CustomPipeEntry;
-}
+import { useUpdateLead } from "@/hooks/useLeads";
+import { useCreateAcaoDoDia } from "@/hooks/useAcoesDoDia";
+import { formatDistanceToNow } from "date-fns";
+import { ptBR } from "date-fns/locale";
 
 interface CustomPipelineKanbanProps {
   pipeline: CustomPipeline;
@@ -63,6 +62,8 @@ export function CustomPipelineKanban({
   onClickEntry,
 }: CustomPipelineKanbanProps) {
   const moveLead = useMoveLeadInCustomPipe();
+  const updateLead = useUpdateLead();
+  const createAcaoDoDia = useCreateAcaoDoDia();
   const { allowed: canMovePipe } = useCanPerformAction("move_pipe_record");
   const { data: workflowCounts = {} } = useCustomPipeWorkflowCounts(pipeline.id);
 
@@ -89,18 +90,34 @@ export function CustomPipelineKanban({
     });
   }, [entries, searchQuery]);
 
+  // Transforma CustomPipeEntry → LeadCardData
+  const transformToCard = (entry: CustomPipeEntry): LeadCardData => {
+    const lead = entry.lead;
+    return {
+      id: entry.id,
+      name: lead?.name || "Sem nome",
+      company: lead?.company_name || lead?.company || null,
+      phone: lead?.phone || null,
+      email: lead?.email || null,
+      rating: lead?.rating || 0,
+      responsible: entry.assigned_profile?.full_name || null,
+      origin: lead?.origin,
+      tags: lead?.lead_tags?.map((lt: any) => ({ name: lt.tag?.name, color: lt.tag?.color || "#888" })).filter((t: any) => t.name) || [],
+      createdAt: entry.created_at,
+      notes: entry.notes,
+      leadId: entry.lead_id,
+    };
+  };
+
   // Agrupar entries por etapa e montar colunas
-  const columns: KanbanColumn<KanbanItem>[] = useMemo(() => {
+  const columns: KanbanColumn<LeadCardData>[] = useMemo(() => {
     const grouped = groupEntriesByStage(filteredEntries, stages);
 
     return stages.map((stage) => ({
       id: stage.id,
       title: stage.name,
       color: stage.color || "#64748b",
-      items: (grouped[stage.id] || []).map((entry) => ({
-        id: entry.id,
-        entry,
-      })),
+      items: (grouped[stage.id] || []).map(transformToCard),
     }));
   }, [stages, filteredEntries]);
 
@@ -117,7 +134,7 @@ export function CustomPipelineKanban({
   };
 
   return (
-    <DraggableKanbanBoard<KanbanItem>
+    <DraggableKanbanBoard<LeadCardData>
       columns={columns}
       onStatusChange={handleStatusChange}
       disabled={!canMovePipe}
@@ -134,11 +151,21 @@ export function CustomPipelineKanban({
           />
         );
       }}
-      renderCard={(item) => (
-        <CustomPipeLeadCard
-          entry={item.entry}
-          onRemove={onRemoveEntry}
-          onClick={onClickEntry}
+      renderCard={(card) => (
+        <LeadCard
+          lead={card}
+          variant="custom"
+          onClick={() => {
+            const entry = filteredEntries.find(e => e.id === card.id);
+            if (entry) onClickEntry?.(entry);
+          }}
+          onRemove={onRemoveEntry ? () => onRemoveEntry(card.id) : undefined}
+          onCalorChange={(calor) => {
+            if (card.leadId) updateLead.mutate({ id: card.leadId, rating: calor });
+          }}
+          onQuickAction={(title) => {
+            createAcaoDoDia.mutate({ title, lead_id: card.leadId || undefined });
+          }}
         />
       )}
     />

@@ -93,12 +93,12 @@ export default function Dashboard() {
 
   // Individual goal for the currently logged-in seller
   const myTeamMemberId = currentTeamMember?.id;
-  const myCloserGoal = individualGoals?.closerGoals?.find((g) => g.id === myTeamMemberId);
-  const mySdrGoal = individualGoals?.sdrGoals?.find((g) => g.id === myTeamMemberId);
+  const myCloserGoal = individualGoals?.salesGoals?.find((g) => g.id === myTeamMemberId);
+  const mySdrGoal = individualGoals?.meetingsGoals?.find((g) => g.id === myTeamMemberId);
   const myIndividualGoal = myCloserGoal ?? mySdrGoal;
 
   // Transform ranking data for preview
-  const topClosers = rankingData?.closerRanking?.slice(0, 5).map(c => ({
+  const topClosers = rankingData?.salesRanking?.slice(0, 5).map(c => ({
     id: c.id,
     name: c.name,
     value: c.value,

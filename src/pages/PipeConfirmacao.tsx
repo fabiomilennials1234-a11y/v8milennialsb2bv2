@@ -28,51 +28,30 @@ import { useStageWorkflowCounts } from "@/hooks/useStageWorkflows";
 import { usePipeConfirmacao, useUpdatePipeConfirmacao, useCreatePipeConfirmacao, useDeletePipeConfirmacao, PipeConfirmacaoStatus } from "@/hooks/usePipeConfirmacao";
 import { usePipelineStages, stagesToColumns, getPipelineTypeName } from "@/hooks/usePipelineStages";
 import { PipeSettingsDialog } from "@/components/pipelines/PipeSettingsDialog";
-import { useDeleteAllLeadsInPipe } from "@/hooks/useLeads";
+import { useDeleteAllLeadsInPipe, useUpdateLead } from "@/hooks/useLeads";
 import { useCreatePipeProposta } from "@/hooks/usePipePropostas";
 import { useResponsibleMembers } from "@/hooks/useTeamMembers";
 import { LeadModal } from "@/components/leads/LeadModal";
 import { AddMeetingModal } from "@/components/confirmacao/AddMeetingModal";
-import { ConfirmacaoDetailModal } from "@/components/confirmacao/ConfirmacaoDetailModal";
 import { ConfirmacaoStats } from "@/components/confirmacao/ConfirmacaoStats";
 import type { MetricsPeriod } from "@/hooks/usePipeMetrics";
-import { ConfirmacaoCard } from "@/components/confirmacao/ConfirmacaoCard";
-import { ConfirmacaoFilters, type OriginFilter, type TimeFilter, type UrgencyFilter } from "@/components/confirmacao/ConfirmacaoFilters";
+import { LeadCard, type LeadCardData } from "@/components/leads/LeadCard";
+import { LeadDetailDrawer } from "@/components/leads/LeadDetailDrawer";
+import { ConfirmacaoContext } from "@/components/leads/funnel-contexts/ConfirmacaoContext";
+import { ConfirmacaoFilters, OriginFilter, TimeFilter, UrgencyFilter } from "@/components/confirmacao/ConfirmacaoFilters";
 import { MeetingTimeline } from "@/components/confirmacao/MeetingTimeline";
 import { CompareceuModal } from "@/components/confirmacao/CompareceuModal";
 import { useConfirmacaoOverdueDays, isConfirmacaoOverdue } from "@/hooks/useOrganizationSettings";
 import { format, isToday, startOfWeek, endOfWeek, isWithinInterval, isTomorrow, isPast, startOfDay, differenceInCalendarDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useLogLeadAction } from "@/hooks/useLogLeadAction";
+import { useCreateAcaoDoDia } from "@/hooks/useAcoesDoDia";
 import { toast } from "sonner";
 import { useOrganization } from "@/hooks/useOrganization";
 import { track, trackModuleVisit } from "@/lib/analytics";
 import { useFeaturePermission } from "@/hooks/useUserRole";
 
-interface ConfirmacaoCardData extends DraggableItem {
-  name: string;
-  company: string;
-  email?: string;
-  phone?: string;
-  meetingDate?: string;
-  meetingDateTime?: Date;
-  rating: number;
-  origin: "whatsapp" | "meta_ads" | "outro" | "site" | "remarketing" | "google_ads" | "cal";
-  responsible?: string;
-  sdrId?: string | null;
-  closerId?: string | null;
-  tags: { name: string; color: string }[];
-  leadId: string;
-  faturamento?: number;
-  segment?: string;
-  urgency?: string;
-  status?: string;
-  confirmacaoId?: string;
-  isConfirmed?: boolean;
-  updatedAt?: string | null;
-  overdueDays?: number;
-  meetLink?: string | null;
-}
+// ConfirmacaoCardData is now LeadCardData from the unified LeadCard component
 
 // Calculate correct status based on meeting date using CALENDAR DAYS (not hours)
 // Note: pre_confirmada and confirmada_no_dia are NOT used as statuses anymore
@@ -237,7 +216,9 @@ export default function PipeConfirmacao() {
   const createPipeConfirmacao = useCreatePipeConfirmacao();
   const deletePipeConfirmacao = useDeletePipeConfirmacao();
   const deleteAllLeadsInPipe = useDeleteAllLeadsInPipe("confirmacao");
+  const updateLead = useUpdateLead();
   const logAction = useLogLeadAction();
+  const createAcaoDoDia = useCreateAcaoDoDia();
   const { allowed: canDeleteCards } = useFeaturePermission("pipeline.delete_cards");
 
   // Transform team members for filter
@@ -301,7 +282,7 @@ export default function PipeConfirmacao() {
     });
   }, [pipeData, metricsPeriod, selectedMetricsMonth, selectedMetricsYear]);
 
-  const transformToCard = (item: any): ConfirmacaoCardData => {
+  const transformToCard = (item: any): LeadCardData => {
     const lead = item.lead;
     return {
       id: item.id,
@@ -309,27 +290,19 @@ export default function PipeConfirmacao() {
       company: lead?.company || "Sem empresa",
       email: lead?.email,
       phone: lead?.phone,
-      meetingDate: item.meeting_date 
-        ? format(new Date(item.meeting_date), "dd MMM, HH:mm", { locale: ptBR })
-        : undefined,
-      meetingDateTime: item.meeting_date ? new Date(item.meeting_date) : undefined,
       rating: lead?.rating || 0,
       origin: lead?.origin || "outro",
       responsible: item.sdr?.name || item.closer?.name || lead?.sdr?.name || lead?.closer?.name,
-      sdrId: item.sdr_id,
-      closerId: item.closer_id,
       tags: lead?.lead_tags?.map((lt: any) => ({ name: lt.tag?.name, color: lt.tag?.color || "#888" })).filter((t: any) => t.name) || [],
       leadId: item.lead_id,
       faturamento: lead?.faturamento,
-      segment: lead?.segment,
       urgency: lead?.urgency,
-      status: item.status,
-      confirmacaoId: item.id,
-      isConfirmed: item.is_confirmed || false,
-      updatedAt: item.updated_at,
-      overdueDays,
-      createdAt: item.created_at,
+      date: item.meeting_date ? new Date(item.meeting_date) : null,
+      dateLabel: item.meeting_date
+        ? format(new Date(item.meeting_date), "dd MMM, HH:mm", { locale: ptBR })
+        : undefined,
       meetLink: item.meet_link ?? null,
+      createdAt: item.created_at,
     };
   };
 
@@ -352,7 +325,7 @@ export default function PipeConfirmacao() {
     return stagesToColumns(pipelineStages);
   }, [pipelineStages]);
 
-  const columns = useMemo((): KanbanColumn<ConfirmacaoCardData>[] => {
+  const columns = useMemo((): KanbanColumn<LeadCardData>[] => {
     if (!pipeData) return statusColumns.map(col => ({ ...col, items: [] }));
 
     const now = new Date();
@@ -522,7 +495,7 @@ export default function PipeConfirmacao() {
     }
   };
 
-  const handleCardClick = (card: ConfirmacaoCardData) => {
+  const handleCardClick = (card: LeadCardData) => {
     const item = pipeData?.find(p => p.id === card.id);
     if (item) {
       setSelectedItem(item);
@@ -668,10 +641,17 @@ export default function PipeConfirmacao() {
             );
           }}
           renderCard={(card) => (
-            <ConfirmacaoCard
-              card={card}
+            <LeadCard
+              lead={card}
+              variant="confirmacao"
               onClick={() => handleCardClick(card)}
-              onDelete={canDeleteCards ? handleOpenDeleteDialog : undefined}
+              onRemove={canDeleteCards ? () => handleOpenDeleteDialog(card.id, card.leadId || "") : undefined}
+              onQuickAction={(title) => {
+                createAcaoDoDia.mutate({ title, lead_id: card.leadId || undefined });
+              }}
+              onCalorChange={(calor) => {
+                if (card.leadId) updateLead.mutate({ id: card.leadId, rating: calor });
+              }}
             />
           )}
         />
@@ -702,11 +682,16 @@ export default function PipeConfirmacao() {
         onSuccess={refetch}
       />
 
-      <ConfirmacaoDetailModal
+      <LeadDetailDrawer
         open={isDetailModalOpen}
         onOpenChange={setIsDetailModalOpen}
-        item={selectedItem}
+        leadId={selectedItem?.lead_id || null}
+        variant="confirmacao"
+        pipeData={selectedItem}
         onSuccess={refetch}
+        renderFunnelContext={({ lead, pipeData, onSuccess: onCtxSuccess }) => (
+          <ConfirmacaoContext lead={lead} pipeData={pipeData} onSuccess={onCtxSuccess} />
+        )}
       />
 
       <CompareceuModal

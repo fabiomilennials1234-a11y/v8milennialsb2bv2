@@ -592,52 +592,7 @@ serve(withSentry('lead-webhook', async (req) => {
       if (placedInCampaign !== true) placedInCampaign = false;
     }
 
-    // Enfileira webhooks outbound (lead.created ou lead.updated)
-    const webhookPayload = {
-      event: isNewLead ? "lead.created" : "lead.updated",
-      timestamp: new Date().toISOString(),
-      data: {
-        id: leadId,
-        name: result.lead.name,
-        email: result.lead.email ?? undefined,
-        phone: result.lead.phone ?? undefined,
-        company: result.lead.company ?? undefined,
-        organization_id: organizationId,
-        origin: result.lead.origin,
-      },
-    };
-    try {
-      await enqueueWebhookDeliveries(supabase, organizationId, webhookPayload.event, webhookPayload);
-    } catch (e) {
-      console.warn("[lead-webhook] Failed to enqueue webhooks:", e);
-    }
-
-    // Se é novo lead, verificar se existe agente outbound para disparar
-    if (isNewLead) {
-      // Chamar edge function de outbound-trigger
-      const triggerUrl = `${supabaseUrl}/functions/v1/outbound-trigger`;
-      
-      try {
-        await fetch(triggerUrl, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${supabaseKey}`,
-          },
-          body: JSON.stringify({
-            lead_id: leadId,
-            organization_id: organizationId,
-            source: payload.source,
-            tags: payload.tags || [],
-          }),
-        });
-        console.log("[lead-webhook] Triggered outbound check for lead:", leadId);
-      } catch (triggerError) {
-        // Não bloquear se o trigger falhar
-        console.warn("[lead-webhook] Failed to trigger outbound:", triggerError);
-      }
-    }
-
+    // ── Build response first, then fire-and-forget non-critical work ──
     const responseBody: Record<string, unknown> = {
       success: true,
       lead_id: leadId,
@@ -654,15 +609,60 @@ serve(withSentry('lead-webhook', async (req) => {
       if (placeInCampaignError) responseBody.place_in_campaign_error = placeInCampaignError;
     }
 
-    await logRuntime({
-      organizationId: organizationId,
-      module: "lead",
-      action: "webhook_ingest",
-      status: "success",
-      entityType: "lead",
-      entityId: leadId,
-      payloadSnapshot: { source: payload.source, is_new: isNewLead },
-    });
+    // Fire-and-forget: enqueue webhooks, outbound trigger, and log runtime.
+    // These are non-critical — we don't block the HTTP response waiting for them.
+    const backgroundTasks: Promise<void>[] = [];
+
+    // Enfileira webhooks outbound (lead.created ou lead.updated)
+    backgroundTasks.push(
+      enqueueWebhookDeliveries(supabase, organizationId, isNewLead ? "lead.created" : "lead.updated", {
+        event: isNewLead ? "lead.created" : "lead.updated",
+        timestamp: new Date().toISOString(),
+        data: {
+          id: leadId,
+          name: result.lead.name,
+          email: result.lead.email ?? undefined,
+          phone: result.lead.phone ?? undefined,
+          organization_id: organizationId,
+        },
+      }).catch((e) => console.warn("[lead-webhook] Failed to enqueue webhooks:", e)),
+    );
+
+    // Se é novo lead, verificar se existe agente outbound para disparar
+    if (isNewLead) {
+      backgroundTasks.push(
+        fetch(`${supabaseUrl}/functions/v1/outbound-trigger`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${supabaseKey}`,
+          },
+          body: JSON.stringify({
+            lead_id: leadId,
+            organization_id: organizationId,
+            source: payload.source,
+            tags: payload.tags || [],
+          }),
+        })
+          .then(() => console.log("[lead-webhook] Triggered outbound check for lead:", leadId))
+          .catch((e) => console.warn("[lead-webhook] Failed to trigger outbound:", e)),
+      );
+    }
+
+    backgroundTasks.push(
+      logRuntime({
+        organizationId: organizationId,
+        module: "lead",
+        action: "webhook_ingest",
+        status: "success",
+        entityType: "lead",
+        entityId: leadId,
+        payloadSnapshot: { source: payload.source, is_new: isNewLead },
+      }).catch((e) => console.warn("[lead-webhook] logRuntime failed:", e)),
+    );
+
+    // Run background tasks without blocking response
+    Promise.allSettled(backgroundTasks).catch(() => {});
 
     return new Response(
       JSON.stringify(responseBody),

@@ -71,7 +71,7 @@ Deno.serve(withSentry('tinyerp-push-order', async (req) => {
       );
     }
 
-    const { pipe_proposta_id, client_override } = await req.json();
+    const { pipe_proposta_id, client_override, frete, parcelas, meio_pagamento } = await req.json();
     if (!pipe_proposta_id) {
       return new Response(
         JSON.stringify({ error: "pipe_proposta_id é obrigatório" }),
@@ -206,16 +206,45 @@ Deno.serve(withSentry('tinyerp-push-order', async (req) => {
       }
     }
 
-    const pedido = {
-      pedido: {
-        cliente: clienteData,
-        itens: tinyItems,
-        valor_frete: 0,
-        valor_desconto: 0,
-        obs: proposta.notes || `Pedido gerado via CRM - Proposta ${pipe_proposta_id.substring(0, 8)}`,
-        situacao: "aberto",
-      },
+    // Build freight data
+    const freteData = frete as Record<string, unknown> | undefined;
+    const valorFrete = Number(freteData?.valor_frete) || 0;
+
+    // Build parcelas for TinyERP
+    const parcelasInput = (parcelas || []) as Array<{ dias: number; valor: number }>;
+    const meioPagamentoStr = (meio_pagamento || "dinheiro") as string;
+    const tinyParcelas = parcelasInput.length > 0
+      ? parcelasInput.map((p) => ({
+          parcela: {
+            dias: p.dias,
+            valor: p.valor.toFixed(2),
+            forma_pagamento: "",
+            meio_pagamento: meioPagamentoStr,
+          },
+        }))
+      : undefined;
+
+    const pedidoObj: Record<string, unknown> = {
+      cliente: clienteData,
+      itens: tinyItems,
+      valor_frete: valorFrete,
+      valor_desconto: 0,
+      obs: proposta.notes || `Pedido gerado via CRM - Proposta ${pipe_proposta_id.substring(0, 8)}`,
+      situacao: "aberto",
+      meio_pagamento: meioPagamentoStr,
     };
+
+    // Add freight fields if provided
+    if (freteData?.frete_por_conta) pedidoObj.frete_por_conta = freteData.frete_por_conta;
+    if (freteData?.nome_transportador) pedidoObj.nome_transportador = freteData.nome_transportador;
+    if (freteData?.forma_envio) pedidoObj.forma_envio = freteData.forma_envio;
+
+    // Add parcelas if provided
+    if (tinyParcelas && tinyParcelas.length > 0) {
+      pedidoObj.parcelas = tinyParcelas;
+    }
+
+    const pedido = { pedido: pedidoObj };
 
     const result = await callTinyApi(tokenData.token, "pedido.incluir.php", {
       pedido: JSON.stringify(pedido),

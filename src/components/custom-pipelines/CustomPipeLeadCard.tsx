@@ -1,3 +1,6 @@
+/**
+ * @deprecated Use LeadCard variant="custom" instead. This component is kept for reference only.
+ */
 import { Building2, Phone, User, Clock, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";

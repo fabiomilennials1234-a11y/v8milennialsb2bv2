@@ -1,5 +1,4 @@
-import { useState, useMemo, useRef, memo, useCallback, useEffect } from "react";
-import { usePersistedState } from "@/hooks/usePersistedState";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search, Filter, Plus, Calendar, User, Building2, Star,
@@ -28,24 +27,20 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { DraggableKanbanBoard, DraggableItem, KanbanColumn } from "@/components/kanban/DraggableKanbanBoard";
+import { DraggableKanbanBoard, KanbanColumn } from "@/components/kanban/DraggableKanbanBoard";
 import { useCanPerformAction } from "@/lib/permissions";
 import { StageWorkflowsBadgeWrapper } from "@/components/kanban/StageWorkflowsBadgeWrapper";
 import { useStageWorkflowCounts } from "@/hooks/useStageWorkflows";
 import { usePipePropostas, useUpdatePipeProposta, useDeletePipeProposta, PipePropostasStatus } from "@/hooks/usePipePropostas";
 import { usePipePropostasMetrics, type MetricsPeriod } from "@/hooks/usePipeMetrics";
-import { useDeleteAllLeadsInPipe } from "@/hooks/useLeads";
+import { useDeleteAllLeadsInPipe, useUpdateLead } from "@/hooks/useLeads";
 import { usePipelineStages, stagesToColumns } from "@/hooks/usePipelineStages";
 import { PipeSettingsDialog } from "@/components/pipelines/PipeSettingsDialog";
 import { useTeamMembers, useResponsibleMembers } from "@/hooks/useTeamMembers";
 import { CreateProposalModal } from "@/components/proposals/CreateProposalModal";
-import { ProposalDetailModal } from "@/components/proposals/ProposalDetailModal";
+import { LeadCard, type LeadCardData } from "@/components/leads/LeadCard";
+import { LeadDetailDrawer } from "@/components/leads/LeadDetailDrawer";
+import { PropostasContext } from "@/components/leads/funnel-contexts";
 import { FunnelChart } from "@/components/dashboard/FunnelChart";
 import { CalorSlider, CalorBadge } from "@/components/proposals/CalorSlider";
 import { QuickAddDailyAction } from "@/components/proposals/QuickAddDailyAction";
@@ -53,10 +48,11 @@ import { CommitmentDateModal } from "@/components/proposals/CommitmentDateModal"
 import { TinyErpConfirmOrderDialog } from "@/components/proposals/TinyErpConfirmOrderDialog";
 import { DaysUntilMeeting } from "@/components/proposals/DaysUntilMeeting";
 import { useTinyErpStatus } from "@/hooks/useTinyErp";
+import { useCreateAcaoDoDia } from "@/hooks/useAcoesDoDia";
 import { supabase } from "@/integrations/supabase/client";
 import { CalorAnalyticsChart } from "@/components/proposals/CalorAnalyticsChart";
 import { ProductAnalyticsChart } from "@/components/proposals/ProductAnalyticsChart";
-import { format, formatDistanceToNow } from "date-fns";
+import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useLogLeadAction } from "@/hooks/useLogLeadAction";
 import { toast } from "sonner";
@@ -65,265 +61,6 @@ import { useOrganization } from "@/hooks/useOrganization";
 import { track, trackModuleVisit } from "@/lib/analytics";
 import { useFeaturePermission } from "@/hooks/useUserRole";
 
-interface ProposalItem {
-  id: string;
-  product_id: string | null;
-  sale_value: number | null;
-  product?: {
-    id: string;
-    name: string;
-    type: "mrr" | "projeto" | "unitario";
-  };
-}
-
-interface ProposalCard extends DraggableItem {
-  name: string;
-  company: string;
-  email?: string;
-  phone?: string;
-  rating: number;
-  calor: number;
-  closer?: string;
-  closerId?: string;
-  productType: "mrr" | "projeto" | null;
-  value: number;
-  contractDuration: number;
-  tags: { name: string; color: string }[];
-  lastContact?: string;
-  segment?: string;
-  commitmentDate?: Date;
-  leadId?: string;
-  items: ProposalItem[];
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-import { openWhatsApp, formatPhoneForWhatsApp } from "@/lib/whatsapp";
-
-const ProposalCardComponent = memo(function ProposalCardComponent({
-  proposal,
-  onCalorChange,
-  onDelete,
-}: {
-  proposal: ProposalCard;
-  onCalorChange: (calor: number) => void;
-  onDelete?: (pipeId: string, leadId: string) => void;
-}) {
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-      minimumFractionDigits: 0,
-    }).format(value);
-  };
-
-  const formattedPhone = formatPhoneForWhatsApp(proposal.phone);
-  const hasMultipleProducts = proposal.items.length > 1;
-  const hasMixedTypes = proposal.items.some(i => i.product?.type === "mrr") && 
-                        proposal.items.some(i => i.product?.type === "projeto");
-
-  return (
-    <motion.div
-      whileHover={{ scale: 1.02, y: -2 }}
-      className="kanban-card group cursor-pointer w-full flex flex-col max-h-[340px] overflow-hidden"
-    >
-      <div className="overflow-y-auto overflow-x-hidden min-h-0 flex-1 pr-1 -mr-1 [scrollbar-gutter:stable]">
-      {/* Quick Actions Row */}
-      <div className="flex items-center justify-between gap-2 mb-2">
-        <CalorSlider 
-          value={proposal.calor} 
-          onChange={onCalorChange}
-        />
-        <QuickAddDailyAction
-          propostaId={proposal.id}
-          leadName={proposal.name}
-        />
-        {onDelete && proposal.leadId && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-              <Button variant="ghost" size="icon" className="h-6 w-6">
-                <MoreVertical className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                className="text-destructive focus:text-destructive"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDelete(proposal.id, proposal.leadId!);
-                }}
-              >
-                <Trash2 className="w-4 h-4 mr-2" />
-                Remover do Funil
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-      </div>
-
-      <div className="flex items-start justify-between gap-2 mb-2">
-        <div className="flex-1 min-w-0">
-          <h4 className="font-medium text-sm break-words line-clamp-2 group-hover:text-primary transition-colors" title={proposal.name}>
-            {proposal.name}
-          </h4>
-          <div className="flex items-center gap-1 text-muted-foreground mt-0.5">
-            <Building2 className="w-3 h-3 shrink-0 mt-0.5" />
-            <span className="text-xs break-words line-clamp-2" title={proposal.company || "Sem empresa"}>{proposal.company || "Sem empresa"}</span>
-          </div>
-        </div>
-        <div className="flex items-center gap-0.5 shrink-0">
-          {[...Array(5)].map((_, i) => (
-            <Star
-              key={i}
-              className={cn(
-                "w-3 h-3",
-                i < Math.ceil(proposal.rating / 2)
-                  ? "text-chart-5 fill-chart-5"
-                  : "text-muted-foreground/30"
-              )}
-            />
-          ))}
-        </div>
-      </div>
-
-      {/* Product Items - Show each product with type badge and value (até 5 no card, resto em "+N") */}
-      {proposal.items.length > 0 ? (
-        <div className="space-y-1.5 mb-2">
-          {proposal.items.slice(0, 5).map((item) => (
-            <div 
-              key={item.id} 
-              className="flex items-center justify-between gap-2 p-1.5 rounded bg-muted/50 min-w-0"
-            >
-              <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                {item.product?.type && (
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      "text-[10px] px-1.5 py-0 h-4 shrink-0",
-                      item.product.type === "mrr"
-                        ? "bg-chart-5/10 text-chart-5 border-chart-5/20"
-                        : item.product.type === "unitario"
-                        ? "bg-warning/10 text-warning border-warning/20"
-                        : "bg-primary/10 text-primary border-primary/20"
-                    )}
-                  >
-                    {item.product.type === "mrr" ? "MRR" : item.product.type === "unitario" ? "Unit" : "Proj"}
-                  </Badge>
-                )}
-                <span className="text-xs break-words line-clamp-2 min-w-0" title={item.product?.name || "Produto"}>{item.product?.name || "Produto"}</span>
-              </div>
-              <span className="text-xs font-medium text-success shrink-0">
-                {formatCurrency(item.sale_value || 0)}
-              </span>
-            </div>
-          ))}
-          {proposal.items.length > 5 && (
-            <p className="text-[10px] text-muted-foreground text-center">
-              +{proposal.items.length - 5} produto(s)
-            </p>
-          )}
-        </div>
-      ) : (
-        /* Fallback for old proposals without items */
-        <div className="flex items-center gap-2 mb-3">
-          {proposal.productType && (
-            <Badge
-              variant="outline"
-              className={cn(
-                "text-xs",
-                proposal.productType === "mrr"
-                  ? "bg-chart-5/10 text-chart-5 border-chart-5/20"
-                  : "bg-primary/10 text-primary border-primary/20"
-              )}
-            >
-              {proposal.productType === "mrr" ? "MRR" : "Projeto"}
-            </Badge>
-          )}
-          <div className="flex items-center gap-1 text-success font-semibold text-sm">
-            <DollarSign className="w-3.5 h-3.5" />
-            {formatCurrency(proposal.value)}
-            {proposal.productType === "mrr" && (
-              <span className="text-xs font-normal text-muted-foreground">/mês</span>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Total Value - Show when multiple products */}
-      {proposal.items.length > 0 && (
-        <div className="flex items-center justify-between mb-2 pt-2 border-t border-border/50">
-          <span className="text-xs text-muted-foreground">Total:</span>
-          <div className="flex items-center gap-1 text-success font-semibold text-sm shrink-0">
-            <DollarSign className="w-3.5 h-3.5" />
-            {formatCurrency(proposal.value)}
-          </div>
-        </div>
-      )}
-
-      {/* Contract Duration */}
-      {proposal.contractDuration > 0 && (
-        <div className="flex items-center gap-1.5 text-muted-foreground mb-2">
-          <Clock className="w-3.5 h-3.5 shrink-0" />
-          <span className="text-xs">Contrato: {proposal.contractDuration} meses</span>
-        </div>
-      )}
-
-      {/* Tags coloridas estilo Trello */}
-      {proposal.tags.length > 0 && (
-        <div className="flex gap-1 mb-2 flex-wrap">
-          {proposal.tags.slice(0, 4).map((tag) => (
-            <div
-              key={tag.name}
-              className="h-2 rounded-full min-w-[40px] flex-1 max-w-[60px]"
-              style={{ backgroundColor: tag.color }}
-              title={tag.name}
-            />
-          ))}
-        </div>
-      )}
-
-      {/* Entry Timer */}
-      {proposal.createdAt && (
-        <div className="flex items-center gap-1 text-[10px] text-muted-foreground mb-2">
-          <Clock className="w-3 h-3 shrink-0" />
-          <span>{formatDistanceToNow(new Date(proposal.createdAt), { addSuffix: true, locale: ptBR })}</span>
-        </div>
-      )}
-
-      {/* Meeting Date & Days Until */}
-      <div className="flex items-center justify-between gap-2 pt-2 border-t border-border min-w-0">
-        <div className="flex items-center gap-2 min-w-0 flex-1">
-          {proposal.commitmentDate ? (
-            <DaysUntilMeeting commitmentDate={proposal.commitmentDate} compact />
-          ) : proposal.lastContact ? (
-            <div className="flex items-center gap-1.5 text-muted-foreground min-w-0">
-              <Calendar className="w-3 h-3 shrink-0" />
-              <span className="text-xs truncate">{proposal.lastContact}</span>
-            </div>
-          ) : null}
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {formattedPhone && (
-            <button
-              onClick={(e) => openWhatsApp(proposal.phone, e)}
-              className="p-1.5 rounded-md bg-[#25D366]/10 hover:bg-[#25D366]/20 text-[#25D366] transition-colors"
-              title="Abrir WhatsApp"
-            >
-              <MessageCircle className="w-3.5 h-3.5" />
-            </button>
-          )}
-          {proposal.closer && (
-            <div className="flex items-center gap-1.5 min-w-0">
-              <User className="w-3 h-3 text-muted-foreground shrink-0" />
-              <span className="text-xs text-muted-foreground truncate max-w-[100px]" title={proposal.closer}>{proposal.closer}</span>
-            </div>
-          )}
-        </div>
-      </div>
-      </div>
-    </motion.div>
-  );
-});
 
 // ---------------------------------------------------------------------------
 // Persisted filter state — scoped per org + user, TTL 24 h
@@ -422,7 +159,9 @@ export default function PipePropostas() {
   const { data: tinyStatus } = useTinyErpStatus();
   const deletePipeProposta = useDeletePipeProposta();
   const deleteAllLeadsInPipe = useDeleteAllLeadsInPipe("propostas");
+  const updateLead = useUpdateLead();
   const logAction = useLogLeadAction();
+  const createAcaoDoDia = useCreateAcaoDoDia();
   const { allowed: canDeleteCards } = useFeaturePermission("pipeline.delete_cards");
   const { data: metricsByPeriod } = usePipePropostasMetrics(
     metricsPeriod,
@@ -432,44 +171,26 @@ export default function PipePropostas() {
 
   const responsibleMembers = useResponsibleMembers();
 
-  // Transform pipe data to ProposalCard format
-  const transformToCard = (item: any): ProposalCard => {
+  // Transform pipe data to LeadCardData format
+  const transformToCard = (item: any): LeadCardData => {
     const lead = item.lead;
     const items = item.items || [];
     const hasItemsFromDb = items.length > 0;
     const hasMainProduct = !hasItemsFromDb && item.product_id && item.product;
 
-    const itemsForCard = hasItemsFromDb
+    const productsForCard = hasItemsFromDb
       ? items.map((i: any) => ({
-          id: i.id,
-          product_id: i.product_id,
-          sale_value: i.sale_value,
-          product: i.product ? {
-            id: i.product.id,
-            name: i.product.name,
-            type: i.product.type,
-          } : undefined,
+          name: i.product?.name || "Produto",
+          type: i.product?.type,
+          value: i.sale_value || 0,
         }))
       : hasMainProduct
-        ? [{
-            id: `main-${item.id}`,
-            product_id: item.product_id,
-            sale_value: item.sale_value,
-            product: item.product ? {
-              id: item.product.id,
-              name: item.product.name,
-              type: item.product.type,
-            } : undefined,
-          }]
+        ? [{ name: item.product?.name || "Produto", type: item.product?.type, value: item.sale_value || 0 }]
         : [];
 
-    const totalValue = itemsForCard.length > 0
-      ? itemsForCard.reduce((sum: number, i: any) => sum + (i.sale_value || 0), 0)
+    const totalValue = productsForCard.length > 0
+      ? productsForCard.reduce((sum: number, p: any) => sum + p.value, 0)
       : (item.sale_value || 0);
-
-    const productTypes = itemsForCard.length > 0
-      ? [...new Set(itemsForCard.map((i: any) => i.product?.type).filter(Boolean))]
-      : item.product_type ? [item.product_type] : [];
 
     return {
       id: item.id,
@@ -479,21 +200,18 @@ export default function PipePropostas() {
       phone: lead?.phone,
       rating: lead?.rating || 0,
       calor: item.calor ?? 5,
-      closer: item.closer?.name || lead?.closer?.name,  // displayed as "Resp" in card
-      closerId: item.closer_id,
-      productType: productTypes.length === 1 ? productTypes[0] : (productTypes.length > 0 ? null : item.product_type),
+      responsible: item.closer?.name || lead?.closer?.name,
       value: totalValue,
+      valueLabel: new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 0 }).format(totalValue),
       contractDuration: item.contract_duration || 0,
       tags: lead?.lead_tags?.map((lt: any) => ({ name: lt.tag?.name, color: lt.tag?.color || "#888" })).filter((t: any) => t.name) || [],
-      lastContact: item.commitment_date 
-        ? format(new Date(item.commitment_date), "dd/MM HH:mm", { locale: ptBR })
-        : undefined,
-      segment: lead?.segment,
-      commitmentDate: item.commitment_date ? new Date(item.commitment_date) : undefined,
+      date: item.commitment_date ? new Date(item.commitment_date) : null,
+      dateLabel: item.commitment_date ? format(new Date(item.commitment_date), "dd MMM, HH:mm", { locale: ptBR }) : undefined,
+      origin: lead?.origin,
+      urgency: lead?.urgency,
       leadId: lead?.id,
-      items: itemsForCard,
+      products: productsForCard,
       createdAt: item.created_at,
-      updatedAt: item.updated_at,
     };
   };
 
@@ -515,7 +233,7 @@ export default function PipePropostas() {
   }, [pipelineStages]);
 
   // Organize data by status columns (recent first; compromisso_marcado by commitment date)
-  const columns = useMemo((): KanbanColumn<ProposalCard>[] => {
+  const columns = useMemo((): KanbanColumn<LeadCardData>[] => {
     if (!pipeData) return statusColumns.map(col => ({ ...col, items: [] }));
 
     return statusColumns.map(col => {
@@ -934,7 +652,7 @@ export default function PipePropostas() {
   };
 
   // Render column footer with total value
-  const renderColumnFooter = (column: KanbanColumn<ProposalCard>) => (
+  const renderColumnFooter = (column: KanbanColumn<LeadCardData>) => (
     <div className="mb-3 p-2 rounded-lg bg-background/50">
       <p className="text-xs text-muted-foreground">
         Total:{" "}
@@ -1222,19 +940,24 @@ export default function PipePropostas() {
                 );
               }}
               renderCard={(card) => (
-                <div onClick={() => {
-                  const item = pipeData?.find(p => p.id === card.id);
-                  if (item) {
-                    setSelectedProposta(item);
-                    setIsDetailModalOpen(true);
-                  }
-                }}>
-                  <ProposalCardComponent
-                    proposal={card}
-                    onCalorChange={(calor) => handleCalorChange(card.id, calor)}
-                    onDelete={canDeleteCards ? handleOpenDeleteDialog : undefined}
-                  />
-                </div>
+                <LeadCard
+                  lead={card}
+                  variant="propostas"
+                  onClick={() => {
+                    const item = pipeData?.find(p => p.id === card.id);
+                    if (item) {
+                      setSelectedProposta(item);
+                      setIsDetailModalOpen(true);
+                    }
+                  }}
+                  onRemove={canDeleteCards ? () => handleOpenDeleteDialog(card.id, card.leadId || "") : undefined}
+                  onQuickAction={(title) => {
+                    createAcaoDoDia.mutate({ title, lead_id: card.leadId || undefined });
+                  }}
+                  onCalorChange={(calor) => {
+                    if (card.leadId) updateLead.mutate({ id: card.leadId, rating: calor });
+                  }}
+                />
               )}
               renderColumnFooter={renderColumnFooter}
             />
@@ -1406,18 +1129,18 @@ export default function PipePropostas() {
         onSuccess={refetch}
       />
 
-      {/* Proposal Detail Modal */}
-      {selectedProposta && (
-        <ProposalDetailModal
-          open={isDetailModalOpen}
-          onOpenChange={setIsDetailModalOpen}
-          proposta={selectedProposta}
-          onSuccess={() => {
-            refetch();
-            setSelectedProposta(null);
-          }}
-        />
-      )}
+      {/* Proposal Detail Drawer */}
+      <LeadDetailDrawer
+        open={isDetailModalOpen}
+        onOpenChange={setIsDetailModalOpen}
+        leadId={selectedProposta?.lead_id || selectedProposta?.lead?.id || null}
+        variant="propostas"
+        pipeData={selectedProposta}
+        onSuccess={refetch}
+        renderFunnelContext={({ lead, pipeData: pData, onSuccess: onCtxSuccess }) => (
+          <PropostasContext lead={lead} pipeData={pData} onSuccess={onCtxSuccess} />
+        )}
+      />
 
       {/* TinyERP Confirm Order Modal (on drag-to-vendido) */}
       {pendingVendido && (

@@ -14,7 +14,7 @@ interface ConversionBarProps {
   meetings: number;
   sales: number;
   index: number;
-  type: "sdr" | "closer";
+  type: "meetings" | "sales";
 }
 
 function ConversionBar({ name, rate, meetings, sales, index, type }: ConversionBarProps) {
@@ -62,7 +62,7 @@ function ConversionBar({ name, rate, meetings, sales, index, type }: ConversionB
       </div>
       <div className="flex items-center justify-between text-xs text-muted-foreground">
         <span>
-          {type === "sdr" 
+          {type === "meetings"
             ? `${meetings} reuniões → ${sales} compareceu`
             : `${meetings} propostas → ${sales} vendas`}
         </span>
@@ -88,10 +88,10 @@ function ConversionChartBase() {
     );
   }
 
-  const hasSDRs = data?.sdrRates && data.sdrRates.length > 0;
-  const hasClosers = data?.closerRates && data.closerRates.length > 0;
+  const hasMeetings = data?.meetingsRates && data.meetingsRates.length > 0;
+  const hasSales = data?.salesRates && data.salesRates.length > 0;
 
-  if (!hasSDRs && !hasClosers) {
+  if (!hasMeetings && !hasSales) {
     return (
       <div className="text-center py-6 text-muted-foreground">
         <p className="text-sm">Nenhum dado de conversão disponível</p>
@@ -100,44 +100,44 @@ function ConversionChartBase() {
   }
 
   return (
-    <Tabs defaultValue={hasClosers ? "closers" : "sdrs"} className="w-full">
+    <Tabs defaultValue={hasSales ? "sales" : "meetings"} className="w-full">
       <TabsList className="grid w-full max-w-xs grid-cols-2 mb-4">
-        <TabsTrigger value="closers" disabled={!hasClosers}>
-          Closers ({data?.closerRates.length || 0})
+        <TabsTrigger value="sales" disabled={!hasSales}>
+          Vendas ({data?.salesRates.length || 0})
         </TabsTrigger>
-        <TabsTrigger value="sdrs" disabled={!hasSDRs}>
-          SDRs ({data?.sdrRates.length || 0})
+        <TabsTrigger value="meetings" disabled={!hasMeetings}>
+          Reuniões ({data?.meetingsRates.length || 0})
         </TabsTrigger>
       </TabsList>
 
-      <TabsContent value="closers" className="space-y-4">
-        {data?.closerRates
+      <TabsContent value="sales" className="space-y-4">
+        {data?.salesRates
           .sort((a, b) => b.rate - a.rate)
-          .map((closer, index) => (
+          .map((member, index) => (
             <ConversionBar
-              key={closer.id}
-              name={closer.name}
-              rate={closer.rate}
-              meetings={closer.meetings}
-              sales={closer.sales}
+              key={member.id}
+              name={member.name}
+              rate={member.rate}
+              meetings={member.meetings}
+              sales={member.sales}
               index={index}
-              type="closer"
+              type="sales"
             />
           ))}
       </TabsContent>
 
-      <TabsContent value="sdrs" className="space-y-4">
-        {data?.sdrRates
+      <TabsContent value="meetings" className="space-y-4">
+        {data?.meetingsRates
           .sort((a, b) => b.rate - a.rate)
-          .map((sdr, index) => (
+          .map((member, index) => (
             <ConversionBar
-              key={sdr.id}
-              name={sdr.name}
-              rate={sdr.rate}
-              meetings={sdr.meetings}
-              sales={sdr.sales}
+              key={member.id}
+              name={member.name}
+              rate={member.rate}
+              meetings={member.meetings}
+              sales={member.sales}
               index={index}
-              type="sdr"
+              type="meetings"
             />
           ))}
       </TabsContent>

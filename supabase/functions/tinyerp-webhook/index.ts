@@ -81,6 +81,29 @@ Deno.serve(withSentry('tinyerp-webhook', async (req) => {
       .update(updateData)
       .eq("id", mapping.id);
 
+    // Fetch full NF-e details (link, number, key) if idNotaFiscal is present
+    const idNotaFiscal = dados.idNotaFiscal || dados.nfe_id;
+    if (idNotaFiscal) {
+      try {
+        const nfeUrl = `${SUPABASE_URL}/functions/v1/tinyerp-fetch-nfe`;
+        fetch(nfeUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+          },
+          body: JSON.stringify({
+            organizationId: mapping.organization_id,
+            tinyOrderId,
+            idNotaFiscal: String(idNotaFiscal),
+          }),
+        }).catch((e) => console.warn("[TinyERP Webhook] NF-e fetch fire-and-forget error:", e));
+        console.log("[TinyERP Webhook] Triggered NF-e fetch for:", idNotaFiscal);
+      } catch (nfeErr) {
+        console.warn("[TinyERP Webhook] Failed to trigger NF-e fetch:", nfeErr);
+      }
+    }
+
     // Log the webhook
     await logTinyOp(supabaseAdmin, {
       organization_id: mapping.organization_id,

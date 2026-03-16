@@ -2,13 +2,13 @@
  * Status do pedido no TinyERP
  *
  * Exibe se um pedido foi enviado para o TinyERP, número do pedido,
- * status da NF-e e permite envio manual.
+ * status da NF-e, link para download do PDF e permite envio manual.
  */
 
-import { Database, Send, CheckCircle2, Loader2, FileText } from "lucide-react";
+import { Database, Send, CheckCircle2, Loader2, FileText, Download, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { useTinyErpStatus, useTinyErpOrderMapping, useTinyErpPushOrder } from "@/hooks/useTinyErp";
+import { useTinyErpStatus, useTinyErpOrderMapping, useTinyErpPushOrder, useTinyErpFetchNfe } from "@/hooks/useTinyErp";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -27,6 +27,7 @@ export function TinyErpOrderStatus({ pipePropostaId }: TinyErpOrderStatusProps) 
   const { data: tinyStatus } = useTinyErpStatus();
   const { data: orderMapping, isLoading } = useTinyErpOrderMapping(pipePropostaId);
   const pushOrder = useTinyErpPushOrder();
+  const fetchNfe = useTinyErpFetchNfe();
 
   // Don't render if TinyERP not connected
   if (!tinyStatus?.connected) return null;
@@ -42,6 +43,10 @@ export function TinyErpOrderStatus({ pipePropostaId }: TinyErpOrderStatusProps) 
 
   // Order already pushed
   if (orderMapping) {
+    const hasNfeLink = !!orderMapping.nfe_link;
+    const hasNfeId = !!orderMapping.tiny_nfe_id;
+    const nfeStatus = orderMapping.nfe_status || orderMapping.tiny_nfe_status;
+
     return (
       <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-3 space-y-2">
         <div className="flex items-center justify-between">
@@ -61,17 +66,54 @@ export function TinyErpOrderStatus({ pipePropostaId }: TinyErpOrderStatusProps) 
               <span className="font-medium">Pedido:</span> #{orderMapping.tiny_order_number}
             </div>
           )}
-          {orderMapping.tiny_nfe_id && (
+          {(hasNfeId || nfeStatus) && (
             <div className="flex items-center gap-1">
               <FileText className="w-3 h-3" />
               <span className="font-medium">NF-e:</span>{" "}
-              {nfeStatusLabels[orderMapping.tiny_nfe_status || ""] || orderMapping.tiny_nfe_status || "—"}
+              {orderMapping.nfe_numero ? `#${orderMapping.nfe_numero} — ` : ""}
+              {nfeStatusLabels[nfeStatus || ""] || nfeStatus || "—"}
             </div>
           )}
           {orderMapping.last_synced_at && (
             <div>
               Atualizado {formatDistanceToNow(new Date(orderMapping.last_synced_at), { addSuffix: true, locale: ptBR })}
             </div>
+          )}
+        </div>
+
+        {/* NF-e actions */}
+        <div className="flex gap-2">
+          {hasNfeLink && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-xs"
+              onClick={() => window.open(orderMapping.nfe_link!, "_blank")}
+            >
+              <Download className="w-3 h-3 mr-1" />
+              Baixar NF-e
+            </Button>
+          )}
+          {orderMapping.tiny_order_id && !hasNfeLink && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-xs"
+              onClick={() =>
+                fetchNfe.mutate({
+                  tinyOrderId: orderMapping.tiny_order_id!,
+                  idNotaFiscal: orderMapping.tiny_nfe_id || undefined,
+                })
+              }
+              disabled={fetchNfe.isPending}
+            >
+              {fetchNfe.isPending ? (
+                <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+              ) : (
+                <RefreshCw className="w-3 h-3 mr-1" />
+              )}
+              Buscar NF-e
+            </Button>
           )}
         </div>
       </div>

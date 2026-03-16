@@ -6,7 +6,7 @@
  */
 
 import { useState } from "react";
-import { Loader2, Send, Building2, User, MapPin } from "lucide-react";
+import { Loader2, Send, User, MapPin, Truck, CreditCard } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -17,6 +17,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -68,6 +75,18 @@ export function TinyErpConfirmOrderDialog({
     cep: "",
   });
 
+  // Freight fields
+  const [freteData, setFreteData] = useState({
+    valor_frete: "",
+    frete_por_conta: "R",
+    nome_transportador: "",
+    forma_envio: "",
+  });
+
+  // Payment fields
+  const [condicaoPagamento, setCondicaoPagamento] = useState("avista");
+  const [meioPagamento, setMeioPagamento] = useState("pix");
+
   // Reset form when dialog opens with new data
   const resetForm = () => {
     setClientData({
@@ -84,6 +103,9 @@ export function TinyErpConfirmOrderDialog({
       uf: "",
       cep: "",
     });
+    setFreteData({ valor_frete: "", frete_por_conta: "R", nome_transportador: "", forma_envio: "" });
+    setCondicaoPagamento("avista");
+    setMeioPagamento("pix");
   };
 
   const handleConfirm = async () => {
@@ -95,6 +117,22 @@ export function TinyErpConfirmOrderDialog({
     setIsPushing(true);
 
     try {
+      // Build parcelas based on payment condition
+      const valorFrete = parseFloat(freteData.valor_frete) || 0;
+      const totalComFrete = totalValue + valorFrete;
+      const parcelasConfig: Record<string, number[]> = {
+        avista: [0],
+        "30dias": [30],
+        "30_60": [30, 60],
+        "30_60_90": [30, 60, 90],
+      };
+      const diasParcelas = parcelasConfig[condicaoPagamento] || [0];
+      const valorParcela = totalComFrete / diasParcelas.length;
+      const parcelas = diasParcelas.map((dias) => ({
+        dias,
+        valor: Math.round(valorParcela * 100) / 100,
+      }));
+
       const { data, error } = await supabase.functions.invoke("tinyerp-push-order", {
         body: {
           pipe_proposta_id: pipePropostaId,
@@ -111,6 +149,14 @@ export function TinyErpConfirmOrderDialog({
             uf: clientData.uf.trim(),
             cep: clientData.cep.replace(/\D/g, ""),
           },
+          frete: {
+            valor_frete: valorFrete,
+            frete_por_conta: freteData.frete_por_conta,
+            nome_transportador: freteData.nome_transportador.trim() || undefined,
+            forma_envio: freteData.forma_envio.trim() || undefined,
+          },
+          parcelas,
+          meio_pagamento: meioPagamento,
         },
       });
 
@@ -289,6 +335,94 @@ export function TinyErpConfirmOrderDialog({
                   onChange={(e) => updateField("cep", e.target.value)}
                   placeholder="00000-000"
                 />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Freight & Payment */}
+        <div className="space-y-4">
+          {/* Freight */}
+          <div className="space-y-3">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+              <Truck className="w-3.5 h-3.5" /> Frete (opcional)
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs">Valor do frete (R$)</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={freteData.valor_frete}
+                  onChange={(e) => setFreteData((p) => ({ ...p, valor_frete: e.target.value }))}
+                  placeholder="0,00"
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Frete por conta</Label>
+                <Select
+                  value={freteData.frete_por_conta}
+                  onValueChange={(v) => setFreteData((p) => ({ ...p, frete_por_conta: v }))}
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="R">Remetente</SelectItem>
+                    <SelectItem value="D">Destinatário</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs">Transportadora</Label>
+                <Input
+                  value={freteData.nome_transportador}
+                  onChange={(e) => setFreteData((p) => ({ ...p, nome_transportador: e.target.value }))}
+                  placeholder="Nome da transportadora"
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Forma de envio</Label>
+                <Input
+                  value={freteData.forma_envio}
+                  onChange={(e) => setFreteData((p) => ({ ...p, forma_envio: e.target.value }))}
+                  placeholder="Correios PAC, Sedex..."
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Payment */}
+          <div className="space-y-3">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+              <CreditCard className="w-3.5 h-3.5" /> Pagamento
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs">Condição de pagamento</Label>
+                <Select value={condicaoPagamento} onValueChange={setCondicaoPagamento}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="avista">À vista</SelectItem>
+                    <SelectItem value="30dias">30 dias</SelectItem>
+                    <SelectItem value="30_60">30/60 dias</SelectItem>
+                    <SelectItem value="30_60_90">30/60/90 dias</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs">Meio de pagamento</Label>
+                <Select value={meioPagamento} onValueChange={setMeioPagamento}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="dinheiro">Dinheiro</SelectItem>
+                    <SelectItem value="boleto">Boleto</SelectItem>
+                    <SelectItem value="cartao_credito">Cartão de crédito</SelectItem>
+                    <SelectItem value="cartao_debito">Cartão de débito</SelectItem>
+                    <SelectItem value="pix">PIX</SelectItem>
+                    <SelectItem value="transferencia">Transferência</SelectItem>
+                    <SelectItem value="outros">Outros</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
           </div>

@@ -171,7 +171,17 @@ export default function GestaoMetas() {
 
   const getMemberName = (memberId: string | null) => {
     if (!memberId) return "Time";
-    return teamMembers.find(m => m.id === memberId)?.name || "Desconhecido";
+    const member = teamMembers.find(m => m.id === memberId);
+    if (!member) return "Desconhecido";
+    return member.job_title ? `${member.name} (${member.job_title})` : member.name;
+  };
+
+  // Filtra membros baseado no tipo de meta selecionado
+  const getFilteredMembers = () => {
+    const active = teamMembers.filter(m => m.is_active);
+    if (formData.type === "vendas") return active.filter(m => (m as any).metric_type === "sales");
+    if (formData.type === "reunioes") return active.filter(m => (m as any).metric_type === "meetings");
+    return active; // faturamento, clientes, conversao — sem filtro
   };
 
   const getGoalTypeInfo = (type: string) => {
@@ -447,9 +457,9 @@ export default function GestaoMetas() {
               <Label htmlFor="team_member_id">Membro do Time (opcional)</Label>
               <Select
                 value={formData.team_member_id || "team"}
-                onValueChange={(value) => setFormData({ 
-                  ...formData, 
-                  team_member_id: value === "team" ? null : value 
+                onValueChange={(value) => setFormData({
+                  ...formData,
+                  team_member_id: value === "team" ? null : value
                 })}
               >
                 <SelectTrigger>
@@ -457,9 +467,9 @@ export default function GestaoMetas() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="team">🏢 Meta do Time</SelectItem>
-                  {teamMembers.filter(m => m.is_active).map((member) => (
+                  {getFilteredMembers().map((member) => (
                     <SelectItem key={member.id} value={member.id}>
-                      {member.name}
+                      {member.name}{(member as any).job_title ? ` (${(member as any).job_title})` : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>

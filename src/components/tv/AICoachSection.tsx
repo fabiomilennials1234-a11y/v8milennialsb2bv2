@@ -47,7 +47,7 @@ export function AICoachSection() {
         new Date(c.updated_at).getMonth() + 1 === currentMonth
       ) || [];
       
-      const sdrGoal = individualGoals?.sdrGoals?.find(g => g.id === member.id);
+      const sdrGoal = individualGoals?.meetingsGoals?.find(g => g.id === member.id);
       
       metrics.confirmados = sdrConfirmacoes.length;
       metrics.metaReuniao = sdrGoal?.goal || 20;
@@ -60,7 +60,7 @@ export function AICoachSection() {
       ) || [];
       
       const faturamento = closerSales.reduce((sum, p) => sum + (p.sale_value || 0), 0);
-      const closerGoal = individualGoals?.closerGoals?.find(g => g.id === member.id);
+      const closerGoal = individualGoals?.salesGoals?.find(g => g.id === member.id);
       
       metrics.faturamento = faturamento;
       metrics.metaVendas = closerGoal?.goal || 50000;
