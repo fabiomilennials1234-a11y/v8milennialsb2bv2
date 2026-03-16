@@ -177,9 +177,13 @@ serve(withSentry('lead-webhook', async (req) => {
       });
 
       if (!result) {
-        console.error("[lead-webhook] Failed to get or create lead");
+        console.error("[lead-webhook] Failed to get or create lead for org:", organizationId, "phone:", phone, "email:", email);
         return new Response(
-          JSON.stringify({ error: "Failed to get or create lead" }),
+          JSON.stringify({
+            error: "Failed to get or create lead",
+            hint: "Check Supabase Edge Function logs for [lead-service] errors. Common causes: missing database columns (run pending migrations), duplicate leads, or DB constraint violations.",
+            context: { organization_id: organizationId, phone: phone || null, email: email || null },
+          }),
           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
