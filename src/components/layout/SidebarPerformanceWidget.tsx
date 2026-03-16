@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { motion } from "framer-motion";
-import { DollarSign, Target, Flame, CheckCircle, Trophy, Lock, Zap, Eye, EyeOff } from "lucide-react";
+import { DollarSign, Target, Flame, CheckCircle, Trophy, Lock, Zap, Eye, EyeOff, ChevronDown, ChevronUp } from "lucide-react";
 import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
 import { useCommissionSummary } from "@/hooks/useCommissions";
 import { useOrganization } from "@/hooks/useOrganization";
@@ -11,6 +11,7 @@ import { useQuery } from "@tanstack/react-query";
 import { OraculoComercial } from "./OraculoComercial";
 
 const WIDGETS_HIDDEN_KEY = "sidebar_widgets_hidden";
+const WIDGETS_MINIMIZED_KEY = "sidebar_widgets_minimized";
 
 function useWidgetsVisibility() {
   const [hidden, setHidden] = useState(() => {
@@ -30,6 +31,26 @@ function useWidgetsVisibility() {
   }, []);
 
   return { hidden, toggle };
+}
+
+function useWidgetsMinimized() {
+  const [minimized, setMinimized] = useState(() => {
+    try {
+      return localStorage.getItem(WIDGETS_MINIMIZED_KEY) === "true";
+    } catch {
+      return false;
+    }
+  });
+
+  const toggle = useCallback(() => {
+    setMinimized((prev) => {
+      const next = !prev;
+      try { localStorage.setItem(WIDGETS_MINIMIZED_KEY, String(next)); } catch {}
+      return next;
+    });
+  }, []);
+
+  return { minimized, toggle };
 }
 
 function MaskedValue({ children, hidden }: { children: React.ReactNode; hidden: boolean }) {
@@ -246,6 +267,7 @@ export function SidebarPerformanceWidget({ collapsed }: SidebarPerformanceWidget
   );
 
   const { hidden: widgetsHidden, toggle: toggleWidgets } = useWidgetsVisibility();
+  const { minimized: widgetsMinimized, toggle: toggleMinimized } = useWidgetsMinimized();
 
   // Admin sem metric_type e agency não veem o widget
   if (memberRole === "admin" && !metricType) return null;
@@ -267,6 +289,21 @@ export function SidebarPerformanceWidget({ collapsed }: SidebarPerformanceWidget
     );
   }
 
+  // Minimizado: barra compacta para expandir
+  if (!collapsed && widgetsMinimized) {
+    return (
+      <div className="px-3 py-2 border-t border-sidebar-border">
+        <button
+          onClick={toggleMinimized}
+          className="flex items-center gap-2 w-full text-xs text-sidebar-foreground/40 hover:text-sidebar-foreground/60 transition-colors rounded-md px-2 py-1.5 hover:bg-sidebar-accent"
+        >
+          <ChevronUp className="w-3.5 h-3.5" />
+          <span>Mostrar widgets</span>
+        </button>
+      </div>
+    );
+  }
+
   // Widget para membros com metric_type "meetings" (ex-SDR)
   if (metricType === "meetings" && sdrData && commissionSummary) {
     const percentage = sdrData.goal > 0 ? (sdrData.confirmed / sdrData.goal) * 100 : 0;
@@ -274,16 +311,25 @@ export function SidebarPerformanceWidget({ collapsed }: SidebarPerformanceWidget
 
     return (
       <div className="p-3 border-t border-sidebar-border space-y-2">
-        {/* Toggle de visibilidade */}
+        {/* Toggle de visibilidade + minimizar */}
         {!collapsed && (
-          <button
-            onClick={toggleWidgets}
-            className="flex items-center gap-1.5 text-[10px] text-sidebar-foreground/40 hover:text-sidebar-foreground/70 transition-colors w-full justify-end"
-            title={widgetsHidden ? "Mostrar valores" : "Ocultar valores"}
-          >
-            {widgetsHidden ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
-            <span>{widgetsHidden ? "Mostrar" : "Ocultar"}</span>
-          </button>
+          <div className="flex items-center justify-end gap-2">
+            <button
+              onClick={toggleWidgets}
+              className="flex items-center gap-1.5 text-[10px] text-sidebar-foreground/40 hover:text-sidebar-foreground/70 transition-colors"
+              title={widgetsHidden ? "Mostrar valores" : "Ocultar valores"}
+            >
+              {widgetsHidden ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+              <span>{widgetsHidden ? "Mostrar" : "Ocultar"}</span>
+            </button>
+            <button
+              onClick={toggleMinimized}
+              className="p-1 text-sidebar-foreground/40 hover:text-sidebar-foreground/70 transition-colors rounded hover:bg-sidebar-accent"
+              title="Minimizar widgets"
+            >
+              <ChevronDown className="w-3 h-3" />
+            </button>
+          </div>
         )}
 
         {/* Ganhos do mês para SDR */}
@@ -392,16 +438,25 @@ export function SidebarPerformanceWidget({ collapsed }: SidebarPerformanceWidget
 
     return (
       <div className="p-3 border-t border-sidebar-border space-y-2">
-        {/* Toggle de visibilidade */}
+        {/* Toggle de visibilidade + minimizar */}
         {!collapsed && (
-          <button
-            onClick={toggleWidgets}
-            className="flex items-center gap-1.5 text-[10px] text-sidebar-foreground/40 hover:text-sidebar-foreground/70 transition-colors w-full justify-end"
-            title={widgetsHidden ? "Mostrar valores" : "Ocultar valores"}
-          >
-            {widgetsHidden ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
-            <span>{widgetsHidden ? "Mostrar" : "Ocultar"}</span>
-          </button>
+          <div className="flex items-center justify-end gap-2">
+            <button
+              onClick={toggleWidgets}
+              className="flex items-center gap-1.5 text-[10px] text-sidebar-foreground/40 hover:text-sidebar-foreground/70 transition-colors"
+              title={widgetsHidden ? "Mostrar valores" : "Ocultar valores"}
+            >
+              {widgetsHidden ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+              <span>{widgetsHidden ? "Mostrar" : "Ocultar"}</span>
+            </button>
+            <button
+              onClick={toggleMinimized}
+              className="p-1 text-sidebar-foreground/40 hover:text-sidebar-foreground/70 transition-colors rounded hover:bg-sidebar-accent"
+              title="Minimizar widgets"
+            >
+              <ChevronDown className="w-3 h-3" />
+            </button>
+          </div>
         )}
 
         {/* Ganhos do mês */}

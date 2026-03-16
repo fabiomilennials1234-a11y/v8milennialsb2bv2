@@ -87,8 +87,8 @@ Deno.serve(withSentry('webhook-new-lead', async (req) => {
     const utm_term = sanitizeString(rawUtmTerm, 100);
     const utm_content = sanitizeString(rawUtmContent, 100);
 
-    // If compromisso_date is filled, set origin to "calendly", otherwise normalize origin
-    const origin = compromisso_date ? "calendly" : (validOrigins.includes(rawOrigin) ? rawOrigin : "outro");
+    // If compromisso_date is filled, set origin to "cal", otherwise normalize origin
+    const origin = compromisso_date ? "cal" : (validOrigins.includes(rawOrigin) ? rawOrigin : "outro");
     
     // Validate input
     const validation = validateLeadInput({
@@ -117,18 +117,20 @@ Deno.serve(withSentry('webhook-new-lead', async (req) => {
     let deduplicationMethod = null;
 
     // 0. FIRST PRIORITY: Try to find by normalized phone
+    // Uses limit(1) instead of maybeSingle() to handle duplicate leads gracefully
     const normalizedPhone = normalizePhoneForSearch(phone);
     if (normalizedPhone) {
-      const { data: leadByPhone, error: phoneSearchError } = await supabase
+      const { data: phoneResults, error: phoneSearchError } = await supabase
         .from("leads")
         .select("*")
         .eq("normalized_phone", normalizedPhone)
-        .maybeSingle();
+        .order("created_at", { ascending: false })
+        .limit(1);
 
-      if (!phoneSearchError && leadByPhone) {
-        existingLead = leadByPhone;
+      if (!phoneSearchError && phoneResults?.[0]) {
+        existingLead = phoneResults[0];
         deduplicationMethod = "phone";
-        console.log("[webhook-new-lead] Found existing lead by phone:", leadByPhone.id);
+        console.log("[webhook-new-lead] Found existing lead by phone:", existingLead.id);
       }
     }
 
@@ -216,7 +218,7 @@ Deno.serve(withSentry('webhook-new-lead', async (req) => {
       if (newCompromissoDate && !existingLead.compromisso_date) {
         // Only update if existing lead has no compromisso_date
         updatedData.compromisso_date = newCompromissoDate;
-        updatedData.origin = "ambos"; // Mark as lead from multiple sources
+        updatedData.origin = "cal"; // Lead now has compromisso_date from calendar source
       } else if (existingLead.compromisso_date && newCompromissoDate && existingLead.compromisso_date !== newCompromissoDate) {
         // If both have dates, keep existing and log the conflict
         updatedData.notes = (updatedData.notes || existingLead.notes || '') + 

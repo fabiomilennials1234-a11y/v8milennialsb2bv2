@@ -136,18 +136,21 @@ export async function getOrCreateLead(
   });
 
   // 1. SEARCH BY NORMALIZED PHONE (priority)
+  // Uses limit(1) to handle duplicate leads gracefully (returns most recent)
   if (normalizedPhone) {
-    const { data: leadByPhone, error: phoneError } = await supabase
+    const { data: phoneResults, error: phoneError } = await supabase
       .from("leads")
       .select("id, name, phone, email, organization_id, normalized_phone")
       .eq("organization_id", organizationId)
       .eq("normalized_phone", normalizedPhone)
-      .maybeSingle();
+      .order("created_at", { ascending: false })
+      .limit(1);
 
-    if (phoneError && !phoneError.message?.includes("No rows")) {
+    if (phoneError) {
       console.error("[lead-service] Error searching by phone:", phoneError);
     }
 
+    const leadByPhone = phoneResults?.[0] ?? null;
     if (leadByPhone) {
       console.log("[lead-service] Found lead by phone:", leadByPhone.id);
       return { lead: leadByPhone, created: false, source: "phone" };
@@ -155,18 +158,21 @@ export async function getOrCreateLead(
   }
 
   // 2. SEARCH BY EMAIL (fallback)
+  // Uses limit(1) to handle duplicate leads gracefully (returns most recent)
   if (normalizedEmailValue) {
-    const { data: leadByEmail, error: emailError } = await supabase
+    const { data: emailResults, error: emailError } = await supabase
       .from("leads")
       .select("id, name, phone, email, organization_id, normalized_phone")
       .eq("organization_id", organizationId)
       .ilike("email", normalizedEmailValue)
-      .maybeSingle();
+      .order("created_at", { ascending: false })
+      .limit(1);
 
-    if (emailError && !emailError.message?.includes("No rows")) {
+    if (emailError) {
       console.error("[lead-service] Error searching by email:", emailError);
     }
 
+    const leadByEmail = emailResults?.[0] ?? null;
     if (leadByEmail) {
       console.log("[lead-service] Found lead by email:", leadByEmail.id);
       return { lead: leadByEmail, created: false, source: "email" };
@@ -194,10 +200,14 @@ export async function getOrCreateLead(
     phone: phone || null, // Save original phone format
     // normalized_phone will be auto-filled by trigger
     email: email || null,
-    origin: isShadow ? "shadow_copilot" : (origin || "whatsapp"),
+    origin: origin || "whatsapp",
     organization_id: organizationId,
-    is_shadow: isShadow || false,
   };
+
+  // Only include is_shadow when explicitly true (column defaults to false)
+  if (isShadow) {
+    insertData.is_shadow = true;
+  }
 
   // Shadow leads não entram em nenhum pipe até serem promovidos
   if (!isShadow) {
@@ -228,41 +238,44 @@ export async function getOrCreateLead(
 
       // Retry search - the lead was created by another process
       if (normalizedPhone) {
-        const { data: retryLead } = await supabase
+        const { data: retryResults } = await supabase
           .from("leads")
           .select("id, name, phone, email, organization_id, normalized_phone")
           .eq("organization_id", organizationId)
           .eq("normalized_phone", normalizedPhone)
-          .maybeSingle();
+          .order("created_at", { ascending: false })
+          .limit(1);
 
-        if (retryLead) {
+        if (retryResults?.[0]) {
           console.log(
             "[lead-service] Found lead after retry:",
-            retryLead.id
+            retryResults[0].id
           );
-          return { lead: retryLead, created: false, source: "phone" };
+          return { lead: retryResults[0], created: false, source: "phone" };
         }
       }
 
       if (normalizedEmailValue) {
-        const { data: retryLeadByEmail } = await supabase
+        const { data: retryEmailResults } = await supabase
           .from("leads")
           .select("id, name, phone, email, organization_id, normalized_phone")
           .eq("organization_id", organizationId)
           .ilike("email", normalizedEmailValue)
-          .maybeSingle();
+          .order("created_at", { ascending: false })
+          .limit(1);
 
-        if (retryLeadByEmail) {
+        if (retryEmailResults?.[0]) {
           console.log(
             "[lead-service] Found lead by email after retry:",
-            retryLeadByEmail.id
+            retryEmailResults[0].id
           );
-          return { lead: retryLeadByEmail, created: false, source: "email" };
+          return { lead: retryEmailResults[0], created: false, source: "email" };
         }
       }
     }
 
     console.error("[lead-service] Error creating lead:", createError);
+    console.error("[lead-service] Insert data was:", JSON.stringify(insertData));
     return null;
   }
 
@@ -308,31 +321,33 @@ export async function findLeadByPhoneOrEmail(
   const normalizedPhone = normalizePhoneForSearch(phone);
   const normalizedEmailValue = normalizeEmail(email);
 
-  // Search by phone first
+  // Search by phone first (limit(1) handles duplicates gracefully)
   if (normalizedPhone) {
-    const { data: leadByPhone } = await supabase
+    const { data: phoneResults } = await supabase
       .from("leads")
       .select("id, name, phone, email, organization_id, normalized_phone")
       .eq("organization_id", organizationId)
       .eq("normalized_phone", normalizedPhone)
-      .maybeSingle();
+      .order("created_at", { ascending: false })
+      .limit(1);
 
-    if (leadByPhone) {
-      return leadByPhone;
+    if (phoneResults?.[0]) {
+      return phoneResults[0];
     }
   }
 
-  // Fallback to email
+  // Fallback to email (limit(1) handles duplicates gracefully)
   if (normalizedEmailValue) {
-    const { data: leadByEmail } = await supabase
+    const { data: emailResults } = await supabase
       .from("leads")
       .select("id, name, phone, email, organization_id, normalized_phone")
       .eq("organization_id", organizationId)
       .ilike("email", normalizedEmailValue)
-      .maybeSingle();
+      .order("created_at", { ascending: false })
+      .limit(1);
 
-    if (leadByEmail) {
-      return leadByEmail;
+    if (emailResults?.[0]) {
+      return emailResults[0];
     }
   }
 
