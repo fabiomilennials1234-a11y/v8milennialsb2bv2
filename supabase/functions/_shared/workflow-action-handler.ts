@@ -197,35 +197,38 @@ async function getWhatsAppInstance(
   supabase: SupabaseClient,
   organizationId: string,
   instanceId?: string,
-): Promise<{ instanceName: string; evolutionUrl: string; evolutionKey: string } | null> {
+): Promise<{ instanceId: string; instanceName: string; evolutionUrl: string; evolutionKey: string } | null> {
   const evolutionUrl = Deno.env.get("EVOLUTION_API_URL");
   const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
   if (!evolutionUrl || !evolutionKey) return null;
 
+  let resolvedId: string | null = null;
   let instanceName: string | null = null;
 
   if (instanceId) {
     const { data } = await supabase
       .from("whatsapp_instances")
-      .select("instance_name")
+      .select("id, instance_name")
       .eq("id", instanceId)
       .maybeSingle();
+    resolvedId = data?.id ?? null;
     instanceName = data?.instance_name ?? null;
   }
 
   if (!instanceName) {
     const { data } = await supabase
       .from("whatsapp_instances")
-      .select("instance_name")
+      .select("id, instance_name")
       .eq("organization_id", organizationId)
       .eq("status", "open")
       .limit(1)
       .maybeSingle();
+    resolvedId = data?.id ?? null;
     instanceName = data?.instance_name ?? null;
   }
 
-  if (!instanceName) return null;
-  return { instanceName, evolutionUrl, evolutionKey };
+  if (!instanceName || !resolvedId) return null;
+  return { instanceId: resolvedId, instanceName, evolutionUrl, evolutionKey };
 }
 
 async function getLeadPhone(supabase: SupabaseClient, leadId: string): Promise<string | null> {
@@ -423,9 +426,11 @@ async function handleSendWhatsApp(ctx: ActionContext): Promise<ActionResult> {
   // Record in whatsapp_messages
   await ctx.supabase.from("whatsapp_messages").insert({
     organization_id: ctx.organizationId,
-    instance_name: wa.instanceName,
+    instance_id: wa.instanceId,
+    message_id: `wf_${crypto.randomUUID()}`,
     remote_jid: phone + "@s.whatsapp.net",
-    from_me: true,
+    phone_number: phone,
+    direction: "outgoing",
     message_type: "conversation",
     content: message,
     timestamp: new Date().toISOString(),
@@ -451,9 +456,11 @@ async function handleSendWhatsAppAudio(ctx: ActionContext): Promise<ActionResult
   // Record in whatsapp_messages so it appears in chat
   await ctx.supabase.from("whatsapp_messages").insert({
     organization_id: ctx.organizationId,
-    instance_name: wa.instanceName,
+    instance_id: wa.instanceId,
+    message_id: `wf_${crypto.randomUUID()}`,
     remote_jid: phone + "@s.whatsapp.net",
-    from_me: true,
+    phone_number: phone,
+    direction: "outgoing",
     message_type: "audio",
     content: null,
     media_url: audioUrl,
