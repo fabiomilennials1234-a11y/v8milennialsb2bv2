@@ -73,6 +73,11 @@ export function TriggerPanel({ data, onUpdate }: TriggerPanelProps) {
                      t === "webhook_received" ? "Webhook Recebido" :
                      t === "lead_assigned" ? "Lead Atribuído" :
                      t === "campaign_status_changed" ? "Status de Campanha Mudou" :
+                     t === "lead_added_to_campaign" ? "Lead Entrou na Campanha" :
+                     t === "lead_removed_from_campaign" ? "Lead Saiu da Campanha" :
+                     t === "campaign_lead_replied" ? "Lead Respondeu na Campanha" :
+                     t === "campaign_lead_no_reply" ? "Lead Não Respondeu na Campanha" :
+                     t === "campaign_completed" ? "Lead Concluiu a Campanha" :
                      t === "field_changed" ? "Campo do Lead Alterado" :
                      t}
                   </SelectItem>
@@ -349,6 +354,29 @@ export function TriggerPanel({ data, onUpdate }: TriggerPanelProps) {
                 <SelectItem value="completed">Encerrada</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+        </>
+      )}
+
+      {/* ── new campaign triggers ── */}
+      {["lead_added_to_campaign", "lead_removed_from_campaign",
+        "campaign_lead_replied", "campaign_lead_no_reply", "campaign_completed",
+      ].includes(data.triggerType) && (
+        <>
+          <div className="space-y-2">
+            <Label>ID da Campanha (opcional)</Label>
+            <Input
+              value={(cfg.campaign_id as string) || ""}
+              onChange={(e) => updateConfig({ campaign_id: e.target.value })}
+              placeholder="Qualquer campanha se vazio"
+            />
+            <p className="text-xs text-muted-foreground">
+              {data.triggerType === "lead_added_to_campaign" && "Dispara quando um lead é adicionado à campanha."}
+              {data.triggerType === "lead_removed_from_campaign" && "Dispara quando um lead é removido da campanha."}
+              {data.triggerType === "campaign_lead_replied" && "Dispara quando o lead responde uma mensagem da campanha."}
+              {data.triggerType === "campaign_lead_no_reply" && "Dispara quando o timeout de espera de resposta expira sem resposta."}
+              {data.triggerType === "campaign_completed" && "Dispara quando o lead chega no último estágio da campanha."}
+            </p>
           </div>
         </>
       )}

@@ -76,12 +76,13 @@ const ACTION_ICONS: Record<string, React.ElementType> = {
   evaluate_conversation: CheckCircle,
 };
 
-function ActionNodeComponent({ data, selected }: NodeProps) {
+function ActionNodeComponent({ id, data, selected }: NodeProps) {
   const nodeData = data as unknown as ActionNodeData;
   const Icon = ACTION_ICONS[nodeData.actionType] || Play;
 
   return (
     <BaseNode
+      nodeId={id}
       nodeType="action"
       icon={<Icon className="w-5 h-5 text-green-500" />}
       title={nodeData.label || "Ação"}

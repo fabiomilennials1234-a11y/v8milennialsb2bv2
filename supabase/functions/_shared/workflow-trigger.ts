@@ -160,7 +160,12 @@ function matchesTriggerConfig(
       return true;
     }
 
-    case "campaign_status_changed": {
+    case "campaign_status_changed":
+    case "lead_added_to_campaign":
+    case "lead_removed_from_campaign":
+    case "campaign_lead_replied":
+    case "campaign_lead_no_reply":
+    case "campaign_completed": {
       if (config.campaign_id && context.campanha_id && config.campaign_id !== context.campanha_id) return false;
       return true;
     }
