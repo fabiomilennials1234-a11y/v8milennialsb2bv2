@@ -139,12 +139,22 @@ export function useMetaConnectionStatus() {
 /**
  * Inicia o fluxo OAuth do Meta (redireciona para Facebook Login)
  */
+interface ConnectMetaParams {
+  connectionType?: ConnectionType;
+  authType?: "rerequest";
+}
+
 export function useConnectMeta() {
   const { user } = useAuth();
   const { organizationId } = useOrganization();
 
   return useMutation({
-    mutationFn: async (connectionType: ConnectionType = "facebook") => {
+    mutationFn: async (input: ConnectionType | ConnectMetaParams = "facebook") => {
+      const resolvedType: ConnectionType =
+        typeof input === "string" ? input : input.connectionType || "facebook";
+      const resolvedAuthType =
+        typeof input === "object" ? input.authType : undefined;
+
       if (!user?.id || !organizationId) {
         throw new Error("Usuario ou organizacao nao encontrados");
       }
@@ -153,7 +163,7 @@ export function useConnectMeta() {
         JSON.stringify({
           userId: user.id,
           orgId: organizationId,
-          connectionType,
+          connectionType: resolvedType,
         })
       );
 
@@ -186,7 +196,7 @@ export function useConnectMeta() {
       ];
 
       const scopes =
-        connectionType === "instagram"
+        resolvedType === "instagram"
           ? instagramScopes.join(",")
           : facebookScopes.join(",");
 
@@ -197,6 +207,10 @@ export function useConnectMeta() {
         response_type: "code",
         state,
       });
+
+      if (resolvedAuthType) {
+        params.set("auth_type", resolvedAuthType);
+      }
 
       const loginUrl = `https://www.facebook.com/v21.0/dialog/oauth?${params}`;
       window.location.href = loginUrl;
