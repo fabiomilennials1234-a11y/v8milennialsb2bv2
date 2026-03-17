@@ -39,7 +39,8 @@ import {
 import torqueLogo from "@/assets/torque-logo.png";
 import torqueIcon from "@/assets/torque-icon.png";
 import { useAuth } from "@/contexts/AuthContext";
-import { useUserRole, useJobTitle } from "@/hooks/useUserRole";
+import { useUserRole, useJobTitle, useFeaturePermissions, useIsAdmin } from "@/hooks/useUserRole";
+import { useMasterAuth } from "@/hooks/useMasterAuth";
 // useWhatsAppContacts/Realtime removidos da Sidebar para performance (eram no-op com instanceId=null)
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
 import { SIDEBAR_FEATURE_MAP, type FeatureKey } from "@/lib/feature-registry";
@@ -114,6 +115,27 @@ const CUSTOM_PIPE_ICON_MAP: Record<string, React.ElementType> = {
   gift: Gift,
 };
 
+/** Mapeia paths da sidebar → feature_permission de visualização do membro */
+const SIDEBAR_VIEW_PERMISSIONS: Record<string, string> = {
+  "/campanhas": "campaigns.view",
+  "/marketing": "marketing.view",
+  "/chat": "whatsapp.view",
+  "/pipe-whatsapp": "pipeline.view",
+  "/pipe-confirmacao": "pipeline.view",
+  "/pipe-propostas": "pipeline.view",
+  "/upsell": "upsell.view",
+  "/agenda": "agenda.view",
+  "/follow-ups": "followups.view",
+  "/leads": "leads.view",
+  "/performance": "performance.view",
+  "/comissoes": "commissions.view",
+  "/copilot": "copilot.view",
+  "/automacoes": "workflows.view",
+  "/equipe": "team.view",
+  "/produtos": "products.view",
+  "/configuracoes": "settings.view",
+};
+
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const [hovered, setHovered] = useState(false);
@@ -147,7 +169,18 @@ export function Sidebar() {
     }
   }, [location.pathname]);
   const { data: customPipelines = [] } = useCustomPipelines();
+  const { data: featurePerms } = useFeaturePermissions();
+  const { isAdmin } = useIsAdmin();
+  const { isMaster } = useMasterAuth();
   const role = userRole?.role;
+
+  /** Verifica se o membro tem permissão de visualização para uma rota */
+  const canViewRoute = (path: string): boolean => {
+    if (isMaster || isAdmin) return true;
+    const permKey = SIDEBAR_VIEW_PERMISSIONS[path];
+    if (!permKey) return true;
+    return featurePerms?.[permKey] !== false;
+  };
 
   /** Verifica se um nav item está bloqueado pela feature flag */
   const isLocked = (path: string): boolean => {
@@ -334,6 +367,15 @@ export function Sidebar() {
         {navItems.map((item) => {
           const locked = isLocked(item.path);
 
+          // Filtrar por permissão de visualização do membro
+          if (item.children) {
+            // Para grupo com filhos (Funis), esconder se nenhum filho é visível
+            const visibleChildren = item.children.filter((c) => canViewRoute(c.path));
+            if (visibleChildren.length === 0 && !canViewRoute(item.path)) return null;
+          } else {
+            if (!canViewRoute(item.path)) return null;
+          }
+
           return (
           <div key={item.path}>
             {item.children ? (
@@ -391,7 +433,7 @@ export function Sidebar() {
                   )}
                 >
                   <div className="min-h-0 overflow-hidden">
-                    {item.children.map((child) => (
+                    {item.children.filter((c) => canViewRoute(c.path)).map((child) => (
                       <NavLink
                         key={child.path}
                         to={child.path}
@@ -505,7 +547,7 @@ export function Sidebar() {
                 <span className="text-xs text-sidebar-foreground/50 uppercase font-medium">Admin</span>
               </div>
             )}
-            {adminNavItems.map((item) => {
+            {adminNavItems.filter((item) => canViewRoute(item.path)).map((item) => {
               const adminLocked = isLocked(item.path);
               return adminLocked ? (
                 <button
@@ -554,7 +596,7 @@ export function Sidebar() {
 
       {/* Bottom Navigation */}
       <div className="p-3 border-t border-sidebar-border space-y-1">
-        {bottomNavItems.map((item) => (
+        {bottomNavItems.filter((item) => canViewRoute(item.path)).map((item) => (
           <NavLink
             key={item.path}
             to={item.path}

@@ -9,6 +9,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { OrgFeaturesProvider } from "@/contexts/OrgFeaturesContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { PermissionProtectedRoute } from "@/components/PermissionProtectedRoute";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { useAutoAdminAssignment } from "@/hooks/useAutoAdminAssignment";
 import { SubscriptionProtectedRoute } from "@/components/SubscriptionProtectedRoute";
@@ -171,7 +172,9 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <Campanhas />
+              <PermissionProtectedRoute featureKey="campaigns.view">
+                <Campanhas />
+              </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -181,7 +184,9 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <CampanhaDetail />
+              <PermissionProtectedRoute featureKey="campaigns.view">
+                <CampanhaDetail />
+              </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -191,7 +196,9 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <Marketing />
+              <PermissionProtectedRoute featureKey="marketing.view">
+                <Marketing />
+              </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -201,7 +208,9 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <PipeConfirmacao />
+              <PermissionProtectedRoute featureKey="pipeline.view">
+                <PipeConfirmacao />
+              </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -211,7 +220,9 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <PipePropostas />
+              <PermissionProtectedRoute featureKey="pipeline.view">
+                <PipePropostas />
+              </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -221,7 +232,9 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <Performance />
+              <PermissionProtectedRoute featureKey="performance.view">
+                <Performance />
+              </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -247,7 +260,9 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <PipeWhatsapp />
+              <PermissionProtectedRoute featureKey="pipeline.view">
+                <PipeWhatsapp />
+              </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -257,7 +272,9 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <PipeFollowUps />
+              <PermissionProtectedRoute featureKey="followups.view">
+                <PipeFollowUps />
+              </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -267,7 +284,9 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <Leads />
+              <PermissionProtectedRoute featureKey="leads.view">
+                <Leads />
+              </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -281,7 +300,9 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <Comissoes />
+              <PermissionProtectedRoute featureKey="commissions.view">
+                <Comissoes />
+              </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -291,7 +312,9 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <Equipe />
+              <PermissionProtectedRoute featureKey="team.view">
+                <Equipe />
+              </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -301,7 +324,9 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <Configuracoes />
+              <PermissionProtectedRoute featureKey="settings.view">
+                <Configuracoes />
+              </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -319,7 +344,9 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <Produtos />
+              <PermissionProtectedRoute featureKey="products.view">
+                <Produtos />
+              </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -329,7 +356,9 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <Copilot />
+              <PermissionProtectedRoute featureKey="copilot.view">
+                <Copilot />
+              </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -339,7 +368,9 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <CopilotMetrics />
+              <PermissionProtectedRoute featureKey="copilot.view">
+                <CopilotMetrics />
+              </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -359,7 +390,9 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <ChatWhatsApp />
+              <PermissionProtectedRoute featureKey="whatsapp.view">
+                <ChatWhatsApp />
+              </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -369,7 +402,9 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <ChatWhatsApp />
+              <PermissionProtectedRoute featureKey="whatsapp.view">
+                <ChatWhatsApp />
+              </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -379,7 +414,9 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <Upsell />
+              <PermissionProtectedRoute featureKey="upsell.view">
+                <Upsell />
+              </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -389,7 +426,9 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <CustomPipeline />
+              <PermissionProtectedRoute featureKey="pipeline.view">
+                <CustomPipeline />
+              </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -399,7 +438,9 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <Agenda />
+              <PermissionProtectedRoute featureKey="agenda.view">
+                <Agenda />
+              </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -445,7 +486,9 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <Automacoes />
+              <PermissionProtectedRoute featureKey="workflows.view">
+                <Automacoes />
+              </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -455,7 +498,9 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <AutomacoesEditor />
+              <PermissionProtectedRoute featureKey="workflows.view">
+                <AutomacoesEditor />
+              </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -465,7 +510,9 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <AutomacoesEditor />
+              <PermissionProtectedRoute featureKey="workflows.view">
+                <AutomacoesEditor />
+              </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -475,7 +522,9 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <AutomacoesExecucoes />
+              <PermissionProtectedRoute featureKey="workflows.view">
+                <AutomacoesExecucoes />
+              </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }

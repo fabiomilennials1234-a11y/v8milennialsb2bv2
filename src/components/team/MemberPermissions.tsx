@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
 import { useIsAdmin } from "@/hooks/useUserRole";
 import { supabase } from "@/integrations/supabase/client";
@@ -28,15 +29,20 @@ interface MemberFeaturePermission {
 
 const MODULE_LABELS: Record<string, string> = {
   leads: "Leads",
-  pipeline: "Pipeline",
-  dashboard: "Dashboard",
-  equipe: "Equipe",
-  comissoes: "Comissoes",
-  copilot: "Copilot",
-  whatsapp: "WhatsApp",
-  integracoes: "Integracoes",
-  configuracoes: "Configuracoes",
-  relatorios: "Relatorios",
+  pipeline: "Funis",
+  campaigns: "Campanhas",
+  whatsapp: "WhatsApp / Chat",
+  copilot: "Copilot / IA",
+  workflows: "Automacoes",
+  products: "Produtos",
+  agenda: "Agenda",
+  performance: "Metas e Performance",
+  commissions: "Comissoes",
+  followups: "Follow-ups",
+  settings: "Configuracoes",
+  upsell: "Upsell / Carteira",
+  marketing: "Marketing",
+  team: "Equipe",
 };
 
 export function MemberPermissions() {
@@ -431,15 +437,16 @@ export function MemberPermissions() {
                           )}
                         </div>
 
-                        {/* Feature list */}
+                        {/* Feature list — separated by view vs action */}
                         <div className="divide-y">
-                          {features
-                            .filter((f) => !isModuleViewKey(f.key))
-                            .map((feature) => {
-                              const enabled =
-                                permissionMap[feature.key] ?? feature.default_value;
-                              const disabled =
-                                feature.is_admin_only || !moduleEnabled;
+                          {(() => {
+                            const nonViewFeatures = features.filter((f) => !isModuleViewKey(f.key));
+                            const viewFeatures = nonViewFeatures.filter((f) => f.key.endsWith(".view_all"));
+                            const actionFeatures = nonViewFeatures.filter((f) => !f.key.endsWith(".view_all"));
+
+                            const renderFeature = (feature: FeaturePermission) => {
+                              const enabled = permissionMap[feature.key] ?? feature.default_value;
+                              const disabled = feature.is_admin_only || !moduleEnabled;
 
                               return (
                                 <div
@@ -477,7 +484,34 @@ export function MemberPermissions() {
                                   />
                                 </div>
                               );
-                            })}
+                            };
+
+                            return (
+                              <>
+                                {viewFeatures.length > 0 && (
+                                  <>
+                                    <div className="px-4 pt-3 pb-1">
+                                      <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">
+                                        Visualizacao
+                                      </p>
+                                    </div>
+                                    {viewFeatures.map(renderFeature)}
+                                    <div className="px-4">
+                                      <Separator className="my-0" />
+                                    </div>
+                                  </>
+                                )}
+                                {actionFeatures.length > 0 && (
+                                  <div className="px-4 pt-3 pb-1">
+                                    <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">
+                                      Acoes
+                                    </p>
+                                  </div>
+                                )}
+                                {actionFeatures.map(renderFeature)}
+                              </>
+                            );
+                          })()}
                         </div>
                       </div>
                     );
