@@ -17,7 +17,7 @@ export function useMessageTemplates(type: CampaignTemplateMessageType) {
 
       const { data, error } = await supabase
         .from("campaign_templates")
-        .select("id, organization_id, name, content, message_type, audio_url, image_url, available_variables, times_used, is_active, created_at, updated_at")
+        .select("id, organization_id, name, content, message_type, audio_url, available_variables, is_active, created_at, updated_at")
         .eq("organization_id", organizationId)
         .eq("message_type", type)
         .eq("is_active", true)

@@ -695,7 +695,7 @@ function WhatsAppTextPanel({
     (data.templateMode as string) ||
     (data.useTemplate ? "meta_template" : "free");
 
-  const { data: templates, isLoading: templatesLoading } =
+  const { data: templates, isLoading: templatesLoading, isError: templatesError } =
     useMessageTemplates("text");
   const [templateSearch, setTemplateSearch] = useState("");
 
@@ -764,7 +764,11 @@ function WhatsAppTextPanel({
       {templateMode === "campaign_template" && (
         <div className="space-y-2">
           <Label>Selecionar template de texto</Label>
-          {templatesLoading ? (
+          {templatesError ? (
+            <p className="text-xs text-destructive">
+              Erro ao carregar templates. Verifique sua conexão.
+            </p>
+          ) : templatesLoading ? (
             <p className="text-xs text-muted-foreground">
               Carregando templates...
             </p>
@@ -907,7 +911,7 @@ function AudioTemplatePicker({
   selectedId?: string;
   onSelect: (template: CampaignTemplate) => void;
 }) {
-  const { data: templates, isLoading } = useMessageTemplates("audio");
+  const { data: templates, isLoading, isError } = useMessageTemplates("audio");
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -947,6 +951,14 @@ function AudioTemplatePicker({
     return (
       <p className="text-xs text-muted-foreground">
         Carregando templates de áudio...
+      </p>
+    );
+  }
+
+  if (isError) {
+    return (
+      <p className="text-xs text-destructive">
+        Erro ao carregar templates de áudio.
       </p>
     );
   }

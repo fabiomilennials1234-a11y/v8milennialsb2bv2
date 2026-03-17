@@ -63,7 +63,17 @@ async function resolveVariables(
     origem:     lead.origin || "",
   };
 
-  // Sistema: data_hoje, hora_atual
+  // Sistema: saudacao, data_hoje, hora_atual
+  if (template.includes("{{saudacao}}")) {
+    const h = parseInt(
+      new Intl.DateTimeFormat("pt-BR", {
+        hour: "numeric",
+        hour12: false,
+        timeZone: "America/Sao_Paulo",
+      }).format(new Date()),
+    );
+    vars.saudacao = h >= 5 && h < 12 ? "Bom dia" : h >= 12 && h < 18 ? "Boa tarde" : "Boa noite";
+  }
   if (template.includes("{{data_hoje}}")) {
     vars.data_hoje = new Date().toLocaleDateString("pt-BR");
   }

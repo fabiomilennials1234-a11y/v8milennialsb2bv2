@@ -684,6 +684,7 @@ export const WORKFLOW_VARIABLES: WorkflowVariable[] = [
   // Personalizado
   { key: "{{custom.campo}}",  label: "Campo personalizado (ex: {{custom.cnpj}})", category: "Personalizado" },
   // Sistema
+  { key: "{{saudacao}}",          label: "Saudação (Bom dia/Boa tarde/Boa noite)", category: "Sistema" },
   { key: "{{data_hoje}}",         label: "Data de hoje",           category: "Sistema" },
   { key: "{{hora_atual}}",        label: "Hora atual",             category: "Sistema" },
   { key: "{{nome_empresa_crm}}", label: "Nome da sua empresa",    category: "Sistema" },
