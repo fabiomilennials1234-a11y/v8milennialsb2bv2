@@ -43,6 +43,7 @@ $$;
 -- ─── 2. RLS copilot_agents ──────────────────────────────────────────────────
 
 DROP POLICY IF EXISTS "Admins and closers can insert agents" ON public.copilot_agents;
+DROP POLICY IF EXISTS "members_can_insert_copilot_agents" ON public.copilot_agents;
 CREATE POLICY "members_can_insert_copilot_agents"
   ON public.copilot_agents FOR INSERT
   WITH CHECK (
@@ -53,6 +54,7 @@ CREATE POLICY "members_can_insert_copilot_agents"
   );
 
 DROP POLICY IF EXISTS "Admins and closers can update agents from their organization" ON public.copilot_agents;
+DROP POLICY IF EXISTS "members_can_update_copilot_agents" ON public.copilot_agents;
 CREATE POLICY "members_can_update_copilot_agents"
   ON public.copilot_agents FOR UPDATE
   USING (
@@ -63,6 +65,7 @@ CREATE POLICY "members_can_update_copilot_agents"
   );
 
 DROP POLICY IF EXISTS "Admins and closers can delete agents from their organization" ON public.copilot_agents;
+DROP POLICY IF EXISTS "members_can_delete_copilot_agents" ON public.copilot_agents;
 CREATE POLICY "members_can_delete_copilot_agents"
   ON public.copilot_agents FOR DELETE
   USING (
@@ -75,6 +78,7 @@ CREATE POLICY "members_can_delete_copilot_agents"
 -- ─── 3. RLS copilot_agent_faqs ──────────────────────────────────────────────
 
 DROP POLICY IF EXISTS "Admins and closers can manage FAQs" ON public.copilot_agent_faqs;
+DROP POLICY IF EXISTS "members_can_manage_copilot_faqs" ON public.copilot_agent_faqs;
 CREATE POLICY "members_can_manage_copilot_faqs"
   ON public.copilot_agent_faqs FOR ALL
   USING (
@@ -99,6 +103,7 @@ CREATE POLICY "members_can_manage_copilot_faqs"
 -- ─── 4. RLS copilot_agent_kanban_rules ──────────────────────────────────────
 
 DROP POLICY IF EXISTS "Admins and closers can manage Kanban rules" ON public.copilot_agent_kanban_rules;
+DROP POLICY IF EXISTS "members_can_manage_copilot_kanban_rules" ON public.copilot_agent_kanban_rules;
 CREATE POLICY "members_can_manage_copilot_kanban_rules"
   ON public.copilot_agent_kanban_rules FOR ALL
   USING (
@@ -126,6 +131,7 @@ CREATE POLICY "members_can_manage_copilot_kanban_rules"
 -- SELECT mantido sem mudança: qualquer membro pode listar instâncias.
 
 DROP POLICY IF EXISTS "Users can insert WhatsApp instances in their organization" ON public.whatsapp_instances;
+DROP POLICY IF EXISTS "members_can_insert_whatsapp_instances" ON public.whatsapp_instances;
 CREATE POLICY "members_can_insert_whatsapp_instances"
   ON public.whatsapp_instances FOR INSERT
   WITH CHECK (
@@ -136,6 +142,7 @@ CREATE POLICY "members_can_insert_whatsapp_instances"
   );
 
 DROP POLICY IF EXISTS "Users can update WhatsApp instances in their organization" ON public.whatsapp_instances;
+DROP POLICY IF EXISTS "members_can_update_whatsapp_instances" ON public.whatsapp_instances;
 CREATE POLICY "members_can_update_whatsapp_instances"
   ON public.whatsapp_instances FOR UPDATE
   USING (
@@ -146,6 +153,7 @@ CREATE POLICY "members_can_update_whatsapp_instances"
   );
 
 DROP POLICY IF EXISTS "Users can delete WhatsApp instances in their organization" ON public.whatsapp_instances;
+DROP POLICY IF EXISTS "members_can_delete_whatsapp_instances" ON public.whatsapp_instances;
 CREATE POLICY "members_can_delete_whatsapp_instances"
   ON public.whatsapp_instances FOR DELETE
   USING (
@@ -158,6 +166,7 @@ CREATE POLICY "members_can_delete_whatsapp_instances"
 -- ─── 6. RLS whatsapp_instance_allowed_members ───────────────────────────────
 
 DROP POLICY IF EXISTS "allowed_members_insert_admin_or_closer" ON public.whatsapp_instance_allowed_members;
+DROP POLICY IF EXISTS "members_can_insert_allowed_members" ON public.whatsapp_instance_allowed_members;
 CREATE POLICY "members_can_insert_allowed_members"
   ON public.whatsapp_instance_allowed_members FOR INSERT
   WITH CHECK (
@@ -170,6 +179,7 @@ CREATE POLICY "members_can_insert_allowed_members"
   );
 
 DROP POLICY IF EXISTS "allowed_members_update_admin_or_closer" ON public.whatsapp_instance_allowed_members;
+DROP POLICY IF EXISTS "members_can_update_allowed_members" ON public.whatsapp_instance_allowed_members;
 CREATE POLICY "members_can_update_allowed_members"
   ON public.whatsapp_instance_allowed_members FOR UPDATE
   USING (
@@ -182,6 +192,7 @@ CREATE POLICY "members_can_update_allowed_members"
   );
 
 DROP POLICY IF EXISTS "allowed_members_delete_admin_or_closer" ON public.whatsapp_instance_allowed_members;
+DROP POLICY IF EXISTS "members_can_delete_allowed_members" ON public.whatsapp_instance_allowed_members;
 CREATE POLICY "members_can_delete_allowed_members"
   ON public.whatsapp_instance_allowed_members FOR DELETE
   USING (
