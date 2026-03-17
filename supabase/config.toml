@@ -120,3 +120,11 @@ verify_jwt = false
 # refresh-meta-tokens: chamado por pg_cron; autenticação via x-cron-secret
 [functions.refresh-meta-tokens]
 verify_jwt = false
+
+# list-lead-forms: autenticação via JWT do usuario (validado internamente)
+[functions.list-lead-forms]
+verify_jwt = false
+
+# send-meta-message: autenticação via JWT do usuario (validado internamente)
+[functions.send-meta-message]
+verify_jwt = false
