@@ -36,6 +36,8 @@ import {
   Plus,
   X,
   RefreshCw,
+  AlertTriangle,
+  ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -100,11 +102,17 @@ const PIPE_OPTIONS = [
 // Sub-components
 // ---------------------------------------------------------------------------
 
+interface PageFormsResult {
+  forms: MetaForm[];
+  tos_not_accepted?: boolean;
+  tos_accept_url?: string;
+}
+
 /** Busca formularios de uma pagina via Edge Function */
 function usePageForms(pageId: string, enabled: boolean) {
   return useQuery({
     queryKey: ["meta_lead_forms", pageId],
-    queryFn: async (): Promise<MetaForm[]> => {
+    queryFn: async (): Promise<PageFormsResult> => {
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
       const { data: session } = await supabase.auth.getSession();
       const token = session?.session?.access_token;
@@ -127,7 +135,12 @@ function usePageForms(pageId: string, enabled: boolean) {
         throw new Error(err.error || "Erro ao buscar formularios");
       }
 
-      return res.json();
+      const data = await res.json();
+      // Handle both old format (array) and new format (object with forms key)
+      if (Array.isArray(data)) {
+        return { forms: data };
+      }
+      return data as PageFormsResult;
     },
     enabled,
     staleTime: 5 * 60 * 1000, // 5 min cache
@@ -400,11 +413,15 @@ function PageLeadgenCard({
   isSaving: boolean;
 }) {
   const {
-    data: forms = [],
+    data: formsResult,
     isLoading: formsLoading,
     refetch: refetchForms,
     error: formsError,
   } = usePageForms(page.id, config.is_active);
+
+  const forms = formsResult?.forms ?? [];
+  const tosNotAccepted = formsResult?.tos_not_accepted === true;
+  const tosAcceptUrl = formsResult?.tos_accept_url;
 
   const selectedPipeStages = config.assign_to_pipe
     ? pipeStages[config.assign_to_pipe] || []
@@ -453,6 +470,36 @@ function PageLeadgenCard({
                 <p className="text-xs text-destructive mt-1">
                   Erro ao carregar formularios: {(formsError as Error)?.message || "Desconhecido"}. Clique em Atualizar.
                 </p>
+              ) : tosNotAccepted ? (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 mt-1">
+                  <div className="flex items-start gap-2.5">
+                    <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <p className="font-medium text-amber-800 text-xs">
+                        Termos do Lead Ads nao aceitos
+                      </p>
+                      <p className="text-amber-700 text-xs mt-1">
+                        O administrador desta pagina precisa aceitar os Termos de
+                        Servico do Lead Ads do Facebook para que os formularios
+                        aparecam aqui.
+                      </p>
+                      {tosAcceptUrl && (
+                        <a
+                          href={tosAcceptUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 mt-2 text-xs font-medium text-amber-800 underline"
+                        >
+                          Aceitar os Termos agora
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      )}
+                      <p className="text-amber-600 text-xs mt-1.5">
+                        Apos aceitar, clique em "Atualizar" para carregar os formularios.
+                      </p>
+                    </div>
+                  </div>
+                </div>
               ) : (
                 <Select
                   value={config.form_id || "all"}
@@ -491,7 +538,7 @@ function PageLeadgenCard({
                   </SelectContent>
                 </Select>
               )}
-              {!formsLoading && forms.length === 0 && !formsError && (
+              {!formsLoading && forms.length === 0 && !formsError && !tosNotAccepted && (
                 <p className="text-xs text-muted-foreground mt-1">
                   Nenhum formulario encontrado nesta pagina.
                 </p>

@@ -108,3 +108,15 @@ verify_jwt = false
 # process-outbound-dispatches: chamado por pg_cron; autenticação via x-cron-secret
 [functions.process-outbound-dispatches]
 verify_jwt = false
+
+# meta-webhook: recebe webhooks do Meta (mensagens + leadgen); autenticação via HMAC SHA256
+[functions.meta-webhook]
+verify_jwt = false
+
+# meta-oauth-callback: redirect do Meta OAuth (sem JWT); valida code + state internamente
+[functions.meta-oauth-callback]
+verify_jwt = false
+
+# refresh-meta-tokens: chamado por pg_cron; autenticação via x-cron-secret
+[functions.refresh-meta-tokens]
+verify_jwt = false

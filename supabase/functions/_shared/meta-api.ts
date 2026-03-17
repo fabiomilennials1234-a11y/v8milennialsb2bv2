@@ -340,12 +340,31 @@ export async function getLeadgenData(
 }
 
 /**
- * List active lead forms for a page
+ * List active lead forms for a page.
+ * Returns tos_not_accepted flag when the page hasn't accepted Lead Ads TOS.
  */
 export async function listLeadForms(
   pageId: string,
   pageAccessToken: string
-): Promise<Array<{ id: string; name: string; status: string }>> {
+): Promise<{
+  forms: Array<{ id: string; name: string; status: string }>;
+  tos_not_accepted?: boolean;
+  tos_accept_url?: string;
+}> {
+  // Check if page has accepted Lead Ads TOS
+  const tosRes = await fetch(
+    `${GRAPH_API_BASE}/${pageId}?fields=leadgen_tos_accepted&access_token=${pageAccessToken}`
+  );
+  const tosData = await tosRes.json();
+
+  if (tosData.leadgen_tos_accepted === false) {
+    return {
+      forms: [],
+      tos_not_accepted: true,
+      tos_accept_url: `https://www.facebook.com/ads/leadgen/tos?page_id=${pageId}`,
+    };
+  }
+
   const res = await fetch(
     `${GRAPH_API_BASE}/${pageId}/leadgen_forms?fields=id,name,status&access_token=${pageAccessToken}`
   );
@@ -356,7 +375,7 @@ export async function listLeadForms(
     throw new Error(`Meta listLeadForms error: ${data.error.message}`);
   }
 
-  return data.data || [];
+  return { forms: data.data || [] };
 }
 
 /**
