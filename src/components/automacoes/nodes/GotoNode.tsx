@@ -4,11 +4,12 @@ import { CornerDownRight } from "lucide-react";
 import { BaseNode } from "./BaseNode";
 import type { GotoNodeData } from "@/types/workflow";
 
-function GotoNodeComponent({ data, selected }: NodeProps) {
+function GotoNodeComponent({ id, data, selected }: NodeProps) {
   const nodeData = data as unknown as GotoNodeData;
 
   return (
     <BaseNode
+      nodeId={id}
       nodeType="goto"
       icon={<CornerDownRight className="w-5 h-5 text-teal-500" />}
       title={nodeData.label || "Ir Para"}

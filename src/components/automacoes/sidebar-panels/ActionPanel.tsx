@@ -427,6 +427,55 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
         </>
       )}
 
+      {at === "send_campaign_message" && (
+        <>
+          <div className="space-y-2">
+            <Label>ID da Campanha</Label>
+            <Input
+              value={data.campaignId || ""}
+              onChange={(e) => onUpdate({ campaignId: e.target.value })}
+              placeholder="UUID da campanha"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>ID do Template da Campanha</Label>
+            <Input
+              value={data.campaignTemplateId || ""}
+              onChange={(e) => onUpdate({ campaignTemplateId: e.target.value })}
+              placeholder="UUID do template"
+            />
+          </div>
+        </>
+      )}
+
+      {at === "pause_campaign_sequence" && (
+        <div className="space-y-2">
+          <Label>ID da Campanha</Label>
+          <Input
+            value={data.campaignId || ""}
+            onChange={(e) => onUpdate({ campaignId: e.target.value })}
+            placeholder="UUID da campanha"
+          />
+          <p className="text-xs text-muted-foreground">
+            Cancela todas as mensagens agendadas do lead nesta campanha.
+          </p>
+        </div>
+      )}
+
+      {at === "resume_campaign_sequence" && (
+        <div className="space-y-2">
+          <Label>ID da Campanha</Label>
+          <Input
+            value={data.campaignId || ""}
+            onChange={(e) => onUpdate({ campaignId: e.target.value })}
+            placeholder="UUID da campanha"
+          />
+          <p className="text-xs text-muted-foreground">
+            Reagenda as mensagens canceladas do lead nesta campanha.
+          </p>
+        </div>
+      )}
+
       {/* ═══════ AGENDA ═══════ */}
 
       {at === "create_calendar_event" && (

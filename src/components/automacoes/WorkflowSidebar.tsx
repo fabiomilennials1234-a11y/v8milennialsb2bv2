@@ -1,4 +1,4 @@
-import { X } from "lucide-react";
+import { X, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { TriggerPanel } from "./sidebar-panels/TriggerPanel";
@@ -17,6 +17,7 @@ interface WorkflowSidebarProps {
   selectedNode: WorkflowNode | null;
   onClose: () => void;
   onUpdateNode: (nodeId: string, data: Partial<WorkflowNodeData>) => void;
+  onDeleteNode?: (nodeId: string) => void;
   allNodes?: WorkflowNode[];
 }
 
@@ -24,6 +25,7 @@ export function WorkflowSidebar({
   selectedNode,
   onClose,
   onUpdateNode,
+  onDeleteNode,
   allNodes = [],
 }: WorkflowSidebarProps) {
   if (!selectedNode) return null;
@@ -83,6 +85,21 @@ export function WorkflowSidebar({
           {renderPanel()}
         </div>
       </ScrollArea>
+
+      {/* Delete button */}
+      {onDeleteNode && (
+        <div className="px-4 py-3 border-t">
+          <Button
+            variant="destructive"
+            size="sm"
+            className="w-full"
+            onClick={() => onDeleteNode(selectedNode.id)}
+          >
+            <Trash2 className="w-4 h-4 mr-2" />
+            Excluir Nó
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

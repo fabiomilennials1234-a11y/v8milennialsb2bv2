@@ -160,6 +160,20 @@ async function resolveVariables(
     result = result.replaceAll(`{{${key}}}`, val);
   }
 
+  // Campaign variables: {{campanha_nome}}, {{campanha_estagio}}
+  if (template.includes("{{campanha_nome}}") || template.includes("{{campanha_estagio}}")) {
+    const { data: campLead } = await supabase
+      .from("campanha_leads")
+      .select("campanha_id, stage_id, campanhas(name), campanha_stages(name)")
+      .eq("lead_id", leadId)
+      .limit(1)
+      .maybeSingle();
+    if (campLead) {
+      vars.campanha_nome = (campLead as any).campanhas?.name || "";
+      vars.campanha_estagio = (campLead as any).campanha_stages?.name || "";
+    }
+  }
+
   // Custom fields: {{custom.campo}}
   const customMatches = result.match(/\{\{custom\.([^}]+)\}\}/g);
   if (customMatches) {
@@ -333,6 +347,15 @@ export async function executeWorkflowAction(ctx: ActionContext): Promise<ActionR
       break;
     case "move_campaign_stage":
       result = await handleMoveCampaignStage(ctx);
+      break;
+    case "send_campaign_message":
+      result = await handleSendCampaignMessage(ctx);
+      break;
+    case "pause_campaign_sequence":
+      result = await handlePauseCampaignSequence(ctx);
+      break;
+    case "resume_campaign_sequence":
+      result = await handleResumeCampaignSequence(ctx);
       break;
 
     // ── Calendar ──
@@ -874,6 +897,98 @@ async function handleMoveCampaignStage(ctx: ActionContext): Promise<ActionResult
     .eq("lead_id", ctx.leadId);
 
   return { success: true, message: `Moved to campaign stage "${stageName || stageId}"` };
+}
+
+async function handleSendCampaignMessage(ctx: ActionContext): Promise<ActionResult> {
+  const campaignId = ctx.nodeData.campaignId as string;
+  const templateId = ctx.nodeData.campaignTemplateId as string;
+  if (!campaignId) return { success: false, error: "No campaign configured" };
+  if (!templateId) return { success: false, error: "No template configured" };
+
+  const { data: template } = await ctx.supabase
+    .from("campaign_templates")
+    .select("content, message_type, audio_url")
+    .eq("id", templateId)
+    .maybeSingle();
+
+  if (!template) return { success: false, error: "Template not found" };
+
+  const message = await resolveVariables(ctx.supabase, ctx.leadId, template.content || "");
+
+  const wa = await getWhatsAppInstance(ctx.supabase, ctx.organizationId, ctx.nodeData.whatsappInstanceId as string);
+  if (!wa) return { success: false, error: "WhatsApp instance not available" };
+
+  const phone = await getLeadPhone(ctx.supabase, ctx.leadId);
+  if (!phone) return { success: false, error: "Lead has no phone" };
+
+  const isAudio = template.message_type === "audio" && template.audio_url;
+
+  let res: Response;
+  if (isAudio) {
+    res = await fetch(`${wa.evolutionUrl}/message/sendWhatsAppAudio/${wa.instanceName}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: wa.evolutionKey },
+      body: JSON.stringify({ number: phone, audio: template.audio_url }),
+    });
+  } else {
+    res = await fetch(`${wa.evolutionUrl}/message/sendText/${wa.instanceName}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: wa.evolutionKey },
+      body: JSON.stringify({ number: phone, text: message }),
+    });
+  }
+
+  if (!res.ok) return { success: false, error: `Campaign message send failed: ${await res.text()}` };
+
+  // Record in whatsapp_messages
+  await ctx.supabase.from("whatsapp_messages").insert({
+    organization_id: ctx.organizationId,
+    instance_id: wa.instanceId,
+    message_id: `wf_camp_${crypto.randomUUID()}`,
+    remote_jid: phone + "@s.whatsapp.net",
+    phone_number: phone,
+    direction: "outgoing",
+    message_type: isAudio ? "audio" : "conversation",
+    content: isAudio ? null : message,
+    media_url: isAudio ? template.audio_url : null,
+    timestamp: new Date().toISOString(),
+    status: "sent",
+  });
+
+  return { success: true, message: `Campaign message sent` };
+}
+
+async function handlePauseCampaignSequence(ctx: ActionContext): Promise<ActionResult> {
+  const campaignId = ctx.nodeData.campaignId as string;
+  if (!campaignId) return { success: false, error: "No campaign configured" };
+
+  const { error } = await ctx.supabase
+    .from("scheduled_campaign_messages")
+    .update({ status: "cancelled" })
+    .eq("lead_id", ctx.leadId)
+    .eq("campanha_id", campaignId)
+    .eq("status", "scheduled");
+
+  if (error) return { success: false, error: error.message };
+  return { success: true, message: "Campaign sequence paused" };
+}
+
+async function handleResumeCampaignSequence(ctx: ActionContext): Promise<ActionResult> {
+  const campaignId = ctx.nodeData.campaignId as string;
+  if (!campaignId) return { success: false, error: "No campaign configured" };
+
+  const { error } = await ctx.supabase
+    .from("scheduled_campaign_messages")
+    .update({
+      status: "scheduled",
+      scheduled_at: new Date().toISOString(),
+    })
+    .eq("lead_id", ctx.leadId)
+    .eq("campanha_id", campaignId)
+    .eq("status", "cancelled");
+
+  if (error) return { success: false, error: error.message };
+  return { success: true, message: "Campaign sequence resumed" };
 }
 
 // ─── Calendar Handlers ──────────────────────────────────────────────────────

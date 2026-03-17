@@ -187,6 +187,15 @@ export default function AutomacoesEditor() {
     [setNodes]
   );
 
+  const handleDeleteNode = useCallback(
+    (nodeId: string) => {
+      setNodes((nds) => nds.filter((n) => n.id !== nodeId));
+      setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId));
+      setSelectedNodeId(null);
+    },
+    [setNodes, setEdges]
+  );
+
   const handleSave = useCallback(async () => {
     if (!name.trim()) {
       toast.error("Dê um nome ao workflow");
@@ -274,6 +283,7 @@ export default function AutomacoesEditor() {
           selectedNode={selectedNode as any}
           onClose={() => setSelectedNodeId(null)}
           onUpdateNode={handleUpdateNode}
+          onDeleteNode={handleDeleteNode}
           allNodes={nodes as any}
         />
       </div>

@@ -1,9 +1,12 @@
-import { Handle, Position } from "@xyflow/react";
+import { useCallback } from "react";
+import { Handle, Position, useReactFlow } from "@xyflow/react";
+import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { WorkflowNodeType } from "@/types/workflow";
 import { NODE_COLORS } from "@/types/workflow";
 
 interface BaseNodeProps {
+  nodeId?: string;
   nodeType: WorkflowNodeType;
   icon: React.ReactNode;
   title: string;
@@ -16,6 +19,7 @@ interface BaseNodeProps {
 }
 
 export function BaseNode({
+  nodeId,
   nodeType,
   icon,
   title,
@@ -27,17 +31,38 @@ export function BaseNode({
   children,
 }: BaseNodeProps) {
   const colors = NODE_COLORS[nodeType];
+  const { deleteElements } = useReactFlow();
+
+  const handleDelete = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (nodeId) {
+        deleteElements({ nodes: [{ id: nodeId }] });
+      }
+    },
+    [nodeId, deleteElements]
+  );
 
   return (
     <div
       className={cn(
-        "w-[280px] rounded-xl shadow-md border-l-4 border bg-card transition-shadow",
+        "group relative w-[280px] rounded-xl shadow-md border-l-4 border bg-card transition-shadow",
         colors.border,
         colors.bgLight,
         colors.bgDark,
         selected && "ring-2 ring-primary ring-offset-2 ring-offset-background shadow-lg"
       )}
     >
+      {nodeId && (
+        <button
+          onClick={handleDelete}
+          className="absolute -top-2 -right-2 z-10 hidden group-hover:flex items-center justify-center w-5 h-5 rounded-full bg-destructive text-destructive-foreground shadow-md hover:bg-destructive/90 transition-colors"
+          title="Excluir nó"
+        >
+          <X className="w-3 h-3" />
+        </button>
+      )}
+
       {showTargetHandle && (
         <Handle
           type="target"

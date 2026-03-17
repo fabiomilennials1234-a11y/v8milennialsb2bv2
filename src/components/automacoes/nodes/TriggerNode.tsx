@@ -13,12 +13,13 @@ const TRIGGER_ICONS: Record<string, React.ElementType> = {
   cron: Timer,
 };
 
-function TriggerNodeComponent({ data, selected }: NodeProps) {
+function TriggerNodeComponent({ id, data, selected }: NodeProps) {
   const nodeData = data as unknown as TriggerNodeData;
   const Icon = TRIGGER_ICONS[nodeData.triggerType] || Zap;
 
   return (
     <BaseNode
+      nodeId={id}
       nodeType="trigger"
       icon={<Icon className="w-5 h-5 text-blue-500" />}
       title={nodeData.label || "Trigger"}

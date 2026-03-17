@@ -21,6 +21,11 @@ export type WorkflowTriggerType =
   | "webhook_received"
   | "lead_assigned"
   | "campaign_status_changed"
+  | "lead_added_to_campaign"
+  | "lead_removed_from_campaign"
+  | "campaign_lead_replied"
+  | "campaign_lead_no_reply"
+  | "campaign_completed"
   | "field_changed";
 
 export type WorkflowNodeType =
@@ -59,6 +64,9 @@ export type WorkflowActionType =
   | "add_to_campaign"
   | "remove_from_campaign"
   | "move_campaign_stage"
+  | "send_campaign_message"
+  | "pause_campaign_sequence"
+  | "resume_campaign_sequence"
   // Agenda
   | "create_calendar_event"
   | "schedule_meeting"
@@ -267,6 +275,7 @@ export interface ActionNodeData {
   campaignName?: string;
   campaignStageId?: string;
   campaignStageName?: string;
+  campaignTemplateId?: string;
   // Calendar
   eventTitle?: string;
   eventDescription?: string;
@@ -517,6 +526,9 @@ export const ACTION_LABELS: Record<WorkflowActionType, string> = {
   add_to_campaign: "Adicionar à Campanha",
   remove_from_campaign: "Remover da Campanha",
   move_campaign_stage: "Mover Estágio na Campanha",
+  send_campaign_message: "Enviar Mensagem da Campanha",
+  pause_campaign_sequence: "Pausar Sequência da Campanha",
+  resume_campaign_sequence: "Retomar Sequência da Campanha",
   // Agenda
   create_calendar_event: "Criar Evento no Calendar",
   schedule_meeting: "Agendar Reunião",
@@ -551,6 +563,11 @@ export const TRIGGER_LABELS: Record<WorkflowTriggerType, string> = {
   webhook_received: "Webhook Recebido",
   lead_assigned: "Lead Atribuído",
   campaign_status_changed: "Status de Campanha Mudou",
+  lead_added_to_campaign: "Lead Entrou na Campanha",
+  lead_removed_from_campaign: "Lead Saiu da Campanha",
+  campaign_lead_replied: "Lead Respondeu na Campanha",
+  campaign_lead_no_reply: "Lead Não Respondeu na Campanha",
+  campaign_completed: "Lead Concluiu a Campanha",
   field_changed: "Campo do Lead Alterado",
 };
 
@@ -616,7 +633,7 @@ export const ACTION_CATEGORIES: ActionCategory[] = [
   },
   {
     label: "Campanhas",
-    actions: ["add_to_campaign", "remove_from_campaign", "move_campaign_stage"],
+    actions: ["add_to_campaign", "remove_from_campaign", "move_campaign_stage", "send_campaign_message", "pause_campaign_sequence", "resume_campaign_sequence"],
   },
   {
     label: "Agenda",
@@ -681,6 +698,9 @@ export const WORKFLOW_VARIABLES: WorkflowVariable[] = [
   { key: "{{responsavel_telefone}}",   label: "Telefone do responsável",      category: "Responsável" },
   { key: "{{sdr}}",                    label: "SDR (legado)",                 category: "Responsável" },
   { key: "{{closer}}",                 label: "Closer (legado)",              category: "Responsável" },
+  // Campanha
+  { key: "{{campanha_nome}}",    label: "Nome da campanha",    category: "Campanha" },
+  { key: "{{campanha_estagio}}", label: "Estágio na campanha", category: "Campanha" },
   // Personalizado
   { key: "{{custom.campo}}",  label: "Campo personalizado (ex: {{custom.cnpj}})", category: "Personalizado" },
   // Sistema
@@ -704,7 +724,11 @@ export const TRIGGER_CATEGORIES: TriggerCategory[] = [
     triggers: ["stage_changed", "meeting_confirmed", "meeting_not_confirmed", "proposal_accepted", "proposal_lost"],
   },
   {
+    label: "Campanhas",
+    triggers: ["campaign_status_changed", "lead_added_to_campaign", "lead_removed_from_campaign", "campaign_lead_replied", "campaign_lead_no_reply", "campaign_completed"],
+  },
+  {
     label: "Automação",
-    triggers: ["followup_overdue", "campaign_status_changed", "cron", "webhook_received"],
+    triggers: ["followup_overdue", "cron", "webhook_received"],
   },
 ];

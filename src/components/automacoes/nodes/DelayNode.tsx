@@ -11,7 +11,7 @@ const UNIT_LABELS: Record<string, string> = {
   days: "dias",
 };
 
-function DelayNodeComponent({ data, selected }: NodeProps) {
+function DelayNodeComponent({ id, data, selected }: NodeProps) {
   const nodeData = data as unknown as DelayNodeData;
   const unitLabel = UNIT_LABELS[nodeData.unit] || nodeData.unit;
 
@@ -32,6 +32,7 @@ function DelayNodeComponent({ data, selected }: NodeProps) {
 
   return (
     <BaseNode
+      nodeId={id}
       nodeType="delay"
       icon={icon}
       title={nodeData.label || "Delay"}

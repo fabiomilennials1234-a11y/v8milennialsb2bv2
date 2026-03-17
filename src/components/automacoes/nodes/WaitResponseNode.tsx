@@ -1,7 +1,7 @@
-import { memo } from "react";
+import { memo, useCallback } from "react";
 import type { NodeProps } from "@xyflow/react";
-import { Handle, Position } from "@xyflow/react";
-import { MessageCircle } from "lucide-react";
+import { Handle, Position, useReactFlow } from "@xyflow/react";
+import { MessageCircle, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NODE_COLORS } from "@/types/workflow";
 import type { WaitResponseNodeData } from "@/types/workflow";
@@ -12,7 +12,7 @@ const CHANNEL_LABELS: Record<string, string> = {
   any: "Qualquer canal",
 };
 
-function WaitResponseNodeComponent({ data, selected }: NodeProps) {
+function WaitResponseNodeComponent({ id, data, selected }: NodeProps) {
   const nodeData = data as unknown as WaitResponseNodeData;
   const colors = NODE_COLORS.wait_response;
   const channelLabel = CHANNEL_LABELS[nodeData.channel] || "Qualquer canal";
@@ -22,16 +22,33 @@ function WaitResponseNodeComponent({ data, selected }: NodeProps) {
   if (nodeData.timeoutMinutes) timeoutParts.push(`${nodeData.timeoutMinutes}min`);
   const timeoutText = timeoutParts.length > 0 ? timeoutParts.join(" ") : "sem timeout";
 
+  const { deleteElements } = useReactFlow();
+  const handleDelete = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      deleteElements({ nodes: [{ id }] });
+    },
+    [id, deleteElements]
+  );
+
   return (
     <div
       className={cn(
-        "w-[280px] rounded-xl shadow-md border-l-4 border bg-card transition-shadow",
+        "group relative w-[280px] rounded-xl shadow-md border-l-4 border bg-card transition-shadow",
         colors.border,
         colors.bgLight,
         colors.bgDark,
         selected && "ring-2 ring-primary ring-offset-2 ring-offset-background shadow-lg"
       )}
     >
+      <button
+        onClick={handleDelete}
+        className="absolute -top-2 -right-2 z-10 hidden group-hover:flex items-center justify-center w-5 h-5 rounded-full bg-destructive text-destructive-foreground shadow-md hover:bg-destructive/90 transition-colors"
+        title="Excluir nó"
+      >
+        <X className="w-3 h-3" />
+      </button>
+
       <Handle
         type="target"
         position={Position.Top}

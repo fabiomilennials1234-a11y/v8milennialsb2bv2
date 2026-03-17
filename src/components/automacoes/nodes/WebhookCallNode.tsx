@@ -4,7 +4,7 @@ import { Globe } from "lucide-react";
 import { BaseNode } from "./BaseNode";
 import type { WebhookCallNodeData } from "@/types/workflow";
 
-function WebhookCallNodeComponent({ data, selected }: NodeProps) {
+function WebhookCallNodeComponent({ id, data, selected }: NodeProps) {
   const nodeData = data as unknown as WebhookCallNodeData;
   const method = nodeData.method || "POST";
   const urlPreview = nodeData.url
@@ -15,6 +15,7 @@ function WebhookCallNodeComponent({ data, selected }: NodeProps) {
 
   return (
     <BaseNode
+      nodeId={id}
       nodeType="webhook_call"
       icon={<Globe className="w-5 h-5 text-indigo-500" />}
       title={nodeData.label || "Webhook"}
