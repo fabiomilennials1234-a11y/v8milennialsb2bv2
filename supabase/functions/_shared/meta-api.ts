@@ -390,7 +390,7 @@ export async function listLeadForms(
   );
   const tosData = await tosRes.json();
 
-  if (tosData.leadgen_tos_accepted === false) {
+  if (!tosData.leadgen_tos_accepted) {
     return {
       forms: [],
       tos_not_accepted: true,
@@ -398,17 +398,27 @@ export async function listLeadForms(
     };
   }
 
-  const res = await fetch(
-    `${GRAPH_API_BASE}/${pageId}/leadgen_forms?fields=id,name,status&access_token=${pageAccessToken}`
-  );
+  // Paginate through all lead forms
+  const forms: Array<{ id: string; name: string; status: string }> = [];
+  let formsUrl: string | null =
+    `${GRAPH_API_BASE}/${pageId}/leadgen_forms?fields=id,name,status&limit=100&access_token=${pageAccessToken}`;
 
-  const data = await res.json();
+  while (formsUrl) {
+    const res = await fetch(formsUrl);
+    const data = await res.json();
 
-  if (data.error) {
-    throw new Error(`Meta listLeadForms error: ${data.error.message}`);
+    if (data.error) {
+      throw new Error(`Meta listLeadForms error: ${data.error.message}`);
+    }
+
+    if (data.data) {
+      forms.push(...data.data);
+    }
+
+    formsUrl = data.paging?.next || null;
   }
 
-  return { forms: data.data || [] };
+  return { forms };
 }
 
 /**
@@ -479,7 +489,7 @@ export async function refreshLongLivedToken(currentToken: string): Promise<MetaT
 /**
  * Build the Meta Login Dialog URL for OAuth
  */
-export function buildLoginUrl(state?: string): string {
+export function buildLoginUrl(state?: string, options?: { authType?: string }): string {
   const appId = Deno.env.get("META_APP_ID");
   const redirectUri = Deno.env.get("META_REDIRECT_URI");
 
@@ -504,6 +514,10 @@ export function buildLoginUrl(state?: string): string {
     response_type: "code",
     ...(state ? { state } : {}),
   });
+
+  if (options?.authType) {
+    params.set("auth_type", options.authType);
+  }
 
   return `https://www.facebook.com/${GRAPH_API_VERSION}/dialog/oauth?${params}`;
 }

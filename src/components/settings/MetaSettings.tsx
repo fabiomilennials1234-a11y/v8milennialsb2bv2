@@ -17,6 +17,7 @@ import {
   AlertTriangle,
   Instagram,
   Globe,
+  RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -215,6 +216,28 @@ function ConnectionSection({
                 </Button>
               )}
 
+              {isConnected && !isExpired && !tokenWarning && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    connectMeta.mutate({
+                      connectionType: type,
+                      authType: "rerequest",
+                    })
+                  }
+                  disabled={connectMeta.isPending}
+                  className="gap-1"
+                >
+                  {connectMeta.isPending ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <RefreshCw className="w-3.5 h-3.5" />
+                  )}
+                  Atualizar paginas
+                </Button>
+              )}
+
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button
@@ -265,6 +288,40 @@ function ConnectionSection({
                 <strong>{daysUntilExpiry} dia(s)</strong>. Reconecte para
                 renovar.
               </span>
+            </div>
+          )}
+
+          {/* Empty Pages Warning */}
+          {isConnected && pages.length === 0 && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+              <p className="text-sm font-medium text-amber-800">
+                {type === "instagram"
+                  ? "Nenhuma conta Instagram vinculada"
+                  : "Nenhuma pagina vinculada"}
+              </p>
+              <p className="text-sm text-amber-700 mt-1">
+                Durante a conexao, nenhuma pagina foi selecionada ou voce nao tem
+                acesso de administrador a nenhuma pagina.
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-2"
+                onClick={() =>
+                  connectMeta.mutate({
+                    connectionType: type,
+                    authType: "rerequest",
+                  })
+                }
+                disabled={connectMeta.isPending}
+              >
+                {connectMeta.isPending ? (
+                  <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
+                )}
+                Selecionar paginas
+              </Button>
             </div>
           )}
 
