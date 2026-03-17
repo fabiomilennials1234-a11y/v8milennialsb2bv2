@@ -34,6 +34,7 @@ import {
   Calendar,
   ChevronDown,
   ChevronUp,
+  UserX,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -90,6 +91,7 @@ export function ImportLeadsFunnelContent({
   const [file, setFile] = useState<File | null>(null);
   const [previewLeads, setPreviewLeads] = useState<PreviewLead[]>([]);
   const [totalLeads, setTotalLeads] = useState(0);
+  const [incompleteLeadsCount, setIncompleteLeadsCount] = useState(0);
   const [previewResult, setPreviewResult] = useState<FilePreviewResult | null>(null);
   const [userColumnMapping, setUserColumnMapping] = useState<Record<string, string>>({});
   const [selectedStageKey, setSelectedStageKey] = useState<string>("");
@@ -131,6 +133,7 @@ export function ImportLeadsFunnelContent({
         const mapping = { ...(preview.suggestedMapping ?? {}), ...userColumnMapping };
         const leads = await parseCSV(selectedFile, Object.keys(mapping).length ? mapping : undefined);
         setTotalLeads(leads.length);
+        setIncompleteLeadsCount(leads.filter(l => !l.phone && !l.email).length);
         setPreviewLeads(
           leads.slice(0, 10).map((l) => ({
             name: l.name,
@@ -185,7 +188,8 @@ export function ImportLeadsFunnelContent({
       setStep("complete");
     } catch (error) {
       console.error("Import error:", error);
-      toast.error("Erro durante a importação");
+      const msg = error instanceof Error ? error.message : String(error);
+      toast.error(`Erro durante a importação: ${msg}`);
       setStep("preview");
     }
   };
@@ -195,6 +199,7 @@ export function ImportLeadsFunnelContent({
     setFile(null);
     setPreviewLeads([]);
     setTotalLeads(0);
+    setIncompleteLeadsCount(0);
     setPreviewResult(null);
     setUserColumnMapping({});
     setSelectedStageKey("");
@@ -317,6 +322,7 @@ export function ImportLeadsFunnelContent({
                         : userColumnMapping;
                       const leads = await parseCSV(file!, Object.keys(mapping).length ? mapping : undefined);
                       setTotalLeads(leads.length);
+                      setIncompleteLeadsCount(leads.filter(l => !l.phone && !l.email).length);
                       setPreviewLeads(
                         leads.slice(0, 10).map((l) => ({
                           name: l.name,
@@ -350,9 +356,19 @@ export function ImportLeadsFunnelContent({
                 <FileSpreadsheet className="w-8 h-8 text-primary" />
                 <div>
                   <p className="font-medium text-sm">{file?.name}</p>
-                  <p className="text-xs text-muted-foreground">{totalLeads} leads encontrados</p>
+                  <p className="text-xs text-muted-foreground">{totalLeads} leads encontrados no arquivo</p>
                 </div>
               </div>
+
+              {incompleteLeadsCount > 0 && (
+                <div className="flex items-start gap-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                  <UserX className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <p className="text-xs text-amber-800 dark:text-amber-200">
+                    <strong>{incompleteLeadsCount} lead{incompleteLeadsCount > 1 ? "s" : ""} sem telefone e e-mail</strong> — serão importados como incompletos. Você poderá completar os dados depois.
+                  </p>
+                </div>
+              )}
+
               <div className="space-y-2">
                 <Label>Preview (primeiros 10)</Label>
                 <ScrollArea className="h-40 rounded-lg border">
@@ -497,6 +513,13 @@ export function ImportLeadsFunnelContent({
                   <p className="text-2xl font-bold text-blue-500">{(result as { updated?: number }).updated ?? 0}</p>
                   <p className="text-xs text-muted-foreground">Atualizados</p>
                 </div>
+                {((result as { incomplete?: number }).incomplete ?? 0) > 0 && (
+                  <div className="p-4 bg-orange-500/10 rounded-xl text-center">
+                    <UserX className="w-6 h-6 mx-auto mb-2 text-orange-500" />
+                    <p className="text-2xl font-bold text-orange-500">{(result as { incomplete?: number }).incomplete}</p>
+                    <p className="text-xs text-muted-foreground">Sem contato</p>
+                  </div>
+                )}
                 <div className="p-4 bg-amber-500/10 rounded-xl text-center">
                   <AlertCircle className="w-6 h-6 mx-auto mb-2 text-amber-500" />
                   <p className="text-2xl font-bold text-amber-500">{result.duplicates}</p>
@@ -508,6 +531,15 @@ export function ImportLeadsFunnelContent({
                   <p className="text-xs text-muted-foreground">Inválidos</p>
                 </div>
               </div>
+
+              {((result as { incomplete?: number }).incomplete ?? 0) > 0 && (
+                <div className="flex items-start gap-2 p-3 bg-orange-500/10 border border-orange-500/30 rounded-lg">
+                  <UserX className="w-4 h-4 text-orange-500 shrink-0 mt-0.5" />
+                  <p className="text-xs text-orange-800 dark:text-orange-200">
+                    <strong>{(result as { incomplete?: number }).incomplete} lead{((result as { incomplete?: number }).incomplete ?? 0) > 1 ? "s" : ""} importado{((result as { incomplete?: number }).incomplete ?? 0) > 1 ? "s" : ""} sem telefone/e-mail.</strong> Eles aparecem normalmente no funil — complete os dados de contato depois.
+                  </p>
+                </div>
+              )}
               {/* Rejection details (collapsible) */}
               {lastReport && lastReport.errors.length > 0 && (
                 <div className="rounded-xl border border-red-200 dark:border-red-900">
