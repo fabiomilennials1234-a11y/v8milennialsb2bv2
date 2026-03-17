@@ -6,7 +6,7 @@
  * - Subscription expirou
  * - Subscription está suspensa/cancelada
  *
- * Admin e Master bypassam requireActive (podem criar copilots mesmo em trial).
+ * Admin, Master e members com permissão de copilot bypassam requireActive.
  * Master bypassa TODA verificação de subscription.
  */
 
@@ -14,7 +14,7 @@ import { ReactNode, useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { checkCurrentUserSubscription, type SubscriptionStatus } from '@/lib/subscription';
-import { useUserRole } from '@/hooks/useUserRole';
+import { useUserRole, useCanManageCopilot } from '@/hooks/useUserRole';
 import { useMasterAuth } from '@/hooks/useMasterAuth';
 import { Loader2 } from 'lucide-react';
 
@@ -30,10 +30,11 @@ export function SubscriptionProtectedRoute({
   const { user, loading: authLoading } = useAuth();
   const { data: userRole, isLoading: roleLoading } = useUserRole();
   const { isMaster, isLoading: masterLoading } = useMasterAuth();
+  const { canManage: canManageCopilot, isLoading: copilotLoading } = useCanManageCopilot();
   const [subscription, setSubscription] = useState<SubscriptionStatus | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const canBypassSubscription = isMaster || userRole?.role === 'admin';
+  const canBypassSubscription = isMaster || userRole?.role === 'admin' || canManageCopilot;
 
   useEffect(() => {
     // Master bypassa toda verificação de subscription
@@ -51,7 +52,7 @@ export function SubscriptionProtectedRoute({
     }
   }, [user, authLoading, isMaster, masterLoading]);
 
-  if (authLoading || loading || roleLoading || masterLoading) {
+  if (authLoading || loading || roleLoading || masterLoading || copilotLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">

@@ -6,6 +6,7 @@ import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -16,20 +17,26 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Mic, MicOff, Upload, Trash2, Play, Square } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { ACTION_CATEGORIES, ACTION_LABELS } from "@/types/workflow";
 import type { ActionNodeData, WorkflowActionType } from "@/types/workflow";
 import { useWhatsAppInstances } from "@/hooks/useWhatsAppInstances";
 import { useOrganization } from "@/hooks/useOrganization";
+import { useMessageTemplates } from "@/hooks/useMessageTemplates";
 import { supabase } from "@/integrations/supabase/client";
 import { convertAudioBlobToMp3, preloadLamejs } from "@/lib/audioToMp3";
 import { toast } from "sonner";
+import { VariableInserter } from "@/components/automacoes/VariableInserter";
+import {
+  TemplateTextarea,
+  type TemplateTextareaHandle,
+} from "@/components/automacoes/TemplateTextarea";
+import type { CampaignTemplate } from "@/hooks/useCampaignTemplates";
 
 interface ActionPanelProps {
   data: ActionNodeData;
   onUpdate: (updates: Partial<ActionNodeData>) => void;
 }
-
-const VARIABLES_HELP = 'Variáveis: {{nome}}, {{empresa}}, {{email}}, {{telefone}}, {{estagio}}, {{sdr}}, {{closer}}, {{score}}, {{rating}}, {{custom.campo}}';
 
 export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
   const at = data.actionType;
@@ -76,54 +83,26 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
       {/* ═══════ COMUNICAÇÃO ═══════ */}
 
       {/* WhatsApp Instance Selector (shared by all WhatsApp actions) */}
-      {(at === "send_whatsapp" || at === "send_whatsapp_audio" || at === "send_whatsapp_image" || at === "send_whatsapp_template") && (
+      {(at === "send_whatsapp" ||
+        at === "send_whatsapp_audio" ||
+        at === "send_whatsapp_image" ||
+        at === "send_whatsapp_template") && (
         <WhatsAppInstanceSelector
           instanceId={data.whatsappInstanceId}
-          onSelect={(id, name) => onUpdate({ whatsappInstanceId: id, whatsappInstanceName: name })}
+          onSelect={(id, name) =>
+            onUpdate({ whatsappInstanceId: id, whatsappInstanceName: name })
+          }
         />
       )}
 
       {/* Send WhatsApp (Texto) */}
       {at === "send_whatsapp" && (
-        <>
-          <div className="flex items-center gap-2">
-            <Switch
-              checked={data.useTemplate || false}
-              onCheckedChange={(v) => onUpdate({ useTemplate: v })}
-            />
-            <Label>Usar template existente</Label>
-          </div>
-          {data.useTemplate ? (
-            <div className="space-y-2">
-              <Label>ID do Template</Label>
-              <Input
-                value={data.templateId || ""}
-                onChange={(e) => onUpdate({ templateId: e.target.value })}
-                placeholder="ID do template"
-              />
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <Label>Mensagem</Label>
-              <Textarea
-                value={data.messageTemplate || ""}
-                onChange={(e) => onUpdate({ messageTemplate: e.target.value })}
-                placeholder="Olá {{nome}}, tudo bem?"
-                rows={4}
-              />
-              <p className="text-xs text-muted-foreground">{VARIABLES_HELP}</p>
-            </div>
-          )}
-        </>
+        <WhatsAppTextPanel data={data} onUpdate={onUpdate} />
       )}
 
       {/* Send WhatsApp (Áudio) */}
       {at === "send_whatsapp_audio" && (
-        <AudioRecorderField
-          audioUrl={data.audioUrl}
-          audioName={data.audioName}
-          onUpdate={onUpdate}
-        />
+        <WhatsAppAudioPanel data={data} onUpdate={onUpdate} />
       )}
 
       {/* Send WhatsApp (Imagem) */}
@@ -145,7 +124,9 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
               placeholder="Confira nosso catálogo, {{nome}}!"
               rows={2}
             />
-            <p className="text-xs text-muted-foreground">{VARIABLES_HELP}</p>
+            <p className="text-xs text-muted-foreground">
+              Variáveis: {"{{"} nome {"}}"}, {"{{"} empresa {"}}"} ...
+            </p>
           </div>
         </>
       )}
@@ -172,9 +153,13 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
             <Label>Canal</Label>
             <Select
               value={data.metaChannel || "instagram"}
-              onValueChange={(v) => onUpdate({ metaChannel: v as "instagram" | "facebook" })}
+              onValueChange={(v) =>
+                onUpdate({ metaChannel: v as "instagram" | "facebook" })
+              }
             >
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="instagram">Instagram</SelectItem>
                 <SelectItem value="facebook">Facebook</SelectItem>
@@ -189,7 +174,6 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
               placeholder="Olá {{nome}}!"
               rows={3}
             />
-            <p className="text-xs text-muted-foreground">{VARIABLES_HELP}</p>
           </div>
         </>
       )}
@@ -206,7 +190,8 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
               rows={4}
             />
             <p className="text-xs text-muted-foreground">
-              O SDR verá esta mensagem como sugestão e poderá editar antes de enviar.
+              O SDR verá esta mensagem como sugestão e poderá editar antes de
+              enviar.
             </p>
           </div>
         </>
@@ -223,7 +208,9 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
               value={data.pipeType || ""}
               onValueChange={(v) => onUpdate({ pipeType: v })}
             >
-              <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione" />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="pipe_whatsapp">Qualificação</SelectItem>
                 <SelectItem value="pipe_confirmacao">Confirmação</SelectItem>
@@ -263,7 +250,9 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
               value={data.fieldName || ""}
               onValueChange={(v) => onUpdate({ fieldName: v })}
             >
-              <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione" />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="name">Nome</SelectItem>
                 <SelectItem value="company">Empresa</SelectItem>
@@ -283,7 +272,6 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
               onChange={(e) => onUpdate({ fieldValue: e.target.value })}
               placeholder="Novo valor do campo"
             />
-            <p className="text-xs text-muted-foreground">{VARIABLES_HELP}</p>
           </div>
         </>
       )}
@@ -328,7 +316,8 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
       {at === "calculate_score" && (
         <div className="p-3 rounded-lg bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800">
           <p className="text-xs text-green-700 dark:text-green-300">
-            Chama a IA para calcular o lead score automaticamente com base nos dados do lead e histórico de conversas.
+            Chama a IA para calcular o lead score automaticamente com base nos
+            dados do lead e histórico de conversas.
           </p>
         </div>
       )}
@@ -342,7 +331,9 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
               value={data.targetPipeType || ""}
               onValueChange={(v) => onUpdate({ targetPipeType: v })}
             >
-              <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione" />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="pipe_whatsapp">Qualificação</SelectItem>
                 <SelectItem value="pipe_confirmacao">Confirmação</SelectItem>
@@ -369,7 +360,9 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
             value={data.pipeType || ""}
             onValueChange={(v) => onUpdate({ pipeType: v })}
           >
-            <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+            <SelectTrigger>
+              <SelectValue placeholder="Selecione" />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="pipe_whatsapp">Qualificação</SelectItem>
               <SelectItem value="pipe_confirmacao">Confirmação</SelectItem>
@@ -388,7 +381,9 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
               value={data.pipeType || ""}
               onValueChange={(v) => onUpdate({ pipeType: v })}
             >
-              <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione" />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="pipe_whatsapp">Qualificação</SelectItem>
                 <SelectItem value="pipe_confirmacao">Confirmação</SelectItem>
@@ -490,7 +485,9 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
               min={15}
               step={15}
               value={data.eventDurationMinutes ?? 30}
-              onChange={(e) => onUpdate({ eventDurationMinutes: Number(e.target.value) })}
+              onChange={(e) =>
+                onUpdate({ eventDurationMinutes: Number(e.target.value) })
+              }
             />
           </div>
         </>
@@ -498,16 +495,18 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
 
       {at === "schedule_meeting" && (
         <div className="p-3 rounded-lg bg-muted text-xs text-muted-foreground">
-          Cria uma entrada no Pipe Confirmação com status "reunião marcada" para o lead.
+          Cria uma entrada no Pipe Confirmação com status "reunião marcada" para
+          o lead.
         </div>
       )}
 
       {/* ═══════ TINYERP ═══════ */}
 
-      {(at === "create_tinyerp_order" || at === "create_tinyerp_upsell_order") && (
+      {(at === "create_tinyerp_order" ||
+        at === "create_tinyerp_upsell_order") && (
         <div className="p-3 rounded-lg bg-muted text-xs text-muted-foreground">
-          Cria automaticamente um pedido no TinyERP usando os dados da proposta/upsell do lead.
-          Requer integração TinyERP configurada.
+          Cria automaticamente um pedido no TinyERP usando os dados da
+          proposta/upsell do lead. Requer integração TinyERP configurada.
         </div>
       )}
 
@@ -519,9 +518,13 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
             <Label>Modo de Atribuição</Label>
             <Select
               value={data.assignMode || "round_robin"}
-              onValueChange={(v) => onUpdate({ assignMode: v as "specific" | "round_robin" })}
+              onValueChange={(v) =>
+                onUpdate({ assignMode: v as "specific" | "round_robin" })
+              }
             >
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="round_robin">Round Robin</SelectItem>
                 <SelectItem value="specific">Específico</SelectItem>
@@ -559,15 +562,18 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
               placeholder="Lead {{nome}} precisa de atenção!"
               rows={3}
             />
-            <p className="text-xs text-muted-foreground">{VARIABLES_HELP}</p>
           </div>
           <div className="space-y-2">
             <Label>Canal de Notificação</Label>
             <Select
               value={data.notifyChannel || "app"}
-              onValueChange={(v) => onUpdate({ notifyChannel: v as "app" | "whatsapp" | "both" })}
+              onValueChange={(v) =>
+                onUpdate({ notifyChannel: v as "app" | "whatsapp" | "both" })
+              }
             >
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="app">Apenas no App</SelectItem>
                 <SelectItem value="whatsapp">WhatsApp</SelectItem>
@@ -594,7 +600,9 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
             <Label>Descrição (opcional)</Label>
             <Textarea
               value={data.followupDescription || ""}
-              onChange={(e) => onUpdate({ followupDescription: e.target.value })}
+              onChange={(e) =>
+                onUpdate({ followupDescription: e.target.value })
+              }
               placeholder="Detalhes do follow-up"
               rows={2}
             />
@@ -603,9 +611,15 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
             <Label>Prioridade</Label>
             <Select
               value={data.followupPriority || "medium"}
-              onValueChange={(v) => onUpdate({ followupPriority: v as "low" | "medium" | "high" })}
+              onValueChange={(v) =>
+                onUpdate({
+                  followupPriority: v as "low" | "medium" | "high",
+                })
+              }
             >
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="low">Baixa</SelectItem>
                 <SelectItem value="medium">Média</SelectItem>
@@ -628,7 +642,6 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
               placeholder="Gere uma mensagem de follow-up para {{nome}} da {{empresa}} considerando que..."
               rows={4}
             />
-            <p className="text-xs text-muted-foreground">{VARIABLES_HELP}</p>
           </div>
           <div className="space-y-2">
             <Label>Salvar resultado em variável</Label>
@@ -647,8 +660,9 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
       {at === "summarize_conversation" && (
         <div className="p-3 rounded-lg bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800">
           <p className="text-xs text-green-700 dark:text-green-300">
-            Resume automaticamente o histórico de conversa do lead e salva no contexto do workflow.
-            Útil antes de um handoff para Copilot ou para enriquecer notificações.
+            Resume automaticamente o histórico de conversa do lead e salva no
+            contexto do workflow. Útil antes de um handoff para Copilot ou para
+            enriquecer notificações.
           </p>
         </div>
       )}
@@ -656,8 +670,8 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
       {at === "evaluate_conversation" && (
         <div className="p-3 rounded-lg bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800">
           <p className="text-xs text-green-700 dark:text-green-300">
-            Avalia a qualidade da conversa com IA: tom, engajamento, qualificação.
-            O resultado fica disponível nas condições seguintes.
+            Avalia a qualidade da conversa com IA: tom, engajamento,
+            qualificação. O resultado fica disponível nas condições seguintes.
           </p>
         </div>
       )}
@@ -665,7 +679,337 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
   );
 }
 
-// ── Gravador de áudio para ação WhatsApp ──
+// ── WhatsApp Texto ────────────────────────────────────────────────────────────
+
+function WhatsAppTextPanel({
+  data,
+  onUpdate,
+}: {
+  data: ActionNodeData;
+  onUpdate: (updates: Partial<ActionNodeData>) => void;
+}) {
+  const taRef = useRef<TemplateTextareaHandle>(null);
+
+  // Backward compat: derive templateMode from legacy useTemplate flag
+  const templateMode =
+    (data.templateMode as string) ||
+    (data.useTemplate ? "meta_template" : "free");
+
+  const { data: templates, isLoading: templatesLoading } =
+    useMessageTemplates("text");
+  const [templateSearch, setTemplateSearch] = useState("");
+
+  const filteredTemplates = (templates ?? []).filter(
+    (t) =>
+      !templateSearch ||
+      t.name.toLowerCase().includes(templateSearch.toLowerCase()),
+  );
+
+  const handleModeChange = (mode: "free" | "campaign_template" | "meta_template") => {
+    onUpdate({ templateMode: mode, useTemplate: mode === "meta_template" });
+  };
+
+  const handleSelectTemplate = (t: CampaignTemplate) => {
+    onUpdate({
+      messageTemplate: t.content,
+      templateSourceId: t.id,
+      templateMode: "campaign_template",
+      useTemplate: false,
+    });
+  };
+
+  return (
+    <>
+      {/* 3-way mode selector */}
+      <div className="space-y-1.5">
+        <Label>Modo de mensagem</Label>
+        <div className="flex gap-1 rounded-lg border p-1 bg-muted/30">
+          {(
+            [
+              { mode: "free", label: "Escrever" },
+              { mode: "campaign_template", label: "Template" },
+              { mode: "meta_template", label: "Template Meta" },
+            ] as const
+          ).map(({ mode, label }) => (
+            <Button
+              key={mode}
+              type="button"
+              variant={templateMode === mode ? "default" : "ghost"}
+              size="sm"
+              className="flex-1 h-7 text-xs"
+              onClick={() => handleModeChange(mode)}
+            >
+              {label}
+            </Button>
+          ))}
+        </div>
+      </div>
+
+      {/* Template Meta mode */}
+      {templateMode === "meta_template" && (
+        <div className="space-y-2">
+          <Label>ID do Template Meta</Label>
+          <Input
+            value={data.templateId || ""}
+            onChange={(e) => onUpdate({ templateId: e.target.value })}
+            placeholder="ID do template aprovado pela Meta"
+          />
+          <p className="text-xs text-muted-foreground">
+            Templates aprovados pela Meta para envio em massa.
+          </p>
+        </div>
+      )}
+
+      {/* Campaign template selector */}
+      {templateMode === "campaign_template" && (
+        <div className="space-y-2">
+          <Label>Selecionar template de texto</Label>
+          {templatesLoading ? (
+            <p className="text-xs text-muted-foreground">
+              Carregando templates...
+            </p>
+          ) : (
+            <div className="space-y-2">
+              <Input
+                value={templateSearch}
+                onChange={(e) => setTemplateSearch(e.target.value)}
+                placeholder="Buscar template..."
+                className="h-8 text-sm"
+              />
+              <div className="max-h-40 overflow-y-auto rounded-md border space-y-0.5 p-1 bg-background">
+                {filteredTemplates.length === 0 ? (
+                  <p className="text-xs text-muted-foreground text-center py-3">
+                    {(templates ?? []).length === 0
+                      ? "Nenhum template de texto cadastrado em Campanhas"
+                      : "Nenhum resultado"}
+                  </p>
+                ) : (
+                  filteredTemplates.map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => handleSelectTemplate(t)}
+                      className={cn(
+                        "w-full text-left px-2 py-1.5 rounded-sm text-sm hover:bg-muted transition-colors",
+                        data.templateSourceId === t.id &&
+                          "bg-primary/10 text-primary",
+                      )}
+                    >
+                      <div className="font-medium truncate">{t.name}</div>
+                      <div className="text-xs text-muted-foreground truncate">
+                        {t.content}
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+              {data.templateSourceId && (
+                <p className="text-xs text-primary">
+                  Template carregado. Edite o conteúdo abaixo se necessário.
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Message textarea (free + campaign_template modes) */}
+      {templateMode !== "meta_template" && (
+        <div className="space-y-2">
+          <Label>
+            {templateMode === "campaign_template"
+              ? "Conteúdo (editável)"
+              : "Mensagem"}
+          </Label>
+          <VariableInserter
+            onInsert={(v) => taRef.current?.insertAtCursor(v)}
+          />
+          <TemplateTextarea
+            ref={taRef}
+            value={data.messageTemplate || ""}
+            onChange={(v) => onUpdate({ messageTemplate: v })}
+            placeholder="Olá {{nome}}, tudo bem?"
+            rows={4}
+          />
+        </div>
+      )}
+    </>
+  );
+}
+
+// ── WhatsApp Áudio ────────────────────────────────────────────────────────────
+
+function WhatsAppAudioPanel({
+  data,
+  onUpdate,
+}: {
+  data: ActionNodeData;
+  onUpdate: (updates: Partial<ActionNodeData>) => void;
+}) {
+  const audioMode = (data.audioMode as string) || "recorded";
+
+  return (
+    <>
+      {/* Mode toggle */}
+      <div className="space-y-1.5">
+        <Label>Modo do áudio</Label>
+        <div className="flex gap-1 rounded-lg border p-1 bg-muted/30">
+          <Button
+            type="button"
+            variant={audioMode === "recorded" ? "default" : "ghost"}
+            size="sm"
+            className="flex-1 h-7 text-xs"
+            onClick={() => onUpdate({ audioMode: "recorded" })}
+          >
+            Gravar novo
+          </Button>
+          <Button
+            type="button"
+            variant={audioMode === "template" ? "default" : "ghost"}
+            size="sm"
+            className="flex-1 h-7 text-xs"
+            onClick={() => onUpdate({ audioMode: "template" })}
+          >
+            Usar template de áudio
+          </Button>
+        </div>
+      </div>
+
+      {audioMode === "template" ? (
+        <AudioTemplatePicker
+          selectedId={data.audioSourceId}
+          onSelect={(t) =>
+            onUpdate({
+              audioUrl: t.audio_url ?? undefined,
+              audioName: t.name,
+              audioSourceId: t.id,
+              audioMode: "template",
+            })
+          }
+        />
+      ) : (
+        <AudioRecorderField
+          audioUrl={data.audioUrl}
+          audioName={data.audioName}
+          onUpdate={onUpdate}
+        />
+      )}
+    </>
+  );
+}
+
+// ── Seletor de template de áudio ─────────────────────────────────────────────
+
+function AudioTemplatePicker({
+  selectedId,
+  onSelect,
+}: {
+  selectedId?: string;
+  onSelect: (template: CampaignTemplate) => void;
+}) {
+  const { data: templates, isLoading } = useMessageTemplates("audio");
+  const [playingId, setPlayingId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const filtered = (templates ?? []).filter(
+    (t) =>
+      !search || t.name.toLowerCase().includes(search.toLowerCase()),
+  );
+
+  useEffect(() => {
+    return () => {
+      audioRef.current?.pause();
+    };
+  }, []);
+
+  const togglePlay = (t: CampaignTemplate, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (playingId === t.id) {
+      audioRef.current?.pause();
+      audioRef.current = null;
+      setPlayingId(null);
+      return;
+    }
+    audioRef.current?.pause();
+    if (!t.audio_url) return;
+    const audio = new Audio(t.audio_url);
+    audioRef.current = audio;
+    audio.onended = () => {
+      setPlayingId(null);
+      audioRef.current = null;
+    };
+    audio.play();
+    setPlayingId(t.id);
+  };
+
+  if (isLoading) {
+    return (
+      <p className="text-xs text-muted-foreground">
+        Carregando templates de áudio...
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <Label>Template de áudio</Label>
+      <Input
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        placeholder="Buscar template..."
+        className="h-8 text-sm"
+      />
+      <div className="max-h-48 overflow-y-auto rounded-md border space-y-0.5 p-1 bg-background">
+        {filtered.length === 0 ? (
+          <p className="text-xs text-muted-foreground text-center py-3">
+            {(templates ?? []).length === 0
+              ? "Nenhum template de áudio cadastrado em Campanhas"
+              : "Nenhum resultado"}
+          </p>
+        ) : (
+          filtered.map((t) => (
+            <div
+              key={t.id}
+              className={cn(
+                "flex items-center gap-2 p-2 rounded-sm hover:bg-muted cursor-pointer transition-colors",
+                selectedId === t.id &&
+                  "bg-primary/10 border border-primary/30",
+              )}
+              onClick={() => onSelect(t)}
+            >
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 flex-shrink-0"
+                onClick={(e) => togglePlay(t, e)}
+                disabled={!t.audio_url}
+                title={playingId === t.id ? "Parar" : "Ouvir"}
+              >
+                {playingId === t.id ? (
+                  <Square className="w-3.5 h-3.5" />
+                ) : (
+                  <Play className="w-3.5 h-3.5" />
+                )}
+              </Button>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium truncate">{t.name}</div>
+              </div>
+              {selectedId === t.id && (
+                <Badge variant="secondary" className="text-xs flex-shrink-0">
+                  Selecionado
+                </Badge>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Gravador de áudio para ação WhatsApp ──────────────────────────────────────
 
 function AudioRecorderField({
   audioUrl,
@@ -689,7 +1033,6 @@ function AudioRecorderField({
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioElRef = useRef<HTMLAudioElement | null>(null);
 
-  // Preload lamejs when component mounts
   useEffect(() => {
     preloadLamejs();
     return () => {
@@ -712,7 +1055,8 @@ function AudioRecorderField({
       let mimeType = "audio/webm;codecs=opus";
       if (!MediaRecorder.isTypeSupported(mimeType)) {
         mimeType = "audio/webm";
-        if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = "audio/ogg;codecs=opus";
+        if (!MediaRecorder.isTypeSupported(mimeType))
+          mimeType = "audio/ogg;codecs=opus";
         if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = "";
       }
       const mediaRecorder = mimeType
@@ -733,7 +1077,10 @@ function AudioRecorderField({
       mediaRecorder.start(100);
       setIsRecording(true);
       setRecordingTime(0);
-      timerRef.current = setInterval(() => setRecordingTime((s) => s + 1), 1000);
+      timerRef.current = setInterval(
+        () => setRecordingTime((s) => s + 1),
+        1000,
+      );
     } catch {
       toast.error("Não foi possível acessar o microfone");
     }
@@ -758,32 +1105,46 @@ function AudioRecorderField({
       }
       setIsUploading(true);
       try {
-        // Convert to MP3 for universal compatibility
         const mp3Blob = await convertAudioBlobToMp3(blob);
-        const ext = mp3Blob.type.includes("mpeg") ? "mp3" : mp3Blob.type.includes("ogg") ? "ogg" : "webm";
+        const ext = mp3Blob.type.includes("mpeg")
+          ? "mp3"
+          : mp3Blob.type.includes("ogg")
+            ? "ogg"
+            : "webm";
         const path = `workflow-audios/${organizationId}/${crypto.randomUUID()}.${ext}`;
 
-        const { data, error } = await supabase.storage.from("media").upload(path, mp3Blob, {
-          contentType: mp3Blob.type || "audio/mpeg",
-          upsert: false,
-        });
+        const { data, error } = await supabase.storage
+          .from("media")
+          .upload(path, mp3Blob, {
+            contentType: mp3Blob.type || "audio/mpeg",
+            upsert: false,
+          });
 
         if (error) throw new Error(`Erro ao enviar áudio: ${error.message}`);
 
-        const { data: urlData } = supabase.storage.from("media").getPublicUrl(data.path);
+        const { data: urlData } = supabase.storage
+          .from("media")
+          .getPublicUrl(data.path);
         if (!urlData?.publicUrl) throw new Error("Erro ao obter URL do áudio");
 
-        onUpdate({ audioUrl: urlData.publicUrl, audioId: undefined, audioName: audioName || "Áudio gravado" });
+        onUpdate({
+          audioUrl: urlData.publicUrl,
+          audioId: undefined,
+          audioName: audioName || "Áudio gravado",
+          audioMode: "recorded",
+          audioSourceId: undefined,
+        });
         setLocalBlob(null);
         toast.success("Áudio salvo com sucesso!");
-      } catch (err: any) {
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "Erro ao enviar áudio";
         console.error("Erro ao enviar áudio:", err);
-        toast.error(err?.message || "Erro ao enviar áudio");
+        toast.error(message);
       } finally {
         setIsUploading(false);
       }
     },
-    [organizationId, onUpdate, audioName]
+    [organizationId, onUpdate, audioName],
   );
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -798,7 +1159,12 @@ function AudioRecorderField({
 
   const removeAudio = () => {
     setLocalBlob(null);
-    onUpdate({ audioUrl: undefined, audioId: undefined, audioName: undefined });
+    onUpdate({
+      audioUrl: undefined,
+      audioId: undefined,
+      audioName: undefined,
+      audioSourceId: undefined,
+    });
     if (audioElRef.current) {
       audioElRef.current.pause();
       audioElRef.current = null;
@@ -847,17 +1213,28 @@ function AudioRecorderField({
           {!hasAudio && !hasPendingBlob && !isRecording && (
             <>
               <p className="text-sm text-muted-foreground">
-                Grave ou envie um áudio que será enviado automaticamente ao lead.
+                Grave ou envie um áudio que será enviado automaticamente ao
+                lead.
               </p>
               <div className="flex flex-wrap gap-2">
-                <Button type="button" variant="default" size="sm" onClick={startRecording}>
+                <Button
+                  type="button"
+                  variant="default"
+                  size="sm"
+                  onClick={startRecording}
+                >
                   <Mic className="w-4 h-4 mr-1" />
                   Gravar áudio
                 </Button>
                 <Label className="flex items-center gap-2 cursor-pointer px-3 py-2 rounded-md border bg-background hover:bg-muted/50 text-sm">
                   <Upload className="w-4 h-4" />
                   Enviar arquivo
-                  <input type="file" accept="audio/*" className="hidden" onChange={handleFileSelect} />
+                  <input
+                    type="file"
+                    accept="audio/*"
+                    className="hidden"
+                    onChange={handleFileSelect}
+                  />
                 </Label>
               </div>
             </>
@@ -873,7 +1250,12 @@ function AudioRecorderField({
               <span className="text-sm font-medium text-red-600">
                 Gravando... {formatTime(recordingTime)}
               </span>
-              <Button type="button" variant="destructive" size="sm" onClick={stopRecording}>
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                onClick={stopRecording}
+              >
                 <MicOff className="w-4 h-4 mr-1" />
                 Parar
               </Button>
@@ -885,14 +1267,29 @@ function AudioRecorderField({
             <div className="space-y-3">
               <div className="flex items-center justify-between p-3 rounded-lg bg-background border">
                 <div className="flex items-center gap-2">
-                  <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={togglePlayback}>
-                    {isPlaying ? <Square className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={togglePlayback}
+                  >
+                    {isPlaying ? (
+                      <Square className="w-4 h-4" />
+                    ) : (
+                      <Play className="w-4 h-4" />
+                    )}
                   </Button>
                   <span className="text-sm">
                     Áudio pronto · {(localBlob.size / 1024).toFixed(1)} KB
                   </span>
                 </div>
-                <Button type="button" variant="ghost" size="sm" onClick={() => setLocalBlob(null)}>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setLocalBlob(null)}
+                >
                   <Trash2 className="w-4 h-4 mr-1" />
                   Remover
                 </Button>
@@ -912,14 +1309,29 @@ function AudioRecorderField({
           {hasAudio && (
             <div className="flex items-center justify-between p-3 rounded-lg bg-background border">
               <div className="flex items-center gap-2">
-                <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={togglePlayback}>
-                  {isPlaying ? <Square className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={togglePlayback}
+                >
+                  {isPlaying ? (
+                    <Square className="w-4 h-4" />
+                  ) : (
+                    <Play className="w-4 h-4" />
+                  )}
                 </Button>
                 <span className="text-sm text-green-700 dark:text-green-400">
                   Áudio salvo
                 </span>
               </div>
-              <Button type="button" variant="ghost" size="sm" onClick={removeAudio}>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={removeAudio}
+              >
                 <Trash2 className="w-4 h-4 mr-1" />
                 Remover
               </Button>
@@ -931,7 +1343,7 @@ function AudioRecorderField({
   );
 }
 
-// ── Seletor de instância WhatsApp ──
+// ── Seletor de instância WhatsApp ─────────────────────────────────────────────
 
 function WhatsAppInstanceSelector({
   instanceId,
@@ -943,14 +1355,16 @@ function WhatsAppInstanceSelector({
   const { data: instances, isLoading } = useWhatsAppInstances();
 
   const connectedInstances = (instances || []).filter(
-    (i) => i.status === "connected" || i.status === "open"
+    (i) => i.status === "connected" || i.status === "open",
   );
 
   if (isLoading) {
     return (
       <div className="space-y-2">
         <Label>Instância WhatsApp</Label>
-        <p className="text-xs text-muted-foreground">Carregando instâncias...</p>
+        <p className="text-xs text-muted-foreground">
+          Carregando instâncias...
+        </p>
       </div>
     );
   }
@@ -961,7 +1375,8 @@ function WhatsAppInstanceSelector({
         <Label>Instância WhatsApp</Label>
         <div className="p-3 rounded-lg bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800">
           <p className="text-xs text-yellow-700 dark:text-yellow-300">
-            Nenhuma instância WhatsApp conectada. Configure em Configurações &gt; WhatsApp.
+            Nenhuma instância WhatsApp conectada. Configure em Configurações
+            &gt; WhatsApp.
           </p>
         </div>
       </div>
@@ -986,7 +1401,9 @@ function WhatsAppInstanceSelector({
           <SelectValue placeholder="Selecione a instância" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="__auto__">Automático (primeira disponível)</SelectItem>
+          <SelectItem value="__auto__">
+            Automático (primeira disponível)
+          </SelectItem>
           {connectedInstances.map((inst) => (
             <SelectItem key={inst.id} value={inst.id}>
               {inst.instance_name}

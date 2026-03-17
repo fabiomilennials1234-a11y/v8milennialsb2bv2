@@ -67,30 +67,33 @@ export function useHasRole(role: AppRole) {
   };
 }
 
-/** Admin e Master podem gerenciar copilots. Membros precisam da feature copilot.create. */
+/**
+ * Permissões granulares para Copilot.
+ * Admin e Master sempre podem. Members precisam da feature habilitada pelo admin.
+ * useFeaturePermission já incorpora isMaster || isAdmin || features[key].
+ */
 export function useCanManageCopilot() {
-  const { data: userRole, isLoading } = useUserRole();
-  const { data: currentTeamMember, isLoading: loadingTeam } = useCurrentTeamMember();
-  const { isMaster, isLoading: masterLoading } = useMasterAuth();
-  const { data: featurePerms } = useFeaturePermissions();
-  const role = userRole?.role ?? currentTeamMember?.role;
+  const { allowed: canCreate, isLoading: l1 } = useFeaturePermission("copilot.create");
+  const { allowed: canEdit,   isLoading: l2 } = useFeaturePermission("copilot.edit");
+  const { allowed: canDelete, isLoading: l3 } = useFeaturePermission("copilot.delete");
+  const { allowed: canToggle, isLoading: l4 } = useFeaturePermission("copilot.toggle");
   return {
-    canManage: isMaster || role === "admin" || featurePerms?.["copilot.create"] === true,
-    isLoading: isLoading || loadingTeam || masterLoading,
+    canManage: canCreate,
+    canCreate,
+    canEdit,
+    canDelete,
+    canToggle,
+    isLoading: l1 || l2 || l3 || l4,
   };
 }
 
-/** Admin e Master podem gerenciar instâncias WhatsApp. Membros precisam da feature whatsapp.manage_instances. */
+/**
+ * Permissão para gerenciar instâncias WhatsApp.
+ * Admin e Master sempre podem. Members precisam da feature habilitada pelo admin.
+ */
 export function useCanManageWhatsApp() {
-  const { data: userRole, isLoading } = useUserRole();
-  const { data: currentTeamMember, isLoading: loadingTeam } = useCurrentTeamMember();
-  const { isMaster, isLoading: masterLoading } = useMasterAuth();
-  const { data: featurePerms } = useFeaturePermissions();
-  const role = userRole?.role ?? currentTeamMember?.role;
-  return {
-    canManage: isMaster || role === "admin" || featurePerms?.["whatsapp.manage_instances"] === true,
-    isLoading: isLoading || loadingTeam || masterLoading,
-  };
+  const { allowed: canManage, isLoading } = useFeaturePermission("whatsapp.manage_instances");
+  return { canManage, isLoading };
 }
 
 // ─── Feature Permissions Hook ───────────────────────────

@@ -84,7 +84,7 @@ export default function Copilot() {
       navigate("/copilot/novo");
       return;
     }
-    // Admins e closers sempre têm acesso; outros precisam de assinatura ativa
+    // Membros com permissão ou assinatura ativa podem prosseguir
     if (!canManageCopilot && !hasAccess) {
       navigate("/configuracoes");
       return;
@@ -130,11 +130,11 @@ export default function Copilot() {
             Configure e gerencie seus agentes de IA personalizados
           </p>
           <p className="text-xs text-muted-foreground mt-1 max-w-xl">
-            Admin e Closers podem criar copilots e vincular a números em Configurações → WhatsApp. SDRs podem ativar ou desativar a IA em cada conversa (toggle no chat, painel do lead ou card no funil).
+            Admin ou membros com a permissão habilitada podem criar copilots e vinculá-los a números em Configurações → WhatsApp. Qualquer membro pode ativar ou desativar a IA em cada conversa.
           </p>
           {!canManageCopilot && (
             <p className="text-xs text-muted-foreground/80 mt-1 max-w-xl">
-              Se você é Closer ou Admin na equipe e não vê o botão &quot;Novo Copilot&quot;, peça ao admin para conferir sua role em Pitstop → Equipe.
+              Se você não vê o botão &quot;Novo Copilot&quot;, peça ao administrador para liberar a permissão &quot;Criar agente IA&quot; nas configurações de permissões.
             </p>
           )}
         </div>
