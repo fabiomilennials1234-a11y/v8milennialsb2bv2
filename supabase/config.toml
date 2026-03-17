@@ -84,3 +84,27 @@ verify_jwt = false
 # tinyerp-fetch-nfe: chamado pelo webhook e pelo frontend via service_role
 [functions.tinyerp-fetch-nfe]
 verify_jwt = false
+
+# process-workflow-executions: chamado por pg_cron e pg_net triggers; autenticação via x-cron-secret
+[functions.process-workflow-executions]
+verify_jwt = false
+
+# retry-dead-letter-jobs: chamado por pg_cron; autenticação via x-cron-secret
+[functions.retry-dead-letter-jobs]
+verify_jwt = false
+
+# process-ai-actions: chamado por pg_cron; autenticação via x-cron-secret  
+[functions.process-ai-actions]
+verify_jwt = false
+
+# pipe-rule-dispatch: chamado por pg_cron e pg_net; autenticação via x-cron-secret
+[functions.pipe-rule-dispatch]
+verify_jwt = false
+
+# process-copilot-followups: chamado por pg_cron; autenticação via x-cron-secret
+[functions.process-copilot-followups]
+verify_jwt = false
+
+# process-outbound-dispatches: chamado por pg_cron; autenticação via x-cron-secret
+[functions.process-outbound-dispatches]
+verify_jwt = false

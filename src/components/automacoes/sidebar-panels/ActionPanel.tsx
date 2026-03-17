@@ -32,6 +32,8 @@ import {
   type TemplateTextareaHandle,
 } from "@/components/automacoes/TemplateTextarea";
 import type { CampaignTemplate } from "@/hooks/useCampaignTemplates";
+import { usePipelineStages, type PipelineType } from "@/hooks/usePipelineStages";
+import { useTags } from "@/hooks/useTags";
 
 interface ActionPanelProps {
   data: ActionNodeData;
@@ -201,44 +203,12 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
 
       {/* Move Stage */}
       {at === "move_stage" && (
-        <>
-          <div className="space-y-2">
-            <Label>Tipo de Pipe</Label>
-            <Select
-              value={data.pipeType || ""}
-              onValueChange={(v) => onUpdate({ pipeType: v })}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="pipe_whatsapp">Qualificação</SelectItem>
-                <SelectItem value="pipe_confirmacao">Confirmação</SelectItem>
-                <SelectItem value="pipe_propostas">Propostas</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label>Estágio destino</Label>
-            <Input
-              value={data.targetStage || ""}
-              onChange={(e) => onUpdate({ targetStage: e.target.value })}
-              placeholder="Ex: confirmada_no_dia"
-            />
-          </div>
-        </>
+        <MoveStageFields data={data} onUpdate={onUpdate} />
       )}
 
       {/* Add/Remove Tag */}
       {(at === "add_tag" || at === "remove_tag") && (
-        <div className="space-y-2">
-          <Label>Nome da Tag</Label>
-          <Input
-            value={data.tagName || ""}
-            onChange={(e) => onUpdate({ tagName: e.target.value })}
-            placeholder="Ex: qualificado"
-          />
-        </div>
+        <TagSelectorField data={data} onUpdate={onUpdate} />
       )}
 
       {/* Update Lead Field */}
@@ -674,6 +644,151 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
             qualificação. O resultado fica disponível nas condições seguintes.
           </p>
         </div>
+      )}
+    </div>
+  );
+}
+
+// ── Move Stage (com seletor dinâmico de etapas) ───────────────────────────────
+
+const PIPE_OPTIONS: { value: PipelineType; label: string }[] = [
+  { value: "whatsapp", label: "Qualificação" },
+  { value: "confirmacao", label: "Confirmação" },
+  { value: "propostas", label: "Propostas" },
+  { value: "upsell_base", label: "Upsell (Tempo)" },
+  { value: "upsell_gestao", label: "Upsell (Gestão)" },
+];
+
+function MoveStageFields({
+  data,
+  onUpdate,
+}: {
+  data: ActionNodeData;
+  onUpdate: (updates: Partial<ActionNodeData>) => void;
+}) {
+  const pipeType = (data.pipeType as PipelineType) || "whatsapp";
+  const { data: stages, isLoading: stagesLoading } = usePipelineStages(pipeType);
+
+  const activeStages = (stages || []).filter((s) => s.is_active);
+
+  return (
+    <>
+      <div className="space-y-2">
+        <Label>Tipo de Pipe</Label>
+        <Select
+          value={pipeType}
+          onValueChange={(v) =>
+            onUpdate({ pipeType: v, targetStage: "" })
+          }
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="Selecione" />
+          </SelectTrigger>
+          <SelectContent>
+            {PIPE_OPTIONS.map((p) => (
+              <SelectItem key={p.value} value={p.value}>
+                {p.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-2">
+        <Label>Estágio destino</Label>
+        {stagesLoading ? (
+          <p className="text-xs text-muted-foreground">Carregando estágios...</p>
+        ) : (
+          <Select
+            value={data.targetStage || ""}
+            onValueChange={(v) => onUpdate({ targetStage: v })}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Selecione o estágio" />
+            </SelectTrigger>
+            <SelectContent>
+              {activeStages.map((s) => (
+                <SelectItem key={s.stage_key} value={s.stage_key}>
+                  <span className="flex items-center gap-2">
+                    <span
+                      className="inline-block w-2.5 h-2.5 rounded-full shrink-0"
+                      style={{ backgroundColor: s.color || "#888" }}
+                    />
+                    {s.name}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+      </div>
+    </>
+  );
+}
+
+// ── Tag Selector ──────────────────────────────────────────────────────────────
+
+function TagSelectorField({
+  data,
+  onUpdate,
+}: {
+  data: ActionNodeData;
+  onUpdate: (updates: Partial<ActionNodeData>) => void;
+}) {
+  const { data: tags, isLoading, isError } = useTags();
+
+  if (isLoading) {
+    return (
+      <div className="space-y-2">
+        <Label>Tag</Label>
+        <p className="text-xs text-muted-foreground">Carregando tags...</p>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="space-y-2">
+        <Label>Tag</Label>
+        <p className="text-xs text-destructive">Erro ao carregar tags.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <Label>Tag</Label>
+      {(tags ?? []).length === 0 ? (
+        <p className="text-xs text-muted-foreground">
+          Nenhuma tag cadastrada na organização.
+        </p>
+      ) : (
+        <Select
+          value={data.tagId || ""}
+          onValueChange={(v) => {
+            const selected = tags?.find((t) => t.id === v);
+            onUpdate({
+              tagId: v,
+              tagName: selected?.name || "",
+            });
+          }}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="Selecione a tag" />
+          </SelectTrigger>
+          <SelectContent>
+            {(tags ?? []).map((t) => (
+              <SelectItem key={t.id} value={t.id}>
+                <span className="flex items-center gap-2">
+                  <span
+                    className="inline-block w-2.5 h-2.5 rounded-full shrink-0"
+                    style={{ backgroundColor: t.color || "#888" }}
+                  />
+                  {t.name}
+                </span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       )}
     </div>
   );

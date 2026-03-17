@@ -448,6 +448,19 @@ async function handleSendWhatsAppAudio(ctx: ActionContext): Promise<ActionResult
   const result = await sendWhatsAppAudio(wa.instanceName, phone, audioUrl);
   if (!result.success) return { success: false, error: result.error || "Audio send failed" };
 
+  // Record in whatsapp_messages so it appears in chat
+  await ctx.supabase.from("whatsapp_messages").insert({
+    organization_id: ctx.organizationId,
+    instance_name: wa.instanceName,
+    remote_jid: phone + "@s.whatsapp.net",
+    from_me: true,
+    message_type: "audio",
+    content: null,
+    media_url: audioUrl,
+    timestamp: new Date().toISOString(),
+    status: "sent",
+  });
+
   return { success: true, message: "WhatsApp audio sent" };
 }
 
@@ -622,10 +635,11 @@ async function handleAddTag(ctx: ActionContext): Promise<ActionResult> {
 
   let resolvedTagId = tagId;
   if (!resolvedTagId && tagName) {
-    let { data: tag } = await ctx.supabase.from("tags").select("id").eq("name", tagName).maybeSingle();
+    let { data: tag } = await ctx.supabase.from("tags").select("id")
+      .eq("name", tagName).eq("organization_id", ctx.organizationId).maybeSingle();
     if (!tag) {
       const { data: newTag } = await ctx.supabase
-        .from("tags").insert({ name: tagName, color: "#6366f1" }).select("id").single();
+        .from("tags").insert({ name: tagName, color: "#6366f1", organization_id: ctx.organizationId }).select("id").single();
       tag = newTag;
     }
     resolvedTagId = tag?.id;
@@ -646,7 +660,8 @@ async function handleRemoveTag(ctx: ActionContext): Promise<ActionResult> {
 
   let resolvedTagId = tagId;
   if (!resolvedTagId && tagName) {
-    const { data: tag } = await ctx.supabase.from("tags").select("id").eq("name", tagName).maybeSingle();
+    const { data: tag } = await ctx.supabase.from("tags").select("id")
+      .eq("name", tagName).eq("organization_id", ctx.organizationId).maybeSingle();
     resolvedTagId = tag?.id;
   }
   if (!resolvedTagId) return { success: false, error: "Tag not found" };
