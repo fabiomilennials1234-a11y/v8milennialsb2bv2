@@ -17,6 +17,7 @@ import {
   getMe,
   listPages,
   subscribePageWebhook,
+  acceptLeadgenTos,
 } from "../_shared/meta-api.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -127,6 +128,9 @@ Deno.serve(withSentry('meta-oauth-callback', async (req) => {
       // Subscreve webhook
       const subscribed = await subscribePageWebhook(page.id, page.access_token);
 
+      // Aceita TOS de Lead Ads automaticamente
+      await acceptLeadgenTos(page.id, page.access_token);
+
       // Salva pagina
       const { error: pageError } = await supabase
         .from("meta_pages")
@@ -162,7 +166,7 @@ Deno.serve(withSentry('meta-oauth-callback', async (req) => {
 
     await logRuntime({
       organizationId: orgId,
-      module: "auth",
+      module: "permission",
       action: "meta_callback",
       status: "success",
       payloadSnapshot: { connectionType, pagesConnected, igAccountsConnected },
@@ -177,7 +181,7 @@ Deno.serve(withSentry('meta-oauth-callback', async (req) => {
   } catch (err) {
     console.error("[meta-oauth-callback] Unexpected error:", err);
     await logRuntime({
-      module: "auth",
+      module: "permission",
       action: "meta_callback",
       status: "error",
       errorMessage: err instanceof Error ? err.message : String(err),

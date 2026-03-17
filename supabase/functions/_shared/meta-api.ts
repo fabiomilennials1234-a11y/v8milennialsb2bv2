@@ -316,6 +316,39 @@ export async function sendMediaMessage(
 }
 
 // ---------------------------------------------------------------------------
+// Lead Ads TOS
+// ---------------------------------------------------------------------------
+
+/**
+ * Accept Lead Ads Terms of Service for a page.
+ * Called automatically during OAuth connection.
+ */
+export async function acceptLeadgenTos(
+  pageId: string,
+  pageAccessToken: string
+): Promise<boolean> {
+  try {
+    const res = await fetch(
+      `${GRAPH_API_BASE}/${pageId}/leadgen_tos`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ access_token: pageAccessToken }),
+      }
+    );
+    const data = await res.json();
+    if (data.error) {
+      console.warn(`[META-API] acceptLeadgenTos failed for ${pageId}:`, data.error.message);
+      return false;
+    }
+    return data.success === true || data.accepted === true;
+  } catch (err) {
+    console.warn(`[META-API] acceptLeadgenTos error for ${pageId}:`, err);
+    return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Lead Ads
 // ---------------------------------------------------------------------------
 
