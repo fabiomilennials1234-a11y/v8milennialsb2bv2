@@ -226,10 +226,14 @@ export interface ActionNodeData {
   messageTemplate?: string;
   templateId?: string;
   useTemplate?: boolean;
+  templateMode?: "free" | "campaign_template" | "meta_template";
+  templateSourceId?: string;
   // Send WhatsApp (áudio)
   audioId?: string;
   audioName?: string;
   audioUrl?: string;
+  audioMode?: "recorded" | "template";
+  audioSourceId?: string;
   // Send WhatsApp (imagem)
   imageUrl?: string;
   imageCaption?: string;
@@ -644,6 +648,47 @@ export interface TriggerCategory {
   label: string;
   triggers: WorkflowTriggerType[];
 }
+
+// =====================================================
+// WORKFLOW VARIABLES (for UI + documentation)
+// =====================================================
+
+export interface WorkflowVariable {
+  key: string;
+  label: string;
+  category: string;
+}
+
+export const WORKFLOW_VARIABLES: WorkflowVariable[] = [
+  // Lead
+  { key: "{{nome}}",          label: "Nome do lead",                  category: "Lead" },
+  { key: "{{empresa}}",       label: "Empresa",                       category: "Lead" },
+  { key: "{{email}}",         label: "Email",                         category: "Lead" },
+  { key: "{{telefone}}",      label: "Telefone",                      category: "Lead" },
+  { key: "{{faturamento}}",   label: "Faturamento",                   category: "Lead" },
+  { key: "{{segmento}}",      label: "Segmento",                      category: "Lead" },
+  { key: "{{score}}",         label: "Score de qualificação",         category: "Lead" },
+  { key: "{{rating}}",        label: "Rating (estrelas)",             category: "Lead" },
+  { key: "{{origem}}",        label: "Origem do lead",                category: "Lead" },
+  { key: "{{urgencia}}",      label: "Urgência",                      category: "Lead" },
+  { key: "{{observacoes}}",   label: "Observações",                   category: "Lead" },
+  // Pipeline
+  { key: "{{estagio}}",       label: "Estágio atual no funil",        category: "Pipeline" },
+  { key: "{{data_reuniao}}",  label: "Data da reunião",               category: "Pipeline" },
+  { key: "{{valor_proposta}}",label: "Valor da proposta",             category: "Pipeline" },
+  // Responsável
+  { key: "{{responsavel}}",            label: "Nome do responsável",          category: "Responsável" },
+  { key: "{{responsavel_telefone}}",   label: "Telefone do responsável",      category: "Responsável" },
+  { key: "{{sdr}}",                    label: "SDR (legado)",                 category: "Responsável" },
+  { key: "{{closer}}",                 label: "Closer (legado)",              category: "Responsável" },
+  // Personalizado
+  { key: "{{custom.campo}}",  label: "Campo personalizado (ex: {{custom.cnpj}})", category: "Personalizado" },
+  // Sistema
+  { key: "{{saudacao}}",          label: "Saudação (Bom dia/Boa tarde/Boa noite)", category: "Sistema" },
+  { key: "{{data_hoje}}",         label: "Data de hoje",           category: "Sistema" },
+  { key: "{{hora_atual}}",        label: "Hora atual",             category: "Sistema" },
+  { key: "{{nome_empresa_crm}}", label: "Nome da sua empresa",    category: "Sistema" },
+];
 
 export const TRIGGER_CATEGORIES: TriggerCategory[] = [
   {

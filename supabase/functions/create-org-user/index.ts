@@ -261,19 +261,8 @@ serve(withSentry('create-org-user', async (req) => {
         corsHeaders
       );
     }
-    // Upsert into user_roles (may already exist via trg_sync_user_roles trigger)
-    const { error: urErr } = await supabase.from("user_roles").upsert(
-      { user_id: newUserId, role: roleForInsert },
-      { onConflict: "user_id,role", ignoreDuplicates: true }
-    );
-    if (urErr) {
-      await supabase.auth.admin.deleteUser(newUserId);
-      return jsonResponse(
-        { success: false, error: "Insert user_role failed", message: urErr.message },
-        500,
-        corsHeaders
-      );
-    }
+    // user_roles é populado automaticamente pelo trigger trg_sync_user_roles
+    // que dispara no INSERT em team_members acima. Não é necessário inserir manualmente.
     await logRuntime({
       organizationId,
       module: "auth",

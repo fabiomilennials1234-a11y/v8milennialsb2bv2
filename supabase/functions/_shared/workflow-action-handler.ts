@@ -35,7 +35,11 @@ async function resolveVariables(
 
   const { data: lead } = await supabase
     .from("leads")
-    .select("name, company, email, phone, pipe_whatsapp, qualification_score, rating, sdr_id, closer_id, responsible_id")
+    .select(
+      "name, company, email, phone, pipe_whatsapp, qualification_score, rating, " +
+      "sdr_id, closer_id, responsible_id, organization_id, " +
+      "faturamento, segment, urgency, notes, origin",
+    )
     .eq("id", leadId)
     .maybeSingle();
 
@@ -45,16 +49,42 @@ async function resolveVariables(
 
   // Standard variables
   const vars: Record<string, string> = {
-    nome: lead.name || "",
-    empresa: lead.company || "",
-    email: lead.email || "",
-    telefone: lead.phone || "",
-    estagio: lead.pipe_whatsapp || "",
-    score: String(lead.qualification_score ?? ""),
-    rating: String(lead.rating ?? ""),
+    nome:       lead.name || "",
+    empresa:    lead.company || "",
+    email:      lead.email || "",
+    telefone:   lead.phone || "",
+    estagio:    lead.pipe_whatsapp || "",
+    score:      String(lead.qualification_score ?? ""),
+    rating:     String(lead.rating ?? ""),
+    faturamento: String(lead.faturamento ?? ""),
+    segmento:   lead.segment || "",
+    urgencia:   lead.urgency || "",
+    observacoes: lead.notes || "",
+    origem:     lead.origin || "",
   };
 
-  // Resolve SDR/Closer names
+  // Sistema: saudacao, data_hoje, hora_atual
+  if (template.includes("{{saudacao}}")) {
+    const h = parseInt(
+      new Intl.DateTimeFormat("pt-BR", {
+        hour: "numeric",
+        hour12: false,
+        timeZone: "America/Sao_Paulo",
+      }).format(new Date()),
+    );
+    vars.saudacao = h >= 5 && h < 12 ? "Bom dia" : h >= 12 && h < 18 ? "Boa tarde" : "Boa noite";
+  }
+  if (template.includes("{{data_hoje}}")) {
+    vars.data_hoje = new Date().toLocaleDateString("pt-BR");
+  }
+  if (template.includes("{{hora_atual}}")) {
+    vars.hora_atual = new Date().toLocaleTimeString("pt-BR", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+
+  // SDR name (legado)
   if (template.includes("{{sdr}}") && lead.sdr_id) {
     const { data: member } = await supabase
       .from("team_members")
@@ -63,6 +93,7 @@ async function resolveVariables(
       .maybeSingle();
     vars.sdr = member?.name || "";
   }
+  // Closer name (legado)
   if (template.includes("{{closer}}") && lead.closer_id) {
     const { data: member } = await supabase
       .from("team_members")
@@ -71,14 +102,58 @@ async function resolveVariables(
       .maybeSingle();
     vars.closer = member?.name || "";
   }
-  // Resolve responsible name (unified)
-  if (template.includes("{{responsavel}}") && lead.responsible_id) {
+  // Responsável (unified) — name and phone
+  if (
+    (template.includes("{{responsavel}}") ||
+      template.includes("{{responsavel_telefone}}")) &&
+    lead.responsible_id
+  ) {
     const { data: member } = await supabase
       .from("team_members")
-      .select("name")
+      .select("name, phone")
       .eq("id", lead.responsible_id)
       .maybeSingle();
-    vars.responsavel = member?.name || "";
+    vars.responsavel = (member as { name?: string; phone?: string })?.name || "";
+    vars.responsavel_telefone = (member as { name?: string; phone?: string })?.phone || "";
+  }
+
+  // Nome da empresa do CRM (organizations.name)
+  if (template.includes("{{nome_empresa_crm}}") && lead.organization_id) {
+    const { data: org } = await supabase
+      .from("organizations")
+      .select("name")
+      .eq("id", lead.organization_id)
+      .maybeSingle();
+    vars.nome_empresa_crm = org?.name || "";
+  }
+
+  // Data da reunião (pipe_confirmacao.meeting_date)
+  if (template.includes("{{data_reuniao}}")) {
+    const { data: conf } = await supabase
+      .from("pipe_confirmacao")
+      .select("meeting_date")
+      .eq("lead_id", leadId)
+      .maybeSingle();
+    const rawDate = (conf as { meeting_date?: string } | null)?.meeting_date;
+    vars.data_reuniao = rawDate
+      ? new Date(rawDate).toLocaleDateString("pt-BR")
+      : "";
+  }
+
+  // Valor da proposta (pipe_propostas.sale_value)
+  if (template.includes("{{valor_proposta}}")) {
+    const { data: prop } = await supabase
+      .from("pipe_propostas")
+      .select("sale_value")
+      .eq("lead_id", leadId)
+      .maybeSingle();
+    const saleValue = (prop as { sale_value?: number } | null)?.sale_value;
+    vars.valor_proposta = saleValue != null
+      ? new Intl.NumberFormat("pt-BR", {
+          style: "currency",
+          currency: "BRL",
+        }).format(saleValue)
+      : "";
   }
 
   for (const [key, val] of Object.entries(vars)) {
@@ -88,7 +163,7 @@ async function resolveVariables(
   // Custom fields: {{custom.campo}}
   const customMatches = result.match(/\{\{custom\.([^}]+)\}\}/g);
   if (customMatches) {
-    const orgId = (await supabase.from("leads").select("organization_id").eq("id", leadId).maybeSingle())?.data?.organization_id;
+    const orgId = lead.organization_id;
     for (const match of customMatches) {
       const fieldName = match.replace("{{custom.", "").replace("}}", "");
       let val = "";
