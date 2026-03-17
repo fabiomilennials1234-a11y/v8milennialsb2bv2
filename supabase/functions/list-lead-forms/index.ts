@@ -2,12 +2,14 @@
  * list-lead-forms
  *
  * Lista formularios de Lead Ads e/ou campos de um formulario especifico.
+ * Detecta quando a pagina nao aceitou os TOS de Lead Ads e retorna
+ * tos_not_accepted com URL para aceitar.
  *
  * Body (POST):
  *   { pageId: string }                    -> lista formularios da pagina
  *   { pageId: string, formId: string }    -> lista campos do formulario
  *
- * Response (formularios): [{ id, name, status }]
+ * Response (formularios): { forms: [...], tos_not_accepted?, tos_accept_url? }
  * Response (campos):      [{ key, label, type }]
  */
 
@@ -22,6 +24,7 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 Deno.serve(withSentry('list-lead-forms', async (req) => {
   const corsHeaders = getCorsHeaders(req.headers.get("origin"));
+  const headers = { ...corsHeaders, "Content-Type": "application/json" };
 
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders });
@@ -33,7 +36,7 @@ Deno.serve(withSentry('list-lead-forms', async (req) => {
     if (!pageId) {
       return new Response(
         JSON.stringify({ error: "pageId e obrigatorio" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 400, headers }
       );
     }
 
@@ -52,43 +55,37 @@ Deno.serve(withSentry('list-lead-forms', async (req) => {
     if (pageError || !page) {
       return new Response(
         JSON.stringify({ error: "Pagina Meta nao encontrada ou inativa" }),
-        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 404, headers }
       );
     }
 
     // Se formId fornecido, buscar campos do formulario
     if (formId) {
       const fields = await getLeadFormFields(formId, page.page_access_token);
-      await logRuntime({
-        module: "lead",
-        action: "list_forms",
-        status: "success",
-        payloadSnapshot: { pageId, formId, fieldsCount: fields.length },
-      });
-      return new Response(
-        JSON.stringify(fields),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify(fields), { status: 200, headers });
     }
 
-    // Senao, listar formularios da pagina
-    const forms = await listLeadForms(page.page_id, page.page_access_token);
+    // Senao, listar formularios da pagina (inclui deteccao de TOS)
+    const result = await listLeadForms(page.page_id, page.page_access_token);
+
     await logRuntime({
-      module: "lead",
-      action: "list_forms",
+      module: "campaign",
+      action: "list_lead_forms",
       status: "success",
-      payloadSnapshot: { pageId, formsCount: forms.length },
+      payloadSnapshot: {
+        pageId,
+        formsCount: result.forms.length,
+        tos_not_accepted: result.tos_not_accepted || false,
+      },
     });
-    return new Response(
-      JSON.stringify(forms),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+
+    return new Response(JSON.stringify(result), { status: 200, headers });
   } catch (err: unknown) {
     const errorMessage = err instanceof Error ? err.message : "Erro desconhecido";
     console.error("[list-lead-forms] Error:", errorMessage);
     await logRuntime({
-      module: "lead",
-      action: "list_forms",
+      module: "campaign",
+      action: "list_lead_forms",
       status: "error",
       errorMessage,
     });
