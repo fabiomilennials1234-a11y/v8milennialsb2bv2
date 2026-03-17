@@ -88,11 +88,22 @@ export function TriggerPanel({ data, onUpdate }: TriggerPanelProps) {
         <>
           <div className="space-y-2">
             <Label>Filtrar por origem (opcional)</Label>
-            <Input
-              value={(cfg.filter_origin as string) || ""}
-              onChange={(e) => updateConfig({ filter_origin: e.target.value })}
-              placeholder="Ex: whatsapp, meta_ads, calendly"
-            />
+            <Select
+              value={(cfg.filter_origin as string) || "__any__"}
+              onValueChange={(v) => updateConfig({ filter_origin: v === "__any__" ? "" : v })}
+            >
+              <SelectTrigger><SelectValue placeholder="Qualquer origem" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__any__">Qualquer origem</SelectItem>
+                <SelectItem value="meta_ads">Meta Ads</SelectItem>
+                <SelectItem value="google_ads">Google Ads</SelectItem>
+                <SelectItem value="whatsapp">WhatsApp</SelectItem>
+                <SelectItem value="site">Site</SelectItem>
+                <SelectItem value="remarketing">Remarketing</SelectItem>
+                <SelectItem value="cal">Calendário (Cal)</SelectItem>
+                <SelectItem value="outro">Outro</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <div className="space-y-2">
             <Label>Filtrar por pipe (opcional)</Label>
