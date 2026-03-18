@@ -57,6 +57,7 @@ import { WhatsAppSettings } from "@/components/settings/WhatsAppSettings";
 import { GoogleCalendarSettings } from "@/components/settings/GoogleCalendarSettings";
 import { MetaSettings } from "@/components/settings/MetaSettings";
 import { TinyErpSettings } from "@/components/settings/TinyErpSettings";
+import { ElevenLabsSettings } from "@/components/settings/ElevenLabsSettings";
 import { WebhookSettings } from "@/components/settings/WebhookSettings";
 import { HelpCenter } from "@/components/settings/help/HelpCenter";
 import { toast } from "sonner";
@@ -550,6 +551,8 @@ export default function Configuracoes() {
                 <GoogleCalendarSettings />
                 <div className="border-t" />
                 <TinyErpSettings />
+                <div className="border-t" />
+                <ElevenLabsSettings />
               </CardContent>
             </Card>
           </TabsContent>
