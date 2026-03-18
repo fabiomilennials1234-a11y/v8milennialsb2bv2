@@ -48,7 +48,11 @@ export function AgentTtsSettings({ agentId, ttsConfig, onSave }: AgentTtsSetting
         body: { action: "list_voices" },
       });
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
       setVoices(data?.voices || []);
+      if ((data?.voices || []).length === 0) {
+        console.warn("ElevenLabs returned 0 voices — check API key configuration");
+      }
     } catch (err) {
       console.error("Failed to load voices:", err);
       toast.error("Erro ao carregar vozes do ElevenLabs");

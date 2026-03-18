@@ -67,10 +67,13 @@ Deno.serve(withSentry('elevenlabs-proxy', async (req) => {
 
     // Get user's organization and check admin role
     const { data: membership } = await supabase
-      .from("organization_members")
+      .from("team_members")
       .select("organization_id, role")
       .eq("user_id", user.id)
-      .single();
+      .eq("is_active", true)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
 
     if (!membership) {
       return new Response(
@@ -79,7 +82,7 @@ Deno.serve(withSentry('elevenlabs-proxy', async (req) => {
       );
     }
 
-    if (membership.role !== "admin" && membership.role !== "owner") {
+    if (membership.role !== "admin") {
       return new Response(
         JSON.stringify({ error: "Admin access required" }),
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
