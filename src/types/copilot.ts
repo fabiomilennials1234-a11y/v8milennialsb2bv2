@@ -303,6 +303,20 @@ export interface CopilotAgentAudio {
 }
 
 /**
+ * Configuração de TTS (Text-to-Speech) via ElevenLabs
+ * NULL na coluna = feature desabilitada
+ */
+export interface TtsConfig {
+  provider: "elevenlabs";
+  voice_id: string;
+  mode: "always" | "mirror";
+  max_chars: number;
+  model_id?: string;
+  stability?: number;
+  similarity_boost?: number;
+}
+
+/**
  * Mover lead para outro pipe (Confirmação ou Propostas) em uma etapa
  */
 export interface MoveToPipeConfig {

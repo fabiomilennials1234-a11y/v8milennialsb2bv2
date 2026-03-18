@@ -20,6 +20,7 @@ import {
   Link2,
   Unlink,
   Pencil,
+  Volume2,
 } from "lucide-react";
 import {
   Dialog,
@@ -42,6 +43,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+import { AgentTtsSettings } from "./AgentTtsSettings";
 import { useUpdateCopilotAgentPipeline, useLinkAgentToWhatsAppInstance } from "@/hooks/useCopilotAgents";
 import { useWhatsAppInstancesWithAgent } from "@/hooks/useWhatsAppInstances";
 import type { CopilotAgentWithRelations, MoveRule } from "@/types/copilot";
@@ -267,6 +271,20 @@ export function AgentConfigModal({
     setActiveStages((prev) => ({ ...prev, [pipe]: [] }));
   };
 
+  const handleTtsSave = async (config: any) => {
+    if (!agent?.id) return;
+    const { error } = await supabase
+      .from("copilot_agents")
+      .update({ tts_config: config } as any)
+      .eq("id", agent.id);
+
+    if (error) {
+      toast.error("Erro ao salvar configuracao de audio");
+    } else {
+      toast.success("Configuracao de audio salva");
+    }
+  };
+
   const handleSave = async () => {
     if (!agent) return;
 
@@ -296,7 +314,7 @@ export function AgentConfigModal({
         </DialogHeader>
 
         <Tabs defaultValue="overview" className="flex-1">
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="overview" className="flex items-center gap-2">
               <Settings className="w-4 h-4" />
               Geral
@@ -304,6 +322,10 @@ export function AgentConfigModal({
             <TabsTrigger value="pipelines" className="flex items-center gap-2">
               <GitBranch className="w-4 h-4" />
               Funis
+            </TabsTrigger>
+            <TabsTrigger value="audio" className="gap-2">
+              <Volume2 className="h-4 w-4" />
+              Audio
             </TabsTrigger>
           </TabsList>
 
@@ -666,6 +688,18 @@ export function AgentConfigModal({
                 </CardContent>
               </Card>
             </TabsContent>
+
+          <TabsContent value="audio">
+            <Card className="glass-card">
+              <CardContent className="pt-6">
+                <AgentTtsSettings
+                  agentId={agent?.id || ""}
+                  ttsConfig={(agent as any)?.tts_config || null}
+                  onSave={handleTtsSave}
+                />
+              </CardContent>
+            </Card>
+          </TabsContent>
           </ScrollArea>
         </Tabs>
 
