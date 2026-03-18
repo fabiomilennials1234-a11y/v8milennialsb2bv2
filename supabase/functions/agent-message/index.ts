@@ -37,7 +37,7 @@ Deno.serve(withSentry('agent-message', async (req) => {
   try {
     // Parse webhook de Twilio ou formato genérico
     const body = await req.json();
-    const { from, message, channel, organization_id, push_name } = body; // from = phone number ou user_id
+    const { from, message, channel, organization_id, push_name, incoming_message_type } = body; // from = phone number ou user_id
 
     // 1. IDENTIFY TENANT
     const { lead, organizationId } = await identifyTenant(supabase, from, channel, organization_id, push_name);
@@ -79,7 +79,7 @@ Deno.serve(withSentry('agent-message', async (req) => {
       .catch(e => console.warn('[agent-message] Typing indicator failed (non-fatal):', e));
 
     // 3. PROCESS MESSAGE (toda lógica está aqui)
-    const response = await engine.processMessage(lead.id, message);
+    const response = await engine.processMessage(lead.id, message, incoming_message_type);
 
     // 3.5 Item #8: LLM-as-a-judge — avaliar qualidade da resposta (fire-and-forget)
     if (response.message && (response as any)._eval_meta) {

@@ -37,6 +37,7 @@ export class AgentEngine {
   private organizationId: string;
   private currentLeadId: string | null = null;
   private conversationContext: ConversationContextSummary | null = null;
+  private incomingMessageType: string = "text";
 
   // ── Compressão de histórico ───────────────────────────────────────────
   private readonly HISTORY_COMPRESS_THRESHOLD = 25;
@@ -60,9 +61,10 @@ export class AgentEngine {
   /**
    * Processa mensagem do lead e retorna resposta
    */
-  async processMessage(leadId: string, userMessage: string) {
+  async processMessage(leadId: string, userMessage: string, incomingMessageType?: string) {
     console.log('[AgentEngine] Processing message:', { leadId, messagePreview: userMessage.substring(0, 50) });
     this.currentLeadId = leadId;
+    this.incomingMessageType = incomingMessageType || "text";
 
     // 0. OPT-OUT CHECK — antes de qualquer chamada LLM (item #9)
     const optOutReply = this.detectOptOut(userMessage);
@@ -1849,6 +1851,27 @@ Regras:
     sections.push("- Em caso de dúvida ou situação complexa, transfira para um humano");
     sections.push("- Nunca invente informações - se não souber, admita e ofereça alternativa");
     sections.push("- Mantenha o foco no objetivo principal sem ser insistente ou agressivo");
+
+    // =====================================================
+    // AUDIO MODE INSTRUCTIONS (TTS)
+    // =====================================================
+    if (capabilities.tts_config) {
+      const ttsConfig = capabilities.tts_config as { mode: string; max_chars: number };
+      const shouldAddAudioInstructions =
+        ttsConfig.mode === "always" ||
+        (ttsConfig.mode === "mirror" && (this.incomingMessageType === "audio" || this.incomingMessageType === "ptt"));
+
+      if (shouldAddAudioInstructions) {
+        sections.push("");
+        sections.push("# [MODO ÁUDIO ATIVO]");
+        sections.push("Suas respostas serão convertidas em áudio (voice note). Por isso:");
+        sections.push(`- Mantenha respostas curtas e diretas (máximo ${ttsConfig.max_chars} caracteres)`);
+        sections.push("- Use linguagem falada, natural, como se estivesse gravando um áudio");
+        sections.push("- Evite listas, bullet points, formatação markdown — nada disso aparece em áudio");
+        sections.push("- Evite siglas ou abreviações que não soam bem quando faladas");
+        sections.push("- Não use emojis");
+      }
+    }
 
     return sections.join("\n");
   }
