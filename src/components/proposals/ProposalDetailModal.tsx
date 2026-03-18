@@ -35,6 +35,7 @@ import { useUpdatePipeProposta, useDeletePipeProposta, PipePropostasStatus, stat
 import { useLeadHistory } from "@/hooks/useLeadHistory";
 import { useLogLeadAction } from "@/hooks/useLogLeadAction";
 import { useDeleteLead } from "@/hooks/useLeads";
+import { useHasPermission } from "@/hooks/usePermissions";
 import { useActiveProducts } from "@/hooks/useProducts";
 import { 
   usePipePropostaItems, 
@@ -114,6 +115,7 @@ export function ProposalDetailModal({
   const updateProposta = useUpdatePipeProposta();
   const deleteProposta = useDeletePipeProposta();
   const deleteLead = useDeleteLead();
+  const { data: canDelete } = useHasPermission("can_delete_leads");
   const { data: leadHistory, isLoading: historyLoading } = useLeadHistory(proposta?.lead_id);
   const logAction = useLogLeadAction();
   const createItem = useCreatePipePropostaItem();
@@ -348,7 +350,8 @@ export function ProposalDetailModal({
       onOpenChange(false);
       onSuccess?.();
     } catch (error) {
-      toast.error("Erro ao excluir proposta");
+      const msg = error instanceof Error ? error.message : "Erro ao excluir proposta";
+      toast.error(msg);
       console.error(error);
     }
   };
@@ -922,61 +925,66 @@ export function ProposalDetailModal({
 
         {/* Footer */}
         <div className="flex justify-between gap-2 px-6 py-4 border-t shrink-0 bg-background">
-          <div className="flex gap-2">
-            {/* Excluir apenas proposta */}
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="outline" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10">
-                  <Trash2 className="w-4 h-4 mr-1" />
-                  Excluir Proposta
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Excluir proposta?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    Isso irá remover apenas a proposta. O lead continuará no sistema.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                  <AlertDialogAction 
-                    onClick={handleDeleteProposta}
-                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                  >
-                    {deleteProposta.isPending ? "Excluindo..." : "Excluir Proposta"}
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
+          {/* Delete actions — only shown to users with can_delete_leads permission */}
+          {canDelete ? (
+            <div className="flex gap-2">
+              {/* Excluir apenas proposta */}
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="outline" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10">
+                    <Trash2 className="w-4 h-4 mr-1" />
+                    Excluir Proposta
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Excluir proposta?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Isso irá remover apenas a proposta. O lead continuará no sistema.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={handleDeleteProposta}
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    >
+                      {deleteProposta.isPending ? "Excluindo..." : "Excluir Proposta"}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
 
-            {/* Excluir lead e proposta */}
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10">
-                  <Trash2 className="w-4 h-4 mr-1" />
-                  Excluir Lead
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Excluir lead e todas as propostas?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    Isso irá remover permanentemente o lead "{lead?.name}" e TODOS os dados associados (propostas, follow-ups, histórico, etc).
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                  <AlertDialogAction 
-                    onClick={handleDeleteLead}
-                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                  >
-                    {deleteLead.isPending ? "Excluindo..." : "Excluir Lead e Propostas"}
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          </div>
+              {/* Excluir lead e proposta */}
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10">
+                    <Trash2 className="w-4 h-4 mr-1" />
+                    Excluir Lead
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Excluir lead e todas as propostas?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Isso irá remover permanentemente o lead "{lead?.name}" e TODOS os dados associados (propostas, follow-ups, histórico, etc).
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={handleDeleteLead}
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    >
+                      {deleteLead.isPending ? "Excluindo..." : "Excluir Lead e Propostas"}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
+          ) : (
+            <div />
+          )}
           
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => onOpenChange(false)}>

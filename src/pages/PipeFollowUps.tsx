@@ -1,4 +1,5 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
+import { usePersistedState } from "@/hooks/usePersistedState";
 import { motion, AnimatePresence } from "framer-motion";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -49,12 +50,51 @@ import { useUserRole, useFeaturePermission } from "@/hooks/useUserRole";
 import { useLogLeadAction } from "@/hooks/useLogLeadAction";
 import { cn } from "@/lib/utils";
 
+// ---------------------------------------------------------------------------
+// Persisted filter state — scoped per org + user, TTL 24 h
+// ---------------------------------------------------------------------------
+type FollowUpsFilterState = {
+  search: string;
+  dateFilter: "today" | "overdue" | "upcoming" | "all";
+  showCompleted: boolean;
+  showArchived: boolean;
+};
+
+const DEFAULT_FOLLOWUPS_FILTERS: FollowUpsFilterState = {
+  search: "",
+  dateFilter: "today",
+  showCompleted: false,
+  showArchived: false,
+};
+
 export default function PipeFollowUps() {
-  const [search, setSearch] = useState("");
+  const [filterState, setFilterState] = usePersistedState(
+    "followups",
+    DEFAULT_FOLLOWUPS_FILTERS
+  );
+
+  const { search, dateFilter, showCompleted, showArchived } = filterState;
+
+  const setSearch = useCallback(
+    (v: string) => setFilterState((f) => ({ ...f, search: v })),
+    [setFilterState]
+  );
+  const setDateFilter = useCallback(
+    (v: "today" | "overdue" | "upcoming" | "all") =>
+      setFilterState((f) => ({ ...f, dateFilter: v })),
+    [setFilterState]
+  );
+  const setShowCompleted = useCallback(
+    (v: boolean) => setFilterState((f) => ({ ...f, showCompleted: v })),
+    [setFilterState]
+  );
+  const setShowArchived = useCallback(
+    (v: boolean) => setFilterState((f) => ({ ...f, showArchived: v })),
+    [setFilterState]
+  );
+
+  // selectedMember is NOT persisted — it has role-based auto-logic (admin vs SDR/Closer)
   const [selectedMember, setSelectedMember] = useState<string | null>(null);
-  const [dateFilter, setDateFilter] = useState<"today" | "overdue" | "upcoming" | "all">("today");
-  const [showCompleted, setShowCompleted] = useState(false);
-  const [showArchived, setShowArchived] = useState(false);
   const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; followUpId: string } | null>(null);
   const [isDetailDrawerOpen, setIsDetailDrawerOpen] = useState(false);
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);

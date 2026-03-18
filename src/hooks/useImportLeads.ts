@@ -292,6 +292,8 @@ interface ImportResult {
   duplicates: number;
   updated: number; // Leads that were updated with new data
   invalid: number;
+  /** Leads importados sem telefone e sem email. */
+  incomplete?: number;
   distribution?: Record<string, number>;
 }
 
@@ -301,6 +303,8 @@ export interface EdgeFunctionReport {
   created: number;
   updated: number;
   rejected: number;
+  /** Leads importados sem telefone e sem email. */
+  incomplete?: number;
   errors: { row: number; reason: string }[];
   distribution?: Record<string, number>;
 }
@@ -489,6 +493,8 @@ export interface ImportFunnelResult {
   duplicates: number;
   updated: number;
   invalid: number;
+  /** Leads importados sem telefone e sem email. */
+  incomplete?: number;
 }
 
 export function useImportLeads() {
@@ -787,7 +793,18 @@ export function useImportLeads() {
               [/celular/, /telefone/, /\bphone\b/, /whatsapp/, /\bfone\b/, /\btel\b/]
             );
             phoneField.matchedKeys.forEach(k => usedKeys.add(k));
-            const phone = chooseBestValue("phone", phoneField.values);
+            // Normaliza notação científica do Excel (ex: 5.51E+12 ou 7,1994E+10 → "5511987654321")
+            const normalizedPhoneValues = phoneField.values.map((v) => {
+              const trimmed = (v || "").trim();
+              // Normaliza vírgula decimal (locale pt-BR: "7,1994E+10") para ponto antes de testar
+              const dotted = trimmed.replace(",", ".");
+              if (/^[+-]?\d+(?:\.\d+)?[eE][+-]?\d+$/.test(dotted)) {
+                const num = Number(dotted);
+                if (!isNaN(num) && num > 0) return Math.round(num).toString();
+              }
+              return trimmed;
+            });
+            const phone = chooseBestValue("phone", normalizedPhoneValues);
 
             // EMAIL
             const emailField = collectFieldValues(
@@ -805,8 +822,7 @@ export function useImportLeads() {
             emailField.matchedKeys.forEach(k => usedKeys.add(k));
             const email = chooseBestValue("email", emailField.values);
 
-            // Skip if no contact info
-            if (!phone && !email) continue;
+            // Leads sem telefone e sem email são permitidos (importados como incompletos)
 
             // FATURAMENTO - multiple columns, choose best
             const faturamentoField = collectFieldValues(
@@ -1063,20 +1079,34 @@ export function useImportLeads() {
     parsedLeads: ParsedLead[],
     payload: Record<string, unknown>,
   ): Promise<{ report: EdgeFunctionReport }> => {
-    const { data: sessionData } = await supabase.auth.getSession();
-    const token = sessionData?.session?.access_token;
-    if (!token) throw new Error("Sessão expirada. Faça login novamente.");
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+    const functionUrl = `${supabaseUrl}/functions/v1/import-leads`;
 
-    const { data, error } = await supabase.functions.invoke("import-leads", {
-      body: {
+    const response = await fetch(functionUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "apikey": anonKey,
+      },
+      body: JSON.stringify({
         ...payload,
         leads: parsedLeads,
         organization_id: organizationId,
-      },
-      headers: { Authorization: `Bearer ${token}` },
+      }),
     });
 
-    if (error) throw new Error(error.message || "Erro ao chamar Edge Function de importação");
+    let data: any;
+    try {
+      data = await response.json();
+    } catch {
+      throw new Error("Resposta inválida da função de importação");
+    }
+
+    if (!response.ok) {
+      throw new Error(data?.error || data?.message || `Erro ${response.status} na importação`);
+    }
+
     if (!data?.success) throw new Error(data?.error || "Erro desconhecido na importação");
     return { report: data.report as EdgeFunctionReport };
   };
@@ -1091,7 +1121,8 @@ export function useImportLeads() {
     campaignStages?: { id: string; name: string }[],
     distributionMode?: "round_robin" | "random",
     closerMemberIds?: string[],
-    closerDistributionMode?: "round_robin" | "random"
+    closerDistributionMode?: "round_robin" | "random",
+    userColumnMapping?: Record<string, string>
   ): Promise<ImportResult> => {
     setIsImporting(true);
     setProgress(0);
@@ -1099,7 +1130,7 @@ export function useImportLeads() {
 
     try {
       // 1. Parse file locally
-      const parsedLeads = await parseCSV(file);
+      const parsedLeads = await parseCSV(file, userColumnMapping);
       console.log(`Parsed ${parsedLeads.length} leads from file`);
 
       if (parsedLeads.length === 0) {
@@ -1125,12 +1156,17 @@ export function useImportLeads() {
 
       setLastReport(report);
 
+      const duplicatePattern = /duplicado|ja existe|já existe|sem dados novos/i;
+      const duplicatesCount = report.errors.filter((e) => duplicatePattern.test(e.reason)).length;
+      const invalidCount = report.rejected - duplicatesCount;
+
       const result: ImportResult = {
         total: report.total,
         imported: report.created,
-        duplicates: report.rejected,
+        duplicates: duplicatesCount,
         updated: report.updated,
-        invalid: report.errors.length,
+        invalid: invalidCount < 0 ? report.rejected : invalidCount,
+        incomplete: report.incomplete ?? 0,
         distribution: report.distribution,
       };
 
@@ -1181,12 +1217,17 @@ export function useImportLeads() {
 
       setLastReport(report);
 
+      const duplicatePatternFunnel = /duplicado|ja existe|já existe|sem dados novos/i;
+      const duplicatesFunnel = report.errors.filter((e) => duplicatePatternFunnel.test(e.reason)).length;
+      const invalidFunnel = report.rejected - duplicatesFunnel;
+
       const funnelResult: ImportFunnelResult = {
         total: report.total,
         imported: report.created,
-        duplicates: report.rejected,
+        duplicates: duplicatesFunnel,
         updated: report.updated,
-        invalid: report.errors.length,
+        invalid: invalidFunnel < 0 ? report.rejected : invalidFunnel,
+        incomplete: report.incomplete ?? 0,
       };
 
       setProgress(100);

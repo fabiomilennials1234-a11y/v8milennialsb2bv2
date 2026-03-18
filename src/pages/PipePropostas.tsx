@@ -62,17 +62,63 @@ import { track, trackModuleVisit } from "@/lib/analytics";
 import { useFeaturePermission } from "@/hooks/useUserRole";
 
 
+// ---------------------------------------------------------------------------
+// Persisted filter state — scoped per org + user, TTL 24 h
+// ---------------------------------------------------------------------------
+type PropostasFilterState = {
+  searchTerm: string;
+  filterResponsible: string;
+  filterProductType: string;
+  filterPriority: string;
+  filterCalor: string;
+  viewMode: "kanban" | "analytics";
+};
+
+const DEFAULT_PROPOSTAS_FILTERS: PropostasFilterState = {
+  searchTerm: "",
+  filterResponsible: "all",
+  filterProductType: "all",
+  filterPriority: "all",
+  filterCalor: "all",
+  viewMode: "kanban",
+};
+
 export default function PipePropostas() {
-  const [searchTerm, setSearchTerm] = useState("");
-  const [filterResponsible, setFilterResponsible] = useState("all");
-  const [filterProductType, setFilterProductType] = useState("all");
-  const [filterPriority, setFilterPriority] = useState("all");
-  const [filterCalor, setFilterCalor] = useState("all");
+  const [filterState, setFilterState] = usePersistedState(
+    "propostas",
+    DEFAULT_PROPOSTAS_FILTERS
+  );
+
+  const { searchTerm, filterResponsible, filterProductType, filterPriority, filterCalor, viewMode } = filterState;
+
+  const setSearchTerm = useCallback(
+    (v: string) => setFilterState((f) => ({ ...f, searchTerm: v })),
+    [setFilterState]
+  );
+  const setFilterResponsible = useCallback(
+    (v: string) => setFilterState((f) => ({ ...f, filterResponsible: v })),
+    [setFilterState]
+  );
+  const setFilterProductType = useCallback(
+    (v: string) => setFilterState((f) => ({ ...f, filterProductType: v })),
+    [setFilterState]
+  );
+  const setFilterPriority = useCallback(
+    (v: string) => setFilterState((f) => ({ ...f, filterPriority: v })),
+    [setFilterState]
+  );
+  const setFilterCalor = useCallback(
+    (v: string) => setFilterState((f) => ({ ...f, filterCalor: v })),
+    [setFilterState]
+  );
+  const setViewMode = useCallback(
+    (v: "kanban" | "analytics") => setFilterState((f) => ({ ...f, viewMode: v })),
+    [setFilterState]
+  );
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [selectedProposta, setSelectedProposta] = useState<any>(null);
-  const [viewMode, setViewMode] = useState<"kanban" | "analytics">("kanban");
   const [analyticsTab, setAnalyticsTab] = useState<"propostas" | "produtos">("propostas");
   
   // State for commitment date modal
@@ -420,7 +466,8 @@ export default function PipePropostas() {
       toast.success("Proposta removida do funil!");
       setDeleteDialog(null);
     } catch (error) {
-      toast.error("Erro ao excluir");
+      const msg = error instanceof Error ? error.message : "Erro ao excluir proposta";
+      toast.error(msg);
     }
   };
 

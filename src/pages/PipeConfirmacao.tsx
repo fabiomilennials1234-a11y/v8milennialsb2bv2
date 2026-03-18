@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
+import { usePersistedState } from "@/hooks/usePersistedState";
 import { motion } from "framer-motion";
 import { Plus, Calendar, Loader2, LayoutGrid, List, Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -116,21 +117,80 @@ function calculateStatusByDate(meetingDate: Date | null, currentStatus: PipeConf
   return null;
 }
 
+// ---------------------------------------------------------------------------
+// Persisted filter state — scoped per org + user, TTL 24 h
+// ---------------------------------------------------------------------------
+type ConfirmacaoFilterState = {
+  searchQuery: string;
+  originFilter: OriginFilter;
+  timeFilter: TimeFilter;
+  urgencyFilter: UrgencyFilter;
+  selectedStatuses: string[];
+  selectedResponsibleId: string;
+  viewMode: "kanban" | "timeline";
+};
+
+const DEFAULT_CONFIRMACAO_FILTERS: ConfirmacaoFilterState = {
+  searchQuery: "",
+  originFilter: "all",
+  timeFilter: "all",
+  urgencyFilter: "all",
+  selectedStatuses: [],
+  selectedResponsibleId: "all",
+  viewMode: "kanban",
+};
+
 export default function PipeConfirmacao() {
-  const [searchQuery, setSearchQuery] = useState("");
-  const [originFilter, setOriginFilter] = useState<OriginFilter>("all");
-  const [timeFilter, setTimeFilter] = useState<TimeFilter>("all");
-  const [urgencyFilter, setUrgencyFilter] = useState<UrgencyFilter>("all");
-  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
-  const [selectedResponsibleId, setSelectedResponsibleId] = useState<string>("all");
+  const [filterState, setFilterState] = usePersistedState(
+    "confirmacao",
+    DEFAULT_CONFIRMACAO_FILTERS
+  );
+
+  const {
+    searchQuery,
+    originFilter,
+    timeFilter,
+    urgencyFilter,
+    selectedStatuses,
+    selectedResponsibleId,
+    viewMode,
+  } = filterState;
+
+  const setSearchQuery = useCallback(
+    (v: string) => setFilterState((f) => ({ ...f, searchQuery: v })),
+    [setFilterState]
+  );
+  const setOriginFilter = useCallback(
+    (v: OriginFilter) => setFilterState((f) => ({ ...f, originFilter: v })),
+    [setFilterState]
+  );
+  const setTimeFilter = useCallback(
+    (v: TimeFilter) => setFilterState((f) => ({ ...f, timeFilter: v })),
+    [setFilterState]
+  );
+  const setUrgencyFilter = useCallback(
+    (v: UrgencyFilter) => setFilterState((f) => ({ ...f, urgencyFilter: v })),
+    [setFilterState]
+  );
+  const setSelectedStatuses = useCallback(
+    (v: string[]) => setFilterState((f) => ({ ...f, selectedStatuses: v })),
+    [setFilterState]
+  );
+  const setSelectedResponsibleId = useCallback(
+    (v: string) => setFilterState((f) => ({ ...f, selectedResponsibleId: v })),
+    [setFilterState]
+  );
+  const setViewMode = useCallback(
+    (v: "kanban" | "timeline") => setFilterState((f) => ({ ...f, viewMode: v })),
+    [setFilterState]
+  );
   const [isLeadModalOpen, setIsLeadModalOpen] = useState(false);
   const [isMeetingModalOpen, setIsMeetingModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [editingLead, setEditingLead] = useState<any>(null);
   const [selectedItem, setSelectedItem] = useState<any>(null);
-  const [viewMode, setViewMode] = useState<"kanban" | "timeline">("kanban");
-  
+
   // Compareceu modal state
   const [isCompareceuModalOpen, setIsCompareceuModalOpen] = useState(false);
   const [pendingCompareceuItem, setPendingCompareceuItem] = useState<any>(null);

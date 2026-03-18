@@ -64,6 +64,21 @@ const ALL_ORIGIN_OPTIONS = [
 ];
 
 
+// ---------------------------------------------------------------------------
+// Persisted filter state — scoped per org + user, TTL 24 h
+// ---------------------------------------------------------------------------
+type WhatsappFilterState = {
+  searchTerm: string;
+  filterResponsible: string;
+  filterOrigin: string;
+};
+
+const DEFAULT_WHATSAPP_FILTERS: WhatsappFilterState = {
+  searchTerm: "",
+  filterResponsible: "all",
+  filterOrigin: "all",
+};
+
 export default function PipeWhatsapp() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterResponsible, setFilterResponsible] = useState("all");

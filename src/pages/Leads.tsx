@@ -1,4 +1,5 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
+import { usePersistedState } from "@/hooks/usePersistedState";
 import { motion } from "framer-motion";
 import {
   Fuel,
@@ -148,10 +149,42 @@ function StarRating({ rating, onRate, readonly = false }: { rating: number; onRa
   );
 }
 
+// ---------------------------------------------------------------------------
+// Persisted filter state — scoped per org + user, TTL 24 h
+// ---------------------------------------------------------------------------
+type LeadsFilterState = {
+  searchQuery: string;
+  filterOrigin: string;
+  filterRating: string;
+};
+
+const DEFAULT_LEADS_FILTERS: LeadsFilterState = {
+  searchQuery: "",
+  filterOrigin: "all",
+  filterRating: "all",
+};
+
 export default function Leads() {
-  const [searchQuery, setSearchQuery] = useState("");
-  const [filterOrigin, setFilterOrigin] = useState<string>("all");
-  const [filterRating, setFilterRating] = useState<string>("all");
+  const [filterState, setFilterState] = usePersistedState(
+    "leads",
+    DEFAULT_LEADS_FILTERS
+  );
+
+  const { searchQuery, filterOrigin, filterRating } = filterState;
+
+  const setSearchQuery = useCallback(
+    (v: string) => setFilterState((f) => ({ ...f, searchQuery: v })),
+    [setFilterState]
+  );
+  const setFilterOrigin = useCallback(
+    (v: string) => setFilterState((f) => ({ ...f, filterOrigin: v })),
+    [setFilterState]
+  );
+  const setFilterRating = useCallback(
+    (v: string) => setFilterState((f) => ({ ...f, filterRating: v })),
+    [setFilterState]
+  );
+
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const { allowed: canExport } = useCanPerformAction("export_leads");

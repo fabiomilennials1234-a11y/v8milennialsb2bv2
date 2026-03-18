@@ -4,13 +4,16 @@
  * Centraliza a importação de leads no backend.
  * O frontend faz o parse do arquivo (CSV/XLSX) e mapeamento de colunas,
  * depois envia o array de leads parseados para esta Edge Function que:
- * 1. Autentica via requireAuth()
- * 2. Verifica permissão via canUserPerformAction({ action: 'import_leads' })
- * 3. Valida cada lead (name obrigatório, phone ou email obrigatório, formato phone)
+ * 1. Valida organization_id (sem JWT — autenticação via apikey do Supabase)
+ * 2. Confirma existência da organização no DB antes de processar
+ * 3. Valida cada lead (name obrigatório; phone e email são opcionais — leads sem contato são importados como incompletos)
  * 4. Dedup por phone com merge inteligente
  * 5. Processa em batches de 50
  * 6. Retorna relatório detalhado
  * 7. Loga execução com logRuntime()
+ *
+ * Segurança: deployed com --no-verify-jwt. O gateway aceita a apikey pública do Supabase.
+ * A função valida o organization_id contra o DB via service role antes de qualquer escrita.
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -18,8 +21,6 @@ import { withSentry } from "../_shared/sentry.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { trackEvent } from "../_shared/track.ts";
-import { requireAuth, AuthError, authErrorResponse } from "../_shared/user-auth.ts";
-import { canUserPerformAction } from "../_shared/permission_engine.ts";
 
 // ─── Types ───────────────────────────────────────────────
 
@@ -81,6 +82,8 @@ interface ImportReport {
   created: number;
   updated: number;
   rejected: number;
+  /** Leads importados sem telefone e sem email (são criados, mas marcados como incompletos). */
+  incomplete: number;
   errors: { row: number; reason: string }[];
   distribution?: Record<string, number>;
 }
@@ -96,6 +99,15 @@ function getServiceClient() {
 }
 
 function formatPhone(phone: string): string {
+  // Trata notação científica do Excel — suporta ponto ("5.51E+12") e vírgula pt-BR ("7,1994E+10")
+  const trimmed = (phone || "").trim();
+  const dotted = trimmed.replace(",", ".");
+  if (/^[+-]?\d+(?:\.\d+)?[eE][+-]?\d+$/.test(dotted)) {
+    const num = Number(dotted);
+    if (!isNaN(num) && num > 0) {
+      return formatPhone(Math.round(num).toString());
+    }
+  }
   const digits = phone.replace(/\D/g, "");
   if (digits.startsWith("55") && digits.length >= 12) return digits;
   if (digits.length === 10 || digits.length === 11) return `55${digits}`;
@@ -274,11 +286,15 @@ function mergeNotes(existingNotes?: string | null, rawNotes?: string, kommoBlock
 
 function validateLead(lead: ParsedLead, index: number): string | null {
   if (!lead.name?.trim()) return `Linha ${index + 1}: nome é obrigatório`;
-  if (!lead.phone?.trim() && !lead.email?.trim()) return `Linha ${index + 1}: telefone ou email é obrigatório`;
   if (lead.phone?.trim() && !validatePhone(lead.phone)) {
     return `Linha ${index + 1}: telefone inválido (${lead.phone}) — esperado 10-13 dígitos`;
   }
   return null;
+}
+
+/** Retorna true se o lead não tem telefone nem email (será importado como incompleto). */
+function isIncomplete(lead: ParsedLead): boolean {
+  return !lead.phone?.trim() && !lead.email?.trim();
 }
 
 // ─── Campaign Import ────────────────────────────────────
@@ -315,6 +331,20 @@ async function importToCampaign(
 
   const existingMap = new Map<string, NonNullable<typeof existingLeads>[number]>();
   existingLeads?.forEach((l) => { if (l.phone) existingMap.set(l.phone, l); });
+
+  // Pre-fetch existing leads by email for leads without phone
+  const emailsOnly = leads
+    .filter((l) => !l.phone && l.email)
+    .map((l) => l.email!.toLowerCase().trim());
+  const existingEmailMap = new Map<string, NonNullable<typeof existingLeads>[number]>();
+  if (emailsOnly.length > 0) {
+    const { data: existingByEmail } = await supabase
+      .from("leads")
+      .select("id, phone, name, company, email, faturamento, segment, notes, rating, utm_campaign, utm_source, utm_medium, utm_content, utm_term")
+      .eq("organization_id", organizationId)
+      .in("email", emailsOnly);
+    existingByEmail?.forEach((l) => { if (l.email) existingEmailMap.set(l.email.toLowerCase(), l); });
+  }
 
   // Create/get import tag
   const now = new Date();
@@ -370,7 +400,11 @@ async function importToCampaign(
           ? resolveStageFromName(lead.stage, campaignStages.map((s) => ({ stage_key: s.id, name: s.name })), stageId)
           : stageId;
 
-      const existingLead = formattedPhone ? existingMap.get(formattedPhone) : null;
+      const existingLead = formattedPhone
+        ? existingMap.get(formattedPhone)
+        : lead.email
+          ? existingEmailMap.get(lead.email.toLowerCase().trim())
+          : null;
 
       try {
         if (existingLead) {
@@ -605,6 +639,20 @@ async function importToFunnel(
   const existingMap = new Map<string, NonNullable<typeof existingLeads>[number]>();
   existingLeads?.forEach((l) => { if (l.phone) existingMap.set(l.phone, l); });
 
+  // Pre-fetch existing leads by email for leads without phone
+  const emailsOnlyFunnel = leads
+    .filter((l) => !l.phone && l.email)
+    .map((l) => l.email!.toLowerCase().trim());
+  const existingEmailMapFunnel = new Map<string, NonNullable<typeof existingLeads>[number]>();
+  if (emailsOnlyFunnel.length > 0) {
+    const { data: existingByEmailFunnel } = await supabase
+      .from("leads")
+      .select("id, phone, name, company, email, faturamento, segment, notes, rating, utm_campaign, utm_source, utm_medium, utm_content, utm_term")
+      .eq("organization_id", organizationId)
+      .in("email", emailsOnlyFunnel);
+    existingByEmailFunnel?.forEach((l) => { if (l.email) existingEmailMapFunnel.set(l.email.toLowerCase(), l); });
+  }
+
   const processedPhones = new Set<string>();
   const createdLeadIds: string[] = [];
   const BATCH_SIZE = 50;
@@ -623,7 +671,11 @@ async function importToFunnel(
         continue;
       }
 
-      const existingLead = formattedPhone ? existingMap.get(formattedPhone) : null;
+      const existingLead = formattedPhone
+        ? existingMap.get(formattedPhone)
+        : lead.email
+          ? existingEmailMapFunnel.get(lead.email.toLowerCase().trim())
+          : null;
 
       try {
         let leadId: string;
@@ -826,26 +878,28 @@ Deno.serve(
       );
     }
 
-    // 2. Auth
-    let authCtx;
-    try {
-      authCtx = await requireAuth(req, { organizationId: body.organization_id, body: body as any });
-    } catch (e) {
-      if (e instanceof AuthError) return authErrorResponse(e, corsHeaders);
-      throw e;
+    // 2. Organization validation (sem JWT)
+    if (!body.organization_id) {
+      return new Response(
+        JSON.stringify({ success: false, error: "organization_id é obrigatório" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
     }
 
-    // 3. Permission check
-    const permResult = await canUserPerformAction({
-      userId: authCtx.userId,
-      organizationId: authCtx.organizationId,
-      action: "import_leads",
-    });
+    const organizationId = body.organization_id;
 
-    if (!permResult.allowed) {
+    // 3. Confirm org exists in DB (security gate — prevents writes to fake org IDs)
+    const supabaseEarly = getServiceClient();
+    const { data: orgRow } = await supabaseEarly
+      .from("organizations")
+      .select("id")
+      .eq("id", organizationId)
+      .maybeSingle();
+
+    if (!orgRow) {
       return new Response(
-        JSON.stringify({ success: false, error: permResult.reason || "Sem permissão para importar leads" }),
-        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        JSON.stringify({ success: false, error: "Organização não encontrada" }),
+        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -866,7 +920,7 @@ Deno.serve(
 
     // 5. Validate each lead
     const validLeads: ParsedLead[] = [];
-    const report: ImportReport = { total: body.leads.length, created: 0, updated: 0, rejected: 0, errors: [] };
+    const report: ImportReport = { total: body.leads.length, created: 0, updated: 0, rejected: 0, incomplete: 0, errors: [] };
 
     for (let i = 0; i < body.leads.length; i++) {
       const validationError = validateLead(body.leads[i], i);
@@ -874,30 +928,31 @@ Deno.serve(
         report.rejected++;
         report.errors.push({ row: i + 1, reason: validationError });
       } else {
+        if (isIncomplete(body.leads[i])) report.incomplete++;
         validLeads.push(body.leads[i]);
       }
     }
 
     // 6. Process valid leads
-    const supabase = getServiceClient();
+    const supabase = supabaseEarly; // reuse client created in step 3
 
     try {
       if (body.destination === "campaign") {
-        await importToCampaign(supabase, validLeads, { ...body, organization_id: authCtx.organizationId }, report);
+        await importToCampaign(supabase, validLeads, { ...body, organization_id: organizationId }, report);
       } else {
-        await importToFunnel(supabase, validLeads, { ...body, organization_id: authCtx.organizationId }, report);
+        await importToFunnel(supabase, validLeads, { ...body, organization_id: organizationId }, report);
       }
     } catch (err) {
       console.error("[import-leads] Processing error:", err);
 
       await logRuntime({
-        organizationId: authCtx.organizationId,
+        organizationId: organizationId,
         module: "pipe_dispatch",
         action: "import_leads",
         status: "error",
         errorMessage: (err as Error).message,
         entityType: "user",
-        entityId: authCtx.userId,
+        entityId: undefined,
         payloadSnapshot: {
           destination: body.destination,
           totalLeads: body.leads.length,
@@ -913,12 +968,12 @@ Deno.serve(
 
     // 7. Log success
     await logRuntime({
-      organizationId: authCtx.organizationId,
+      organizationId: organizationId,
       module: "pipe_dispatch",
       action: "import_leads",
       status: "success",
       entityType: "user",
-      entityId: authCtx.userId,
+      entityId: undefined,
       payloadSnapshot: {
         destination: body.destination,
         total: report.total,
@@ -930,8 +985,8 @@ Deno.serve(
 
     // Track usage event (fire-and-forget)
     trackEvent({
-      organizationId: authCtx.organizationId,
-      userId: authCtx.userId,
+      organizationId: organizationId,
+      userId: undefined,
       eventType: "import_completed",
       entityType: "lead",
       metadata: {

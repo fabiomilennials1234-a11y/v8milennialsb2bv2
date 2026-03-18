@@ -1,4 +1,5 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
+import { usePersistedState } from "@/hooks/usePersistedState";
 import {
   DndContext,
   DragOverlay,
@@ -496,6 +497,19 @@ function KanbanColumn({
   );
 }
 
+// ---------------------------------------------------------------------------
+// Persisted filter state — scoped per org + user + campanha, TTL 24 h
+// ---------------------------------------------------------------------------
+type CampanhaKanbanFilterState = {
+  responsibleFilter: string;
+  nameFilter: string;
+};
+
+const DEFAULT_CAMPANHA_KANBAN_FILTERS: CampanhaKanbanFilterState = {
+  responsibleFilter: "all",
+  nameFilter: "",
+};
+
 export function CampanhaKanban({
   campanhaId,
   stages,
@@ -506,12 +520,27 @@ export function CampanhaKanban({
   onMoveToConfirmacao,
   onExtractToPipe,
 }: CampanhaKanbanProps) {
+  // screen key includes campanhaId so each campaign has independent filters
+  const [filterState, setFilterState] = usePersistedState(
+    `campanha-kanban-${campanhaId}`,
+    DEFAULT_CAMPANHA_KANBAN_FILTERS
+  );
+
+  const { responsibleFilter, nameFilter } = filterState;
+
+  const setResponsibleFilter = useCallback(
+    (v: string) => setFilterState((f) => ({ ...f, responsibleFilter: v })),
+    [setFilterState]
+  );
+  const setNameFilter = useCallback(
+    (v: string) => setFilterState((f) => ({ ...f, nameFilter: v })),
+    [setFilterState]
+  );
+
   const [activeId, setActiveId] = useState<string | null>(null);
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [editLeadId, setEditLeadId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<CampanhaLead | null>(null);
-  const [responsibleFilter, setResponsibleFilter] = useState<string>("all");
-  const [nameFilter, setNameFilter] = useState("");
   const updateLead = useUpdateCampanhaLead();
   const deleteCampanhaLead = useDeleteCampanhaLead();
   const deleteLead = useDeleteLead();

@@ -11,6 +11,8 @@ import {
   Activity,
   BarChart3,
   Flag,
+  Users,
+  User,
 } from "lucide-react";
 import { MetricCard } from "@/components/dashboard/MetricCard";
 import { GoalProgress } from "@/components/dashboard/GoalProgress";
@@ -24,7 +26,7 @@ import { SalesBreakdown } from "@/components/dashboard/SalesBreakdown";
 import { QuickStats } from "@/components/dashboard/QuickStats";
 import { PriorityLeads } from "@/components/dashboard/PriorityLeads";
 import { useDashboardMetrics, useFunnelData, useRankingData, useConversionRates } from "@/hooks/useDashboardMetrics";
-import { useTeamGoals } from "@/hooks/useGoals";
+import { useTeamGoals, useIndividualGoals } from "@/hooks/useGoals";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOrganization } from "@/hooks/useOrganization";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -58,11 +60,15 @@ export default function Dashboard() {
   const expectedProgress = (dayOfMonth / daysInMonth) * 100;
 
   // Hooks devem ser chamados ANTES de qualquer return condicional (Rules of Hooks)
+  // metrics = individual metrics for sellers (auto filterByMe), total for admins
   const { data: metrics, isLoading: metricsLoading } = useDashboardMetrics(month, year);
+  // totalMetrics = always unfiltered (org-wide total), used in velocímetro team section
+  const { data: totalMetrics, isLoading: totalMetricsLoading } = useDashboardMetrics(month, year, null);
   const { data: funnelData, isLoading: funnelLoading } = useFunnelData(month, year);
   const { data: rankingData, isLoading: rankingLoading } = useRankingData(month, year);
   const { data: conversionRates, isLoading: conversionLoading } = useConversionRates(month, year);
   const { data: teamGoals, isLoading: goalsLoading } = useTeamGoals(month, year);
+  const { data: individualGoals } = useIndividualGoals(month, year);
 
   const userName = user?.user_metadata?.full_name?.split(" ")[0] || user?.email?.split("@")[0] || "Usuário";
 
@@ -73,15 +79,23 @@ export default function Dashboard() {
     return "Boa noite";
   };
 
-  // Find specific goals
+  const isAdmin = role === "admin";
+
+  // Find specific team goals
   const faturamentoGoal = teamGoals?.find((g) => g.type === "faturamento");
   const clientesGoal = teamGoals?.find((g) => g.type === "clientes");
   const reunioesGoal = teamGoals?.find((g) => g.type === "reunioes");
 
-  // Calculate expected progress
-  const expectedFaturamento = faturamentoGoal 
-    ? (faturamentoGoal.target_value * expectedProgress) / 100 
+  // Calculate expected progress (based on team goal)
+  const expectedFaturamento = faturamentoGoal
+    ? (faturamentoGoal.target_value * expectedProgress) / 100
     : 0;
+
+  // Individual goal for the currently logged-in seller
+  const myTeamMemberId = currentTeamMember?.id;
+  const myCloserGoal = individualGoals?.salesGoals?.find((g) => g.id === myTeamMemberId);
+  const mySdrGoal = individualGoals?.meetingsGoals?.find((g) => g.id === myTeamMemberId);
+  const myIndividualGoal = myCloserGoal ?? mySdrGoal;
 
   // Transform ranking data for preview
   const topClosers = rankingData?.salesRanking?.slice(0, 5).map(c => ({
@@ -98,7 +112,7 @@ export default function Dashboard() {
     color: step.color.replace("hsl(var(--", "bg-").replace("))", ""),
   })) || [];
 
-  const isLoading = metricsLoading || funnelLoading || rankingLoading || goalsLoading;
+  const isLoading = metricsLoading || totalMetricsLoading || funnelLoading || rankingLoading || goalsLoading;
 
   if (isLoading) {
     return (
@@ -288,38 +302,111 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div className="grid gap-6">
-            {faturamentoGoal && (
-              <GoalProgress
-                title="Meta de Faturamento"
-                current={metrics?.vendaTotal || 0}
-                goal={faturamentoGoal.target_value}
-                unit="R$ "
-              />
-            )}
-            {clientesGoal && (
-              <GoalProgress
-                title="Meta de Novos Clientes"
-                current={metrics?.novosClientes || 0}
-                goal={clientesGoal.target_value}
-              />
-            )}
-            {reunioesGoal && (
-              <GoalProgress
-                title="Meta de Reuniões Comparecidas"
-                current={metrics?.reunioesComparecidas || 0}
-                goal={reunioesGoal.target_value}
-              />
-            )}
-            {faturamentoGoal && expectedFaturamento > 0 && (
-              <GoalProgress
-                title="Onde deveria estar hoje"
-                current={metrics?.vendaTotal || 0}
-                goal={Math.round(expectedFaturamento)}
-                unit="R$ "
-              />
-            )}
-          </div>
+          {isAdmin ? (
+            /* Admin: contexto único — métricas totais vs metas da equipe */
+            <div className="grid gap-6">
+              {faturamentoGoal && (
+                <GoalProgress
+                  title="Meta de Faturamento"
+                  current={metrics?.vendaTotal || 0}
+                  goal={faturamentoGoal.target_value}
+                  unit="R$ "
+                />
+              )}
+              {clientesGoal && (
+                <GoalProgress
+                  title="Meta de Novos Clientes"
+                  current={metrics?.novosClientes || 0}
+                  goal={clientesGoal.target_value}
+                />
+              )}
+              {reunioesGoal && (
+                <GoalProgress
+                  title="Meta de Reuniões Comparecidas"
+                  current={metrics?.reunioesComparecidas || 0}
+                  goal={reunioesGoal.target_value}
+                />
+              )}
+              {faturamentoGoal && expectedFaturamento > 0 && (
+                <GoalProgress
+                  title="Onde deveria estar hoje"
+                  current={metrics?.vendaTotal || 0}
+                  goal={Math.round(expectedFaturamento)}
+                  unit="R$ "
+                />
+              )}
+            </div>
+          ) : (
+            /* Vendedor: dois contextos — Equipe e Individual */
+            <div className="space-y-6">
+              {/* Contexto: Equipe — métricas totais vs metas da equipe */}
+              <div>
+                <p className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-2">
+                  <Users className="w-4 h-4" />
+                  Equipe
+                </p>
+                <div className="grid gap-4">
+                  {faturamentoGoal && (
+                    <GoalProgress
+                      title="Meta de Faturamento"
+                      current={totalMetrics?.vendaTotal || 0}
+                      goal={faturamentoGoal.target_value}
+                      unit="R$ "
+                    />
+                  )}
+                  {clientesGoal && (
+                    <GoalProgress
+                      title="Meta de Novos Clientes"
+                      current={totalMetrics?.novosClientes || 0}
+                      goal={clientesGoal.target_value}
+                    />
+                  )}
+                  {reunioesGoal && (
+                    <GoalProgress
+                      title="Meta de Reuniões Comparecidas"
+                      current={totalMetrics?.reunioesComparecidas || 0}
+                      goal={reunioesGoal.target_value}
+                    />
+                  )}
+                  {faturamentoGoal && expectedFaturamento > 0 && (
+                    <GoalProgress
+                      title="Onde deveria estar hoje"
+                      current={totalMetrics?.vendaTotal || 0}
+                      goal={Math.round(expectedFaturamento)}
+                      unit="R$ "
+                    />
+                  )}
+                </div>
+              </div>
+
+              {/* Contexto: Individual — métricas do próprio vendedor vs meta individual */}
+              {myIndividualGoal && myIndividualGoal.goal > 0 && (
+                <div>
+                  <p className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-2">
+                    <User className="w-4 h-4" />
+                    Meu Desempenho
+                  </p>
+                  <div className="grid gap-4">
+                    {myCloserGoal && myCloserGoal.goal > 0 && (
+                      <GoalProgress
+                        title="Minha Meta de Vendas"
+                        current={metrics?.vendaTotal || 0}
+                        goal={myCloserGoal.goal}
+                        unit="R$ "
+                      />
+                    )}
+                    {mySdrGoal && mySdrGoal.goal > 0 && (
+                      <GoalProgress
+                        title="Minha Meta de Reuniões"
+                        current={metrics?.reunioesComparecidas || 0}
+                        goal={mySdrGoal.goal}
+                      />
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </motion.div>
       )}
 

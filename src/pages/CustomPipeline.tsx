@@ -216,8 +216,39 @@ export default function CustomPipelinePage() {
           onOpenChange={setShowSettings}
           pipeline={pipeline}
           stages={stages}
+          onRequestDelete={() => {
+            setShowSettings(false);
+            setShowDeletePipeline(true);
+          }}
         />
       )}
+
+      {/* Confirmar exclusão do funil */}
+      <AlertDialog open={showDeletePipeline} onOpenChange={setShowDeletePipeline}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-destructive" />
+              Excluir Funil "{pipeline?.name}"?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação não pode ser desfeita. O funil será desativado e deixará de aparecer na sidebar e em todas as listagens.
+              <br /><br />
+              <strong>Os leads e registros do sistema não serão apagados.</strong>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeletePipeline}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deletePipeline.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Excluir Funil
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Lead Detail Drawer */}
       <LeadDetailDrawer
