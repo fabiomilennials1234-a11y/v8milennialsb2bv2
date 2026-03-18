@@ -4151,6 +4151,7 @@ export type Database = {
           created_at: string
           id: string
           lead_id: string
+          loss_reason: string | null
           metrics_period_at: string | null
           notes: string | null
           organization_id: string | null
@@ -4170,6 +4171,7 @@ export type Database = {
           created_at?: string
           id?: string
           lead_id: string
+          loss_reason?: string | null
           metrics_period_at?: string | null
           notes?: string | null
           organization_id?: string | null
@@ -4189,6 +4191,7 @@ export type Database = {
           created_at?: string
           id?: string
           lead_id?: string
+          loss_reason?: string | null
           metrics_period_at?: string | null
           notes?: string | null
           organization_id?: string | null

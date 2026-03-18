@@ -64,6 +64,18 @@ import { useFeaturePermission } from "@/hooks/useUserRole";
 
 
 // ---------------------------------------------------------------------------
+// Loss reasons for "perdido" status
+// ---------------------------------------------------------------------------
+const LOSS_REASONS = [
+  { value: "sem_budget", label: "Sem budget" },
+  { value: "concorrencia", label: "Concorrência" },
+  { value: "timing", label: "Timing errado" },
+  { value: "follow_up_fraco", label: "Follow-up fraco" },
+  { value: "produto_nao_adequado", label: "Produto não adequado" },
+  { value: "outro", label: "Outro" },
+];
+
+// ---------------------------------------------------------------------------
 // Persisted filter state — scoped per org + user, TTL 24 h
 // ---------------------------------------------------------------------------
 type PropostasFilterState = {
@@ -139,6 +151,15 @@ export default function PipePropostas() {
     lead: any;
     items: Array<{ product_name: string; sale_value: number }>;
     totalValue: number;
+  } | null>(null);
+
+  // State for loss reason dialog (drag-to-perdido)
+  const [lossReasonDialogOpen, setLossReasonDialogOpen] = useState(false);
+  const [selectedLossReason, setSelectedLossReason] = useState<string>("");
+  const [pendingPerdido, setPendingPerdido] = useState<{
+    itemId: string;
+    leadId: string;
+    closerId: string | null;
   } | null>(null);
 
   const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; pipeId: string; leadId: string } | null>(null);
@@ -533,7 +554,43 @@ export default function PipePropostas() {
       }
     }
 
+    // If moving to "perdido", show loss reason dialog
+    if (newStatus === "perdido") {
+      setPendingPerdido({
+        itemId,
+        leadId: item.lead_id,
+        closerId: item.closer_id,
+      });
+      setSelectedLossReason("");
+      setLossReasonDialogOpen(true);
+      return;
+    }
+
     await executeStatusChange(itemId, newStatus, item.lead_id, item.closer_id);
+  };
+
+  // Handle loss reason dialog confirmation
+  const handleLossReasonConfirm = async () => {
+    if (!pendingPerdido) return;
+    await executeStatusChange(
+      pendingPerdido.itemId,
+      "perdido",
+      pendingPerdido.leadId,
+      pendingPerdido.closerId,
+      undefined,
+      false,
+      selectedLossReason || null
+    );
+    setLossReasonDialogOpen(false);
+    setPendingPerdido(null);
+    setSelectedLossReason("");
+  };
+
+  const handleLossReasonCancel = () => {
+    setLossReasonDialogOpen(false);
+    setPendingPerdido(null);
+    setSelectedLossReason("");
+    toast("Operação cancelada");
   };
 
   // Execute status change (called directly or after date/TinyERP modal)
@@ -543,7 +600,8 @@ export default function PipePropostas() {
     leadId: string,
     closerId: string | null,
     commitmentDate?: Date,
-    skipAutoPush?: boolean
+    skipAutoPush?: boolean,
+    lossReason?: string | null
   ) => {
     try {
       const updates: any = {
@@ -562,6 +620,11 @@ export default function PipePropostas() {
       // If moved to "vendido" or "perdido", set closed_at date
       if (newStatus === "vendido" || newStatus === "perdido") {
         updates.closed_at = new Date().toISOString();
+      }
+
+      // If loss reason provided (for perdido), save it
+      if (newStatus === "perdido" && lossReason) {
+        updates.loss_reason = lossReason;
       }
 
       await updatePipeProposta.mutateAsync(updates);
@@ -1170,6 +1233,41 @@ export default function PipePropostas() {
         onCancel={handleCommitmentDateCancel}
         leadName={pendingStatusChange?.leadName || "Lead"}
       />
+
+      {/* Loss Reason Dialog (drag-to-perdido) */}
+      <AlertDialog open={lossReasonDialogOpen} onOpenChange={(open) => { if (!open) { setLossReasonDialogOpen(false); setPendingPerdido(null); setSelectedLossReason(""); } }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Motivo da perda</AlertDialogTitle>
+            <AlertDialogDescription>
+              Selecione o motivo pelo qual esta proposta foi perdida. Isso ajuda a melhorar o processo comercial.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="px-1 py-2">
+            <Select value={selectedLossReason} onValueChange={setSelectedLossReason}>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecionar motivo (opcional)" />
+              </SelectTrigger>
+              <SelectContent>
+                {LOSS_REASONS.map((r) => (
+                  <SelectItem key={r.value} value={r.value}>
+                    {r.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={handleLossReasonCancel}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleLossReasonConfirm}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Confirmar Perda
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Delete single lead from pipe */}
       <AlertDialog open={deleteDialog?.open} onOpenChange={(open) => !open && setDeleteDialog(null)}>

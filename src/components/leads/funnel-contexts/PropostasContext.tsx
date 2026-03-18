@@ -5,6 +5,15 @@
  * notes, TinyERP integration (OrderStatus + ConfirmDialog), delete.
  */
 
+const LOSS_REASONS = [
+  { value: "sem_budget", label: "Sem budget" },
+  { value: "concorrencia", label: "Concorrência" },
+  { value: "timing", label: "Timing errado" },
+  { value: "follow_up_fraco", label: "Follow-up fraco" },
+  { value: "produto_nao_adequado", label: "Produto não adequado" },
+  { value: "outro", label: "Outro" },
+];
+
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
@@ -79,6 +88,7 @@ export function PropostasContext({ lead, pipeData: proposta, onSuccess }: Propos
 
   const [formData, setFormData] = useState({
     status: proposta?.status || "marcar_compromisso",
+    loss_reason: proposta?.loss_reason || "",
     contract_duration: proposta?.contract_duration || "",
     responsible_id: proposta?.responsible_id || proposta?.closer_id || "",
     commitment_date: proposta?.commitment_date ? format(new Date(proposta.commitment_date), "yyyy-MM-dd'T'HH:mm") : "",
@@ -96,6 +106,7 @@ export function PropostasContext({ lead, pipeData: proposta, onSuccess }: Propos
     if (proposta) {
       setFormData({
         status: proposta.status || "marcar_compromisso",
+        loss_reason: proposta.loss_reason || "",
         contract_duration: proposta.contract_duration || "",
         responsible_id: proposta.responsible_id || proposta.closer_id || "",
         commitment_date: proposta.commitment_date ? format(new Date(proposta.commitment_date), "yyyy-MM-dd'T'HH:mm") : "",
@@ -205,6 +216,7 @@ export function PropostasContext({ lead, pipeData: proposta, onSuccess }: Propos
         commitment_date: formData.commitment_date ? new Date(formData.commitment_date).toISOString() : null,
         notes: formData.notes || null,
         closed_at: ["vendido", "perdido"].includes(formData.status) ? new Date().toISOString() : null,
+        loss_reason: formData.status === "perdido" ? (formData.loss_reason || null) : null,
         skip_auto_push: shouldShowTinyModal,
       });
 
@@ -347,7 +359,7 @@ export function PropostasContext({ lead, pipeData: proposta, onSuccess }: Propos
           {statusColumns.map((status) => (
             <button
               key={status.id}
-              onClick={() => setFormData({ ...formData, status: status.id })}
+              onClick={() => setFormData({ ...formData, status: status.id, loss_reason: status.id !== "perdido" ? "" : formData.loss_reason })}
               className={cn(
                 "p-2.5 rounded-lg border-2 text-left transition-all hover:border-primary/50",
                 formData.status === status.id ? "border-primary bg-primary/5" : "border-muted"
@@ -358,6 +370,28 @@ export function PropostasContext({ lead, pipeData: proposta, onSuccess }: Propos
             </button>
           ))}
         </div>
+
+        {/* Loss reason — shown when status is "perdido" */}
+        {formData.status === "perdido" && (
+          <div className="mt-3 space-y-1.5">
+            <Label className="text-xs">Motivo da perda</Label>
+            <Select
+              value={formData.loss_reason || ""}
+              onValueChange={(v) => setFormData({ ...formData, loss_reason: v })}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Selecionar motivo (opcional)" />
+              </SelectTrigger>
+              <SelectContent>
+                {LOSS_REASONS.map((r) => (
+                  <SelectItem key={r.value} value={r.value}>
+                    {r.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
       </div>
 
       {/* Config fields */}
