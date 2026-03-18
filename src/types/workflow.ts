@@ -276,6 +276,7 @@ export interface ActionNodeData {
   campaignStageId?: string;
   campaignStageName?: string;
   campaignTemplateId?: string;
+  campaignTemplateName?: string;
   // Calendar
   eventTitle?: string;
   eventDescription?: string;
@@ -701,6 +702,11 @@ export const WORKFLOW_VARIABLES: WorkflowVariable[] = [
   // Campanha
   { key: "{{campanha_nome}}",    label: "Nome da campanha",    category: "Campanha" },
   { key: "{{campanha_estagio}}", label: "Estágio na campanha", category: "Campanha" },
+  // I.A.
+  { key: "{{ai_resumo}}",        label: "Resumo da conversa (I.A.)",       category: "I.A." },
+  { key: "{{ai_sentimento}}",    label: "Sentimento (positive/neutral/negative)", category: "I.A." },
+  { key: "{{ai_temperatura}}",   label: "Temperatura do lead (cold/warm/hot)",    category: "I.A." },
+  { key: "{{ai_proxima_acao}}",  label: "Próxima ação sugerida (I.A.)",    category: "I.A." },
   // Personalizado
   { key: "{{custom.campo}}",  label: "Campo personalizado (ex: {{custom.cnpj}})", category: "Personalizado" },
   // Sistema
