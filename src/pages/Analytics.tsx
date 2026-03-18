@@ -1,10 +1,13 @@
 import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AnalyticsFilters } from "@/components/analytics/AnalyticsFilters";
+import { OverviewTab } from "@/components/analytics/tabs/OverviewTab";
+import { FinanceiroTab } from "@/components/analytics/tabs/FinanceiroTab";
 import { ComercialTab } from "@/components/analytics/tabs/ComercialTab";
+import { PipesFunisTab } from "@/components/analytics/tabs/PipesFunisTab";
 
 export default function Analytics() {
-  const [activeTab, setActiveTab] = useState("comercial");
+  const [activeTab, setActiveTab] = useState("overview");
 
   return (
     <div className="space-y-4">
@@ -16,14 +19,14 @@ export default function Analytics() {
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
-          <TabsTrigger value="overview" disabled>
+          <TabsTrigger value="overview">
             Visão Geral
           </TabsTrigger>
-          <TabsTrigger value="financeiro" disabled>
+          <TabsTrigger value="financeiro">
             Financeiro
           </TabsTrigger>
           <TabsTrigger value="comercial">Comercial</TabsTrigger>
-          <TabsTrigger value="pipes" disabled>
+          <TabsTrigger value="pipes">
             Pipes & Funis
           </TabsTrigger>
           <TabsTrigger value="engajamento" disabled>
@@ -31,8 +34,20 @@ export default function Analytics() {
           </TabsTrigger>
         </TabsList>
 
+        <TabsContent value="overview" className="space-y-4">
+          <OverviewTab />
+        </TabsContent>
+
+        <TabsContent value="financeiro" className="space-y-4">
+          <FinanceiroTab />
+        </TabsContent>
+
         <TabsContent value="comercial" className="space-y-4">
           <ComercialTab />
+        </TabsContent>
+
+        <TabsContent value="pipes" className="space-y-4">
+          <PipesFunisTab />
         </TabsContent>
       </Tabs>
     </div>
