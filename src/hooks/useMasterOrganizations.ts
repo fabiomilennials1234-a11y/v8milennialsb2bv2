@@ -109,24 +109,6 @@ export function useMasterOrganizationStats() {
   });
 }
 
-// Todos os sidebar keys para CLIENTE em orgs OUTBOUND (tudo configurável pelo AGENCY)
-const DEFAULT_SIDEBAR_PERMISSIONS: { sidebar_key: string; is_visible: boolean }[] = [
-  { sidebar_key: "dashboard", is_visible: true },
-  { sidebar_key: "campanhas", is_visible: false },
-  { sidebar_key: "marketing", is_visible: true },
-  { sidebar_key: "chat_whatsapp", is_visible: true },
-  { sidebar_key: "funis", is_visible: true },
-  { sidebar_key: "follow_ups", is_visible: true },
-  { sidebar_key: "leads", is_visible: true },
-  { sidebar_key: "performance", is_visible: false },
-  { sidebar_key: "comissoes", is_visible: false },
-  { sidebar_key: "copilot", is_visible: true },
-  { sidebar_key: "equipe", is_visible: false },
-  { sidebar_key: "produtos", is_visible: false },
-  { sidebar_key: "tv_dashboard", is_visible: false },
-  { sidebar_key: "configuracoes", is_visible: false },
-];
-
 // Badges base do sistema para orgs OUTBOUND
 const SYSTEM_BADGES: { name: string; description: string; icon: string; criteria_type: string; criteria_value: number }[] = [
   { name: "Primeiro Lead Quente", description: "Recebeu o primeiro lead quente", icon: "flame", criteria_type: "leads_quentes", criteria_value: 1 },
@@ -170,22 +152,8 @@ export function useMasterCreateOrganization() {
 
       if (error) throw error;
 
-      // 2. Se OUTBOUND: seed sidebar permissions + badges base
+      // 2. Se OUTBOUND: seed badges base
       if (orgType === "outbound") {
-        const sidebarRows = DEFAULT_SIDEBAR_PERMISSIONS.map((p) => ({
-          organization_id: org.id,
-          sidebar_key: p.sidebar_key,
-          is_visible: p.is_visible,
-        }));
-
-        const { error: sidebarError } = await supabase
-          .from("client_sidebar_permissions")
-          .insert(sidebarRows);
-
-        if (sidebarError) {
-          console.error("Error seeding sidebar permissions:", sidebarError);
-        }
-
         const badgeRows = SYSTEM_BADGES.map((b) => ({
           organization_id: org.id,
           name: b.name,

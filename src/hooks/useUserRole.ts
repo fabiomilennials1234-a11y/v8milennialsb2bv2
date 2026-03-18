@@ -162,19 +162,3 @@ export function useFeaturePermission(featureKey: string): { allowed: boolean; is
   };
 }
 
-// ─── Deprecated hooks (kept for compatibility during migration) ──
-
-/** @deprecated Use useIsAdmin() instead — agency is now admin */
-export function useIsAgency() {
-  return { isAgency: false, isLoading: false };
-}
-
-/** @deprecated Use useFeaturePermission() instead */
-export function useIsBDR() {
-  return { isBDR: false, isLoading: false };
-}
-
-/** @deprecated Use useFeaturePermission() instead */
-export function useIsCliente() {
-  return { isCliente: false, isLoading: false };
-}
