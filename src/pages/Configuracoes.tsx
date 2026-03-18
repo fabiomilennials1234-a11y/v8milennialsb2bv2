@@ -60,6 +60,8 @@ import { TinyErpSettings } from "@/components/settings/TinyErpSettings";
 import { ElevenLabsSettings } from "@/components/settings/ElevenLabsSettings";
 import { WebhookSettings } from "@/components/settings/WebhookSettings";
 import { HelpCenter } from "@/components/settings/help/HelpCenter";
+import { MilestonesConfig } from "@/components/settings/MilestonesConfig";
+import { useOrganization } from "@/hooks/useOrganization";
 import { toast } from "sonner";
 
 const colorOptions = [
@@ -467,7 +469,8 @@ function GeneralSettings() {
 }
 
 export default function Configuracoes() {
-  const totalTabs = 7;
+  const { orgType } = useOrganization();
+  const totalTabs = orgType === "outbound" ? 8 : 7;
 
   return (
     <div className="space-y-6">
@@ -512,6 +515,9 @@ export default function Configuracoes() {
             <Settings className="w-4 h-4" />
             Geral
           </TabsTrigger>
+          {orgType === "outbound" && (
+            <TabsTrigger value="marcos">Marcos & Badges</TabsTrigger>
+          )}
           <TabsTrigger value="ajuda" className="gap-2">
             <HelpCircle className="w-4 h-4" />
             Ajuda
@@ -580,6 +586,10 @@ export default function Configuracoes() {
               </CardContent>
             </Card>
           </TabsContent>
+
+          {orgType === "outbound" && (
+            <TabsContent value="marcos"><MilestonesConfig /></TabsContent>
+          )}
 
         </div>
       </Tabs>
