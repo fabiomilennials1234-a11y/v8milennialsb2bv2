@@ -384,9 +384,10 @@ export function CreateCampanhaModal({ open, onOpenChange }: CreateCampanhaModalP
       toast.success("Campanha criada com sucesso!");
       onOpenChange(false);
       resetForm();
-    } catch (error) {
-      toast.error("Erro ao criar campanha");
-      console.error(error);
+    } catch (error: any) {
+      const msg = error?.message || error?.error?.message || "Erro desconhecido";
+      toast.error("Erro ao criar campanha", { description: msg, duration: 10000 });
+      console.error("Erro ao criar campanha:", error);
     }
   };
 
