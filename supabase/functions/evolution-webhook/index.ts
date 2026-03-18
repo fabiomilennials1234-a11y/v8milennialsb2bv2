@@ -5,6 +5,8 @@ import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { findLeadByPhoneOrEmail, associateMessagesToLead, getOrCreateLead } from "../_shared/lead-service.ts";
 import { smartSplitMessage, type NaturalMessagingConfig } from "../_shared/natural-messaging.ts";
 import { logRuntime } from "../_shared/logger.ts";
+import { generateTtsAudio, truncateForTts } from "../_shared/tts-elevenlabs.ts";
+import { sendWhatsAppAudio } from "../_shared/audio-sender.ts";
 
 /**
  * Evolution API Webhook Receiver
@@ -458,7 +460,8 @@ async function triggerAgentMessage(
   organizationId: string,
   phoneNumber: string,
   messageText: string,
-  pushName?: string
+  pushName?: string,
+  incomingMessageType?: string
 ): Promise<{ success: boolean; message?: string; error?: string }> {
   try {
     console.log("[Evolution Webhook] Triggering agent-message for:", {
@@ -482,6 +485,7 @@ async function triggerAgentMessage(
           channel: "whatsapp",
           organization_id: organizationId,
           push_name: pushName,
+          incoming_message_type: incomingMessageType || "text",
         }),
       }
     );
@@ -576,7 +580,8 @@ Deno.serve(withSentry('evolution-webhook', async (req) => {
           availability,
           response_delay_seconds,
           attend_unknown_contacts,
-          natural_messaging_config
+          natural_messaging_config,
+          tts_config
         )
       `)
       .eq("instance_name", payload.instance)
@@ -756,7 +761,7 @@ async function handleMessagesUpsert(
     organization_id: string; 
     instance_name: string;
     copilot_agent_id?: string | null;
-    copilot_agents?: { id: string; name: string; is_active: boolean; is_default: boolean; attend_unknown_contacts?: boolean; natural_messaging_config?: NaturalMessagingConfig | null } | null;
+    copilot_agents?: { id: string; name: string; is_active: boolean; is_default: boolean; attend_unknown_contacts?: boolean; natural_messaging_config?: NaturalMessagingConfig | null; tts_config?: { provider: string; voice_id: string; mode: "always" | "mirror"; max_chars: number; model_id?: string; stability?: number; similarity_boost?: number } | null } | null;
   },
   data: Record<string, unknown>
 ) {
@@ -1025,7 +1030,8 @@ async function handleMessagesUpsert(
             instance.organization_id,
             phoneNumber,
             batchedMessageText,
-            msg.pushName
+            msg.pushName,
+            messageType
           );
 
           // Marcar TODAS as mensagens como processadas
@@ -1043,38 +1049,120 @@ async function handleMessagesUpsert(
 
           // Se o agente retornou uma resposta, enviar de volta via WhatsApp
           if (agentResult.success && agentResult.message) {
-            // @ts-ignore - natural_messaging_config vem do join
-            const rawNaturalConfig = instance.copilot_agents?.natural_messaging_config;
-            // Default: sempre ativo com intensidade "natural" se config for NULL
-            const naturalConfig: NaturalMessagingConfig = rawNaturalConfig?.enabled != null
-              ? rawNaturalConfig as NaturalMessagingConfig
-              : { enabled: true, intensity: "natural" };
-            const sent = await sendWhatsAppResponse(
-              instance.instance_name,
-              phoneNumber,
-              agentResult.message,
-              naturalConfig
+            // @ts-ignore - tts_config vem do join
+            const ttsConfig = instance.copilot_agents?.tts_config;
+
+            // Decide if we should generate TTS audio
+            const shouldGenerateAudio = ttsConfig && (
+              ttsConfig.mode === "always" ||
+              (ttsConfig.mode === "mirror" && (messageType === "audio" || messageType === "ptt"))
             );
 
-            // Salvar mensagem de saída no banco
-            if (sent) {
-              const { error: outMsgError } = await supabase.from("whatsapp_messages").insert({
-                organization_id: instance.organization_id,
-                instance_id: instance.id,
-                message_id: `agent_${Date.now()}_${Math.random().toString(36).substring(7)}`,
-                remote_jid: `${phoneNumber}@s.whatsapp.net`,
-                phone_number: phoneNumber,
-                direction: "outgoing",
-                message_type: "text",
-                content: agentResult.message,
-                status: "sent",
-                timestamp: new Date().toISOString(),
-              });
+            let sentAsAudio = false;
 
-              if (outMsgError) {
-                console.error("[Evolution Webhook] Error saving outgoing message:", outMsgError);
+            if (shouldGenerateAudio) {
+              // Resolve API key: org DB → env var
+              const { data: orgData } = await supabase
+                .from("organizations")
+                .select("elevenlabs_api_key")
+                .eq("id", instance.organization_id)
+                .single();
+
+              const apiKey = orgData?.elevenlabs_api_key || Deno.env.get("ELEVENLABS_API_KEY");
+
+              if (apiKey) {
+                // Truncate text for audio
+                const audioText = truncateForTts(agentResult.message, ttsConfig.max_chars || 500);
+
+                // Generate TTS audio
+                const ttsResult = await generateTtsAudio(
+                  {
+                    text: audioText,
+                    voiceId: ttsConfig.voice_id,
+                    modelId: ttsConfig.model_id,
+                    stability: ttsConfig.stability,
+                    similarityBoost: ttsConfig.similarity_boost,
+                    apiKey,
+                  },
+                  instance.organization_id
+                );
+
+                if (ttsResult.success && ttsResult.audioUrl) {
+                  // Send as voice note
+                  const audioResult = await sendWhatsAppAudio(
+                    instance.instance_name,
+                    phoneNumber,
+                    ttsResult.audioUrl
+                  );
+
+                  if (audioResult.success) {
+                    sentAsAudio = true;
+                    console.log("[Evolution Webhook] TTS audio sent successfully");
+
+                    // Save outgoing message as ptt with text content for chat display
+                    const { error: outMsgError } = await supabase.from("whatsapp_messages").insert({
+                      organization_id: instance.organization_id,
+                      instance_id: instance.id,
+                      message_id: audioResult.messageId || `agent_tts_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+                      remote_jid: `${phoneNumber}@s.whatsapp.net`,
+                      phone_number: phoneNumber,
+                      direction: "outgoing",
+                      message_type: "ptt",
+                      content: agentResult.message,
+                      media_url: ttsResult.audioUrl,
+                      status: "sent",
+                      timestamp: new Date().toISOString(),
+                    });
+
+                    if (outMsgError) {
+                      console.error("[Evolution Webhook] Error saving TTS outgoing message:", outMsgError);
+                    } else {
+                      console.log("[Evolution Webhook] TTS outgoing message saved");
+                    }
+                  } else {
+                    console.warn("[Evolution Webhook] TTS audio send failed, falling back to text:", audioResult.error);
+                  }
+                } else {
+                  console.warn("[Evolution Webhook] TTS generation failed, falling back to text:", ttsResult.error);
+                }
               } else {
-                console.log("[Evolution Webhook] Outgoing agent message saved");
+                console.warn("[Evolution Webhook] No ElevenLabs API key found, falling back to text");
+              }
+            }
+
+            // Fallback: send as text (or if audio was not requested)
+            if (!sentAsAudio) {
+              // @ts-ignore - natural_messaging_config vem do join
+              const rawNaturalConfig = instance.copilot_agents?.natural_messaging_config;
+              const naturalConfig: NaturalMessagingConfig = rawNaturalConfig?.enabled != null
+                ? rawNaturalConfig as NaturalMessagingConfig
+                : { enabled: true, intensity: "natural" };
+              const sent = await sendWhatsAppResponse(
+                instance.instance_name,
+                phoneNumber,
+                agentResult.message,
+                naturalConfig
+              );
+
+              if (sent) {
+                const { error: outMsgError } = await supabase.from("whatsapp_messages").insert({
+                  organization_id: instance.organization_id,
+                  instance_id: instance.id,
+                  message_id: `agent_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+                  remote_jid: `${phoneNumber}@s.whatsapp.net`,
+                  phone_number: phoneNumber,
+                  direction: "outgoing",
+                  message_type: "text",
+                  content: agentResult.message,
+                  status: "sent",
+                  timestamp: new Date().toISOString(),
+                });
+
+                if (outMsgError) {
+                  console.error("[Evolution Webhook] Error saving outgoing message:", outMsgError);
+                } else {
+                  console.log("[Evolution Webhook] Outgoing agent message saved");
+                }
               }
             }
           } else if (!agentResult.success) {
