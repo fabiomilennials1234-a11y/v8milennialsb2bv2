@@ -90,16 +90,26 @@ Deno.serve(withSentry('elevenlabs-proxy', async (req) => {
       );
     }
 
-    // Resolve API key
-    const { data: orgData, error: orgError } = await supabase
-      .from("organizations")
-      .select("elevenlabs_api_key")
-      .eq("id", membership.organization_id)
-      .single();
+    // Resolve API key: try org DB first, fall back to env var
+    let orgApiKey: string | null = null;
+    try {
+      const { data: orgData, error: orgError } = await supabase
+        .from("organizations")
+        .select("elevenlabs_api_key")
+        .eq("id", membership.organization_id)
+        .single();
 
-    console.log("[elevenlabs-proxy] Org data:", { hasKey: !!orgData?.elevenlabs_api_key, orgError: orgError?.message });
+      if (orgError) {
+        console.warn("[elevenlabs-proxy] Org query error (falling back to env var):", orgError.message);
+      } else {
+        orgApiKey = (orgData as any)?.elevenlabs_api_key || null;
+      }
+    } catch (e) {
+      console.warn("[elevenlabs-proxy] Org query failed (falling back to env var):", e);
+    }
 
-    const apiKey = orgData?.elevenlabs_api_key || Deno.env.get("ELEVENLABS_API_KEY");
+    const apiKey = orgApiKey || Deno.env.get("ELEVENLABS_API_KEY");
+    console.log("[elevenlabs-proxy] API key resolved:", { fromOrg: !!orgApiKey, fromEnv: !!Deno.env.get("ELEVENLABS_API_KEY"), hasKey: !!apiKey });
     if (!apiKey) {
       return new Response(
         JSON.stringify({ error: "ElevenLabs API key not configured. Add it in organization settings." }),
