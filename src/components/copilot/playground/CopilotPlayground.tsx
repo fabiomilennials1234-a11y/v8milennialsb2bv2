@@ -142,7 +142,6 @@ function playgroundToAgentPayload(data: PlaygroundData) {
       can_create_lead: data.tools.CRIAR_LEAD?.enabled ?? false,
       can_transfer_human: data.tools.TRANSFERIR_HUMANO?.enabled ?? false,
       can_move_cards: data.tools.MOVER_CARD?.enabled ?? false,
-      can_create_custom_field: data.tools.CRIAR_CAMPO?.enabled ?? false,
       max_conversation_turns: 20,
       business_context: {},
       conversation_style: {},
