@@ -20,7 +20,7 @@ The Analytics module is a new top-level section in the v8 Milennials B2B platfor
 - Team member filter (all or specific seller)
 - Lead origin filter (all or specific origin)
 
-**Sidebar Integration:** New item "Analytics" with BarChart3 icon, placed after "Marketing" in the main navigation. Feature key: `analytics.view`.
+**Sidebar Integration:** New item "Analytics" with BarChart3 icon, placed after "Marketing" in the main navigation. Feature key: `analytics` (new key — must be added to `FeatureKey` union type in `feature-registry.ts`, to the `FEATURES` catalog, to `SIDEBAR_FEATURE_MAP` as `"/analytics": "analytics"`, and seeded in the backend `plan_features` table for relevant subscription plans).
 
 ## Data Sources
 
@@ -28,12 +28,12 @@ The Analytics module is a new top-level section in the v8 Milennials B2B platfor
 - `leads` — lead data, origin, segment, faturamento
 - `pipe_whatsapp` — qualification pipeline with timestamps
 - `pipe_confirmacao` — meeting confirmation pipeline with meeting dates
-- `pipe_propostas` — proposals with sales_value, type (unica/mrr/projeto), closed_at
+- `pipe_propostas` — proposals with sales_value, type (product_type enum: `mrr`, `projeto`, `unitario`, `physical`, `digital`, `service`), closed_at
 - `team_members` — seller data, roles
 - `goals` — monthly targets and achievements
 - `commissions` — commission rules and calculations
 - `pipeline_stages` — custom stage configuration
-- WhatsApp messages (for response time calculations)
+- `whatsapp_messages` — message history with `timestamp` (authoritative message time from WhatsApp), `direction` (inbound/outbound), for response time calculations. Use `timestamp` column (not `created_at`) for all time-based calculations.
 
 **External (future integration — Phase 4):**
 - Google Ads API — spend data for CAC calculation
@@ -43,10 +43,15 @@ The Analytics module is a new top-level section in the v8 Milennials B2B platfor
 ## Implementation Phases
 
 ### Phase 1: Infrastructure + Comercial Tab
-Core routing, layout, global filters, date range component, and the Comercial tab (richest existing data).
+- Core routing, layout, global filters, date range component
+- Feature registry: add `analytics` to `FeatureKey`, `FEATURES`, `SIDEBAR_FEATURE_MAP`, seed `plan_features`
+- Schema migration: add `loss_reason` text field to `pipe_propostas` + UI for sellers to record loss reason on deal closure
+- Comercial tab (richest existing data)
+- Win/Loss analysis shows placeholder until enough loss_reason data is collected (minimum 20 closed deals with reasons)
 
-### Phase 2: Financeiro + Pipes & Funis Tabs
-Financial analytics and pipeline analysis using existing data.
+### Phase 2: Financeiro + Pipes & Funis Tabs + Visão Geral
+- Financial analytics and pipeline analysis using existing data
+- Overview tab with cross-cutting insights
 
 ### Phase 3: Engajamento Tab
 Response time metrics requiring WhatsApp message timestamp analysis.
@@ -65,8 +70,13 @@ The overview tab surfaces the most important cross-cutting insights — the kind
 **1. Análise de Cohort — Retenção de Clientes**
 - Heatmap grid: rows = acquisition month (cohort), columns = months since acquisition (M0–M11)
 - Cells show retention % with color intensity (darker = higher retention)
-- Data source: `pipe_propostas` (vendido status) cross-referenced with ongoing activity
+- **Definition of "retained":** A customer is considered retained in month M(n) if:
+  - For MRR-type sales: `closed_at` + `contract_duration` has not expired (estimated, since no `cancelled_at` exists), OR the customer made a new purchase in that month
+  - For non-MRR sales: the customer made a new purchase or has active engagement (WhatsApp messages) in that month
+  - Note: this is an approximation. Accurate churn tracking requires a `churned_at` field (see Schema Additions)
+- Data source: `pipe_propostas` (vendido status) cross-referenced with subsequent purchases and `contract_duration`
 - Helps identify: which months produced loyal customers, retention trends over time
+- Minimum data: requires at least 2 months of sales data to display
 
 **2. Unit Economics**
 - 6-card grid showing calculated metrics:
@@ -74,8 +84,8 @@ The overview tab surfaces the most important cross-cutting insights — the kind
   - **LTV** (Lifetime Value): average revenue per customer × average customer lifespan
   - **LTV/CAC Ratio**: with health indicator (>3x = healthy, 1-3x = attention, <1x = danger)
   - **Payback Period**: CAC ÷ average monthly revenue per customer
-  - **Churn Rate**: customers lost ÷ total customers at start of period
-  - **Revenue Churn**: MRR lost ÷ total MRR at start of period
+  - **Churn Rate**: customers lost ÷ total customers at start of period. Estimated using `contract_duration`: a customer is considered churned when `closed_at` + `contract_duration` < current date and no renewal purchase exists. Labeled as "estimated" in UI until a `churned_at` field is added.
+  - **Revenue Churn**: MRR lost from churned customers ÷ total MRR at start of period. Same estimation logic as Churn Rate.
 - Each card shows value, trend vs previous period, and health benchmark
 
 **3. Atribuição por Origem — ROI Real**
@@ -105,7 +115,21 @@ The overview tab surfaces the most important cross-cutting insights — the kind
   - **Alerta** (red): degrading metrics that need attention
   - **Tendência** (purple): sustained trends with projections
   - **Padrão** (orange): behavioral patterns discovered in data
-- Generated by comparing current period metrics against historical baselines
+- **Generation logic:**
+  - Baseline: 3-month rolling average of the same metric
+  - Threshold: insight triggers when current value deviates >15% from baseline
+  - Maximum 4 insights shown, ranked by deviation magnitude
+  - Specific insight templates:
+    1. **Oportunidade — High conversion, low volume:** Origin with >25% conversion rate but <10% of total leads
+    2. **Oportunidade — Seller strength:** Seller with >20% above average on a specific funnel transition
+    3. **Alerta — Degrading conversion:** Any funnel transition dropping >10% vs 3-month baseline
+    4. **Alerta — Increasing cycle time:** Any stage time increasing >25% vs baseline
+    5. **Alerta — Rising churn:** Churn rate increasing >1pp vs baseline
+    6. **Tendência — Sustained growth:** MRR growing >5% m/m for 3+ consecutive months
+    7. **Tendência — Improving response:** Team response time decreasing for 3+ months
+    8. **Padrão — Best contact times:** Top 3 day/hour combinations by response rate
+    9. **Padrão — Origin seasonality:** Origin performing >30% better/worse than its own average
+    10. **Padrão — Seller pairing:** SDR/Closer combinations with >20% higher close rate
 
 ---
 
@@ -116,7 +140,7 @@ Deep financial analysis: revenue composition, MRR health, profitability, project
 ### Components
 
 **1. Composição de Receita**
-- Donut chart: MRR vs Projeto vs Única (with percentages and absolute values)
+- Donut chart showing revenue by `product_type`: MRR, Projeto, Unitário as primary segments. Types `physical`, `digital`, `service` grouped as "Outros" if they represent <5% individually, otherwise shown as separate segments.
 - Total revenue in center
 - Below: MRR growth trend (avg monthly growth in R$)
 
@@ -145,7 +169,7 @@ Deep financial analysis: revenue composition, MRR health, profitability, project
 - Phase 1-3: estimated CAC. Phase 4: real ad spend data.
 
 **6. Ticket Médio — Evolução por Tipo**
-- Grouped bar chart: 3 bars per month (MRR, Projeto, Única)
+- Grouped bar chart: bars per month for each active `product_type` (MRR, Projeto, Unitário; additional types shown if they have sales)
 - Shows trend of average ticket by sale type over 6 months
 - Legend with current values
 
@@ -180,7 +204,7 @@ Deep financial analysis: revenue composition, MRR health, profitability, project
 - Answers: "where is each seller strong/weak in the funnel?"
 
 **4. Qualidade de Lead por Origem**
-- Stacked cards per origin (Google Ads, Indicação, Meta Ads, etc.)
+- Stacked cards per origin (dynamically populated from `lead_origin` enum: `google_ads`, `meta_ads`, `whatsapp`, `site`, `remarketing`, `cal`, `outro`. Note: `indicacao` is not in the enum — if needed, add it via migration or map it under `outro`)
 - Each card shows: composite quality Score (0-10), conversion rate, average ticket, cycle length, estimated LTV
 - Score calculated from weighted combination of these metrics
 - Answers: "which channels bring the best quality leads, not just volume?"
@@ -188,7 +212,7 @@ Deep financial analysis: revenue composition, MRR health, profitability, project
 **5. Análise de Win/Loss**
 - Split panel: left = Top Motivos de Ganho, right = Top Motivos de Perda
 - Each side: 4 bars showing reason and percentage
-- Data source: loss reasons from `pipe_propostas` (status = perdido) — may require adding a loss_reason field
+- Data source: `pipe_propostas.loss_reason` field (added in Phase 1 migration). Shows placeholder with explanation until at least 20 closed deals have loss reasons recorded.
 - Answers: "why do we win and lose deals?"
 
 **6. Tendência Individual — Quem Tá Subindo/Caindo**
@@ -310,21 +334,27 @@ Returns: funnel flow with conversion rates and times, weekly entry/exit volumes,
 **`get_analytics_engagement_metrics(p_org_id, p_start_date, p_end_date, p_member_id?, p_origin?)`**
 Returns: response times (team and client), response/close rates by origin, hourly patterns, speed-conversion correlation.
 
-**`get_analytics_overview_metrics(p_org_id, p_start_date, p_end_date)`**
+**`get_analytics_overview_metrics(p_org_id, p_start_date, p_end_date, p_member_id?, p_origin?)`**
 Returns: cohort data, unit economics, attribution, velocity, top insights.
 
-### Possible Schema Additions
+### Schema Additions
 
-- `pipe_propostas.loss_reason` — enum or text field for why a deal was lost (needed for Win/Loss analysis)
-- `analytics_costs` table — for manual cost import (Phase 4): org_id, channel, amount, month, year
-- `analytics_ad_integrations` table — for ad platform connections (Phase 4): org_id, platform, credentials, last_sync
+**Phase 1 (required):**
+- `pipe_propostas.loss_reason` — text field for why a deal was lost. Added via migration. UI: dropdown with common reasons (sem_budget, concorrencia, timing, follow_up_fraco, produto_nao_adequado, outro) + free text on the deal closure modal.
+
+**Phase 2 (recommended):**
+- `pipe_propostas.churned_at` — timestamp for when an MRR customer cancels. Enables accurate churn tracking instead of estimation via `contract_duration`.
+
+**Phase 4:**
+- `analytics_costs` table — for manual cost import: org_id, channel, amount, month, year
+- `analytics_ad_integrations` table — for ad platform connections: org_id, platform, credentials, last_sync
 
 ### Indexes
 
 - `pipe_propostas`: index on `(organization_id, closed_at)` for time-series queries
 - `pipe_whatsapp`: index on `(organization_id, created_at)` for flow analysis
 - `pipe_confirmacao`: index on `(organization_id, meeting_date)` for confirmation metrics
-- WhatsApp messages: index on `(organization_id, created_at, direction)` for response time calculations
+- `whatsapp_messages`: index on `(organization_id, timestamp, direction)` for response time calculations
 
 ---
 
@@ -378,14 +408,65 @@ src/
 
 ### Charting
 
-- Primary: **Recharts** (already in project) for standard charts (bar, area, line, pie)
-- Custom components for: cohort heatmap, radar chart, funnel visualization, pipeline aging, heatmap grid
-- All charts use existing CSS variable color system (chart-1 through chart-5 + semantic colors)
+**Standard Recharts components** (minimal effort):
+- BarChart, AreaChart, LineChart, PieChart — used for revenue bars, MRR evolution, ticket trends, donut chart
+- RadarChart — used for seller comparison radar (new usage, but standard Recharts component)
+
+**Custom components** (significant effort, built with HTML/CSS/SVG):
+- `CohortHeatmap` — grid of colored cells, no Recharts needed
+- `FunnelVisualization` — tapering bars with inter-stage annotations
+- `PipelineAging` — stacked horizontal bars with color segments
+- `ResponseHeatmap` — day×hour grid with color intensity
+- `DivergingBar` — bars extending left/right from center line
+- `SparklineBars` — mini bar charts in table cells
+
+All charts use existing CSS variable color system (chart-1 through chart-5 + semantic colors).
+
+### Comparison Period Logic
+
+The "vs período anterior" toggle compares the selected range against the same-duration period immediately before:
+- **Hoje:** compares to yesterday
+- **7d:** compares to the 7 days before the selected 7 days
+- **30d:** compares to the 30 days before the selected 30 days
+- **90d:** compares to the 90 days before the selected 90 days
+- **Custom (e.g., Mar 1-15):** compares to the same-length period immediately before (Feb 14-28)
+
+Trend indicators (↑/↓) and percentage changes always reference this comparison period.
+
+### Empty States
+
+When a component lacks sufficient data, show a reusable `AnalyticsEmptyState` component with:
+- Illustration (chart icon placeholder)
+- Message explaining what data is needed
+- Minimum data thresholds per component:
+  - Cohort heatmap: 2 months of sales data
+  - Ranking evolution: 2+ sellers with 2+ months of data
+  - Win/Loss analysis: 20+ closed deals with `loss_reason` filled
+  - Response heatmap: 50+ WhatsApp conversations
+  - Conversion trends: 2+ months of pipeline data
+  - Copilot vs Human: Copilot must be active with 10+ conversations
+- Components with partial data show what they can with a "limited data" badge
+
+### Error Handling
+
+- Each chart component wrapped in its own React Error Boundary
+- A failing chart shows an inline error card ("Erro ao carregar dados. Tentar novamente.") without breaking the rest of the tab
+- RPC timeout: 30 seconds. On timeout, show error with retry button.
+- Retry strategy: 1 automatic retry (matching existing TanStack Query config), then manual retry button
+
+### Responsive Design
+
+Desktop-primary design (minimum width: 1024px). On smaller screens:
+- Multi-column grids (2-col, 3-col) collapse to single column
+- Heatmap tables scroll horizontally with sticky first column
+- KPI card rows wrap to 2×2 grid on tablet
+- No mobile-specific layout — the sidebar already collapses on small screens
 
 ---
 
 ## Feature Flagging
 
-- Feature key: `analytics.view` — gates access to the entire Analytics module
+- Feature key: `analytics` — gates access to the entire Analytics module
+- Must be added to: `FeatureKey` type, `FEATURES` catalog, `SIDEBAR_FEATURE_MAP`, and `plan_features` table
 - Can be tied to subscription plans (e.g., Pro/Enterprise only)
 - Uses existing `PermissionProtectedRoute` and `OrgFeaturesContext`
