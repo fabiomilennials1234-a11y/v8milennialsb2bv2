@@ -323,7 +323,7 @@ Communication metrics, response patterns, and the impact of speed on conversion.
 ### New RPC Functions
 
 **`get_analytics_financial_metrics(p_org_id, p_start_date, p_end_date, p_member_id?, p_origin?)`**
-Returns: revenue composition (MRR/projeto/unica), MRR evolution, ticket averages by type, commission totals, projections.
+Returns: revenue composition (MRR/projeto/unitario), MRR evolution, ticket averages by type, commission totals, projections.
 
 **`get_analytics_commercial_metrics(p_org_id, p_start_date, p_end_date, p_member_id?, p_origin?)`**
 Returns: per-seller conversion matrix, ranking history, lead quality scores, win/loss reasons, performance trends.
