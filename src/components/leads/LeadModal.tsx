@@ -36,6 +36,7 @@ import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 const originLabels: Record<string, string> = {
   whatsapp: "WhatsApp",
