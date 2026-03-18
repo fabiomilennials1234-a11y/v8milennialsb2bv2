@@ -796,8 +796,6 @@ export function CopilotWizard() {
 
       if (errorMessage.includes("unique_agent_name_per_org")) {
         errorMessage = "Já existe um agente com este nome na sua organização. Escolha um nome diferente.";
-      } else if (errorMessage.includes("activation_triggers") || errorMessage.includes("column")) {
-        errorMessage = "Coluna não encontrada no banco. Execute a migration pendente.";
       }
 
       toast.error(isEditMode ? "Erro ao atualizar Copilot" : "Erro ao criar Copilot", {

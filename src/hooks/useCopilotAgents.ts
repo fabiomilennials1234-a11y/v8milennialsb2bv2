@@ -290,10 +290,6 @@ export function useCreateCopilotAgent() {
       // Erros específicos com mensagens amigáveis
       if (errorMessage.includes("unique_agent_name_per_org")) {
         errorMessage = "Já existe um agente com este nome na sua organização. Escolha um nome diferente.";
-      } else if (errorMessage.includes("activation_triggers") ||
-          errorMessage.includes("column") ||
-          errorMessage.includes("Could not find")) {
-        errorMessage = "Coluna não encontrada no banco. Execute o script FIX_COPILOT_COLUMNS.sql no Supabase SQL Editor.";
       }
       
       toast.error("Erro ao criar Copilot", {
