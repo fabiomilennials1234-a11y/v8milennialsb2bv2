@@ -174,6 +174,26 @@ async function resolveVariables(
     }
   }
 
+  // AI variables: {{ai_resumo}}, {{ai_sentimento}}, {{ai_temperatura}}, {{ai_proxima_acao}}
+  if (template.includes("{{ai_")) {
+    const { data: aiSummary } = await supabase
+      .from("conversation_summaries")
+      .select("summary, sentiment, lead_temperature, next_action")
+      .eq("lead_id", leadId)
+      .maybeSingle();
+    if (aiSummary) {
+      vars.ai_resumo = (aiSummary as any).summary || "";
+      vars.ai_sentimento = (aiSummary as any).sentiment || "";
+      vars.ai_temperatura = (aiSummary as any).lead_temperature || "";
+      vars.ai_proxima_acao = (aiSummary as any).next_action || "";
+    }
+  }
+
+  // Second pass for late-bound vars (campaign + AI)
+  for (const [key, val] of Object.entries(vars)) {
+    result = result.replaceAll(`{{${key}}}`, val);
+  }
+
   // Custom fields: {{custom.campo}}
   const customMatches = result.match(/\{\{custom\.([^}]+)\}\}/g);
   if (customMatches) {
@@ -1177,11 +1197,18 @@ async function handleInvokeEdgeFunction(ctx: ActionContext, functionName: string
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` },
     body: JSON.stringify({
-      organizationId: ctx.organizationId,
-      leadId: ctx.leadId,
+      lead_id: ctx.leadId,
     }),
   });
 
   if (!res.ok) return { success: false, error: `${functionName} failed: ${await res.text()}` };
-  return { success: true, message: `${functionName} completed` };
+
+  let data: Record<string, unknown> | undefined;
+  try {
+    data = await res.json();
+  } catch {
+    // response may not be JSON
+  }
+
+  return { success: true, message: `${functionName} completed`, data };
 }
