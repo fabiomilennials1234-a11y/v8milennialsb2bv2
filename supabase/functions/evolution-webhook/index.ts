@@ -850,6 +850,7 @@ async function handleMessagesUpsert(
       if (!messageText && direction === "incoming" && mediaUrl) {
         // @ts-ignore - copilot_agents vem do join
         const hasAgent = instance.copilot_agent_id && instance.copilot_agents?.is_active;
+        console.log("[Evolution Webhook] Media without text:", { messageType, hasMediaUrl: !!mediaUrl, hasAgent });
         if (hasAgent) {
           if (messageType === "image") {
             const description = await describeImageWithOpenRouter(mediaUrl);
@@ -857,12 +858,16 @@ async function handleMessagesUpsert(
               messageText = `[Imagem] ${description}`;
             }
           } else if (messageType === "audio" || messageType === "ptt") {
+            console.log("[Evolution Webhook] Transcribing audio:", { mediaUrl: mediaUrl?.substring(0, 80) });
             const transcript = await transcribeAudioWithOpenAI(mediaUrl);
+            console.log("[Evolution Webhook] Transcription result:", { hasTranscript: !!transcript, length: transcript?.length });
             if (transcript) {
               messageText = `[Áudio transcrito] ${transcript}`;
             }
           }
         }
+      } else if (!messageText && direction === "incoming" && !mediaUrl && (messageType === "audio" || messageType === "ptt")) {
+        console.warn("[Evolution Webhook] Audio message received but NO mediaUrl available — transcription impossible");
       }
 
       // Inserir mensagem no banco
@@ -908,6 +913,7 @@ async function handleMessagesUpsert(
       }
 
       // Se for mensagem recebida, processar com IA (se tiver agente vinculado)
+      console.log("[Evolution Webhook] Agent decision:", { direction, hasText: !!messageText, textLength: messageText?.length, messageType });
       if (direction === "incoming" && messageText) {
         // Primeiro tentar associar a um lead existente
         await associateMessageToExistingLead(supabase, instance.organization_id, phoneNumber);
