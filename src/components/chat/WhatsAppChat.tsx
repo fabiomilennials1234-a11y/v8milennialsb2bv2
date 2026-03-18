@@ -1452,12 +1452,12 @@ function ChatWindow({
     }
   };
 
-  // Nome do contato: priorizar lead (CRM) para evitar nomes trocados
+  // Nome do contato: prioriza push_name (nome real do WhatsApp) — consistente com contactDisplayName na lista lateral
   const contactNameRaw =
-    selectedLeadName ??
-    selectedContact?.lead_name ??
     selectedContact?.push_name ??
     messages.find((m) => m.push_name)?.push_name ??
+    selectedLeadName ??
+    selectedContact?.lead_name ??
     phoneNumber;
   const contactName = (contactNameRaw && String(contactNameRaw).trim()) ? String(contactNameRaw).trim() : (phoneNumber || "?");
 
