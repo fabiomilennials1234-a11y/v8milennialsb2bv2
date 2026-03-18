@@ -128,3 +128,7 @@ verify_jwt = false
 # send-meta-message: autenticação via JWT do usuario (validado internamente)
 [functions.send-meta-message]
 verify_jwt = false
+
+# elevenlabs-proxy: JWT validado internamente (admin check)
+[functions.elevenlabs-proxy]
+verify_jwt = false
