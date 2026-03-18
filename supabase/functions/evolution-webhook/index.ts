@@ -196,47 +196,94 @@ async function describeImageWithOpenRouter(mediaUrl: string): Promise<string | n
 }
 
 async function transcribeAudioWithOpenAI(mediaUrl: string): Promise<string | null> {
-  if (!OPENAI_API_KEY) {
-    console.warn("[Evolution Webhook] Missing OPENAI_API_KEY for audio transcription");
+  // Try OpenAI Whisper first, then ElevenLabs as fallback
+  if (OPENAI_API_KEY) {
+    try {
+      const mediaResponse = await fetch(mediaUrl);
+      if (!mediaResponse.ok) {
+        console.error("[Evolution Webhook] Failed to download audio:", mediaResponse.status);
+        return null;
+      }
+
+      const audioBlob = await mediaResponse.blob();
+      const contentType = audioBlob.type || "audio/ogg";
+      const file = new File([audioBlob], "audio", { type: contentType });
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("model", "whisper-1");
+      formData.append("language", "pt");
+
+      const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${OPENAI_API_KEY}`,
+        },
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("[Evolution Webhook] OpenAI transcription failed:", response.status, errorText);
+        // Fall through to ElevenLabs
+      } else {
+        const result = await response.json();
+        if (result?.text) {
+          console.log("[Evolution Webhook] Audio transcribed via OpenAI Whisper");
+          return String(result.text).trim().slice(0, MAX_MEDIA_TEXT_CHARS);
+        }
+      }
+    } catch (error) {
+      console.error("[Evolution Webhook] OpenAI transcription error:", error);
+      // Fall through to ElevenLabs
+    }
+  }
+
+  // Fallback: ElevenLabs Speech-to-Text
+  return transcribeAudioWithElevenLabs(mediaUrl);
+}
+
+async function transcribeAudioWithElevenLabs(mediaUrl: string): Promise<string | null> {
+  const apiKey = Deno.env.get("ELEVENLABS_API_KEY");
+  if (!apiKey) {
+    console.warn("[Evolution Webhook] No OPENAI_API_KEY or ELEVENLABS_API_KEY — cannot transcribe audio");
     return null;
   }
 
   try {
+    console.log("[Evolution Webhook] Transcribing audio via ElevenLabs STT");
     const mediaResponse = await fetch(mediaUrl);
     if (!mediaResponse.ok) {
-      console.error("[Evolution Webhook] Failed to download audio:", mediaResponse.status);
+      console.error("[Evolution Webhook] Failed to download audio for ElevenLabs:", mediaResponse.status);
       return null;
     }
 
     const audioBlob = await mediaResponse.blob();
-    const contentType = audioBlob.type || "audio/ogg";
-    const file = new File([audioBlob], "audio", { type: contentType });
     const formData = new FormData();
-    formData.append("file", file);
-    formData.append("model", "whisper-1");
-    formData.append("language", "pt");
+    formData.append("file", new File([audioBlob], "audio.ogg", { type: audioBlob.type || "audio/ogg" }));
+    formData.append("language_code", "por");
 
-    const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+    const response = await fetch("https://api.elevenlabs.io/v1/speech-to-text", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${OPENAI_API_KEY}`,
+        "xi-api-key": apiKey,
       },
       body: formData,
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("[Evolution Webhook] Audio transcription failed:", response.status, errorText);
+      console.error("[Evolution Webhook] ElevenLabs STT failed:", response.status, errorText);
       return null;
     }
 
     const result = await response.json();
     if (result?.text) {
+      console.log("[Evolution Webhook] Audio transcribed via ElevenLabs STT");
       return String(result.text).trim().slice(0, MAX_MEDIA_TEXT_CHARS);
     }
     return null;
   } catch (error) {
-    console.error("[Evolution Webhook] Error transcribing audio:", error);
+    console.error("[Evolution Webhook] ElevenLabs STT error:", error);
     return null;
   }
 }
