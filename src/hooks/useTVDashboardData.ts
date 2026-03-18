@@ -118,15 +118,43 @@ export function useTVDashboardData() {
       }) || [];
       
       // Calculate sales values
-      const vendasMRR = currentMonthPropostas
-        .filter(p => p.product_type === "mrr")
-        .reduce((sum, p) => sum + (p.sale_value || 0), 0);
-      
-      const vendasProjeto = currentMonthPropostas
-        .filter(p => p.product_type === "projeto")
-        .reduce((sum, p) => sum + (p.sale_value || 0), 0);
-      
-      const vendasRealizadas = vendasMRR + vendasProjeto;
+      // vendasMRR = soma do valor mensal recorrente (sem multiplicar pela duração)
+      // vendasRealizadas = Venda Total = MRR × duração + Projeto (valor real contratado)
+      let vendasMRR = 0;
+      let vendasProjeto = 0;
+      let vendasRealizadas = 0;
+      for (const p of currentMonthPropostas) {
+        // contract_duration nulo/inválido → fallback de 1 mês
+        const duration = Math.max(1, Number((p as any).contract_duration) || 1);
+        const items = ((p as any).items as Array<{ sale_value: number | null; product?: { type: string } | null }> | null)
+          ?.filter(i => i != null) ?? [];
+        if (items.length > 0) {
+          for (const item of items) {
+            const val = Number(item.sale_value) || 0;
+            const t = item.product?.type;
+            if (t === "mrr") {
+              vendasMRR += val;
+              vendasRealizadas += val * duration;
+            } else if (t === "projeto") {
+              vendasProjeto += val;
+              vendasRealizadas += val;
+            } else {
+              vendasRealizadas += val;
+            }
+          }
+        } else {
+          const val = Number(p.sale_value) || 0;
+          if (p.product_type === "mrr") {
+            vendasMRR += val;
+            vendasRealizadas += val * duration;
+          } else if (p.product_type === "projeto") {
+            vendasProjeto += val;
+            vendasRealizadas += val;
+          } else {
+            vendasRealizadas += val;
+          }
+        }
+      }
       
       // Where should we be (proportional to days passed)
       const progressoEsperado = dayOfMonth / lastDayOfMonth;
@@ -211,16 +239,21 @@ export function useTVDashboardData() {
         !["vendido", "perdido"].includes(p.status)
       ).slice(0, 10);
       
-      // Monthly sales
-      const vendasDoMes = currentMonthPropostas.map(p => ({
-        id: p.id,
-        leadName: p.lead?.name || "Lead",
-        company: p.lead?.company || "",
-        value: p.sale_value || 0,
-        type: p.product_type,
-        closerName: p.closer?.name || "",
-        closedAt: p.closed_at
-      }));
+      // Monthly sales — value = Venda Total (MRR × duração; Projeto = pontual)
+      const vendasDoMes = currentMonthPropostas.map(p => {
+        const duration = Math.max(1, Number((p as any).contract_duration) || 1);
+        const baseVal = p.sale_value || 0;
+        const totalVal = p.product_type === "mrr" ? baseVal * duration : baseVal;
+        return {
+          id: p.id,
+          leadName: p.lead?.name || "Lead",
+          company: p.lead?.company || "",
+          value: totalVal,
+          type: p.product_type,
+          closerName: p.closer?.name || "",
+          closedAt: p.closed_at
+        };
+      });
       
       // ========== INDIVIDUAL GOALS - CALCULATE DYNAMICALLY ==========
       // Não-admin: só metas do próprio usuário
@@ -228,9 +261,15 @@ export function useTVDashboardData() {
       const meetingsGoalsSource = isAdmin ? (individualGoals?.meetingsGoals || []) : (myId && individualGoals?.meetingsGoals?.find(g => g.id === myId) ? [individualGoals.meetingsGoals.find(g => g.id === myId)!] : []);
 
       const salesGoals = salesGoalsSource.map(g => {
+        // Venda Total por membro = MRR × duração + Projeto
         const memberSales = currentMonthPropostas
           .filter(p => (p.responsible_id || p.closer_id) === g.id)
-          .reduce((sum, p) => sum + (p.sale_value || 0), 0);
+          .reduce((sum, p) => {
+            const duration = Math.max(1, Number((p as any).contract_duration) || 1);
+            return p.product_type === "mrr"
+              ? sum + (p.sale_value || 0) * duration
+              : sum + (p.sale_value || 0);
+          }, 0);
         const currentValue = memberSales;
         const goalValue = g.goal || 0;
         const percentage = goalValue > 0 ? Math.round((currentValue / goalValue) * 100) : 0;

@@ -315,20 +315,34 @@ export default function PipePropostas() {
     let mrr = 0;
     let projeto = 0;
     for (const item of soldData) {
+      // contract_duration nulo/inválido → fallback de 1 mês
+      const duration = Math.max(1, Number(item.contract_duration) || 1);
       const items = item.items?.filter((i: any) => i != null) ?? [];
       if (items.length > 0) {
         for (const it of items) {
           const val = Number(it.sale_value) || 0;
-          sold += val;
           const t = it.product?.type;
-          if (t === "mrr") mrr += val;
-          else if (t === "projeto") projeto += val;
+          if (t === "mrr") {
+            mrr += val;             // MRR Vendido = valor mensal recorrente
+            sold += val * duration; // Venda Total = mensal × duração do contrato
+          } else if (t === "projeto") {
+            projeto += val;
+            sold += val;            // Projeto: valor pontual
+          } else {
+            sold += val;            // Unitário: valor pontual
+          }
         }
       } else {
         const val = Number(item.sale_value) || 0;
-        sold += val;
-        if (item.product_type === "mrr") mrr += val;
-        else if (item.product_type === "projeto") projeto += val;
+        if (item.product_type === "mrr") {
+          mrr += val;
+          sold += val * duration;
+        } else if (item.product_type === "projeto") {
+          projeto += val;
+          sold += val;
+        } else {
+          sold += val;
+        }
       }
     }
 
