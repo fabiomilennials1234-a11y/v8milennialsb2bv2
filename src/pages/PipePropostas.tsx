@@ -1,4 +1,5 @@
-import { useState, useMemo, useRef, useEffect } from "react";
+import { useState, useMemo, useRef, useEffect, useCallback } from "react";
+import { usePersistedState } from "@/hooks/usePersistedState";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search, Filter, Plus, Calendar, User, Building2, Star,
@@ -61,6 +62,33 @@ import { useOrganization } from "@/hooks/useOrganization";
 import { track, trackModuleVisit } from "@/lib/analytics";
 import { useFeaturePermission } from "@/hooks/useUserRole";
 
+// ─── Helper: temporal filter para o kanban no modo "Este mês" ────────────────
+const CLOSED_STATUSES_PROPOSTAS = ["vendido", "perdido"];
+
+/**
+ * Retorna true se a proposta pertence ao intervalo [startStr, endStr].
+ *
+ * Regra:
+ *  - Status fechados (vendido/perdido): usa metrics_period_at (primário) ou closed_at (fallback).
+ *    Alinhado com a lógica de usePipePropostasMetrics().
+ *  - Status abertos/ativos: usa created_at como referência temporal.
+ *    Justificativa: created_at é o momento em que a proposta "entrou" no pipe,
+ *    representando fielmente a "foto do mês" para cards em andamento.
+ */
+function isPropostaInPeriod(
+  item: { status: string; metrics_period_at?: string | null; closed_at?: string | null; created_at?: string | null },
+  startStr: string,
+  endStr: string,
+): boolean {
+  if (CLOSED_STATUSES_PROPOSTAS.includes(item.status)) {
+    const ref = item.metrics_period_at ?? item.closed_at;
+    if (!ref) return false;
+    return ref >= startStr && ref <= endStr;
+  }
+  const ref = item.created_at;
+  if (!ref) return false;
+  return ref >= startStr && ref <= endStr;
+}
 
 // ---------------------------------------------------------------------------
 // Persisted filter state — scoped per org + user, TTL 24 h
@@ -169,6 +197,14 @@ export default function PipePropostas() {
     metricsPeriod === "month" ? selectedMetricsYear : undefined
   );
 
+  // Intervalo UTC do mês selecionado — reutilizado no filtro do kanban e na contagem
+  const periodRange = useMemo(() => {
+    if (metricsPeriod !== "month") return null;
+    const start = new Date(Date.UTC(selectedMetricsYear, selectedMetricsMonth - 1, 1));
+    const end = new Date(Date.UTC(selectedMetricsYear, selectedMetricsMonth, 0, 23, 59, 59, 999));
+    return { startStr: start.toISOString(), endStr: end.toISOString() };
+  }, [metricsPeriod, selectedMetricsMonth, selectedMetricsYear]);
+
   const responsibleMembers = useResponsibleMembers();
 
   // Transform pipe data to LeadCardData format
@@ -239,6 +275,14 @@ export default function PipePropostas() {
     return statusColumns.map(col => {
       const columnItems = pipeData
         .filter(item => item.status === col.id)
+        // 1. Filtro temporal — aplicado antes dos demais filtros
+        .filter(item => {
+          if (metricsPeriod === "month" && periodRange) {
+            return isPropostaInPeriod(item, periodRange.startStr, periodRange.endStr);
+          }
+          return true;
+        })
+        // 2. Filtros funcionais (busca, responsável, tipo, prioridade, calor)
         .filter(item => {
           const lead = item.lead;
 
@@ -249,13 +293,13 @@ export default function PipePropostas() {
           const matchesSearch = searchTerm === "" ||
             lead?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
             lead?.company?.toLowerCase().includes(searchTerm.toLowerCase());
-          
+
           // Responsible filter
           const matchesResponsible = filterResponsible === "all" || item.responsible_id === filterResponsible;
-          
+
           // Product type filter
           const matchesType = filterProductType === "all" || item.product_type === filterProductType;
-          
+
           // Priority filter based on lead rating
           const rating = lead?.rating || 0;
           let matchesPriority = true;
@@ -277,7 +321,7 @@ export default function PipePropostas() {
           } else if (filterCalor === "cold") {
             matchesCalor = calor < 4;
           }
-          
+
           return matchesSearch && matchesResponsible && matchesType && matchesPriority && matchesCalor;
         })
         .map(transformToCard)
@@ -291,7 +335,7 @@ export default function PipePropostas() {
         items: columnItems,
       };
     });
-  }, [pipeData, searchTerm, filterResponsible, filterProductType, filterPriority, filterCalor]);
+  }, [pipeData, searchTerm, filterResponsible, filterProductType, filterPriority, filterCalor, metricsPeriod, periodRange]);
 
   // Calculate stats (Vendas Total / MRR Vendido / Projetos Vendidos por item quando houver items)
   const stats = useMemo(() => {
@@ -360,6 +404,14 @@ export default function PipePropostas() {
       inProgressCount: stats.inProgressCount,
     };
   }, [metricsPeriod, metricsByPeriod, stats]);
+
+  // Total de propostas que passam pelo filtro temporal (para exibir no banner)
+  const periodFilteredCount = useMemo(() => {
+    if (metricsPeriod !== "month" || !pipeData || !periodRange) return 0;
+    return pipeData.filter(item =>
+      isPropostaInPeriod(item, periodRange.startStr, periodRange.endStr)
+    ).length;
+  }, [pipeData, metricsPeriod, periodRange]);
 
   // Funnel data
   const funnelData = useMemo(() => {
@@ -720,7 +772,7 @@ export default function PipePropostas() {
         <Tabs value={metricsPeriod} onValueChange={(v) => setMetricsPeriod(v as MetricsPeriod)}>
           <TabsList className="h-9">
             <TabsTrigger value="all" className="gap-1.5 text-xs">Geral</TabsTrigger>
-            <TabsTrigger value="month" className="gap-1.5 text-xs">Este mês</TabsTrigger>
+            <TabsTrigger value="month" className="gap-1.5 text-xs">Por mês</TabsTrigger>
           </TabsList>
         </Tabs>
         {metricsPeriod === "month" && (
@@ -751,7 +803,7 @@ export default function PipePropostas() {
           </>
         )}
         <span className="text-xs text-muted-foreground">
-          {metricsPeriod === "all" ? "Métricas do pipe no geral" : `Métricas de ${format(new Date(selectedMetricsYear, selectedMetricsMonth - 1), "MMMM/yyyy", { locale: ptBR })}`}
+          {metricsPeriod === "all" ? "Métricas do pipe no geral" : `Filtrando por ${format(new Date(selectedMetricsYear, selectedMetricsMonth - 1), "MMMM/yyyy", { locale: ptBR })}`}
         </span>
       </div>
 
@@ -835,6 +887,20 @@ export default function PipePropostas() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
           >
+            {/* Banner: kanban filtrado por período */}
+            {metricsPeriod === "month" && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/10 border border-primary/20 text-sm text-primary mb-4">
+                <Calendar className="w-4 h-4 shrink-0" />
+                <span>
+                  Exibindo propostas de{" "}
+                  <strong>
+                    {format(new Date(selectedMetricsYear, selectedMetricsMonth - 1), "MMMM/yyyy", { locale: ptBR })}
+                  </strong>
+                  {" "}— {periodFilteredCount} proposta{periodFilteredCount !== 1 ? "s" : ""} no período
+                </span>
+              </div>
+            )}
+
             {/* Filters */}
             <div className="flex flex-wrap gap-3 mb-6">
               <div className="relative flex-1 min-w-[200px] max-w-sm">
