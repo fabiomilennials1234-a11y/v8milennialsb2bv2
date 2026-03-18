@@ -13,8 +13,8 @@ export function ResponseHeatmapPlaceholder() {
       </CardHeader>
       <CardContent>
         <AnalyticsEmptyState
-          message="Heatmap de resposta disponível na próxima atualização"
-          detail="Requer análise de mensagens WhatsApp (em desenvolvimento)."
+          message="Padrão de resposta disponível na aba Engajamento"
+          detail="Acesse a aba Engajamento para ver o padrão horário de respostas e métricas de WhatsApp."
         />
       </CardContent>
     </Card>

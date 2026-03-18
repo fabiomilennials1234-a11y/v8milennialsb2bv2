@@ -5,6 +5,7 @@ import { OverviewTab } from "@/components/analytics/tabs/OverviewTab";
 import { FinanceiroTab } from "@/components/analytics/tabs/FinanceiroTab";
 import { ComercialTab } from "@/components/analytics/tabs/ComercialTab";
 import { PipesFunisTab } from "@/components/analytics/tabs/PipesFunisTab";
+import { EngajamentoTab } from "@/components/analytics/tabs/EngajamentoTab";
 
 export default function Analytics() {
   const [activeTab, setActiveTab] = useState("overview");
@@ -29,7 +30,7 @@ export default function Analytics() {
           <TabsTrigger value="pipes">
             Pipes & Funis
           </TabsTrigger>
-          <TabsTrigger value="engajamento" disabled>
+          <TabsTrigger value="engajamento">
             Engajamento
           </TabsTrigger>
         </TabsList>
@@ -48,6 +49,10 @@ export default function Analytics() {
 
         <TabsContent value="pipes" className="space-y-4">
           <PipesFunisTab />
+        </TabsContent>
+
+        <TabsContent value="engajamento" className="space-y-4">
+          <EngajamentoTab />
         </TabsContent>
       </Tabs>
     </div>
