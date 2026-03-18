@@ -4,9 +4,8 @@
  * Breaks long agent responses into multiple short messages
  * with realistic typing delays, simulating a real person.
  *
- * Two strategies:
- * 1. Heuristic split (fast, no cost) — paragraphs/sentences
- * 2. LLM split (fallback) — when message is too long/complex
+ * Strategy: LLM split ALWAYS runs first (Gemini Flash — fast, cheap).
+ * Heuristic split is the fallback if LLM fails or is unavailable.
  */
 
 const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY") || "";
@@ -80,20 +79,18 @@ export async function smartSplitMessage(
   }
 
   const params = INTENSITY_PRESETS[config.intensity] || INTENSITY_PRESETS.natural;
-  const paragraphs = message.split(/\n\n+/).filter((p) => p.trim());
-  const needsLlmSplit =
-    message.length >= params.llmThresholdChars ||
-    paragraphs.length >= params.llmThresholdParagraphs;
+
+  // Short messages that don't need splitting
+  if (message.length <= params.minChunkChars) {
+    return { chunks: [message.trim()], delays: [0] };
+  }
 
   let chunks: string[];
 
-  if (needsLlmSplit) {
-    console.log("[NaturalMessaging] Using LLM split — chars:", message.length, "paragraphs:", paragraphs.length);
-    chunks = await llmSplit(message, params);
-  } else {
-    console.log("[NaturalMessaging] Using heuristic split — chars:", message.length);
-    chunks = heuristicSplit(message, params);
-  }
+  // ALWAYS use LLM split first — it understands conversational flow
+  // Heuristic is only a fallback if LLM fails or is unavailable
+  console.log("[NaturalMessaging] Using LLM split — chars:", message.length);
+  chunks = await llmSplit(message, params);
 
   // If splitting produced only 1 chunk, just return as-is
   if (chunks.length <= 1) {
@@ -242,17 +239,31 @@ async function llmSplit(
         messages: [
           {
             role: "system",
-            content: `Você é um assistente que divide mensagens longas em múltiplas mensagens curtas de WhatsApp, como uma pessoa real digitaria.
+            content: `Você é um pós-processador que divide respostas de IA em múltiplas mensagens de WhatsApp, simulando como uma pessoa real digitaria.
 
-Regras:
+COMO UMA PESSOA REAL MANDA MENSAGENS NO WHATSAPP:
+- Manda uma ideia por mensagem, não tudo de uma vez
+- Separa saudação do conteúdo principal
+- Separa perguntas do resto (pergunta fica sozinha na última mensagem)
+- Mensagens curtas e diretas, sem textão
+- Se tem uma lista, pode mandar os itens em mensagens separadas
+- Se a mensagem já é curta o suficiente (menos de ${params.maxCharsPerChunk} caracteres), NÃO divida — retorne ela como está
+
+REGRAS TÉCNICAS:
 - Máximo ${params.maxCharsPerChunk} caracteres por mensagem
 - Mínimo ${params.minChunkChars} caracteres por mensagem
-- NÃO altere o conteúdo, apenas divida
-- NÃO adicione saudações, emojis ou texto extra
+- NÃO altere o conteúdo, apenas divida nos pontos naturais
+- NÃO adicione texto, saudações, emojis ou qualquer coisa que não estava no original
 - Mantenha a ordem original
 - Retorne APENAS um JSON array de strings, sem markdown, sem explicação
 
-Exemplo de retorno: ["Primeira mensagem aqui", "Segunda mensagem aqui", "Terceira mensagem"]`,
+EXEMPLOS:
+
+Entrada: "Oi João! Tudo bem? Então, sobre o plano Pro que você perguntou, ele custa R$297/mês e inclui acesso a todas as funcionalidades. Quer que eu te explique melhor os benefícios?"
+Saída: ["Oi João! Tudo bem?", "Então, sobre o plano Pro que você perguntou, ele custa R$297/mês e inclui acesso a todas as funcionalidades.", "Quer que eu te explique melhor os benefícios?"]
+
+Entrada: "O valor é R$297/mês."
+Saída: ["O valor é R$297/mês."]`,
           },
           {
             role: "user",
