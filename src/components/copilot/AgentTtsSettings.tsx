@@ -10,16 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-
-interface TtsConfig {
-  provider: "elevenlabs";
-  voice_id: string;
-  mode: "always" | "mirror";
-  max_chars: number;
-  model_id?: string;
-  stability?: number;
-  similarity_boost?: number;
-}
+import type { TtsConfig } from "@/types/copilot";
 
 interface Voice {
   voice_id: string;
@@ -73,7 +64,12 @@ export function AgentTtsSettings({ agentId, ttsConfig, onSave }: AgentTtsSetting
       const filesBase64 = await Promise.all(
         cloneFiles.map(async (file) => {
           const buffer = await file.arrayBuffer();
-          const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+          const bytes = new Uint8Array(buffer);
+          let binary = "";
+          for (let i = 0; i < bytes.length; i++) {
+            binary += String.fromCharCode(bytes[i]);
+          }
+          const base64 = btoa(binary);
           return { name: file.name, data: base64, mime_type: file.type };
         })
       );

@@ -50,7 +50,11 @@ Deno.serve(withSentry('elevenlabs-proxy', async (req) => {
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-    const userSupabase = createClient(SUPABASE_URL, authHeader.replace("Bearer ", ""));
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY") || SUPABASE_SERVICE_ROLE_KEY;
+    const userSupabase = createClient(SUPABASE_URL, anonKey, {
+      auth: { persistSession: false },
+      global: { headers: { Authorization: authHeader } },
+    });
 
     // Get current user
     const { data: { user }, error: authError } = await userSupabase.auth.getUser();
