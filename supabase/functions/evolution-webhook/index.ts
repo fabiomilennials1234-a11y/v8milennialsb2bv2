@@ -260,6 +260,7 @@ async function transcribeAudioWithElevenLabs(mediaUrl: string): Promise<string |
     const audioBlob = await mediaResponse.blob();
     const formData = new FormData();
     formData.append("file", new File([audioBlob], "audio.ogg", { type: audioBlob.type || "audio/ogg" }));
+    formData.append("model_id", "scribe_v1");
     formData.append("language_code", "por");
 
     const response = await fetch("https://api.elevenlabs.io/v1/speech-to-text", {
