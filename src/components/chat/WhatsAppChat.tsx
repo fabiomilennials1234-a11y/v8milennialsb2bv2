@@ -1622,8 +1622,16 @@ function ChatWindow({
             ) : (
               <div className="space-y-1 pb-4">
                 {(() => {
+                  // Deduplicar por message_id (mantém primeira ocorrência; ignora optimistic IDs)
+                  const seenIds = new Set<string>();
+                  const deduped = messages.filter((m) => {
+                    if (!m?.message_id || m.message_id.startsWith("optimistic_")) return true;
+                    if (seenIds.has(m.message_id)) return false;
+                    seenIds.add(m.message_id);
+                    return true;
+                  });
                   let lastDate = "";
-                  return messages.map((message, index) => {
+                  return deduped.map((message, index) => {
                     const ts = message?.timestamp;
                     const date = ts ? new Date(ts) : new Date();
                     const validDate = !Number.isNaN(date.getTime());
