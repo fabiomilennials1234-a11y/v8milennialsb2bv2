@@ -1061,72 +1061,82 @@ async function handleMessagesUpsert(
             let sentAsAudio = false;
 
             if (shouldGenerateAudio) {
-              // Resolve API key: org DB → env var
-              const { data: orgData } = await supabase
-                .from("organizations")
-                .select("elevenlabs_api_key")
-                .eq("id", instance.organization_id)
-                .single();
+              try {
+                // Resolve API key: org DB → env var (resilient to PostgREST schema cache issues)
+                let orgApiKey: string | null = null;
+                try {
+                  const { data: orgData } = await supabase
+                    .from("organizations")
+                    .select("elevenlabs_api_key")
+                    .eq("id", instance.organization_id)
+                    .single();
+                  orgApiKey = (orgData as any)?.elevenlabs_api_key || null;
+                } catch (e) {
+                  console.warn("[Evolution Webhook] Org API key query failed:", e);
+                }
 
-              const apiKey = orgData?.elevenlabs_api_key || Deno.env.get("ELEVENLABS_API_KEY");
+                const apiKey = orgApiKey || Deno.env.get("ELEVENLABS_API_KEY");
 
-              if (apiKey) {
-                // Truncate text for audio
-                const audioText = truncateForTts(agentResult.message, ttsConfig.max_chars || 500);
+                if (apiKey) {
+                  // Truncate text for audio
+                  const audioText = truncateForTts(agentResult.message, ttsConfig.max_chars || 500);
 
-                // Generate TTS audio
-                const ttsResult = await generateTtsAudio(
-                  {
-                    text: audioText,
-                    voiceId: ttsConfig.voice_id,
-                    modelId: ttsConfig.model_id,
-                    stability: ttsConfig.stability,
-                    similarityBoost: ttsConfig.similarity_boost,
-                    apiKey,
-                  },
-                  instance.organization_id
-                );
-
-                if (ttsResult.success && ttsResult.audioUrl) {
-                  // Send as voice note
-                  const audioResult = await sendWhatsAppAudio(
-                    instance.instance_name,
-                    phoneNumber,
-                    ttsResult.audioUrl
+                  // Generate TTS audio
+                  const ttsResult = await generateTtsAudio(
+                    {
+                      text: audioText,
+                      voiceId: ttsConfig.voice_id,
+                      modelId: ttsConfig.model_id,
+                      stability: ttsConfig.stability,
+                      similarityBoost: ttsConfig.similarity_boost,
+                      apiKey,
+                    },
+                    instance.organization_id
                   );
 
-                  if (audioResult.success) {
-                    sentAsAudio = true;
-                    console.log("[Evolution Webhook] TTS audio sent successfully");
+                  if (ttsResult.success && ttsResult.audioUrl) {
+                    // Send as voice note
+                    const audioResult = await sendWhatsAppAudio(
+                      instance.instance_name,
+                      phoneNumber,
+                      ttsResult.audioUrl
+                    );
 
-                    // Save outgoing message as ptt with text content for chat display
-                    const { error: outMsgError } = await supabase.from("whatsapp_messages").insert({
-                      organization_id: instance.organization_id,
-                      instance_id: instance.id,
-                      message_id: audioResult.messageId || `agent_tts_${Date.now()}_${Math.random().toString(36).substring(7)}`,
-                      remote_jid: `${phoneNumber}@s.whatsapp.net`,
-                      phone_number: phoneNumber,
-                      direction: "outgoing",
-                      message_type: "ptt",
-                      content: agentResult.message,
-                      media_url: ttsResult.audioUrl,
-                      status: "sent",
-                      timestamp: new Date().toISOString(),
-                    });
+                    if (audioResult.success) {
+                      sentAsAudio = true;
+                      console.log("[Evolution Webhook] TTS audio sent successfully");
 
-                    if (outMsgError) {
-                      console.error("[Evolution Webhook] Error saving TTS outgoing message:", outMsgError);
+                      // Save outgoing message as ptt with text content for chat display
+                      const { error: outMsgError } = await supabase.from("whatsapp_messages").insert({
+                        organization_id: instance.organization_id,
+                        instance_id: instance.id,
+                        message_id: audioResult.messageId || `agent_tts_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+                        remote_jid: `${phoneNumber}@s.whatsapp.net`,
+                        phone_number: phoneNumber,
+                        direction: "outgoing",
+                        message_type: "ptt",
+                        content: agentResult.message,
+                        media_url: ttsResult.audioUrl,
+                        status: "sent",
+                        timestamp: new Date().toISOString(),
+                      });
+
+                      if (outMsgError) {
+                        console.error("[Evolution Webhook] Error saving TTS outgoing message:", outMsgError);
+                      } else {
+                        console.log("[Evolution Webhook] TTS outgoing message saved");
+                      }
                     } else {
-                      console.log("[Evolution Webhook] TTS outgoing message saved");
+                      console.warn("[Evolution Webhook] TTS audio send failed, falling back to text:", audioResult.error);
                     }
                   } else {
-                    console.warn("[Evolution Webhook] TTS audio send failed, falling back to text:", audioResult.error);
+                    console.warn("[Evolution Webhook] TTS generation failed, falling back to text:", ttsResult.error);
                   }
                 } else {
-                  console.warn("[Evolution Webhook] TTS generation failed, falling back to text:", ttsResult.error);
+                  console.warn("[Evolution Webhook] No ElevenLabs API key found, falling back to text");
                 }
-              } else {
-                console.warn("[Evolution Webhook] No ElevenLabs API key found, falling back to text");
+              } catch (ttsError) {
+                console.error("[Evolution Webhook] TTS block crashed, falling back to text:", ttsError);
               }
             }
 
