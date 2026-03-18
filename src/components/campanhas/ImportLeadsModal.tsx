@@ -12,7 +12,7 @@ import { useLeadCustomFields } from "@/hooks/useLeadCustomFields";
 import { useCanPerformAction } from "@/lib/permissions";
 import { downloadLeadsImportTemplate } from "@/lib/leadsImportTemplate";
 import { toast } from "sonner";
-import { Upload, FileSpreadsheet, CheckCircle2, XCircle, AlertCircle, Loader2, Sparkles, Users, RefreshCw, AlertTriangle, FileDown, ChevronDown, ChevronUp } from "lucide-react";
+import { Upload, FileSpreadsheet, CheckCircle2, XCircle, AlertCircle, Loader2, Sparkles, Users, RefreshCw, AlertTriangle, FileDown, ChevronDown, ChevronUp, UserX } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface ImportLeadsModalProps {
@@ -45,6 +45,7 @@ export function ImportLeadsModal({
   const [file, setFile] = useState<File | null>(null);
   const [previewLeads, setPreviewLeads] = useState<PreviewLead[]>([]);
   const [totalLeads, setTotalLeads] = useState(0);
+  const [incompleteLeadsCount, setIncompleteLeadsCount] = useState(0);
   const [previewResult, setPreviewResult] = useState<FilePreviewResult | null>(null);
   const [userColumnMapping, setUserColumnMapping] = useState<Record<string, string>>({});
   const [selectedStageId, setSelectedStageId] = useState<string>("");
@@ -106,6 +107,7 @@ export function ImportLeadsModal({
 
       const leads = await parseCSV(selectedFile);
       setTotalLeads(leads.length);
+      setIncompleteLeadsCount(leads.filter(l => !l.phone && !l.email).length);
       setPreviewLeads(leads.slice(0, 10).map(l => ({
         name: l.name,
         company: l.company,
@@ -150,6 +152,9 @@ export function ImportLeadsModal({
 
     try {
       const memberIds = allMembers.map(m => m.team_member_id);
+      const mergedMapping = previewResult
+        ? { ...(previewResult.suggestedMapping ?? {}), ...userColumnMapping }
+        : { ...userColumnMapping };
       await importLeads(
         file,
         campanhaId,
@@ -160,12 +165,14 @@ export function ImportLeadsModal({
         stages.map((s) => ({ id: s.id, name: s.name })),
         autoDistribute ? distributionMode : undefined,
         undefined,
-        undefined
+        undefined,
+        Object.keys(mergedMapping).length ? mergedMapping : undefined
       );
       setStep("complete");
     } catch (error) {
       console.error("Import error:", error);
-      toast.error("Erro durante a importação");
+      const msg = error instanceof Error ? error.message : String(error);
+      toast.error(`Erro durante a importação: ${msg}`);
       setStep("preview");
     }
   };
@@ -175,6 +182,7 @@ export function ImportLeadsModal({
     setFile(null);
     setPreviewLeads([]);
     setTotalLeads(0);
+    setIncompleteLeadsCount(0);
     setPreviewResult(null);
     setUserColumnMapping({});
     setSelectedStageId("");
@@ -314,8 +322,12 @@ export function ImportLeadsModal({
                 <Button
                   onClick={async () => {
                     try {
-                      const leads = await parseCSV(file!);
+                      const mapping = previewResult
+                        ? { ...(previewResult.suggestedMapping ?? {}), ...userColumnMapping }
+                        : { ...userColumnMapping };
+                      const leads = await parseCSV(file!, Object.keys(mapping).length ? mapping : undefined);
                       setTotalLeads(leads.length);
+                      setIncompleteLeadsCount(leads.filter(l => !l.phone && !l.email).length);
                       setPreviewLeads(
                         leads.slice(0, 10).map((l) => ({
                           name: l.name,
@@ -351,10 +363,20 @@ export function ImportLeadsModal({
                 <div>
                   <p className="font-medium text-sm">{file?.name}</p>
                   <p className="text-xs text-muted-foreground">
-                    {totalLeads} leads encontrados
+                    {totalLeads} leads encontrados no arquivo
                   </p>
                 </div>
               </div>
+
+              {/* Incomplete leads warning */}
+              {incompleteLeadsCount > 0 && (
+                <div className="flex items-start gap-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                  <UserX className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <p className="text-xs text-amber-800 dark:text-amber-200">
+                    <strong>{incompleteLeadsCount} lead{incompleteLeadsCount > 1 ? "s" : ""} sem telefone e e-mail</strong> — serão importados como incompletos. Você poderá completar os dados depois.
+                  </p>
+                </div>
+              )}
 
               {/* Preview */}
               <div className="space-y-2">
@@ -535,7 +557,7 @@ export function ImportLeadsModal({
               </div>
 
               {/* Stats */}
-              <div className="grid grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -557,6 +579,19 @@ export function ImportLeadsModal({
                   <p className="text-2xl font-bold text-blue-500">{result.updated}</p>
                   <p className="text-xs text-muted-foreground">Atualizados</p>
                 </motion.div>
+
+                {(result.incomplete ?? 0) > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.38 }}
+                    className="p-4 bg-orange-500/10 rounded-xl text-center"
+                  >
+                    <UserX className="w-6 h-6 mx-auto mb-2 text-orange-500" />
+                    <p className="text-2xl font-bold text-orange-500">{result.incomplete}</p>
+                    <p className="text-xs text-muted-foreground">Sem contato</p>
+                  </motion.div>
+                )}
 
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
@@ -580,6 +615,20 @@ export function ImportLeadsModal({
                   <p className="text-xs text-muted-foreground">Inválidos</p>
                 </motion.div>
               </div>
+
+              {(result.incomplete ?? 0) > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.5 }}
+                  className="flex items-start gap-2 p-3 bg-orange-500/10 border border-orange-500/30 rounded-lg"
+                >
+                  <UserX className="w-4 h-4 text-orange-500 shrink-0 mt-0.5" />
+                  <p className="text-xs text-orange-800 dark:text-orange-200">
+                    <strong>{result.incomplete} lead{(result.incomplete ?? 0) > 1 ? "s" : ""} importado{(result.incomplete ?? 0) > 1 ? "s" : ""} sem telefone/e-mail.</strong> Eles aparecem normalmente na campanha — complete os dados de contato depois.
+                  </p>
+                </motion.div>
+              )}
 
               {/* Distribution breakdown */}
               {result.distribution && Object.keys(result.distribution).length > 0 && (
