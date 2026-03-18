@@ -18,10 +18,12 @@ CREATE INDEX IF NOT EXISTS idx_pipe_confirmacao_org_meeting
   ON pipe_confirmacao (organization_id, meeting_date)
   WHERE meeting_date IS NOT NULL;
 
--- Seed analytics feature into plan_features for all active plans
--- This enables the analytics module for organizations on these plans
-INSERT INTO plan_features (plan_id, feature_key, enabled)
-SELECT id, 'analytics', true
-FROM subscription_plans
-WHERE is_active = true
-ON CONFLICT DO NOTHING;
+-- Add analytics feature to all subscription plans (features is JSONB column)
+UPDATE subscription_plans
+SET features = COALESCE(features, '{}')::jsonb || '{"analytics": true}'::jsonb
+WHERE is_active = true;
+
+-- Also register in feature_flags table with default enabled
+INSERT INTO feature_flags (key, name, description, default_enabled, category)
+VALUES ('analytics', 'Analytics', 'Painel de inteligência com métricas avançadas', true, 'modules')
+ON CONFLICT (key) DO NOTHING;
