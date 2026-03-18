@@ -34,6 +34,9 @@ import {
 import type { CampaignTemplate } from "@/hooks/useCampaignTemplates";
 import { usePipelineStages, type PipelineType } from "@/hooks/usePipelineStages";
 import { useTags } from "@/hooks/useTags";
+import { CampaignSelectorField } from "./CampaignSelectorField";
+import { CampaignStageSelectorField } from "./CampaignStageSelectorField";
+import { CampaignTemplateSelectorField } from "./CampaignTemplateSelectorField";
 
 interface ActionPanelProps {
   data: ActionNodeData;
@@ -375,105 +378,87 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
       {/* ═══════ CAMPANHAS ═══════ */}
 
       {at === "add_to_campaign" && (
-        <>
-          <div className="space-y-2">
-            <Label>Nome da Campanha</Label>
-            <Input
-              value={data.campaignName || ""}
-              onChange={(e) => onUpdate({ campaignName: e.target.value })}
-              placeholder="Nome ou ID da campanha"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>ID da Campanha</Label>
-            <Input
-              value={data.campaignId || ""}
-              onChange={(e) => onUpdate({ campaignId: e.target.value })}
-              placeholder="UUID da campanha"
-            />
-          </div>
-        </>
+        <CampaignSelectorField
+          campaignId={data.campaignId || ""}
+          onSelect={(id, name) => onUpdate({ campaignId: id, campaignName: name })}
+        />
       )}
 
       {at === "remove_from_campaign" && (
-        <div className="space-y-2">
-          <Label>ID da Campanha</Label>
-          <Input
-            value={data.campaignId || ""}
-            onChange={(e) => onUpdate({ campaignId: e.target.value })}
-            placeholder="UUID da campanha"
-          />
-        </div>
+        <CampaignSelectorField
+          campaignId={data.campaignId || ""}
+          onSelect={(id, name) => onUpdate({ campaignId: id, campaignName: name })}
+        />
       )}
 
       {at === "move_campaign_stage" && (
         <>
-          <div className="space-y-2">
-            <Label>ID da Campanha</Label>
-            <Input
-              value={data.campaignId || ""}
-              onChange={(e) => onUpdate({ campaignId: e.target.value })}
-              placeholder="UUID da campanha"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Nome do estágio destino</Label>
-            <Input
-              value={data.campaignStageName || ""}
-              onChange={(e) => onUpdate({ campaignStageName: e.target.value })}
-              placeholder="Ex: Qualificado"
-            />
-          </div>
+          <CampaignSelectorField
+            campaignId={data.campaignId || ""}
+            onSelect={(id, name) =>
+              onUpdate({
+                campaignId: id,
+                campaignName: name,
+                campaignStageId: "",
+                campaignStageName: "",
+              })
+            }
+          />
+          <CampaignStageSelectorField
+            campanhaId={data.campaignId || ""}
+            stageId={data.campaignStageId || ""}
+            onSelect={(id, name) =>
+              onUpdate({ campaignStageId: id, campaignStageName: name })
+            }
+          />
         </>
       )}
 
       {at === "send_campaign_message" && (
         <>
-          <div className="space-y-2">
-            <Label>ID da Campanha</Label>
-            <Input
-              value={data.campaignId || ""}
-              onChange={(e) => onUpdate({ campaignId: e.target.value })}
-              placeholder="UUID da campanha"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>ID do Template da Campanha</Label>
-            <Input
-              value={data.campaignTemplateId || ""}
-              onChange={(e) => onUpdate({ campaignTemplateId: e.target.value })}
-              placeholder="UUID do template"
-            />
-          </div>
+          <CampaignSelectorField
+            campaignId={data.campaignId || ""}
+            onSelect={(id, name) =>
+              onUpdate({
+                campaignId: id,
+                campaignName: name,
+                campaignTemplateId: "",
+                campaignTemplateName: "",
+              })
+            }
+          />
+          <CampaignTemplateSelectorField
+            campanhaId={data.campaignId || ""}
+            templateId={data.campaignTemplateId || ""}
+            onSelect={(id, name) =>
+              onUpdate({ campaignTemplateId: id, campaignTemplateName: name })
+            }
+          />
         </>
       )}
 
       {at === "pause_campaign_sequence" && (
-        <div className="space-y-2">
-          <Label>ID da Campanha</Label>
-          <Input
-            value={data.campaignId || ""}
-            onChange={(e) => onUpdate({ campaignId: e.target.value })}
-            placeholder="UUID da campanha"
+        <>
+          <CampaignSelectorField
+            campaignId={data.campaignId || ""}
+            onSelect={(id, name) => onUpdate({ campaignId: id, campaignName: name })}
           />
           <p className="text-xs text-muted-foreground">
             Cancela todas as mensagens agendadas do lead nesta campanha.
           </p>
-        </div>
+        </>
       )}
 
       {at === "resume_campaign_sequence" && (
-        <div className="space-y-2">
-          <Label>ID da Campanha</Label>
-          <Input
-            value={data.campaignId || ""}
-            onChange={(e) => onUpdate({ campaignId: e.target.value })}
-            placeholder="UUID da campanha"
+        <>
+          <CampaignSelectorField
+            campaignId={data.campaignId || ""}
+            onSelect={(id, name) => onUpdate({ campaignId: id, campaignName: name })}
           />
           <p className="text-xs text-muted-foreground">
             Reagenda as mensagens canceladas do lead nesta campanha.
           </p>
-        </div>
+        </>
       )}
 
       {/* ═══════ AGENDA ═══════ */}
