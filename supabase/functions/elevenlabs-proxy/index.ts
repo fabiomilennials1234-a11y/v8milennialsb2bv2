@@ -50,15 +50,12 @@ Deno.serve(withSentry('elevenlabs-proxy', async (req) => {
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY") || SUPABASE_SERVICE_ROLE_KEY;
-    const userSupabase = createClient(SUPABASE_URL, anonKey, {
-      auth: { persistSession: false },
-      global: { headers: { Authorization: authHeader } },
-    });
 
-    // Get current user
-    const { data: { user }, error: authError } = await userSupabase.auth.getUser();
+    // Validate user JWT using service role client
+    const token = authHeader.replace("Bearer ", "");
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
     if (authError || !user) {
+      console.error("[elevenlabs-proxy] Auth failed:", authError?.message);
       return new Response(
         JSON.stringify({ error: "Unauthorized" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -66,7 +63,8 @@ Deno.serve(withSentry('elevenlabs-proxy', async (req) => {
     }
 
     // Get user's organization and check admin role
-    const { data: membership } = await supabase
+    console.log("[elevenlabs-proxy] User authenticated:", user.id);
+    const { data: membership, error: memberError } = await supabase
       .from("team_members")
       .select("organization_id, role")
       .eq("user_id", user.id)
@@ -74,6 +72,8 @@ Deno.serve(withSentry('elevenlabs-proxy', async (req) => {
       .order("created_at", { ascending: true })
       .limit(1)
       .maybeSingle();
+
+    console.log("[elevenlabs-proxy] Membership:", { membership, memberError: memberError?.message });
 
     if (!membership) {
       return new Response(
@@ -83,18 +83,21 @@ Deno.serve(withSentry('elevenlabs-proxy', async (req) => {
     }
 
     if (membership.role !== "admin") {
+      console.log("[elevenlabs-proxy] Role check failed:", membership.role);
       return new Response(
-        JSON.stringify({ error: "Admin access required" }),
+        JSON.stringify({ error: `Admin access required. Your role: ${membership.role}` }),
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     // Resolve API key
-    const { data: orgData } = await supabase
+    const { data: orgData, error: orgError } = await supabase
       .from("organizations")
       .select("elevenlabs_api_key")
       .eq("id", membership.organization_id)
       .single();
+
+    console.log("[elevenlabs-proxy] Org data:", { hasKey: !!orgData?.elevenlabs_api_key, orgError: orgError?.message });
 
     const apiKey = orgData?.elevenlabs_api_key || Deno.env.get("ELEVENLABS_API_KEY");
     if (!apiKey) {
