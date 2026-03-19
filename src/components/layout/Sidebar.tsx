@@ -64,6 +64,7 @@ interface NavItem {
   icon: React.ElementType;
   path: string;
   badge?: number;
+  masterOnly?: boolean;
 }
 
 interface NavItemWithChildren extends NavItem {
@@ -82,7 +83,7 @@ const navItems: NavItemWithChildren[] = [
   { label: "Central de Comando", icon: Gauge, path: "/" },
   { label: "Campanhas", icon: Target, path: "/campanhas" },
   { label: "Marketing", icon: BarChart2, path: "/marketing" },
-  { label: "Analytics", icon: BarChart3, path: "/analytics" },
+  { label: "Analytics", icon: BarChart3, path: "/analytics", masterOnly: true },
   { label: "Chat", icon: Zap, path: "/chat" },
   { label: "Funis", icon: GitBranch, path: "/funis", children: funisSubItems },
   { label: "Agenda", icon: CalendarDays, path: "/agenda" },
@@ -396,7 +397,7 @@ export function Sidebar() {
 
       {/* Main Navigation */}
       <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-        {visibleNavItems.map((item) => {
+        {visibleNavItems.filter((item) => !item.masterOnly || isMaster).map((item) => {
           const locked = isLocked(item.path);
 
           // Filtrar por permissão de visualização do membro

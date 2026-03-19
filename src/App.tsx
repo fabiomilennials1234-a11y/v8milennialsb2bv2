@@ -208,11 +208,13 @@ function AppRoutes() {
         path="/analytics"
         element={
           <ProtectedRoute>
-            <LayoutWrapper>
-              <PermissionProtectedRoute featureKey="analytics.view">
-                <Analytics />
-              </PermissionProtectedRoute>
-            </LayoutWrapper>
+            <MasterRoute>
+              <LayoutWrapper>
+                <PermissionProtectedRoute featureKey="analytics.view">
+                  <Analytics />
+                </PermissionProtectedRoute>
+              </LayoutWrapper>
+            </MasterRoute>
           </ProtectedRoute>
         }
       />
