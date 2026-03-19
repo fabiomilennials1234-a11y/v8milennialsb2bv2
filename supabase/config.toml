@@ -5,6 +5,10 @@ project_id = "jsjsmuncfkbsbzqzqhfq"
 [auth.email]
 enable_confirmations = false
 
+# import-leads: autenticação via apikey; organization_id validado internamente
+[functions.import-leads]
+verify_jwt = false
+
 [functions.lead-webhook]
 verify_jwt = false
 

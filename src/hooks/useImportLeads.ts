@@ -1083,15 +1083,11 @@ export function useImportLeads() {
     const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
     const functionUrl = `${supabaseUrl}/functions/v1/import-leads`;
 
-    const { data: { session } } = await supabase.auth.getSession();
-    const accessToken = session?.access_token;
-
     const response = await fetch(functionUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "apikey": anonKey,
-        ...(accessToken ? { "Authorization": `Bearer ${accessToken}` } : {}),
       },
       body: JSON.stringify({
         ...payload,
