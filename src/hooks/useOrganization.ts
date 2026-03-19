@@ -46,7 +46,15 @@ export function useOrganization(): OrganizationContext {
     staleTime: 5 * 60 * 1000, // 5 minutos — org_type não muda
   });
 
+  // isLoading reflecte o carregamento completo (usado por componentes que querem esperar orgType)
   const isLoading = teamLoading || (!!orgId && orgLoading);
+
+  // isReady habilita queries de dados assim que o orgId é conhecido.
+  // NÃO aguarda orgLoading: a query org-type é metadado de UI opcional e pode falhar/retransmitir
+  // sem bloquear o carregamento dos dados do pipe. Aguardar orgLoading causava loading infinito —
+  // durante retries da query org-type, isReady oscilava true→false→true, fazendo as queries
+  // downstream serem habilitadas e desabilitadas repetidamente sem completar.
+  const isReady = !teamLoading && !!orgId;
 
   return {
     organizationId: orgId ?? null,
@@ -54,7 +62,7 @@ export function useOrganization(): OrganizationContext {
     role: teamMember?.role ?? null,
     orgType: orgData?.org_type ?? null,
     isLoading,
-    isReady: !isLoading && !!orgId,
+    isReady,
     error: teamError as Error | null,
   };
 }

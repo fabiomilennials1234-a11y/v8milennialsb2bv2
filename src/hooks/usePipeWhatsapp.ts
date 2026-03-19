@@ -28,7 +28,7 @@ export function usePipeWhatsapp() {
 
   return useQuery({
     queryKey: ["pipe_whatsapp", organizationId],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       if (!organizationId) {
         return [];
       }
@@ -47,12 +47,15 @@ export function usePipeWhatsapp() {
           sdr:team_members!pipe_whatsapp_sdr_id_fkey(id, name)
         `)
         .eq("organization_id", organizationId)
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .abortSignal(signal);
 
       if (error) throw error;
       return data;
     },
     enabled: isReady && !!organizationId,
+    retry: 1,
+    staleTime: 30_000,
   });
 }
 

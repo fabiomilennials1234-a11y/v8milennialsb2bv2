@@ -91,7 +91,7 @@ import { TimelineItem } from "./TimelineItem";
 import { ScheduleFollowUpButton } from "@/components/followups/ScheduleFollowUpButton";
 import { ORIGIN_COLORS } from "./LeadCard";
 import { cn } from "@/lib/utils";
-import { openWhatsApp, formatPhoneForWhatsApp } from "@/lib/whatsapp";
+import { useOpenWhatsAppChat, formatPhoneForWhatsApp } from "@/lib/whatsapp";
 import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
@@ -172,6 +172,7 @@ export const LeadDetailDrawer = memo(function LeadDetailDrawer({
   const { toast: hookToast } = useToast();
   const queryClient = useQueryClient();
   const toggleAIMutation = useToggleLeadAI();
+  const openWhatsApp = useOpenWhatsAppChat();
   const updateLead = useUpdateLead();
   const deleteLead = useDeleteLead();
   const logAction = useLogLeadAction();
