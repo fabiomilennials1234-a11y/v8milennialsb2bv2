@@ -1079,16 +1079,32 @@ export function useImportLeads() {
     parsedLeads: ParsedLead[],
     payload: Record<string, unknown>,
   ): Promise<{ report: EdgeFunctionReport }> => {
-    const { data, error } = await supabase.functions.invoke("import-leads", {
-      body: {
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+    const functionUrl = `${supabaseUrl}/functions/v1/import-leads`;
+
+    const response = await fetch(functionUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "apikey": anonKey,
+      },
+      body: JSON.stringify({
         ...payload,
         leads: parsedLeads,
         organization_id: organizationId,
-      },
+      }),
     });
 
-    if (error) {
-      throw new Error(error.message || "Erro na função de importação");
+    let data: any;
+    try {
+      data = await response.json();
+    } catch {
+      throw new Error("Resposta inválida da função de importação");
+    }
+
+    if (!response.ok) {
+      throw new Error(data?.error || data?.message || `Erro ${response.status} na importação`);
     }
 
     if (!data?.success) throw new Error(data?.error || "Erro desconhecido na importação");
