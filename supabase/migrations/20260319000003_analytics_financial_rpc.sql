@@ -30,7 +30,7 @@ BEGIN
       AND pp.closed_at >= p_start_date
       AND pp.closed_at < (p_end_date + interval '1 day')
       AND (p_member_id IS NULL OR pp.closer_id = p_member_id)
-      AND (p_origin IS NULL OR l.origin = p_origin)
+      AND (p_origin IS NULL OR l.origin::text = p_origin)
   ),
 
   -- ── Revenue by product_type (group small types as "outros") ─────────────
@@ -190,7 +190,7 @@ BEGIN
     WHERE l.organization_id = p_org_id
       AND l.created_at >= p_start_date
       AND l.created_at < (p_end_date + interval '1 day')
-      AND (p_origin IS NULL OR l.origin = p_origin)
+      AND (p_origin IS NULL OR l.origin::text = p_origin)
     GROUP BY l.origin
     HAVING COUNT(DISTINCT l.id) >= 3
     ORDER BY cac_estimate ASC

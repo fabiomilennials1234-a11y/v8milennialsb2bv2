@@ -34,7 +34,7 @@ BEGIN
       AND pp.closed_at >= p_start_date
       AND pp.closed_at < (p_end_date + interval '1 day')
       AND (p_member_id IS NULL OR pp.closer_id = p_member_id)
-      AND (p_origin IS NULL OR l.origin = p_origin)
+      AND (p_origin IS NULL OR l.origin::text = p_origin)
   ),
 
   -- ── Cohort: last 6 acquisition months ────────────────────────────────────
@@ -247,7 +247,7 @@ BEGIN
     WHERE l.organization_id = p_org_id
       AND l.created_at >= p_start_date
       AND l.created_at < (p_end_date + interval '1 day')
-      AND (p_origin IS NULL OR l.origin = p_origin)
+      AND (p_origin IS NULL OR l.origin::text = p_origin)
   ),
   attribution_raw AS (
     SELECT
@@ -424,10 +424,19 @@ BEGIN
   -- Insight 2: funnel stage with biggest drop
   insight_bottleneck AS (
     SELECT
-      vf.bottleneck_stage AS stage,
-      vf.bottleneck_pct
+      CASE
+        WHEN vf.lead_to_whatsapp_days = vf.max_stage_days THEN 'Lead → WhatsApp'
+        WHEN vf.whatsapp_to_confirmacao_days = vf.max_stage_days THEN 'WhatsApp → Confirmação'
+        WHEN vf.confirmacao_to_proposal_days = vf.max_stage_days THEN 'Confirmação → Proposta'
+        ELSE 'Proposta → Fechamento'
+      END AS stage,
+      CASE WHEN vf.total_cycle_days > 0
+        THEN ROUND(vf.max_stage_days / vf.total_cycle_days * 100, 1)
+        ELSE 0
+      END AS bottleneck_pct
     FROM velocity_final vf
-    WHERE vf.bottleneck_pct > 40
+    WHERE vf.total_cycle_days > 0
+      AND ROUND(vf.max_stage_days / vf.total_cycle_days * 100, 1) > 40
     LIMIT 1
   ),
   -- Insight 3: revenue trending up 3+ months

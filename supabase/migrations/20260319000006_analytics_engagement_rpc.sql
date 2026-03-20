@@ -178,7 +178,7 @@ BEGIN
       COALESCE(AVG(on4.response_seconds), 0) AS avg_response_seconds
     FROM team_members tm
     LEFT JOIN scope_messages sm_out
-      ON sm_out.assigned_to = tm.id::text AND sm_out.direction = 'outbound'
+      ON sm_out.assigned_to = tm.id AND sm_out.direction = 'outbound'
     LEFT JOIN outbound_next on4
       ON on4.inbound_id IN (
         SELECT id FROM inbound_msgs WHERE lead_id = sm_out.lead_id
