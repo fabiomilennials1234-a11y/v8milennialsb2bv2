@@ -1173,6 +1173,7 @@ async function handleMessagesUpsert(
                         media_url: ttsResult.audioUrl,
                         status: "sent",
                         timestamp: new Date().toISOString(),
+                        sent_by_ai: true,
                       });
 
                       if (outMsgError) {
@@ -1220,6 +1221,7 @@ async function handleMessagesUpsert(
                   content: agentResult.message,
                   status: "sent",
                   timestamp: new Date().toISOString(),
+                  sent_by_ai: true,
                 });
 
                 if (outMsgError) {
