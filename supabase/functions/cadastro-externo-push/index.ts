@@ -62,9 +62,9 @@ Deno.serve(
       return new Response(null, { status: 204, headers: corsHeaders });
     }
 
-    const respond = (body: Record<string, unknown>, status = 200) =>
+    const respond = (body: Record<string, unknown>) =>
       new Response(JSON.stringify(body), {
-        status,
+        status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
 
@@ -73,7 +73,7 @@ Deno.serve(
     try {
       // ── Auth ──────────────────────────────────────────────
       const authHeader = req.headers.get("Authorization");
-      if (!authHeader) return respond({ error: "Não autorizado" }, 401);
+      if (!authHeader) return respond({ error: "Não autorizado" });
 
       const supabaseUser = createClient(
         SUPABASE_URL,
@@ -88,7 +88,7 @@ Deno.serve(
         data: { user },
         error: authError,
       } = await supabaseUser.auth.getUser();
-      if (authError || !user) return respond({ error: "Usuário não autenticado" }, 401);
+      if (authError || !user) return respond({ error: "Usuário não autenticado" });
 
       // ── Resolve org ID ────────────────────────────────────
       const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
@@ -107,7 +107,7 @@ Deno.serve(
       const apiKey = Deno.env.get("CADASTRO_EXTERNO_API_KEY");
       const apiUrl = Deno.env.get("CADASTRO_EXTERNO_URL");
       if (!apiKey || !apiUrl) {
-        return respond({ error: "Integração não configurada (env vars ausentes)" }, 500);
+        return respond({ error: "Integração não configurada (env vars ausentes)" });
       }
 
       // ── Parse body ────────────────────────────────────────
@@ -130,7 +130,7 @@ Deno.serve(
       } = body;
 
       if (!pipe_proposta_id || !nome_cliente || !cnpj) {
-        return respond({ error: "Campos obrigatórios ausentes (pipe_proposta_id, nome_cliente, cnpj)" }, 400);
+        return respond({ error: "Campos obrigatórios ausentes (pipe_proposta_id, nome_cliente, cnpj)" });
       }
 
       // ── 1. Search for existing client by CNPJ ────────────
@@ -230,7 +230,7 @@ Deno.serve(
           error: errorMsg,
           code: createData.code,
           details: createData.details,
-        }, 400);
+        });
       }
 
       // ── 3. Success ────────────────────────────────────────
@@ -260,7 +260,7 @@ Deno.serve(
         status: "error",
         errorMessage: msg,
       });
-      return respond({ error: msg }, 500);
+      return respond({ error: msg });
     }
   })
 );
