@@ -26,7 +26,7 @@ BEGIN
     WHERE pw.organization_id = p_org_id
       AND l.created_at >= p_start_date
       AND l.created_at < (p_end_date + interval '1 day')
-      AND (p_origin IS NULL OR l.origin = p_origin)
+      AND (p_origin IS NULL OR l.origin::text = p_origin)
       AND (p_member_id IS NULL OR pw.sdr_id = p_member_id)
     GROUP BY pw.sdr_id
   ),
@@ -41,7 +41,7 @@ BEGIN
       AND pc.created_at >= p_start_date
       AND pc.created_at < (p_end_date + interval '1 day')
       AND pc.status = 'compareceu'
-      AND (p_origin IS NULL OR l.origin = p_origin)
+      AND (p_origin IS NULL OR l.origin::text = p_origin)
       AND (p_member_id IS NULL OR pc.responsible_id = p_member_id OR pc.sdr_id = p_member_id)
     GROUP BY COALESCE(pc.responsible_id, pc.sdr_id)
   ),
@@ -58,7 +58,7 @@ BEGIN
     WHERE pp.organization_id = p_org_id
       AND pp.created_at >= p_start_date
       AND pp.created_at < (p_end_date + interval '1 day')
-      AND (p_origin IS NULL OR l.origin = p_origin)
+      AND (p_origin IS NULL OR l.origin::text = p_origin)
       AND (p_member_id IS NULL OR pp.closer_id = p_member_id)
     GROUP BY pp.closer_id
   ),
@@ -87,7 +87,7 @@ BEGIN
       AND pp.created_at >= p_start_date
       AND pp.created_at < (p_end_date + interval '1 day')
       AND (p_member_id IS NULL OR pp.closer_id = p_member_id)
-      AND (p_origin IS NULL OR l.origin = p_origin)
+      AND (p_origin IS NULL OR l.origin::text = p_origin)
   ),
   -- Loss reasons
   loss_reasons AS (
@@ -126,7 +126,7 @@ BEGIN
     WHERE l.organization_id = p_org_id
       AND l.created_at >= p_start_date
       AND l.created_at < (p_end_date + interval '1 day')
-      AND (p_origin IS NULL OR l.origin = p_origin)
+      AND (p_origin IS NULL OR l.origin::text = p_origin)
   )
   SELECT jsonb_build_object(
     'member_stats', COALESCE((SELECT jsonb_agg(row_to_json(ms)) FROM member_stats ms), '[]'::jsonb),
