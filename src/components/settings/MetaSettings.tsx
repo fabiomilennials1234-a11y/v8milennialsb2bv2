@@ -472,3 +472,114 @@ export function MetaSettings() {
     </div>
   );
 }
+
+// ─── Componentes isolados por plataforma (usados pelo catálogo de integrações) ──
+
+/** Renderiza apenas a seção Facebook (com Lead Ads). */
+export function FacebookSettings() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { isLoading } = useMetaConnections();
+  const { handleCallback } = useMetaOAuthCallback();
+
+  useEffect(() => {
+    const result = handleCallback(searchParams);
+    if (result) {
+      if (result.success) toast.success(result.message);
+      else toast.error(result.message);
+      searchParams.delete("meta");
+      searchParams.delete("pages");
+      searchParams.delete("instagram");
+      searchParams.delete("reason");
+      searchParams.delete("connectionType");
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [searchParams]);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  return (
+    <ConnectionSection
+      type="facebook"
+      icon={<FacebookIcon className="w-6 h-6 text-[#1877F2]" />}
+      title="Facebook"
+      subtitle="Conecte suas páginas do Facebook para receber mensagens do Messenger e capturar leads de anúncios."
+      accentColor="#1877F2"
+      buttonLabel="Conectar com Facebook"
+      disconnectLabel="Desconectar Facebook?"
+      renderPage={(page) => (
+        <div className="flex items-center gap-3">
+          <MessengerIcon className="w-4 h-4 text-[#0084FF]" />
+          <span className="text-sm font-medium">{page.page_name}</span>
+        </div>
+      )}
+    >
+      <div className="pt-4 border-t">
+        <MetaLeadgenConfig />
+      </div>
+    </ConnectionSection>
+  );
+}
+
+/** Renderiza apenas a seção Instagram. */
+export function InstagramSettings() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { isLoading } = useMetaConnections();
+  const { handleCallback } = useMetaOAuthCallback();
+
+  useEffect(() => {
+    const result = handleCallback(searchParams);
+    if (result) {
+      if (result.success) toast.success(result.message);
+      else toast.error(result.message);
+      searchParams.delete("meta");
+      searchParams.delete("pages");
+      searchParams.delete("instagram");
+      searchParams.delete("reason");
+      searchParams.delete("connectionType");
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [searchParams]);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  return (
+    <ConnectionSection
+      type="instagram"
+      icon={<Instagram className="w-6 h-6 text-[#E1306C]" />}
+      title="Instagram"
+      subtitle="Conecte sua conta do Instagram para receber mensagens do Instagram Direct."
+      accentColor="#E1306C"
+      buttonLabel="Conectar com Instagram"
+      disconnectLabel="Desconectar Instagram?"
+      renderPage={(page) => (
+        <div className="flex items-center gap-3">
+          <Instagram className="w-4 h-4 text-[#E1306C]" />
+          <div className="flex flex-col">
+            <span className="text-sm font-medium">
+              {page.instagram_username
+                ? `@${page.instagram_username}`
+                : page.page_name}
+            </span>
+            {page.instagram_username && (
+              <span className="text-xs text-muted-foreground">
+                {page.page_name}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+    />
+  );
+}
