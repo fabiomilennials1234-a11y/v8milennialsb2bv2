@@ -60,6 +60,8 @@ import { useDeleteLead } from "@/hooks/useLeads";
 import { useTinyErpStatus } from "@/hooks/useTinyErp";
 import { TinyErpOrderStatus } from "@/components/proposals/TinyErpOrderStatus";
 import { TinyErpConfirmOrderDialog } from "@/components/proposals/TinyErpConfirmOrderDialog";
+import { useCadastroExternoEnabled } from "@/hooks/useCadastroExterno";
+import { CadastroExternoConfirmDialog } from "@/components/proposals/CadastroExternoConfirmDialog";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -73,6 +75,7 @@ interface PropostasContextProps {
 
 export function PropostasContext({ lead, pipeData: proposta, onSuccess }: PropostasContextProps) {
   const { data: tinyStatus } = useTinyErpStatus();
+  const cadastroExternoEnabled = useCadastroExternoEnabled();
   const { data: teamMembers = [] } = useTeamMembers();
   const { data: products = [] } = useActiveProducts();
   const { data: itemsData = [], isLoading: itemsLoading } = usePipePropostaItems(proposta?.id);
@@ -97,6 +100,7 @@ export function PropostasContext({ lead, pipeData: proposta, onSuccess }: Propos
   const [newNote, setNewNote] = useState("");
   const [isAddingNote, setIsAddingNote] = useState(false);
   const [tinyConfirmOpen, setTinyConfirmOpen] = useState(false);
+  const [cadastroExternoOpen, setCadastroExternoOpen] = useState(false);
 
   const [localItems, setLocalItems] = useState<Array<{ id: string; product_id: string; sale_value: string; isNew?: boolean }>>([]);
   const [itemsInitialized, setItemsInitialized] = useState(false);
@@ -203,6 +207,7 @@ export function PropostasContext({ lead, pipeData: proposta, onSuccess }: Propos
 
       const isNewSale = formData.status === "vendido" && proposta.status !== "vendido";
       const shouldShowTinyModal = isNewSale && tinyStatus?.connected;
+      const shouldShowCadastroModal = isNewSale && cadastroExternoEnabled;
 
       await updateProposta.mutateAsync({
         id: proposta.id,
@@ -223,6 +228,12 @@ export function PropostasContext({ lead, pipeData: proposta, onSuccess }: Propos
       if (shouldShowTinyModal) {
         toast.success("🎉 Venda fechada!");
         setTinyConfirmOpen(true);
+        return;
+      }
+
+      if (shouldShowCadastroModal) {
+        toast.success("🎉 Venda fechada!");
+        setCadastroExternoOpen(true);
         return;
       }
 
@@ -480,6 +491,19 @@ export function PropostasContext({ lead, pipeData: proposta, onSuccess }: Propos
         lead={lead}
         items={tinyItems}
         totalValue={totalValue}
+        onSuccess={() => { onSuccess?.(); }}
+      />
+
+      {/* Cadastro Externo Confirm Dialog */}
+      <CadastroExternoConfirmDialog
+        open={cadastroExternoOpen}
+        onOpenChange={setCadastroExternoOpen}
+        pipePropostaId={proposta.id}
+        lead={lead}
+        items={tinyItems}
+        totalValue={totalValue}
+        contractDuration={formData.contract_duration ? Number(formData.contract_duration) : null}
+        proposalNotes={formData.notes || null}
         onSuccess={() => { onSuccess?.(); }}
       />
     </div>
