@@ -49,6 +49,8 @@ import { CommitmentDateModal } from "@/components/proposals/CommitmentDateModal"
 import { TinyErpConfirmOrderDialog } from "@/components/proposals/TinyErpConfirmOrderDialog";
 import { DaysUntilMeeting } from "@/components/proposals/DaysUntilMeeting";
 import { useTinyErpStatus } from "@/hooks/useTinyErp";
+import { useCadastroExternoEnabled } from "@/hooks/useCadastroExterno";
+import { CadastroExternoConfirmDialog } from "@/components/proposals/CadastroExternoConfirmDialog";
 import { useCreateAcaoDoDia } from "@/hooks/useAcoesDoDia";
 import { supabase } from "@/integrations/supabase/client";
 import { CalorAnalyticsChart } from "@/components/proposals/CalorAnalyticsChart";
@@ -153,6 +155,19 @@ export default function PipePropostas() {
     totalValue: number;
   } | null>(null);
 
+  // State for Cadastro Externo confirmation modal on drag-to-vendido
+  const [cadastroExternoOpen, setCadastroExternoOpen] = useState(false);
+  const [pendingCadastroExterno, setPendingCadastroExterno] = useState<{
+    itemId: string;
+    leadId: string;
+    closerId: string | null;
+    lead: any;
+    items: Array<{ product_name: string; sale_value: number }>;
+    totalValue: number;
+    contractDuration: number | null;
+    proposalNotes: string | null;
+  } | null>(null);
+
   // State for loss reason dialog (drag-to-perdido)
   const [lossReasonDialogOpen, setLossReasonDialogOpen] = useState(false);
   const [selectedLossReason, setSelectedLossReason] = useState<string>("");
@@ -179,6 +194,7 @@ export default function PipePropostas() {
   const updatePipeProposta = useUpdatePipeProposta();
   const { allowed: canMovePipe } = useCanPerformAction("move_pipe_record");
   const { data: tinyStatus } = useTinyErpStatus();
+  const cadastroExternoEnabled = useCadastroExternoEnabled();
   const deletePipeProposta = useDeletePipeProposta();
   const deleteAllLeadsInPipe = useDeleteAllLeadsInPipe("propostas");
   const updateLead = useUpdateLead();
@@ -552,6 +568,27 @@ export default function PipePropostas() {
         setTinyConfirmOpen(true);
         return;
       }
+
+      if (cadastroExternoEnabled) {
+        const itemsList = (item.items || []).map((it: any) => ({
+          product_name: it.product?.name || "Produto",
+          sale_value: Number(it.sale_value) || 0,
+        }));
+        const total = itemsList.reduce((sum: number, it: any) => sum + it.sale_value, 0);
+
+        setPendingCadastroExterno({
+          itemId,
+          leadId: item.lead_id,
+          closerId: item.closer_id,
+          lead: item.lead,
+          items: itemsList,
+          totalValue: total || Number(item.sale_value) || 0,
+          contractDuration: item.contract_duration || null,
+          proposalNotes: item.notes || null,
+        });
+        setCadastroExternoOpen(true);
+        return;
+      }
     }
 
     // If moving to "perdido", show loss reason dialog
@@ -686,6 +723,27 @@ export default function PipePropostas() {
       );
     } finally {
       vendidoCompletingRef.current = false;
+    }
+  };
+
+  // Guard ref to prevent double execution of cadastro externo completion
+  const cadastroCompletingRef = useRef(false);
+
+  const handleCadastroExternoComplete = async () => {
+    if (!pendingCadastroExterno || cadastroCompletingRef.current) return;
+    cadastroCompletingRef.current = true;
+    const pv = pendingCadastroExterno;
+    setPendingCadastroExterno(null);
+
+    try {
+      await executeStatusChange(
+        pv.itemId,
+        "vendido",
+        pv.leadId,
+        pv.closerId,
+      );
+    } finally {
+      cadastroCompletingRef.current = false;
     }
   };
 
@@ -1222,6 +1280,26 @@ export default function PipePropostas() {
           items={pendingVendido.items}
           totalValue={pendingVendido.totalValue}
           onSuccess={handleTinyVendidoComplete}
+        />
+      )}
+
+      {/* Cadastro Externo Confirm Dialog (on drag-to-vendido) */}
+      {pendingCadastroExterno && (
+        <CadastroExternoConfirmDialog
+          open={cadastroExternoOpen}
+          onOpenChange={(open) => {
+            setCadastroExternoOpen(open);
+            if (!open && pendingCadastroExterno) {
+              handleCadastroExternoComplete();
+            }
+          }}
+          pipePropostaId={pendingCadastroExterno.itemId}
+          lead={pendingCadastroExterno.lead}
+          items={pendingCadastroExterno.items}
+          totalValue={pendingCadastroExterno.totalValue}
+          contractDuration={pendingCadastroExterno.contractDuration}
+          proposalNotes={pendingCadastroExterno.proposalNotes}
+          onSuccess={handleCadastroExternoComplete}
         />
       )}
 
