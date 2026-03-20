@@ -32,6 +32,7 @@ Feature adicional: filtro "Aguardando humano" no chat.
 | Mensagens antigas | Ficam como `false` (human) | Retroatividade não é viável nem necessária |
 | State ao reativar IA | Reset para `QUALIFYING` | Estado `ACTIVE` não existe no enum; `QUALIFYING` é o estado genérico ativo |
 | Handler existente | `executeTransferHuman` mantido intacto | Usado por webhook-orchestrator e automation paths |
+| History source value | `source: 'agent'` (não 'copilot') | CHECK constraint em lead_history.source só permite: manual, agent, automation, system |
 
 ---
 
@@ -51,14 +52,21 @@ Responsabilidades:
 - `conversations` UPDATE: `state = 'WAITING_HUMAN'` WHERE `lead_id = leadId`
 - Retorna resultado. Sem notificação, sem lead_history.
 
+Nota: `determineNextState()` já retorna `WAITING_HUMAN` para `transfer_to_human`, então `updateConversationState()` (que roda depois no fluxo normal) escreverá WAITING_HUMAN novamente — redundante mas inofensivo, serve como safety net.
+
+Se `immediateTransferHuman` falhar, logar o erro e continuar o fluxo normal (a mensagem de despedida do agente ainda deve ser enviada). O worker processará o fallback via fila.
+
 ### 1.2 Chamada imediata em `agent-engine.ts`
 
 No `processMessage()`, entre `processLLMResponse()` e `enqueueToolAction()`:
 
 ```
 if (actionToExecute?.action === 'TRANSFER_HUMAN') {
-  await immediateTransferHuman(supabase, leadId);
-  // Enfileirar apenas side-effects
+  const transferResult = await immediateTransferHuman(supabase, leadId);
+  if (!transferResult.success) {
+    console.warn('[AgentEngine] Immediate transfer failed, will rely on queue:', transferResult.error);
+  }
+  // Enfileirar apenas side-effects (notificação + lead_history)
   await enqueueAiAction(supabase, {
     organizationId,
     leadId,
@@ -67,9 +75,16 @@ if (actionToExecute?.action === 'TRANSFER_HUMAN') {
     payload: { lead_id: leadId, reason: actionToExecute.params.reason },
     idempotencyKey: `transfer_human_notify_${leadId}_${minuteTs}`,
   });
-  // Pular enqueueToolAction normal para TRANSFER_HUMAN
+  // Pular enqueueToolAction para TRANSFER_HUMAN (já executado imediatamente)
+  // MAS: updateConversationState, logDecision, enqueueAutomationActions
+  // continuam rodando normalmente no fluxo subsequente do processMessage()
 }
 ```
+
+**Importante:** Apenas `enqueueToolAction` é bypassado para `TRANSFER_HUMAN`. Todos os passos subsequentes do `processMessage()` continuam normalmente:
+- `updateConversationState()` — salva a mensagem de despedida do agente, incrementa turn_count, escreve state (WAITING_HUMAN via determineNextState, redundante com o imediato)
+- `logDecision()` — registra a decisão do agente
+- `enqueueAutomationActions()` — processa automações configuradas (onNeedHuman)
 
 ### 1.3 Novo handler `transfer_to_human_notify` em `ai-action-executor.ts`
 
@@ -81,21 +96,24 @@ case "transfer_to_human_notify":
 ```
 
 Implementação:
-1. Busca `leads.responsible_id` WHERE `id = leadId`
-2. Se `responsible_id` existe → join `team_members.user_id` → insere `notifications` para esse user
-3. Se `responsible_id` null → busca todos `team_members` WHERE `organization_id = orgId AND is_active = true AND user_id IS NOT NULL` → insere `notifications` para cada um
+1. Busca `leads` WHERE `id = leadId` → obtém `responsible_id`, `name`, `company`
+2. Se `responsible_id` existe → busca `team_members` WHERE `id = responsible_id AND user_id IS NOT NULL` → insere `notifications` para `team_members.user_id`
+3. Se `responsible_id` null → busca todos `team_members` WHERE `organization_id = orgId AND is_active = true AND user_id IS NOT NULL` → insere `notifications` para cada `user_id`
 4. Notification payload: `type: 'transfer_to_human'`, `title: 'Lead precisa de atendimento humano'`, `description: '{leadName}: {reason}'`, `link: '/pipe-whatsapp'`
-5. Insere `lead_history`: `action: 'transfer_to_human'`, `source: 'copilot'`, `metadata: { reason }`
+
+Nota: a inserção em `lead_history` é feita pelo mecanismo genérico de history logging que já existe no `executeAiAction` (linhas 173-200 de ai-action-executor.ts), usando o history mapping abaixo. Não precisa de INSERT manual dentro de `executeTransferHumanNotify`.
 
 ### 1.4 History mapping atualizado
 
 ```typescript
 transfer_to_human_notify: {
-  action: "transfer_to_human",
+  action: "ai_toggled",
   descriptionFn: (p) => `Copilot transferiu: ${p.reason || 'sem motivo informado'}`,
-  source: "copilot",
+  source: "agent",
 },
 ```
+
+Usa `action: "ai_toggled"` e `source: "agent"` para compatibilidade com o CHECK constraint existente em `lead_history.source` (valores permitidos: manual, agent, automation, system). A `metadata` do payload já carrega `{ reason }` para distinguir de outros toggles.
 
 ### 1.5 Idempotência corrigida
 
@@ -114,6 +132,8 @@ Continua funcionando para webhook-orchestrator e automation_need_human paths.
 
 ### 2.1 Nova migração SQL
 
+Filename: `supabase/migrations/20260319100000_add_sent_by_ai_to_whatsapp_messages.sql`
+
 ```sql
 ALTER TABLE public.whatsapp_messages
   ADD COLUMN IF NOT EXISTS sent_by_ai BOOLEAN DEFAULT false;
@@ -122,9 +142,21 @@ CREATE INDEX idx_whatsapp_messages_sent_by_ai
   ON public.whatsapp_messages(sent_by_ai) WHERE sent_by_ai = true;
 ```
 
+Mensagens existentes ficam como `false` (default). Apenas novas mensagens do Copilot serão marcadas.
+
 ### 2.2 Onde setar `sent_by_ai = true`
 
-No fluxo de `agent-message`, ao persistir a resposta do LLM em `whatsapp_messages`, incluir `sent_by_ai: true` no INSERT.
+O INSERT em `whatsapp_messages` para respostas do agente acontece em `supabase/functions/evolution-webhook/index.ts`, **não** em `agent-engine.ts`. Dois sites de INSERT precisam de `sent_by_ai: true`:
+
+1. **Linha ~1164** — resposta TTS (audio) do agente: adicionar `sent_by_ai: true` ao objeto do INSERT
+2. **Linha ~1212** — resposta texto do agente: adicionar `sent_by_ai: true` ao objeto do INSERT
+
+**NÃO** alterar:
+- Linha ~1343 (MESSAGES_UPDATE event) — captura mensagens genéricas outgoing, pode ser humano ou dashboard
+- `src/hooks/useWhatsAppChat.ts` (linhas 445, 651) — mensagens enviadas pelo frontend (humano)
+- `supabase/functions/campaign-rule-dispatch/index.ts` — mensagens de campanha
+
+Estes mantêm o default `false`.
 
 ---
 
@@ -140,13 +172,17 @@ Ao lado do toggle de IA, exibir badge baseado no estado da conversa:
 | `ai_disabled && state !== 'WAITING_HUMAN'` | "IA desativada" | `BotOff` | muted |
 | IA ativa | sem badge | — | — |
 
-Dados: `useConversationHistory` já retorna `conversation` com `state`. Consumir `history?.conversation?.state`.
+Dados: `useConversationHistory` já retorna `conversation` com `state` (via `select(*)` na tabela conversations, linha 78-83). Consumir `history?.conversation?.state`. Sem query adicional.
+
+Imports necessários: `UserPlus` e `BotOff` de `lucide-react` (UserPlus já está importado no AlertsDropdown, verificar se precisa importar no WhatsAppChat).
 
 ### 3.2 Motivo da transferência inline no chat
 
-Buscar `lead_history` WHERE `lead_id = ? AND action = 'transfer_to_human'` e renderizar como card inline na timeline, posicionado cronologicamente entre mensagens:
+**Query:** Adicionar ao `useConversationHistory` uma query para `lead_history` WHERE `lead_id = ? AND action = 'ai_toggled' AND metadata->>'reason' IS NOT NULL`, retornando `{ id, action, description, metadata, created_at }`.
 
-- Background: `bg-amber-50`, borda esquerda `border-l-2 border-amber-400`
+**Merge na timeline:** O hook já retorna `allMessages` como array com `timestamp`. Criar tipo union `TimelineItem = MessageItem | TransferEvent`. Intercalar `lead_history` entries no array por `created_at` vs `timestamp` das mensagens. O componente renderiza `TransferEvent` como card inline:
+
+- Background: `bg-amber-50 dark:bg-amber-950/20`, borda esquerda `border-l-2 border-amber-400`
 - Ícone: `UserPlus` amber
 - Título: "Transferido para humano"
 - Subtítulo: `metadata.reason`
@@ -158,16 +194,23 @@ Para mensagens outgoing:
 - `sent_by_ai === true` → Label acima da bolha: ícone `Bot` (cor primary) + "Copilot" (text-[10px])
 - `sent_by_ai === false` → Sem label (comportamento atual)
 
-Dados em `useConversationHistory`:
-- Quando source é `whatsapp_messages`: passar `sent_by_ai` do registro
-- Quando source é `conversation_messages` com `role === 'assistant'`: inferir `sent_by_ai = true`
+**Plumbing de dados em `useConversationHistory`:**
+
+1. Atualizar interface `WhatsAppMessage` para incluir `sent_by_ai: boolean | null`
+2. O `select("*")` existente (linha 125) já retornará `sent_by_ai` após a migração
+3. No mapeamento de `allMessages`:
+   - Branch `whatsapp_messages` (linhas 144-151): incluir `sent_by_ai: m.sent_by_ai ?? false`
+   - Branch `conversation_messages` (linhas 137-143): inferir `sent_by_ai: m.role === 'assistant'`
+4. O tipo unificado de mensagem no array `allMessages` deve incluir `sent_by_ai: boolean`
 
 ### 3.4 Toggle "reativar IA" com reset de estado (`useLeads.ts`)
 
-Quando `disabled = false` (reativando IA), adicionar ao `mutationFn`:
+Quando `disabled = false` (reativando IA), adicionar ao `mutationFn` após o UPDATE em leads:
 
 1. UPDATE `conversations.state = 'QUALIFYING'` WHERE `lead_id = leadId` (reset do WAITING_HUMAN)
 2. INSERT `lead_history`: `action: 'ai_reactivated'`, `source: 'manual'`, `metadata: { reactivated_by: userId }`
+
+**RLS:** A tabela `conversations` permite UPDATE por usuários autenticados que são admins, responsáveis pela conversa, ou quando a conversa não tem responsável atribuído (`assigned_to`). Para a maioria dos casos de uso isso é suficiente. Se o UPDATE falhar por RLS (usuário não-admin sem permissão), logar o erro silenciosamente — o toggle de ai_disabled no lead ainda funciona, apenas o state da conversation não reseta. O agente tratará isso gracefully ao receber a próxima mensagem.
 
 ---
 
@@ -177,7 +220,7 @@ Quando `disabled = false` (reativando IA), adicionar ao `mutationFn`:
 
 Na montagem do prompt (método que constrói `sections[]`), antes das capabilities dinâmicas:
 
-1. Query: `lead_history WHERE lead_id = ? AND action = 'transfer_to_human' ORDER BY created_at DESC LIMIT 1`
+1. Query: `lead_history WHERE lead_id = ? AND action = 'ai_toggled' AND metadata->>'reason' IS NOT NULL ORDER BY created_at DESC LIMIT 1`
 2. Se registro existe e `created_at` < 24h atrás, injetar seção:
 
 ```
@@ -192,14 +235,32 @@ Custo: 1 query extra, executada apenas quando lead está ativo (ai_disabled = fa
 
 ### 4.2 Filtro "Aguardando humano" no chat (`WhatsAppChat.tsx`)
 
-Novo toggle ao lado do "Com lead" existente:
+**Contexto:** O chat UI usa `whatsapp_conversations` (metadata de chat) e `whatsapp_messages` (mensagens), que são tabelas separadas de `conversations` (state machine do Copilot). O join entre eles passa por `leads`: `whatsapp_messages.lead_id` → `leads.id` ← `conversations.lead_id`.
 
+**Implementação:** Nova query React Query separada:
+
+```typescript
+const { data: waitingHumanLeadIds } = useQuery({
+  queryKey: ['waiting-human-leads', organizationId],
+  queryFn: async () => {
+    const { data } = await supabase
+      .from('conversations')
+      .select('lead_id')
+      .eq('organization_id', organizationId)
+      .eq('state', 'WAITING_HUMAN');
+    return new Set((data ?? []).map(c => c.lead_id));
+  },
+  refetchInterval: 30000, // 30s polling
+});
+```
+
+Novo toggle ao lado do "Com lead" existente:
 - Label: "Aguardando humano"
 - Ícone: `UserPlus` amber
-- Badge com contagem de conversas nesse estado
-- Quando ativo: filtra contatos onde `conversations.state = 'WAITING_HUMAN'`
+- Badge com `waitingHumanLeadIds.size` como contagem
+- Quando ativo: filtra contatos client-side onde `contact.lead_id` está no Set
 
-Implementação: query separada para buscar `lead_id`s com `conversations.state = 'WAITING_HUMAN'` e filtrar client-side a lista de contatos. Reusa realtime subscription existente para manter atualizado.
+Contacts sem `lead_id` são excluídos pelo filtro (correto: sem lead = sem conversation = não pode estar WAITING_HUMAN).
 
 ---
 
@@ -207,12 +268,13 @@ Implementação: query separada para buscar `lead_id`s com `conversations.state 
 
 | Arquivo | Mudança |
 |---------|---------|
-| `supabase/functions/agent-message/agent-engine.ts` | Chamada imediata de transfer, contexto no prompt, idempotência |
+| `supabase/functions/agent-message/agent-engine.ts` | Chamada imediata de transfer (processMessage), contexto no prompt |
 | `supabase/functions/_shared/ai-action-executor.ts` | `immediateTransferHuman()`, handler `transfer_to_human_notify`, history mapping |
 | `supabase/functions/_shared/ai-queue.ts` | Sem alteração |
-| `supabase/migrations/YYYYMMDD_add_sent_by_ai.sql` | Nova coluna `sent_by_ai` |
-| `src/components/chat/WhatsAppChat.tsx` | Badge de estado, filtro "Aguardando humano", label Copilot em mensagens |
-| `src/hooks/useConversationHistory.ts` | Passar `sent_by_ai`, buscar `lead_history` para timeline |
+| `supabase/functions/evolution-webhook/index.ts` | `sent_by_ai: true` nos INSERTs de whatsapp_messages do agente (linhas ~1164, ~1212) |
+| `supabase/migrations/20260319100000_add_sent_by_ai_to_whatsapp_messages.sql` | Nova coluna + índice parcial |
+| `src/components/chat/WhatsAppChat.tsx` | Badge de estado, filtro "Aguardando humano", label Copilot em mensagens, imports |
+| `src/hooks/useConversationHistory.ts` | `sent_by_ai` no tipo e mapeamento, `lead_history` para timeline, tipo union TimelineItem |
 | `src/hooks/useLeads.ts` | Reset `conversations.state` ao reativar IA, inserir lead_history |
 | `src/components/notifications/AlertsDropdown.tsx` | Sem alteração (já consome notifications corretamente) |
 
