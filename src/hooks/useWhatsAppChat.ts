@@ -20,6 +20,8 @@ export interface WhatsAppMessage {
   lead_id: string | null;
   timestamp: string;
   created_at: string;
+  /** Whether this message was sent by the Copilot AI agent */
+  sent_by_ai: boolean | null;
 }
 
 export interface ChatContactTag {
@@ -341,7 +343,7 @@ export function useWhatsAppMessages(
 
       const { data, error } = await supabase
         .from("whatsapp_messages")
-        .select("id, organization_id, instance_id, message_id, remote_jid, phone_number, direction, message_type, content, media_url, push_name, status, lead_id, timestamp, created_at")
+        .select("id, organization_id, instance_id, message_id, remote_jid, phone_number, direction, message_type, content, media_url, push_name, status, lead_id, timestamp, created_at, sent_by_ai")
         .eq("organization_id", organizationId)
         .eq("instance_id", instanceId)
         .eq("phone_number", phoneNumber)
@@ -491,6 +493,7 @@ export function useSendWhatsAppMessage() {
         lead_id: null,
         timestamp: new Date().toISOString(),
         created_at: new Date().toISOString(),
+        sent_by_ai: false,
       };
 
       queryClient.setQueryData<WhatsAppMessage[]>(
@@ -697,6 +700,7 @@ export function useSendWhatsAppMedia() {
         lead_id: null,
         timestamp: new Date().toISOString(),
         created_at: new Date().toISOString(),
+        sent_by_ai: false,
       };
 
       queryClient.setQueryData<WhatsAppMessage[]>(
