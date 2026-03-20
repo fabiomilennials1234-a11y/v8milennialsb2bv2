@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, Component } from "react";
 import { useSearchParams } from "react-router-dom";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
   MessageSquare,
@@ -35,6 +35,7 @@ import {
   Trash2,
   Tag,
   Settings,
+  UserPlus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,6 +43,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { useToggleLeadAI } from "@/hooks/useLeads";
 import {
@@ -218,6 +220,10 @@ function ContactList({
   onSelectInstance,
   showOnlyWithLead,
   onToggleShowOnlyWithLead,
+  showOnlyWaitingHuman,
+  onToggleShowOnlyWaitingHuman,
+  waitingHumanCount,
+  waitingHumanLeadIds,
   activeTab,
   onTabChange,
   onArchive,
@@ -242,6 +248,10 @@ function ContactList({
   onSelectInstance?: (instanceId: string) => void;
   showOnlyWithLead: boolean;
   onToggleShowOnlyWithLead: () => void;
+  showOnlyWaitingHuman: boolean;
+  onToggleShowOnlyWaitingHuman: () => void;
+  waitingHumanCount: number;
+  waitingHumanLeadIds?: Set<string>;
   activeTab: "active" | "archived";
   onTabChange: (tab: "active" | "archived") => void;
   onArchive: (phone: string) => void;
@@ -257,6 +267,7 @@ function ContactList({
 }) {
   const filteredContacts = contacts.filter((c) => {
     if (showOnlyWithLead && !c.lead_id) return false;
+    if (showOnlyWaitingHuman && !(c.lead_id && waitingHumanLeadIds?.has(c.lead_id))) return false;
     // Filtrar por tab
     if (activeTab === "active" && c.archived_at) return false;
     if (activeTab === "archived" && !c.archived_at) return false;
@@ -335,6 +346,25 @@ function ContactList({
           >
             <Filter className="w-3 h-3" />
             {showOnlyWithLead ? "Com lead" : "Todos"}
+          </button>
+          <button
+            type="button"
+            onClick={onToggleShowOnlyWaitingHuman}
+            className={cn(
+              "flex items-center gap-1.5 text-xs px-2 py-1 rounded-md transition-colors",
+              showOnlyWaitingHuman
+                ? "bg-amber-500/15 text-amber-600 font-medium"
+                : "text-muted-foreground hover:bg-muted"
+            )}
+            title={showOnlyWaitingHuman ? "Mostrando apenas aguardando humano" : "Filtrar aguardando humano"}
+          >
+            <UserPlus className="w-3 h-3" />
+            Humano
+            {waitingHumanCount > 0 && (
+              <span className="bg-amber-500 text-white text-[10px] rounded-full min-w-[16px] h-4 flex items-center justify-center px-1">
+                {waitingHumanCount}
+              </span>
+            )}
           </button>
         </div>
 
@@ -1043,6 +1073,14 @@ function MessageBubble({
             : "bg-muted/80 rounded-bl-md"
         )}
       >
+        {/* Sender label for AI messages */}
+        {isOutgoing && message.sent_by_ai && (
+          <div className="flex items-center gap-1 mb-1">
+            <Bot className="h-3 w-3 text-primary-foreground/70" />
+            <span className="text-[10px] text-primary-foreground/70 font-medium">Copilot</span>
+          </div>
+        )}
+
         {/* Texto / Legenda */}
         {message.content && (
           <p className={cn(
@@ -1323,6 +1361,49 @@ function ChatWindow({
   }, []);
 
   const { data: messages = [], isLoading } = useWhatsAppMessages(phoneNumber, instanceId);
+
+  // Fetch conversation state for transfer badge
+  const { data: conversationState } = useQuery({
+    queryKey: ['conversation-state', leadId],
+    queryFn: async () => {
+      if (!leadId) return null;
+      const { data } = await supabase
+        .from('conversations')
+        .select('state')
+        .eq('lead_id', leadId)
+        .maybeSingle();
+      return data?.state ?? null;
+    },
+    enabled: !!leadId,
+  });
+
+  const isWaitingHuman = conversationState === 'WAITING_HUMAN';
+
+  // Fetch transfer events for inline timeline cards
+  const { data: transferEvents = [] } = useQuery({
+    queryKey: ['transfer-events', leadId],
+    queryFn: async () => {
+      if (!leadId) return [];
+      const { data } = await supabase
+        .from('lead_history')
+        .select('id, metadata, created_at')
+        .eq('lead_id', leadId)
+        .eq('action', 'ai_toggled')
+        .not('metadata', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(10);
+      return (data ?? [])
+        .filter((e: any) => (e.metadata as Record<string, unknown>)?.reason)
+        .map((e: any) => ({
+          id: e.id,
+          type: 'transfer_event' as const,
+          reason: ((e.metadata as Record<string, unknown>)?.reason as string) || '',
+          timestamp: e.created_at,
+        }));
+    },
+    enabled: !!leadId,
+  });
+
   const sendMessage = useSendWhatsAppMessage();
   const sendMedia = useSendWhatsAppMedia();
   const { canReply: canReplyOnThisNumber } = useCanReplyOnInstanceByName(instanceName);
@@ -1601,6 +1682,19 @@ function ChatWindow({
             </div>
           </motion.div>
         )}
+
+        {/* Transfer / AI state badge */}
+        {hasLead && leadId && isWaitingHuman && (
+          <Badge variant="outline" className="border-amber-400 text-amber-600 gap-1.5 text-xs">
+            <UserPlus className="h-3 w-3" />
+            Aguardando humano
+          </Badge>
+        )}
+        {hasLead && leadId && currentAiDisabled && !isWaitingHuman && (
+          <Badge variant="outline" className="text-muted-foreground gap-1.5 text-xs">
+            IA desativada
+          </Badge>
+        )}
       </div>
 
       {/* Área de mensagens: altura limitada com scroll interno; boundary evita "fewer hooks" ao isolar erros */}
@@ -1622,8 +1716,38 @@ function ChatWindow({
             ) : (
               <div className="space-y-1 pb-4">
                 {(() => {
+                  // Merge messages + transfer events, sorted by timestamp
+                  const timeline = [
+                    ...messages.map(m => ({ ...m, _type: 'message' as const })),
+                    ...transferEvents.map(e => ({ ...e, _type: 'transfer' as const })),
+                  ].sort((a, b) => {
+                    const timeA = new Date(a.timestamp).getTime();
+                    const timeB = new Date(b.timestamp).getTime();
+                    return timeA - timeB;
+                  });
+
                   let lastDate = "";
-                  return messages.map((message, index) => {
+                  return timeline.map((item, index) => {
+                    // Transfer event card
+                    if (item._type === 'transfer') {
+                      return (
+                        <div key={`transfer-${item.id}`} className="flex items-start gap-2 px-4 py-2 bg-amber-50 dark:bg-amber-950/20 border-l-2 border-amber-400 mx-4 my-2 rounded-r">
+                          <UserPlus className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                          <div>
+                            <p className="text-xs font-medium text-amber-800 dark:text-amber-200">Transferido para humano</p>
+                            {item.reason && (
+                              <p className="text-xs text-amber-700 dark:text-amber-300">{item.reason}</p>
+                            )}
+                            <p className="text-xs text-amber-500 mt-0.5">
+                              {new Date(item.timestamp).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    // Normal message (preserve existing date separator + MessageBubble logic)
+                    const message = item;
                     const ts = message?.timestamp;
                     const date = ts ? new Date(ts) : new Date();
                     const validDate = !Number.isNaN(date.getTime());
@@ -1808,6 +1932,7 @@ export function WhatsAppChat() {
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [showOnlyWithLead, setShowOnlyWithLead] = useState(false);
+  const [showOnlyWaitingHuman, setShowOnlyWaitingHuman] = useState(false);
   const [isLeadPanelOpen, setIsLeadPanelOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"active" | "archived">("active");
   const [isInstancesModalOpen, setIsInstancesModalOpen] = useState(false);
@@ -1828,6 +1953,24 @@ export function WhatsAppChat() {
   // Hooks para archive/delete/tags
   const { isAdmin } = useIsAdmin();
   const { data: teamMember } = useCurrentTeamMember();
+
+  const { data: waitingHumanLeadIds } = useQuery({
+    queryKey: ['waiting-human-leads', teamMember?.organization_id],
+    queryFn: async () => {
+      if (!teamMember?.organization_id) return new Set<string>();
+      const { data } = await supabase
+        .from('conversations')
+        .select('lead_id')
+        .eq('organization_id', teamMember.organization_id)
+        .eq('state', 'WAITING_HUMAN');
+      return new Set((data ?? []).map((c: any) => c.lead_id as string));
+    },
+    enabled: !!teamMember?.organization_id,
+    refetchInterval: 30000,
+  });
+
+  const waitingHumanCount = waitingHumanLeadIds?.size ?? 0;
+
   const { data: allTags = [] } = useTags();
   const archiveConversation = useArchiveConversation();
   const unarchiveConversation = useUnarchiveConversation();
@@ -2001,6 +2144,10 @@ export function WhatsAppChat() {
             onSelectInstance={setSelectedInstanceId}
             showOnlyWithLead={showOnlyWithLead}
             onToggleShowOnlyWithLead={() => setShowOnlyWithLead((v) => !v)}
+            showOnlyWaitingHuman={showOnlyWaitingHuman}
+            onToggleShowOnlyWaitingHuman={() => setShowOnlyWaitingHuman(!showOnlyWaitingHuman)}
+            waitingHumanCount={waitingHumanCount}
+            waitingHumanLeadIds={waitingHumanLeadIds}
             activeTab={activeTab}
             onTabChange={setActiveTab}
             onArchive={handleArchive}
