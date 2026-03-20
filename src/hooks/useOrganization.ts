@@ -54,7 +54,7 @@ export function useOrganization(): OrganizationContext {
     role: teamMember?.role ?? null,
     orgType: orgData?.org_type ?? null,
     isLoading,
-    isReady: !isLoading && !!orgId,
+    isReady: !!orgId,
     error: teamError as Error | null,
   };
 }

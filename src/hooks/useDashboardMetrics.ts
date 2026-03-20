@@ -253,6 +253,8 @@ export function useRankingData(month?: number, year?: number) {
   return useQuery({
     queryKey: ["ranking-data", selectedMonth, selectedYear, organizationId],
     queryFn: async () => {
+      if (!organizationId) return { salesRanking: [], meetingsRanking: [] };
+
       const { data, error } = await supabase.rpc("get_ranking_data", {
         p_month: selectedMonth,
         p_year: selectedYear,
