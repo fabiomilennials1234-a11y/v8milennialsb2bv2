@@ -26,7 +26,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { openWhatsApp, formatPhoneForWhatsApp } from "@/lib/whatsapp";
+import { useOpenWhatsAppChat, formatPhoneForWhatsApp } from "@/lib/whatsapp";
 import { format, isToday, isTomorrow, isPast, differenceInHours, differenceInDays, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { isConfirmacaoOverdue } from "@/hooks/useOrganizationSettings";
@@ -144,6 +144,7 @@ function getMeetingIndicator(
 }
 
 export const ConfirmacaoCard = memo(function ConfirmacaoCard({ card, onClick, onDelete, variant = "default" }: ConfirmacaoCardProps) {
+  const openWhatsApp = useOpenWhatsAppChat();
   const origin = originConfig[card.origin] || originConfig.outro;
   const meetingDate = card.meetingDateTime || (card.meetingDate ? new Date(card.meetingDate) : null);
   const indicator = getMeetingIndicator(

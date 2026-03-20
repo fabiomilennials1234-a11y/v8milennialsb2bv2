@@ -28,7 +28,7 @@ import { Phone, Mail, Building2, GripVertical, User, DollarSign, Star, Tag, Tras
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { openWhatsApp } from "@/lib/whatsapp";
+import { useOpenWhatsAppChat } from "@/lib/whatsapp";
 import { LeadDetailModal } from "@/components/leads/LeadDetailModal";
 import { LeadModal } from "@/components/leads/LeadModal";
 import {
@@ -520,6 +520,7 @@ export function CampanhaKanban({
   onMoveToConfirmacao,
   onExtractToPipe,
 }: CampanhaKanbanProps) {
+  const openWhatsApp = useOpenWhatsAppChat();
   // screen key includes campanhaId so each campaign has independent filters
   const [filterState, setFilterState] = usePersistedState(
     `campanha-kanban-${campanhaId}`,

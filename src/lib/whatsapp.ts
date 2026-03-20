@@ -1,3 +1,6 @@
+import { useCallback } from "react";
+import { useNavigate } from "react-router-dom";
+
 // Format phone number for WhatsApp: 55 + DDD (without 0) + number (add 9 if short)
 export function formatPhoneForWhatsApp(phone: string | undefined): string | null {
   if (!phone) return null;
@@ -29,9 +32,25 @@ export function openWhatsApp(phone: string | undefined, e?: React.MouseEvent) {
   if (e) {
     e.stopPropagation();
   }
-  
+
   const formattedPhone = formatPhoneForWhatsApp(phone);
   if (formattedPhone) {
     window.open(`https://wa.me/${formattedPhone}`, '_blank', 'noopener,noreferrer');
   }
+}
+
+/**
+ * Hook que retorna um callback para abrir a conversa do lead diretamente
+ * no chat interno do Torque (/chat-whatsapp?phone=...).
+ * Substitui openWhatsApp nos contextos operacionais de lead.
+ */
+export function useOpenWhatsAppChat() {
+  const navigate = useNavigate();
+  return useCallback((phone: string | undefined, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const formatted = formatPhoneForWhatsApp(phone);
+    if (formatted) {
+      navigate(`/chat-whatsapp?phone=${encodeURIComponent(formatted)}`);
+    }
+  }, [navigate]);
 }
