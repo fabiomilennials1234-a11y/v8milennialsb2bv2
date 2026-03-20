@@ -476,8 +476,27 @@ export function useToggleLeadAI() {
         .eq("organization_id", organizationId)
         .select()
         .single();
-      
+
       if (error) throw error;
+
+      // When reactivating AI: reset conversation state and log
+      if (!disabled) {
+        // Reset conversation state from WAITING_HUMAN to QUALIFYING
+        await supabase
+          .from("conversations")
+          .update({ state: "QUALIFYING" })
+          .eq("lead_id", leadId);
+
+        // Log reactivation in lead_history
+        await supabase.from("lead_history").insert({
+          lead_id: leadId,
+          action: "ai_reactivated",
+          description: "IA Copilot reativada pelo vendedor",
+          source: "manual",
+          metadata: { reactivated_by: user?.id },
+        });
+      }
+
       return data;
     },
     // Atualização otimista para feedback imediato
@@ -599,6 +618,8 @@ export function useToggleLeadAI() {
       queryClient.invalidateQueries({ queryKey: ["pipe_confirmacao"], refetchType: 'active' });
       queryClient.invalidateQueries({ queryKey: ["pipe_propostas"], refetchType: 'active' });
       queryClient.invalidateQueries({ queryKey: ["lead_by_phone"], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ["conversation-history", variables.leadId] });
+      queryClient.invalidateQueries({ queryKey: ["waiting-human-leads"], refetchType: 'active' });
     },
   });
 }

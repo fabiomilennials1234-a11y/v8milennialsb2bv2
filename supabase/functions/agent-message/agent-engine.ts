@@ -2,6 +2,7 @@ import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { OpenRouterClient } from "./openrouter-client.ts";
 import { generateEmbedding } from "../_shared/embeddings.ts";
 import { enqueueAiAction } from "../_shared/ai-queue.ts";
+import { immediateTransferHuman } from "../_shared/ai-action-executor.ts";
 
 /** Parse custom_instructions (JSON ou string legada) para { dos, donts } */
 function parseCustomInstructions(raw: string): { dos: string; donts: string } {
@@ -225,7 +226,26 @@ export class AgentEngine {
       }
       console.log('[AgentEngine] Step 9: Enqueuing action:', actionToExecute.action);
       try {
-        executionResult = await this.enqueueToolAction(actionToExecute, conversation.id);
+        // TRANSFER_HUMAN: execute immediately, enqueue only side-effects
+        if (actionToExecute.action === 'TRANSFER_HUMAN') {
+          const transferResult = await immediateTransferHuman(this.supabase, this.currentLeadId!);
+          if (!transferResult.success) {
+            console.warn('[AgentEngine] Immediate transfer failed, will rely on queue:', transferResult.error);
+          }
+          // Enqueue notification + lead_history only (no db state change)
+          const minuteTs = Math.floor(Date.now() / 60_000);
+          await enqueueAiAction(this.supabase, {
+            organizationId: this.organizationId,
+            leadId: this.currentLeadId || undefined,
+            conversationId: conversation.id.startsWith('temp_') ? undefined : conversation.id,
+            actionType: 'transfer_to_human_notify',
+            payload: { ...actionToExecute.params, lead_id: this.currentLeadId },
+            idempotencyKey: `transfer_human_notify_${this.currentLeadId}_${minuteTs}`,
+          });
+          executionResult = { success: true, queued: true, immediate: true };
+        } else {
+          executionResult = await this.enqueueToolAction(actionToExecute, conversation.id);
+        }
       } catch (enqueueError) {
         console.warn('[AgentEngine] Action enqueue failed (non-fatal):', enqueueError);
         executionResult = { error: String(enqueueError), status: 'failed' };
@@ -1608,6 +1628,41 @@ Regras:
     }
 
     // =====================================================
+    // 1.5. CONTEXTO DE INTERVENÇÃO HUMANA RECENTE
+    // =====================================================
+    try {
+      const { data: recentTransfer } = await this.supabase
+        .from("lead_history")
+        .select("metadata, created_at")
+        .eq("lead_id", leadId)
+        .eq("action", "ai_toggled")
+        .not("metadata", "is", null)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (recentTransfer) {
+        const transferTime = new Date(recentTransfer.created_at);
+        const minutesAgo = Math.round((Date.now() - transferTime.getTime()) / 60_000);
+        const metadata = recentTransfer.metadata as Record<string, unknown>;
+        const reason = metadata?.reason as string;
+
+        // Only inject context if transfer was within last 24h and has a reason (copilot-initiated)
+        if (minutesAgo < 1440 && reason) {
+          sections.push("");
+          sections.push("# CONTEXTO IMPORTANTE");
+          sections.push(`Esta conversa foi transferida para um vendedor humano há ${minutesAgo} minutos.`);
+          sections.push(`Motivo original da transferência: ${reason}`);
+          sections.push("O vendedor interveio e devolveu a conversa para você.");
+          sections.push("Continue naturalmente, sem repetir perguntas já feitas.");
+          sections.push("");
+        }
+      }
+    } catch (e) {
+      console.warn("[AgentEngine] Failed to check recent handoff (non-fatal):", e);
+    }
+
+    // =====================================================
     // 2. ADICIONAR CAPABILITIES DINÂMICAS (Feature Flags)
     // =====================================================
     sections.push("# CAPABILITIES DINÂMICAS");
@@ -2456,6 +2511,8 @@ Regras:
         return `schedule_meeting_${leadId}_${params.preferred_date}`;
       case 'transfer_to_human':
         return `transfer_human_${leadId}`;
+      case 'transfer_to_human_notify':
+        return `transfer_human_notify_${leadId}_${ts}`;
       case 'advance_stage':
         return `advance_stage_${leadId}_${params.target_pipe || 'whatsapp'}_${params.target_stage}`;
       case 'confirm_meeting':

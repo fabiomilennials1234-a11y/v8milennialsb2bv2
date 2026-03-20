@@ -28,6 +28,45 @@ export interface ActionResult {
   error?: string;
 }
 
+// ─── Immediate Transfer (synchronous, called inline by agent-engine) ──────────
+
+/**
+ * Immediate transfer: sets ai_disabled + WAITING_HUMAN synchronously.
+ * Called inline from agent-engine before enqueueing side-effects.
+ * Does NOT create notifications or lead_history (that's the queue's job).
+ */
+export async function immediateTransferHuman(
+  supabase: SupabaseClient,
+  leadId: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error: leadError } = await supabase
+      .from("leads")
+      .update({ ai_disabled: true, ai_disabled_at: new Date().toISOString() })
+      .eq("id", leadId);
+
+    if (leadError) {
+      console.warn("[immediateTransferHuman] Failed to update lead:", leadError.message);
+      return { success: false, error: leadError.message };
+    }
+
+    const { error: convError } = await supabase
+      .from("conversations")
+      .update({ state: "WAITING_HUMAN" })
+      .eq("lead_id", leadId);
+
+    if (convError) {
+      console.warn("[immediateTransferHuman] Failed to update conversation:", convError.message);
+    }
+
+    console.log("[immediateTransferHuman] Transfer executed immediately for lead:", leadId);
+    return { success: true };
+  } catch (err) {
+    console.warn("[immediateTransferHuman] Unexpected error:", err);
+    return { success: false, error: String(err) };
+  }
+}
+
 // ─── Action → lead_history mapping ────────────────────────────────────────────
 
 interface HistoryMapping {
@@ -59,6 +98,11 @@ const ACTION_HISTORY_MAP: Record<string, HistoryMapping> = {
   transfer_to_human: {
     action: "ai_toggled",
     descriptionFn: () => "Transferido para atendimento humano pelo Copilot",
+    source: "agent",
+  },
+  transfer_to_human_notify: {
+    action: "ai_toggled",
+    descriptionFn: (p) => `Copilot transferiu: ${p.reason || "sem motivo informado"}`,
     source: "agent",
   },
   update_qualification_score: {
@@ -142,6 +186,9 @@ export async function executeAiAction(
       break;
     case "transfer_to_human":
       result = await executeTransferHuman(supabase, payload);
+      break;
+    case "transfer_to_human_notify":
+      result = await executeTransferHumanNotify(supabase, payload, organization_id, lead_id);
       break;
     case "update_qualification_score":
       result = await executeUpdateQualificationScore(supabase, payload);
@@ -513,6 +560,76 @@ async function executeTransferHuman(
   }
 
   return { success: true, message: "Conversa transferida para humano" };
+}
+
+/**
+ * Side-effects only: notification + lead_history (via generic logger).
+ * The actual ai_disabled + WAITING_HUMAN was already set by immediateTransferHuman.
+ */
+async function executeTransferHumanNotify(
+  supabase: SupabaseClient,
+  params: Record<string, unknown>,
+  organizationId: string,
+  leadId: string | null,
+): Promise<ActionResult> {
+  if (!leadId) return { success: false, error: "lead_id é obrigatório" };
+
+  const reason = (params.reason as string) || "sem motivo informado";
+
+  const { data: lead } = await supabase
+    .from("leads")
+    .select("name, company, responsible_id")
+    .eq("id", leadId)
+    .single();
+
+  const leadLabel = lead?.name
+    ? lead.company ? `${lead.name} - ${lead.company}` : lead.name
+    : "Lead";
+
+  let notifyUserIds: string[] = [];
+
+  if (lead?.responsible_id) {
+    const { data: member } = await supabase
+      .from("team_members")
+      .select("user_id")
+      .eq("id", lead.responsible_id)
+      .not("user_id", "is", null)
+      .single();
+
+    if (member?.user_id) {
+      notifyUserIds = [member.user_id];
+    }
+  }
+
+  if (notifyUserIds.length === 0) {
+    const { data: members } = await supabase
+      .from("team_members")
+      .select("user_id")
+      .eq("organization_id", organizationId)
+      .eq("is_active", true)
+      .not("user_id", "is", null);
+
+    notifyUserIds = (members ?? []).map((m) => m.user_id).filter(Boolean) as string[];
+  }
+
+  for (const userId of notifyUserIds) {
+    try {
+      await supabase.from("notifications").insert({
+        organization_id: organizationId,
+        user_id: userId,
+        type: "transfer_to_human",
+        title: "Lead precisa de atendimento humano",
+        description: `${leadLabel}: ${reason}`,
+        lead_id: leadId,
+        link: "/pipe-whatsapp",
+      });
+    } catch (notifErr) {
+      console.warn("[executeTransferHumanNotify] Failed to create notification:", notifErr);
+    }
+  }
+
+  console.log(`[executeTransferHumanNotify] Notified ${notifyUserIds.length} user(s) for lead ${leadId}`);
+  return { success: true, message: `Notificação enviada para ${notifyUserIds.length} usuário(s)` };
 }
 
 async function executeAdvanceStage(
