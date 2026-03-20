@@ -14,6 +14,7 @@ import {
   type CampaignType, type CampaignObjective, type TargetPipe,
   type AutoConfig, type LeadDistributionMode, type CampanhaMemberRole,
   OBJECTIVE_LABELS, OBJECTIVE_DEFAULT_STAGES,
+  getObjectiveMetricLabel, getObjectiveSuccessStageLabel,
 } from "@/hooks/useCampanhas";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
 import { useWhatsAppInstances } from "@/hooks/useWhatsAppInstances";
@@ -750,7 +751,7 @@ export function CreateCampanhaModal({ open, onOpenChange }: CreateCampanhaModalP
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="teamGoal">Meta do Time (reuniões)</Label>
+                  <Label htmlFor="teamGoal">Meta do Time ({getObjectiveMetricLabel(objective)})</Label>
                   <Input
                     id="teamGoal"
                     type="number"
@@ -761,7 +762,7 @@ export function CreateCampanhaModal({ open, onOpenChange }: CreateCampanhaModalP
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="individualGoal">Meta Individual (reuniões)</Label>
+                  <Label htmlFor="individualGoal">Meta Individual ({getObjectiveMetricLabel(objective)})</Label>
                   <Input
                     id="individualGoal"
                     type="number"
@@ -831,7 +832,7 @@ export function CreateCampanhaModal({ open, onOpenChange }: CreateCampanhaModalP
                       onCheckedChange={() => handleSetReuniaoMarcada(stage.id)}
                     />
                     <Label htmlFor={`reuniao-${stage.id}`} className="text-xs whitespace-nowrap cursor-pointer">
-                      Reunião Marcada
+                      {getObjectiveSuccessStageLabel(objective)}
                     </Label>
                   </div>
 
@@ -848,7 +849,7 @@ export function CreateCampanhaModal({ open, onOpenChange }: CreateCampanhaModalP
               ))}
             </div>
             <p className="text-xs text-muted-foreground">
-              * Marque uma etapa como "Reunião Marcada" para que leads nela sejam contabilizados.
+              * Marque uma etapa como "{getObjectiveSuccessStageLabel(objective)}" para que leads nela sejam contabilizados na meta.
             </p>
           </div>
         );

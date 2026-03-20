@@ -49,10 +49,12 @@ export const CampanhaCard = memo(function CampanhaCard({ campanha }: CampanhaCar
   const daysRemaining = differenceInDays(deadline, new Date());
   const isExpired = isPast(deadline);
 
-  // Count leads in "reuniao_marcada" stage
-  const reuniaoMarcadaStage = stages?.find((s) => s.is_reuniao_marcada);
-  const meetingsCount = leads?.filter((l) => l.stage_id === reuniaoMarcadaStage?.id).length || 0;
-  const progress = campanha.team_goal > 0 ? (meetingsCount / campanha.team_goal) * 100 : 0;
+  // Count leads in the success stage (is_reuniao_marcada = generic goal stage flag)
+  const successStage = stages?.find((s) => s.is_reuniao_marcada);
+  const successCount = successStage
+    ? leads?.filter((l) => l.stage_id === successStage.id).length || 0
+    : 0;
+  const progress = campanha.team_goal > 0 ? (successCount / campanha.team_goal) * 100 : 0;
 
   // Count members who earned bonus
   const bonusEarnedCount = members?.filter((m) => m.bonus_earned).length || 0;
@@ -147,7 +149,7 @@ export const CampanhaCard = memo(function CampanhaCard({ campanha }: CampanhaCar
               Progresso do Time
             </span>
             <span className="font-semibold">
-              {meetingsCount} / {campanha.team_goal}
+              {successCount} / {campanha.team_goal}
             </span>
           </div>
           <Progress value={Math.min(progress, 100)} className="h-2" />

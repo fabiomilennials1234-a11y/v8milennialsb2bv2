@@ -16,6 +16,8 @@ import {
   useUpdateCampanhaStage,
   useDeleteCampanhaStage,
   useReorderCampanhaStages,
+  type CampaignObjective,
+  getObjectiveSuccessStageLabel,
 } from "@/hooks/useCampanhas";
 import { 
   Plus, 
@@ -62,6 +64,7 @@ interface ManageStagesModalProps {
   onOpenChange: (open: boolean) => void;
   campanhaId: string;
   stages: CampanhaStage[];
+  objective?: CampaignObjective | null;
 }
 
 // Cores predefinidas para etapas
@@ -189,7 +192,7 @@ function SortableStageItem({
               onCheckedChange={(checked) => onEditIsReuniaoChange(!!checked)}
             />
             <Label htmlFor={`reuniao-${stage.id}`} className="text-sm">
-              Conta como reunião marcada
+              Conta como {successStageLabel.toLowerCase()}
             </Label>
           </div>
         </div>
@@ -203,7 +206,7 @@ function SortableStageItem({
             <span className="font-medium">{stage.name}</span>
             {stage.is_reuniao_marcada && (
               <span className="ml-2 text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded">
-                Reunião
+                {successStageLabel}
               </span>
             )}
           </div>
@@ -231,7 +234,9 @@ export function ManageStagesModal({
   onOpenChange,
   campanhaId,
   stages,
+  objective,
 }: ManageStagesModalProps) {
+  const successStageLabel = getObjectiveSuccessStageLabel(objective);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editColor, setEditColor] = useState("");
@@ -447,7 +452,7 @@ export function ManageStagesModal({
                     onCheckedChange={(checked) => setNewStageIsReuniao(!!checked)}
                   />
                   <Label htmlFor="new-stage-reuniao" className="text-sm">
-                    Conta como reunião marcada
+                    Conta como {successStageLabel.toLowerCase()}
                   </Label>
                 </div>
                 <div className="flex gap-2">
