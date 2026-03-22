@@ -4,6 +4,20 @@ import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember, isVirtualTeamMember } from "@/hooks/useTeamMembers";
 import { track } from "@/lib/analytics";
 
+/**
+ * Check if a whatsapp_instance is backed by SZ.chat (via metadata.channel).
+ * Uses whatsapp_instances table which has frontend-accessible RLS policies.
+ */
+async function isSzChatInstance(instanceId: string | null | undefined): Promise<boolean> {
+  if (!instanceId) return false;
+  const { data } = await supabase
+    .from("whatsapp_instances")
+    .select("metadata")
+    .eq("id", instanceId)
+    .maybeSingle();
+  return (data?.metadata as any)?.channel === "sz_chat";
+}
+
 export interface WhatsAppMessage {
   id: string;
   organization_id: string;
@@ -426,17 +440,39 @@ export function useSendWhatsAppMessage() {
       // Formatar número (remover caracteres especiais)
       const formattedNumber = phoneNumber.replace(/\D/g, "");
 
-      // Chamar a Evolution API via proxy
-      const { data, error } = await supabase.functions.invoke("evolution-api-proxy", {
-        body: {
-          endpoint: `/message/sendText/${instanceName}`,
-          method: "POST",
+      // Check if this instance uses SZ.chat
+      const isSzChat = await isSzChatInstance(instanceId);
+
+      let data: any;
+      let error: any;
+
+      if (isSzChat) {
+        // Route through SZ.chat API
+        const result = await supabase.functions.invoke("sz-chat-send", {
           body: {
-            number: formattedNumber,
-            text: message,
+            action: "send_message",
+            organization_id: teamMember.organization_id,
+            phone_number: formattedNumber,
+            message,
           },
-        },
-      });
+        });
+        data = result.data;
+        error = result.error;
+      } else {
+        // Route through Evolution API (default for all other orgs)
+        const result = await supabase.functions.invoke("evolution-api-proxy", {
+          body: {
+            endpoint: `/message/sendText/${instanceName}`,
+            method: "POST",
+            body: {
+              number: formattedNumber,
+              text: message,
+            },
+          },
+        });
+        data = result.data;
+        error = result.error;
+      }
 
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
@@ -588,64 +624,99 @@ export function useSendWhatsAppMedia() {
         }
       }
 
-      let endpoint: string;
-      let body: Record<string, unknown>;
+      // Check if this instance uses SZ.chat
+      const isSzChat = await isSzChatInstance(instanceId);
 
-      if (mediaType === "audio") {
-        // Endpoint para áudio PTT (push-to-talk)
-        endpoint = `/message/sendWhatsAppAudio/${instanceName}`;
-        body = {
-          number: formattedNumber,
-          audio: mediaUrl,
-        };
+      let data: any;
+      let error: any;
+
+      if (isSzChat) {
+        // Route through SZ.chat API
+        console.log("[WhatsApp Media] SZ.chat instance detected, routing through sz-chat-send");
+        const result = await supabase.functions.invoke("sz-chat-send", {
+          body: {
+            action: "send_message",
+            organization_id: teamMember.organization_id,
+            phone_number: formattedNumber,
+            message: caption || "",
+            message_type: "media",
+            media_url: mediaUrl,
+          },
+        });
+        data = result.data;
+        error = result.error;
+
+        console.log("[WhatsApp Media] SZ.chat response:", { data, error });
+
+        if (error) {
+          console.error("[WhatsApp Media] SZ.chat Error:", error);
+          throw new Error(error.message || "Erro ao enviar mídia via SZ.chat");
+        }
+        if (data?.error) {
+          console.error("[WhatsApp Media] SZ.chat API Error:", data);
+          throw new Error(data.error);
+        }
       } else {
-        // Endpoint para imagem, documento, vídeo
-        endpoint = `/message/sendMedia/${instanceName}`;
-        body = {
-          number: formattedNumber,
-          mediatype: mediaType,
-          mimetype: mimetype || getMimeType(mediaType),
-          caption: caption || "",
-          media: mediaUrl,
-          fileName: fileName || `file_${Date.now()}`,
+        // Route through Evolution API (default for all other orgs)
+        let endpoint: string;
+        let body: Record<string, unknown>;
+
+        if (mediaType === "audio") {
+          // Endpoint para áudio PTT (push-to-talk)
+          endpoint = `/message/sendWhatsAppAudio/${instanceName}`;
+          body = {
+            number: formattedNumber,
+            audio: mediaUrl,
+          };
+        } else {
+          // Endpoint para imagem, documento, vídeo
+          endpoint = `/message/sendMedia/${instanceName}`;
+          body = {
+            number: formattedNumber,
+            mediatype: mediaType,
+            mimetype: mimetype || getMimeType(mediaType),
+            caption: caption || "",
+            media: mediaUrl,
+            fileName: fileName || `file_${Date.now()}`,
+          };
+        }
+
+        const requestPayload = {
+          endpoint,
+          method: "POST",
+          body,
         };
-      }
 
-      const requestPayload = {
-        endpoint,
-        method: "POST",
-        body,
-      };
+        console.log("[WhatsApp Media] ====== REQUEST DETAILS ======");
+        console.log("[WhatsApp Media] Endpoint:", endpoint);
+        console.log("[WhatsApp Media] To:", formattedNumber);
+        console.log("[WhatsApp Media] Media URL:", mediaUrl);
+        console.log("[WhatsApp Media] Full Body:", JSON.stringify(body, null, 2));
+        console.log("[WhatsApp Media] Request Payload:", JSON.stringify(requestPayload, null, 2));
+        console.log("[WhatsApp Media] ==============================");
 
-      console.log("[WhatsApp Media] ====== REQUEST DETAILS ======");
-      console.log("[WhatsApp Media] Endpoint:", endpoint);
-      console.log("[WhatsApp Media] To:", formattedNumber);
-      console.log("[WhatsApp Media] Media URL:", mediaUrl);
-      console.log("[WhatsApp Media] Full Body:", JSON.stringify(body, null, 2));
-      console.log("[WhatsApp Media] Request Payload:", JSON.stringify(requestPayload, null, 2));
-      console.log("[WhatsApp Media] ==============================");
+        const result = await supabase.functions.invoke("evolution-api-proxy", {
+          body: requestPayload,
+        });
+        data = result.data;
+        error = result.error;
 
-      const { data, error } = await supabase.functions.invoke("evolution-api-proxy", {
-        body: requestPayload,
-      });
+        console.log("[WhatsApp Media] ====== RESPONSE ======");
+        console.log("[WhatsApp Media] Data:", data);
+        console.log("[WhatsApp Media] Error:", error);
+        console.log("[WhatsApp Media] ========================");
 
-      console.log("[WhatsApp Media] ====== RESPONSE ======");
-      console.log("[WhatsApp Media] Data:", data);
-      console.log("[WhatsApp Media] Error:", error);
-      console.log("[WhatsApp Media] ========================");
-
-      if (error) {
-        console.error("[WhatsApp Media] Edge Function Error:", error);
-        // Tentar extrair mais detalhes do erro
-        const errorContext = error.context || {};
-        console.error("[WhatsApp Media] Error Context:", errorContext);
-        throw new Error(error.message || "Erro ao enviar mídia");
-      }
-      if (data?.error) {
-        console.error("[WhatsApp Media] API Error:", data);
-        // Mostrar detalhes do erro da Evolution API
-        const details = data.details ? JSON.stringify(data.details) : "";
-        throw new Error(`${data.error}${details ? ` - ${details}` : ""}`);
+        if (error) {
+          console.error("[WhatsApp Media] Edge Function Error:", error);
+          const errorContext = error.context || {};
+          console.error("[WhatsApp Media] Error Context:", errorContext);
+          throw new Error(error.message || "Erro ao enviar mídia");
+        }
+        if (data?.error) {
+          console.error("[WhatsApp Media] API Error:", data);
+          const details = data.details ? JSON.stringify(data.details) : "";
+          throw new Error(`${data.error}${details ? ` - ${details}` : ""}`);
+        }
       }
 
       console.log("[WhatsApp Media] Success:", data);
