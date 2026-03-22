@@ -20,7 +20,7 @@ interface SzChatConfig {
 }
 
 interface SendRequest {
-  action: "send_message" | "transfer_back" | "finish_session" | "auth_refresh";
+  action: "send_message" | "transfer_back" | "finish_session" | "auth_refresh" | "get_active_session";
   organization_id: string;
   phone_number?: string;
   message?: string;
@@ -176,7 +176,7 @@ Deno.serve(withSentry('sz-chat-send', async (req) => {
     }
 
     const token = await ensureAuth(supabase, config as SzChatConfig, body.organization_id);
-    let result: { success: boolean; data?: unknown; error?: string };
+    let result: { success: boolean; data?: unknown; error?: string; session?: unknown };
 
     switch (body.action) {
       case "send_message": {
@@ -227,6 +227,36 @@ Deno.serve(withSentry('sz-chat-send', async (req) => {
       }
       case "auth_refresh": {
         result = { success: true, data: { message: "Token refreshed" } };
+        break;
+      }
+      case "get_active_session": {
+        if (!body.phone_number) {
+          return new Response(JSON.stringify({ error: "phone_number is required" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+        // Normalize phone
+        const phone = body.phone_number.replace(/\D/g, "");
+        const { data: session } = await supabase
+          .from("sz_chat_sessions")
+          .select("sz_chat_session_id, status, contact_name")
+          .eq("organization_id", body.organization_id)
+          .eq("phone_number", phone)
+          .eq("status", "active")
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (!session) {
+          result = { success: true, session: null };
+        } else {
+          result = {
+            success: true,
+            session: {
+              sz_chat_session_id: session.sz_chat_session_id,
+              team_mappings: (config as SzChatConfig).team_mappings || {},
+            },
+          };
+        }
         break;
       }
       default:

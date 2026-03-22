@@ -36,6 +36,7 @@ import {
   Tag,
   Settings,
   UserPlus,
+  ArrowRightLeft,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,6 +54,8 @@ import {
   useSendWhatsAppMedia,
   useWhatsAppMessagesRealtime,
   useWhatsAppInstancesForUser,
+  useTransferToSzChatDepartment,
+  useActiveSzChatSession,
   type WhatsAppInstanceForUser,
   ChatContact,
   WhatsAppMessage,
@@ -1408,6 +1411,12 @@ function ChatWindow({
   const sendMedia = useSendWhatsAppMedia();
   const { canReply: canReplyOnThisNumber } = useCanReplyOnInstanceByName(instanceName);
 
+  // SZ.chat transfer-back: check if this contact has an active SZ.chat session
+  const { data: teamMemberCW } = useCurrentTeamMember();
+  const organizationIdCW = teamMemberCW?.organization_id ?? null;
+  const { data: szChatSession } = useActiveSzChatSession(phoneNumber, organizationIdCW);
+  const transferToSzChat = useTransferToSzChatDepartment();
+
   // Ativar realtime
   useWhatsAppMessagesRealtime(phoneNumber);
 
@@ -1694,6 +1703,59 @@ function ChatWindow({
           <Badge variant="outline" className="text-muted-foreground gap-1.5 text-xs">
             IA desativada
           </Badge>
+        )}
+
+        {/* SZ.chat transfer-back button: only visible when there is an active SZ.chat session */}
+        {szChatSession && Object.keys(szChatSession.team_mappings).length > 0 && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="shrink-0 gap-1.5 text-xs"
+                disabled={transferToSzChat.isPending}
+              >
+                {transferToSzChat.isPending ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <ArrowRightLeft className="w-3.5 h-3.5" />
+                )}
+                Transferir setor
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {Object.entries(szChatSession.team_mappings).map(([teamName, teamId]) => (
+                <DropdownMenuItem
+                  key={teamId}
+                  onClick={() => {
+                    if (!organizationIdCW) return;
+                    transferToSzChat.mutate(
+                      {
+                        organizationId: organizationIdCW,
+                        sessionId: szChatSession.sz_chat_session_id,
+                        targetTeamName: teamName,
+                        targetTeamId: teamId,
+                      },
+                      {
+                        onSuccess: () => {
+                          toast.success(`Conversa transferida para ${teamName}`);
+                        },
+                        onError: (err) => {
+                          toast.error(
+                            err instanceof Error
+                              ? err.message
+                              : "Erro ao transferir conversa"
+                          );
+                        },
+                      }
+                    );
+                  }}
+                >
+                  {teamName}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
       </div>
 
