@@ -159,7 +159,7 @@ export class AgentEngine {
 
     // 5. Build Tools (based on capabilities)
     console.log('[AgentEngine] Step 5: Building tools...');
-    const tools = this.buildDynamicTools(capabilities, orgCustomFields, pipelineStages);
+    const tools = await this.buildDynamicTools(capabilities, orgCustomFields, pipelineStages);
 
     // 6. Call LLM via OpenRouter
     console.log('[AgentEngine] Step 6: Getting conversation history...');
@@ -214,20 +214,21 @@ export class AgentEngine {
     const cleanMessage = messageParts.join(' ');
 
     // 8. Enqueue Action (via pending_ai_actions → worker assíncrono)
-    let executionResult = null;
+    let executionResult: Record<string, unknown> | null = null;
     if (actionToExecute) {
       // Injetar lead_id para ações que precisam
       const needsLeadId = ['SCHEDULE_MEETING', 'TRANSFER_HUMAN', 'UPDATE_LEAD', 'QUALIFY_LEAD', 'DISQUALIFY_LEAD', 'ADVANCE_STAGE', 'UPDATE_QUALIFICATION_SCORE', 'CONFIRM_MEETING', 'ADVANCE_CONFIRMATION_STAGE', 'CREATE_CUSTOM_FIELD', 'TRANSFER_SZ_CHAT'];
-      if (this.currentLeadId && needsLeadId.includes(actionToExecute.action)) {
-        actionToExecute = {
-          ...actionToExecute,
-          params: { ...actionToExecute.params, lead_id: this.currentLeadId },
+      let currentAction = actionToExecute;
+      if (this.currentLeadId && needsLeadId.includes(currentAction.action)) {
+        currentAction = {
+          ...currentAction,
+          params: { ...currentAction.params, lead_id: this.currentLeadId },
         };
       }
-      console.log('[AgentEngine] Step 9: Enqueuing action:', actionToExecute.action);
+      console.log('[AgentEngine] Step 9: Enqueuing action:', currentAction.action);
       try {
         // TRANSFER_HUMAN: execute immediately, enqueue only side-effects
-        if (actionToExecute.action === 'TRANSFER_HUMAN') {
+        if (currentAction.action === 'TRANSFER_HUMAN') {
           const transferResult = await immediateTransferHuman(this.supabase, this.currentLeadId!);
           if (!transferResult.success) {
             console.warn('[AgentEngine] Immediate transfer failed, will rely on queue:', transferResult.error);
@@ -239,11 +240,11 @@ export class AgentEngine {
             leadId: this.currentLeadId || undefined,
             conversationId: conversation.id.startsWith('temp_') ? undefined : conversation.id,
             actionType: 'transfer_to_human_notify',
-            payload: { ...actionToExecute.params, lead_id: this.currentLeadId },
+            payload: { ...currentAction.params, lead_id: this.currentLeadId },
             idempotencyKey: `transfer_human_notify_${this.currentLeadId}_${minuteTs}`,
           });
           executionResult = { success: true, queued: true, immediate: true };
-        } else if (actionToExecute.action === 'TRANSFER_SZ_CHAT') {
+        } else if (currentAction.action === 'TRANSFER_SZ_CHAT') {
           // TRANSFER_SZ_CHAT: disable AI immediately, enqueue SZ.chat transfer
           const transferResult = await immediateTransferHuman(this.supabase, this.currentLeadId!);
           if (!transferResult.success) {
@@ -256,12 +257,12 @@ export class AgentEngine {
             leadId: this.currentLeadId || undefined,
             conversationId: conversation.id.startsWith('temp_') ? undefined : conversation.id,
             actionType: 'transfer_sz_chat',
-            payload: { ...actionToExecute.params, lead_id: this.currentLeadId },
+            payload: { ...currentAction.params, lead_id: this.currentLeadId },
             idempotencyKey: `transfer_sz_chat_${this.currentLeadId}_${minuteTs}`,
           });
           executionResult = { success: true, queued: true, immediate: true };
         } else {
-          executionResult = await this.enqueueToolAction(actionToExecute, conversation.id);
+          executionResult = await this.enqueueToolAction(currentAction, conversation.id);
         }
       } catch (enqueueError) {
         console.warn('[AgentEngine] Action enqueue failed (non-fatal):', enqueueError);
@@ -1951,7 +1952,7 @@ Regras:
   /**
    * Build Dynamic Tools (baseado em capabilities)
    */
-  private buildDynamicTools(
+  private async buildDynamicTools(
     capabilities: any,
     orgCustomFields: { field_name: string }[] = [],
     pipelineStages: { stage_key: string; name: string; pipeline_type: string }[] = []
