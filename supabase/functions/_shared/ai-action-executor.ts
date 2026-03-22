@@ -105,6 +105,11 @@ const ACTION_HISTORY_MAP: Record<string, HistoryMapping> = {
     descriptionFn: (p) => `Copilot transferiu: ${p.reason || "sem motivo informado"}`,
     source: "agent",
   },
+  transfer_sz_chat: {
+    action: "ai_toggled",
+    descriptionFn: (p) => `Copilot transferiu para setor SZ.chat: ${p.target_team_name || "setor não informado"}`,
+    source: "agent",
+  },
   update_qualification_score: {
     action: "field_updated",
     descriptionFn: (p) => `Score de qualificação atualizado para ${p.score || 0} pelo Copilot`,
@@ -212,6 +217,9 @@ export async function executeAiAction(
       break;
     case "update_pipeline_stage":
       result = await executeUpdatePipelineStage(supabase, payload, organization_id);
+      break;
+    case "transfer_sz_chat":
+      result = await executeTransferSzChat(supabase, lead_id, organization_id, payload);
       break;
     default:
       return { success: false, error: `Tipo de ação desconhecido: ${action_type}` };
@@ -630,6 +638,48 @@ async function executeTransferHumanNotify(
 
   console.log(`[executeTransferHumanNotify] Notified ${notifyUserIds.length} user(s) for lead ${leadId}`);
   return { success: true, message: `Notificação enviada para ${notifyUserIds.length} usuário(s)` };
+}
+
+async function executeTransferSzChat(
+  supabase: SupabaseClient,
+  leadId: string | null,
+  organizationId: string,
+  params: Record<string, unknown>,
+): Promise<ActionResult> {
+  if (!leadId) return { success: false, error: "lead_id é obrigatório" };
+
+  const { data: session } = await supabase
+    .from("sz_chat_sessions").select("sz_chat_session_id")
+    .eq("lead_id", leadId).eq("organization_id", organizationId).eq("status", "active")
+    .order("created_at", { ascending: false }).limit(1).maybeSingle();
+
+  if (!session?.sz_chat_session_id) {
+    return { success: false, error: "No active SZ.chat session for this lead" };
+  }
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+  const res = await fetch(`${supabaseUrl}/functions/v1/sz-chat-send`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${serviceKey}` },
+    body: JSON.stringify({
+      action: "transfer_back", organization_id: organizationId,
+      session_id: session.sz_chat_session_id,
+      target_team_name: params.target_team_name, target_team_id: params.target_team_id,
+    }),
+  });
+
+  const result = await res.json();
+  if (!res.ok || !result.success) {
+    return { success: false, error: result.error || "Transfer failed" };
+  }
+
+  await supabase.from("leads")
+    .update({ ai_disabled: true, ai_disabled_at: new Date().toISOString() })
+    .eq("id", leadId);
+
+  return { success: true, message: "Conversa transferida para setor SZ.chat" };
 }
 
 async function executeAdvanceStage(
