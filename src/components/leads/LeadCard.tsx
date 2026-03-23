@@ -26,7 +26,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
-import { openWhatsApp, formatPhoneForWhatsApp } from "@/lib/whatsapp";
+import { useOpenWhatsAppChat, formatPhoneForWhatsApp } from "@/lib/whatsapp";
 import { formatDistanceToNow, isToday, isTomorrow, isPast, differenceInDays, differenceInHours } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import type { DraggableItem } from "@/components/kanban/DraggableKanbanBoard";
@@ -315,6 +315,7 @@ export const LeadCard = memo(function LeadCard({
   const origin = ORIGIN_COLORS[lead.origin || "outro"] || ORIGIN_COLORS.outro;
   const urgency = lead.urgency ? URGENCY_COLORS[lead.urgency] : null;
   const hasPhone = !!formatPhoneForWhatsApp(lead.phone ?? undefined);
+  const openWhatsApp = useOpenWhatsAppChat();
   const parsedDate = lead.date
     ? (lead.date instanceof Date ? lead.date : new Date(lead.date))
     : null;
