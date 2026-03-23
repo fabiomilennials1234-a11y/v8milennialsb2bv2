@@ -55,7 +55,7 @@ BEGIN
   inbound_msgs AS (
     SELECT id, lead_id, ts
     FROM scope_messages
-    WHERE direction = 'inbound'
+    WHERE direction = 'incoming'
       AND EXTRACT(HOUR FROM ts) BETWEEN 8 AND 18
   ),
   outbound_next AS (
@@ -66,7 +66,7 @@ BEGIN
     FROM inbound_msgs i
     JOIN scope_messages o
       ON  o.lead_id   = i.lead_id
-      AND o.direction = 'outbound'
+      AND o.direction = 'outgoing'
       AND o.ts > i.ts
       AND o.ts < i.ts + interval '12 hours'
     ORDER BY i.id, o.ts
@@ -78,7 +78,7 @@ BEGIN
   outbound_msgs AS (
     SELECT id, lead_id, ts
     FROM scope_messages
-    WHERE direction = 'outbound'
+    WHERE direction = 'outgoing'
       AND EXTRACT(HOUR FROM ts) BETWEEN 8 AND 18
   ),
   inbound_next AS (
@@ -89,7 +89,7 @@ BEGIN
     FROM outbound_msgs o
     JOIN scope_messages i
       ON  i.lead_id   = o.lead_id
-      AND i.direction = 'inbound'
+      AND i.direction = 'incoming'
       AND i.ts > o.ts
       AND i.ts < o.ts + interval '24 hours'
     ORDER BY o.id, i.ts
@@ -101,7 +101,7 @@ BEGIN
   leads_with_inbound AS (
     SELECT COUNT(DISTINCT sm.lead_id) AS cnt
     FROM scope_messages sm
-    WHERE sm.direction = 'inbound'
+    WHERE sm.direction = 'incoming'
   ),
 
   -- -----------------------------------------------------------------------
@@ -147,7 +147,7 @@ BEGIN
       COALESCE(AVG(on3.response_seconds), 0) AS avg_response_seconds
     FROM period_leads pl
     LEFT JOIN scope_messages sm_in
-      ON sm_in.lead_id  = pl.lead_id AND sm_in.direction = 'inbound'
+      ON sm_in.lead_id  = pl.lead_id AND sm_in.direction = 'incoming'
     LEFT JOIN period_proposals pp2
       ON pp2.lead_id = pl.lead_id
     LEFT JOIN outbound_next on3
@@ -178,7 +178,7 @@ BEGIN
       COALESCE(AVG(on4.response_seconds), 0) AS avg_response_seconds
     FROM team_members tm
     LEFT JOIN scope_messages sm_out
-      ON sm_out.assigned_to = tm.id AND sm_out.direction = 'outbound'
+      ON sm_out.assigned_to = tm.user_id AND sm_out.direction = 'outgoing'
     LEFT JOIN outbound_next on4
       ON on4.inbound_id IN (
         SELECT id FROM inbound_msgs WHERE lead_id = sm_out.lead_id
@@ -197,12 +197,12 @@ BEGIN
       EXTRACT(HOUR FROM sm.ts)::int AS hour,
       COUNT(*) AS response_count
     FROM scope_messages sm
-    WHERE sm.direction = 'inbound'
+    WHERE sm.direction = 'incoming'
     GROUP BY EXTRACT(HOUR FROM sm.ts)::int
     ORDER BY hour
   ),
   total_inbound_cnt AS (
-    SELECT COUNT(*) AS cnt FROM scope_messages WHERE direction = 'inbound'
+    SELECT COUNT(*) AS cnt FROM scope_messages WHERE direction = 'incoming'
   ),
   hourly_with_rate AS (
     SELECT
@@ -288,7 +288,7 @@ BEGIN
       COUNT(DISTINCT wm.lead_id) AS replied_leads
     FROM whatsapp_messages wm
     WHERE wm.organization_id = p_org_id
-      AND wm.direction = 'inbound'
+      AND wm.direction = 'incoming'
       AND wm.timestamp IS NOT NULL
       AND wm.timestamp::timestamptz >= (p_end_date - interval '6 months')
       AND wm.timestamp::timestamptz < (p_end_date + interval '1 day')
@@ -353,7 +353,7 @@ BEGIN
     FROM whatsapp_messages wm
     INNER JOIN period_leads pl ON pl.lead_id = wm.lead_id
     WHERE wm.organization_id = p_org_id
-      AND wm.direction = 'outbound'
+      AND wm.direction = 'outgoing'
       AND wm.processed_by_agent_at IS NOT NULL
       AND wm.timestamp IS NOT NULL
   ),
@@ -362,7 +362,7 @@ BEGIN
     FROM whatsapp_messages wm
     INNER JOIN period_leads pl ON pl.lead_id = wm.lead_id
     WHERE wm.organization_id = p_org_id
-      AND wm.direction = 'outbound'
+      AND wm.direction = 'outgoing'
       AND wm.processed_by_agent_at IS NULL
       AND wm.timestamp IS NOT NULL
   ),
@@ -373,7 +373,7 @@ BEGIN
     FROM copilot_outbound co
     JOIN scope_messages sm_in2
       ON sm_in2.lead_id   = co.lead_id
-      AND sm_in2.direction = 'inbound'
+      AND sm_in2.direction = 'incoming'
       AND sm_in2.ts < co.ts
       AND sm_in2.ts > co.ts - interval '12 hours'
     ORDER BY co.lead_id, co.ts
@@ -385,7 +385,7 @@ BEGIN
     FROM human_outbound hu
     JOIN scope_messages sm_in3
       ON sm_in3.lead_id   = hu.lead_id
-      AND sm_in3.direction = 'inbound'
+      AND sm_in3.direction = 'incoming'
       AND sm_in3.ts < hu.ts
       AND sm_in3.ts > hu.ts - interval '12 hours'
     ORDER BY hu.lead_id, hu.ts
@@ -398,7 +398,7 @@ BEGIN
         ELSE 0 END AS response_rate,
       CASE WHEN (SELECT cnt FROM total_leads_cnt) > 0
         THEN ROUND(COUNT(DISTINCT co.lead_id) FILTER (WHERE EXISTS (
-          SELECT 1 FROM scope_messages WHERE lead_id = co.lead_id AND direction = 'inbound'
+          SELECT 1 FROM scope_messages WHERE lead_id = co.lead_id AND direction = 'incoming'
         ))::numeric / (SELECT cnt FROM total_leads_cnt) * 100, 1)
         ELSE 0 END AS qualification_rate,
       CASE WHEN (SELECT cnt FROM total_leads_cnt) > 0
@@ -416,7 +416,7 @@ BEGIN
         ELSE 0 END AS response_rate,
       CASE WHEN (SELECT cnt FROM total_leads_cnt) > 0
         THEN ROUND(COUNT(DISTINCT hu.lead_id) FILTER (WHERE EXISTS (
-          SELECT 1 FROM scope_messages WHERE lead_id = hu.lead_id AND direction = 'inbound'
+          SELECT 1 FROM scope_messages WHERE lead_id = hu.lead_id AND direction = 'incoming'
         ))::numeric / (SELECT cnt FROM total_leads_cnt) * 100, 1)
         ELSE 0 END AS qualification_rate,
       CASE WHEN (SELECT cnt FROM total_leads_cnt) > 0
@@ -428,7 +428,7 @@ BEGIN
   )
 
   SELECT jsonb_build_object(
-    'kpi_cards', (
+    'kpi_cards', COALESCE((
       SELECT jsonb_build_object(
         'our_avg_response_seconds',    ROUND(our_avg_response_seconds::numeric, 0),
         'client_avg_response_seconds', ROUND(client_avg_response_seconds::numeric, 0),
@@ -437,7 +437,7 @@ BEGIN
       )
       FROM kpi
       LIMIT 1
-    ),
+    ), '{"our_avg_response_seconds":0,"client_avg_response_seconds":0,"response_rate_pct":0,"close_rate_pct":0}'::jsonb),
     'response_by_origin',  COALESCE((SELECT jsonb_agg(row_to_json(rbo)) FROM response_by_origin rbo), '[]'::jsonb),
     'team_response_times', COALESCE((SELECT jsonb_agg(row_to_json(mr))  FROM member_response mr),      '[]'::jsonb),
     'hourly_pattern',      COALESCE((SELECT jsonb_agg(row_to_json(hw))  FROM hourly_with_rate hw),      '[]'::jsonb),
