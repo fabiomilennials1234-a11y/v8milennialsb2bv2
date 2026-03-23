@@ -207,7 +207,14 @@ async function transcribeAudioWithOpenAI(mediaUrl: string): Promise<string | nul
 
       const audioBlob = await mediaResponse.blob();
       const contentType = audioBlob.type || "audio/ogg";
-      const file = new File([audioBlob], "audio", { type: contentType });
+      // Whisper requires a recognized file extension — derive from content type
+      const extFromType: Record<string, string> = {
+        "audio/mpeg": "mp3", "audio/mp3": "mp3", "audio/ogg": "ogg",
+        "audio/webm": "webm", "audio/wav": "wav", "audio/mp4": "m4a",
+        "audio/x-m4a": "m4a", "audio/aac": "aac", "audio/flac": "flac",
+      };
+      const ext = extFromType[contentType] || "mp3";
+      const file = new File([audioBlob], `audio.${ext}`, { type: contentType });
       const formData = new FormData();
       formData.append("file", file);
       formData.append("model", "whisper-1");
