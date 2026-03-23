@@ -548,14 +548,19 @@ async function triggerAgentMessage(
     const result = await response.json();
 
     if (!response.ok) {
-      console.error("[Evolution Webhook] Agent-message error:", result);
-      return { success: false, error: result.error || "Agent processing failed" };
+      console.error("[Evolution Webhook] Agent-message FAILED:", {
+        status: response.status,
+        error: result.error,
+        fullResponse: JSON.stringify(result).substring(0, 500),
+      });
+      return { success: false, error: result.error || `Agent processing failed (HTTP ${response.status})` };
     }
 
     console.log("[Evolution Webhook] Agent-message response:", {
       hasMessage: !!result.message,
+      messageLength: result.message?.length,
       state: result.state,
-      action: result.action,
+      action: result.action_executed,
     });
 
     return { success: true, message: result.message };
@@ -1239,7 +1244,18 @@ async function handleMessagesUpsert(
               }
             }
           } else if (!agentResult.success) {
-            console.warn("[Evolution Webhook] Agent processing failed:", agentResult.error);
+            console.error("[Evolution Webhook] Agent processing FAILED:", {
+              error: agentResult.error,
+              phone: phoneNumber,
+              organizationId: instance.organization_id,
+              agentId: instance.copilot_agent_id,
+            });
+          } else {
+            // success=true but no message (LLM returned empty or tool-only response)
+            console.warn("[Evolution Webhook] Agent returned success but no message:", {
+              phone: phoneNumber,
+              organizationId: instance.organization_id,
+            });
           }
         } else {
           console.log("[Evolution Webhook] No active agent linked to this instance, skipping AI processing");
