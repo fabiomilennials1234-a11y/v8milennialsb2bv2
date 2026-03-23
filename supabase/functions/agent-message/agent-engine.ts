@@ -155,7 +155,7 @@ export class AgentEngine {
 
     // 4. Build Dynamic Prompt
     console.log('[AgentEngine] Step 4: Building prompt...');
-    const systemPrompt = this.buildDynamicPrompt(capabilities, conversation, leadData, documentSummaries, semanticContext, longTermMemories);
+    const systemPrompt = await this.buildDynamicPrompt(capabilities, conversation, leadData, documentSummaries, semanticContext, longTermMemories);
 
     // 5. Build Tools (based on capabilities)
     console.log('[AgentEngine] Step 5: Building tools...');
@@ -1360,7 +1360,7 @@ Regras:
    * 3. Adiciona capabilities dinâmicas (feature flags) ao final
    * 4. Adiciona dados do lead para contexto personalizado
    */
-  private buildDynamicPrompt(capabilities: any, conversation: any, leadData?: any, documentSummaries?: Array<{file_name: string; summary: string}>, semanticContext?: string, longTermMemories?: string): string {
+  private async buildDynamicPrompt(capabilities: any, conversation: any, leadData?: any, documentSummaries?: Array<{file_name: string; summary: string}>, semanticContext?: string, longTermMemories?: string): Promise<string> {
     const sections: string[] = [];
 
     // =====================================================
