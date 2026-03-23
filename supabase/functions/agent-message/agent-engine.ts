@@ -537,8 +537,8 @@ export class AgentEngine {
       }
     }
 
-    // Fallback: agente padrão da organização
-    const { data } = await this.supabase
+    // Fallback 1: agente padrão da organização
+    const { data: defaultAgent } = await this.supabase
       .from('copilot_agents')
       .select(SELECT)
       .eq('organization_id', this.organizationId)
@@ -546,7 +546,30 @@ export class AgentEngine {
       .eq('is_default', true)
       .maybeSingle();
 
-    return data;
+    if (defaultAgent) {
+      console.log('[AgentEngine] Using default agent:', { agentId: defaultAgent.id });
+      return defaultAgent;
+    }
+
+    // Fallback 2: qualquer agente ativo da organização (mais recente)
+    // Garante que shadow leads e leads sem routing match ainda recebam resposta
+    console.warn('[AgentEngine] No default agent found, trying any active agent');
+    const { data: anyAgent } = await this.supabase
+      .from('copilot_agents')
+      .select(SELECT)
+      .eq('organization_id', this.organizationId)
+      .eq('is_active', true)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (anyAgent) {
+      console.log('[AgentEngine] Using fallback active agent:', { agentId: anyAgent.id });
+    } else {
+      console.error('[AgentEngine] No active agents found for organization:', this.organizationId);
+    }
+
+    return anyAgent;
   }
 
   /**
@@ -2149,9 +2172,15 @@ Regras:
     }
 
     // Tool para transferir atendimento para outro setor via SZ.chat
-    const { data: szChatConfig } = await this.supabase
-      .from("sz_chat_config").select("team_mappings")
-      .eq("organization_id", this.organizationId).eq("is_active", true).maybeSingle();
+    let szChatConfig: { team_mappings: Record<string, unknown> } | null = null;
+    try {
+      const { data } = await this.supabase
+        .from("sz_chat_config").select("team_mappings")
+        .eq("organization_id", this.organizationId).eq("is_active", true).maybeSingle();
+      szChatConfig = data;
+    } catch (e) {
+      console.warn('[AgentEngine] sz_chat_config query failed (non-fatal):', e);
+    }
 
     if (szChatConfig?.team_mappings && Object.keys(szChatConfig.team_mappings).length > 0) {
       const teamNames = Object.keys(szChatConfig.team_mappings);
