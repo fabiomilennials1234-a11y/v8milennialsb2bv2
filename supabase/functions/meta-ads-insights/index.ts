@@ -52,16 +52,6 @@ Deno.serve(withSentry("meta-ads-insights", async (req) => {
   }
 
   try {
-    // Validate anon-key auth
-    const authHeader = req.headers.get("authorization");
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
-    if (!authHeader || !anonKey || authHeader !== `Bearer ${anonKey}`) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers }
-      );
-    }
-
     const accessToken = Deno.env.get("META_ADS_ACCESS_TOKEN");
     const accountId = Deno.env.get("META_ADS_ACCOUNT_ID");
 
