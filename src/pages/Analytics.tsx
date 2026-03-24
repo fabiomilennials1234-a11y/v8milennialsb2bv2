@@ -12,8 +12,7 @@ import { useOrganization } from "@/hooks/useOrganization";
 export default function Analytics() {
   const [activeTab, setActiveTab] = useState("overview");
   const { organizationId } = useOrganization();
-  const MILENNIALS_ORG_ID = import.meta.env.VITE_MILENNIALS_ORG_ID || "";
-  const showUtmsTab = organizationId === MILENNIALS_ORG_ID;
+  const showUtmsTab = organizationId === "6030520a-2ca7-477d-be89-55758e2cd808";
 
   return (
     <div className="space-y-4">
