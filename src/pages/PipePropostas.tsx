@@ -238,7 +238,7 @@ export default function PipePropostas() {
       phone: lead?.phone,
       rating: lead?.rating || 0,
       calor: item.calor ?? 5,
-      responsible: item.closer?.name || lead?.closer?.name,
+      responsible: item.responsible?.name || item.closer?.name || lead?.responsible?.name || lead?.closer?.name,
       value: totalValue,
       valueLabel: new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 0 }).format(totalValue),
       contractDuration: item.contract_duration || 0,

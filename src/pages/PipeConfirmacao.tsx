@@ -292,7 +292,7 @@ export default function PipeConfirmacao() {
       phone: lead?.phone,
       rating: lead?.rating || 0,
       origin: lead?.origin || "outro",
-      responsible: item.sdr?.name || item.closer?.name || lead?.sdr?.name || lead?.closer?.name,
+      responsible: item.responsible?.name || item.sdr?.name || item.closer?.name || lead?.responsible?.name || lead?.sdr?.name || lead?.closer?.name,
       tags: lead?.lead_tags?.map((lt: any) => ({ name: lt.tag?.name, color: lt.tag?.color || "#888" })).filter((t: any) => t.name) || [],
       leadId: item.lead_id,
       faturamento: lead?.faturamento,
