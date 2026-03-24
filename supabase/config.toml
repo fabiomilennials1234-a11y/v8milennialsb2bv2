@@ -27,6 +27,10 @@ verify_jwt = false
 [functions.agent-message]
 verify_jwt = false
 
+# summarize-conversation: JWT validado internamente
+[functions.summarize-conversation]
+verify_jwt = false
+
 [functions.webhook-orchestrator]
 verify_jwt = false
 
@@ -79,6 +83,25 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.google-calendar-sharing]
+verify_jwt = false
+
+# tinyerp: JWT validado internamente em todas as funções
+[functions.tinyerp-sync-products]
+verify_jwt = false
+
+[functions.tinyerp-connect]
+verify_jwt = false
+
+[functions.tinyerp-disconnect]
+verify_jwt = false
+
+[functions.tinyerp-proxy]
+verify_jwt = false
+
+[functions.tinyerp-push-order]
+verify_jwt = false
+
+[functions.tinyerp-push-upsell-order]
 verify_jwt = false
 
 # tinyerp-webhook: recebe webhooks do TinyERP (sem JWT)

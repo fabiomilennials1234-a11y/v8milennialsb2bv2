@@ -30,8 +30,20 @@ async function resolveVariables(
   supabase: SupabaseClient,
   leadId: string,
   template: string,
+  executionContext?: Record<string, unknown>,
 ): Promise<string> {
   if (!template || !template.includes("{{")) return template;
+
+  // First pass: resolve execution context variables (e.g., {{ai_message}} from previous nodes)
+  if (executionContext) {
+    for (const [key, val] of Object.entries(executionContext)) {
+      if (val !== null && val !== undefined && typeof val !== "object") {
+        template = template.replaceAll(`{{${key}}}`, String(val));
+      }
+    }
+    // If all variables resolved, return early
+    if (!template.includes("{{")) return template;
+  }
 
   const { data: lead } = await supabase
     .from("leads")
@@ -416,6 +428,14 @@ export async function executeWorkflowAction(ctx: ActionContext): Promise<ActionR
       break;
     case "summarize_conversation":
       result = await handleInvokeEdgeFunction(ctx, "summarize-conversation");
+      // Store AI summary variables in execution context for downstream nodes
+      if (result.success && result.data) {
+        const d = result.data as Record<string, unknown>;
+        if (d.summary) ctx.executionContext.ai_resumo = d.summary;
+        if (d.sentiment) ctx.executionContext.ai_sentimento = d.sentiment;
+        if (d.lead_temperature) ctx.executionContext.ai_temperatura = d.lead_temperature;
+        if (d.next_action) ctx.executionContext.ai_proxima_acao = d.next_action;
+      }
       break;
     case "evaluate_conversation":
       result = await handleInvokeEdgeFunction(ctx, "evaluate-agent-conversation");
@@ -452,7 +472,7 @@ async function handleSendWhatsApp(ctx: ActionContext): Promise<ActionResult> {
   if (!phone) return { success: false, error: "Lead has no phone" };
 
   const template = ctx.nodeData.messageTemplate as string || "";
-  const message = await resolveVariables(ctx.supabase, ctx.leadId, template);
+  const message = await resolveVariables(ctx.supabase, ctx.leadId, template, ctx.executionContext);
   if (!message) return { success: false, error: "Empty message template" };
 
   const res = await fetch(`${wa.evolutionUrl}/message/sendText/${wa.instanceName}`, {
@@ -525,7 +545,7 @@ async function handleSendWhatsAppImage(ctx: ActionContext): Promise<ActionResult
   if (!imageUrl) return { success: false, error: "No image URL configured" };
 
   const caption = ctx.nodeData.imageCaption as string || "";
-  const resolvedCaption = await resolveVariables(ctx.supabase, ctx.leadId, caption);
+  const resolvedCaption = await resolveVariables(ctx.supabase, ctx.leadId, caption, ctx.executionContext);
 
   const res = await fetch(`${wa.evolutionUrl}/message/sendMedia/${wa.instanceName}`, {
     method: "POST",
@@ -556,7 +576,7 @@ async function handleSendWhatsAppTemplate(ctx: ActionContext): Promise<ActionRes
 
   if (!tpl) return { success: false, error: "Template not found" };
 
-  const message = await resolveVariables(ctx.supabase, ctx.leadId, tpl.content || "");
+  const message = await resolveVariables(ctx.supabase, ctx.leadId, tpl.content || "", ctx.executionContext);
 
   const res = await fetch(`${wa.evolutionUrl}/message/sendText/${wa.instanceName}`, {
     method: "POST",
@@ -571,7 +591,7 @@ async function handleSendWhatsAppTemplate(ctx: ActionContext): Promise<ActionRes
 async function handleSendMetaMessage(ctx: ActionContext): Promise<ActionResult> {
   const channel = ctx.nodeData.metaChannel as string || "instagram";
   const message = ctx.nodeData.metaMessage as string || "";
-  const resolved = await resolveVariables(ctx.supabase, ctx.leadId, message);
+  const resolved = await resolveVariables(ctx.supabase, ctx.leadId, message, ctx.executionContext);
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
@@ -593,7 +613,7 @@ async function handleSendMetaMessage(ctx: ActionContext): Promise<ActionResult> 
 
 async function handleSendSemiAutomatic(ctx: ActionContext): Promise<ActionResult> {
   const message = ctx.nodeData.semiAutoMessage as string || "";
-  const resolved = await resolveVariables(ctx.supabase, ctx.leadId, message);
+  const resolved = await resolveVariables(ctx.supabase, ctx.leadId, message, ctx.executionContext);
 
   const { error } = await ctx.supabase.from("scheduled_pipe_messages").insert({
     lead_id: ctx.leadId,
@@ -933,7 +953,7 @@ async function handleSendCampaignMessage(ctx: ActionContext): Promise<ActionResu
 
   if (!template) return { success: false, error: "Template not found" };
 
-  const message = await resolveVariables(ctx.supabase, ctx.leadId, template.content || "");
+  const message = await resolveVariables(ctx.supabase, ctx.leadId, template.content || "", ctx.executionContext);
 
   const wa = await getWhatsAppInstance(ctx.supabase, ctx.organizationId, ctx.nodeData.whatsappInstanceId as string);
   if (!wa) return { success: false, error: "WhatsApp instance not available" };
@@ -1172,21 +1192,69 @@ async function handleCreateFollowup(ctx: ActionContext): Promise<ActionResult> {
 // ─── AI Handlers ────────────────────────────────────────────────────────────
 
 async function handleGenerateAiMessage(ctx: ActionContext): Promise<ActionResult> {
-  const { error } = await ctx.supabase.from("pending_ai_actions").insert({
-    organization_id: ctx.organizationId,
-    lead_id: ctx.leadId,
-    action_type: "generate_message",
-    payload: {
-      source: "workflow",
-      agent_id: ctx.nodeData.aiAgentId || null,
-      prompt: ctx.nodeData.aiPrompt || null,
-      output_variable: ctx.nodeData.aiOutputVariable || null,
-    },
-    status: "pending",
-  });
+  const openRouterApiKey = Deno.env.get("OPENROUTER_API_KEY");
+  if (!openRouterApiKey) {
+    return { success: false, error: "OPENROUTER_API_KEY não configurada" };
+  }
 
-  if (error) return { success: false, error: error.message };
-  return { success: true, message: "AI message generation queued" };
+  const rawPrompt = (ctx.nodeData.aiPrompt as string) || "";
+  if (!rawPrompt) {
+    return { success: false, error: "Prompt de IA não configurado no nó" };
+  }
+
+  // Resolve variables in the prompt (e.g., {{nome}}, {{empresa}})
+  const prompt = await resolveVariables(ctx.supabase, ctx.leadId, rawPrompt);
+
+  try {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${openRouterApiKey}`,
+        "HTTP-Referer": Deno.env.get("OPENROUTER_REFERER_URL") || "https://v8millennials.com",
+        "X-Title": "V8 Millennials CRM - Workflow AI Message",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.0-flash-001",
+        messages: [
+          {
+            role: "system",
+            content:
+              "Você é um assistente de vendas B2B. Gere uma mensagem curta, natural e adequada para WhatsApp. " +
+              "Não use saudações formais como 'Prezado' ou 'Caro'. Seja direto e conversacional. " +
+              "Responda APENAS com o texto da mensagem, sem explicações.",
+          },
+          { role: "user", content: prompt },
+        ],
+        temperature: 0.7,
+        max_tokens: 500,
+      }),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      return { success: false, error: `OpenRouter API error: ${response.status} ${errText}` };
+    }
+
+    const data = await response.json();
+    const generatedMessage = data.choices?.[0]?.message?.content?.trim() || "";
+
+    if (!generatedMessage) {
+      return { success: false, error: "IA retornou mensagem vazia" };
+    }
+
+    // Store in execution context so next nodes can use {{ai_message}}
+    const outputVar = (ctx.nodeData.aiOutputVariable as string) || "ai_message";
+    ctx.executionContext[outputVar] = generatedMessage;
+
+    return {
+      success: true,
+      message: `Mensagem gerada com sucesso (${generatedMessage.length} chars)`,
+      data: { [outputVar]: generatedMessage },
+    };
+  } catch (err) {
+    return { success: false, error: `Erro ao gerar mensagem: ${err instanceof Error ? err.message : String(err)}` };
+  }
 }
 
 async function handleInvokeEdgeFunction(ctx: ActionContext, functionName: string): Promise<ActionResult> {
