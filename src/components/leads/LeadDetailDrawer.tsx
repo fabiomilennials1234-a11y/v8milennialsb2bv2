@@ -326,6 +326,29 @@ export const LeadDetailDrawer = memo(function LeadDetailDrawer({
     setIsDirty(true);
   };
 
+  // Auto-save responsible change immediately (no need to click Salvar)
+  const handleResponsibleChange = async (newResponsibleId: string | null) => {
+    if (!lead) return;
+    // Update local state immediately for instant UI feedback
+    setFormData((prev) => ({ ...prev, responsible_id: newResponsibleId }));
+
+    try {
+      await updateLead.mutateAsync({
+        id: lead.id,
+        responsible_id: newResponsibleId,
+      });
+      const responsibleName = responsibleMembers.find((m) => m.id === newResponsibleId)?.name || "Nenhum";
+      logAction({ leadId: lead.id, action: "responsible_assigned", description: `Responsável alterado para "${responsibleName}"` });
+      queryClient.invalidateQueries({ queryKey: ["lead-detail", leadId] });
+      toast.success(`Responsável alterado para "${responsibleName}"`);
+      onSuccess?.();
+    } catch (error: any) {
+      // Revert on failure
+      setFormData((prev) => ({ ...prev, responsible_id: lead.responsible_id || "" }));
+      toast.error(`Erro ao alterar responsável: ${error?.message || "Erro desconhecido"}`);
+    }
+  };
+
   const handleSave = async () => {
     if (!lead) return;
     setIsSaving(true);
@@ -356,11 +379,7 @@ export const LeadDetailDrawer = memo(function LeadDetailDrawer({
       if (formData.phone !== (lead.phone || "")) changes.push("telefone");
       if (formData.segment !== (lead.segment || "")) changes.push("segmento");
       if (formData.notes !== (lead.notes || "")) changes.push("observações");
-      if (formData.responsible_id !== (lead.responsible_id || null)) {
-        changes.push("responsável");
-        const responsibleName = responsibleMembers.find((m) => m.id === formData.responsible_id)?.name || "Nenhum";
-        logAction({ leadId: lead.id, action: "responsible_assigned", description: `Responsável alterado para "${responsibleName}"` });
-      }
+      // Note: responsible_id changes are auto-saved via handleResponsibleChange (no need to log here)
       if (changes.length > 0) {
         logAction({ leadId: lead.id, action: "field_updated", description: `Campos atualizados: ${changes.join(", ")}` });
       }
@@ -746,7 +765,7 @@ export const LeadDetailDrawer = memo(function LeadDetailDrawer({
                         <h3 className="text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-2">Responsável</h3>
                         <Select
                           value={formData.responsible_id || "none"}
-                          onValueChange={(v) => handleFieldChange("responsible_id", v === "none" ? null : v)}
+                          onValueChange={(v) => handleResponsibleChange(v === "none" ? null : v)}
                         >
                           <SelectTrigger className="h-9">
                             {formData.responsible_id && formData.responsible_id !== "none" ? (
