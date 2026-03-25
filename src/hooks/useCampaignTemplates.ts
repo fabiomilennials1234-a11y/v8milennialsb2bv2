@@ -86,20 +86,23 @@ export const TEMPLATE_VARIABLES = [
   { key: 'origem', label: 'Origem', example: 'Meta Ads' },
   { key: 'segmento', label: 'Segmento', example: 'Tecnologia' },
   { key: 'faturamento', label: 'Faturamento', example: 'R$100 mil' },
-  { key: 'saudacao', label: 'Saudação (bom dia / boa tarde / boa noite)', example: 'bom dia' },
+  { key: 'saudacao', label: 'Saudação (Bom dia / Boa tarde / Boa noite)', example: 'Bom dia' },
   { key: 'data', label: 'Data atual (dd/mm/aaaa)', example: '30/01/2026' },
   { key: 'hora', label: 'Hora atual', example: '14:30' },
 ] as const;
 
 /** Retorna saudação, data e hora no fuso do Brasil (preview/envio) */
 export function getTimeBasedVariables(now: Date = new Date()): { saudacao: string; data: string; hora: string } {
-  const br = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
-  const hour = br.getHours();
-  let saudacao = 'bom dia';
-  if (hour >= 12 && hour < 18) saudacao = 'boa tarde';
-  else if (hour >= 18 || hour < 5) saudacao = 'boa noite';
-  const data = br.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-  const hora = br.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', hour12: false });
+  const tz = 'America/Sao_Paulo';
+  const hour = parseInt(
+    new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: '2-digit', hour12: false }).format(now),
+    10,
+  );
+  let saudacao = 'Bom dia';
+  if (hour >= 12 && hour < 18) saudacao = 'Boa tarde';
+  else if (hour >= 18 || hour < 5) saudacao = 'Boa noite';
+  const data = new Intl.DateTimeFormat('pt-BR', { timeZone: tz, day: '2-digit', month: '2-digit', year: 'numeric' }).format(now);
+  const hora = new Intl.DateTimeFormat('pt-BR', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false }).format(now);
   return { saudacao, data, hora };
 }
 

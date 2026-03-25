@@ -17,6 +17,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSentry } from '../_shared/sentry.ts';
 import { logRuntime } from "../_shared/logger.ts";
+import { getTimeBasedVariables } from '../_shared/time-variables.ts';
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
@@ -427,32 +428,7 @@ async function processBatch(
   return { success: true, sent, failed, skipped };
 }
 
-/**
- * Retorna saudação, data e hora no fuso do Brasil (America/Sao_Paulo)
- */
-function getTimeBasedVariables(now: Date = new Date()): { saudacao: string; data: string; hora: string } {
-  const tz = "America/Sao_Paulo";
-  const hour = parseInt(
-    new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "2-digit", hour12: false }).format(now),
-    10
-  );
-  let saudacao = "bom dia";
-  if (hour >= 12 && hour < 18) saudacao = "boa tarde";
-  else if (hour >= 18 || hour < 5) saudacao = "boa noite";
-  const data = new Intl.DateTimeFormat("pt-BR", {
-    timeZone: tz,
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  }).format(now);
-  const hora = new Intl.DateTimeFormat("pt-BR", {
-    timeZone: tz,
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(now);
-  return { saudacao, data, hora };
-}
+// getTimeBasedVariables is now imported from _shared/time-variables.ts
 
 /**
  * Substitui variáveis no template

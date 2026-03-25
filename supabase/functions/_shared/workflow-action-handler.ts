@@ -8,6 +8,7 @@
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { sendWhatsAppAudio } from "./audio-sender.ts";
+import { getTimeBasedVariables } from "./time-variables.ts";
 
 export interface ActionResult {
   success: boolean;
@@ -75,25 +76,12 @@ async function resolveVariables(
     origem:     lead.origin || "",
   };
 
-  // Sistema: saudacao, data_hoje, hora_atual
-  if (template.includes("{{saudacao}}")) {
-    const h = parseInt(
-      new Intl.DateTimeFormat("pt-BR", {
-        hour: "numeric",
-        hour12: false,
-        timeZone: "America/Sao_Paulo",
-      }).format(new Date()),
-    );
-    vars.saudacao = h >= 5 && h < 12 ? "Bom dia" : h >= 12 && h < 18 ? "Boa tarde" : "Boa noite";
-  }
-  if (template.includes("{{data_hoje}}")) {
-    vars.data_hoje = new Date().toLocaleDateString("pt-BR");
-  }
-  if (template.includes("{{hora_atual}}")) {
-    vars.hora_atual = new Date().toLocaleTimeString("pt-BR", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+  // Sistema: saudacao, data_hoje, hora_atual — resolved at send time with correct timezone
+  if (template.includes("{{saudacao}}") || template.includes("{{data_hoje}}") || template.includes("{{hora_atual}}")) {
+    const timeVars = getTimeBasedVariables();
+    vars.saudacao = timeVars.saudacao;
+    vars.data_hoje = timeVars.data;
+    vars.hora_atual = timeVars.hora;
   }
 
   // SDR name (legado)
