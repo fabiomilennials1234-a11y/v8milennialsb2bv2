@@ -1098,31 +1098,50 @@ async function handleTinyErpOrder(ctx: ActionContext, functionName: string): Pro
 async function handleAssign(ctx: ActionContext, role: "sdr" | "closer"): Promise<ActionResult> {
   let assigneeId = ctx.nodeData.assigneeId as string;
   const assignMode = ctx.nodeData.assignMode as string || "specific";
-  // Mapeia o tipo de atribuição para a coluna de dados correta (sdr_id ou closer_id)
   const field = role === "sdr" ? "sdr_id" : "closer_id";
 
   if (assignMode === "round_robin") {
-    // Get all active team members with matching metric_type and pick next via round robin
-    const targetMetric = role === "sdr" ? "meetings" : "sales";
-    const { data: members } = await ctx.supabase
-      .from("team_members")
-      .select("id")
-      .eq("organization_id", ctx.organizationId)
-      .eq("is_active", true)
-      .eq("metric_type", targetMetric);
+    // Check if workflow node has campaign context
+    const campaignId = ctx.nodeData.campaignId as string | undefined;
+    // Check if workflow node has pipe context
+    const pipeType = ctx.nodeData.pipeType as string | undefined;
 
-    if (members && members.length > 0) {
-      const counts = await Promise.all(
-        members.map(async (m: { id: string }) => {
-          const { count } = await ctx.supabase
-            .from("leads")
-            .select("*", { count: "exact", head: true })
-            .eq("responsible_id", m.id);
-          return { id: m.id, count: count ?? 0 };
-        }),
-      );
-      counts.sort((a, b) => a.count - b.count);
-      assigneeId = counts[0].id;
+    if (campaignId) {
+      // Campaign-scoped distribution via atomic RPC
+      const rpcName = role === "closer" ? "get_next_campaign_closer" : "get_next_campaign_sdr";
+      const { data: nextId } = await ctx.supabase.rpc(rpcName, { p_campaign_id: campaignId });
+      if (nextId) assigneeId = nextId;
+    } else if (pipeType) {
+      // Pipe-scoped distribution via atomic RPC
+      const { data: nextId } = await ctx.supabase.rpc("get_next_pipe_sdr", {
+        p_pipe_type: pipeType,
+        p_organization_id: ctx.organizationId,
+      });
+      if (nextId) assigneeId = nextId;
+    } else {
+      // Fallback: org-scoped least-loaded (adds organization_id filter)
+      const targetMetric = role === "sdr" ? "meetings" : "sales";
+      const { data: members } = await ctx.supabase
+        .from("team_members")
+        .select("id")
+        .eq("organization_id", ctx.organizationId)
+        .eq("is_active", true)
+        .eq("metric_type", targetMetric);
+
+      if (members && members.length > 0) {
+        const counts = await Promise.all(
+          members.map(async (m: { id: string }) => {
+            const { count } = await ctx.supabase
+              .from("leads")
+              .select("*", { count: "exact", head: true })
+              .eq("responsible_id", m.id)
+              .eq("organization_id", ctx.organizationId);
+            return { id: m.id, count: count ?? 0 };
+          }),
+        );
+        counts.sort((a, b) => a.count - b.count);
+        assigneeId = counts[0].id;
+      }
     }
   }
 
