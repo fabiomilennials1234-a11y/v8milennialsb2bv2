@@ -554,36 +554,12 @@ async function processPipeQueue(
         let sdrId: string | null = (row as any).target_sdr_id || null;
 
         if (mode === "round_robin") {
-          const { data: sdrs } = await supabase
-            .from("team_members")
-            .select("id, name")
-            .eq("organization_id", orgId)
-            .in("role", ["admin", "sdr", "member"]);
-
-          if (sdrs && sdrs.length > 0) {
-            const pipeTable = `pipe_${pipeType}`;
-            const { data: sdrCounts } = await supabase
-              .from(pipeTable)
-              .select("responsible_id")
-              .eq("organization_id", orgId)
-              .not("responsible_id", "is", null);
-
-            const countMap: Record<string, number> = {};
-            for (const s of sdrs) countMap[s.id] = 0;
-            for (const cl of sdrCounts || []) {
-              if (cl.responsible_id && countMap[cl.responsible_id] !== undefined) {
-                countMap[cl.responsible_id]++;
-              }
-            }
-
-            let minCount = Infinity;
-            for (const s of sdrs) {
-              if ((countMap[s.id] ?? 0) < minCount) {
-                minCount = countMap[s.id] ?? 0;
-                sdrId = s.id;
-              }
-            }
-          }
+          // Use atomic pipe distribution RPC (correct pool + advisory lock)
+          const { data: nextId } = await supabase.rpc("get_next_pipe_sdr", {
+            p_pipe_type: pipeType,
+            p_organization_id: orgId,
+          });
+          sdrId = nextId ?? null;
         }
 
         if (!sdrId) {
