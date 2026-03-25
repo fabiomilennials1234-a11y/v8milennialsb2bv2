@@ -147,32 +147,13 @@ Deno.serve(
       }
 
       if (rule.sdr_mode === "round_robin") {
-        // Least-loaded: count active (non-terminal) leads per pool member
-        const { data: pipeLeads } = await supabase
-          .from(pipeTable)
-          .select("responsible_id, status")
-          .eq("organization_id", organizationId)
-          .in("responsible_id", memberIds);
-
-        const countMap: Record<string, number> = {};
-        for (const id of memberIds) countMap[id] = 0;
-        for (const row of pipeLeads ?? []) {
-          if (
-            row.responsible_id &&
-            countMap[row.responsible_id] !== undefined &&
-            !TERMINAL_STATUSES.includes(row.status)
-          ) {
-            countMap[row.responsible_id]++;
-          }
-        }
-
-        let minCount = Infinity;
-        for (const id of memberIds) {
-          if (countMap[id] < minCount) {
-            minCount = countMap[id];
-            selectedMemberId = id;
-          }
-        }
+        // Atomic RPC with advisory lock — prevents race conditions
+        const { data: chosen } = await supabase.rpc("distribute_pipe_round_robin", {
+          p_pipe_type: pipeType,
+          p_organization_id: organizationId,
+          p_member_ids: memberIds,
+        });
+        selectedMemberId = chosen ?? null;
       }
     }
 
