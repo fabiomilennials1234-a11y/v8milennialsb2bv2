@@ -527,50 +527,17 @@ async function processCampaignQueue(
         const mode = (row as any).sdr_assignment_mode || "specific";
         let sdrId: string | null = (row as any).target_sdr_id || null;
 
-        if (mode === "round_robin" || mode === "random") {
-          // Find SDR members in this campaign
-          const { data: sdrMembers } = await supabase
-            .from("campanha_members")
-            .select("team_member_id, team_member:team_members(id, name)")
-            .eq("campanha_id", campanhaId)
-            .eq("role", "sdr")
-            .order("team_member_id");
-
-          const sdrs = (sdrMembers || [])
-            .filter((m: any) => m.team_member)
-            .map((m: any) => ({ id: m.team_member_id, name: m.team_member?.name }));
-
-          if (sdrs.length > 0) {
-            if (mode === "random") {
-              // Random: pick a random SDR from the pool
-              const idx = Math.floor(Math.random() * sdrs.length);
-              sdrId = sdrs[idx].id;
-            } else {
-              // Round robin: pick SDR with fewest leads (least loaded)
-              const { data: sdrCounts } = await supabase
-                .from("campanha_leads")
-                .select("responsible_id")
-                .eq("campanha_id", campanhaId)
-                .not("responsible_id", "is", null);
-
-              const countMap: Record<string, number> = {};
-              for (const s of sdrs) countMap[s.id] = 0;
-              for (const cl of sdrCounts || []) {
-                if (cl.responsible_id && countMap[cl.responsible_id] !== undefined) {
-                  countMap[cl.responsible_id]++;
-                }
-              }
-
-              // Pick SDR with lowest count
-              let minCount = Infinity;
-              for (const s of sdrs) {
-                if ((countMap[s.id] ?? 0) < minCount) {
-                  minCount = countMap[s.id] ?? 0;
-                  sdrId = s.id;
-                }
-              }
-            }
-          }
+        if (mode === "round_robin") {
+          // Use atomic campaign distribution RPC (unified pool + advisory lock)
+          const { data: nextId } = await supabase.rpc("get_next_campaign_sdr", {
+            p_campaign_id: campanhaId,
+          });
+          sdrId = nextId ?? null;
+        } else if (mode === "random") {
+          const { data: nextId } = await supabase.rpc("get_next_campaign_sdr", {
+            p_campaign_id: campanhaId,
+          });
+          sdrId = nextId ?? null;
         }
 
         if (!sdrId) {
