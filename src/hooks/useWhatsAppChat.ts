@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember, isVirtualTeamMember } from "@/hooks/useTeamMembers";
 import { track } from "@/lib/analytics";
+import { formatPhoneForWhatsApp } from "@/lib/whatsapp";
 
 /**
  * Check if a whatsapp_instance is backed by SZ.chat (via metadata.channel).
@@ -437,8 +438,9 @@ export function useSendWhatsAppMessage() {
         teamMember.id
       );
 
-      // Formatar número (remover caracteres especiais)
-      const formattedNumber = phoneNumber.replace(/\D/g, "");
+      // Normalizar número para formato Evolution API (55 + DDD + número)
+      const formattedNumber = formatPhoneForWhatsApp(phoneNumber);
+      if (!formattedNumber) throw new Error("Número de telefone inválido");
 
       // Check if this instance uses SZ.chat
       const isSzChat = await isSzChatInstance(instanceId);
@@ -604,7 +606,8 @@ export function useSendWhatsAppMedia() {
         teamMember.id
       );
 
-      const formattedNumber = phoneNumber.replace(/\D/g, "");
+      const formattedNumber = formatPhoneForWhatsApp(phoneNumber);
+      if (!formattedNumber) throw new Error("Número de telefone inválido");
       let mediaUrl = media;
 
       // Se for base64, fazer upload para Storage primeiro

@@ -632,7 +632,7 @@ export const LeadDetailDrawer = memo(function LeadDetailDrawer({
                       {lead.phone && (
                         <DropdownMenuItem asChild>
                           <Link
-                            to={`/chat-whatsapp?phone=${encodeURIComponent(lead.phone.replace(/\D/g, ""))}`}
+                            to={`/chat-whatsapp?phone=${encodeURIComponent(formatPhoneForWhatsApp(lead.phone) || lead.phone)}`}
                             onClick={() => onOpenChange(false)}
                           >
                             <Send className="w-4 h-4 mr-2" />
