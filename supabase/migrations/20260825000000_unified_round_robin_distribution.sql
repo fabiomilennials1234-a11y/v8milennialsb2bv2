@@ -110,7 +110,7 @@ BEGIN
         AND status NOT IN ('vendido', 'perdido', 'cancelado');
 
     ELSE
-      v_cur_count := 0;
+      RAISE EXCEPTION 'Unknown pipe type: %. Expected whatsapp, confirmacao, or propostas.', p_pipe_type;
     END IF;
 
     -- Tiebreak: first member in array wins (array is pre-sorted),

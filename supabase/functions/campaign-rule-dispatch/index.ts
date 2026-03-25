@@ -534,10 +534,14 @@ async function processCampaignQueue(
           });
           sdrId = nextId ?? null;
         } else if (mode === "random") {
-          const { data: nextId } = await supabase.rpc("get_next_campaign_sdr", {
-            p_campaign_id: campanhaId,
-          });
-          sdrId = nextId ?? null;
+          // Pick randomly from campaign members (rule-level mode, not campaign-level)
+          const { data: members } = await supabase
+            .from("campanha_members")
+            .select("team_member_id")
+            .eq("campanha_id", campanhaId);
+          if (members && members.length > 0) {
+            sdrId = members[Math.floor(Math.random() * members.length)].team_member_id;
+          }
         }
 
         if (!sdrId) {
