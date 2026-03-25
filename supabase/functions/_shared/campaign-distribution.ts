@@ -65,28 +65,13 @@ export async function getCampaignResponsibleAssignment(
   }
 
   if (mode === "round_robin") {
-    // "Least loaded" algorithm: pick member with fewest leads in this campaign
-    const { data: counts } = await supabase
-      .from("campanha_leads")
-      .select("responsible_id")
-      .eq("campanha_id", campaignId)
-      .not("responsible_id", "is", null);
-
-    const countMap: Record<string, number> = {};
-    for (const id of memberIds) countMap[id] = 0;
-    for (const cl of counts || []) {
-      if (cl.responsible_id && countMap[cl.responsible_id] !== undefined) {
-        countMap[cl.responsible_id]++;
-      }
-    }
-
-    let minCount = Infinity;
-    let chosen: string | null = null;
-    for (const id of memberIds) {
-      if (countMap[id] < minCount) {
-        minCount = countMap[id];
-        chosen = id;
-      }
+    const { data: chosen, error: rrError } = await supabase.rpc(
+      "distribute_campaign_round_robin",
+      { p_campaign_id: campaignId, p_member_ids: memberIds }
+    );
+    if (rrError) {
+      console.warn("[campaign-distribution] RPC error:", rrError);
+      return null;
     }
     return chosen;
   }
