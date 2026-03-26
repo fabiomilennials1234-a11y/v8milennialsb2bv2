@@ -58,7 +58,14 @@ function createDefaultNodeData(type: WorkflowNodeType): WorkflowNodeData {
     case "wait_response":
       return { type: "wait_response", label: "Esperar Resposta", timeoutHours: 24, timeoutMinutes: 0, channel: "any" } as WaitResponseNodeData;
     case "split_ab":
-      return { type: "split_ab", label: "Split A/B", splitPercentA: 50, variantALabel: "A", variantBLabel: "B" } as SplitAbNodeData;
+      return {
+        type: "split_ab",
+        label: "Split A/B",
+        variants: [
+          { id: "a", label: "A", percentage: 50 },
+          { id: "b", label: "B", percentage: 50 },
+        ],
+      } as SplitAbNodeData;
     case "webhook_call":
       return { type: "webhook_call", label: "Webhook", url: "", method: "POST", bodyTemplate: "", outputVariable: "" } as WebhookCallNodeData;
     case "goto":
