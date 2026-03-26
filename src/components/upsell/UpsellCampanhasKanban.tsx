@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { useUpsellCampanhas, useUpdateUpsellCampanha } from "@/hooks/useUpsellCampanhas";
 import { LeadCard } from "@/components/leads/LeadCard";
@@ -44,6 +44,33 @@ export function UpsellCampanhasKanban({ searchQuery, filterStatus, filterRespons
     clientName: string;
   } | null>(null);
   const [dragOverCol, setDragOverCol] = useState<string | null>(null);
+
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const topScrollRef = useRef<HTMLDivElement>(null);
+  const [scrollWidth, setScrollWidth] = useState(0);
+  const syncingScroll = useRef(false);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(() => setScrollWidth(el.scrollWidth));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [campanhas]);
+
+  const handleTopScroll = useCallback(() => {
+    if (syncingScroll.current) return;
+    syncingScroll.current = true;
+    if (scrollRef.current && topScrollRef.current) scrollRef.current.scrollLeft = topScrollRef.current.scrollLeft;
+    syncingScroll.current = false;
+  }, []);
+
+  const handleMainScroll = useCallback(() => {
+    if (syncingScroll.current) return;
+    syncingScroll.current = true;
+    if (topScrollRef.current && scrollRef.current) topScrollRef.current.scrollLeft = scrollRef.current.scrollLeft;
+    syncingScroll.current = false;
+  }, []);
 
   const filteredCampanhas = campanhas.filter((c) => {
     const client = c.client as any;
@@ -126,7 +153,20 @@ export function UpsellCampanhasKanban({ searchQuery, filterStatus, filterRespons
 
   return (
     <>
-      <div className="flex gap-4 overflow-x-auto pb-4" style={{ minHeight: "60vh" }}>
+      {/* Top scrollbar */}
+      <div
+        ref={topScrollRef}
+        onScroll={handleTopScroll}
+        className="overflow-x-auto overflow-y-hidden"
+        style={{ height: 12 }}
+      >
+        <div style={{ width: scrollWidth, height: 1 }} />
+      </div>
+
+      <div
+        ref={scrollRef}
+        onScroll={handleMainScroll}
+        className="flex gap-4 overflow-x-auto overflow-y-hidden pb-4 max-h-[calc(100vh-220px)] scrollbar-hide" style={{ minHeight: "40vh" }}>
         {CAMPANHA_COLUMNS.map((col, colIndex) => {
           const colCampanhas = filteredCampanhas.filter((c) => c.status === col.id);
           const isDragOver = dragOverCol === col.id;
@@ -137,7 +177,7 @@ export function UpsellCampanhasKanban({ searchQuery, filterStatus, filterRespons
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: colIndex * 0.03, duration: 0.3 }}
-              className={`flex-shrink-0 w-64 bg-muted/30 rounded-lg transition-all duration-200 ${
+              className={`flex-shrink-0 w-64 bg-muted/30 rounded-lg flex flex-col transition-all duration-200 ${
                 isDragOver ? "ring-2 ring-primary/30 bg-primary/5" : ""
               }`}
               onDrop={(e) => handleDrop(e, col.id)}
@@ -151,7 +191,7 @@ export function UpsellCampanhasKanban({ searchQuery, filterStatus, filterRespons
                 </div>
               </div>
 
-              <div className="p-2 space-y-2 min-h-[200px]">
+              <div className="p-2 space-y-2 min-h-[100px] overflow-y-auto flex-1 min-h-0">
                 {colCampanhas.map((campanha, i) => (
                   <motion.div
                     key={campanha.id}
