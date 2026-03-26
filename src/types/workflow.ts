@@ -352,13 +352,53 @@ export interface WaitResponseNodeData {
   [key: string]: unknown;
 }
 
+export interface SplitVariant {
+  id: string;
+  label: string;
+  percentage: number;
+}
+
 export interface SplitAbNodeData {
   type: "split_ab";
   label: string;
-  splitPercentA: number; // 0-100, B é o complemento
-  variantALabel: string;
-  variantBLabel: string;
+  variants: SplitVariant[];
+  // Legacy fields — kept optional for migration from old workflows
+  splitPercentA?: number;
+  variantALabel?: string;
+  variantBLabel?: string;
   [key: string]: unknown;
+}
+
+/** Converts legacy A/B-only data to the new variants[] format */
+export function migrateSplitAbData(data: Record<string, unknown>): SplitAbNodeData {
+  // Already migrated
+  if (Array.isArray(data.variants) && data.variants.length > 0) {
+    return data as unknown as SplitAbNodeData;
+  }
+
+  // Legacy format: splitPercentA / variantALabel / variantBLabel
+  const percentA = Number(data.splitPercentA) || 50;
+  const percentB = 100 - percentA;
+
+  return {
+    type: "split_ab",
+    label: (data.label as string) || "Split A/B",
+    variants: [
+      { id: "a", label: (data.variantALabel as string) || "A", percentage: percentA },
+      { id: "b", label: (data.variantBLabel as string) || "B", percentage: percentB },
+    ],
+  };
+}
+
+/** Distributes percentages evenly across N variants, ensuring sum === 100 */
+export function distributePercentages(count: number): number[] {
+  if (count <= 0) return [];
+  const base = Math.floor((100 / count) * 100) / 100; // 2 decimal places
+  const percentages = Array(count).fill(base);
+  // Assign remainder to the last variant so sum === 100
+  const remainder = 100 - base * count;
+  percentages[count - 1] = Math.round((percentages[count - 1] + remainder) * 100) / 100;
+  return percentages;
 }
 
 export interface WebhookCallNodeData {
