@@ -5,6 +5,15 @@
  * notes, TinyERP integration (OrderStatus + ConfirmDialog), delete.
  */
 
+const LOSS_REASONS = [
+  { value: "sem_budget", label: "Sem budget" },
+  { value: "concorrencia", label: "Concorrência" },
+  { value: "timing", label: "Timing errado" },
+  { value: "follow_up_fraco", label: "Follow-up fraco" },
+  { value: "produto_nao_adequado", label: "Produto não adequado" },
+  { value: "outro", label: "Outro" },
+];
+
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
@@ -51,6 +60,8 @@ import { useDeleteLead } from "@/hooks/useLeads";
 import { useTinyErpStatus } from "@/hooks/useTinyErp";
 import { TinyErpOrderStatus } from "@/components/proposals/TinyErpOrderStatus";
 import { TinyErpConfirmOrderDialog } from "@/components/proposals/TinyErpConfirmOrderDialog";
+import { useCadastroExternoEnabled } from "@/hooks/useCadastroExterno";
+import { CadastroExternoConfirmDialog } from "@/components/proposals/CadastroExternoConfirmDialog";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -64,6 +75,7 @@ interface PropostasContextProps {
 
 export function PropostasContext({ lead, pipeData: proposta, onSuccess }: PropostasContextProps) {
   const { data: tinyStatus } = useTinyErpStatus();
+  const cadastroExternoEnabled = useCadastroExternoEnabled();
   const { data: teamMembers = [] } = useTeamMembers();
   const { data: products = [] } = useActiveProducts();
   const { data: itemsData = [], isLoading: itemsLoading } = usePipePropostaItems(proposta?.id);
@@ -79,6 +91,7 @@ export function PropostasContext({ lead, pipeData: proposta, onSuccess }: Propos
 
   const [formData, setFormData] = useState({
     status: proposta?.status || "marcar_compromisso",
+    loss_reason: proposta?.loss_reason || "",
     contract_duration: proposta?.contract_duration || "",
     responsible_id: proposta?.responsible_id || proposta?.closer_id || "",
     commitment_date: proposta?.commitment_date ? format(new Date(proposta.commitment_date), "yyyy-MM-dd'T'HH:mm") : "",
@@ -87,6 +100,7 @@ export function PropostasContext({ lead, pipeData: proposta, onSuccess }: Propos
   const [newNote, setNewNote] = useState("");
   const [isAddingNote, setIsAddingNote] = useState(false);
   const [tinyConfirmOpen, setTinyConfirmOpen] = useState(false);
+  const [cadastroExternoOpen, setCadastroExternoOpen] = useState(false);
 
   const [localItems, setLocalItems] = useState<Array<{ id: string; product_id: string; sale_value: string; isNew?: boolean }>>([]);
   const [itemsInitialized, setItemsInitialized] = useState(false);
@@ -96,6 +110,7 @@ export function PropostasContext({ lead, pipeData: proposta, onSuccess }: Propos
     if (proposta) {
       setFormData({
         status: proposta.status || "marcar_compromisso",
+        loss_reason: proposta.loss_reason || "",
         contract_duration: proposta.contract_duration || "",
         responsible_id: proposta.responsible_id || proposta.closer_id || "",
         commitment_date: proposta.commitment_date ? format(new Date(proposta.commitment_date), "yyyy-MM-dd'T'HH:mm") : "",
@@ -192,6 +207,7 @@ export function PropostasContext({ lead, pipeData: proposta, onSuccess }: Propos
 
       const isNewSale = formData.status === "vendido" && proposta.status !== "vendido";
       const shouldShowTinyModal = isNewSale && tinyStatus?.connected;
+      const shouldShowCadastroModal = isNewSale && cadastroExternoEnabled;
 
       await updateProposta.mutateAsync({
         id: proposta.id,
@@ -205,12 +221,19 @@ export function PropostasContext({ lead, pipeData: proposta, onSuccess }: Propos
         commitment_date: formData.commitment_date ? new Date(formData.commitment_date).toISOString() : null,
         notes: formData.notes || null,
         closed_at: ["vendido", "perdido"].includes(formData.status) ? new Date().toISOString() : null,
+        loss_reason: formData.status === "perdido" ? (formData.loss_reason || null) : null,
         skip_auto_push: shouldShowTinyModal,
       });
 
       if (shouldShowTinyModal) {
         toast.success("🎉 Venda fechada!");
         setTinyConfirmOpen(true);
+        return;
+      }
+
+      if (shouldShowCadastroModal) {
+        toast.success("🎉 Venda fechada!");
+        setCadastroExternoOpen(true);
         return;
       }
 
@@ -347,7 +370,7 @@ export function PropostasContext({ lead, pipeData: proposta, onSuccess }: Propos
           {statusColumns.map((status) => (
             <button
               key={status.id}
-              onClick={() => setFormData({ ...formData, status: status.id })}
+              onClick={() => setFormData({ ...formData, status: status.id, loss_reason: status.id !== "perdido" ? "" : formData.loss_reason })}
               className={cn(
                 "p-2.5 rounded-lg border-2 text-left transition-all hover:border-primary/50",
                 formData.status === status.id ? "border-primary bg-primary/5" : "border-muted"
@@ -358,6 +381,28 @@ export function PropostasContext({ lead, pipeData: proposta, onSuccess }: Propos
             </button>
           ))}
         </div>
+
+        {/* Loss reason — shown when status is "perdido" */}
+        {formData.status === "perdido" && (
+          <div className="mt-3 space-y-1.5">
+            <Label className="text-xs">Motivo da perda</Label>
+            <Select
+              value={formData.loss_reason || ""}
+              onValueChange={(v) => setFormData({ ...formData, loss_reason: v })}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Selecionar motivo (opcional)" />
+              </SelectTrigger>
+              <SelectContent>
+                {LOSS_REASONS.map((r) => (
+                  <SelectItem key={r.value} value={r.value}>
+                    {r.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
       </div>
 
       {/* Config fields */}
@@ -446,6 +491,19 @@ export function PropostasContext({ lead, pipeData: proposta, onSuccess }: Propos
         lead={lead}
         items={tinyItems}
         totalValue={totalValue}
+        onSuccess={() => { onSuccess?.(); }}
+      />
+
+      {/* Cadastro Externo Confirm Dialog */}
+      <CadastroExternoConfirmDialog
+        open={cadastroExternoOpen}
+        onOpenChange={setCadastroExternoOpen}
+        pipePropostaId={proposta.id}
+        lead={lead}
+        items={tinyItems}
+        totalValue={totalValue}
+        contractDuration={formData.contract_duration ? Number(formData.contract_duration) : null}
+        proposalNotes={formData.notes || null}
         onSuccess={() => { onSuccess?.(); }}
       />
     </div>

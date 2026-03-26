@@ -8,7 +8,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { getOrgTinyToken, callTinyApi, logTinyOp, getTinyErrorMessage, isTinyNoRecordsError } from "../_shared/tinyerp-utils.ts";
-import { withSentry } from '../_shared/sentry.ts';
+import { captureError } from '../_shared/sentry.ts';
 import { logRuntime } from "../_shared/logger.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -27,7 +27,7 @@ interface TinyProduct {
   situacao?: string;
 }
 
-Deno.serve(withSentry('tinyerp-sync-products', async (req) => {
+Deno.serve(async (req) => {
   const corsHeaders = getCorsHeaders(req.headers.get("origin"));
 
   if (req.method === "OPTIONS") {
@@ -152,59 +152,98 @@ Deno.serve(withSentry('tinyerp-sync-products', async (req) => {
             .eq("tiny_product_id", String(produto.id))
             .maybeSingle();
 
-          const productData = {
+          const tinyProductId = String(produto.id);
+          const sku = produto.codigo || null;
+          const ticket = Number(produto.preco) || 0;
+
+          const productUpdateFields = {
             name: produto.nome,
-            sku: produto.codigo || null,
-            ticket: produto.preco || 0,
+            sku,
+            ticket,
             base_unit: produto.unidade || "un",
-            type: "unitario" as const,
-            organization_id: orgId,
           };
 
           if (existingMapping) {
-            // Update existing product
-            await supabaseAdmin
+            // ── Update existing mapped product ──
+            const { error: updErr } = await supabaseAdmin
               .from("products")
-              .update({
-                name: productData.name,
-                sku: productData.sku,
-                ticket: productData.ticket,
-                base_unit: productData.base_unit,
-              })
+              .update(productUpdateFields)
               .eq("id", existingMapping.product_id);
 
-            await supabaseAdmin
-              .from("tinyerp_product_mappings")
-              .update({ last_synced_at: new Date().toISOString(), tiny_sku: produto.codigo })
-              .eq("id", existingMapping.id);
-
-            itemsUpdated++;
-          } else {
-            // Create new product
-            const { data: newProduct, error: insertError } = await supabaseAdmin
-              .from("products")
-              .insert(productData)
-              .select("id")
-              .single();
-
-            if (insertError || !newProduct) {
-              console.error("[TinyERP Sync] Failed to create product:", insertError);
+            if (updErr) {
+              console.error("[TinyERP Sync] Failed to update product:", updErr);
               itemsFailed++;
               continue;
             }
 
-            // Create mapping
             await supabaseAdmin
               .from("tinyerp_product_mappings")
-              .insert({
-                organization_id: orgId,
-                product_id: newProduct.id,
-                tiny_product_id: String(produto.id),
-                tiny_sku: produto.codigo || null,
-                sync_direction: "from_tiny",
-              });
+              .update({ last_synced_at: new Date().toISOString(), tiny_sku: sku })
+              .eq("id", existingMapping.id);
 
-            itemsCreated++;
+            itemsUpdated++;
+          } else {
+            // ── No mapping: check if a CRM product with same SKU already exists ──
+            // (prevents unique constraint violation on idx_products_sku_org)
+            let targetProductId: string | null = null;
+
+            if (sku) {
+              const { data: existingBySku } = await supabaseAdmin
+                .from("products")
+                .select("id")
+                .eq("organization_id", orgId)
+                .eq("sku", sku)
+                .maybeSingle();
+
+              if (existingBySku) {
+                // Product exists by SKU but has no TinyERP mapping — update it
+                await supabaseAdmin
+                  .from("products")
+                  .update(productUpdateFields)
+                  .eq("id", existingBySku.id);
+
+                targetProductId = existingBySku.id;
+                itemsUpdated++;
+              }
+            }
+
+            if (!targetProductId) {
+              // Create new product
+              const { data: newProduct, error: insertError } = await supabaseAdmin
+                .from("products")
+                .insert({
+                  ...productUpdateFields,
+                  type: "unitario" as const,
+                  organization_id: orgId,
+                })
+                .select("id")
+                .single();
+
+              if (insertError || !newProduct) {
+                console.error("[TinyERP Sync] Failed to create product:", insertError);
+                itemsFailed++;
+                continue;
+              }
+
+              targetProductId = newProduct.id;
+              itemsCreated++;
+            }
+
+            // Create mapping (upsert to handle edge cases)
+            const { error: mapErr } = await supabaseAdmin
+              .from("tinyerp_product_mappings")
+              .upsert({
+                organization_id: orgId,
+                product_id: targetProductId,
+                tiny_product_id: tinyProductId,
+                tiny_sku: sku,
+                sync_direction: "from_tiny",
+                last_synced_at: new Date().toISOString(),
+              }, { onConflict: "organization_id,tiny_product_id" });
+
+            if (mapErr) {
+              console.error("[TinyERP Sync] Failed to create mapping:", mapErr);
+            }
           }
         } catch (err) {
           console.error("[TinyERP Sync] Error processing product:", produto.id, err);
@@ -264,16 +303,18 @@ Deno.serve(withSentry('tinyerp-sync-products', async (req) => {
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {
-    console.error("[TinyERP Sync] Error:", err);
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    console.error("[TinyERP Sync] Error:", errorMsg, err instanceof Error ? err.stack : "");
+    await captureError(err, { functionName: "tinyerp-sync-products" }).catch(() => {});
     await logRuntime({
       module: "general",
       action: "tinyerp_sync_products",
       status: "error",
-      errorMessage: err instanceof Error ? err.message : String(err),
-    });
+      errorMessage: errorMsg,
+    }).catch(() => {});
     return new Response(
-      JSON.stringify({ error: err instanceof Error ? err.message : "Erro desconhecido" }),
+      JSON.stringify({ error: errorMsg }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
-}));
+});

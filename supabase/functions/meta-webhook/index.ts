@@ -289,7 +289,7 @@ async function saveIncomingMessage(
 const MAPPABLE_LEAD_FIELDS = new Set([
   "name", "email", "phone", "company", "segment", "urgency",
   "faturamento", "notes", "utm_campaign", "utm_source", "utm_medium",
-  "utm_content", "utm_term",
+  "utm_content", "utm_term", "meta_campaign_id", "meta_adset_id", "meta_ad_id",
 ]);
 
 interface FieldMapping {
@@ -335,6 +335,54 @@ function applyFieldMappings(
   }
 
   return leadData;
+}
+
+// ── UTM Enrichment (Milennials only) ─────────────────────────────────────
+
+const MILENNIALS_ORG_ID = Deno.env.get("MILENNIALS_ORG_ID") || "";
+const META_ADS_ACCESS_TOKEN_ENV = Deno.env.get("META_ADS_ACCESS_TOKEN") || "";
+const GRAPH_API_VERSION_UTM = "v21.0";
+
+/**
+ * Attempts to fetch campaign/adset/ad names from Meta Graph API
+ * for a given leadgen event. Returns UTM fields to merge into the lead.
+ * NEVER throws — returns empty object on any failure.
+ */
+async function enrichUtmFromLeadgen(
+  leadgenId: string
+): Promise<Record<string, string>> {
+  try {
+    if (!META_ADS_ACCESS_TOKEN_ENV) return {};
+
+    // Step 1: Get ad_id from leadgen
+    const leadgenRes = await fetch(
+      `https://graph.facebook.com/${GRAPH_API_VERSION_UTM}/${leadgenId}?fields=ad_id&access_token=${META_ADS_ACCESS_TOKEN_ENV}`
+    );
+    const leadgenJson = await leadgenRes.json();
+    const adId = leadgenJson?.ad_id;
+    if (!adId) return {};
+
+    // Step 2: Get campaign/adset/ad hierarchy from ad
+    const adRes = await fetch(
+      `https://graph.facebook.com/${GRAPH_API_VERSION_UTM}/${adId}?fields=name,adset{id,name},campaign{id,name}&access_token=${META_ADS_ACCESS_TOKEN_ENV}`
+    );
+    const adJson = await adRes.json();
+    if (adJson.error) return {};
+
+    return {
+      utm_source: "facebook",
+      utm_medium: "paid",
+      utm_campaign: adJson.campaign?.name || "",
+      utm_content: adJson.adset?.name || "",
+      utm_term: adJson.name || "",
+      meta_campaign_id: adJson.campaign?.id || "",
+      meta_adset_id: adJson.adset?.id || "",
+      meta_ad_id: adId,
+    };
+  } catch (err) {
+    console.warn(`[meta-webhook] UTM enrichment failed (non-fatal):`, err);
+    return {};
+  }
 }
 
 async function processLeadgen(
@@ -394,6 +442,12 @@ async function processLeadgen(
   const email = mappedFields.email || null;
   const phone = mappedFields.phone || null;
 
+  // ── UTM Enrichment (Milennials org only, never blocks lead creation) ──
+  let utmFields: Record<string, string> = {};
+  if (page.organization_id === MILENNIALS_ORG_ID && MILENNIALS_ORG_ID) {
+    utmFields = await enrichUtmFromLeadgen(leadgenId);
+  }
+
   // Verificar se lead ja existe (por email ou telefone)
   let existingLeadId: string | null = null;
 
@@ -435,6 +489,13 @@ async function processLeadgen(
     if (mappedFields.segment) updateData.segment = mappedFields.segment;
     if (mappedFields.notes) updateData.notes = mappedFields.notes;
 
+    // Apply UTM enrichment fields (only if not already set on lead)
+    for (const [key, value] of Object.entries(utmFields)) {
+      if (value && !mappedFields[key]) {
+        updateData[key] = value;
+      }
+    }
+
     await supabase.from("leads").update(updateData).eq("id", existingLeadId);
     return;
   }
@@ -448,6 +509,13 @@ async function processLeadgen(
     origin: "meta_ads",
     metadata: { ...formFields, leadgen_id: leadgenId, form_id: leadData.form_id },
   };
+
+  // Apply UTM enrichment fields (only if not already set via field_mappings)
+  for (const [key, value] of Object.entries(utmFields)) {
+    if (value && !mappedFields[key]) {
+      newLeadData[key] = value;
+    }
+  }
 
   // Adicionar campos extras mapeados
   for (const [field, value] of Object.entries(mappedFields)) {

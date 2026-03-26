@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Search, Plus, Zap, Loader2, Globe, Calendar, Settings2 } from "lucide-react";
+import { Search, Plus, Zap, Loader2, Globe, Calendar, Settings2, AlertCircle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -104,7 +104,7 @@ export default function PipeWhatsapp() {
   const { organizationId } = useOrganization();
   useEffect(() => { trackModuleVisit("pipe_whatsapp", organizationId); }, []);
 
-  const { data: pipeData, isLoading, refetch } = usePipeWhatsapp();
+  const { data: pipeData, isLoading, isError, refetch } = usePipeWhatsapp();
   const { data: pipelineStages = [], isLoading: loadingStages } = usePipelineStages("whatsapp");
   const { data: workflowCounts = {} } = useStageWorkflowCounts("whatsapp");
   const { data: metricsByPeriod } = usePipeWhatsappMetrics(
@@ -295,10 +295,25 @@ export default function PipeWhatsapp() {
     setDeleteDialog({ open: true, pipeId, leadId });
   };
 
-  if (isLoading) {
+  if (isLoading && !pipeData) {
     return (
       <div className="flex items-center justify-center h-64">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (isError && !pipeData) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 gap-3 text-muted-foreground">
+        <AlertCircle className="w-8 h-8 text-destructive" />
+        <p className="text-sm">Erro ao carregar o funil de qualificação.</p>
+        <button
+          onClick={() => refetch()}
+          className="text-xs underline text-primary hover:text-primary/80"
+        >
+          Tentar novamente
+        </button>
       </div>
     );
   }

@@ -17,6 +17,7 @@ export type FeatureKey =
   | "commissions"
   | "performance"
   | "marketing"
+  | "analytics"
   | "tv_dashboard"
   | "products"
   // Campaign types
@@ -27,7 +28,9 @@ export type FeatureKey =
   | "copilot_advanced"
   | "whatsapp_bulk"
   | "api_access"
-  | "white_label";
+  | "white_label"
+  // Integrations
+  | "external_cadastro";
 
 export type LimitKey =
   | "max_leads"
@@ -65,6 +68,14 @@ export const FEATURES: FeatureMeta[] = [
   { key: "commissions", label: "Comissões", description: "Comissões e pagamentos", icon: "DollarSign", category: "modules", sidebarPath: "/comissoes" },
   { key: "performance", label: "Pódio", description: "Performance, ranking e metas", icon: "Trophy", category: "modules", sidebarPath: "/performance" },
   { key: "marketing", label: "Marketing", description: "Marketing e análises", icon: "BarChart2", category: "modules", sidebarPath: "/marketing" },
+  {
+    key: "analytics",
+    label: "Analytics",
+    description: "Painel de inteligência com métricas avançadas de vendas, financeiro e engajamento",
+    icon: "BarChart3",
+    category: "modules",
+    sidebarPath: "/analytics",
+  },
   { key: "products", label: "Produtos", description: "Catálogo de produtos", icon: "Package", category: "modules", sidebarPath: "/produtos" },
   { key: "tv_dashboard", label: "TV Dashboard", description: "Dashboard para exibição em TV", icon: "Tv", category: "modules", sidebarPath: "/tv" },
   { key: "copilot", label: "Copilot", description: "Agente de IA conversacional", icon: "Bot", category: "modules", sidebarPath: "/copilot" },
@@ -77,6 +88,7 @@ export const FEATURES: FeatureMeta[] = [
   { key: "whatsapp_bulk", label: "Disparo em Massa", description: "Envio de mensagens em lote", icon: "Send", category: "advanced" },
   { key: "api_access", label: "Acesso API", description: "Acesso à API pública", icon: "Code", category: "advanced" },
   { key: "white_label", label: "White Label", description: "Personalização completa de marca", icon: "Palette", category: "advanced" },
+  { key: "external_cadastro", label: "Cadastro Externo", description: "Cadastro automático de clientes no sistema externo", icon: "UserPlus", category: "advanced" },
 ];
 
 // ─── Limits Catalog ────────────────────────────────────────────

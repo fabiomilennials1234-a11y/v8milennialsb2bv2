@@ -1,4 +1,5 @@
 import { withSentry } from '../_shared/sentry.ts';
+import { getTimeBasedVariables as getTimeVars } from '../_shared/time-variables.ts';
 /**
  * Worker: Processa regras de follow-up do Copilot (no_response)
  *
@@ -31,29 +32,7 @@ function replaceVariables(template: string, vars: Record<string, string>): strin
   return out.replace(/\{[^}]+\}/g, "").trim();
 }
 
-function getTimeVars(now: Date): { saudacao: string; data: string; hora: string } {
-  const tz = "America/Sao_Paulo";
-  const hour = parseInt(
-    new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "2-digit", hour12: false }).format(now),
-    10
-  );
-  let saudacao = "bom dia";
-  if (hour >= 12 && hour < 18) saudacao = "boa tarde";
-  else if (hour >= 18 || hour < 5) saudacao = "boa noite";
-  const data = new Intl.DateTimeFormat("pt-BR", {
-    timeZone: tz,
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  }).format(now);
-  const hora = new Intl.DateTimeFormat("pt-BR", {
-    timeZone: tz,
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(now);
-  return { saudacao, data, hora };
-}
+// getTimeVars is now imported from _shared/time-variables.ts (aliased from getTimeBasedVariables)
 
 Deno.serve(withSentry('process-copilot-followups', async (req) => {
   const corsHeaders = withSecurityHeaders(getCorsHeaders(req.headers.get("origin")));

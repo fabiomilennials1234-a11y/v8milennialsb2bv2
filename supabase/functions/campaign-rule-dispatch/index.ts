@@ -23,6 +23,7 @@ import { logRuntime } from "../_shared/logger.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { requireAuth, AuthError } from "../_shared/user-auth.ts";
+import { getTimeBasedVariables } from '../_shared/time-variables.ts';
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
@@ -527,49 +528,20 @@ async function processCampaignQueue(
         const mode = (row as any).sdr_assignment_mode || "specific";
         let sdrId: string | null = (row as any).target_sdr_id || null;
 
-        if (mode === "round_robin" || mode === "random") {
-          // Find SDR members in this campaign
-          const { data: sdrMembers } = await supabase
+        if (mode === "round_robin") {
+          // Use atomic campaign distribution RPC (unified pool + advisory lock)
+          const { data: nextId } = await supabase.rpc("get_next_campaign_sdr", {
+            p_campaign_id: campanhaId,
+          });
+          sdrId = nextId ?? null;
+        } else if (mode === "random") {
+          // Pick randomly from campaign members (rule-level mode, not campaign-level)
+          const { data: members } = await supabase
             .from("campanha_members")
-            .select("team_member_id, team_member:team_members(id, name)")
-            .eq("campanha_id", campanhaId)
-            .eq("role", "sdr")
-            .order("team_member_id");
-
-          const sdrs = (sdrMembers || [])
-            .filter((m: any) => m.team_member)
-            .map((m: any) => ({ id: m.team_member_id, name: m.team_member?.name }));
-
-          if (sdrs.length > 0) {
-            if (mode === "random") {
-              // Random: pick a random SDR from the pool
-              const idx = Math.floor(Math.random() * sdrs.length);
-              sdrId = sdrs[idx].id;
-            } else {
-              // Round robin: pick SDR with fewest leads (least loaded)
-              const { data: sdrCounts } = await supabase
-                .from("campanha_leads")
-                .select("responsible_id")
-                .eq("campanha_id", campanhaId)
-                .not("responsible_id", "is", null);
-
-              const countMap: Record<string, number> = {};
-              for (const s of sdrs) countMap[s.id] = 0;
-              for (const cl of sdrCounts || []) {
-                if (cl.responsible_id && countMap[cl.responsible_id] !== undefined) {
-                  countMap[cl.responsible_id]++;
-                }
-              }
-
-              // Pick SDR with lowest count
-              let minCount = Infinity;
-              for (const s of sdrs) {
-                if ((countMap[s.id] ?? 0) < minCount) {
-                  minCount = countMap[s.id] ?? 0;
-                  sdrId = s.id;
-                }
-              }
-            }
+            .select("team_member_id")
+            .eq("campanha_id", campanhaId);
+          if (members && members.length > 0) {
+            sdrId = members[Math.floor(Math.random() * members.length)].team_member_id;
           }
         }
 
@@ -837,19 +809,7 @@ async function markFailed(supabase: SupabaseClient, id: string, errorMessage: st
   }).eq("id", id);
 }
 
-function getTimeBasedVariables(now: Date = new Date()): { saudacao: string; data: string; hora: string } {
-  const tz = "America/Sao_Paulo";
-  const hour = parseInt(
-    new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "2-digit", hour12: false }).format(now),
-    10
-  );
-  let saudacao = "bom dia";
-  if (hour >= 12 && hour < 18) saudacao = "boa tarde";
-  else if (hour >= 18 || hour < 5) saudacao = "boa noite";
-  const data = new Intl.DateTimeFormat("pt-BR", { timeZone: tz, day: "2-digit", month: "2-digit", year: "numeric" }).format(now);
-  const hora = new Intl.DateTimeFormat("pt-BR", { timeZone: tz, hour: "2-digit", minute: "2-digit", hour12: false }).format(now);
-  return { saudacao, data, hora };
-}
+// getTimeBasedVariables is now imported from _shared/time-variables.ts
 
 function replaceVariables(template: string, variables: Record<string, string>): string {
   let result = template;

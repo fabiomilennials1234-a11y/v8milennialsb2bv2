@@ -361,20 +361,10 @@ async function importToCampaign(
     tagId = newTag.id;
   }
 
-  // Distribution setup
+  // Distribution tracking (for report only)
   const distribution: Record<string, number> = {};
-  let memberIndex = 0;
   if (autoDistribute && memberIds?.length) {
     memberIds.forEach((id) => { distribution[id] = 0; });
-    if (distributionMode === "round_robin") {
-      const { count } = await supabase.from("campanha_leads").select("id", { count: "exact", head: true }).eq("campanha_id", campanhaId);
-      memberIndex = count ?? 0;
-    }
-  }
-  let closerIndex = 0;
-  if (closerMemberIds?.length && closerDistributionMode === "round_robin") {
-    const { count } = await supabase.from("campanha_leads").select("id", { count: "exact", head: true }).eq("campanha_id", campanhaId).not("closer_id", "is", null);
-    closerIndex = count ?? 0;
   }
 
   const processedPhones = new Set<string>();
@@ -439,12 +429,11 @@ async function importToCampaign(
             .from("campanha_leads").select("id").eq("campanha_id", campanhaId).eq("lead_id", existingLead.id).maybeSingle();
 
           if (!existingCL) {
-            const { assignedSdrId, assignedCloserId } = resolveDistribution(
-              autoDistribute, memberIds, distributionMode, memberIndex, distribution, sdrId,
-              closerMemberIds, closerDistributionMode, closerIndex,
+            const { assignedSdrId, assignedCloserId } = await resolveDistribution(
+              supabase, campanhaId,
+              autoDistribute, memberIds, distributionMode, distribution, sdrId,
+              closerMemberIds, closerDistributionMode,
             );
-            if (assignedSdrId && autoDistribute) memberIndex++;
-            if (assignedCloserId && closerMemberIds?.length) closerIndex++;
 
             await supabase.from("campanha_leads").insert({
               campanha_id: campanhaId,
@@ -505,12 +494,11 @@ async function importToCampaign(
           continue;
         }
 
-        const { assignedSdrId, assignedCloserId } = resolveDistribution(
-          autoDistribute, memberIds, distributionMode, memberIndex, distribution, sdrId,
-          closerMemberIds, closerDistributionMode, closerIndex,
+        const { assignedSdrId, assignedCloserId } = await resolveDistribution(
+          supabase, campanhaId,
+          autoDistribute, memberIds, distributionMode, distribution, sdrId,
+          closerMemberIds, closerDistributionMode,
         );
-        if (assignedSdrId && autoDistribute) memberIndex++;
-        if (assignedCloserId && closerMemberIds?.length) closerIndex++;
 
         await supabase.from("campanha_leads").insert({
           campanha_id: campanhaId,
@@ -556,35 +544,50 @@ async function importToCampaign(
   report.distribution = autoDistribute ? distribution : undefined;
 }
 
-function resolveDistribution(
+async function resolveDistribution(
+  supabase: ReturnType<typeof createClient>,
+  campanhaId: string,
   autoDistribute: boolean | undefined,
   memberIds: string[] | undefined,
   distributionMode: "round_robin" | "random" | undefined,
-  memberIndex: number,
   distribution: Record<string, number>,
   sdrId: string | undefined,
   closerMemberIds: string[] | undefined,
   closerDistributionMode: "round_robin" | "random" | undefined,
-  closerIndex: number,
-): { assignedSdrId: string | null; assignedCloserId: string | null } {
+): Promise<{ assignedSdrId: string | null; assignedCloserId: string | null }> {
   let assignedSdrId: string | null = null;
   if (autoDistribute && memberIds?.length) {
-    if (distributionMode === "random") {
+    if (distributionMode === "round_robin") {
+      // Atomic RPC with advisory lock — each call sees updated counts
+      const { data } = await supabase.rpc("distribute_campaign_round_robin", {
+        p_campaign_id: campanhaId,
+        p_member_ids: memberIds,
+      });
+      assignedSdrId = data ?? null;
+    } else if (distributionMode === "random") {
       assignedSdrId = memberIds[Math.floor(Math.random() * memberIds.length)];
     } else {
-      assignedSdrId = memberIds[memberIndex % memberIds.length];
+      assignedSdrId = memberIds[0];
     }
-    distribution[assignedSdrId] = (distribution[assignedSdrId] || 0) + 1;
+    if (assignedSdrId) {
+      distribution[assignedSdrId] = (distribution[assignedSdrId] || 0) + 1;
+    }
   } else if (sdrId) {
     assignedSdrId = sdrId;
   }
 
   let assignedCloserId: string | null = null;
   if (closerMemberIds?.length) {
-    if (closerDistributionMode === "random") {
+    if (closerDistributionMode === "round_robin") {
+      const { data } = await supabase.rpc("distribute_campaign_round_robin", {
+        p_campaign_id: campanhaId,
+        p_member_ids: closerMemberIds,
+      });
+      assignedCloserId = data ?? null;
+    } else if (closerDistributionMode === "random") {
       assignedCloserId = closerMemberIds[Math.floor(Math.random() * closerMemberIds.length)];
     } else {
-      assignedCloserId = closerMemberIds[closerIndex % closerMemberIds.length];
+      assignedCloserId = closerMemberIds[0];
     }
   }
 

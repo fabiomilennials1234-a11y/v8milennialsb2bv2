@@ -234,19 +234,12 @@ export default function MasterUsers() {
   };
 
   // Roles disponíveis por tipo de organização
-  const getRolesForOrgType = (orgType: string | null) => {
-    if (orgType === "outbound") {
-      return [
-        { value: "agency", label: "Agency" },
-        { value: "bdr", label: "BDR" },
-        { value: "cliente", label: "Cliente" },
-      ];
-    }
+  function getRolesForOrgType(_orgType?: string): { value: string; label: string }[] {
     return [
       { value: "admin", label: "Admin" },
       { value: "member", label: "Membro" },
     ];
-  };
+  }
 
   // Descobrir org_type de uma org pelo id
   const getOrgType = (orgId: string) => {

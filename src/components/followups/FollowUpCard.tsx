@@ -18,7 +18,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { openWhatsApp, formatPhoneForWhatsApp } from "@/lib/whatsapp";
+import { useOpenWhatsAppChat, formatPhoneForWhatsApp } from "@/lib/whatsapp";
 import type { FollowUp } from "@/hooks/useFollowUps";
 
 interface FollowUpCardProps {
@@ -55,6 +55,7 @@ export const FollowUpCard = memo(function FollowUpCard({ followUp, onComplete, o
   const isCompleted = !!followUp.completed_at;
   const canArchive = onArchive && (isOverdue || isCompleted);
   const PipeIcon = followUp.source_pipe ? pipeIcons[followUp.source_pipe] : null;
+  const openWhatsApp = useOpenWhatsAppChat();
 
   return (
     <motion.div

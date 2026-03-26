@@ -49,6 +49,8 @@ import { CommitmentDateModal } from "@/components/proposals/CommitmentDateModal"
 import { TinyErpConfirmOrderDialog } from "@/components/proposals/TinyErpConfirmOrderDialog";
 import { DaysUntilMeeting } from "@/components/proposals/DaysUntilMeeting";
 import { useTinyErpStatus } from "@/hooks/useTinyErp";
+import { useCadastroExternoEnabled } from "@/hooks/useCadastroExterno";
+import { CadastroExternoConfirmDialog } from "@/components/proposals/CadastroExternoConfirmDialog";
 import { useCreateAcaoDoDia } from "@/hooks/useAcoesDoDia";
 import { supabase } from "@/integrations/supabase/client";
 import { CalorAnalyticsChart } from "@/components/proposals/CalorAnalyticsChart";
@@ -62,6 +64,45 @@ import { useOrganization } from "@/hooks/useOrganization";
 import { track, trackModuleVisit } from "@/lib/analytics";
 import { useFeaturePermission } from "@/hooks/useUserRole";
 
+// ─── Helper: temporal filter para o kanban no modo "Este mês" ────────────────
+const CLOSED_STATUSES_PROPOSTAS = ["vendido", "perdido"];
+
+/**
+ * Retorna true se a proposta pertence ao intervalo [startStr, endStr].
+ *
+ * Regra:
+ *  - Status fechados (vendido/perdido): usa metrics_period_at (primário) ou closed_at (fallback).
+ *    Alinhado com a lógica de usePipePropostasMetrics().
+ *  - Status abertos/ativos: usa created_at como referência temporal.
+ *    Justificativa: created_at é o momento em que a proposta "entrou" no pipe,
+ *    representando fielmente a "foto do mês" para cards em andamento.
+ */
+function isPropostaInPeriod(
+  item: { status: string; metrics_period_at?: string | null; closed_at?: string | null; created_at?: string | null },
+  startStr: string,
+  endStr: string,
+): boolean {
+  if (CLOSED_STATUSES_PROPOSTAS.includes(item.status)) {
+    const ref = item.metrics_period_at ?? item.closed_at;
+    if (!ref) return false;
+    return ref >= startStr && ref <= endStr;
+  }
+  const ref = item.created_at;
+  if (!ref) return false;
+  return ref >= startStr && ref <= endStr;
+}
+
+// ---------------------------------------------------------------------------
+// Loss reasons for "perdido" status
+// ---------------------------------------------------------------------------
+const LOSS_REASONS = [
+  { value: "sem_budget", label: "Sem budget" },
+  { value: "concorrencia", label: "Concorrência" },
+  { value: "timing", label: "Timing errado" },
+  { value: "follow_up_fraco", label: "Follow-up fraco" },
+  { value: "produto_nao_adequado", label: "Produto não adequado" },
+  { value: "outro", label: "Outro" },
+];
 
 // ---------------------------------------------------------------------------
 // Persisted filter state — scoped per org + user, TTL 24 h
@@ -141,6 +182,28 @@ export default function PipePropostas() {
     totalValue: number;
   } | null>(null);
 
+  // State for Cadastro Externo confirmation modal on drag-to-vendido
+  const [cadastroExternoOpen, setCadastroExternoOpen] = useState(false);
+  const [pendingCadastroExterno, setPendingCadastroExterno] = useState<{
+    itemId: string;
+    leadId: string;
+    closerId: string | null;
+    lead: any;
+    items: Array<{ product_name: string; sale_value: number }>;
+    totalValue: number;
+    contractDuration: number | null;
+    proposalNotes: string | null;
+  } | null>(null);
+
+  // State for loss reason dialog (drag-to-perdido)
+  const [lossReasonDialogOpen, setLossReasonDialogOpen] = useState(false);
+  const [selectedLossReason, setSelectedLossReason] = useState<string>("");
+  const [pendingPerdido, setPendingPerdido] = useState<{
+    itemId: string;
+    leadId: string;
+    closerId: string | null;
+  } | null>(null);
+
   const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; pipeId: string; leadId: string } | null>(null);
   const [deleteAllLeadsDialogOpen, setDeleteAllLeadsDialogOpen] = useState(false);
   const [metricsPeriod, setMetricsPeriod] = useState<MetricsPeriod>("all");
@@ -158,6 +221,7 @@ export default function PipePropostas() {
   const updatePipeProposta = useUpdatePipeProposta();
   const { allowed: canMovePipe } = useCanPerformAction("move_pipe_record");
   const { data: tinyStatus } = useTinyErpStatus();
+  const cadastroExternoEnabled = useCadastroExternoEnabled();
   const deletePipeProposta = useDeletePipeProposta();
   const deleteAllLeadsInPipe = useDeleteAllLeadsInPipe("propostas");
   const updateLead = useUpdateLead();
@@ -169,6 +233,14 @@ export default function PipePropostas() {
     metricsPeriod === "month" ? selectedMetricsMonth : undefined,
     metricsPeriod === "month" ? selectedMetricsYear : undefined
   );
+
+  // Intervalo UTC do mês selecionado — reutilizado no filtro do kanban e na contagem
+  const periodRange = useMemo(() => {
+    if (metricsPeriod !== "month") return null;
+    const start = new Date(Date.UTC(selectedMetricsYear, selectedMetricsMonth - 1, 1));
+    const end = new Date(Date.UTC(selectedMetricsYear, selectedMetricsMonth, 0, 23, 59, 59, 999));
+    return { startStr: start.toISOString(), endStr: end.toISOString() };
+  }, [metricsPeriod, selectedMetricsMonth, selectedMetricsYear]);
 
   const responsibleMembers = useResponsibleMembers();
 
@@ -201,7 +273,7 @@ export default function PipePropostas() {
       phone: lead?.phone,
       rating: lead?.rating || 0,
       calor: item.calor ?? 5,
-      responsible: item.closer?.name || lead?.closer?.name,
+      responsible: item.responsible?.name || item.closer?.name || lead?.responsible?.name || lead?.closer?.name,
       value: totalValue,
       valueLabel: new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 0 }).format(totalValue),
       contractDuration: item.contract_duration || 0,
@@ -240,6 +312,14 @@ export default function PipePropostas() {
     return statusColumns.map(col => {
       const columnItems = pipeData
         .filter(item => item.status === col.id)
+        // 1. Filtro temporal — aplicado antes dos demais filtros
+        .filter(item => {
+          if (metricsPeriod === "month" && periodRange) {
+            return isPropostaInPeriod(item, periodRange.startStr, periodRange.endStr);
+          }
+          return true;
+        })
+        // 2. Filtros funcionais (busca, responsável, tipo, prioridade, calor)
         .filter(item => {
           const lead = item.lead;
 
@@ -250,13 +330,13 @@ export default function PipePropostas() {
           const matchesSearch = searchTerm === "" ||
             lead?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
             lead?.company?.toLowerCase().includes(searchTerm.toLowerCase());
-          
+
           // Responsible filter
           const matchesResponsible = filterResponsible === "all" || item.responsible_id === filterResponsible;
-          
+
           // Product type filter
           const matchesType = filterProductType === "all" || item.product_type === filterProductType;
-          
+
           // Priority filter based on lead rating
           const rating = lead?.rating || 0;
           let matchesPriority = true;
@@ -278,7 +358,7 @@ export default function PipePropostas() {
           } else if (filterCalor === "cold") {
             matchesCalor = calor < 4;
           }
-          
+
           return matchesSearch && matchesResponsible && matchesType && matchesPriority && matchesCalor;
         })
         .map(transformToCard)
@@ -292,7 +372,7 @@ export default function PipePropostas() {
         items: columnItems,
       };
     });
-  }, [pipeData, searchTerm, filterResponsible, filterProductType, filterPriority, filterCalor]);
+  }, [pipeData, searchTerm, filterResponsible, filterProductType, filterPriority, filterCalor, metricsPeriod, periodRange]);
 
   // Calculate stats (Vendas Total / MRR Vendido / Projetos Vendidos por item quando houver items)
   const stats = useMemo(() => {
@@ -315,20 +395,34 @@ export default function PipePropostas() {
     let mrr = 0;
     let projeto = 0;
     for (const item of soldData) {
+      // contract_duration nulo/inválido → fallback de 1 mês
+      const duration = Math.max(1, Number(item.contract_duration) || 1);
       const items = item.items?.filter((i: any) => i != null) ?? [];
       if (items.length > 0) {
         for (const it of items) {
           const val = Number(it.sale_value) || 0;
-          sold += val;
           const t = it.product?.type;
-          if (t === "mrr") mrr += val;
-          else if (t === "projeto") projeto += val;
+          if (t === "mrr") {
+            mrr += val;             // MRR Vendido = valor mensal recorrente
+            sold += val * duration; // Venda Total = mensal × duração do contrato
+          } else if (t === "projeto") {
+            projeto += val;
+            sold += val;            // Projeto: valor pontual
+          } else {
+            sold += val;            // Unitário: valor pontual
+          }
         }
       } else {
         const val = Number(item.sale_value) || 0;
-        sold += val;
-        if (item.product_type === "mrr") mrr += val;
-        else if (item.product_type === "projeto") projeto += val;
+        if (item.product_type === "mrr") {
+          mrr += val;
+          sold += val * duration;
+        } else if (item.product_type === "projeto") {
+          projeto += val;
+          sold += val;
+        } else {
+          sold += val;
+        }
       }
     }
 
@@ -361,6 +455,14 @@ export default function PipePropostas() {
       inProgressCount: stats.inProgressCount,
     };
   }, [metricsPeriod, metricsByPeriod, stats]);
+
+  // Total de propostas que passam pelo filtro temporal (para exibir no banner)
+  const periodFilteredCount = useMemo(() => {
+    if (metricsPeriod !== "month" || !pipeData || !periodRange) return 0;
+    return pipeData.filter(item =>
+      isPropostaInPeriod(item, periodRange.startStr, periodRange.endStr)
+    ).length;
+  }, [pipeData, metricsPeriod, periodRange]);
 
   // Funnel data
   const funnelData = useMemo(() => {
@@ -531,9 +633,66 @@ export default function PipePropostas() {
         setTinyConfirmOpen(true);
         return;
       }
+
+      if (cadastroExternoEnabled) {
+        const itemsList = (item.items || []).map((it: any) => ({
+          product_name: it.product?.name || "Produto",
+          sale_value: Number(it.sale_value) || 0,
+        }));
+        const total = itemsList.reduce((sum: number, it: any) => sum + it.sale_value, 0);
+
+        setPendingCadastroExterno({
+          itemId,
+          leadId: item.lead_id,
+          closerId: item.closer_id,
+          lead: item.lead,
+          items: itemsList,
+          totalValue: total || Number(item.sale_value) || 0,
+          contractDuration: item.contract_duration || null,
+          proposalNotes: item.notes || null,
+        });
+        setCadastroExternoOpen(true);
+        return;
+      }
+    }
+
+    // If moving to "perdido", show loss reason dialog
+    if (newStatus === "perdido") {
+      setPendingPerdido({
+        itemId,
+        leadId: item.lead_id,
+        closerId: item.closer_id,
+      });
+      setSelectedLossReason("");
+      setLossReasonDialogOpen(true);
+      return;
     }
 
     await executeStatusChange(itemId, newStatus, item.lead_id, item.closer_id);
+  };
+
+  // Handle loss reason dialog confirmation
+  const handleLossReasonConfirm = async () => {
+    if (!pendingPerdido) return;
+    await executeStatusChange(
+      pendingPerdido.itemId,
+      "perdido",
+      pendingPerdido.leadId,
+      pendingPerdido.closerId,
+      undefined,
+      false,
+      selectedLossReason || null
+    );
+    setLossReasonDialogOpen(false);
+    setPendingPerdido(null);
+    setSelectedLossReason("");
+  };
+
+  const handleLossReasonCancel = () => {
+    setLossReasonDialogOpen(false);
+    setPendingPerdido(null);
+    setSelectedLossReason("");
+    toast("Operação cancelada");
   };
 
   // Execute status change (called directly or after date/TinyERP modal)
@@ -543,7 +702,8 @@ export default function PipePropostas() {
     leadId: string,
     closerId: string | null,
     commitmentDate?: Date,
-    skipAutoPush?: boolean
+    skipAutoPush?: boolean,
+    lossReason?: string | null
   ) => {
     try {
       const updates: any = {
@@ -562,6 +722,11 @@ export default function PipePropostas() {
       // If moved to "vendido" or "perdido", set closed_at date
       if (newStatus === "vendido" || newStatus === "perdido") {
         updates.closed_at = new Date().toISOString();
+      }
+
+      // If loss reason provided (for perdido), save it
+      if (newStatus === "perdido" && lossReason) {
+        updates.loss_reason = lossReason;
       }
 
       await updatePipeProposta.mutateAsync(updates);
@@ -623,6 +788,27 @@ export default function PipePropostas() {
       );
     } finally {
       vendidoCompletingRef.current = false;
+    }
+  };
+
+  // Guard ref to prevent double execution of cadastro externo completion
+  const cadastroCompletingRef = useRef(false);
+
+  const handleCadastroExternoComplete = async () => {
+    if (!pendingCadastroExterno || cadastroCompletingRef.current) return;
+    cadastroCompletingRef.current = true;
+    const pv = pendingCadastroExterno;
+    setPendingCadastroExterno(null);
+
+    try {
+      await executeStatusChange(
+        pv.itemId,
+        "vendido",
+        pv.leadId,
+        pv.closerId,
+      );
+    } finally {
+      cadastroCompletingRef.current = false;
     }
   };
 
@@ -721,7 +907,7 @@ export default function PipePropostas() {
         <Tabs value={metricsPeriod} onValueChange={(v) => setMetricsPeriod(v as MetricsPeriod)}>
           <TabsList className="h-9">
             <TabsTrigger value="all" className="gap-1.5 text-xs">Geral</TabsTrigger>
-            <TabsTrigger value="month" className="gap-1.5 text-xs">Este mês</TabsTrigger>
+            <TabsTrigger value="month" className="gap-1.5 text-xs">Por mês</TabsTrigger>
           </TabsList>
         </Tabs>
         {metricsPeriod === "month" && (
@@ -752,7 +938,7 @@ export default function PipePropostas() {
           </>
         )}
         <span className="text-xs text-muted-foreground">
-          {metricsPeriod === "all" ? "Métricas do pipe no geral" : `Métricas de ${format(new Date(selectedMetricsYear, selectedMetricsMonth - 1), "MMMM/yyyy", { locale: ptBR })}`}
+          {metricsPeriod === "all" ? "Métricas do pipe no geral" : `Filtrando por ${format(new Date(selectedMetricsYear, selectedMetricsMonth - 1), "MMMM/yyyy", { locale: ptBR })}`}
         </span>
       </div>
 
@@ -836,6 +1022,20 @@ export default function PipePropostas() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
           >
+            {/* Banner: kanban filtrado por período */}
+            {metricsPeriod === "month" && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/10 border border-primary/20 text-sm text-primary mb-4">
+                <Calendar className="w-4 h-4 shrink-0" />
+                <span>
+                  Exibindo propostas de{" "}
+                  <strong>
+                    {format(new Date(selectedMetricsYear, selectedMetricsMonth - 1), "MMMM/yyyy", { locale: ptBR })}
+                  </strong>
+                  {" "}— {periodFilteredCount} proposta{periodFilteredCount !== 1 ? "s" : ""} no período
+                </span>
+              </div>
+            )}
+
             {/* Filters */}
             <div className="flex flex-wrap gap-3 mb-6">
               <div className="relative flex-1 min-w-[200px] max-w-sm">
@@ -1162,6 +1362,26 @@ export default function PipePropostas() {
         />
       )}
 
+      {/* Cadastro Externo Confirm Dialog (on drag-to-vendido) */}
+      {pendingCadastroExterno && (
+        <CadastroExternoConfirmDialog
+          open={cadastroExternoOpen}
+          onOpenChange={(open) => {
+            setCadastroExternoOpen(open);
+            if (!open && pendingCadastroExterno) {
+              handleCadastroExternoComplete();
+            }
+          }}
+          pipePropostaId={pendingCadastroExterno.itemId}
+          lead={pendingCadastroExterno.lead}
+          items={pendingCadastroExterno.items}
+          totalValue={pendingCadastroExterno.totalValue}
+          contractDuration={pendingCadastroExterno.contractDuration}
+          proposalNotes={pendingCadastroExterno.proposalNotes}
+          onSuccess={handleCadastroExternoComplete}
+        />
+      )}
+
       {/* Commitment Date Modal */}
       <CommitmentDateModal
         open={isDateModalOpen}
@@ -1170,6 +1390,41 @@ export default function PipePropostas() {
         onCancel={handleCommitmentDateCancel}
         leadName={pendingStatusChange?.leadName || "Lead"}
       />
+
+      {/* Loss Reason Dialog (drag-to-perdido) */}
+      <AlertDialog open={lossReasonDialogOpen} onOpenChange={(open) => { if (!open) { setLossReasonDialogOpen(false); setPendingPerdido(null); setSelectedLossReason(""); } }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Motivo da perda</AlertDialogTitle>
+            <AlertDialogDescription>
+              Selecione o motivo pelo qual esta proposta foi perdida. Isso ajuda a melhorar o processo comercial.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="px-1 py-2">
+            <Select value={selectedLossReason} onValueChange={setSelectedLossReason}>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecionar motivo (opcional)" />
+              </SelectTrigger>
+              <SelectContent>
+                {LOSS_REASONS.map((r) => (
+                  <SelectItem key={r.value} value={r.value}>
+                    {r.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={handleLossReasonCancel}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleLossReasonConfirm}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Confirmar Perda
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Delete single lead from pipe */}
       <AlertDialog open={deleteDialog?.open} onOpenChange={(open) => !open && setDeleteDialog(null)}>

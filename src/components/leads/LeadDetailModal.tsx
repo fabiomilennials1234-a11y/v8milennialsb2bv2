@@ -27,6 +27,7 @@ import {
   BarChart3,
 } from "lucide-react";
 import { Link } from "react-router-dom";
+import { formatPhoneForWhatsApp } from "@/lib/whatsapp";
 import {
   Dialog,
   DialogContent,
@@ -362,7 +363,7 @@ export function LeadDetailModal({ open, onOpenChange, leadId, onEdit }: LeadDeta
                           </div>
                           <div className="flex items-center gap-2">
                             <Button variant="outline" size="sm" className="gap-1.5" asChild>
-                              <Link to={`/chat-whatsapp?phone=${encodeURIComponent(lead.phone.replace(/\D/g, "") || lead.phone)}`} onClick={() => onOpenChange(false)}>
+                              <Link to={`/chat-whatsapp?phone=${encodeURIComponent(formatPhoneForWhatsApp(lead.phone) || lead.phone)}`} onClick={() => onOpenChange(false)}>
                                 <MessageSquare className="w-3.5 h-3.5" />
                                 Enviar mensagem
                               </Link>

@@ -47,6 +47,7 @@ const TVDashboard = lazy(() => lazyRetry(() => import("./pages/TVDashboard")));
 const Campanhas = lazy(() => lazyRetry(() => import("./pages/Campanhas")));
 const CampanhaDetail = lazy(() => lazyRetry(() => import("./pages/CampanhaDetail")));
 const Marketing = lazy(() => lazyRetry(() => import("./pages/Marketing")));
+const Analytics = lazy(() => lazyRetry(() => import("./pages/Analytics")));
 const Produtos = lazy(() => lazyRetry(() => import("./pages/Produtos")));
 const Copilot = lazy(() => lazyRetry(() => import("./pages/Copilot")));
 const CopilotMetrics = lazy(() => lazyRetry(() => import("./pages/CopilotMetrics")));
@@ -200,6 +201,20 @@ function AppRoutes() {
                 <Marketing />
               </PermissionProtectedRoute>
             </LayoutWrapper>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/analytics"
+        element={
+          <ProtectedRoute>
+            <MasterRoute>
+              <LayoutWrapper>
+                <PermissionProtectedRoute featureKey="analytics.view">
+                  <Analytics />
+                </PermissionProtectedRoute>
+              </LayoutWrapper>
+            </MasterRoute>
           </ProtectedRoute>
         }
       />

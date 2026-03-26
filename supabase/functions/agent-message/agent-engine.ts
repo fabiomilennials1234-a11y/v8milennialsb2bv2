@@ -2,6 +2,7 @@ import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { OpenRouterClient } from "./openrouter-client.ts";
 import { generateEmbedding } from "../_shared/embeddings.ts";
 import { enqueueAiAction } from "../_shared/ai-queue.ts";
+import { immediateTransferHuman } from "../_shared/ai-action-executor.ts";
 
 /** Parse custom_instructions (JSON ou string legada) para { dos, donts } */
 function parseCustomInstructions(raw: string): { dos: string; donts: string } {
@@ -154,11 +155,11 @@ export class AgentEngine {
 
     // 4. Build Dynamic Prompt
     console.log('[AgentEngine] Step 4: Building prompt...');
-    const systemPrompt = this.buildDynamicPrompt(capabilities, conversation, leadData, documentSummaries, semanticContext, longTermMemories);
+    const systemPrompt = await this.buildDynamicPrompt(capabilities, conversation, leadData, documentSummaries, semanticContext, longTermMemories);
 
     // 5. Build Tools (based on capabilities)
     console.log('[AgentEngine] Step 5: Building tools...');
-    const tools = this.buildDynamicTools(capabilities, orgCustomFields, pipelineStages);
+    const tools = await this.buildDynamicTools(capabilities, orgCustomFields, pipelineStages);
 
     // 6. Call LLM via OpenRouter
     console.log('[AgentEngine] Step 6: Getting conversation history...');
@@ -213,19 +214,56 @@ export class AgentEngine {
     const cleanMessage = messageParts.join(' ');
 
     // 8. Enqueue Action (via pending_ai_actions → worker assíncrono)
-    let executionResult = null;
+    let executionResult: Record<string, unknown> | null = null;
     if (actionToExecute) {
       // Injetar lead_id para ações que precisam
-      const needsLeadId = ['SCHEDULE_MEETING', 'TRANSFER_HUMAN', 'UPDATE_LEAD', 'QUALIFY_LEAD', 'DISQUALIFY_LEAD', 'ADVANCE_STAGE', 'UPDATE_QUALIFICATION_SCORE', 'CONFIRM_MEETING', 'ADVANCE_CONFIRMATION_STAGE', 'CREATE_CUSTOM_FIELD'];
-      if (this.currentLeadId && needsLeadId.includes(actionToExecute.action)) {
-        actionToExecute = {
-          ...actionToExecute,
-          params: { ...actionToExecute.params, lead_id: this.currentLeadId },
+      const needsLeadId = ['SCHEDULE_MEETING', 'TRANSFER_HUMAN', 'UPDATE_LEAD', 'QUALIFY_LEAD', 'DISQUALIFY_LEAD', 'ADVANCE_STAGE', 'UPDATE_QUALIFICATION_SCORE', 'CONFIRM_MEETING', 'ADVANCE_CONFIRMATION_STAGE', 'CREATE_CUSTOM_FIELD', 'TRANSFER_SZ_CHAT'];
+      let currentAction = actionToExecute;
+      if (this.currentLeadId && needsLeadId.includes(currentAction.action)) {
+        currentAction = {
+          ...currentAction,
+          params: { ...currentAction.params, lead_id: this.currentLeadId },
         };
       }
-      console.log('[AgentEngine] Step 9: Enqueuing action:', actionToExecute.action);
+      console.log('[AgentEngine] Step 9: Enqueuing action:', currentAction.action);
       try {
-        executionResult = await this.enqueueToolAction(actionToExecute, conversation.id);
+        // TRANSFER_HUMAN: execute immediately, enqueue only side-effects
+        if (currentAction.action === 'TRANSFER_HUMAN') {
+          const transferResult = await immediateTransferHuman(this.supabase, this.currentLeadId!);
+          if (!transferResult.success) {
+            console.warn('[AgentEngine] Immediate transfer failed, will rely on queue:', transferResult.error);
+          }
+          // Enqueue notification + lead_history only (no db state change)
+          const minuteTs = Math.floor(Date.now() / 60_000);
+          await enqueueAiAction(this.supabase, {
+            organizationId: this.organizationId,
+            leadId: this.currentLeadId || undefined,
+            conversationId: conversation.id.startsWith('temp_') ? undefined : conversation.id,
+            actionType: 'transfer_to_human_notify',
+            payload: { ...currentAction.params, lead_id: this.currentLeadId },
+            idempotencyKey: `transfer_human_notify_${this.currentLeadId}_${minuteTs}`,
+          });
+          executionResult = { success: true, queued: true, immediate: true };
+        } else if (currentAction.action === 'TRANSFER_SZ_CHAT') {
+          // TRANSFER_SZ_CHAT: disable AI immediately, enqueue SZ.chat transfer
+          const transferResult = await immediateTransferHuman(this.supabase, this.currentLeadId!);
+          if (!transferResult.success) {
+            console.warn('[AgentEngine] Immediate SZ.chat transfer (ai_disabled) failed:', transferResult.error);
+          }
+          // Enqueue the actual SZ.chat transfer (calls sz-chat-send edge function)
+          const minuteTs = Math.floor(Date.now() / 60_000);
+          await enqueueAiAction(this.supabase, {
+            organizationId: this.organizationId,
+            leadId: this.currentLeadId || undefined,
+            conversationId: conversation.id.startsWith('temp_') ? undefined : conversation.id,
+            actionType: 'transfer_sz_chat',
+            payload: { ...currentAction.params, lead_id: this.currentLeadId },
+            idempotencyKey: `transfer_sz_chat_${this.currentLeadId}_${minuteTs}`,
+          });
+          executionResult = { success: true, queued: true, immediate: true };
+        } else {
+          executionResult = await this.enqueueToolAction(currentAction, conversation.id);
+        }
       } catch (enqueueError) {
         console.warn('[AgentEngine] Action enqueue failed (non-fatal):', enqueueError);
         executionResult = { error: String(enqueueError), status: 'failed' };
@@ -499,8 +537,8 @@ export class AgentEngine {
       }
     }
 
-    // Fallback: agente padrão da organização
-    const { data } = await this.supabase
+    // Fallback 1: agente padrão da organização
+    const { data: defaultAgent } = await this.supabase
       .from('copilot_agents')
       .select(SELECT)
       .eq('organization_id', this.organizationId)
@@ -508,7 +546,30 @@ export class AgentEngine {
       .eq('is_default', true)
       .maybeSingle();
 
-    return data;
+    if (defaultAgent) {
+      console.log('[AgentEngine] Using default agent:', { agentId: defaultAgent.id });
+      return defaultAgent;
+    }
+
+    // Fallback 2: qualquer agente ativo da organização (mais recente)
+    // Garante que shadow leads e leads sem routing match ainda recebam resposta
+    console.warn('[AgentEngine] No default agent found, trying any active agent');
+    const { data: anyAgent } = await this.supabase
+      .from('copilot_agents')
+      .select(SELECT)
+      .eq('organization_id', this.organizationId)
+      .eq('is_active', true)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (anyAgent) {
+      console.log('[AgentEngine] Using fallback active agent:', { agentId: anyAgent.id });
+    } else {
+      console.error('[AgentEngine] No active agents found for organization:', this.organizationId);
+    }
+
+    return anyAgent;
   }
 
   /**
@@ -1299,7 +1360,7 @@ Regras:
    * 3. Adiciona capabilities dinâmicas (feature flags) ao final
    * 4. Adiciona dados do lead para contexto personalizado
    */
-  private buildDynamicPrompt(capabilities: any, conversation: any, leadData?: any, documentSummaries?: Array<{file_name: string; summary: string}>, semanticContext?: string, longTermMemories?: string): string {
+  private async buildDynamicPrompt(capabilities: any, conversation: any, leadData?: any, documentSummaries?: Array<{file_name: string; summary: string}>, semanticContext?: string, longTermMemories?: string): Promise<string> {
     const sections: string[] = [];
 
     // =====================================================
@@ -1608,6 +1669,41 @@ Regras:
     }
 
     // =====================================================
+    // 1.5. CONTEXTO DE INTERVENÇÃO HUMANA RECENTE
+    // =====================================================
+    try {
+      const { data: recentTransfer } = await this.supabase
+        .from("lead_history")
+        .select("metadata, created_at")
+        .eq("lead_id", leadId)
+        .eq("action", "ai_toggled")
+        .not("metadata", "is", null)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (recentTransfer) {
+        const transferTime = new Date(recentTransfer.created_at);
+        const minutesAgo = Math.round((Date.now() - transferTime.getTime()) / 60_000);
+        const metadata = recentTransfer.metadata as Record<string, unknown>;
+        const reason = metadata?.reason as string;
+
+        // Only inject context if transfer was within last 24h and has a reason (copilot-initiated)
+        if (minutesAgo < 1440 && reason) {
+          sections.push("");
+          sections.push("# CONTEXTO IMPORTANTE");
+          sections.push(`Esta conversa foi transferida para um vendedor humano há ${minutesAgo} minutos.`);
+          sections.push(`Motivo original da transferência: ${reason}`);
+          sections.push("O vendedor interveio e devolveu a conversa para você.");
+          sections.push("Continue naturalmente, sem repetir perguntas já feitas.");
+          sections.push("");
+        }
+      }
+    } catch (e) {
+      console.warn("[AgentEngine] Failed to check recent handoff (non-fatal):", e);
+    }
+
+    // =====================================================
     // 2. ADICIONAR CAPABILITIES DINÂMICAS (Feature Flags)
     // =====================================================
     sections.push("# CAPABILITIES DINÂMICAS");
@@ -1879,7 +1975,7 @@ Regras:
   /**
    * Build Dynamic Tools (baseado em capabilities)
    */
-  private buildDynamicTools(
+  private async buildDynamicTools(
     capabilities: any,
     orgCustomFields: { field_name: string }[] = [],
     pipelineStages: { stage_key: string; name: string; pipeline_type: string }[] = []
@@ -2071,6 +2167,40 @@ Regras:
             reason: { type: 'string' },
           },
           required: ['reason'],
+        },
+      });
+    }
+
+    // Tool para transferir atendimento para outro setor via SZ.chat
+    let szChatConfig: { team_mappings: Record<string, unknown> } | null = null;
+    try {
+      const { data } = await this.supabase
+        .from("sz_chat_config").select("team_mappings")
+        .eq("organization_id", this.organizationId).eq("is_active", true).maybeSingle();
+      szChatConfig = data;
+    } catch (e) {
+      console.warn('[AgentEngine] sz_chat_config query failed (non-fatal):', e);
+    }
+
+    if (szChatConfig?.team_mappings && Object.keys(szChatConfig.team_mappings).length > 0) {
+      const teamNames = Object.keys(szChatConfig.team_mappings);
+      tools.push({
+        name: 'transfer_sz_chat',
+        description: `Transferir o atendimento para outro setor da empresa. Setores disponíveis: ${teamNames.join(", ")}. Use quando o cliente solicitar algo fora do escopo comercial.`,
+        input_schema: {
+          type: 'object',
+          properties: {
+            target_team_name: {
+              type: 'string',
+              description: `Nome do setor para transferir. Opções: ${teamNames.join(", ")}`,
+              enum: teamNames,
+            },
+            message_to_client: {
+              type: 'string',
+              description: 'Mensagem para o cliente informando sobre a transferência',
+            },
+          },
+          required: ['target_team_name', 'message_to_client'],
         },
       });
     }
@@ -2364,6 +2494,7 @@ Regras:
       'confirm_meeting': 'CONFIRM_MEETING',
       'advance_confirmation_stage': 'ADVANCE_CONFIRMATION_STAGE',
       'create_custom_field': 'CREATE_CUSTOM_FIELD',
+      'transfer_sz_chat': 'TRANSFER_SZ_CHAT',
     };
     return mapping[toolName] || 'UNKNOWN';
   }
@@ -2380,6 +2511,7 @@ Regras:
     if (toolName === 'confirm_meeting') return 'QUALIFIED'; // Confirmação dispara onQualify automation
     if (toolName === 'advance_confirmation_stage') return currentState;
     if (toolName === 'create_custom_field') return currentState;
+    if (toolName === 'transfer_sz_chat') return 'CLOSED_WON';
     if (currentState === 'NEW_LEAD') return 'QUALIFYING';
     return currentState;
   }
@@ -2404,6 +2536,7 @@ Regras:
       'CONFIRM_MEETING': 'confirm_meeting',
       'ADVANCE_CONFIRMATION_STAGE': 'advance_confirmation_stage',
       'CREATE_CUSTOM_FIELD': 'create_custom_field',
+      'TRANSFER_SZ_CHAT': 'transfer_sz_chat',
     };
 
     const actionType = ACTION_MAP[action.action];
@@ -2456,6 +2589,8 @@ Regras:
         return `schedule_meeting_${leadId}_${params.preferred_date}`;
       case 'transfer_to_human':
         return `transfer_human_${leadId}`;
+      case 'transfer_to_human_notify':
+        return `transfer_human_notify_${leadId}_${ts}`;
       case 'advance_stage':
         return `advance_stage_${leadId}_${params.target_pipe || 'whatsapp'}_${params.target_stage}`;
       case 'confirm_meeting':

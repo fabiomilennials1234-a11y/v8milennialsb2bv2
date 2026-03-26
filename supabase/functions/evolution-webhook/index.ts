@@ -207,7 +207,14 @@ async function transcribeAudioWithOpenAI(mediaUrl: string): Promise<string | nul
 
       const audioBlob = await mediaResponse.blob();
       const contentType = audioBlob.type || "audio/ogg";
-      const file = new File([audioBlob], "audio", { type: contentType });
+      // Whisper requires a recognized file extension — derive from content type
+      const extFromType: Record<string, string> = {
+        "audio/mpeg": "mp3", "audio/mp3": "mp3", "audio/ogg": "ogg",
+        "audio/webm": "webm", "audio/wav": "wav", "audio/mp4": "m4a",
+        "audio/x-m4a": "m4a", "audio/aac": "aac", "audio/flac": "flac",
+      };
+      const ext = extFromType[contentType] || "mp3";
+      const file = new File([audioBlob], `audio.${ext}`, { type: contentType });
       const formData = new FormData();
       formData.append("file", file);
       formData.append("model", "whisper-1");
@@ -541,14 +548,19 @@ async function triggerAgentMessage(
     const result = await response.json();
 
     if (!response.ok) {
-      console.error("[Evolution Webhook] Agent-message error:", result);
-      return { success: false, error: result.error || "Agent processing failed" };
+      console.error("[Evolution Webhook] Agent-message FAILED:", {
+        status: response.status,
+        error: result.error,
+        fullResponse: JSON.stringify(result).substring(0, 500),
+      });
+      return { success: false, error: result.error || `Agent processing failed (HTTP ${response.status})` };
     }
 
     console.log("[Evolution Webhook] Agent-message response:", {
       hasMessage: !!result.message,
+      messageLength: result.message?.length,
       state: result.state,
-      action: result.action,
+      action: result.action_executed,
     });
 
     return { success: true, message: result.message };
@@ -1173,6 +1185,7 @@ async function handleMessagesUpsert(
                         media_url: ttsResult.audioUrl,
                         status: "sent",
                         timestamp: new Date().toISOString(),
+                        sent_by_ai: true,
                       });
 
                       if (outMsgError) {
@@ -1220,6 +1233,7 @@ async function handleMessagesUpsert(
                   content: agentResult.message,
                   status: "sent",
                   timestamp: new Date().toISOString(),
+                  sent_by_ai: true,
                 });
 
                 if (outMsgError) {
@@ -1230,7 +1244,18 @@ async function handleMessagesUpsert(
               }
             }
           } else if (!agentResult.success) {
-            console.warn("[Evolution Webhook] Agent processing failed:", agentResult.error);
+            console.error("[Evolution Webhook] Agent processing FAILED:", {
+              error: agentResult.error,
+              phone: phoneNumber,
+              organizationId: instance.organization_id,
+              agentId: instance.copilot_agent_id,
+            });
+          } else {
+            // success=true but no message (LLM returned empty or tool-only response)
+            console.warn("[Evolution Webhook] Agent returned success but no message:", {
+              phone: phoneNumber,
+              organizationId: instance.organization_id,
+            });
           }
         } else {
           console.log("[Evolution Webhook] No active agent linked to this instance, skipping AI processing");

@@ -24,6 +24,7 @@ import {
   Bot,
   GitBranch,
   BarChart2,
+  BarChart3,
   Workflow,
   TrendingUp,
   Lock,
@@ -42,6 +43,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useUserRole, useJobTitle, useFeaturePermissions, useIsAdmin } from "@/hooks/useUserRole";
 import { useMasterAuth } from "@/hooks/useMasterAuth";
 // useWhatsAppContacts/Realtime removidos da Sidebar para performance (eram no-op com instanceId=null)
+import { useOrganization } from "@/hooks/useOrganization";
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
 import { SIDEBAR_FEATURE_MAP, type FeatureKey } from "@/lib/feature-registry";
 import { UpgradeModal } from "@/components/shared/UpgradeModal";
@@ -62,6 +64,7 @@ interface NavItem {
   icon: React.ElementType;
   path: string;
   badge?: number;
+  masterOnly?: boolean;
 }
 
 interface NavItemWithChildren extends NavItem {
@@ -80,6 +83,7 @@ const navItems: NavItemWithChildren[] = [
   { label: "Central de Comando", icon: Gauge, path: "/" },
   { label: "Campanhas", icon: Target, path: "/campanhas" },
   { label: "Marketing", icon: BarChart2, path: "/marketing" },
+  { label: "Analytics", icon: BarChart3, path: "/analytics", masterOnly: true },
   { label: "Chat", icon: Zap, path: "/chat" },
   { label: "Funis", icon: GitBranch, path: "/funis", children: funisSubItems },
   { label: "Agenda", icon: CalendarDays, path: "/agenda" },
@@ -102,6 +106,17 @@ const bottomNavItems: NavItem[] = [
 ];
 
 const FUNIS_PATHS = ["/pipe-whatsapp", "/pipe-confirmacao", "/pipe-propostas", "/upsell", "/funis", "/pipe/custom"] as const;
+
+/** Outbound members only see these paths — all others are hidden */
+const OUTBOUND_MEMBER_ALLOWED_PATHS = [
+  "/",              // Central de Comando (DashboardOutbound)
+  "/chat",          // Chat WhatsApp
+  "/pipe-whatsapp", // Funil Qualificação
+  "/pipe-confirmacao", // Funil Confirmação
+  "/pipe-propostas",   // Funil Propostas
+  "/funis",            // Funis parent
+  "/follow-ups",       // Revisão
+] as const;
 
 const CUSTOM_PIPE_ICON_MAP: Record<string, React.ElementType> = {
   kanban: Kanban,
@@ -173,6 +188,8 @@ export function Sidebar() {
   const { isAdmin } = useIsAdmin();
   const { isMaster } = useMasterAuth();
   const role = userRole?.role;
+  const { orgType } = useOrganization();
+  const isOutboundMember = orgType === "outbound" && role === "member";
 
   /** Verifica se o membro tem permissão de visualização para uma rota */
   const canViewRoute = (path: string): boolean => {
@@ -286,6 +303,22 @@ export function Sidebar() {
 
   const sidebarEase = "cubic-bezier(0.32, 0.72, 0, 1)";
 
+  // Outbound members: filter nav to only allowed modules
+  const visibleNavItems = isOutboundMember
+    ? navItems.filter((item) =>
+        OUTBOUND_MEMBER_ALLOWED_PATHS.some(
+          (p) => item.path === p || item.children?.some((c) => OUTBOUND_MEMBER_ALLOWED_PATHS.includes(c.path as any))
+        )
+      )
+    : navItems;
+
+  const visibleAdminItems = isOutboundMember ? [] : adminNavItems;
+  const visibleBottomItems = isOutboundMember ? [] : bottomNavItems;
+
+  const visibleFunisSubItems = isOutboundMember
+    ? funisSubItems.filter((s) => OUTBOUND_MEMBER_ALLOWED_PATHS.includes(s.path as any))
+    : funisSubItems;
+
   return (
     <aside
       style={{
@@ -364,7 +397,7 @@ export function Sidebar() {
 
       {/* Main Navigation */}
       <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-        {navItems.map((item) => {
+        {visibleNavItems.filter((item) => !item.masterOnly || isMaster).map((item) => {
           const locked = isLocked(item.path);
 
           // Filtrar por permissão de visualização do membro
@@ -433,7 +466,7 @@ export function Sidebar() {
                   )}
                 >
                   <div className="min-h-0 overflow-hidden">
-                    {item.children.filter((c) => canViewRoute(c.path)).map((child) => (
+                    {(item.label === "Funis" ? visibleFunisSubItems : item.children!).filter((c) => canViewRoute(c.path)).map((child) => (
                       <NavLink
                         key={child.path}
                         to={child.path}
@@ -448,7 +481,7 @@ export function Sidebar() {
                       </NavLink>
                     ))}
                     {/* Funis customizados dinâmicos */}
-                    {item.label === "Funis" && customPipelines.length > 0 && (
+                    {item.label === "Funis" && !isOutboundMember && customPipelines.length > 0 && (
                       <div className="border-t border-sidebar-border/50 mt-1 pt-1">
                         {customPipelines.map((pipe) => {
                           const PipeIcon = CUSTOM_PIPE_ICON_MAP[pipe.icon] || Kanban;
@@ -470,7 +503,7 @@ export function Sidebar() {
                         })}
                       </div>
                     )}
-                    {item.label === "Funis" && (
+                    {item.label === "Funis" && !isOutboundMember && (
                       <button
                         onClick={() => setShowCreatePipeline(true)}
                         className="sidebar-item pl-4 w-full text-muted-foreground hover:text-foreground"
@@ -547,7 +580,7 @@ export function Sidebar() {
                 <span className="text-xs text-sidebar-foreground/50 uppercase font-medium">Admin</span>
               </div>
             )}
-            {adminNavItems.filter((item) => canViewRoute(item.path)).map((item) => {
+            {visibleAdminItems.filter((item) => canViewRoute(item.path)).map((item) => {
               const adminLocked = isLocked(item.path);
               return adminLocked ? (
                 <button
@@ -596,7 +629,7 @@ export function Sidebar() {
 
       {/* Bottom Navigation */}
       <div className="p-3 border-t border-sidebar-border space-y-1">
-        {bottomNavItems.filter((item) => canViewRoute(item.path)).map((item) => (
+        {visibleBottomItems.filter((item) => canViewRoute(item.path)).map((item) => (
           <NavLink
             key={item.path}
             to={item.path}

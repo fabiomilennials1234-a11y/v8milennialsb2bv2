@@ -52,30 +52,52 @@ function getMonthRange(month: number, year: number) {
 type SoldRow = {
   sale_value: number | null;
   product_type: string | null;
+  /** Duração do contrato em meses. Usado para calcular Venda Total em contratos MRR. */
+  contract_duration?: number | null;
   items?: Array<{ sale_value: number | null; product?: { type: string } | null }> | null;
 };
 
-/** Agrega vendidos por item: sold = total, mrr = só tipo mrr, projeto = só tipo projeto; unitário só em sold. */
+/**
+ * Agrega vendidos por item.
+ * Regra de Venda Total:
+ *   - MRR:     mrr += sale_value (mensal);  sold += sale_value * contract_duration
+ *   - Projeto: projeto += sale_value;        sold += sale_value
+ *   - Unitário:                              sold += sale_value
+ * contract_duration nulo/inválido → fallback de 1 mês (evita zerar o contrato).
+ */
 function aggregateSoldByItem(rows: SoldRow[]): { sold: number; mrr: number; projeto: number } {
   let sold = 0;
   let mrr = 0;
   let projeto = 0;
   for (const r of rows) {
+    // Duração mínima de 1 para não anular o valor quando contract_duration é nulo
+    const duration = Math.max(1, Number(r.contract_duration) || 1);
     const items = r.items?.filter((i) => i != null) ?? [];
     if (items.length > 0) {
       for (const item of items) {
         const val = Number(item.sale_value) || 0;
-        sold += val;
         const t = item.product?.type;
-        if (t === "mrr") mrr += val;
-        else if (t === "projeto") projeto += val;
-        // unitario: só em sold, já somado
+        if (t === "mrr") {
+          mrr += val;             // MRR Vendido = valor mensal recorrente
+          sold += val * duration; // Venda Total = mensal × duração do contrato
+        } else if (t === "projeto") {
+          projeto += val;
+          sold += val;            // Projeto: valor pontual (sem multiplicar)
+        } else {
+          sold += val;            // Unitário: valor pontual
+        }
       }
     } else {
       const val = Number(r.sale_value) || 0;
-      sold += val;
-      if (r.product_type === "mrr") mrr += val;
-      else if (r.product_type === "projeto") projeto += val;
+      if (r.product_type === "mrr") {
+        mrr += val;
+        sold += val * duration;
+      } else if (r.product_type === "projeto") {
+        projeto += val;
+        sold += val;
+      } else {
+        sold += val;
+      }
     }
   }
   return { sold, mrr, projeto };
@@ -114,7 +136,7 @@ export function usePipePropostasMetrics(
       }
 
       const activeStatuses = ["marcar_compromisso", "compromisso_marcado", "esfriou", "futuro"];
-      const soldSelect = `id, status, sale_value, product_type, items:pipe_proposta_items(sale_value, product:products(type))`;
+      const soldSelect = `id, status, sale_value, product_type, contract_duration, items:pipe_proposta_items(sale_value, product:products(type))`;
 
       if (period === "all") {
         const { data: allData, error: allError } = await supabase
@@ -126,7 +148,7 @@ export function usePipePropostasMetrics(
 
         const { data: soldDataWithItems, error: soldError } = await supabase
           .from("pipe_propostas")
-          .select(soldSelect)
+          .select(soldSelect) // inclui contract_duration
           .eq("organization_id", organizationId)
           .eq("status", "vendido");
 

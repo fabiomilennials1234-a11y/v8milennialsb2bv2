@@ -37,6 +37,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import boltIcon from "@/assets/bolt-icon.png";
+import DashboardOutbound from "./DashboardOutbound";
 
 function formatCurrency(value: number): string {
   if (value >= 1000000) return `R$ ${(value / 1000000).toFixed(1)}M`;
@@ -69,6 +70,11 @@ export default function Dashboard() {
   const { data: conversionRates, isLoading: conversionLoading } = useConversionRates(month, year);
   const { data: teamGoals, isLoading: goalsLoading } = useTeamGoals(month, year);
   const { data: individualGoals } = useIndividualGoals(month, year);
+
+  // Outbound members get their own dashboard
+  if (orgType === "outbound" && role === "member") {
+    return <DashboardOutbound />;
+  }
 
   const userName = user?.user_metadata?.full_name?.split(" ")[0] || user?.email?.split("@")[0] || "Usuário";
 
@@ -112,7 +118,7 @@ export default function Dashboard() {
     color: step.color.replace("hsl(var(--", "bg-").replace("))", ""),
   })) || [];
 
-  const isLoading = metricsLoading || totalMetricsLoading || funnelLoading || rankingLoading || goalsLoading;
+  const isLoading = orgLoading || metricsLoading || totalMetricsLoading || funnelLoading || rankingLoading || goalsLoading;
 
   if (isLoading) {
     return (

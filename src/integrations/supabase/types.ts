@@ -3246,6 +3246,9 @@ export type Database = {
           utm_medium: string | null
           utm_source: string | null
           utm_term: string | null
+          meta_campaign_id: string | null
+          meta_adset_id: string | null
+          meta_ad_id: string | null
         }
         Insert: {
           ai_disabled?: boolean | null
@@ -3279,6 +3282,9 @@ export type Database = {
           utm_medium?: string | null
           utm_source?: string | null
           utm_term?: string | null
+          meta_campaign_id?: string | null
+          meta_adset_id?: string | null
+          meta_ad_id?: string | null
         }
         Update: {
           ai_disabled?: boolean | null
@@ -3312,6 +3318,9 @@ export type Database = {
           utm_medium?: string | null
           utm_source?: string | null
           utm_term?: string | null
+          meta_campaign_id?: string | null
+          meta_adset_id?: string | null
+          meta_ad_id?: string | null
         }
         Relationships: [
           {
@@ -4151,6 +4160,7 @@ export type Database = {
           created_at: string
           id: string
           lead_id: string
+          loss_reason: string | null
           metrics_period_at: string | null
           notes: string | null
           organization_id: string | null
@@ -4170,6 +4180,7 @@ export type Database = {
           created_at?: string
           id?: string
           lead_id: string
+          loss_reason?: string | null
           metrics_period_at?: string | null
           notes?: string | null
           organization_id?: string | null
@@ -4189,6 +4200,7 @@ export type Database = {
           created_at?: string
           id?: string
           lead_id?: string
+          loss_reason?: string | null
           metrics_period_at?: string | null
           notes?: string | null
           organization_id?: string | null

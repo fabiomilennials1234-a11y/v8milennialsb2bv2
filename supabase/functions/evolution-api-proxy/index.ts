@@ -73,6 +73,15 @@ serve(withSentry('evolution-api-proxy', async (req) => {
       );
     }
 
+    // Normalizar número de telefone no body (defesa server-side)
+    if (body && typeof body.number === "string" && endpoint.includes("/message/")) {
+      let phone = body.number.replace(/\D/g, "");
+      if (phone && !phone.startsWith("55")) {
+        phone = "55" + phone;
+      }
+      body.number = phone;
+    }
+
     // Construir URL completa
     const fullUrl = `${EVOLUTION_API_URL}${endpoint}`;
 
@@ -188,13 +197,18 @@ serve(withSentry('evolution-api-proxy', async (req) => {
 }));
 
 function getErrorMessage(status: number, data: unknown): string {
-  const details = typeof data === "object" && data !== null
-    ? (data as Record<string, unknown>).message || (data as Record<string, unknown>).error || ""
-    : String(data);
+  let details: unknown;
+  if (typeof data === "object" && data !== null) {
+    const obj = data as Record<string, unknown>;
+    // Prefer detailed message arrays (NestJS validation), then message string, then error
+    details = (Array.isArray(obj.message) ? obj.message.join("; ") : obj.message) || obj.error || "";
+  } else {
+    details = String(data);
+  }
 
   switch (status) {
     case 400:
-      return `Requisição inválida: ${details}`;
+      return `Requisição inválida: ${details || "verifique o formato do número e da mensagem"}`;
     case 401:
       return "API Key inválida ou expirada. Verifique a configuração no Supabase.";
     case 403:
