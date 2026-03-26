@@ -69,6 +69,11 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Trash2 } from "lucide-react";
 import { useTeamMembers, useCurrentTeamMember, useResponsibleMembers } from "@/hooks/useTeamMembers";
+import { useCustomPipelines, useCustomPipelineStages, useAddLeadToCustomPipe } from "@/hooks/useCustomPipelines";
+import { useAllPipelineStageOptions, getPipelineTypeName } from "@/hooks/usePipelineStages";
+import { useCreatePipeWhatsapp } from "@/hooks/usePipeWhatsapp";
+import { useCreatePipeConfirmacao } from "@/hooks/usePipeConfirmacao";
+import { useCreatePipeProposta } from "@/hooks/usePipePropostas";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -212,6 +217,45 @@ export default function Leads() {
 
   const responsibleMembers = useResponsibleMembers();
 
+  // ── Pipe/funnel selection for new leads ──
+  const [selectedPipe, setSelectedPipe] = useState("");
+  const [selectedStage, setSelectedStage] = useState("");
+  const { data: customPipelines = [] } = useCustomPipelines();
+  const customPipelineId = selectedPipe.startsWith("custom:") ? selectedPipe.slice(7) : undefined;
+  const { data: customStages = [] } = useCustomPipelineStages(customPipelineId);
+  const { stagesByPipe } = useAllPipelineStageOptions();
+  const createPipeWhatsapp = useCreatePipeWhatsapp();
+  const createPipeConfirmacao = useCreatePipeConfirmacao();
+  const createPipeProposta = useCreatePipeProposta();
+  const addLeadToCustomPipe = useAddLeadToCustomPipe();
+
+  const pipeOptions = useMemo(() => {
+    const standard = [
+      { value: "std:whatsapp", label: getPipelineTypeName("whatsapp") },
+      { value: "std:confirmacao", label: getPipelineTypeName("confirmacao") },
+      { value: "std:propostas", label: getPipelineTypeName("propostas") },
+    ];
+    const custom = customPipelines.map(p => ({ value: `custom:${p.id}`, label: p.name }));
+    return [...standard, ...custom];
+  }, [customPipelines]);
+
+  const stageOptions = useMemo(() => {
+    if (selectedPipe.startsWith("std:")) {
+      const pipeType = selectedPipe.slice(4);
+      return (stagesByPipe[pipeType] || []).map(s => ({ value: s.value, label: s.label }));
+    }
+    if (selectedPipe.startsWith("custom:") && customStages.length > 0) {
+      return customStages.map(s => ({ value: s.id, label: s.name }));
+    }
+    return [];
+  }, [selectedPipe, stagesByPipe, customStages]);
+
+  useEffect(() => {
+    if (selectedPipe && stageOptions.length > 0 && !selectedStage) {
+      setSelectedStage(stageOptions[0].value);
+    }
+  }, [selectedPipe, stageOptions, selectedStage]);
+
   const filteredLeads = useMemo(() => {
     return leads.filter((lead: Lead) => {
       const matchesSearch = 
@@ -263,6 +307,8 @@ export default function Leads() {
     } else {
       setEditingLead(null);
       setFormData(initialFormData);
+      setSelectedPipe("");
+      setSelectedStage("");
     }
     setIsDialogOpen(true);
   };
@@ -309,8 +355,30 @@ export default function Leads() {
         await updateLead.mutateAsync({ id: editingLead.id, ...payload });
         toast.success("Lead atualizado!");
       } else {
-        await createLead.mutateAsync(payload);
-        toast.success("Lead criado!");
+        const newLead = await createLead.mutateAsync(payload);
+
+        // Insert lead into selected funnel/stage
+        let pipeInserted = false;
+        if (newLead?.id && selectedPipe && selectedStage) {
+          try {
+            if (selectedPipe === "std:whatsapp") {
+              await createPipeWhatsapp.mutateAsync({ lead_id: newLead.id, status: selectedStage, organization_id: currentTeamMember!.organization_id });
+            } else if (selectedPipe === "std:confirmacao") {
+              await createPipeConfirmacao.mutateAsync({ lead_id: newLead.id, status: selectedStage, organization_id: currentTeamMember!.organization_id });
+            } else if (selectedPipe === "std:propostas") {
+              await createPipeProposta.mutateAsync({ lead_id: newLead.id, status: selectedStage, organization_id: currentTeamMember!.organization_id });
+            } else if (selectedPipe.startsWith("custom:")) {
+              await addLeadToCustomPipe.mutateAsync({ pipeline_id: selectedPipe.slice(7), lead_id: newLead.id, stage_id: selectedStage });
+            }
+            pipeInserted = true;
+          } catch (pipeError: any) {
+            console.error("Erro ao inserir lead no funil:", pipeError);
+            toast.error("Lead criado, mas houve erro ao inseri-lo no funil.");
+          }
+        }
+
+        const pipeName = pipeInserted ? pipeOptions.find(p => p.value === selectedPipe)?.label : null;
+        toast.success(pipeName ? `Lead criado e adicionado ao funil ${pipeName}!` : "Lead criado!");
       }
       setIsDialogOpen(false);
       setFormData(initialFormData);
@@ -589,7 +657,7 @@ export default function Leads() {
       />
 
       {/* Lead Dialog */}
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+      <Dialog open={isDialogOpen} onOpenChange={(open) => { setIsDialogOpen(open); if (!open) { setSelectedPipe(""); setSelectedStage(""); } }}>
         <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
@@ -667,6 +735,43 @@ export default function Leads() {
                 </div>
               </div>
             </div>
+
+            {/* FUNIL — only visible when creating a new lead */}
+            {!editingLead && (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label>Adicionar ao Funil</Label>
+                  <Select
+                    value={selectedPipe}
+                    onValueChange={(v) => { setSelectedPipe(v); setSelectedStage(""); }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Nenhum (opcional)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {pipeOptions.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {selectedPipe && stageOptions.length > 0 && (
+                  <div className="grid gap-2">
+                    <Label>Etapa Inicial</Label>
+                    <Select value={selectedStage} onValueChange={setSelectedStage}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {stageOptions.map((opt) => (
+                          <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">

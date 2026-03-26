@@ -55,6 +55,7 @@ import { useUpdateLead } from "@/hooks/useLeads";
 import { useLogLeadAction } from "@/hooks/useLogLeadAction";
 import { useCampanhas, useCampanhaStages } from "@/hooks/useCampanhas";
 import { useTeamMembers, useCurrentTeamMember } from "@/hooks/useTeamMembers";
+import { useAllPipelineStageOptions } from "@/hooks/usePipelineStages";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -123,6 +124,9 @@ export function LeadDetailContent({
     (createDestination === "campanha" ? createCampanhaId : selectedCampanhaId) || undefined
   );
 
+  // Dynamic stages from pipeline_stages (replaces hardcoded stage lists)
+  const { stagesByPipe: dynamicStagesByPipe } = useAllPipelineStageOptions();
+
   // Custom pipelines for creation dropdown
   const { data: customPipelines = [] } = useCustomPipelines();
   const { data: customPipeStages = [] } = useCustomPipelineStages(
@@ -182,35 +186,18 @@ export function LeadDetailContent({
     setCreateCustomStageId("");
   }, [createCustomPipelineId]);
 
-  // ─── Standard stage definitions for creation dropdown ─────────
+  // ─── Dynamic stage definitions for creation dropdown ─────────
+  // Maps destination alias → pipeline_stages.pipeline_type
+  const DEST_TO_PIPE_TYPE: Record<string, string> = {
+    qualificacao: "whatsapp",
+    confirmacao: "confirmacao",
+    propostas: "propostas",
+  };
+
   const getStandardStages = (dest: string) => {
-    switch (dest) {
-      case "qualificacao":
-        return [
-          { id: "novo", label: "Novo" },
-          { id: "abordado", label: "Abordado" },
-          { id: "respondeu", label: "Respondeu" },
-          { id: "esfriou", label: "Esfriou" },
-          { id: "agendado", label: "Agendado" },
-        ];
-      case "confirmacao":
-        return [
-          { id: "pre_confirmacao", label: "Pré-Confirmação" },
-          { id: "confirmado", label: "Confirmado" },
-          { id: "remarcado", label: "Remarcado" },
-          { id: "cancelado", label: "Cancelado" },
-          { id: "realizada", label: "Realizada" },
-        ];
-      case "propostas":
-        return [
-          { id: "proposta_enviada", label: "Proposta Enviada" },
-          { id: "em_negociacao", label: "Em Negociação" },
-          { id: "fechado_ganho", label: "Fechado Ganho" },
-          { id: "fechado_perdido", label: "Fechado Perdido" },
-        ];
-      default:
-        return [];
-    }
+    const pipeType = DEST_TO_PIPE_TYPE[dest];
+    if (!pipeType || !dynamicStagesByPipe[pipeType]) return [];
+    return dynamicStagesByPipe[pipeType].map(s => ({ id: s.value, label: s.label }));
   };
 
   const standardStagesForCreate = getStandardStages(createDestination);
@@ -235,12 +222,9 @@ export function LeadDetailContent({
       if (isStandardDest && createStageId && result.leadId) {
         // The hook inserts with default stage, we may need to update if different
         // For now, we handle this by updating after creation if stage differs
-        const defaultStages: Record<string, string> = {
-          qualificacao: "novo",
-          confirmacao: "pre_confirmacao",
-          propostas: "proposta_enviada",
-        };
-        if (createStageId !== defaultStages[createDestination]) {
+        // Compare against the first dynamic stage to decide if we need to update
+        const firstDynamicStage = standardStagesForCreate[0]?.id || "";
+        if (createStageId && createStageId !== firstDynamicStage) {
           // Need to update the pipe status
           const tableMap: Record<string, string> = {
             qualificacao: "pipe_whatsapp",

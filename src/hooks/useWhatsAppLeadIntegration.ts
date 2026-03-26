@@ -1,7 +1,27 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "./useTeamMembers";
+import { DEFAULT_STAGES } from "./usePipelineStages";
 import type { Tables, TablesInsert } from "@/integrations/supabase/types";
+
+/**
+ * Fetches the first active stage_key for a pipeline type from pipeline_stages.
+ * Falls back to DEFAULT_STAGES if no dynamic stage exists.
+ */
+async function getFirstStageKey(orgId: string, pipelineType: string): Promise<string> {
+  const { data } = await supabase
+    .from("pipeline_stages")
+    .select("stage_key")
+    .eq("organization_id", orgId)
+    .eq("pipeline_type", pipelineType)
+    .eq("is_active", true)
+    .order("position", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (data?.stage_key) return data.stage_key;
+  const fallback = DEFAULT_STAGES[pipelineType as keyof typeof DEFAULT_STAGES];
+  return fallback?.[0]?.id || "novo";
+}
 
 export type Lead = Tables<"leads">;
 
@@ -155,26 +175,29 @@ export function useCreateLeadFromWhatsApp() {
             supabase.from("pipe_propostas").select("id").eq("lead_id", existingLead.id).maybeSingle(),
           ]);
           if (!inConf && !inProp) {
+            const firstStage = await getFirstStageKey(teamMember.organization_id, "whatsapp");
             await supabase.from("pipe_whatsapp").insert({
               lead_id: existingLead.id,
-              status: "novo",
+              status: firstStage,
               responsible_id: effectiveSdrIdForShadow,
               sdr_id: effectiveSdrIdForShadow,
               organization_id: teamMember.organization_id,
             });
           }
         } else if (effectiveDestination === "confirmacao") {
+          const firstStage = await getFirstStageKey(teamMember.organization_id, "confirmacao");
           await supabase.from("pipe_confirmacao").insert({
             lead_id: existingLead.id,
-            status: "pre_confirmacao",
+            status: firstStage,
             responsible_id: effectiveSdrIdForShadow,
             sdr_id: effectiveSdrIdForShadow,
             organization_id: teamMember.organization_id,
           });
         } else if (effectiveDestination === "propostas") {
+          const firstStage = await getFirstStageKey(teamMember.organization_id, "propostas");
           await supabase.from("pipe_propostas").insert({
             lead_id: existingLead.id,
-            status: "proposta_enviada",
+            status: firstStage,
             responsible_id: effectiveSdrIdForShadow,
             closer_id: effectiveSdrIdForShadow,
             organization_id: teamMember.organization_id,
@@ -233,7 +256,7 @@ export function useCreateLeadFromWhatsApp() {
 
       console.log("[WhatsApp Lead] Novo lead criado:", newLead.id);
 
-      // 3. Inserir no destino escolhido
+      // 3. Inserir no destino escolhido (using dynamic first stages)
       if (effectiveDestination === "qualificacao") {
         // Verificar se o lead já está ativo em outro pipe antes de inserir em qualificação
         const [{ data: inConfirmacao }, { data: inPropostas }] = await Promise.all([
@@ -241,9 +264,10 @@ export function useCreateLeadFromWhatsApp() {
           supabase.from("pipe_propostas").select("id").eq("lead_id", newLead.id).maybeSingle(),
         ]);
         if (!inConfirmacao && !inPropostas) {
+          const firstStage = await getFirstStageKey(teamMember.organization_id, "whatsapp");
           const { error: pipeError } = await supabase.from("pipe_whatsapp").insert({
             lead_id: newLead.id,
-            status: "novo",
+            status: firstStage,
             responsible_id: effectiveSdrId,
             sdr_id: effectiveSdrId,
             organization_id: teamMember.organization_id,
@@ -255,9 +279,10 @@ export function useCreateLeadFromWhatsApp() {
           console.log("[WhatsApp Lead] Lead já está em outro pipe ativo — não inserido em qualificação.");
         }
       } else if (effectiveDestination === "confirmacao") {
+        const firstStage = await getFirstStageKey(teamMember.organization_id, "confirmacao");
         const { error: pipeError } = await supabase.from("pipe_confirmacao").insert({
           lead_id: newLead.id,
-          status: "pre_confirmacao",
+          status: firstStage,
           responsible_id: effectiveSdrId,
           sdr_id: effectiveSdrId,
           organization_id: teamMember.organization_id,
@@ -266,9 +291,10 @@ export function useCreateLeadFromWhatsApp() {
           console.error("[WhatsApp Lead] Erro ao adicionar ao pipeline confirmação:", pipeError);
         }
       } else if (effectiveDestination === "propostas") {
+        const firstStage = await getFirstStageKey(teamMember.organization_id, "propostas");
         const { error: pipeError } = await supabase.from("pipe_propostas").insert({
           lead_id: newLead.id,
-          status: "proposta_enviada",
+          status: firstStage,
           responsible_id: effectiveSdrId,
           closer_id: effectiveSdrId,
           organization_id: teamMember.organization_id,
