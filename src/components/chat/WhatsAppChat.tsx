@@ -1166,6 +1166,7 @@ function AudioRecorder({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const cancelledRef = useRef(false);
 
   const startRecording = async () => {
     try {
@@ -1191,6 +1192,7 @@ function AudioRecorder({
       
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
+      cancelledRef.current = false;
 
       mediaRecorder.ondataavailable = (e) => {
         if (e.data.size > 0) {
@@ -1199,8 +1201,16 @@ function AudioRecorder({
       };
 
       mediaRecorder.onstop = () => {
-        const audioBlob = new Blob(chunksRef.current, { 
-          type: mediaRecorder.mimeType || "audio/webm" 
+        stream.getTracks().forEach((track) => track.stop());
+
+        if (cancelledRef.current) {
+          console.log("[AudioRecorder] Recording cancelled, discarding audio.");
+          chunksRef.current = [];
+          return;
+        }
+
+        const audioBlob = new Blob(chunksRef.current, {
+          type: mediaRecorder.mimeType || "audio/webm"
         });
         console.log("[AudioRecorder] Recording finished:", {
           chunks: chunksRef.current.length,
@@ -1208,7 +1218,6 @@ function AudioRecorder({
           mimeType: audioBlob.type,
         });
         onRecorded(audioBlob);
-        stream.getTracks().forEach((track) => track.stop());
       };
 
       mediaRecorder.start(100); // Coletar dados a cada 100ms
@@ -1235,14 +1244,16 @@ function AudioRecorder({
   };
 
   const cancelRecording = () => {
+    cancelledRef.current = true;
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
-      mediaRecorderRef.current.stream.getTracks().forEach((track) => track.stop());
     }
+    chunksRef.current = [];
     setIsRecording(false);
     setRecordingTime(0);
     if (timerRef.current) {
       clearInterval(timerRef.current);
+      timerRef.current = null;
     }
     onCancel();
   };
