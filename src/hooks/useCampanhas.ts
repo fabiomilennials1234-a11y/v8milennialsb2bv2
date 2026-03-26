@@ -31,6 +31,37 @@ export const OBJECTIVE_DESCRIPTIONS: Record<CampaignObjective, string> = {
   livre: 'Objetivo customizado → Você configura',
 };
 
+/** Label da métrica principal de cada objetivo (ex.: "reuniões", "qualificações") */
+export const OBJECTIVE_METRIC_LABELS: Record<CampaignObjective, string> = {
+  qualificacao: 'qualificações',
+  agendamentos: 'reuniões',
+  propostas: 'propostas',
+  livre: 'conclusões',
+};
+
+/** Label da etapa de sucesso no Kanban (checkbox) por objetivo */
+export const OBJECTIVE_SUCCESS_STAGE_LABELS: Record<CampaignObjective, string> = {
+  qualificacao: 'Etapa de Qualificação',
+  agendamentos: 'Reunião Marcada',
+  propostas: 'Etapa de Proposta',
+  livre: 'Etapa de Sucesso',
+};
+
+/**
+ * Retorna o label da métrica para uma campanha, com fallback seguro para campanhas legadas.
+ * Campanhas criadas antes desta alteração podem não ter `objective` definido — nesse caso,
+ * assume-se "reuniões" para manter compatibilidade.
+ */
+export function getObjectiveMetricLabel(objective: CampaignObjective | null | undefined): string {
+  if (!objective) return 'reuniões'; // fallback legado
+  return OBJECTIVE_METRIC_LABELS[objective] ?? 'reuniões';
+}
+
+export function getObjectiveSuccessStageLabel(objective: CampaignObjective | null | undefined): string {
+  if (!objective) return 'Reunião Marcada'; // fallback legado
+  return OBJECTIVE_SUCCESS_STAGE_LABELS[objective] ?? 'Reunião Marcada';
+}
+
 export const OBJECTIVE_DEFAULT_STAGES: Record<CampaignObjective, string[]> = {
   qualificacao: ['Novo', 'Contatado', 'Interessado', 'Qualificado'],
   agendamentos: ['Novo', 'Contatado', 'Agendamento Marcado'],

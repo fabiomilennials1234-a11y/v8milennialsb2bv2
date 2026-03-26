@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { useCampanha, useCampanhaStages, useCampanhaLeads, useCampanhaMembers, useUpdateCampanhaMember, useDeleteCampanhaLead, useCampanhaPipeAutomations, useExtractLeadToPipe, resolveExtractionTarget, type CampanhaLead } from "@/hooks/useCampanhas";
+import { useCampanha, useCampanhaStages, useCampanhaLeads, useCampanhaMembers, useUpdateCampanhaMember, useDeleteCampanhaLead, useCampanhaPipeAutomations, useExtractLeadToPipe, resolveExtractionTarget, getObjectiveMetricLabel, type CampanhaLead } from "@/hooks/useCampanhas";
 import { useCreatePipeConfirmacao } from "@/hooks/usePipeConfirmacao";
 import { useImportLeads } from "@/hooks/useImportLeads";
 import { useOrganization } from "@/hooks/useOrganization";
@@ -193,6 +193,69 @@ export default function CampanhaDetail() {
     }
   };
 
+  // Handler unificado para quando lead atinge a etapa-meta via drag no Kanban.
+  // Para agendamentos (e legadas), mantém o fluxo de confirmação.
+  // Para qualificação/propostas/livre, extrai para o pipe correto e incrementa counter.
+  const handleSuccessStageAction = async (lead: CampanhaLead) => {
+    if (!campanha) return;
+
+    const obj = campanha.objective;
+    if (!obj || obj === 'agendamentos') {
+      // Fluxo original: cria confirmação + incrementa counter + remove da campanha
+      await handleMoveToConfirmacao(lead);
+      return;
+    }
+
+    // Para qualificação/propostas/livre: extrai para o pipe do objetivo
+    if (!organizationId) {
+      setExtractModalLead(lead); // fallback modal
+      return;
+    }
+
+    const target = resolveExtractionTarget(campanha);
+    if (!target) {
+      // Campanha livre sem destino configurado — abre modal manual, sem incrementar counter
+      setExtractModalLead(lead);
+      return;
+    }
+
+    try {
+      await extractLeadToPipe.mutateAsync({
+        campanha_lead_id: lead.id,
+        campanha_id: campanha.id,
+        lead_id: lead.lead_id,
+        target_pipe: target.pipe,
+        stage: target.stage,
+        organization_id: organizationId,
+        responsible_id: lead.responsible_id ?? lead.sdr_id ?? lead.closer_id ?? undefined,
+        campaign_name: campanha.name,
+      });
+      toast.success("Lead extraído para o pipe com sucesso");
+
+      // Incrementar counter do membro (mesma lógica que handleMoveToConfirmacao)
+      const effectiveResponsible = lead.responsible_id ?? lead.sdr_id ?? lead.closer_id;
+      if (effectiveResponsible) {
+        const member = members.find(m => m.team_member_id === effectiveResponsible);
+        if (member) {
+          const newCount = (member.meetings_count || 0) + 1;
+          const shouldEarnBonus = campanha.individual_goal
+            ? newCount >= campanha.individual_goal
+            : false;
+
+          await updateMember.mutateAsync({
+            campanha_id: campanha.id,
+            team_member_id: effectiveResponsible,
+            meetings_count: newCount,
+            bonus_earned: shouldEarnBonus || member.bonus_earned,
+          });
+        }
+      }
+    } catch (error) {
+      console.error("Error in success stage action:", error);
+      toast.error("Erro ao extrair lead para o pipe");
+    }
+  };
+
   if (loadingCampanha) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -233,7 +296,7 @@ export default function CampanhaDetail() {
               </Badge>
             </div>
             <p className="text-sm text-muted-foreground">
-              Até {format(new Date(campanha.deadline), "dd 'de' MMMM", { locale: ptBR })} • Meta: {campanha.team_goal} reuniões
+              Até {format(new Date(campanha.deadline), "dd 'de' MMMM", { locale: ptBR })} • Meta: {campanha.team_goal} {getObjectiveMetricLabel(campanha.objective)}
             </p>
           </div>
         </div>
@@ -385,7 +448,7 @@ export default function CampanhaDetail() {
             pipeAutomations={pipeAutomations}
             organizationId={organizationId ?? undefined}
             campanhaName={campanha?.name ?? ""}
-            onMoveToConfirmacao={handleMoveToConfirmacao}
+            onMoveToConfirmacao={handleSuccessStageAction}
             onExtractToPipe={handleExtractToPipe}
           />
         </TabsContent>
@@ -430,6 +493,7 @@ export default function CampanhaDetail() {
         onOpenChange={setManageStagesOpen}
         campanhaId={id!}
         stages={stages}
+        objective={campanha.objective}
       />
       <EditCampanhaModal
         open={editModalOpen}

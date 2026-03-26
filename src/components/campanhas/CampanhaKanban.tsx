@@ -595,10 +595,9 @@ export function CampanhaKanban({
     setActiveId(event.active.id as string);
   };
 
-  // Helper to check if a stage is a "reunião marcada" stage
-  const isReuniaoMarcadaStage = (stageName: string): boolean => {
-    const normalized = stageName.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    return normalized.includes("reuniao") || normalized.includes("meeting") || normalized.includes("marcada");
+  // Helper to check if a stage is the success/goal stage
+  const isSuccessStage = (stage: CampanhaStage): boolean => {
+    return stage.is_reuniao_marcada;
   };
 
   // Handle updating notes for a campaign lead
@@ -657,7 +656,7 @@ export function CampanhaKanban({
           toast.success("Lead enviado para o pipe pela automação");
         } else if (automation && !organizationId) {
           toast.warning("Automação configurada mas organização não definida; lead permanece na campanha.");
-        } else if (targetLeadStage && isReuniaoMarcadaStage(targetLeadStage.name)) {
+        } else if (targetLeadStage && isSuccessStage(targetLeadStage)) {
           onMoveToConfirmacao(lead);
         } else {
           toast.success("Lead movido com sucesso");
@@ -694,7 +693,7 @@ export function CampanhaKanban({
         toast.success("Lead enviado para o pipe pela automação");
       } else if (automation && !organizationId) {
         toast.warning("Automação configurada mas organização não definida; lead permanece na campanha.");
-      } else if (isReuniaoMarcadaStage(targetStage.name)) {
+      } else if (isSuccessStage(targetStage)) {
         onMoveToConfirmacao(lead);
       } else {
         toast.success("Lead movido com sucesso");
