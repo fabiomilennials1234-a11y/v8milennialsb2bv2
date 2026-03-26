@@ -284,29 +284,51 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
         }
 
         case "split_ab": {
-          const splitPercentA = Number(node.data.splitPercentA) || 50;
-          const isA = Math.random() * 100 < splitPercentA;
+          // Support both new variants[] format and legacy splitPercentA format
+          let variants: { id: string; label: string; percentage: number }[];
 
+          if (Array.isArray(node.data.variants) && (node.data.variants as any[]).length > 0) {
+            variants = node.data.variants as { id: string; label: string; percentage: number }[];
+          } else {
+            // Legacy migration: convert splitPercentA to 2-variant format
+            const percentA = Number(node.data.splitPercentA) || 50;
+            variants = [
+              { id: "a", label: (node.data.variantALabel as string) || "A", percentage: percentA },
+              { id: "b", label: (node.data.variantBLabel as string) || "B", percentage: 100 - percentA },
+            ];
+          }
+
+          // Weighted random selection
+          const roll = Math.random() * 100;
+          let cumulative = 0;
+          let chosenVariant = variants[0];
+          for (const v of variants) {
+            cumulative += v.percentage;
+            if (roll < cumulative) {
+              chosenVariant = v;
+              break;
+            }
+          }
+
+          // Find the edge matching this variant
           const outEdges = edgeMap.get(nodeId) || [];
           let nextNodeId: string | undefined;
 
-          if (isA) {
-            const aEdge = outEdges.find(e =>
-              e.sourceHandle?.toLowerCase().includes("a") ||
-              e.sourceHandle?.toLowerCase().includes("true")
-            );
-            nextNodeId = aEdge?.target || outEdges[0]?.target;
+          // Try exact match first: variant_{id}
+          const exactEdge = outEdges.find(e => e.sourceHandle === `variant_${chosenVariant.id}`);
+          if (exactEdge) {
+            nextNodeId = exactEdge.target;
           } else {
-            const bEdge = outEdges.find(e =>
-              e.sourceHandle?.toLowerCase().includes("b") ||
-              e.sourceHandle?.toLowerCase().includes("false")
+            // Legacy fallback: sourceHandle contains the variant id (e.g., "a" or "b")
+            const legacyEdge = outEdges.find(e =>
+              e.sourceHandle?.toLowerCase().includes(chosenVariant.id.toLowerCase())
             );
-            nextNodeId = bEdge?.target || outEdges[1]?.target || outEdges[0]?.target;
+            nextNodeId = legacyEdge?.target || outEdges[0]?.target;
           }
 
           await recordStep(supabase, executionId, node, "success",
-            { splitPercentA },
-            { variant: isA ? "A" : "B" },
+            { variants, variantCount: variants.length },
+            { chosenVariant: chosenVariant.label, chosenVariantId: chosenVariant.id, roll: Math.round(roll * 100) / 100 },
           );
 
           if (nextNodeId) nextNodes.push(nextNodeId);
