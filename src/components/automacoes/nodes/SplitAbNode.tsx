@@ -1,6 +1,6 @@
-import { memo, useCallback } from "react";
+import { memo, useCallback, useEffect } from "react";
 import type { NodeProps } from "@xyflow/react";
-import { Handle, Position, useReactFlow } from "@xyflow/react";
+import { Handle, Position, useReactFlow, useUpdateNodeInternals } from "@xyflow/react";
 import { Split, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NODE_COLORS, migrateSplitAbData } from "@/types/workflow";
@@ -20,6 +20,15 @@ function SplitAbNodeComponent({ id, data, selected }: NodeProps) {
   const nodeData = migrateSplitAbData(data as unknown as Record<string, unknown>);
   const colors = NODE_COLORS.split_ab;
   const variants = nodeData.variants;
+
+  // Force React Flow to recalculate handle positions when variants change
+  const updateNodeInternals = useUpdateNodeInternals();
+  const variantKey = variants.map((v) => v.id).join(",");
+  useEffect(() => {
+    // Small delay to ensure DOM has updated before recalculating
+    const timer = setTimeout(() => updateNodeInternals(id), 0);
+    return () => clearTimeout(timer);
+  }, [id, variantKey, updateNodeInternals]);
 
   const { deleteElements } = useReactFlow();
   const handleDelete = useCallback(

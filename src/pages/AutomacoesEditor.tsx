@@ -190,8 +190,24 @@ export default function AutomacoesEditor() {
             : n
         )
       );
+
+      // Clean up orphaned edges when split_ab variants change
+      if ("variants" in dataUpdates && Array.isArray((dataUpdates as any).variants)) {
+        const validHandles = new Set(
+          ((dataUpdates as any).variants as { id: string }[]).map(
+            (v) => `variant_${v.id}`
+          )
+        );
+        setEdges((eds) =>
+          eds.filter((e) => {
+            if (e.source !== nodeId) return true;
+            if (!e.sourceHandle) return true;
+            return validHandles.has(e.sourceHandle);
+          })
+        );
+      }
     },
-    [setNodes]
+    [setNodes, setEdges]
   );
 
   const handleDeleteNode = useCallback(
