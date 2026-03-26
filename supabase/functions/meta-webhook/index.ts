@@ -15,6 +15,7 @@ import {
   getLeadgenData,
 } from "../_shared/meta-api.ts";
 import { logRuntime } from "../_shared/logger.ts";
+import { getCampaignResponsibleAssignment } from "../_shared/campaign-distribution.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -559,13 +560,57 @@ async function processLeadgen(
       }
     }
 
-    // Vincular a campanha
+    // Vincular a campanha com distribuição automática
     if (config.assign_to_campaign_id) {
-      await supabase.from("campanha_leads").insert({
-        campanha_id: config.assign_to_campaign_id,
-        lead_id: newLead.id,
-        stage: "novo",
-      });
+      const campaignId = config.assign_to_campaign_id;
+
+      // Buscar primeiro stage da campanha para usar como stage_id
+      const { data: firstStage } = await supabase
+        .from("campanha_stages")
+        .select("id")
+        .eq("campanha_id", campaignId)
+        .order("position", { ascending: true })
+        .limit(1)
+        .single();
+
+      if (!firstStage) {
+        console.warn(`[meta-webhook] Campaign ${campaignId} has no stages, skipping campaign placement`);
+      } else {
+        // Auto-distribuir SDR via round-robin RPC
+        const sdrId = await getCampaignResponsibleAssignment(supabase, campaignId);
+
+        // Auto-distribuir Closer via RPC
+        let closerId: string | null = null;
+        const { data: nextCloserId } = await supabase.rpc("get_next_campaign_closer", {
+          p_campaign_id: campaignId,
+        });
+        if (nextCloserId) closerId = nextCloserId;
+
+        const responsibleId = closerId || sdrId;
+
+        const insertPayload: Record<string, unknown> = {
+          campanha_id: campaignId,
+          lead_id: newLead.id,
+          stage_id: firstStage.id,
+          sdr_id: sdrId,
+          closer_id: closerId,
+          responsible_id: responsibleId,
+        };
+
+        const { error: clInsertErr } = await supabase.from("campanha_leads").insert(insertPayload);
+        if (clInsertErr) {
+          console.error(`[meta-webhook] campanha_leads insert failed:`, clInsertErr);
+        } else {
+          // Update lead-level assignment
+          if (responsibleId) {
+            const leadAssign: Record<string, unknown> = { responsible_id: responsibleId };
+            if (sdrId) leadAssign.sdr_id = sdrId;
+            if (closerId) leadAssign.closer_id = closerId;
+            await supabase.from("leads").update(leadAssign).eq("id", newLead.id);
+          }
+          console.log(`[meta-webhook] Lead ${newLead.id} placed in campaign ${campaignId}, responsible: ${responsibleId}`);
+        }
+      }
     }
 
     // Inserir no pipe

@@ -70,7 +70,25 @@ Deno.serve(withSentry('webhook-new-lead', async (req) => {
       utm_campaign: rawUtmCampaign,
       utm_term: rawUtmTerm,
       utm_content: rawUtmContent,
+      organization_id: rawOrganizationId,
     } = body;
+
+    // Resolve organization_id: from payload or first active org
+    let organization_id: string | undefined = rawOrganizationId;
+    if (!organization_id) {
+      const { data: defaultOrg } = await supabase
+        .from("organizations")
+        .select("id")
+        .limit(1)
+        .single();
+      organization_id = defaultOrg?.id;
+    }
+    if (!organization_id) {
+      return new Response(
+        JSON.stringify({ error: "organization_id não encontrado" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     // Sanitize inputs
     const name = sanitizeString(rawName, 200) || "";
@@ -264,6 +282,7 @@ Deno.serve(withSentry('webhook-new-lead', async (req) => {
           await supabase
             .from("pipe_confirmacao")
             .insert({
+              organization_id: existingLead.organization_id || organization_id,
               lead_id: existingLead.id,
               status: "reuniao_marcada",
               sdr_id: sdr_id || existingLead.sdr_id || null,
@@ -329,6 +348,7 @@ Deno.serve(withSentry('webhook-new-lead', async (req) => {
     const { data: lead, error: leadError } = await supabase
       .from("leads")
       .insert({
+        organization_id,
         name,
         email,
         phone,
@@ -340,6 +360,7 @@ Deno.serve(withSentry('webhook-new-lead', async (req) => {
         notes,
         rating: rating ? parseInt(String(rating), 10) : 0,
         sdr_id,
+        responsible_id: sdr_id || null,
         compromisso_date: compromisso_date || null,
         utm_source,
         utm_medium,
@@ -363,6 +384,7 @@ Deno.serve(withSentry('webhook-new-lead', async (req) => {
       const { error: pipeConfirmacaoError } = await supabase
         .from("pipe_confirmacao")
         .insert({
+          organization_id,
           lead_id: lead.id,
           status: "reuniao_marcada",
           sdr_id: sdr_id || null,
@@ -408,6 +430,7 @@ Deno.serve(withSentry('webhook-new-lead', async (req) => {
     const { error: pipeError } = await supabase
       .from("pipe_whatsapp")
       .insert({
+        organization_id,
         lead_id: lead.id,
         status: "novo",
         sdr_id,

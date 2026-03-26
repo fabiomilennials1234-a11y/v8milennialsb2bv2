@@ -550,7 +550,8 @@ serve(withSentry('lead-webhook', async (req) => {
             if (!sdrId) {
               console.warn("[lead-webhook] No SDR assigned for campaign (distribution returned null). Check lead_distribution_mode and campanha_members:", campaign_id);
             }
-            const insertPayload: { campanha_id: string; lead_id: string; stage_id: string; notes?: string; sdr_id?: string; closer_id?: string } = {
+            const responsibleId = closerId || sdrId;
+            const insertPayload: Record<string, unknown> = {
               campanha_id: campaign_id,
               lead_id: leadId,
               stage_id,
@@ -558,6 +559,7 @@ serve(withSentry('lead-webhook', async (req) => {
             if (notes !== undefined) insertPayload.notes = notes;
             if (sdrId) insertPayload.sdr_id = sdrId;
             if (closerId) insertPayload.closer_id = closerId;
+            if (responsibleId) insertPayload.responsible_id = responsibleId;
             const { error: insertErr } = await supabase
               .from("campanha_leads")
               .insert(insertPayload);
@@ -570,8 +572,6 @@ serve(withSentry('lead-webhook', async (req) => {
               const leadUpdate: Record<string, unknown> = {};
               if (sdrId) leadUpdate.sdr_id = sdrId;
               if (closerId) leadUpdate.closer_id = closerId;
-              // Set responsible_id to closer (if assigned) or sdr
-              const responsibleId = closerId || sdrId;
               if (responsibleId) leadUpdate.responsible_id = responsibleId;
               if (Object.keys(leadUpdate).length > 0) {
                 const { error: leadUpdateErr } = await supabase
