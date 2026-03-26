@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -80,12 +80,12 @@ function DroppableColumn<T extends DraggableItem>({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
       className={cn(
-        "kanban-column min-w-[320px] max-w-[360px] flex-shrink-0 transition-all duration-200",
+        "kanban-column min-w-[320px] max-w-[360px] flex-shrink-0 flex flex-col transition-all duration-200",
         isOver && "ring-2 ring-primary/50 bg-primary/5",
         className
       )}
     >
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-4 shrink-0">
         <div className="flex items-center gap-2">
           <div
             className="w-3 h-3 rounded-full"
@@ -131,7 +131,7 @@ function DroppableColumn<T extends DraggableItem>({
 
       {renderColumnFooter && renderColumnFooter(column)}
 
-      <div className="space-y-3 min-h-[100px]">{children}</div>
+      <div className="space-y-3 min-h-[100px] overflow-y-auto flex-1 min-h-0">{children}</div>
     </motion.div>
   );
 }
@@ -193,6 +193,36 @@ export function DraggableKanbanBoard<T extends DraggableItem>({
   disabled,
 }: DraggableKanbanBoardProps<T>) {
   const [activeItem, setActiveItem] = useState<T | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const topScrollRef = useRef<HTMLDivElement>(null);
+  const [scrollWidth, setScrollWidth] = useState(0);
+  const syncing = useRef(false);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(() => setScrollWidth(el.scrollWidth));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [columns]);
+
+  const handleTopScroll = useCallback(() => {
+    if (syncing.current) return;
+    syncing.current = true;
+    if (scrollRef.current && topScrollRef.current) {
+      scrollRef.current.scrollLeft = topScrollRef.current.scrollLeft;
+    }
+    syncing.current = false;
+  }, []);
+
+  const handleMainScroll = useCallback(() => {
+    if (syncing.current) return;
+    syncing.current = true;
+    if (topScrollRef.current && scrollRef.current) {
+      topScrollRef.current.scrollLeft = scrollRef.current.scrollLeft;
+    }
+    syncing.current = false;
+  }, []);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -272,7 +302,22 @@ export function DraggableKanbanBoard<T extends DraggableItem>({
       onDragEnd={handleDragEnd}
       onDragOver={handleDragOver}
     >
-      <div className="flex gap-4 overflow-x-auto pb-4">
+      {/* Top scrollbar */}
+      <div
+        ref={topScrollRef}
+        onScroll={handleTopScroll}
+        className="overflow-x-auto overflow-y-hidden"
+        style={{ height: 12 }}
+      >
+        <div style={{ width: scrollWidth, height: 1 }} />
+      </div>
+
+      {/* Kanban columns */}
+      <div
+        ref={scrollRef}
+        onScroll={handleMainScroll}
+        className="flex gap-4 overflow-x-auto overflow-y-hidden pb-4 max-h-[calc(100vh-220px)] scrollbar-hide"
+      >
         {columns.map((column) => (
           <DroppableColumn
             key={column.id}

@@ -19,7 +19,8 @@ export function PermissionProtectedRoute({
   const { isAdmin, isLoading: adminLoading } = useIsAdmin();
   const { isMaster, isLoading: masterLoading } = useMasterAuth();
 
-  if (isLoading || adminLoading || masterLoading) {
+  // Esperar apenas admin/master resolver (rápido — vem do cache do ProtectedRoute)
+  if (adminLoading || masterLoading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -27,7 +28,21 @@ export function PermissionProtectedRoute({
     );
   }
 
-  if (isMaster || isAdmin || allowed) {
+  // Admin/master: liberar imediatamente sem esperar edge function de permissions
+  if (isMaster || isAdmin) {
+    return <>{children}</>;
+  }
+
+  // Usuário regular: esperar feature permissions (edge function)
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (allowed) {
     return <>{children}</>;
   }
 

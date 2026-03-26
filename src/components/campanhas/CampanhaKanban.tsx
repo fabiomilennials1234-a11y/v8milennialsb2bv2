@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { usePersistedState } from "@/hooks/usePersistedState";
 import {
   DndContext,
@@ -467,7 +467,7 @@ function KanbanColumn({
         </Badge>
       </div>
 
-      <div className="p-2 space-y-2 flex-1 overflow-y-auto max-h-[calc(100vh-400px)]">
+      <div className="p-2 space-y-2 flex-1 overflow-y-auto min-h-0">
         <SortableContext
           items={leads.map((l) => l.id)}
           strategy={verticalListSortingStrategy}
@@ -548,6 +548,37 @@ export function CampanhaKanban({
   const extractToPipe = useExtractLeadToPipe();
   const { data: teamMembers = [] } = useTeamMembers();
 
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const topScrollRef = useRef<HTMLDivElement>(null);
+  const [scrollWidth, setScrollWidth] = useState(0);
+  const syncingScroll = useRef(false);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(() => setScrollWidth(el.scrollWidth));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [stages, leads]);
+
+  const handleTopScroll = useCallback(() => {
+    if (syncingScroll.current) return;
+    syncingScroll.current = true;
+    if (scrollRef.current && topScrollRef.current) {
+      scrollRef.current.scrollLeft = topScrollRef.current.scrollLeft;
+    }
+    syncingScroll.current = false;
+  }, []);
+
+  const handleMainScroll = useCallback(() => {
+    if (syncingScroll.current) return;
+    syncingScroll.current = true;
+    if (topScrollRef.current && scrollRef.current) {
+      topScrollRef.current.scrollLeft = scrollRef.current.scrollLeft;
+    }
+    syncingScroll.current = false;
+  }, []);
+
   // Get unique responsible members from campaign leads
   const responsibles = useMemo(() => {
     const map = new Map<string, { id: string; name: string }>();
@@ -595,10 +626,9 @@ export function CampanhaKanban({
     setActiveId(event.active.id as string);
   };
 
-  // Helper to check if a stage is a "reunião marcada" stage
-  const isReuniaoMarcadaStage = (stageName: string): boolean => {
-    const normalized = stageName.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    return normalized.includes("reuniao") || normalized.includes("meeting") || normalized.includes("marcada");
+  // Helper to check if a stage is the success/goal stage
+  const isSuccessStage = (stage: CampanhaStage): boolean => {
+    return stage.is_reuniao_marcada;
   };
 
   // Handle updating notes for a campaign lead
@@ -657,7 +687,7 @@ export function CampanhaKanban({
           toast.success("Lead enviado para o pipe pela automação");
         } else if (automation && !organizationId) {
           toast.warning("Automação configurada mas organização não definida; lead permanece na campanha.");
-        } else if (targetLeadStage && isReuniaoMarcadaStage(targetLeadStage.name)) {
+        } else if (targetLeadStage && isSuccessStage(targetLeadStage)) {
           onMoveToConfirmacao(lead);
         } else {
           toast.success("Lead movido com sucesso");
@@ -694,7 +724,7 @@ export function CampanhaKanban({
         toast.success("Lead enviado para o pipe pela automação");
       } else if (automation && !organizationId) {
         toast.warning("Automação configurada mas organização não definida; lead permanece na campanha.");
-      } else if (isReuniaoMarcadaStage(targetStage.name)) {
+      } else if (isSuccessStage(targetStage)) {
         onMoveToConfirmacao(lead);
       } else {
         toast.success("Lead movido com sucesso");
@@ -795,7 +825,21 @@ export function CampanhaKanban({
         onDragEnd={handleDragEnd}
         onDragOver={handleDragOver}
       >
-        <div className="flex gap-4 overflow-x-auto pb-4">
+        {/* Top scrollbar */}
+        <div
+          ref={topScrollRef}
+          onScroll={handleTopScroll}
+          className="overflow-x-auto overflow-y-hidden"
+          style={{ height: 12 }}
+        >
+          <div style={{ width: scrollWidth, height: 1 }} />
+        </div>
+
+        <div
+          ref={scrollRef}
+          onScroll={handleMainScroll}
+          className="flex gap-4 overflow-x-auto overflow-y-hidden pb-4 max-h-[calc(100vh-220px)] scrollbar-hide"
+        >
           {stages.map((stage) => (
             <KanbanColumn
               key={stage.id}

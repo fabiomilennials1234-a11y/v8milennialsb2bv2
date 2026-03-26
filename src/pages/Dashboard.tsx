@@ -118,7 +118,7 @@ export default function Dashboard() {
     color: step.color.replace("hsl(var(--", "bg-").replace("))", ""),
   })) || [];
 
-  const isLoading = metricsLoading || totalMetricsLoading || funnelLoading || rankingLoading || goalsLoading;
+  const isLoading = orgLoading || metricsLoading || totalMetricsLoading || funnelLoading || rankingLoading || goalsLoading;
 
   if (isLoading) {
     return (

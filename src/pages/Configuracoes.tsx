@@ -54,11 +54,8 @@ import { useTags, useCreateTag, useUpdateTag, useDeleteTag, Tag as TagType } fro
 import { useIsAdmin } from "@/hooks/useUserRole";
 import { useOrganizationSettings } from "@/hooks/useOrganizationSettings";
 import { WhatsAppSettings } from "@/components/settings/WhatsAppSettings";
-import { GoogleCalendarSettings } from "@/components/settings/GoogleCalendarSettings";
-import { MetaSettings } from "@/components/settings/MetaSettings";
-import { TinyErpSettings } from "@/components/settings/TinyErpSettings";
-import { ElevenLabsSettings } from "@/components/settings/ElevenLabsSettings";
 import { WebhookSettings } from "@/components/settings/WebhookSettings";
+import IntegrationsCatalog from "@/components/settings/IntegrationsCatalog";
 import { HelpCenter } from "@/components/settings/help/HelpCenter";
 import { MilestonesConfig } from "@/components/settings/MilestonesConfig";
 import { useOrganization } from "@/hooks/useOrganization";
@@ -550,17 +547,7 @@ export default function Configuracoes() {
           </TabsContent>
 
           <TabsContent value="integracoes">
-            <Card className="glass-card">
-              <CardContent className="pt-6 space-y-8">
-                <MetaSettings />
-                <div className="border-t" />
-                <GoogleCalendarSettings />
-                <div className="border-t" />
-                <TinyErpSettings />
-                <div className="border-t" />
-                <ElevenLabsSettings />
-              </CardContent>
-            </Card>
+            <IntegrationsCatalog />
           </TabsContent>
 
           <TabsContent value="webhooks">

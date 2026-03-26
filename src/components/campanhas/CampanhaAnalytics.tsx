@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { Campanha, CampanhaStage, CampanhaLead, CampanhaMember } from "@/hooks/useCampanhas";
+import { Campanha, CampanhaStage, CampanhaLead, CampanhaMember, getObjectiveMetricLabel } from "@/hooks/useCampanhas";
 import { format, differenceInDays, isPast } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Target, Users, Trophy, Calendar, TrendingUp, DollarSign, Award, Flame, Zap, Crown, Star, Sparkles } from "lucide-react";
@@ -109,22 +109,22 @@ function ProgressRing({ progress, size = 80, strokeWidth = 8, showLabel = true }
 }
 
 // Individual member card with gamification
-function MemberGoalCard({ 
-  member, 
-  reunioes, 
-  meta, 
+function MemberGoalCard({
+  member,
+  count,
+  meta,
   rank,
-  bonusValue 
-}: { 
-  member: CampanhaMember; 
-  reunioes: number; 
-  meta: number; 
+  bonusValue
+}: {
+  member: CampanhaMember;
+  count: number;
+  meta: number;
   rank: number;
   bonusValue: number;
 }) {
-  const progress = meta > 0 ? (reunioes / meta) * 100 : 0;
+  const progress = meta > 0 ? (count / meta) * 100 : 0;
   const isComplete = progress >= 100;
-  const remaining = Math.max(0, meta - reunioes);
+  const remaining = Math.max(0, meta - count);
 
   const getRankIcon = () => {
     if (rank === 1) return <Crown className="w-5 h-5 text-yellow-400" />;
@@ -193,7 +193,7 @@ function MemberGoalCard({
               </div>
             </div>
             <span className="text-sm font-medium tabular-nums">
-              {reunioes}/{meta}
+              {count}/{meta}
             </span>
           </div>
 
@@ -374,11 +374,14 @@ export function CampanhaAnalytics({
   const deadline = new Date(campanha.deadline);
   const daysRemaining = differenceInDays(deadline, new Date());
   const isExpired = isPast(deadline);
+  const metricLabel = getObjectiveMetricLabel(campanha.objective);
 
-  // Find the "reuniao_marcada" stage
-  const reuniaoStage = stages.find((s) => s.is_reuniao_marcada);
-  const meetingsCount = leads.filter((l) => l.stage_id === reuniaoStage?.id).length;
-  const teamProgress = campanha.team_goal > 0 ? (meetingsCount / campanha.team_goal) * 100 : 0;
+  // Find the success stage (is_reuniao_marcada is the generic "goal stage" flag)
+  const successStage = stages.find((s) => s.is_reuniao_marcada);
+  const successCount = successStage
+    ? leads.filter((l) => l.stage_id === successStage.id).length
+    : 0;
+  const teamProgress = campanha.team_goal > 0 ? (successCount / campanha.team_goal) * 100 : 0;
 
   // Count leads per stage for pie chart
   const stageData = stages.map((stage) => ({
@@ -387,21 +390,25 @@ export function CampanhaAnalytics({
     color: stage.color || "#3B82F6",
   }));
 
-  // Count meetings per member for ranking
+  // Count successes per member for ranking
   const memberData = members
     .map((member) => {
-      const memberMeetings = leads.filter(
-        (l) => (l.responsible_id === member.team_member_id || l.sdr_id === member.team_member_id) && l.stage_id === reuniaoStage?.id
-      ).length;
+      const memberSuccessCount = successStage
+        ? leads.filter(
+            (l) => (l.responsible_id === member.team_member_id || l.sdr_id === member.team_member_id || l.closer_id === member.team_member_id) && l.stage_id === successStage.id
+          ).length
+        : 0;
 
       return {
         member,
-        reunioes: memberMeetings,
+        count: memberSuccessCount,
         meta: campanha.individual_goal || 0,
-        atingiu: memberMeetings >= (campanha.individual_goal || 0),
+        atingiu: campanha.individual_goal
+          ? memberSuccessCount >= campanha.individual_goal
+          : false,
       };
     })
-    .sort((a, b) => b.reunioes - a.reunioes);
+    .sort((a, b) => b.count - a.count);
 
   // Calculate total bonus to be paid
   const bonusEarnedCount = memberData.filter((m) => m.atingiu).length;
@@ -410,9 +417,9 @@ export function CampanhaAnalytics({
   return (
     <div className="space-y-6">
       {/* Team Goal Thermometer */}
-      <TeamThermometer 
-        current={meetingsCount} 
-        goal={campanha.team_goal} 
+      <TeamThermometer
+        current={successCount}
+        goal={campanha.team_goal}
         daysRemaining={isExpired ? 0 : daysRemaining}
       />
 
@@ -525,7 +532,7 @@ export function CampanhaAnalytics({
               <MemberGoalCard
                 key={data.member.id}
                 member={data.member}
-                reunioes={data.reunioes}
+                count={data.count}
                 meta={data.meta}
                 rank={index + 1}
                 bonusValue={campanha.bonus_value || 0}
@@ -551,9 +558,9 @@ export function CampanhaAnalytics({
           <CardContent>
             {memberData.length > 0 ? (
               <ResponsiveContainer width="100%" height={250}>
-                <BarChart data={memberData.map(d => ({ 
-                  name: d.member.team_member?.name || "?", 
-                  reunioes: d.reunioes,
+                <BarChart data={memberData.map(d => ({
+                  name: d.member.team_member?.name || "?",
+                  [metricLabel]: d.count,
                   meta: d.meta
                 }))} layout="vertical">
                   <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
@@ -567,7 +574,7 @@ export function CampanhaAnalytics({
                     }}
                   />
                   <Bar
-                    dataKey="reunioes"
+                    dataKey={metricLabel}
                     fill="hsl(var(--primary))"
                     radius={[0, 4, 4, 0]}
                   />
