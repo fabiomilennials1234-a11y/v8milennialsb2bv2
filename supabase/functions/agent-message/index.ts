@@ -200,13 +200,23 @@ async function identifyTenant(
     });
 
     if (result) {
+      // Buscar ai_disabled do lead (não vem do getOrCreateLead)
+      const { data: leadExtra } = await supabase
+        .from('leads')
+        .select('ai_disabled')
+        .eq('id', result.lead.id)
+        .maybeSingle();
+
+      const lead = { ...result.lead, ai_disabled: leadExtra?.ai_disabled ?? false };
+
       console.log('[agent-message] Lead resolved:', {
-        leadId: result.lead.id,
-        leadName: result.lead.name,
+        leadId: lead.id,
+        leadName: lead.name,
         created: result.created,
-        source: result.source
+        source: result.source,
+        ai_disabled: lead.ai_disabled,
       });
-      return { lead: result.lead, organizationId: result.lead.organization_id };
+      return { lead, organizationId: lead.organization_id };
     }
 
     console.error('[agent-message] Failed to get or create lead');

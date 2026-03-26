@@ -28,7 +28,9 @@ export type FeatureKey =
   | "copilot_advanced"
   | "whatsapp_bulk"
   | "api_access"
-  | "white_label";
+  | "white_label"
+  // Integrations
+  | "external_cadastro";
 
 export type LimitKey =
   | "max_leads"
@@ -86,6 +88,7 @@ export const FEATURES: FeatureMeta[] = [
   { key: "whatsapp_bulk", label: "Disparo em Massa", description: "Envio de mensagens em lote", icon: "Send", category: "advanced" },
   { key: "api_access", label: "Acesso API", description: "Acesso à API pública", icon: "Code", category: "advanced" },
   { key: "white_label", label: "White Label", description: "Personalização completa de marca", icon: "Palette", category: "advanced" },
+  { key: "external_cadastro", label: "Cadastro Externo", description: "Cadastro automático de clientes no sistema externo", icon: "UserPlus", category: "advanced" },
 ];
 
 // ─── Limits Catalog ────────────────────────────────────────────

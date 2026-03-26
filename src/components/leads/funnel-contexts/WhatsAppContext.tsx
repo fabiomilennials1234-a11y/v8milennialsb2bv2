@@ -20,7 +20,7 @@ import { useUpdatePipeWhatsapp, type PipeWhatsappStatus } from "@/hooks/usePipeW
 import { usePipelineStages, stagesToColumns } from "@/hooks/usePipelineStages";
 import { useResponsibleMembers } from "@/hooks/useTeamMembers";
 import { useLogLeadAction } from "@/hooks/useLogLeadAction";
-import { openWhatsApp, formatPhoneForWhatsApp } from "@/lib/whatsapp";
+import { useOpenWhatsAppChat, formatPhoneForWhatsApp } from "@/lib/whatsapp";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -34,6 +34,7 @@ export function WhatsAppContext({ lead, pipeData, onSuccess }: WhatsAppContextPr
   const updatePipe = useUpdatePipeWhatsapp();
   const logAction = useLogLeadAction();
   const responsibleMembers = useResponsibleMembers();
+  const openWhatsApp = useOpenWhatsAppChat();
   const { data: stages = [] } = usePipelineStages("whatsapp");
   const [isUpdating, setIsUpdating] = useState(false);
 

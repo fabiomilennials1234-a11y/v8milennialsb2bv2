@@ -9,9 +9,31 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { FunctionsHttpError } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "./useOrganization";
 import { toast } from "sonner";
+
+/**
+ * Extracts the actual error message from a Supabase FunctionsHttpError.
+ * The default message is generic ("Edge Function returned a non-2xx status code"),
+ * but the real error is in the response body.
+ */
+async function extractFunctionError(error: unknown): Promise<Error> {
+  if (error instanceof FunctionsHttpError) {
+    try {
+      const body = await error.context.json();
+      if (body?.error) return new Error(body.error);
+    } catch {
+      // Response body not JSON — try text
+      try {
+        const text = await error.context.text();
+        if (text) return new Error(text);
+      } catch {}
+    }
+  }
+  return error instanceof Error ? error : new Error(String(error));
+}
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -90,7 +112,7 @@ export function useConnectTinyErp() {
         body: { api_token: apiToken },
       });
 
-      if (error) throw error;
+      if (error) throw await extractFunctionError(error);
       if (data?.error) throw new Error(data.error);
       return data;
     },
@@ -113,7 +135,7 @@ export function useDisconnectTinyErp() {
     mutationFn: async () => {
       const { data, error } = await supabase.functions.invoke("tinyerp-disconnect", {});
 
-      if (error) throw error;
+      if (error) throw await extractFunctionError(error);
       if (data?.error) throw new Error(data.error);
       return data;
     },
@@ -137,7 +159,7 @@ export function useTinyErpSyncProducts() {
     mutationFn: async () => {
       const { data, error } = await supabase.functions.invoke("tinyerp-sync-products", {});
 
-      if (error) throw error;
+      if (error) throw await extractFunctionError(error);
       if (data?.error) throw new Error(data.error);
       return data;
     },
@@ -166,7 +188,7 @@ export function useTinyErpPushOrder() {
         body: { pipe_proposta_id: pipePropostaId },
       });
 
-      if (error) throw error;
+      if (error) throw await extractFunctionError(error);
       if (data?.error) throw new Error(data.error);
       return data;
     },
@@ -269,7 +291,7 @@ export function useTinyErpFetchNfe() {
         },
       });
 
-      if (error) throw error;
+      if (error) throw await extractFunctionError(error);
       if (data?.error) throw new Error(data.error);
       return data;
     },

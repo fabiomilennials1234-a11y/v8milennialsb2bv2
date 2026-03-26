@@ -8,6 +8,7 @@
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { sendWhatsAppAudio } from "./audio-sender.ts";
+import { getTimeBasedVariables } from "./time-variables.ts";
 
 export interface ActionResult {
   success: boolean;
@@ -30,8 +31,20 @@ async function resolveVariables(
   supabase: SupabaseClient,
   leadId: string,
   template: string,
+  executionContext?: Record<string, unknown>,
 ): Promise<string> {
   if (!template || !template.includes("{{")) return template;
+
+  // First pass: resolve execution context variables (e.g., {{ai_message}} from previous nodes)
+  if (executionContext) {
+    for (const [key, val] of Object.entries(executionContext)) {
+      if (val !== null && val !== undefined && typeof val !== "object") {
+        template = template.replaceAll(`{{${key}}}`, String(val));
+      }
+    }
+    // If all variables resolved, return early
+    if (!template.includes("{{")) return template;
+  }
 
   const { data: lead } = await supabase
     .from("leads")
@@ -63,25 +76,12 @@ async function resolveVariables(
     origem:     lead.origin || "",
   };
 
-  // Sistema: saudacao, data_hoje, hora_atual
-  if (template.includes("{{saudacao}}")) {
-    const h = parseInt(
-      new Intl.DateTimeFormat("pt-BR", {
-        hour: "numeric",
-        hour12: false,
-        timeZone: "America/Sao_Paulo",
-      }).format(new Date()),
-    );
-    vars.saudacao = h >= 5 && h < 12 ? "Bom dia" : h >= 12 && h < 18 ? "Boa tarde" : "Boa noite";
-  }
-  if (template.includes("{{data_hoje}}")) {
-    vars.data_hoje = new Date().toLocaleDateString("pt-BR");
-  }
-  if (template.includes("{{hora_atual}}")) {
-    vars.hora_atual = new Date().toLocaleTimeString("pt-BR", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+  // Sistema: saudacao, data_hoje, hora_atual — resolved at send time with correct timezone
+  if (template.includes("{{saudacao}}") || template.includes("{{data_hoje}}") || template.includes("{{hora_atual}}")) {
+    const timeVars = getTimeBasedVariables();
+    vars.saudacao = timeVars.saudacao;
+    vars.data_hoje = timeVars.data;
+    vars.hora_atual = timeVars.hora;
   }
 
   // SDR name (legado)
@@ -416,6 +416,14 @@ export async function executeWorkflowAction(ctx: ActionContext): Promise<ActionR
       break;
     case "summarize_conversation":
       result = await handleInvokeEdgeFunction(ctx, "summarize-conversation");
+      // Store AI summary variables in execution context for downstream nodes
+      if (result.success && result.data) {
+        const d = result.data as Record<string, unknown>;
+        if (d.summary) ctx.executionContext.ai_resumo = d.summary;
+        if (d.sentiment) ctx.executionContext.ai_sentimento = d.sentiment;
+        if (d.lead_temperature) ctx.executionContext.ai_temperatura = d.lead_temperature;
+        if (d.next_action) ctx.executionContext.ai_proxima_acao = d.next_action;
+      }
       break;
     case "evaluate_conversation":
       result = await handleInvokeEdgeFunction(ctx, "evaluate-agent-conversation");
@@ -452,7 +460,7 @@ async function handleSendWhatsApp(ctx: ActionContext): Promise<ActionResult> {
   if (!phone) return { success: false, error: "Lead has no phone" };
 
   const template = ctx.nodeData.messageTemplate as string || "";
-  const message = await resolveVariables(ctx.supabase, ctx.leadId, template);
+  const message = await resolveVariables(ctx.supabase, ctx.leadId, template, ctx.executionContext);
   if (!message) return { success: false, error: "Empty message template" };
 
   const res = await fetch(`${wa.evolutionUrl}/message/sendText/${wa.instanceName}`, {
@@ -525,7 +533,7 @@ async function handleSendWhatsAppImage(ctx: ActionContext): Promise<ActionResult
   if (!imageUrl) return { success: false, error: "No image URL configured" };
 
   const caption = ctx.nodeData.imageCaption as string || "";
-  const resolvedCaption = await resolveVariables(ctx.supabase, ctx.leadId, caption);
+  const resolvedCaption = await resolveVariables(ctx.supabase, ctx.leadId, caption, ctx.executionContext);
 
   const res = await fetch(`${wa.evolutionUrl}/message/sendMedia/${wa.instanceName}`, {
     method: "POST",
@@ -556,7 +564,7 @@ async function handleSendWhatsAppTemplate(ctx: ActionContext): Promise<ActionRes
 
   if (!tpl) return { success: false, error: "Template not found" };
 
-  const message = await resolveVariables(ctx.supabase, ctx.leadId, tpl.content || "");
+  const message = await resolveVariables(ctx.supabase, ctx.leadId, tpl.content || "", ctx.executionContext);
 
   const res = await fetch(`${wa.evolutionUrl}/message/sendText/${wa.instanceName}`, {
     method: "POST",
@@ -571,7 +579,7 @@ async function handleSendWhatsAppTemplate(ctx: ActionContext): Promise<ActionRes
 async function handleSendMetaMessage(ctx: ActionContext): Promise<ActionResult> {
   const channel = ctx.nodeData.metaChannel as string || "instagram";
   const message = ctx.nodeData.metaMessage as string || "";
-  const resolved = await resolveVariables(ctx.supabase, ctx.leadId, message);
+  const resolved = await resolveVariables(ctx.supabase, ctx.leadId, message, ctx.executionContext);
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
@@ -593,7 +601,7 @@ async function handleSendMetaMessage(ctx: ActionContext): Promise<ActionResult> 
 
 async function handleSendSemiAutomatic(ctx: ActionContext): Promise<ActionResult> {
   const message = ctx.nodeData.semiAutoMessage as string || "";
-  const resolved = await resolveVariables(ctx.supabase, ctx.leadId, message);
+  const resolved = await resolveVariables(ctx.supabase, ctx.leadId, message, ctx.executionContext);
 
   const { error } = await ctx.supabase.from("scheduled_pipe_messages").insert({
     lead_id: ctx.leadId,
@@ -933,7 +941,7 @@ async function handleSendCampaignMessage(ctx: ActionContext): Promise<ActionResu
 
   if (!template) return { success: false, error: "Template not found" };
 
-  const message = await resolveVariables(ctx.supabase, ctx.leadId, template.content || "");
+  const message = await resolveVariables(ctx.supabase, ctx.leadId, template.content || "", ctx.executionContext);
 
   const wa = await getWhatsAppInstance(ctx.supabase, ctx.organizationId, ctx.nodeData.whatsappInstanceId as string);
   if (!wa) return { success: false, error: "WhatsApp instance not available" };
@@ -1078,31 +1086,50 @@ async function handleTinyErpOrder(ctx: ActionContext, functionName: string): Pro
 async function handleAssign(ctx: ActionContext, role: "sdr" | "closer"): Promise<ActionResult> {
   let assigneeId = ctx.nodeData.assigneeId as string;
   const assignMode = ctx.nodeData.assignMode as string || "specific";
-  // Mapeia o tipo de atribuição para a coluna de dados correta (sdr_id ou closer_id)
   const field = role === "sdr" ? "sdr_id" : "closer_id";
 
   if (assignMode === "round_robin") {
-    // Get all active team members with matching metric_type and pick next via round robin
-    const targetMetric = role === "sdr" ? "meetings" : "sales";
-    const { data: members } = await ctx.supabase
-      .from("team_members")
-      .select("id")
-      .eq("organization_id", ctx.organizationId)
-      .eq("is_active", true)
-      .eq("metric_type", targetMetric);
+    // Check if workflow node has campaign context
+    const campaignId = ctx.nodeData.campaignId as string | undefined;
+    // Check if workflow node has pipe context
+    const pipeType = ctx.nodeData.pipeType as string | undefined;
 
-    if (members && members.length > 0) {
-      const counts = await Promise.all(
-        members.map(async (m: { id: string }) => {
-          const { count } = await ctx.supabase
-            .from("leads")
-            .select("*", { count: "exact", head: true })
-            .eq("responsible_id", m.id);
-          return { id: m.id, count: count ?? 0 };
-        }),
-      );
-      counts.sort((a, b) => a.count - b.count);
-      assigneeId = counts[0].id;
+    if (campaignId) {
+      // Campaign-scoped distribution via atomic RPC
+      const rpcName = role === "closer" ? "get_next_campaign_closer" : "get_next_campaign_sdr";
+      const { data: nextId } = await ctx.supabase.rpc(rpcName, { p_campaign_id: campaignId });
+      if (nextId) assigneeId = nextId;
+    } else if (pipeType) {
+      // Pipe-scoped distribution via atomic RPC
+      const { data: nextId } = await ctx.supabase.rpc("get_next_pipe_sdr", {
+        p_pipe_type: pipeType,
+        p_organization_id: ctx.organizationId,
+      });
+      if (nextId) assigneeId = nextId;
+    } else {
+      // Fallback: org-scoped least-loaded (adds organization_id filter)
+      const targetMetric = role === "sdr" ? "meetings" : "sales";
+      const { data: members } = await ctx.supabase
+        .from("team_members")
+        .select("id")
+        .eq("organization_id", ctx.organizationId)
+        .eq("is_active", true)
+        .eq("metric_type", targetMetric);
+
+      if (members && members.length > 0) {
+        const counts = await Promise.all(
+          members.map(async (m: { id: string }) => {
+            const { count } = await ctx.supabase
+              .from("leads")
+              .select("*", { count: "exact", head: true })
+              .eq("responsible_id", m.id)
+              .eq("organization_id", ctx.organizationId);
+            return { id: m.id, count: count ?? 0 };
+          }),
+        );
+        counts.sort((a, b) => a.count - b.count);
+        assigneeId = counts[0].id;
+      }
     }
   }
 
@@ -1172,21 +1199,69 @@ async function handleCreateFollowup(ctx: ActionContext): Promise<ActionResult> {
 // ─── AI Handlers ────────────────────────────────────────────────────────────
 
 async function handleGenerateAiMessage(ctx: ActionContext): Promise<ActionResult> {
-  const { error } = await ctx.supabase.from("pending_ai_actions").insert({
-    organization_id: ctx.organizationId,
-    lead_id: ctx.leadId,
-    action_type: "generate_message",
-    payload: {
-      source: "workflow",
-      agent_id: ctx.nodeData.aiAgentId || null,
-      prompt: ctx.nodeData.aiPrompt || null,
-      output_variable: ctx.nodeData.aiOutputVariable || null,
-    },
-    status: "pending",
-  });
+  const openRouterApiKey = Deno.env.get("OPENROUTER_API_KEY");
+  if (!openRouterApiKey) {
+    return { success: false, error: "OPENROUTER_API_KEY não configurada" };
+  }
 
-  if (error) return { success: false, error: error.message };
-  return { success: true, message: "AI message generation queued" };
+  const rawPrompt = (ctx.nodeData.aiPrompt as string) || "";
+  if (!rawPrompt) {
+    return { success: false, error: "Prompt de IA não configurado no nó" };
+  }
+
+  // Resolve variables in the prompt (e.g., {{nome}}, {{empresa}})
+  const prompt = await resolveVariables(ctx.supabase, ctx.leadId, rawPrompt);
+
+  try {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${openRouterApiKey}`,
+        "HTTP-Referer": Deno.env.get("OPENROUTER_REFERER_URL") || "https://v8millennials.com",
+        "X-Title": "V8 Millennials CRM - Workflow AI Message",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.0-flash-001",
+        messages: [
+          {
+            role: "system",
+            content:
+              "Você é um assistente de vendas B2B. Gere uma mensagem curta, natural e adequada para WhatsApp. " +
+              "Não use saudações formais como 'Prezado' ou 'Caro'. Seja direto e conversacional. " +
+              "Responda APENAS com o texto da mensagem, sem explicações.",
+          },
+          { role: "user", content: prompt },
+        ],
+        temperature: 0.7,
+        max_tokens: 500,
+      }),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      return { success: false, error: `OpenRouter API error: ${response.status} ${errText}` };
+    }
+
+    const data = await response.json();
+    const generatedMessage = data.choices?.[0]?.message?.content?.trim() || "";
+
+    if (!generatedMessage) {
+      return { success: false, error: "IA retornou mensagem vazia" };
+    }
+
+    // Store in execution context so next nodes can use {{ai_message}}
+    const outputVar = (ctx.nodeData.aiOutputVariable as string) || "ai_message";
+    ctx.executionContext[outputVar] = generatedMessage;
+
+    return {
+      success: true,
+      message: `Mensagem gerada com sucesso (${generatedMessage.length} chars)`,
+      data: { [outputVar]: generatedMessage },
+    };
+  } catch (err) {
+    return { success: false, error: `Erro ao gerar mensagem: ${err instanceof Error ? err.message : String(err)}` };
+  }
 }
 
 async function handleInvokeEdgeFunction(ctx: ActionContext, functionName: string): Promise<ActionResult> {

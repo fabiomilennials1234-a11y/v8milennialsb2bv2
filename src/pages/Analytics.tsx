@@ -6,9 +6,13 @@ import { FinanceiroTab } from "@/components/analytics/tabs/FinanceiroTab";
 import { ComercialTab } from "@/components/analytics/tabs/ComercialTab";
 import { PipesFunisTab } from "@/components/analytics/tabs/PipesFunisTab";
 import { EngajamentoTab } from "@/components/analytics/tabs/EngajamentoTab";
+import { UtmsTab } from "@/components/analytics/tabs/UtmsTab";
+import { useOrganization } from "@/hooks/useOrganization";
 
 export default function Analytics() {
   const [activeTab, setActiveTab] = useState("overview");
+  const { organizationId } = useOrganization();
+  const showUtmsTab = organizationId === "6030520a-2ca7-477d-be89-55758e2cd808";
 
   return (
     <div className="space-y-4">
@@ -33,6 +37,9 @@ export default function Analytics() {
           <TabsTrigger value="engajamento">
             Engajamento
           </TabsTrigger>
+          {showUtmsTab && (
+            <TabsTrigger value="utms">UTMs</TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4">
@@ -54,6 +61,11 @@ export default function Analytics() {
         <TabsContent value="engajamento" className="space-y-4">
           <EngajamentoTab />
         </TabsContent>
+        {showUtmsTab && (
+          <TabsContent value="utms" className="space-y-4">
+            <UtmsTab />
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );

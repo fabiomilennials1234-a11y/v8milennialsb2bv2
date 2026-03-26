@@ -59,6 +59,8 @@ export function AddLeadToCampanhaModal({
 
     try {
       let responsibleId: string | undefined = selectedResponsibleId && selectedResponsibleId !== AUTO_DISTRIBUTE_VALUE ? selectedResponsibleId : undefined;
+      let closerId: string | undefined = undefined;
+
       if (selectedResponsibleId === AUTO_DISTRIBUTE_VALUE) {
         const { data: nextSdrId, error: rpcError } = await supabase.rpc("get_next_campaign_sdr", {
           p_campaign_id: campanhaId,
@@ -69,6 +71,14 @@ export function AddLeadToCampanhaModal({
           return;
         }
         responsibleId = nextSdrId ?? undefined;
+
+        // Also auto-distribute closer
+        const { data: nextCloserId } = await supabase.rpc("get_next_campaign_closer", {
+          p_campaign_id: campanhaId,
+        });
+        if (nextCloserId) {
+          closerId = nextCloserId;
+        }
       }
 
       await addLead.mutateAsync({
@@ -76,6 +86,8 @@ export function AddLeadToCampanhaModal({
         lead_id: selectedLeadId,
         stage_id: selectedStageId,
         responsible_id: responsibleId,
+        sdr_id: responsibleId,
+        closer_id: closerId,
       });
 
       toast.success("Lead adicionado à campanha!");

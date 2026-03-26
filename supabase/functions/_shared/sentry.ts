@@ -5,6 +5,8 @@
  * does not support Deno.
  */
 
+import { getCorsHeaders } from "./cors.ts";
+
 interface SentryContext {
   functionName?: string;
   organizationId?: string;
@@ -124,6 +126,9 @@ export function withSentry(
         // Ignore JWT parse errors
       }
 
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`[withSentry][${functionName}] Unhandled error:`, errorMessage);
+
       await captureError(error, {
         functionName,
         organizationId,
@@ -134,13 +139,15 @@ export function withSentry(
         },
       });
 
+      const corsHeaders = getCorsHeaders(req.headers.get("origin"));
+
       return new Response(
         JSON.stringify({
-          error: "Ocorreu um erro interno. Tente novamente mais tarde.",
+          error: errorMessage || "Ocorreu um erro interno. Tente novamente mais tarde.",
         }),
         {
           status: 500,
-          headers: { "Content-Type": "application/json" },
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         },
       );
     }

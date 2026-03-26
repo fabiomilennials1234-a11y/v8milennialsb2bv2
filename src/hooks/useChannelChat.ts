@@ -7,6 +7,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember, isVirtualTeamMember } from "@/hooks/useTeamMembers";
+import { formatPhoneForWhatsApp } from "@/lib/whatsapp";
 import type { ChannelType } from "@/components/chat/ChannelBadge";
 
 // ---------------------------------------------------------------------------
@@ -365,7 +366,8 @@ export function useSendChannelMessage() {
         // Enviar via Evolution API (mesmo fluxo existente)
         if (!instanceName) throw new Error("instanceName obrigatorio para WhatsApp");
 
-        const formattedNumber = contactId.replace(/\D/g, "");
+        const formattedNumber = formatPhoneForWhatsApp(contactId);
+        if (!formattedNumber) throw new Error("Número de telefone inválido");
         const { data, error } = await supabase.functions.invoke("evolution-api-proxy", {
           body: {
             endpoint: `/message/sendText/${instanceName}`,
@@ -385,7 +387,7 @@ export function useSendChannelMessage() {
           instance_id: instanceId || null,
           external_id: messageId,
           remote_jid: `${formattedNumber}@s.whatsapp.net`,
-          phone_number: contactId,
+          phone_number: formattedNumber,
           direction: "outgoing",
           message_type: "text",
           content: message,

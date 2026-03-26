@@ -36,6 +36,7 @@ import {
   Tag,
   Settings,
   UserPlus,
+  ArrowRightLeft,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,6 +54,8 @@ import {
   useSendWhatsAppMedia,
   useWhatsAppMessagesRealtime,
   useWhatsAppInstancesForUser,
+  useTransferToSzChatDepartment,
+  useActiveSzChatSession,
   type WhatsAppInstanceForUser,
   ChatContact,
   WhatsAppMessage,
@@ -1163,6 +1166,7 @@ function AudioRecorder({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const cancelledRef = useRef(false);
 
   const startRecording = async () => {
     try {
@@ -1188,6 +1192,7 @@ function AudioRecorder({
       
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
+      cancelledRef.current = false;
 
       mediaRecorder.ondataavailable = (e) => {
         if (e.data.size > 0) {
@@ -1196,8 +1201,16 @@ function AudioRecorder({
       };
 
       mediaRecorder.onstop = () => {
-        const audioBlob = new Blob(chunksRef.current, { 
-          type: mediaRecorder.mimeType || "audio/webm" 
+        stream.getTracks().forEach((track) => track.stop());
+
+        if (cancelledRef.current) {
+          console.log("[AudioRecorder] Recording cancelled, discarding audio.");
+          chunksRef.current = [];
+          return;
+        }
+
+        const audioBlob = new Blob(chunksRef.current, {
+          type: mediaRecorder.mimeType || "audio/webm"
         });
         console.log("[AudioRecorder] Recording finished:", {
           chunks: chunksRef.current.length,
@@ -1205,7 +1218,6 @@ function AudioRecorder({
           mimeType: audioBlob.type,
         });
         onRecorded(audioBlob);
-        stream.getTracks().forEach((track) => track.stop());
       };
 
       mediaRecorder.start(100); // Coletar dados a cada 100ms
@@ -1232,14 +1244,16 @@ function AudioRecorder({
   };
 
   const cancelRecording = () => {
+    cancelledRef.current = true;
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
-      mediaRecorderRef.current.stream.getTracks().forEach((track) => track.stop());
     }
+    chunksRef.current = [];
     setIsRecording(false);
     setRecordingTime(0);
     if (timerRef.current) {
       clearInterval(timerRef.current);
+      timerRef.current = null;
     }
     onCancel();
   };
@@ -1408,6 +1422,12 @@ function ChatWindow({
   const sendMedia = useSendWhatsAppMedia();
   const { canReply: canReplyOnThisNumber } = useCanReplyOnInstanceByName(instanceName);
 
+  // SZ.chat transfer-back: check if this contact has an active SZ.chat session
+  const { data: teamMemberCW } = useCurrentTeamMember();
+  const organizationIdCW = teamMemberCW?.organization_id ?? null;
+  const { data: szChatSession } = useActiveSzChatSession(phoneNumber, organizationIdCW);
+  const transferToSzChat = useTransferToSzChatDepartment();
+
   // Ativar realtime
   useWhatsAppMessagesRealtime(phoneNumber);
 
@@ -1533,12 +1553,12 @@ function ChatWindow({
     }
   };
 
-  // Nome do contato: priorizar lead (CRM) para evitar nomes trocados
+  // Nome do contato: prioriza push_name (nome real do WhatsApp) — consistente com contactDisplayName na lista lateral
   const contactNameRaw =
-    selectedLeadName ??
-    selectedContact?.lead_name ??
     selectedContact?.push_name ??
     messages.find((m) => m.push_name)?.push_name ??
+    selectedLeadName ??
+    selectedContact?.lead_name ??
     phoneNumber;
   const contactName = (contactNameRaw && String(contactNameRaw).trim()) ? String(contactNameRaw).trim() : (phoneNumber || "?");
 
@@ -1694,6 +1714,59 @@ function ChatWindow({
           <Badge variant="outline" className="text-muted-foreground gap-1.5 text-xs">
             IA desativada
           </Badge>
+        )}
+
+        {/* SZ.chat transfer-back button: only visible when there is an active SZ.chat session */}
+        {szChatSession && Object.keys(szChatSession.team_mappings).length > 0 && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="shrink-0 gap-1.5 text-xs"
+                disabled={transferToSzChat.isPending}
+              >
+                {transferToSzChat.isPending ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <ArrowRightLeft className="w-3.5 h-3.5" />
+                )}
+                Transferir setor
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {Object.entries(szChatSession.team_mappings).map(([teamName, teamId]) => (
+                <DropdownMenuItem
+                  key={teamId}
+                  onClick={() => {
+                    if (!organizationIdCW) return;
+                    transferToSzChat.mutate(
+                      {
+                        organizationId: organizationIdCW,
+                        sessionId: szChatSession.sz_chat_session_id,
+                        targetTeamName: teamName,
+                        targetTeamId: teamId,
+                      },
+                      {
+                        onSuccess: () => {
+                          toast.success(`Conversa transferida para ${teamName}`);
+                        },
+                        onError: (err) => {
+                          toast.error(
+                            err instanceof Error
+                              ? err.message
+                              : "Erro ao transferir conversa"
+                          );
+                        },
+                      }
+                    );
+                  }}
+                >
+                  {teamName}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
       </div>
 
