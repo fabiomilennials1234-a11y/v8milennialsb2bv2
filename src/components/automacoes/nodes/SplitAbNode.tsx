@@ -3,14 +3,23 @@ import type { NodeProps } from "@xyflow/react";
 import { Handle, Position, useReactFlow } from "@xyflow/react";
 import { Split, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { NODE_COLORS } from "@/types/workflow";
+import { NODE_COLORS, migrateSplitAbData } from "@/types/workflow";
 import type { SplitAbNodeData } from "@/types/workflow";
 
+// Colors for variant handles/labels — cycles if more than 6 variants
+const VARIANT_COLORS = [
+  { text: "text-pink-600 dark:text-pink-400", bg: "!bg-pink-500" },
+  { text: "text-violet-600 dark:text-violet-400", bg: "!bg-violet-500" },
+  { text: "text-blue-600 dark:text-blue-400", bg: "!bg-blue-500" },
+  { text: "text-emerald-600 dark:text-emerald-400", bg: "!bg-emerald-500" },
+  { text: "text-amber-600 dark:text-amber-400", bg: "!bg-amber-500" },
+  { text: "text-cyan-600 dark:text-cyan-400", bg: "!bg-cyan-500" },
+];
+
 function SplitAbNodeComponent({ id, data, selected }: NodeProps) {
-  const nodeData = data as unknown as SplitAbNodeData;
+  const nodeData = migrateSplitAbData(data as unknown as Record<string, unknown>);
   const colors = NODE_COLORS.split_ab;
-  const percentA = nodeData.splitPercentA ?? 50;
-  const percentB = 100 - percentA;
+  const variants = nodeData.variants;
 
   const { deleteElements } = useReactFlow();
   const handleDelete = useCallback(
@@ -21,10 +30,14 @@ function SplitAbNodeComponent({ id, data, selected }: NodeProps) {
     [id, deleteElements]
   );
 
+  // Build summary like "50% / 30% / 20%"
+  const summary = variants.map((v) => `${v.percentage}%`).join(" / ");
+
   return (
     <div
       className={cn(
-        "group relative w-[280px] rounded-xl shadow-md border-l-4 border bg-card transition-shadow",
+        "group relative rounded-xl shadow-md border-l-4 border bg-card transition-shadow",
+        variants.length > 3 ? "w-[360px]" : "w-[280px]",
         colors.border,
         colors.bgLight,
         colors.bgDark,
@@ -54,37 +67,33 @@ function SplitAbNodeComponent({ id, data, selected }: NodeProps) {
             <p className="text-sm font-semibold text-foreground truncate">
               {nodeData.label || "Split A/B"}
             </p>
-            <p className="text-xs text-muted-foreground truncate">
-              {percentA}% / {percentB}%
-            </p>
+            <p className="text-xs text-muted-foreground truncate">{summary}</p>
           </div>
         </div>
       </div>
 
-      {/* Duas saídas: A e B */}
-      <div className="flex justify-between px-6 pb-2">
-        <div className="relative">
-          <span className="text-[10px] font-medium text-pink-600 dark:text-pink-400">
-            {nodeData.variantALabel || "A"} ({percentA}%)
-          </span>
-          <Handle
-            type="source"
-            position={Position.Bottom}
-            id="variant_a"
-            className="!w-3 !h-3 !bg-pink-500 !border-2 !border-background !left-6"
-          />
-        </div>
-        <div className="relative">
-          <span className="text-[10px] font-medium text-violet-600 dark:text-violet-400">
-            {nodeData.variantBLabel || "B"} ({percentB}%)
-          </span>
-          <Handle
-            type="source"
-            position={Position.Bottom}
-            id="variant_b"
-            className="!w-3 !h-3 !bg-violet-500 !border-2 !border-background !left-6"
-          />
-        </div>
+      {/* Dynamic variant outputs */}
+      <div className="flex justify-between px-4 pb-2 gap-2">
+        {variants.map((variant, index) => {
+          const colorSet = VARIANT_COLORS[index % VARIANT_COLORS.length];
+          return (
+            <div key={variant.id} className="relative text-center flex-1">
+              <span className={cn("text-[10px] font-medium", colorSet.text)}>
+                {variant.label || `${index + 1}`} ({variant.percentage}%)
+              </span>
+              <Handle
+                type="source"
+                position={Position.Bottom}
+                id={`variant_${variant.id}`}
+                className={cn(
+                  "!w-3 !h-3 !border-2 !border-background",
+                  colorSet.bg
+                )}
+                style={{ left: "50%" }}
+              />
+            </div>
+          );
+        })}
       </div>
     </div>
   );
