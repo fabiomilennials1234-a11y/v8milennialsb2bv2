@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { Settings, Plus, MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -46,6 +46,33 @@ export function UpsellBaseKanban({ searchQuery, filterPotencial, filterActive }:
   const [quickSaleOpen, setQuickSaleOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [dragOverCol, setDragOverCol] = useState<string | null>(null);
+
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const topScrollRef = useRef<HTMLDivElement>(null);
+  const [scrollWidth, setScrollWidth] = useState(0);
+  const syncingScroll = useRef(false);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(() => setScrollWidth(el.scrollWidth));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [stages, clients]);
+
+  const handleTopScroll = useCallback(() => {
+    if (syncingScroll.current) return;
+    syncingScroll.current = true;
+    if (scrollRef.current && topScrollRef.current) scrollRef.current.scrollLeft = topScrollRef.current.scrollLeft;
+    syncingScroll.current = false;
+  }, []);
+
+  const handleMainScroll = useCallback(() => {
+    if (syncingScroll.current) return;
+    syncingScroll.current = true;
+    if (topScrollRef.current && scrollRef.current) topScrollRef.current.scrollLeft = scrollRef.current.scrollLeft;
+    syncingScroll.current = false;
+  }, []);
 
   const columns = stagesToColumns(stages);
 
@@ -111,7 +138,20 @@ export function UpsellBaseKanban({ searchQuery, filterPotencial, filterActive }:
         </div>
       )}
 
-      <div className="flex gap-4 overflow-x-auto pb-4" style={{ minHeight: "60vh" }}>
+      {/* Top scrollbar */}
+      <div
+        ref={topScrollRef}
+        onScroll={handleTopScroll}
+        className="overflow-x-auto overflow-y-hidden"
+        style={{ height: 12 }}
+      >
+        <div style={{ width: scrollWidth, height: 1 }} />
+      </div>
+
+      <div
+        ref={scrollRef}
+        onScroll={handleMainScroll}
+        className="flex gap-4 overflow-x-auto overflow-y-hidden pb-4 max-h-[calc(100vh-220px)] scrollbar-hide" style={{ minHeight: "40vh" }}>
         {columns.map((col, colIndex) => {
           const colClients = filteredClients.filter((c) => c.tipo_cliente_tempo === col.id);
           const colVendas = colClients
@@ -125,7 +165,7 @@ export function UpsellBaseKanban({ searchQuery, filterPotencial, filterActive }:
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: colIndex * 0.03, duration: 0.3 }}
-              className={`kanban-column min-w-[320px] max-w-[360px] flex-shrink-0 transition-all duration-200 ${
+              className={`kanban-column min-w-[320px] max-w-[360px] flex-shrink-0 flex flex-col transition-all duration-200 ${
                 isDragOver ? "ring-2 ring-primary/50 bg-primary/5" : ""
               }`}
               onDrop={(e) => handleDrop(e, col.id)}
@@ -165,7 +205,7 @@ export function UpsellBaseKanban({ searchQuery, filterPotencial, filterActive }:
               </div>
 
               {/* Cards */}
-              <div className="space-y-3 min-h-[100px]">
+              <div className="space-y-3 min-h-[100px] overflow-y-auto flex-1 min-h-0">
                 {colClients.map((client, i) => (
                   <motion.div
                     key={client.id}
