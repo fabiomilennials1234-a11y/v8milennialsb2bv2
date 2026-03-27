@@ -1366,6 +1366,11 @@ function ChatWindow({
   // Usar estado otimista se disponível, senão usar o valor da prop
   const currentAiDisabled = optimisticAiDisabled !== null ? optimisticAiDisabled : (leadAiDisabled ?? false);
 
+  // Limpar estado otimista ao trocar de conversa (leadId muda)
+  useEffect(() => {
+    setOptimisticAiDisabled(null);
+  }, [leadId]);
+
   // Quando a prop leadAiDisabled refletir o valor otimista, limpar o estado otimista
   useEffect(() => {
     if (optimisticAiDisabled !== null && leadAiDisabled === optimisticAiDisabled) {
