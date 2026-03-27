@@ -427,16 +427,13 @@ describe("round-trip: export → import", () => {
     const exported = exportWorkflow(original);
     const { workflowInsert } = prepareImport(exported);
 
-    // Check action/copilot node data fields are nullified
-    expect(JSON.stringify(workflowInsert)).not.toContain("instance-uuid-456");
-    expect(JSON.stringify(workflowInsert)).not.toContain("member-uuid-789");
-    expect(JSON.stringify(workflowInsert)).not.toContain("agent-uuid-abc");
-    expect(JSON.stringify(workflowInsert)).not.toContain("org-123");
+    const json = JSON.stringify(workflowInsert);
 
-    // NOTE: The trigger node's data.config is a separate copy from trigger_config;
-    // the implementation sanitizes trigger_config but not the embedded copy in
-    // the trigger node's data.config. Verify the functional trigger_config is clean.
-    const tc = workflowInsert.trigger_config as Record<string, unknown>;
-    expect(tc.pipeline_id).toBeNull();
+    // None of the org-specific UUIDs should appear anywhere
+    expect(json).not.toContain("instance-uuid-456");
+    expect(json).not.toContain("member-uuid-789");
+    expect(json).not.toContain("agent-uuid-abc");
+    expect(json).not.toContain("pipeline-org-uuid");
+    expect(json).not.toContain("org-123");
   });
 });

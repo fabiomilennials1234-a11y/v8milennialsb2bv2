@@ -104,6 +104,20 @@ export function exportWorkflow(workflow: Workflow, orgName?: string): ExportedWo
     const registry = getOrgFieldsForNode(String(nodeData.type));
     const { cleaned, refs } = extractRefsFromData(node.id, nodeData, registry);
     allRefs.push(...refs);
+
+    // Also clean trigger node's embedded config (mirrors trigger_config at top level)
+    if (String(nodeData.type) === "trigger" && typeof cleaned.config === "object" && cleaned.config !== null) {
+      const embeddedConfig = { ...(cleaned.config as Record<string, unknown>) };
+      const { cleaned: cleanedEmbedded, refs: embeddedRefs } = extractRefsFromData(
+        node.id,
+        embeddedConfig,
+        TRIGGER_CONFIG_ORG_FIELDS,
+      );
+      // Avoid duplicate refs (trigger_config refs already captured in step 2)
+      // but still nullify the embedded values
+      cleaned.config = cleanedEmbedded;
+    }
+
     return { ...node, data: cleaned as any };
   });
 
