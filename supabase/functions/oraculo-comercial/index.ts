@@ -24,21 +24,178 @@ interface MetricsData {
   diasRestantes?: number;
 }
 
-serve(withSentry('oraculo-comercial', async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+// ---- Chat mode handler ----
+async function handleChatMode(body: any) {
+  const { question, user_id, organization_id } = body;
+
+  if (!question || !user_id || !organization_id) {
+    return new Response(
+      JSON.stringify({ error: "Missing required fields: question, user_id, organization_id" }),
+      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
   }
 
-  try {
-    const { metrics } = await req.json() as { metrics: MetricsData };
-    const openRouterApiKey = Deno.env.get("OPENROUTER_API_KEY");
-    const referer = Deno.env.get("OPENROUTER_REFERER_URL") || "https://v8millennials.com";
+  // Create supabase client with service role for DB access
+  const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+  );
 
-    if (!openRouterApiKey) {
-      throw new Error("OPENROUTER_API_KEY is not configured");
+  // Check + record rate limit in one call (backend enforcement)
+  const { data: limitResult, error: limitError } = await supabase.rpc("record_oraculo_usage", {
+    p_user_id: user_id,
+    p_org_id: organization_id,
+    p_question: question,
+    p_response: null,
+  });
+
+  if (limitError) {
+    console.error("Rate limit check error:", limitError);
+    return new Response(
+      JSON.stringify({ error: "Erro ao verificar limite de uso" }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
+  const limitData = Array.isArray(limitResult) && limitResult.length > 0 ? limitResult[0] : limitResult;
+  if (limitData?.error === "limit_exceeded") {
+    return new Response(
+      JSON.stringify({ error: "limit_exceeded", used: limitData.used, remaining: 0 }),
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
+  // Fetch org metrics for context
+  const now = new Date();
+  const startOfMonth = new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1)).toISOString();
+  const endOfMonth = new Date(Date.UTC(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999)).toISOString();
+
+  const [metricsRes, rankingRes] = await Promise.all([
+    supabase.rpc("get_dashboard_metrics", {
+      p_org_id: organization_id,
+      p_start_date: startOfMonth,
+      p_end_date: endOfMonth,
+      p_filter_member_id: null,
+    }),
+    supabase.rpc("get_ranking_data", {
+      p_month: now.getMonth() + 1,
+      p_year: now.getFullYear(),
+      p_organization_id: organization_id,
+    }),
+  ]);
+
+  const metrics = Array.isArray(metricsRes.data) ? metricsRes.data[0] : metricsRes.data;
+  const ranking = Array.isArray(rankingRes.data) ? rankingRes.data[0] : rankingRes.data;
+
+  const dayOfMonth = now.getDate();
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+
+  const contextPrompt = `Você é o Oráculo Comercial, um assistente de inteligência comercial B2B. Responda com base nos dados reais do sistema.
+
+DADOS DA OPERAÇÃO (mês atual):
+- Receita: R$ ${metrics?.vendaTotal || 0}
+- Leads captados: ${metrics?.totalLeads || 0}
+- Reuniões marcadas: ${metrics?.reunioesMarcadas || 0}
+- Reuniões comparecidas: ${metrics?.reunioesComparecidas || 0}
+- Propostas enviadas: ${metrics?.propostasEnviadas || 0}
+- Vendas fechadas: ${metrics?.novosClientes || 0}
+- Ticket médio: R$ ${metrics?.ticketMedio || 0}
+- Ticket médio MRR: R$ ${metrics?.ticketMedioMRR || 0}
+- Ticket médio Projeto: R$ ${metrics?.ticketMedioProjeto || 0}
+- Taxa no-show: ${metrics?.taxaNoShow || 0}%
+- Dia ${dayOfMonth} de ${daysInMonth}
+
+RANKING DE VENDEDORES:
+${JSON.stringify(ranking?.salesRanking?.slice(0, 5) || [], null, 2)}
+
+RANKING SDRs:
+${JSON.stringify(ranking?.sdrRanking?.slice(0, 5) || [], null, 2)}
+
+REGRAS:
+- Responda SEMPRE com base nos dados acima
+- NUNCA invente números
+- Seja direto e executivo
+- Use linguagem de operação comercial B2B
+- Se não tiver dados suficientes para responder, diga claramente
+- Mantenha respostas concisas (máximo 4 parágrafos)`;
+
+  const openRouterApiKey = Deno.env.get("OPENROUTER_API_KEY");
+  const referer = Deno.env.get("OPENROUTER_REFERER_URL") || "https://v8millennials.com";
+
+  if (!openRouterApiKey) {
+    throw new Error("OPENROUTER_API_KEY is not configured");
+  }
+
+  const aiResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${openRouterApiKey}`,
+      "Content-Type": "application/json",
+      "HTTP-Referer": referer,
+    },
+    body: JSON.stringify({
+      model: "google/gemini-3-flash-preview",
+      messages: [
+        { role: "system", content: contextPrompt },
+        { role: "user", content: question },
+      ],
+      temperature: 0.6,
+      max_tokens: 500,
+    }),
+  });
+
+  if (!aiResponse.ok) {
+    if (aiResponse.status === 429) {
+      return new Response(
+        JSON.stringify({ error: "Rate limit exceeded. Tente novamente em alguns segundos." }),
+        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
+    if (aiResponse.status === 402) {
+      return new Response(
+        JSON.stringify({ error: "Créditos insuficientes." }),
+        { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    throw new Error("OpenRouter error");
+  }
 
-    const systemPrompt = `Você é um coach comercial direto e pragmático. Você analisa métricas e dá UMA única tarefa prioritária do dia.
+  const aiData = await aiResponse.json();
+  const responseText = aiData.choices?.[0]?.message?.content || "Não consegui gerar uma resposta.";
+
+  // Update the usage record with the response
+  await supabase
+    .from("oraculo_usage")
+    .update({ response: responseText })
+    .eq("user_id", user_id)
+    .eq("question", question)
+    .order("created_at", { ascending: false })
+    .limit(1);
+
+  await logRuntime({
+    module: "copilot",
+    action: "oraculo_chat",
+    status: "success",
+    payloadSnapshot: { user_id, question_length: question.length },
+  });
+
+  return new Response(
+    JSON.stringify({ response: responseText, remaining: limitData?.remaining ?? 0 }),
+    { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+  );
+}
+
+// ---- Legacy mode handler (problema + tarefa) ----
+async function handleLegacyMode(metrics: MetricsData) {
+  const openRouterApiKey = Deno.env.get("OPENROUTER_API_KEY");
+  const referer = Deno.env.get("OPENROUTER_REFERER_URL") || "https://v8millennials.com";
+
+  if (!openRouterApiKey) {
+    throw new Error("OPENROUTER_API_KEY is not configured");
+  }
+
+  const systemPrompt = `Você é um coach comercial direto e pragmático. Você analisa métricas e dá UMA única tarefa prioritária do dia.
 
 REGRAS:
 - Responda APENAS em formato JSON válido
@@ -54,19 +211,18 @@ FORMATO OBRIGATÓRIO (JSON):
   "tarefa": "ação específica e prática para resolver"
 }`;
 
-    let userPrompt = "";
+  let userPrompt = "";
 
-    // Suporta novo campo metric_type com fallback para role legado
-    const isMeetings = metrics.metric_type === "meetings" || (!metrics.metric_type && metrics.role === "sdr");
+  const isMeetings = metrics.metric_type === "meetings" || (!metrics.metric_type && metrics.role === "sdr");
 
-    if (isMeetings) {
-      const progresso = metrics.percentualMeta || 0;
-      const confirmados = metrics.confirmados || 0;
-      const meta = metrics.metaReuniao || 20;
-      const diasRestantes = metrics.diasRestantes || 15;
-      const faltam = meta - confirmados;
+  if (isMeetings) {
+    const progresso = metrics.percentualMeta || 0;
+    const confirmados = metrics.confirmados || 0;
+    const meta = metrics.metaReuniao || 20;
+    const diasRestantes = metrics.diasRestantes || 15;
+    const faltam = meta - confirmados;
 
-      userPrompt = `Métricas do SDR:
+    userPrompt = `Métricas do SDR:
 - Confirmados no mês: ${confirmados}
 - Meta de reuniões: ${meta}
 - Progresso: ${progresso.toFixed(0)}%
@@ -75,15 +231,15 @@ FORMATO OBRIGATÓRIO (JSON):
 - Média necessária: ${(faltam / diasRestantes).toFixed(1)} confirmações/dia
 
 Qual o problema principal e qual a tarefa prioritária de hoje?`;
-    } else {
-      const faturamento = metrics.faturamento || 0;
-      const meta = metrics.metaVendas || 10000;
-      const progresso = metrics.percentualMeta || 0;
-      const diasRestantes = metrics.diasRestantes || 15;
-      const vendas = metrics.numeroVendas || 0;
-      const falta = meta - faturamento;
+  } else {
+    const faturamento = metrics.faturamento || 0;
+    const meta = metrics.metaVendas || 10000;
+    const progresso = metrics.percentualMeta || 0;
+    const diasRestantes = metrics.diasRestantes || 15;
+    const vendas = metrics.numeroVendas || 0;
+    const falta = meta - faturamento;
 
-      userPrompt = `Métricas do Closer:
+    userPrompt = `Métricas do Closer:
 - Faturamento no mês: R$ ${faturamento.toLocaleString("pt-BR")}
 - Meta de vendas: R$ ${meta.toLocaleString("pt-BR")}
 - Progresso: ${progresso.toFixed(0)}%
@@ -92,78 +248,95 @@ Qual o problema principal e qual a tarefa prioritária de hoje?`;
 - Dias restantes no mês: ${diasRestantes}
 
 Qual o problema principal e qual a tarefa prioritária de hoje?`;
+  }
+
+  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${openRouterApiKey}`,
+      "Content-Type": "application/json",
+      "HTTP-Referer": referer,
+    },
+    body: JSON.stringify({
+      model: "google/gemini-3-flash-preview",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      temperature: 0.7,
+      max_tokens: 200,
+    }),
+  });
+
+  if (!response.ok) {
+    if (response.status === 429) {
+      return new Response(
+        JSON.stringify({ error: "Rate limit exceeded. Tente novamente em alguns segundos." }),
+        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    if (response.status === 402) {
+      return new Response(
+        JSON.stringify({ error: "Créditos insuficientes. Adicione créditos ao workspace." }),
+        { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    const errorText = await response.text();
+    console.error("OpenRouter error:", response.status, errorText);
+    throw new Error("OpenRouter error");
+  }
+
+  const data = await response.json();
+  const content = data.choices?.[0]?.message?.content || "";
+
+  let result = { problema: "", tarefa: "" };
+  try {
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      result = JSON.parse(jsonMatch[0]);
+    }
+  } catch (e) {
+    console.error("Failed to parse AI response:", content);
+    result = {
+      problema: "Não consegui analisar as métricas",
+      tarefa: "Revise seu pipeline e priorize follow-ups pendentes",
+    };
+  }
+
+  await logRuntime({
+    module: "copilot",
+    action: "oraculo_analyze",
+    status: "success",
+    payloadSnapshot: { metric_type: metrics.metric_type || (metrics.role === "sdr" ? "meetings" : "sales"), role: metrics.role },
+  });
+
+  return new Response(JSON.stringify(result), {
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+// ---- Main handler ----
+serve(withSentry('oraculo-comercial', async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const body = await req.json();
+
+    // Route to chat mode or legacy mode
+    if (body.mode === "chat") {
+      return await handleChatMode(body);
     }
 
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${openRouterApiKey}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": referer,
-      },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        temperature: 0.7,
-        max_tokens: 200,
-      }),
-    });
-
-    if (!response.ok) {
-      if (response.status === 429) {
-        return new Response(
-          JSON.stringify({ error: "Rate limit exceeded. Tente novamente em alguns segundos." }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "Créditos insuficientes. Adicione créditos ao workspace." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      const errorText = await response.text();
-      console.error("OpenRouter error:", response.status, errorText);
-      throw new Error("OpenRouter error");
-    }
-
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content || "";
-
-    // Parse JSON from response
-    let result = { problema: "", tarefa: "" };
-    try {
-      // Try to extract JSON from the response
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        result = JSON.parse(jsonMatch[0]);
-      }
-    } catch (e) {
-      console.error("Failed to parse AI response:", content);
-      result = {
-        problema: "Não consegui analisar as métricas",
-        tarefa: "Revise seu pipeline e priorize follow-ups pendentes",
-      };
-    }
-
-    await logRuntime({
-      module: "copilot",
-      action: "oraculo_analyze",
-      status: "success",
-      payloadSnapshot: { metric_type: metrics.metric_type || (metrics.role === "sdr" ? "meetings" : "sales"), role: metrics.role },
-    });
-
-    return new Response(JSON.stringify(result), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    // Legacy mode: expects { metrics: MetricsData }
+    const metrics = body.metrics as MetricsData;
+    return await handleLegacyMode(metrics);
   } catch (e) {
     console.error("oraculo-comercial error:", e);
     await logRuntime({
       module: "copilot",
-      action: "oraculo_analyze",
+      action: "oraculo_error",
       status: "error",
       errorMessage: e instanceof Error ? e.message : "Unknown error",
     });
