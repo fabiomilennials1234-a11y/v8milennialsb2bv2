@@ -77,17 +77,37 @@ Deno.serve(withSentry('test-copilot-chat', async (req) => {
             systemPrompt += `\n\n## FAQs\n${faqBlock}`;
           }
 
-          // Injetar Knowledge Base (document summaries) como conhecimento do agente
-          const { data: docs } = await supabase
-            .from("copilot_agent_documents")
-            .select("summary")
-            .eq("agent_id", agentId)
-            .eq("status", "ready")
-            .not("summary", "is", null);
+          // Injetar Knowledge Base — conteudo COMPLETO dos documentos
+          let kbContent = "";
+          try {
+            const kbRes = await fetch(
+              `${SUPABASE_URL}/rest/v1/copilot_agent_documents?agent_id=eq.${agentId}&status=eq.ready&select=content,summary`,
+              { headers: { "apikey": SUPABASE_SERVICE_ROLE_KEY, "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` } }
+            );
+            if (kbRes.ok) {
+              const kbDocs = await kbRes.json();
+              kbContent = (kbDocs || [])
+                .map((d: any) => (d.content || d.summary || "").substring(0, 30000))
+                .filter((t: string) => t.length > 10)
+                .join("\n\n");
+            }
+          } catch { /* fallback below */ }
 
-          if (docs && docs.length > 0) {
-            const kbBlock = docs.map((d: any) => d.summary).join("\n\n");
-            systemPrompt += `\n\n# SEU CONHECIMENTO SOBRE A EMPRESA\n\nVoce conhece profundamente os seguintes aspectos da empresa:\n\n${kbBlock}\n\nCOMPORTAMENTO OBRIGATORIO:\n- Voce SABE essas informacoes. Use naturalmente nas conversas.\n- Quando perguntarem sobre produtos, precos ou servicos, responda com seguranca.\n- Se NAO sabe algo, diga: 'Vou verificar e te retorno'. NUNCA invente.\n- Se pedirem catalogo/documento, use a ferramenta send_document.\n- NUNCA mencione 'documento', 'arquivo' ou 'base de conhecimento'.`;
+          // Fallback se REST nao retornou content
+          if (!kbContent) {
+            const { data: docs } = await supabase
+              .from("copilot_agent_documents")
+              .select("summary")
+              .eq("agent_id", agentId)
+              .eq("status", "ready")
+              .not("summary", "is", null);
+            if (docs && docs.length > 0) {
+              kbContent = docs.map((d: any) => d.summary).join("\n\n");
+            }
+          }
+
+          if (kbContent) {
+            systemPrompt += `\n\n# INFORMACOES QUE VOCE DOMINA SOBRE A EMPRESA E SEUS PRODUTOS\n\nAbaixo esta TUDO que voce sabe sobre os produtos e servicos. Use com total confianca.\n\n${kbContent}\n\n---\nCite nomes, ingredientes e detalhes EXATAMENTE como estao acima. Se nao sabe algo, diga 'vou verificar'. NUNCA invente. NUNCA mencione 'documento' ou 'catalogo'.`;
           }
         }
       } catch (dbErr) {

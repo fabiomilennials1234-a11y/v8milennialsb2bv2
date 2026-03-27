@@ -584,27 +584,54 @@ export class AgentEngine {
   }
 
   /**
-   * Load Knowledge Base Document Summaries
-   * Busca resumos prontos dos documentos do agente para injetar no prompt
+   * Load Knowledge Base — carrega conteudo COMPLETO dos documentos
+   * Prioriza content (texto integral), fallback para summary se content nao disponivel.
    */
   private async loadDocumentSummaries(agentId: string): Promise<Array<{file_name: string; summary: string}>> {
     try {
-      const { data, error } = await this.supabase
-        .from('copilot_agent_documents')
-        .select('file_name, summary')
-        .eq('agent_id', agentId)
-        .eq('status', 'ready')
-        .not('summary', 'is', null);
+      // Buscar via REST API direta (contorna schema cache para coluna 'content')
+      const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 
-      if (error) {
-        console.warn('[AgentEngine] Error loading document summaries:', error.message);
-        return [];
+      const res = await fetch(
+        `${supabaseUrl}/rest/v1/copilot_agent_documents?agent_id=eq.${agentId}&status=eq.ready&select=file_name,summary,content`,
+        {
+          headers: {
+            "apikey": serviceKey,
+            "Authorization": `Bearer ${serviceKey}`,
+          },
+        }
+      );
+
+      if (!res.ok) {
+        // Fallback: usar supabase client (sem content)
+        const { data } = await this.supabase
+          .from('copilot_agent_documents')
+          .select('file_name, summary')
+          .eq('agent_id', agentId)
+          .eq('status', 'ready')
+          .not('summary', 'is', null);
+        console.log('[AgentEngine] KB loaded (fallback, summary only):', data?.length || 0);
+        return data || [];
       }
 
-      console.log('[AgentEngine] Document summaries loaded:', data?.length || 0);
-      return data || [];
+      const docs = await res.json();
+
+      // Para cada documento: usar content completo (ate 30K chars), ou summary como fallback
+      const result = (docs || [])
+        .filter((d: any) => d.summary || d.content)
+        .map((d: any) => ({
+          file_name: d.file_name,
+          summary: d.content
+            ? d.content.substring(0, 30000)  // Conteudo COMPLETO (ate 30K)
+            : (d.summary || ""),
+        }));
+
+      const totalChars = result.reduce((acc: number, d: any) => acc + d.summary.length, 0);
+      console.log(`[AgentEngine] KB loaded: ${result.length} docs, ${totalChars} total chars (full content)`);
+      return result;
     } catch (e) {
-      console.warn('[AgentEngine] Failed to load document summaries:', e);
+      console.warn('[AgentEngine] Failed to load KB:', e);
       return [];
     }
   }
@@ -1636,25 +1663,25 @@ Regras:
     }
 
     // =====================================================
-    // 1.5 KNOWLEDGE BASE — injetado como conhecimento PROPRIO do agente
-    // O agente nao sabe que isso veio de documentos. E o que ele SABE.
+    // 1.5 KNOWLEDGE BASE — conteudo COMPLETO injetado como conhecimento proprio
     // =====================================================
     if (documentSummaries && documentSummaries.length > 0) {
       sections.push("");
-      sections.push("# SEU CONHECIMENTO SOBRE A EMPRESA");
+      sections.push("# INFORMACOES QUE VOCE DOMINA SOBRE A EMPRESA E SEUS PRODUTOS");
       sections.push("");
-      sections.push("Voce conhece profundamente os seguintes aspectos da empresa:");
+      sections.push("Abaixo esta TUDO que voce sabe sobre os produtos, servicos e operacoes da empresa. Estas informacoes sao PRECISAS e COMPLETAS — use-as com total confianca para responder ao lead.");
       sections.push("");
       documentSummaries.forEach((doc) => {
         sections.push(doc.summary);
         sections.push("");
       });
-      sections.push("COMPORTAMENTO OBRIGATORIO:");
-      sections.push("- Voce SABE essas informacoes. Use naturalmente nas conversas, como um vendedor experiente faria.");
-      sections.push("- Quando o lead perguntar sobre produtos, precos ou servicos, responda com seguranca usando o que voce sabe acima.");
-      sections.push("- Se o lead perguntar algo que voce NAO sabe (nao esta no seu conhecimento acima), diga: 'Vou verificar essa informacao e te retorno em breve' ou encaminhe para um especialista. NUNCA invente.");
-      sections.push("- Se o lead quiser receber um catalogo, proposta ou documento, use a ferramenta send_document para enviar.");
-      sections.push("- NUNCA mencione 'documento', 'arquivo', 'base de conhecimento', 'catalogo que me deram'. Voce simplesmente SABE dessas coisas.");
+      sections.push("---");
+      sections.push("COMO USAR ESTE CONHECIMENTO:");
+      sections.push("1. Quando o lead perguntar sobre QUALQUER produto, servico, preco ou especificacao — consulte as informacoes acima e responda com precisao e seguranca.");
+      sections.push("2. Cite nomes de produtos, ingredientes, beneficios e detalhes EXATAMENTE como estao nas informacoes acima. Nao generalize nem simplifique.");
+      sections.push("3. Se a pergunta do lead se refere a algo que NAO esta nas informacoes acima, diga: 'Vou confirmar esse detalhe e ja te retorno.' NUNCA invente dados.");
+      sections.push("4. Voce fala como alguem que CONHECE esses produtos de cor. Nunca diga 'segundo nosso catalogo' ou 'de acordo com o documento'. Voce simplesmente sabe.");
+      sections.push("5. Se o lead pedir para receber um catalogo ou arquivo, use a ferramenta send_document.");
       sections.push("");
     }
 
