@@ -181,28 +181,64 @@ export class AgentEngine {
     const temperature = temperatureModeMap[capabilities.llm_temperature_mode ?? 'balanceado'] ?? 0.7;
     console.log('[AgentEngine] Using model:', model, '| temperature:', temperature, `(${capabilities.llm_temperature_mode ?? 'balanceado'})`);
     
-    // Converter mensagens e tools para formato OpenRouter
-    const openRouterMessages = this.openRouter.convertMessages(allMessages, systemPrompt);
+    // 7. Call LLM com suporte a multi-turn para tools inline (search_knowledge)
     const openRouterTools = tools.length > 0 ? this.openRouter.convertTools(tools) : undefined;
+    const multiTurnMessages: Array<{ role: string; content: string; tool_calls?: any; tool_call_id?: string }> = [...allMessages];
+    let finalNextState = conversation.state;
+    let finalAction: { action: string; params: Record<string, unknown>; tenant_id: string } | null = null;
+    let finalAssistantMessage = '';
+    const MAX_TOOL_TURNS = 3;
 
-    console.log('[AgentEngine] Step 7: Calling LLM...');
-    const response = await this.openRouter.chat({
-      model,
-      messages: openRouterMessages,
-      tools: openRouterTools,
-      tool_choice: openRouterTools ? 'auto' : undefined,
-      max_tokens: 1024,
-      temperature,
-    });
-    console.log('[AgentEngine] LLM response received');
+    for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
+      console.log(`[AgentEngine] LLM call #${turn + 1}...`);
+      const orMessages = this.openRouter.convertMessages(multiTurnMessages, systemPrompt);
 
-    // 7. Process Response
-    console.log('[AgentEngine] Step 8: Processing LLM response...');
-    const { nextState, actionToExecute, assistantMessage } = await this.processLLMResponse(
-      response,
-      conversation,
-      capabilities
-    );
+      const response = await this.openRouter.chat({
+        model,
+        messages: orMessages,
+        tools: openRouterTools,
+        tool_choice: openRouterTools ? 'auto' : undefined,
+        max_tokens: 1024,
+        temperature,
+      });
+
+      const { nextState: ns, actionToExecute: action, assistantMessage: msg } = await this.processLLMResponse(
+        response, conversation, capabilities
+      );
+
+      // Se o LLM chamou search_knowledge: executar INLINE e fazer outra chamada
+      if (action?.action === 'SEARCH_KNOWLEDGE' && action.params?.query) {
+        const query = action.params.query as string;
+        console.log(`[AgentEngine] search_knowledge("${query}") — executing inline...`);
+
+        const searchResult = await this.executeSearchKnowledge(query, capabilities.id);
+        console.log(`[AgentEngine] search_knowledge returned ${searchResult.length} chars`);
+
+        // Adicionar tool call + resultado ao historico para proxima chamada
+        const toolCallId = response.choices?.[0]?.message?.tool_calls?.[0]?.id || `kb_${Date.now()}`;
+        multiTurnMessages.push({
+          role: 'assistant',
+          content: msg || '',
+          tool_calls: response.choices?.[0]?.message?.tool_calls,
+        });
+        multiTurnMessages.push({
+          role: 'tool',
+          content: searchResult,
+          tool_call_id: toolCallId,
+        });
+        continue; // Proxima iteracao do loop — chama o LLM de novo com os resultados
+      }
+
+      // Nao e tool inline — esta e a resposta final
+      finalNextState = ns;
+      finalAction = action;
+      finalAssistantMessage = msg;
+      break;
+    }
+
+    const nextState = finalNextState;
+    const actionToExecute = finalAction;
+    const assistantMessage = finalAssistantMessage || 'Desculpe, houve um problema ao processar sua mensagem.';
     console.log('[AgentEngine] Response processed:', { nextState, hasAction: !!actionToExecute, messageLength: assistantMessage?.length });
 
     // 8a. Split message on ||SPLIT|| delimiter (WhatsApp natural messaging)
@@ -589,50 +625,96 @@ export class AgentEngine {
    */
   private async loadDocumentSummaries(agentId: string): Promise<Array<{file_name: string; summary: string}>> {
     try {
-      // Buscar via REST API direta (contorna schema cache para coluna 'content')
-      const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
-      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+      // Carregar apenas nomes dos documentos (conteudo agora e via search_knowledge tool)
+      const { data, error } = await this.supabase
+        .from('copilot_agent_documents')
+        .select('file_name')
+        .eq('agent_id', agentId)
+        .eq('status', 'ready');
 
-      const res = await fetch(
-        `${supabaseUrl}/rest/v1/copilot_agent_documents?agent_id=eq.${agentId}&status=eq.ready&select=file_name,summary,content`,
-        {
-          headers: {
-            "apikey": serviceKey,
-            "Authorization": `Bearer ${serviceKey}`,
-          },
-        }
-      );
-
-      if (!res.ok) {
-        // Fallback: usar supabase client (sem content)
-        const { data } = await this.supabase
-          .from('copilot_agent_documents')
-          .select('file_name, summary')
-          .eq('agent_id', agentId)
-          .eq('status', 'ready')
-          .not('summary', 'is', null);
-        console.log('[AgentEngine] KB loaded (fallback, summary only):', data?.length || 0);
-        return data || [];
+      if (error) {
+        console.warn('[AgentEngine] KB list error:', error.message);
+        return [];
       }
 
-      const docs = await res.json();
-
-      // Para cada documento: usar content completo (ate 30K chars), ou summary como fallback
-      const result = (docs || [])
-        .filter((d: any) => d.summary || d.content)
-        .map((d: any) => ({
-          file_name: d.file_name,
-          summary: d.content
-            ? d.content.substring(0, 30000)  // Conteudo COMPLETO (ate 30K)
-            : (d.summary || ""),
-        }));
-
-      const totalChars = result.reduce((acc: number, d: any) => acc + d.summary.length, 0);
-      console.log(`[AgentEngine] KB loaded: ${result.length} docs, ${totalChars} total chars (full content)`);
-      return result;
+      console.log('[AgentEngine] KB docs available:', data?.length || 0);
+      return (data || []).map(d => ({ file_name: d.file_name, summary: '' }));
     } catch (e) {
       console.warn('[AgentEngine] Failed to load KB:', e);
       return [];
+    }
+  }
+
+  /**
+   * Executa busca na base de conhecimento inline (search_knowledge tool).
+   * Retorna trechos relevantes + lista de arquivos disponiveis para envio.
+   */
+  private async executeSearchKnowledge(query: string, agentId: string): Promise<string> {
+    try {
+      const apiKey = Deno.env.get('OPENROUTER_API_KEY');
+      if (!apiKey) return 'Erro: API key nao configurada.';
+
+      const queryEmbedding = await generateEmbedding(query, apiKey);
+      if (!queryEmbedding || queryEmbedding.length === 0) return 'Nao foi possivel processar a busca.';
+
+      const embeddingStr = `[${queryEmbedding.join(',')}]`;
+      const parts: string[] = [];
+
+      // Buscar chunks relevantes (generoso: 8 resultados, threshold baixo)
+      const { data: chunks } = await (this.supabase as any)
+        .rpc('match_document_chunks', {
+          query_embedding: embeddingStr,
+          agent_id_filter: agentId,
+          match_count: 8,
+          similarity_threshold: 0.45,
+        });
+
+      if (chunks && chunks.length > 0) {
+        parts.push('=== INFORMACOES ENCONTRADAS ===\n');
+        for (const chunk of chunks as Array<{content: string; similarity: number}>) {
+          parts.push(chunk.content);
+          parts.push('');
+        }
+      }
+
+      // Buscar FAQs relevantes
+      const { data: faqs } = await (this.supabase as any)
+        .rpc('match_faqs', {
+          query_embedding: embeddingStr,
+          agent_id_filter: agentId,
+          match_count: 4,
+          similarity_threshold: 0.5,
+        });
+
+      if (faqs && faqs.length > 0) {
+        parts.push('=== PERGUNTAS FREQUENTES ===\n');
+        for (const faq of faqs as Array<{question: string; answer: string}>) {
+          parts.push(`P: ${faq.question}\nR: ${faq.answer}\n`);
+        }
+      }
+
+      // Listar documentos disponiveis para envio
+      const { data: docs } = await this.supabase
+        .from('copilot_agent_documents')
+        .select('id, file_name')
+        .eq('agent_id', agentId)
+        .eq('status', 'ready');
+
+      if (docs && docs.length > 0) {
+        parts.push('=== DOCUMENTOS DISPONIVEIS PARA ENVIO ===');
+        for (const doc of docs) {
+          parts.push(`- "${doc.file_name.trim()}" (id: ${doc.id}) — use send_document para enviar ao lead`);
+        }
+      }
+
+      if (parts.length === 0) {
+        return 'Nenhuma informacao encontrada na base de conhecimento para: "' + query + '"';
+      }
+
+      return parts.join('\n');
+    } catch (e) {
+      console.error('[AgentEngine] executeSearchKnowledge error:', e);
+      return 'Erro ao consultar a base de conhecimento.';
     }
   }
 
@@ -1663,25 +1745,22 @@ Regras:
     }
 
     // =====================================================
-    // 1.5 KNOWLEDGE BASE — conteudo COMPLETO injetado como conhecimento proprio
+    // 1.5 KNOWLEDGE BASE — instrucao leve, conteudo via search_knowledge tool
     // =====================================================
     if (documentSummaries && documentSummaries.length > 0) {
+      const docNames = documentSummaries.map(d => d.file_name?.trim()).filter(Boolean);
       sections.push("");
-      sections.push("# INFORMACOES QUE VOCE DOMINA SOBRE A EMPRESA E SEUS PRODUTOS");
+      sections.push("# BASE DE CONHECIMENTO");
       sections.push("");
-      sections.push("Abaixo esta TUDO que voce sabe sobre os produtos, servicos e operacoes da empresa. Estas informacoes sao PRECISAS e COMPLETAS — use-as com total confianca para responder ao lead.");
+      sections.push(`Voce tem acesso a uma base de conhecimento com ${documentSummaries.length} documento(s)${docNames.length > 0 ? ': ' + docNames.join(', ') : ''}.`);
       sections.push("");
-      documentSummaries.forEach((doc) => {
-        sections.push(doc.summary);
-        sections.push("");
-      });
-      sections.push("---");
-      sections.push("COMO USAR ESTE CONHECIMENTO:");
-      sections.push("1. Quando o lead perguntar sobre QUALQUER produto, servico, preco ou especificacao — consulte as informacoes acima e responda com precisao e seguranca.");
-      sections.push("2. Cite nomes de produtos, ingredientes, beneficios e detalhes EXATAMENTE como estao nas informacoes acima. Nao generalize nem simplifique.");
-      sections.push("3. Se a pergunta do lead se refere a algo que NAO esta nas informacoes acima, diga: 'Vou confirmar esse detalhe e ja te retorno.' NUNCA invente dados.");
-      sections.push("4. Voce fala como alguem que CONHECE esses produtos de cor. Nunca diga 'segundo nosso catalogo' ou 'de acordo com o documento'. Voce simplesmente sabe.");
-      sections.push("5. Se o lead pedir para receber um catalogo ou arquivo, use a ferramenta send_document.");
+      sections.push("REGRA CRITICA — CONSULTA OBRIGATORIA:");
+      sections.push("- Antes de responder QUALQUER pergunta sobre produtos, precos, servicos, especificacoes, politicas, catalogo ou informacoes comerciais, voce DEVE chamar a ferramenta search_knowledge.");
+      sections.push("- NAO responda de memoria. NAO improvise. SEMPRE consulte a base primeiro.");
+      sections.push("- Use os dados retornados pela busca para formular sua resposta com precisao.");
+      sections.push("- Se a busca nao retornar informacoes relevantes, diga honestamente: 'Vou verificar essa informacao e te retorno em breve.'");
+      sections.push("- Se o lead pedir um documento, catalogo ou arquivo, use a ferramenta send_document.");
+      sections.push("- Fale naturalmente — nunca mencione 'base de conhecimento', 'documento' ou 'ferramenta de busca'.");
       sections.push("");
     }
 
@@ -1698,18 +1777,8 @@ Regras:
       sections.push("");
     }
 
-    // =====================================================
-    // 1.6 SEMANTIC CONTEXT — dados especificos relevantes a pergunta atual
-    // Injetado de forma invisivel, como memoria do agente
-    // =====================================================
-    if (semanticContext && semanticContext.trim().length > 0) {
-      sections.push("");
-      sections.push("# DETALHES ESPECIFICOS QUE VOCE LEMBRA");
-      sections.push("Sobre o assunto que o lead esta perguntando, voce lembra destes detalhes especificos:");
-      sections.push(semanticContext);
-      sections.push("Use estes detalhes com prioridade. Se tiver precos, medidas ou modelos aqui, cite-os com seguranca.");
-      sections.push("");
-    }
+    // 1.6 SEMANTIC CONTEXT — agora handled pelo search_knowledge tool (multi-turn)
+    // Nao injetar mais no prompt — o agente consulta ativamente via tool
 
     // =====================================================
     // 1.5. CONTEXTO DE INTERVENÇÃO HUMANA RECENTE
@@ -2024,6 +2093,35 @@ Regras:
     pipelineStages: { stage_key: string; name: string; pipeline_type: string }[] = []
   ) {
     const tools: any[] = [];
+
+    // search_knowledge — PRIMEIRO tool, alta prioridade
+    // Disponivel quando o agente tem documentos na KB
+    try {
+      const { count } = await this.supabase
+        .from('copilot_agent_documents')
+        .select('id', { count: 'exact', head: true })
+        .eq('agent_id', capabilities.id)
+        .eq('status', 'ready');
+
+      if (count && count > 0) {
+        tools.push({
+          name: 'search_knowledge',
+          description: 'Consulta a base de conhecimento da empresa. Use OBRIGATORIAMENTE antes de responder sobre produtos, servicos, precos, especificacoes, politicas ou catalogo. Retorna informacoes precisas dos documentos da empresa.',
+          input_schema: {
+            type: 'object',
+            properties: {
+              query: {
+                type: 'string',
+                description: 'Termo de busca. Ex: "saude bucal", "preco omega", "politica troca"',
+              },
+            },
+            required: ['query'],
+          },
+        });
+      }
+    } catch (e) {
+      console.warn('[AgentEngine] Failed to check KB docs:', e);
+    }
 
     if (capabilities.can_schedule_meeting) {
       tools.push({
@@ -2577,6 +2675,7 @@ Regras:
       'create_custom_field': 'CREATE_CUSTOM_FIELD',
       'transfer_sz_chat': 'TRANSFER_SZ_CHAT',
       'send_document': 'SEND_DOCUMENT',
+      'search_knowledge': 'SEARCH_KNOWLEDGE',
     };
     return mapping[toolName] || 'UNKNOWN';
   }
@@ -2595,6 +2694,7 @@ Regras:
     if (toolName === 'create_custom_field') return currentState;
     if (toolName === 'transfer_sz_chat') return 'CLOSED_WON';
     if (toolName === 'send_document') return currentState;
+    if (toolName === 'search_knowledge') return currentState;
     if (currentState === 'NEW_LEAD') return 'QUALIFYING';
     return currentState;
   }
@@ -2624,6 +2724,11 @@ Regras:
     };
 
     const actionType = ACTION_MAP[action.action];
+
+    // SEARCH_KNOWLEDGE: handled inline via multi-turn, never enqueued
+    if (action.action === 'SEARCH_KNOWLEDGE') {
+      return { success: true, queued: false, message: 'Handled inline' };
+    }
 
     // QUALIFY/DISQUALIFY: processados via state machine + enqueueAutomationActions
     if (action.action === 'QUALIFY_LEAD' || action.action === 'DISQUALIFY_LEAD') {

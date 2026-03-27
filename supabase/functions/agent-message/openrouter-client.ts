@@ -6,8 +6,14 @@
  */
 
 export interface OpenRouterMessage {
-  role: 'system' | 'user' | 'assistant';
-  content: string;
+  role: 'system' | 'user' | 'assistant' | 'tool';
+  content: string | null;
+  tool_calls?: Array<{
+    id: string;
+    type: 'function';
+    function: { name: string; arguments: string };
+  }>;
+  tool_call_id?: string;
 }
 
 export interface OpenRouterTool {
@@ -92,23 +98,23 @@ export class OpenRouterClient {
   /**
    * Converte mensagens do formato interno para formato OpenRouter
    */
-  convertMessages(messages: Array<{ role: string; content: string }>, systemPrompt?: string): OpenRouterMessage[] {
+  convertMessages(messages: Array<{ role: string; content: string; tool_calls?: any; tool_call_id?: string }>, systemPrompt?: string): OpenRouterMessage[] {
     const openRouterMessages: OpenRouterMessage[] = [];
 
-    // Adicionar system prompt se fornecido
     if (systemPrompt) {
-      openRouterMessages.push({
-        role: 'system',
-        content: systemPrompt,
-      });
+      openRouterMessages.push({ role: 'system', content: systemPrompt });
     }
 
-    // Converter mensagens
     for (const msg of messages) {
-      openRouterMessages.push({
-        role: msg.role as 'user' | 'assistant',
+      const orMsg: OpenRouterMessage = {
+        role: msg.role as OpenRouterMessage['role'],
         content: msg.content,
-      });
+      };
+      // Preservar tool_calls para mensagens assistant que chamaram tools
+      if (msg.tool_calls) orMsg.tool_calls = msg.tool_calls;
+      // Preservar tool_call_id para respostas de tool
+      if (msg.tool_call_id) orMsg.tool_call_id = msg.tool_call_id;
+      openRouterMessages.push(orMsg);
     }
 
     return openRouterMessages;

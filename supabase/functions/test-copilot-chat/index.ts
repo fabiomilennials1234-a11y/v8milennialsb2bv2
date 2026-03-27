@@ -107,7 +107,9 @@ Deno.serve(withSentry('test-copilot-chat', async (req) => {
           }
 
           if (kbContent) {
-            systemPrompt += `\n\n# INFORMACOES QUE VOCE DOMINA SOBRE A EMPRESA E SEUS PRODUTOS\n\nAbaixo esta TUDO que voce sabe sobre os produtos e servicos. Use com total confianca.\n\n${kbContent}\n\n---\nCite nomes, ingredientes e detalhes EXATAMENTE como estao acima. Se nao sabe algo, diga 'vou verificar'. NUNCA invente. NUNCA mencione 'documento' ou 'catalogo'.`;
+            // No Playground, injetamos o conteudo direto (sem multi-turn tool).
+            // Em producao, o agente usa search_knowledge como tool.
+            systemPrompt += `\n\n# BASE DE CONHECIMENTO (preview)\n\nNo ambiente real, voce usaria a ferramenta search_knowledge para consultar estas informacoes. Neste preview, elas ja estao disponiveis:\n\n${kbContent}\n\n---\nUse estas informacoes para responder com precisao. Cite nomes de produtos e detalhes exatamente como estao acima. Se nao encontrar, diga que vai verificar. NUNCA invente. Fale naturalmente.`;
           }
         }
       } catch (dbErr) {
