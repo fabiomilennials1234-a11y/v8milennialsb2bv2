@@ -76,6 +76,19 @@ Deno.serve(withSentry('test-copilot-chat', async (req) => {
               .join("\n\n");
             systemPrompt += `\n\n## FAQs\n${faqBlock}`;
           }
+
+          // Injetar Knowledge Base (document summaries) como conhecimento do agente
+          const { data: docs } = await supabase
+            .from("copilot_agent_documents")
+            .select("summary")
+            .eq("agent_id", agentId)
+            .eq("status", "ready")
+            .not("summary", "is", null);
+
+          if (docs && docs.length > 0) {
+            const kbBlock = docs.map((d: any) => d.summary).join("\n\n");
+            systemPrompt += `\n\n# SEU CONHECIMENTO SOBRE A EMPRESA\n\nVoce conhece profundamente os seguintes aspectos da empresa:\n\n${kbBlock}\n\nCOMPORTAMENTO OBRIGATORIO:\n- Voce SABE essas informacoes. Use naturalmente nas conversas.\n- Quando perguntarem sobre produtos, precos ou servicos, responda com seguranca.\n- Se NAO sabe algo, diga: 'Vou verificar e te retorno'. NUNCA invente.\n- Se pedirem catalogo/documento, use a ferramenta send_document.\n- NUNCA mencione 'documento', 'arquivo' ou 'base de conhecimento'.`;
+          }
         }
       } catch (dbErr) {
         console.warn("[test-copilot-chat] DB fetch failed, using provided systemPrompt:", dbErr);
