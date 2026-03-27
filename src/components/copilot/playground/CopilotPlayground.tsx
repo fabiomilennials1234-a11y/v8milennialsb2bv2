@@ -40,7 +40,7 @@ import {
   useCopilotAgentForEdit,
   useUpdateCopilotAgentFromWizard,
 } from "@/hooks/useCopilotAgents";
-import { useUploadAgentDocument } from "@/hooks/useAgentDocuments";
+import { useUploadAgentDocument, useAgentDocuments, useDeleteAgentDocument } from "@/hooks/useAgentDocuments";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
 
@@ -170,7 +170,11 @@ export function CopilotPlayground() {
   const createAgent = useCreateCopilotAgent();
   const updateAgent = useUpdateCopilotAgentFromWizard();
   const uploadDocument = useUploadAgentDocument();
+  const deleteDocument = useDeleteAgentDocument();
   const { data: editData, isLoading: isLoadingEdit } = useCopilotAgentForEdit(editId);
+  const { data: existingDocs = [] } = useAgentDocuments(editId);
+  const { data: teamMember } = useCurrentTeamMember();
+  const organizationId = teamMember?.organization_id;
 
   // Load edit data
   useEffect(() => {
@@ -282,17 +286,36 @@ export function CopilotPlayground() {
           },
           documentsToRemove: [],
         });
+
+        // Upload pending documents (novos adicionados durante edicao)
+        if (organizationId) {
+          for (const doc of data.documents) {
+            if (doc.file && doc.status === "pending") {
+              try {
+                await uploadDocument.mutateAsync({
+                  agentId: editId,
+                  organizationId,
+                  file: doc.file,
+                });
+              } catch (e) {
+                console.warn("Erro ao fazer upload de documento:", e);
+              }
+            }
+          }
+        }
       } else {
         // Create new agent
         const agent = await createAgent.mutateAsync(payload);
 
         // Upload pending documents
-        if (agent?.id) {
+        if (agent?.id && (organizationId || agent.organization_id)) {
+          const orgId = organizationId || agent.organization_id;
           for (const doc of data.documents) {
             if (doc.file && doc.status === "pending") {
               try {
                 await uploadDocument.mutateAsync({
                   agentId: agent.id,
+                  organizationId: orgId,
                   file: doc.file,
                 });
               } catch (e) {
@@ -414,6 +437,10 @@ export function CopilotPlayground() {
                 links={data.links}
                 onDocumentsChange={(documents) => updateData({ documents })}
                 onLinksChange={(links) => updateData({ links })}
+                existingDocuments={existingDocs}
+                onDeleteExisting={(docId, filePath) => {
+                  if (editId) deleteDocument.mutate({ documentId: docId, filePath, agentId: editId });
+                }}
               />
             </div>
           )}
