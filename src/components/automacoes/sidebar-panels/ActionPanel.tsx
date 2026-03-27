@@ -24,6 +24,7 @@ import { useWhatsAppInstances } from "@/hooks/useWhatsAppInstances";
 import { useOrganization } from "@/hooks/useOrganization";
 import { useMessageTemplates } from "@/hooks/useMessageTemplates";
 import { supabase } from "@/integrations/supabase/client";
+import { useTeamMembers } from "@/hooks/useTeamMembers";
 import { convertAudioBlobToMp3, preloadLamejs } from "@/lib/audioToMp3";
 import { toast } from "sonner";
 import { VariableInserter } from "@/components/automacoes/VariableInserter";
@@ -37,6 +38,65 @@ import { useTags } from "@/hooks/useTags";
 import { CampaignSelectorField } from "./CampaignSelectorField";
 import { CampaignStageSelectorField } from "./CampaignStageSelectorField";
 import { CampaignTemplateSelectorField } from "./CampaignTemplateSelectorField";
+
+function AssignResponsibleConfig({
+  data,
+  onUpdate,
+}: {
+  data: ActionNodeData;
+  onUpdate: (updates: Partial<ActionNodeData>) => void;
+}) {
+  const { data: members = [] } = useTeamMembers();
+  const activeMembers = members.filter((m) => m.is_active);
+
+  return (
+    <>
+      <div className="space-y-2">
+        <Label>Modo de Atribuição</Label>
+        <Select
+          value={data.assignMode || "specific"}
+          onValueChange={(v) =>
+            onUpdate({ assignMode: v as "specific" | "round_robin" })
+          }
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="specific">Usuário Específico</SelectItem>
+            <SelectItem value="round_robin">Round Robin (distribuir)</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      {data.assignMode === "specific" && (
+        <div className="space-y-2">
+          <Label>Responsável</Label>
+          <Select
+            value={data.assigneeId || ""}
+            onValueChange={(v) => {
+              const member = activeMembers.find((m) => m.id === v);
+              onUpdate({
+                assigneeId: v,
+                assigneeName: member?.name || "",
+              });
+            }}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Selecione o responsável" />
+            </SelectTrigger>
+            <SelectContent>
+              {activeMembers.map((m) => (
+                <SelectItem key={m.id} value={m.id}>
+                  {m.name}{m.role ? ` (${m.role})` : ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+    </>
+  );
+}
 
 interface ActionPanelProps {
   data: ActionNodeData;
@@ -516,36 +576,8 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
 
       {/* ═══════ EQUIPE ═══════ */}
 
-      {(at === "assign_sdr" || at === "assign_closer") && (
-        <>
-          <div className="space-y-2">
-            <Label>Modo de Atribuição</Label>
-            <Select
-              value={data.assignMode || "round_robin"}
-              onValueChange={(v) =>
-                onUpdate({ assignMode: v as "specific" | "round_robin" })
-              }
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="round_robin">Round Robin</SelectItem>
-                <SelectItem value="specific">Específico</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          {data.assignMode === "specific" && (
-            <div className="space-y-2">
-              <Label>Nome do Membro</Label>
-              <Input
-                value={data.assigneeName || ""}
-                onChange={(e) => onUpdate({ assigneeName: e.target.value })}
-                placeholder="Nome ou ID do membro"
-              />
-            </div>
-          )}
-        </>
+      {(at === "assign_responsible" || at === "assign_sdr" || at === "assign_closer") && (
+        <AssignResponsibleConfig data={data} onUpdate={onUpdate} />
       )}
 
       {at === "notify_team_member" && (

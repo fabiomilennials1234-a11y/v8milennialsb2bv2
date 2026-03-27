@@ -395,6 +395,9 @@ export async function executeWorkflowAction(ctx: ActionContext): Promise<ActionR
       break;
 
     // ── Team ──
+    case "assign_responsible":
+      result = await handleAssignResponsible(ctx);
+      break;
     case "assign_sdr":
       result = await handleAssign(ctx, "sdr");
       break;
@@ -1085,6 +1088,49 @@ async function handleTinyErpOrder(ctx: ActionContext, functionName: string): Pro
 }
 
 // ─── Team Handlers ──────────────────────────────────────────────────────────
+
+/**
+ * Atribui responsável ao lead (sdr_id, closer_id, responsible_id).
+ * Node único que substitui assign_sdr e assign_closer separados.
+ */
+async function handleAssignResponsible(ctx: ActionContext): Promise<ActionResult> {
+  let assigneeId = ctx.nodeData.assigneeId as string;
+  const assignMode = ctx.nodeData.assignMode as string || "specific";
+
+  if (assignMode === "round_robin") {
+    // Org-scoped least-loaded distribution
+    const { data: members } = await ctx.supabase
+      .from("team_members")
+      .select("id")
+      .eq("organization_id", ctx.organizationId)
+      .eq("is_active", true);
+
+    if (members && members.length > 0) {
+      const counts = await Promise.all(
+        members.map(async (m: { id: string }) => {
+          const { count } = await ctx.supabase
+            .from("leads")
+            .select("*", { count: "exact", head: true })
+            .eq("responsible_id", m.id)
+            .eq("organization_id", ctx.organizationId);
+          return { id: m.id, count: count ?? 0 };
+        }),
+      );
+      counts.sort((a, b) => a.count - b.count);
+      assigneeId = counts[0].id;
+    }
+  }
+
+  if (!assigneeId) return { success: false, error: "No team member to assign" };
+
+  await ctx.supabase.from("leads").update({
+    sdr_id: assigneeId,
+    closer_id: assigneeId,
+    responsible_id: assigneeId,
+  }).eq("id", ctx.leadId);
+
+  return { success: true, message: `Responsável atribuído`, data: { assigneeId } };
+}
 
 async function handleAssign(ctx: ActionContext, role: "sdr" | "closer"): Promise<ActionResult> {
   let assigneeId = ctx.nodeData.assigneeId as string;

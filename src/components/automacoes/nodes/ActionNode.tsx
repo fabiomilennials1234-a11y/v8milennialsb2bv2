@@ -65,6 +65,7 @@ const ACTION_ICONS: Record<string, React.ElementType> = {
   create_tinyerp_order: ShoppingCart,
   create_tinyerp_upsell_order: ShoppingBag,
   // Equipe
+  assign_responsible: UserPlus,
   assign_sdr: UserPlus,
   assign_closer: UserPlus,
   notify_team_member: Bell,
