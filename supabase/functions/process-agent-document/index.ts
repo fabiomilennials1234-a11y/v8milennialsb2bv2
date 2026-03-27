@@ -98,6 +98,7 @@ serve(withSentry('process-agent-document', async (req) => {
 
       const pdfBuffer = await pdfResponse.arrayBuffer();
       const pdfBytes = new Uint8Array(pdfBuffer);
+      console.log(`[process-agent-document] Downloaded PDF: ${pdfBytes.length} bytes`);
 
       // Para PDFs pequenos (< 4MB), usar multimodal API com base64 inline
       // Para PDFs grandes (>= 4MB), extrair texto programaticamente do binario
@@ -117,7 +118,7 @@ serve(withSentry('process-agent-document', async (req) => {
             "X-Title": "V8 Millennials - PDF Text Extraction",
           },
           body: JSON.stringify({
-            model: "google/gemini-2.5-flash-preview",
+            model: "google/gemini-2.5-flash",
             messages: [{
               role: "user",
               content: [
@@ -135,7 +136,7 @@ serve(withSentry('process-agent-document', async (req) => {
           textContent = extractResult.choices?.[0]?.message?.content || "";
           console.log("[process-agent-document] Multimodal extraction got", textContent.length, "chars");
         } else {
-          console.error("[process-agent-document] Multimodal extraction failed:", await extractionResponse.text());
+          console.error("[process-agent-document] Extraction failed:", extractionResponse.status, await extractionResponse.text().then(t => t.substring(0, 200)));
         }
       } else {
         // PDFs grandes (>= 4MB): extrair texto programaticamente do binario PDF
@@ -195,13 +196,15 @@ serve(withSentry('process-agent-document', async (req) => {
     }
 
     if (!textContent || textContent.trim().length < 10) {
+      const errMsg = `Content too short (${textContent?.length || 0} chars). MIME: ${doc.mime_type}, Size: ${doc.file_size}`;
+      console.error("[process-agent-document]", errMsg);
       await supabase
         .from("copilot_agent_documents")
-        .update({ status: "error", error_message: "Document content too short or empty. The PDF may be image-only without readable text.", updated_at: new Date().toISOString() })
+        .update({ status: "error", error_message: errMsg, updated_at: new Date().toISOString() })
         .eq("id", documentId);
 
       return new Response(
-        JSON.stringify({ error: "Document content too short" }),
+        JSON.stringify({ error: errMsg }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
