@@ -521,24 +521,7 @@ export default function PipeWhatsapp() {
         open={isCreateLeadModalOpen}
         onOpenChange={setIsCreateLeadModalOpen}
         lead={null}
-        onSuccess={async (newLeadId) => {
-          if (newLeadId && organizationId) {
-            try {
-              const firstStage = pipelineStages.length > 0
-                ? pipelineStages.sort((a, b) => a.position - b.position)[0].stage_key
-                : "novo";
-              await createPipeWhatsapp.mutateAsync({
-                lead_id: newLeadId,
-                status: firstStage,
-                organization_id: organizationId,
-              });
-            } catch (err) {
-              console.error("[PipeWhatsapp] Erro ao inserir no funil:", err);
-              toast.error("Lead criado, mas não foi possível adicioná-lo ao funil.");
-            }
-          }
-          refetch();
-        }}
+        onSuccess={() => refetch()}
       />
 
       {/* Lead Detail Drawer */}
