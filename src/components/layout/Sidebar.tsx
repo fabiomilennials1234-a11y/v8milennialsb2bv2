@@ -333,12 +333,15 @@ export function Sidebar() {
       {/* Logo */}
       <div className="p-4 flex items-center justify-between border-b border-sidebar-border min-h-[80px]">
         {/* Logo area - crossfade between icon (collapsed) and full logo (expanded) */}
-        <div
-          className="relative flex-shrink-0"
+        <NavLink
+          to="/"
+          className="relative flex-shrink-0 cursor-pointer"
+          title="Central de Comando"
           style={{
             width: open ? 150 : 40,
             height: 40,
             transition: `width 0.55s ${sidebarEase}`,
+            display: "block",
           }}
         >
           {/* Collapsed: icon only */}
@@ -364,7 +367,7 @@ export function Sidebar() {
               transitionDelay: open ? "0.15s" : "0s",
             }}
           />
-        </div>
+        </NavLink>
 
         {/* Alerts + collapse button (expanded) */}
         <div
