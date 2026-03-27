@@ -460,42 +460,14 @@ export function useToggleLeadAI() {
       if (!organizationId) {
         throw new Error("Cannot update lead: No organization context");
       }
-      
-      // Get current user ID
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      const { data, error } = await supabase
-        .from("leads")
-        .update({
-          ai_disabled: disabled,
-          ai_disabled_at: disabled ? new Date().toISOString() : null,
-          ai_disabled_by: disabled ? user?.id : null,
-        })
-        .eq("id", leadId)
-        // SECURITY: Ensure lead belongs to user's organization
-        .eq("organization_id", organizationId)
-        .select()
-        .single();
+
+      // Use RPC to bypass leads RLS — any team member can toggle copilot
+      const { data, error } = await supabase.rpc("toggle_lead_ai", {
+        p_lead_id: leadId,
+        p_disabled: disabled,
+      });
 
       if (error) throw error;
-
-      // When reactivating AI: reset conversation state and log
-      if (!disabled) {
-        // Reset conversation state from WAITING_HUMAN to QUALIFYING
-        await supabase
-          .from("conversations")
-          .update({ state: "QUALIFYING" })
-          .eq("lead_id", leadId);
-
-        // Log reactivation in lead_history
-        await supabase.from("lead_history").insert({
-          lead_id: leadId,
-          action: "ai_reactivated",
-          description: "IA Copilot reativada pelo vendedor",
-          source: "manual",
-          metadata: { reactivated_by: user?.id },
-        });
-      }
 
       return data;
     },

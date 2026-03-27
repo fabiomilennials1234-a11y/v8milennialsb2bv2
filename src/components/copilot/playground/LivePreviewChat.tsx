@@ -6,6 +6,8 @@
  * - Botao "Reiniciar"
  * - Reset automatico ao mudar prompt/config (debounce 2s)
  * - Indicador "digitando..."
+ * - Suporte a attachments (imagens e PDFs)
+ * - Badge "KB ativa" quando agentId presente
  */
 
 import { useState, useRef, useEffect, useCallback } from "react";
@@ -17,16 +19,31 @@ import {
   RefreshCw,
   Play,
   MessageSquare,
+  Paperclip,
+  X,
+  FileText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 
+interface ChatAttachment {
+  base64: string;
+  mimeType: string;
+  fileName: string;
+  previewUrl?: string;
+}
+
 interface ChatMessage {
   role: "user" | "assistant";
   content: string;
-  toolCall?: string; // ex: "MOVER_CARD executada -> etapa Negociacao"
+  toolCall?: string;
+  attachment?: {
+    type: "image" | "pdf";
+    previewUrl?: string;
+    fileName: string;
+  };
 }
 
 interface LivePreviewChatProps {
@@ -36,6 +53,33 @@ interface LivePreviewChatProps {
   firstMessageTemplate?: string;
   /** Key that changes when prompt/config changes — triggers reset */
   configVersion: number;
+  /** Agent ID for KB injection */
+  agentId?: string;
+}
+
+const ACCEPTED_FILE_TYPES = [
+  "image/png",
+  "image/jpeg",
+  "image/jpg",
+  "image/webp",
+  "image/gif",
+  "application/pdf",
+];
+
+const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      // Remove the data URL prefix (e.g. "data:image/png;base64,")
+      const base64 = result.split(",")[1];
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 }
 
 export function LivePreviewChat({
@@ -44,12 +88,15 @@ export function LivePreviewChat({
   isProactive,
   firstMessageTemplate,
   configVersion,
+  agentId,
 }: LivePreviewChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [isSimulating, setIsSimulating] = useState(false);
+  const [pendingAttachment, setPendingAttachment] = useState<ChatAttachment | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const prevConfigVersionRef = useRef(configVersion);
 
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
@@ -67,6 +114,7 @@ export function LivePreviewChat({
       const timer = setTimeout(() => {
         setMessages([]);
         setInputValue("");
+        setPendingAttachment(null);
       }, 2000);
       prevConfigVersionRef.current = configVersion;
       return () => clearTimeout(timer);
@@ -74,11 +122,48 @@ export function LivePreviewChat({
     prevConfigVersionRef.current = configVersion;
   }, [configVersion, messages.length]);
 
+  const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    if (!file) return;
+
+    if (!ACCEPTED_FILE_TYPES.includes(file.type)) {
+      toast.error("Tipo de arquivo nao suportado", {
+        description: "Envie imagens (PNG, JPG, WebP, GIF) ou PDFs.",
+      });
+      return;
+    }
+
+    if (file.size > MAX_FILE_SIZE) {
+      toast.error("Arquivo muito grande", {
+        description: "O tamanho maximo e 20MB.",
+      });
+      return;
+    }
+
+    try {
+      const base64 = await fileToBase64(file);
+      const previewUrl = file.type.startsWith("image/")
+        ? URL.createObjectURL(file)
+        : undefined;
+
+      setPendingAttachment({
+        base64,
+        mimeType: file.type,
+        fileName: file.name,
+        previewUrl,
+      });
+    } catch {
+      toast.error("Erro ao ler arquivo");
+    }
+  }, []);
+
   const callEdgeFunction = useCallback(
     async (
       currentMessages: ChatMessage[],
       userMsg: string,
-      generateFirst: boolean
+      generateFirst: boolean,
+      attachment?: ChatAttachment,
     ): Promise<string[]> => {
       const response = await fetch(
         `${supabaseUrl}/functions/v1/test-copilot-chat`,
@@ -95,6 +180,8 @@ export function LivePreviewChat({
             userMessage: userMsg,
             generateFirstMessage: generateFirst,
             ...(generateFirst && firstMessageTemplate ? { firstMessageTemplate } : {}),
+            ...(agentId ? { agentId } : {}),
+            ...(attachment ? { attachment: { base64: attachment.base64, mimeType: attachment.mimeType, fileName: attachment.fileName } } : {}),
           }),
         }
       );
@@ -111,21 +198,36 @@ export function LivePreviewChat({
       if (!parts[0]) throw new Error("Resposta vazia do agente");
       return parts;
     },
-    [systemPrompt, firstMessageTemplate, supabaseUrl, anonKey]
+    [systemPrompt, firstMessageTemplate, supabaseUrl, anonKey, agentId]
   );
 
   // Send user message
   const handleSend = async () => {
-    if (!inputValue.trim() || isSending || !canTest) return;
+    if ((!inputValue.trim() && !pendingAttachment) || isSending || !canTest) return;
 
     const userMessage = inputValue.trim();
     setInputValue("");
-    const newMessages: ChatMessage[] = [...messages, { role: "user", content: userMessage }];
+
+    const msgAttachment = pendingAttachment
+      ? {
+          type: (pendingAttachment.mimeType.startsWith("image/") ? "image" : "pdf") as "image" | "pdf",
+          previewUrl: pendingAttachment.previewUrl,
+          fileName: pendingAttachment.fileName,
+        }
+      : undefined;
+
+    const currentAttachment = pendingAttachment || undefined;
+    setPendingAttachment(null);
+
+    const newMessages: ChatMessage[] = [
+      ...messages,
+      { role: "user", content: userMessage || (msgAttachment ? `[${msgAttachment.fileName}]` : ""), attachment: msgAttachment },
+    ];
     setMessages(newMessages);
     setIsSending(true);
 
     try {
-      const parts = await callEdgeFunction(messages, userMessage, false);
+      const parts = await callEdgeFunction(messages, userMessage || "[Arquivo enviado]", false, currentAttachment);
       for (let i = 0; i < parts.length; i++) {
         if (i > 0) await new Promise<void>((r) => setTimeout(r, 700));
         setMessages((prev) => [...prev, { role: "assistant", content: parts[i] }]);
@@ -143,9 +245,9 @@ export function LivePreviewChat({
     if (isSimulating || !canTest) return;
     setIsSimulating(true);
     setMessages([]);
+    setPendingAttachment(null);
 
     try {
-      // Pre-defined lead messages for simulation
       const leadMessages = [
         "Ola, quero saber mais sobre o servico de voces",
         "Qual o preco?",
@@ -155,7 +257,6 @@ export function LivePreviewChat({
 
       let currentMessages: ChatMessage[] = [];
 
-      // If proactive, agent goes first
       if (isProactive) {
         const firstParts = await callEdgeFunction([], "", true);
         for (const part of firstParts) {
@@ -165,7 +266,6 @@ export function LivePreviewChat({
         await new Promise<void>((r) => setTimeout(r, 1000));
       }
 
-      // Alternate lead/agent messages
       for (let i = 0; i < leadMessages.length; i++) {
         if (!isSimulating) break;
 
@@ -192,6 +292,7 @@ export function LivePreviewChat({
     setMessages([]);
     setInputValue("");
     setIsSimulating(false);
+    setPendingAttachment(null);
   };
 
   return (
@@ -204,9 +305,16 @@ export function LivePreviewChat({
           </div>
           <div>
             <p className="text-sm font-medium">{agentName || "Agente"}</p>
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-              Live Preview
-            </Badge>
+            <div className="flex items-center gap-1">
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                Live Preview
+              </Badge>
+              {agentId && (
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-green-500/10 text-green-600 border-green-300">
+                  KB ativa
+                </Badge>
+              )}
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-1">
@@ -291,6 +399,20 @@ export function LivePreviewChat({
                       : "bg-muted rounded-bl-sm"
                   }`}
                 >
+                  {/* Attachment preview in message */}
+                  {msg.attachment && msg.attachment.type === "image" && msg.attachment.previewUrl && (
+                    <img
+                      src={msg.attachment.previewUrl}
+                      alt={msg.attachment.fileName}
+                      className="max-w-[200px] max-h-[150px] rounded-lg mb-1 object-cover"
+                    />
+                  )}
+                  {msg.attachment && msg.attachment.type === "pdf" && (
+                    <div className="flex items-center gap-1.5 mb-1 px-2 py-1 rounded bg-black/10 text-xs">
+                      <FileText className="w-3.5 h-3.5" />
+                      {msg.attachment.fileName}
+                    </div>
+                  )}
                   {msg.content}
                 </div>
                 {msg.role === "user" && (
@@ -308,7 +430,7 @@ export function LivePreviewChat({
                 .map((m, idx) => (
                   <div key={`tool-${idx}`} className="flex justify-center">
                     <Badge variant="outline" className="text-[10px] gap-1">
-                      🔧 {m.toolCall}
+                      {m.toolCall}
                     </Badge>
                   </div>
                 ))}
@@ -339,8 +461,55 @@ export function LivePreviewChat({
         </div>
       )}
 
+      {/* Pending attachment preview */}
+      {pendingAttachment && (
+        <div className="px-3 pt-2 flex items-center gap-2">
+          {pendingAttachment.mimeType.startsWith("image/") && pendingAttachment.previewUrl ? (
+            <img
+              src={pendingAttachment.previewUrl}
+              alt={pendingAttachment.fileName}
+              className="w-12 h-12 rounded object-cover border"
+            />
+          ) : (
+            <div className="flex items-center gap-1.5 px-2 py-1.5 rounded border bg-muted text-xs">
+              <FileText className="w-3.5 h-3.5" />
+              {pendingAttachment.fileName}
+            </div>
+          )}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6"
+            onClick={() => {
+              if (pendingAttachment.previewUrl) URL.revokeObjectURL(pendingAttachment.previewUrl);
+              setPendingAttachment(null);
+            }}
+          >
+            <X className="w-3.5 h-3.5" />
+          </Button>
+        </div>
+      )}
+
       {/* Input */}
       <div className="flex gap-2 p-3 border-t">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept={ACCEPTED_FILE_TYPES.join(",")}
+          onChange={handleFileSelect}
+          className="hidden"
+        />
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-9 w-9 flex-shrink-0"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={!canTest || isSending || isSimulating}
+        >
+          <Paperclip className="w-4 h-4" />
+        </Button>
         <Input
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
@@ -359,7 +528,7 @@ export function LivePreviewChat({
           size="icon"
           className="h-9 w-9"
           onClick={handleSend}
-          disabled={!inputValue.trim() || !canTest || isSending || isSimulating}
+          disabled={(!inputValue.trim() && !pendingAttachment) || !canTest || isSending || isSimulating}
         >
           {isSending ? (
             <Loader2 className="w-4 h-4 animate-spin" />
