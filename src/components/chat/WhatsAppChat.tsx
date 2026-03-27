@@ -1697,9 +1697,11 @@ function ChatWindow({
                           toast.success(checked ? "IA ativada" : "IA desativada");
                           setOptimisticAiDisabled(null);
                         },
-                        onError: () => {
+                        onError: (err: any) => {
                           setOptimisticAiDisabled(null);
-                          toast.error("Erro ao alterar Copilot. Tente novamente.");
+                          const msg = err?.message || "Erro desconhecido";
+                          toast.error(`Erro ao alterar Copilot: ${msg}`);
+                          console.error("[toggleAI] Error:", err);
                         },
                       }
                     );
@@ -1712,9 +1714,11 @@ function ChatWindow({
                           toast.success(checked ? "IA ativada" : "IA desativada");
                           setOptimisticAiDisabled(null);
                         },
-                        onError: () => {
+                        onError: (err: any) => {
                           setOptimisticAiDisabled(null);
-                          toast.error("Erro ao alterar Copilot. Tente novamente.");
+                          const msg = err?.message || "Erro desconhecido";
+                          toast.error(`Erro ao alterar Copilot: ${msg}`);
+                          console.error("[toggleAI] Error:", err);
                         },
                       }
                     );

@@ -467,7 +467,10 @@ export function useToggleLeadAI() {
         p_disabled: disabled,
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error("[toggleLeadAI] RPC error:", error.message, error.code, error.details);
+        throw new Error(error.message || "Erro desconhecido ao alterar IA");
+      }
 
       return data;
     },
