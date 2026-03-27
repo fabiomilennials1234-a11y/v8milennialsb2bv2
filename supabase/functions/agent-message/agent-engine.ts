@@ -627,36 +627,36 @@ export class AgentEngine {
 
       const parts: string[] = [];
 
-      // Buscar chunks de documentos relevantes
+      // Buscar chunks de documentos relevantes (mais chunks, threshold mais baixo)
       const { data: chunks, error: chunksErr } = await (this.supabase as any)
         .rpc('match_document_chunks', {
           query_embedding: embeddingStr,
           agent_id_filter: agentId,
-          match_count: 4,
-          similarity_threshold: 0.72,
+          match_count: 6,
+          similarity_threshold: 0.6,
         });
 
       if (!chunksErr && chunks && chunks.length > 0) {
         const chunkTexts = (chunks as Array<{content: string; similarity: number}>)
           .map(c => c.content)
           .join('\n\n');
-        parts.push(`## Contexto da Base de Conhecimento (RAG)\n${chunkTexts}`);
+        parts.push(chunkTexts);
       }
 
-      // Buscar FAQs semanticamente relevantes
+      // Buscar FAQs relevantes
       const { data: faqs, error: faqsErr } = await (this.supabase as any)
         .rpc('match_faqs', {
           query_embedding: embeddingStr,
           agent_id_filter: agentId,
-          match_count: 3,
-          similarity_threshold: 0.75,
+          match_count: 4,
+          similarity_threshold: 0.65,
         });
 
       if (!faqsErr && faqs && faqs.length > 0) {
         const faqTexts = (faqs as Array<{question: string; answer: string; similarity: number}>)
           .map(f => `P: ${f.question}\nR: ${f.answer}`)
           .join('\n\n');
-        parts.push(`## FAQs Relevantes (busca semântica)\n${faqTexts}`);
+        parts.push(faqTexts);
       }
 
       if (parts.length === 0) return '';
@@ -1636,25 +1636,25 @@ Regras:
     }
 
     // =====================================================
-    // 1.5 KNOWLEDGE BASE (document summaries — runtime injection)
+    // 1.5 KNOWLEDGE BASE — injetado como conhecimento PROPRIO do agente
+    // O agente nao sabe que isso veio de documentos. E o que ele SABE.
     // =====================================================
     if (documentSummaries && documentSummaries.length > 0) {
       sections.push("");
-      sections.push("# BASE DE CONHECIMENTO CORPORATIVO");
+      sections.push("# SEU CONHECIMENTO SOBRE A EMPRESA");
       sections.push("");
-      sections.push("Abaixo estao resumos dos documentos oficiais da empresa. Use estas informacoes como FONTE DE VERDADE para responder perguntas sobre produtos, servicos, precos, catalogos e especificacoes.");
+      sections.push("Voce conhece profundamente os seguintes aspectos da empresa:");
       sections.push("");
-      documentSummaries.forEach((doc, index) => {
-        sections.push(`## Documento ${index + 1}: ${doc.file_name}`);
+      documentSummaries.forEach((doc) => {
         sections.push(doc.summary);
         sections.push("");
       });
-      sections.push("**REGRAS OBRIGATORIAS DA BASE DE CONHECIMENTO:**");
-      sections.push("1. Quando o lead perguntar sobre produtos, precos, especificacoes ou servicos, responda SOMENTE com informacoes que estejam nos documentos acima ou no contexto semantico abaixo.");
-      sections.push("2. Se a informacao NAO estiver nos documentos, diga honestamente: 'Nao tenho essa informacao especifica no momento. Posso encaminhar seu pedido para um especialista.' NAO INVENTE dados, precos ou produtos.");
-      sections.push("3. Catalogo = fonte de verdade. Nunca crie itens, precos ou especificacoes que nao existam nos documentos.");
-      sections.push("4. Fale naturalmente, sem mencionar 'segundo o documento' ou 'de acordo com o catalogo'.");
-      sections.push("5. Se o lead pedir o documento/catalogo/arquivo, use a ferramenta send_document para enviar o arquivo original.");
+      sections.push("COMPORTAMENTO OBRIGATORIO:");
+      sections.push("- Voce SABE essas informacoes. Use naturalmente nas conversas, como um vendedor experiente faria.");
+      sections.push("- Quando o lead perguntar sobre produtos, precos ou servicos, responda com seguranca usando o que voce sabe acima.");
+      sections.push("- Se o lead perguntar algo que voce NAO sabe (nao esta no seu conhecimento acima), diga: 'Vou verificar essa informacao e te retorno em breve' ou encaminhe para um especialista. NUNCA invente.");
+      sections.push("- Se o lead quiser receber um catalogo, proposta ou documento, use a ferramenta send_document para enviar.");
+      sections.push("- NUNCA mencione 'documento', 'arquivo', 'base de conhecimento', 'catalogo que me deram'. Voce simplesmente SABE dessas coisas.");
       sections.push("");
     }
 
@@ -1672,15 +1672,15 @@ Regras:
     }
 
     // =====================================================
-    // 1.6 SEMANTIC CONTEXT (RAG — item #5 + #6)
-    // Chunks de documentos e FAQs recuperados por similaridade semântica
+    // 1.6 SEMANTIC CONTEXT — dados especificos relevantes a pergunta atual
+    // Injetado de forma invisivel, como memoria do agente
     // =====================================================
     if (semanticContext && semanticContext.trim().length > 0) {
       sections.push("");
-      sections.push("# CONTEXTO DETALHADO (recuperado por similaridade com a pergunta)");
-      sections.push("As informacoes abaixo sao trechos EXATOS dos documentos da empresa, selecionados por relevancia a pergunta atual.");
+      sections.push("# DETALHES ESPECIFICOS QUE VOCE LEMBRA");
+      sections.push("Sobre o assunto que o lead esta perguntando, voce lembra destes detalhes especificos:");
       sections.push(semanticContext);
-      sections.push("**REGRA:** Priorize estas informacoes detalhadas sobre os resumos acima. Cite dados especificos (precos, medidas, modelos) quando disponiveis aqui. Responda naturalmente sem mencionar a fonte.");
+      sections.push("Use estes detalhes com prioridade. Se tiver precos, medidas ou modelos aqui, cite-os com seguranca.");
       sections.push("");
     }
 
