@@ -383,6 +383,7 @@ async function processCampaignQueue(
               status: "sent",
               lead_id: lead.id,
               timestamp: new Date().toISOString(),
+              sent_by_ai: true,
             });
             if (chatErr && !chatErr.message?.includes("duplicate")) {
               console.warn("[campaign-rule-dispatch] whatsapp_messages insert failed:", chatErr);
@@ -725,6 +726,7 @@ async function processExpiredTimeouts(
                   status: "sent",
                   lead_id: lead.id,
                   timestamp: new Date().toISOString(),
+                  sent_by_ai: true,
                 });
               } catch (_) { /* ignore */ }
             }

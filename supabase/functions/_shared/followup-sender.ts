@@ -99,6 +99,7 @@ export async function sendFollowupMessage(
     status: "sent",
     lead_id: leadId,
     timestamp: new Date().toISOString(),
+    sent_by_ai: true,
   });
 
   await supabase.from("copilot_followup_execution_log").insert({

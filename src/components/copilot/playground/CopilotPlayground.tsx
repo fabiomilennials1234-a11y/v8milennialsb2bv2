@@ -454,6 +454,7 @@ export function CopilotPlayground() {
             isProactive={data.isProactive}
             firstMessageTemplate={data.outboundConfig.firstMessageTemplate}
             configVersion={configVersion}
+            agentId={editId}
           />
         </div>
       </div>

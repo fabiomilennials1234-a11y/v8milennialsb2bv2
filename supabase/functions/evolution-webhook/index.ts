@@ -31,6 +31,7 @@ const MAX_RESPONSE_DELAY_SECONDS = 10;
 const DEFAULT_BATCH_WAIT_SECONDS = 8;
 const MAX_MESSAGE_LENGTH = 350; // Máximo de caracteres por mensagem
 const DELAY_BETWEEN_MESSAGES_MS = 1500; // Delay entre mensagens (1.5s)
+const HUMAN_TAKEOVER_TIMEOUT_MINUTES = 10; // Copilot pausa 10min após atendente humano enviar msg
 
 interface EvolutionWebhookPayload {
   event: string;
@@ -1058,6 +1059,52 @@ async function handleMessagesUpsert(
               thisMessageId: msg.key.id,
               latestMessageId: latestUnprocessed.message_id,
             });
+            continue;
+          }
+
+          // =====================================================
+          // HUMAN TAKEOVER: Se um atendente humano enviou mensagem
+          // nos últimos 10 min, pausar copilot para não interferir
+          // =====================================================
+          const humanTimeoutAgo = new Date(
+            Date.now() - HUMAN_TAKEOVER_TIMEOUT_MINUTES * 60 * 1000
+          ).toISOString();
+
+          const { data: recentHumanMsg } = await supabase
+            .from("whatsapp_messages")
+            .select("message_id, created_at")
+            .eq("organization_id", instance.organization_id)
+            .eq("phone_number", phoneNumber)
+            .eq("direction", "outgoing")
+            .not("sent_by_ai", "is", true)
+            .gte("created_at", humanTimeoutAgo)
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (recentHumanMsg) {
+            console.log("[Evolution Webhook] Human agent active, skipping copilot:", {
+              phone: phoneNumber,
+              lastHumanMsgAt: recentHumanMsg.created_at,
+              timeoutMinutes: HUMAN_TAKEOVER_TIMEOUT_MINUTES,
+            });
+
+            // Marcar mensagens incoming como processadas para não reprocessar
+            const { data: pendingToMark } = await supabase
+              .from("whatsapp_messages")
+              .select("message_id")
+              .eq("organization_id", instance.organization_id)
+              .eq("phone_number", phoneNumber)
+              .eq("direction", "incoming")
+              .is("processed_by_agent_at", null);
+
+            if (pendingToMark && pendingToMark.length > 0) {
+              await supabase
+                .from("whatsapp_messages")
+                .update({ processed_by_agent_at: new Date().toISOString() })
+                .in("message_id", pendingToMark.map((m: { message_id: string }) => m.message_id));
+            }
+
             continue;
           }
 

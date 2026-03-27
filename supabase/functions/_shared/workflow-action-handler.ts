@@ -486,6 +486,7 @@ async function handleSendWhatsApp(ctx: ActionContext): Promise<ActionResult> {
     content: message,
     timestamp: new Date().toISOString(),
     status: "sent",
+    sent_by_ai: true,
   });
 
   return { success: true, message: "WhatsApp text sent" };
@@ -517,6 +518,7 @@ async function handleSendWhatsAppAudio(ctx: ActionContext): Promise<ActionResult
     media_url: audioUrl,
     timestamp: new Date().toISOString(),
     status: "sent",
+    sent_by_ai: true,
   });
 
   return { success: true, message: "WhatsApp audio sent" };
@@ -981,6 +983,7 @@ async function handleSendCampaignMessage(ctx: ActionContext): Promise<ActionResu
     media_url: isAudio ? template.audio_url : null,
     timestamp: new Date().toISOString(),
     status: "sent",
+    sent_by_ai: true,
   });
 
   return { success: true, message: `Campaign message sent` };

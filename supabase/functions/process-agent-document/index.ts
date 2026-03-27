@@ -11,11 +11,11 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Modelos via OpenRouter
-const PDF_MODEL = "google/gemini-2.5-flash";      // Suporte nativo a PDF multimodal
-const IMAGE_MODEL = "openai/gpt-4o";              // Melhor OCR/vision para imagens
-const SUMMARY_MODEL = "openai/gpt-4o-mini";       // Resumo rapido e barato
-const TEXT_EXTRACTION_MODEL = "openai/gpt-4o-mini"; // Extrair texto de conteudo bruto
+// Modelos via OpenAI
+const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
+const VISION_MODEL = "gpt-4o";
+const SUMMARY_MODEL = "gpt-4o-mini";
+const TEXT_EXTRACTION_MODEL = "gpt-4o-mini";
 
 // MIME types que sao imagens
 const IMAGE_MIMES = new Set(["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif"]);
@@ -76,35 +76,36 @@ function extractTextFromDocx(bytes: Uint8Array): string {
 }
 
 /**
- * Chama LLM multimodal via OpenRouter para extrair texto de PDFs ou imagens
+ * Chama LLM multimodal via OpenAI para extrair texto de PDFs ou imagens
  */
 async function extractViaMultimodal(
   apiKey: string,
   base64Content: string,
   mimeType: string,
   isPdf: boolean,
-  refererUrl: string,
+  fileName: string,
 ): Promise<{ text: string; error?: string }> {
-  const model = isPdf ? PDF_MODEL : IMAGE_MODEL;
   const prompt = isPdf
     ? `Extraia TODO o texto deste documento PDF de forma completa e fiel. Transcreva tabelas em markdown. NAO resuma, NAO omita. Se houver imagens com texto, faca OCR. Responda APENAS com o texto extraido.`
     : `Descreva detalhadamente o conteudo desta imagem. Se for material comercial (catalogo, tabela de precos, flyer), transcreva TODOS os textos visiveis incluindo precos, nomes de produtos, especificacoes. Transcreva tabelas em markdown. Responda APENAS com o conteudo extraido.`;
 
-  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+  const contentPart = isPdf
+    ? { type: "file", file: { filename: fileName, file_data: `data:${mimeType};base64,${base64Content}` } }
+    : { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64Content}` } };
+
+  const response = await fetch(OPENAI_API_URL, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${apiKey}`,
-      "HTTP-Referer": refererUrl,
-      "X-Title": "V8 Millennials - Document Extraction",
     },
     body: JSON.stringify({
-      model,
+      model: VISION_MODEL,
       messages: [{
         role: "user",
         content: [
           { type: "text", text: prompt },
-          { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64Content}` } },
+          contentPart,
         ],
       }],
       temperature: 0.1,
@@ -114,7 +115,7 @@ async function extractViaMultimodal(
 
   if (!response.ok) {
     const errBody = await response.text();
-    return { text: "", error: `${model} ${response.status}: ${errBody.substring(0, 200)}` };
+    return { text: "", error: `${VISION_MODEL} ${response.status}: ${errBody.substring(0, 200)}` };
   }
 
   const result = await response.json();
@@ -129,15 +130,12 @@ async function extractViaMultimodal(
 async function cleanTextViaLLM(
   apiKey: string,
   rawText: string,
-  refererUrl: string,
 ): Promise<string> {
-  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+  const response = await fetch(OPENAI_API_URL, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${apiKey}`,
-      "HTTP-Referer": refererUrl,
-      "X-Title": "V8 Millennials - Text Cleanup",
     },
     body: JSON.stringify({
       model: TEXT_EXTRACTION_MODEL,
@@ -161,10 +159,10 @@ serve(withSentry('process-agent-document', async (req) => {
   }
 
   try {
-    const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
-    if (!OPENROUTER_API_KEY) {
+    const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+    if (!OPENAI_API_KEY) {
       return new Response(
-        JSON.stringify({ error: "OpenRouter API key not configured" }),
+        JSON.stringify({ error: "OpenAI API key not configured" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -172,7 +170,6 @@ serve(withSentry('process-agent-document', async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
-    const refererUrl = Deno.env.get("OPENROUTER_REFERER_URL") || "https://v8millennials.com";
 
     const body: ProcessDocumentRequest = await req.json();
     const { documentId } = body;
@@ -238,10 +235,10 @@ serve(withSentry('process-agent-document', async (req) => {
     // ---------- Extracao por tipo ----------
 
     if (isPdf || isImage) {
-      // PDFs e imagens: enviar via multimodal (GPT-4o para imagens, Gemini para PDFs)
-      // Limite: 3.5MB para caber na memoria da Edge Function (base64 = +33%)
-      if (fileBytes.length > 3.5 * 1024 * 1024) {
-        const errMsg = `Arquivo muito grande para processamento automatico (${(fileBytes.length / 1024 / 1024).toFixed(1)}MB). Limite: 3.5MB. Reduza o tamanho do PDF ou divida em partes menores.`;
+      // PDFs e imagens: enviar via multimodal OpenAI GPT-4o
+      // Limite: 100MB
+      if (fileBytes.length > 100 * 1024 * 1024) {
+        const errMsg = `Arquivo muito grande para processamento automatico (${(fileBytes.length / 1024 / 1024).toFixed(1)}MB). Limite: 100MB. Reduza o tamanho do PDF ou divida em partes menores.`;
         await supabase.from("copilot_agent_documents")
           .update({ status: "error", error_message: errMsg, updated_at: new Date().toISOString() })
           .eq("id", documentId);
@@ -251,8 +248,8 @@ serve(withSentry('process-agent-document', async (req) => {
       const base64 = encodeBase64(fileBytes);
       const dataUri = isPdf ? "application/pdf" : mime;
 
-      console.log(`[process-agent-document] Multimodal extraction via ${isPdf ? PDF_MODEL : IMAGE_MODEL} (${base64.length} chars)`);
-      const { text, error: extractError } = await extractViaMultimodal(OPENROUTER_API_KEY, base64, dataUri, isPdf, refererUrl);
+      console.log(`[process-agent-document] Multimodal extraction via ${VISION_MODEL} (${base64.length} chars)`);
+      const { text, error: extractError } = await extractViaMultimodal(OPENAI_API_KEY, base64, dataUri, isPdf, doc.file_name);
 
       if (text && text.length > 10) {
         textContent = text;
@@ -272,7 +269,7 @@ serve(withSentry('process-agent-document', async (req) => {
         // Fallback: enviar o texto bruto ao LLM para limpeza
         console.log("[process-agent-document] DOCX extraction weak, trying LLM cleanup");
         const rawText = new TextDecoder("utf-8", { fatal: false }).decode(fileBytes);
-        textContent = await cleanTextViaLLM(OPENROUTER_API_KEY, rawText, refererUrl);
+        textContent = await cleanTextViaLLM(OPENAI_API_KEY, rawText);
         console.log(`[process-agent-document] LLM cleanup got: ${textContent.length} chars`);
       }
     } else {
@@ -303,13 +300,11 @@ serve(withSentry('process-agent-document', async (req) => {
     const companyName = businessContext.companyName || "a empresa";
 
     // 6. Gerar resumo via GPT-4o-mini
-    const summaryResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    const summaryResponse = await fetch(OPENAI_API_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-        "HTTP-Referer": refererUrl,
-        "X-Title": "V8 Millennials - Document Summary",
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
       },
       body: JSON.stringify({
         model: SUMMARY_MODEL,
@@ -365,7 +360,7 @@ serve(withSentry('process-agent-document', async (req) => {
 
     // 8. RAG: chunks + embeddings (fire-and-forget)
     generateAndStoreChunkEmbeddings(
-      supabase, OPENROUTER_API_KEY, documentId, doc.agent_id, doc.organization_id,
+      supabase, OPENAI_API_KEY, documentId, doc.agent_id, doc.organization_id,
       contentToSave.substring(0, 100000)
     ).catch(e => console.warn("[process-agent-document] Chunks failed:", e));
 

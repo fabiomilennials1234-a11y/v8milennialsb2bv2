@@ -651,7 +651,7 @@ export class AgentEngine {
    */
   private async executeSearchKnowledge(query: string, agentId: string): Promise<string> {
     try {
-      const apiKey = Deno.env.get('OPENROUTER_API_KEY');
+      const apiKey = Deno.env.get('OPENAI_API_KEY');
       if (!apiKey) return 'Erro: API key nao configurada.';
 
       const queryEmbedding = await generateEmbedding(query, apiKey);
@@ -725,7 +725,7 @@ export class AgentEngine {
    */
   private async retrieveSemanticContext(userMessage: string, agentId: string): Promise<string> {
     try {
-      const apiKey = Deno.env.get('OPENROUTER_API_KEY');
+      const apiKey = Deno.env.get('OPENAI_API_KEY');
       if (!apiKey) return '';
 
       // Gerar embedding da mensagem do usuário
@@ -783,7 +783,7 @@ export class AgentEngine {
    */
   private async retrieveLongTermMemories(userMessage: string, leadId: string): Promise<string> {
     try {
-      const apiKey = Deno.env.get('OPENROUTER_API_KEY');
+      const apiKey = Deno.env.get('OPENAI_API_KEY');
       if (!apiKey) return '';
 
       const queryEmbedding = await generateEmbedding(userMessage, apiKey);
@@ -828,7 +828,7 @@ export class AgentEngine {
     // Extrair memórias apenas a cada 5 turnos para reduzir custo
     if (turnCount % 5 !== 0) return;
 
-    const apiKey = Deno.env.get('OPENROUTER_API_KEY');
+    const apiKey = Deno.env.get('OPENAI_API_KEY');
     if (!apiKey) return;
 
     const extractionPrompt = `Analise este trecho de conversa de vendas B2B e extraia APENAS fatos novos e relevantes sobre o lead.
