@@ -479,10 +479,10 @@ export function useSendWhatsAppMessage() {
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
 
-      // Salvar mensagem no banco localmente (com instance_id para aparecer no inbox correto)
+      // Salvar mensagem no banco localmente (upsert: trata corrida com webhook send.message silenciosamente)
       const messageId = data?.key?.id || `local_${Date.now()}`;
       const timestamp = new Date().toISOString();
-      const { error: insertError } = await supabase.from("whatsapp_messages").insert({
+      const { error: insertError } = await supabase.from("whatsapp_messages").upsert({
         organization_id: teamMember.organization_id,
         instance_id: instanceId || null,
         message_id: messageId,
@@ -493,9 +493,9 @@ export function useSendWhatsAppMessage() {
         content: message,
         status: "sent",
         timestamp,
-      });
+      }, { onConflict: "message_id,instance_id", ignoreDuplicates: true });
 
-      if (insertError && !insertError.message?.includes("duplicate")) {
+      if (insertError) {
         console.error("Error saving outgoing message:", insertError);
         // Não bloquear: o webhook send.message também salva como fallback
       }
@@ -724,8 +724,8 @@ export function useSendWhatsAppMedia() {
 
       console.log("[WhatsApp Media] Success:", data);
 
-      // Salvar mensagem no banco (com instance_id para aparecer no inbox correto)
-      const { error: insertError } = await supabase.from("whatsapp_messages").insert({
+      // Salvar mensagem no banco (upsert: se webhook salvou antes com media_url=null, sobrescreve com a URL real do Storage)
+      const { error: insertError } = await supabase.from("whatsapp_messages").upsert({
         organization_id: teamMember.organization_id,
         instance_id: instanceId || null,
         message_id: data?.key?.id || `local_${Date.now()}`,
@@ -737,9 +737,9 @@ export function useSendWhatsAppMedia() {
         media_url: mediaUrl,
         status: "sent",
         timestamp: new Date().toISOString(),
-      });
+      }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
 
-      if (insertError && !insertError.message?.includes("duplicate")) {
+      if (insertError) {
         console.error("Error saving outgoing media message:", insertError);
         // Não bloquear: o webhook send.message também salva como fallback
       }

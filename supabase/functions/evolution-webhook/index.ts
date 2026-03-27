@@ -1356,12 +1356,23 @@ async function handleSendMessage(
 
   const message = msg.message || (data as Record<string, unknown>).message as Record<string, unknown> | undefined;
   if (message) {
-    if ((message as Record<string, unknown>).imageMessage) messageType = "image";
-    else if ((message as Record<string, unknown>).audioMessage) {
-      messageType = ((message as Record<string, unknown>).audioMessage as Record<string, unknown>)?.ptt ? "ptt" : "audio";
+    const m = message as Record<string, unknown>;
+    if (m.imageMessage) {
+      messageType = "image";
+      mediaUrl = (m.imageMessage as Record<string, unknown>)?.url as string || null;
+    } else if (m.audioMessage) {
+      messageType = (m.audioMessage as Record<string, unknown>)?.ptt ? "ptt" : "audio";
+      mediaUrl = (m.audioMessage as Record<string, unknown>)?.url as string || null;
+    } else if (m.videoMessage) {
+      messageType = "video";
+      mediaUrl = (m.videoMessage as Record<string, unknown>)?.url as string || null;
+    } else if (m.documentMessage) {
+      messageType = "document";
+      mediaUrl = (m.documentMessage as Record<string, unknown>)?.url as string || null;
+    } else if (m.stickerMessage) {
+      messageType = "sticker";
+      mediaUrl = (m.stickerMessage as Record<string, unknown>)?.url as string || null;
     }
-    else if ((message as Record<string, unknown>).videoMessage) messageType = "video";
-    else if ((message as Record<string, unknown>).documentMessage) messageType = "document";
   }
 
   console.log("[Evolution Webhook] send.message saving:", {
@@ -1370,7 +1381,9 @@ async function handleSendMessage(
     messageId: key.id,
   });
 
-  const { error: msgError } = await supabase.from("whatsapp_messages").insert({
+  // Upsert: se já existe (ex: MESSAGES_UPSERT chegou primeiro), atualiza media_url
+  // para garantir que a URL correta do Storage sobrescreva null ou CDN URL expirada.
+  const { error: msgError } = await supabase.from("whatsapp_messages").upsert({
     organization_id: instance.organization_id,
     instance_id: instance.id,
     message_id: key.id,
@@ -1386,14 +1399,10 @@ async function handleSendMessage(
       ? new Date(Number(msg.messageTimestamp) * 1000).toISOString()
       : new Date().toISOString(),
     raw_payload: data as unknown as Record<string, unknown>,
-  });
+  }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
 
   if (msgError) {
-    if (!msgError.message?.includes("duplicate")) {
-      console.error("[Evolution Webhook] Error saving send.message:", msgError);
-    } else {
-      console.log("[Evolution Webhook] send.message already exists (duplicate), OK");
-    }
+    console.error("[Evolution Webhook] Error saving send.message:", msgError);
   } else {
     console.log("[Evolution Webhook] send.message saved successfully");
   }
