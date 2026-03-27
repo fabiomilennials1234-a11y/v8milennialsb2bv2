@@ -1,5 +1,4 @@
-import { memo, useMemo } from "react";
-import { motion } from "framer-motion";
+import { memo, useRef, useEffect, useCallback } from "react";
 
 interface SpeedometerGaugeProps {
   currentPercent: number;
@@ -9,6 +8,19 @@ interface SpeedometerGaugeProps {
   subtitle?: string;
 }
 
+const W = 420;
+const H = 280;
+const CX = W / 2;
+const CY = 210;
+const R = 160;
+const MAX_PCT = 130;
+const START_ANGLE = Math.PI * 0.8;
+const SWEEP = Math.PI * 1.5; // 270 degrees
+
+function pctToAngle(pct: number) {
+  return START_ANGLE + (pct / MAX_PCT) * SWEEP;
+}
+
 function SpeedometerGaugeBase({
   currentPercent,
   expectedPercent,
@@ -16,222 +28,176 @@ function SpeedometerGaugeBase({
   currentLabel,
   subtitle,
 }: SpeedometerGaugeProps) {
-  const MAX_PCT = 130;
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const animRef = useRef<number>();
+  const startTimeRef = useRef<number>(0);
+
   const clampedCurrent = Math.min(Math.max(currentPercent, 0), MAX_PCT);
   const clampedExpected = Math.min(Math.max(expectedPercent, 0), MAX_PCT);
-
-  // Arc from -135deg to +135deg = 270deg sweep
-  const MIN_ANGLE = -135;
-  const MAX_ANGLE = 135;
-  const RANGE = MAX_ANGLE - MIN_ANGLE;
-
-  const currentAngle = MIN_ANGLE + (clampedCurrent / MAX_PCT) * RANGE;
-  const expectedAngle = MIN_ANGLE + (clampedExpected / MAX_PCT) * RANGE;
-
   const isAhead = currentPercent >= expectedPercent;
 
-  const ticks = useMemo(() => {
-    const result = [];
-    for (let i = 0; i <= 13; i++) {
-      const pct = i * 10;
-      const angle = MIN_ANGLE + (pct / MAX_PCT) * RANGE;
-      const rad = ((angle - 90) * Math.PI) / 180;
-      const isMajor = pct % 20 === 0;
-      const innerR = isMajor ? 72 : 76;
-      const outerR = 82;
-      result.push({
-        x1: 100 + innerR * Math.cos(rad),
-        y1: 100 + innerR * Math.sin(rad),
-        x2: 100 + outerR * Math.cos(rad),
-        y2: 100 + outerR * Math.sin(rad),
-        label: isMajor ? `${pct}%` : null,
-        labelX: 100 + 62 * Math.cos(rad),
-        labelY: 100 + 62 * Math.sin(rad),
-        isMajor,
-      });
+  const draw = useCallback((timestamp: number) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    if (!startTimeRef.current) startTimeRef.current = timestamp;
+    const elapsed = timestamp - startTimeRef.current;
+    const rawProgress = Math.min(elapsed / 1400, 1);
+    const ease = 1 - Math.pow(1 - rawProgress, 3);
+
+    ctx.clearRect(0, 0, W, H);
+
+    // Background arc
+    ctx.beginPath();
+    ctx.arc(CX, CY, R, START_ANGLE, START_ANGLE + SWEEP, false);
+    ctx.strokeStyle = "rgba(255,255,255,0.06)";
+    ctx.lineWidth = 14;
+    ctx.lineCap = "round";
+    ctx.setLineDash([]);
+    ctx.stroke();
+
+    // Color zones
+    const zones = [
+      { end: 80, color: "rgba(34,197,94,0.1)" },
+      { end: 100, color: "rgba(245,158,11,0.12)" },
+      { end: 130, color: "rgba(239,68,68,0.08)" },
+    ];
+    let zoneStart = 0;
+    for (const zone of zones) {
+      ctx.beginPath();
+      ctx.arc(CX, CY, R, pctToAngle(zoneStart), pctToAngle(zone.end), false);
+      ctx.strokeStyle = zone.color;
+      ctx.lineWidth = 14;
+      ctx.lineCap = "butt";
+      ctx.setLineDash([]);
+      ctx.stroke();
+      zoneStart = zone.end;
     }
-    return result;
-  }, []);
 
-  // SVG arc path helper
-  const describeArc = (cx: number, cy: number, r: number, startDeg: number, endDeg: number) => {
-    const startRad = ((startDeg - 90) * Math.PI) / 180;
-    const endRad = ((endDeg - 90) * Math.PI) / 180;
-    const x1 = cx + r * Math.cos(startRad);
-    const y1 = cy + r * Math.sin(startRad);
-    const x2 = cx + r * Math.cos(endRad);
-    const y2 = cy + r * Math.sin(endRad);
-    const largeArc = endDeg - startDeg > 180 ? 1 : 0;
-    return `M ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2}`;
-  };
+    // Animated progress arc
+    const progressAngle = pctToAngle(clampedCurrent * ease);
+    ctx.beginPath();
+    ctx.arc(CX, CY, R, START_ANGLE, progressAngle, false);
+    ctx.strokeStyle = isAhead ? "#22c55e" : "hsl(221.2, 83.2%, 53.3%)";
+    ctx.lineWidth = 14;
+    ctx.lineCap = "round";
+    ctx.setLineDash([]);
+    ctx.stroke();
 
-  // Color zones on the arc: green zone (0-80), yellow (80-100), red (100-130)
-  const zones = [
-    { start: MIN_ANGLE, end: MIN_ANGLE + (80 / MAX_PCT) * RANGE, color: "hsl(var(--success))", opacity: 0.15 },
-    { start: MIN_ANGLE + (80 / MAX_PCT) * RANGE, end: MIN_ANGLE + (100 / MAX_PCT) * RANGE, color: "hsl(var(--warning))", opacity: 0.15 },
-    { start: MIN_ANGLE + (100 / MAX_PCT) * RANGE, end: MAX_ANGLE, color: "hsl(var(--destructive))", opacity: 0.1 },
-  ];
+    // Tick marks
+    for (let pct = 0; pct <= 130; pct += 10) {
+      const angle = pctToAngle(pct);
+      const isMajor = pct % 20 === 0;
+      const innerR = isMajor ? R - 20 : R - 14;
+      const outerR = R - 6;
+
+      ctx.beginPath();
+      ctx.moveTo(CX + Math.cos(angle) * innerR, CY + Math.sin(angle) * innerR);
+      ctx.lineTo(CX + Math.cos(angle) * outerR, CY + Math.sin(angle) * outerR);
+      ctx.strokeStyle = isMajor ? "rgba(255,255,255,0.4)" : "rgba(255,255,255,0.15)";
+      ctx.lineWidth = isMajor ? 2 : 1;
+      ctx.setLineDash([]);
+      ctx.stroke();
+
+      if (isMajor) {
+        const lx = CX + Math.cos(angle) * (R - 30);
+        const ly = CY + Math.sin(angle) * (R - 30);
+        ctx.font = "500 11px -apple-system, BlinkMacSystemFont, sans-serif";
+        ctx.fillStyle = "rgba(255,255,255,0.35)";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(pct + "%", lx, ly);
+      }
+    }
+
+    // Expected needle (red, thinner)
+    const expAngle = pctToAngle(clampedExpected * ease);
+    const expTipX = CX + Math.cos(expAngle) * (R - 24);
+    const expTipY = CY + Math.sin(expAngle) * (R - 24);
+    ctx.beginPath();
+    ctx.moveTo(CX, CY);
+    ctx.lineTo(expTipX, expTipY);
+    ctx.strokeStyle = "rgba(239,68,68,0.5)";
+    ctx.lineWidth = 2;
+    ctx.lineCap = "round";
+    ctx.setLineDash([]);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(expTipX, expTipY, 3, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(239,68,68,0.5)";
+    ctx.fill();
+
+    // Current needle (green/blue, thicker)
+    const curAngle = pctToAngle(clampedCurrent * ease);
+    const curTipX = CX + Math.cos(curAngle) * (R - 16);
+    const curTipY = CY + Math.sin(curAngle) * (R - 16);
+    ctx.beginPath();
+    ctx.moveTo(CX, CY);
+    ctx.lineTo(curTipX, curTipY);
+    ctx.strokeStyle = isAhead ? "#22c55e" : "hsl(221.2, 83.2%, 53.3%)";
+    ctx.lineWidth = 3.5;
+    ctx.lineCap = "round";
+    ctx.setLineDash([]);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(curTipX, curTipY, 5, 0, Math.PI * 2);
+    ctx.fillStyle = isAhead ? "#22c55e" : "hsl(221.2, 83.2%, 53.3%)";
+    ctx.fill();
+
+    // Glow on tip
+    if (ease > 0.5) {
+      const glowOpacity = 0.3 + 0.3 * Math.sin(timestamp / 500);
+      ctx.beginPath();
+      ctx.arc(curTipX, curTipY, 10, 0, Math.PI * 2);
+      ctx.fillStyle = isAhead
+        ? `rgba(34,197,94,${glowOpacity})`
+        : `rgba(99,102,241,${glowOpacity})`;
+      ctx.fill();
+    }
+
+    // Center hub
+    ctx.beginPath();
+    ctx.arc(CX, CY, 16, 0, Math.PI * 2);
+    ctx.fillStyle = "hsl(240, 10%, 3.9%)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,0.1)";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([]);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(CX, CY, 7, 0, Math.PI * 2);
+    ctx.fillStyle = "hsl(221.2, 83.2%, 53.3%)";
+    ctx.fill();
+
+    // Percentage text
+    const displayPct = Math.round(clampedCurrent * ease);
+    ctx.font = "bold 32px -apple-system, BlinkMacSystemFont, sans-serif";
+    ctx.fillStyle = "#fafafa";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(displayPct + "%", CX, CY + 50);
+
+    animRef.current = requestAnimationFrame(draw);
+  }, [clampedCurrent, clampedExpected, isAhead]);
+
+  useEffect(() => {
+    startTimeRef.current = 0;
+    animRef.current = requestAnimationFrame(draw);
+    return () => {
+      if (animRef.current) cancelAnimationFrame(animRef.current);
+    };
+  }, [draw]);
 
   return (
     <div className="flex flex-col items-center">
-      <svg viewBox="0 0 200 130" className="w-full max-w-[380px]">
-        {/* Outer ring / bezel */}
-        <circle cx={100} cy={100} r={88} fill="none" stroke="hsl(var(--border))" strokeWidth="1" opacity={0.5} />
-
-        {/* Background arc */}
-        <path
-          d={describeArc(100, 100, 82, MIN_ANGLE, MAX_ANGLE)}
-          fill="none"
-          stroke="hsl(var(--muted))"
-          strokeWidth="10"
-          strokeLinecap="round"
-        />
-
-        {/* Color zone arcs */}
-        {zones.map((zone, i) => (
-          <path
-            key={i}
-            d={describeArc(100, 100, 82, zone.start, zone.end)}
-            fill="none"
-            stroke={zone.color}
-            strokeWidth="10"
-            strokeLinecap="butt"
-            opacity={zone.opacity}
-          />
-        ))}
-
-        {/* Progress arc */}
-        <motion.path
-          d={describeArc(100, 100, 82, MIN_ANGLE, MIN_ANGLE + 0.1)}
-          fill="none"
-          stroke={isAhead ? "hsl(var(--success))" : "hsl(var(--primary))"}
-          strokeWidth="10"
-          strokeLinecap="round"
-          initial={false}
-          animate={{
-            d: describeArc(100, 100, 82, MIN_ANGLE, currentAngle),
-          }}
-          transition={{ duration: 1.2, ease: "easeOut" }}
-        />
-
-        {/* Tick marks */}
-        {ticks.map((tick, i) => (
-          <g key={i}>
-            <line
-              x1={tick.x1} y1={tick.y1}
-              x2={tick.x2} y2={tick.y2}
-              stroke="hsl(var(--foreground))"
-              strokeWidth={tick.isMajor ? 1.5 : 0.75}
-              opacity={tick.isMajor ? 0.5 : 0.2}
-            />
-            {tick.label && (
-              <text
-                x={tick.labelX} y={tick.labelY}
-                textAnchor="middle"
-                dominantBaseline="middle"
-                className="fill-muted-foreground"
-                fontSize="6"
-                fontWeight="500"
-              >
-                {tick.label}
-              </text>
-            )}
-          </g>
-        ))}
-
-        {/* Expected needle (red, thinner) */}
-        <motion.line
-          x1={100} y1={100}
-          x2={100} y2={28}
-          stroke="hsl(var(--destructive))"
-          strokeWidth="1.5"
-          opacity={0.5}
-          strokeLinecap="round"
-          style={{ transformOrigin: "100px 100px" }}
-          initial={{ rotate: MIN_ANGLE - 90 }}
-          animate={{ rotate: expectedAngle - 90 }}
-          transition={{ duration: 1, ease: "easeOut", delay: 0.3 }}
-        />
-        <motion.circle
-          cx={100} cy={28} r={2.5}
-          fill="hsl(var(--destructive))"
-          opacity={0.5}
-          style={{ transformOrigin: "100px 100px" }}
-          initial={{ rotate: MIN_ANGLE - 90 }}
-          animate={{ rotate: expectedAngle - 90 }}
-          transition={{ duration: 1, ease: "easeOut", delay: 0.3 }}
-        />
-
-        {/* Current needle (primary, thicker) */}
-        <motion.line
-          x1={100} y1={100}
-          x2={100} y2={22}
-          stroke={isAhead ? "hsl(var(--success))" : "hsl(var(--primary))"}
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          style={{ transformOrigin: "100px 100px" }}
-          initial={{ rotate: MIN_ANGLE - 90 }}
-          animate={{ rotate: currentAngle - 90 }}
-          transition={{ duration: 1.2, ease: "easeOut", delay: 0.5 }}
-        />
-        <motion.circle
-          cx={100} cy={22} r={3.5}
-          fill={isAhead ? "hsl(var(--success))" : "hsl(var(--primary))"}
-          style={{ transformOrigin: "100px 100px" }}
-          initial={{ rotate: MIN_ANGLE - 90 }}
-          animate={{ rotate: currentAngle - 90 }}
-          transition={{ duration: 1.2, ease: "easeOut", delay: 0.5 }}
-        />
-
-        {/* Glow on needle tip when ahead */}
-        {isAhead && (
-          <motion.circle
-            cx={100} cy={22} r={6}
-            fill="none"
-            stroke="hsl(var(--success))"
-            strokeWidth="1.5"
-            style={{ transformOrigin: "100px 100px" }}
-            initial={{ rotate: MIN_ANGLE - 90, opacity: 0 }}
-            animate={{ rotate: currentAngle - 90, opacity: [0.7, 0.15, 0.7] }}
-            transition={{
-              rotate: { duration: 1.2, ease: "easeOut", delay: 0.5 },
-              opacity: { repeat: Infinity, duration: 2, delay: 1.7 },
-            }}
-          />
-        )}
-
-        {/* Pulsing alert when behind */}
-        {!isAhead && currentPercent > 0 && (
-          <motion.circle
-            cx={100} cy={22} r={5}
-            fill="none"
-            stroke="hsl(var(--warning))"
-            strokeWidth="1"
-            style={{ transformOrigin: "100px 100px" }}
-            initial={{ rotate: MIN_ANGLE - 90, opacity: 0 }}
-            animate={{ rotate: currentAngle - 90, opacity: [0.5, 0.1, 0.5] }}
-            transition={{
-              rotate: { duration: 1.2, ease: "easeOut", delay: 0.5 },
-              opacity: { repeat: Infinity, duration: 1.5, delay: 1.7 },
-            }}
-          />
-        )}
-
-        {/* Center hub */}
-        <circle cx={100} cy={100} r={10} fill="hsl(var(--card))" stroke="hsl(var(--border))" strokeWidth="2" />
-        <circle cx={100} cy={100} r={5} fill="hsl(var(--primary))" />
-
-        {/* Center percentage */}
-        <text
-          x={100} y={118}
-          textAnchor="middle"
-          className="fill-foreground"
-          fontSize="16"
-          fontWeight="bold"
-        >
-          {Math.round(currentPercent)}%
-        </text>
-      </svg>
+      <canvas
+        ref={canvasRef}
+        width={W}
+        height={H}
+        style={{ maxWidth: "420px", width: "100%" }}
+      />
 
       {/* Legend */}
       <div className="flex items-center gap-6 mt-1 text-xs">
