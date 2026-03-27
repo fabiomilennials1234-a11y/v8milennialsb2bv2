@@ -24,6 +24,12 @@ interface DashboardMetrics {
   ticketMedioMRR: number;
   ticketMedioProjeto: number;
   novosClientes: number;
+  // New fields for Central de Comandos B2B
+  propostasEnviadas: number;
+  tempoMedioResposta: number;
+  vendaPrimeiroPedido: number;
+  vendaBaseAtiva: number;
+  dailySales: Array<{ day: string; revenue: number; count: number }>;
 }
 
 interface ConversionRate {
@@ -63,18 +69,12 @@ export function useDashboardMetrics(month?: number, year?: number, filterMemberI
       if (!organizationId) {
         console.warn("⚠️ [useDashboardMetrics] organizationId é null — retornando zeros");
         return {
-          totalLeads: 0,
-          reunioesMarcadas: 0,
-          reunioesComparecidas: 0,
-          noShow: 0,
-          taxaNoShow: 0,
-          vendaTotal: 0,
-          vendaMRR: 0,
-          vendaProjeto: 0,
-          ticketMedio: 0,
-          ticketMedioMRR: 0,
-          ticketMedioProjeto: 0,
-          novosClientes: 0,
+          totalLeads: 0, reunioesMarcadas: 0, reunioesComparecidas: 0,
+          noShow: 0, taxaNoShow: 0, vendaTotal: 0, vendaMRR: 0,
+          vendaProjeto: 0, ticketMedio: 0, ticketMedioMRR: 0,
+          ticketMedioProjeto: 0, novosClientes: 0,
+          propostasEnviadas: 0, tempoMedioResposta: 0,
+          vendaPrimeiroPedido: 0, vendaBaseAtiva: 0, dailySales: [],
         };
       }
 
@@ -92,6 +92,8 @@ export function useDashboardMetrics(month?: number, year?: number, filterMemberI
           noShow: 0, taxaNoShow: 0, vendaTotal: 0, vendaMRR: 0,
           vendaProjeto: 0, ticketMedio: 0, ticketMedioMRR: 0,
           ticketMedioProjeto: 0, novosClientes: 0,
+          propostasEnviadas: 0, tempoMedioResposta: 0,
+          vendaPrimeiroPedido: 0, vendaBaseAtiva: 0, dailySales: [],
         };
       }
 
@@ -113,6 +115,11 @@ export function useDashboardMetrics(month?: number, year?: number, filterMemberI
         ticketMedioMRR: d?.ticketMedioMRR ?? 0,
         ticketMedioProjeto: d?.ticketMedioProjeto ?? 0,
         novosClientes: d?.novosClientes ?? 0,
+        propostasEnviadas: d?.propostasEnviadas ?? 0,
+        tempoMedioResposta: d?.tempoMedioResposta ?? 0,
+        vendaPrimeiroPedido: d?.vendaPrimeiroPedido ?? 0,
+        vendaBaseAtiva: d?.vendaBaseAtiva ?? 0,
+        dailySales: (d?.dailySales as any[]) ?? [],
       };
     },
     enabled: !!organizationId,
