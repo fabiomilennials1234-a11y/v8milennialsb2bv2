@@ -472,7 +472,7 @@ export const LeadDetailDrawer = memo(function LeadDetailDrawer({
               ? "O Copilot voltará a responder mensagens deste lead."
               : "O Copilot não responderá mais mensagens deste lead.",
           });
-          setOptimisticAiDisabled(null);
+          // NÃO resetar optimistic aqui — evita flicker de race condition
         },
         onError: () => {
           hookToast({ title: "Erro", description: "Não foi possível alterar o status da IA.", variant: "destructive" });
@@ -497,6 +497,13 @@ export const LeadDetailDrawer = memo(function LeadDetailDrawer({
       .toUpperCase();
 
   const currentAiDisabled = optimisticAiDisabled !== null ? optimisticAiDisabled : (lead?.ai_disabled ?? false);
+
+  // Sincronizar: quando a prop refletir o valor otimista, limpar estado otimista
+  useEffect(() => {
+    if (optimisticAiDisabled !== null && lead?.ai_disabled === optimisticAiDisabled) {
+      setOptimisticAiDisabled(null);
+    }
+  }, [lead?.ai_disabled, optimisticAiDisabled]);
 
   // Compute relative dates for footer
   const createdAgo = lead?.created_at

@@ -1,7 +1,7 @@
 /**
  * @deprecated Use LeadDetailDrawer instead. This component is kept for reference only.
  */
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   User,
@@ -138,7 +138,7 @@ export function LeadDetailModal({ open, onOpenChange, leadId, onEdit }: LeadDeta
   const toggleAIMutation = useToggleLeadAI();
   const logAction = useLogLeadAction();
   const [optimisticAiDisabled, setOptimisticAiDisabled] = useState<boolean | null>(null);
-  
+
   const { data: lead, isLoading } = useQuery({
     queryKey: ["lead-detail", leadId],
     queryFn: async () => {
@@ -185,6 +185,13 @@ export function LeadDetailModal({ open, onOpenChange, leadId, onEdit }: LeadDeta
     },
     enabled: !!leadId && open,
   });
+
+  // Sincronizar: quando o lead refletir o valor otimista, limpar estado otimista
+  useEffect(() => {
+    if (optimisticAiDisabled !== null && lead?.ai_disabled === optimisticAiDisabled) {
+      setOptimisticAiDisabled(null);
+    }
+  }, [lead?.ai_disabled, optimisticAiDisabled]);
 
   const formatCurrency = (value: number | null | undefined) => {
     if (!value) return "R$ 0";
@@ -302,7 +309,7 @@ export function LeadDetailModal({ open, onOpenChange, leadId, onEdit }: LeadDeta
                                         ? "O Copilot voltará a responder mensagens deste lead."
                                         : "O Copilot não responderá mais mensagens deste lead.",
                                     });
-                                    setOptimisticAiDisabled(null);
+                                    // NÃO resetar optimistic aqui — evita flicker
                                   },
                                   onError: () => {
                                     toast({

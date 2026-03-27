@@ -1364,7 +1364,14 @@ function ChatWindow({
   
   // Usar estado otimista se disponível, senão usar o valor da prop
   const currentAiDisabled = optimisticAiDisabled !== null ? optimisticAiDisabled : (leadAiDisabled ?? false);
-  
+
+  // Quando a prop leadAiDisabled refletir o valor otimista, limpar o estado otimista
+  useEffect(() => {
+    if (optimisticAiDisabled !== null && leadAiDisabled === optimisticAiDisabled) {
+      setOptimisticAiDisabled(null);
+    }
+  }, [leadAiDisabled, optimisticAiDisabled]);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
@@ -1686,8 +1693,9 @@ function ChatWindow({
                       {
                         onSuccess: () => {
                           toast.success(checked ? "IA ativada" : "IA desativada");
-                          // Resetar estado otimista após sucesso
-                          setOptimisticAiDisabled(null);
+                          // NÃO resetar optimisticAiDisabled aqui — o estado otimista
+                          // persiste até o onError ou até a prop leadAiDisabled atualizar
+                          // via refetch, evitando flicker de race condition.
                         },
                         onError: () => {
                           // Reverter estado otimista em caso de erro

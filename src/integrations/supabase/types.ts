@@ -6179,6 +6179,10 @@ export type Database = {
         }
         Returns: string
       }
+      toggle_lead_ai: {
+        Args: { p_disabled: boolean; p_lead_id: string }
+        Returns: Json
+      }
       user_has_org_permission: {
         Args: { p_permission_key: string }
         Returns: boolean
