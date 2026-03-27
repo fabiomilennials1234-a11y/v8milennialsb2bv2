@@ -586,9 +586,11 @@ export function useToggleLeadAI() {
       }
     },
     onSuccess: (_, variables) => {
-      // Atualizar cache DIRETAMENTE com o novo valor antes de invalidar.
-      // Isso evita a race condition onde o componente limpa o estado otimista
-      // mas o refetch ainda não completou (causando flicker).
+      // Atualizar cache DIRETAMENTE com o valor confirmado pelo servidor.
+      // NÃO invalidar lead_by_phone nem lead-detail: a invalidação dispara
+      // um refetch que passa pelo RLS, e o RLS pode bloquear o SELECT para
+      // usuários que não são SDR/closer/responsible do lead — sobrescrevendo
+      // o cache correto com null e fazendo o switch reverter.
       const updateAiDisabled = (old: any) => {
         if (!old) return old;
         if (old.id === variables.leadId) {
@@ -606,13 +608,30 @@ export function useToggleLeadAI() {
       // Atualizar lead-detail (usado nos modais)
       queryClient.setQueryData(["lead-detail", variables.leadId], updateAiDisabled);
 
-      // Invalidar para eventual consistency (refetch em background)
-      queryClient.invalidateQueries({ queryKey: ["leads"], refetchType: 'active' });
-      queryClient.invalidateQueries({ queryKey: ["lead-detail", variables.leadId] });
-      queryClient.invalidateQueries({ queryKey: ["pipe_whatsapp"], refetchType: 'active' });
-      queryClient.invalidateQueries({ queryKey: ["pipe_confirmacao"], refetchType: 'active' });
-      queryClient.invalidateQueries({ queryKey: ["pipe_propostas"], refetchType: 'active' });
-      queryClient.invalidateQueries({ queryKey: ["lead_by_phone"], refetchType: 'active' });
+      // Atualizar lista de leads
+      queryClient.setQueryData(["leads", organizationId], (old: any) => {
+        if (!old) return old;
+        return old.map((lead: Lead) =>
+          lead.id === variables.leadId
+            ? { ...lead, ai_disabled: variables.disabled }
+            : lead
+        );
+      });
+
+      // Atualizar pipes
+      const updatePipe = (old: any) => {
+        if (!old) return old;
+        return old.map((item: any) =>
+          (item.leadId === variables.leadId || item.lead_id === variables.leadId)
+            ? { ...item, ai_disabled: variables.disabled }
+            : item
+        );
+      };
+      queryClient.setQueryData(["pipe_whatsapp"], updatePipe);
+      queryClient.setQueryData(["pipe_confirmacao"], updatePipe);
+      queryClient.setQueryData(["pipe_propostas"], updatePipe);
+
+      // Invalidar APENAS queries que NÃO usam RLS de leads para refetch
       queryClient.invalidateQueries({ queryKey: ["conversation-history", variables.leadId] });
       queryClient.invalidateQueries({ queryKey: ["waiting-human-leads"], refetchType: 'active' });
     },

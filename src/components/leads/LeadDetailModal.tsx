@@ -309,7 +309,7 @@ export function LeadDetailModal({ open, onOpenChange, leadId, onEdit }: LeadDeta
                                         ? "O Copilot voltará a responder mensagens deste lead."
                                         : "O Copilot não responderá mais mensagens deste lead.",
                                     });
-                                    setOptimisticAiDisabled(null);
+                                    // Não limpar optimistic — useEffect sync cuida disso
                                   },
                                   onError: () => {
                                     toast({

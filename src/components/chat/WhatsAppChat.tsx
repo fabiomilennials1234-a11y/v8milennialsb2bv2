@@ -1695,7 +1695,9 @@ function ChatWindow({
                       {
                         onSuccess: () => {
                           toast.success(checked ? "IA ativada" : "IA desativada");
-                          setOptimisticAiDisabled(null);
+                          // Não limpar optimistic aqui. O onSuccess do useLeads.ts
+                          // já atualizou o cache diretamente. O useEffect sync
+                          // limpa o optimistic quando leadAiDisabled prop atualizar.
                         },
                         onError: (err: any) => {
                           setOptimisticAiDisabled(null);
@@ -1712,7 +1714,9 @@ function ChatWindow({
                       {
                         onSuccess: () => {
                           toast.success(checked ? "IA ativada" : "IA desativada");
-                          setOptimisticAiDisabled(null);
+                          // Não limpar optimistic aqui. O onSuccess do useLeads.ts
+                          // já atualizou o cache diretamente. O useEffect sync
+                          // limpa o optimistic quando leadAiDisabled prop atualizar.
                         },
                         onError: (err: any) => {
                           setOptimisticAiDisabled(null);
