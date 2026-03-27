@@ -448,6 +448,31 @@ export function useDeleteAllLeads() {
 }
 
 /**
+ * Read ai_disabled status for a lead via SECURITY DEFINER RPC.
+ * Bypasses RLS — always returns the real DB value regardless of
+ * whether the user has SELECT permission on the lead via RLS.
+ */
+export function useLeadAiStatus(leadId: string | undefined) {
+  return useQuery({
+    queryKey: ["lead_ai_status", leadId],
+    queryFn: async () => {
+      if (!leadId) return { ai_disabled: false };
+      const { data, error } = await supabase.rpc("get_lead_ai_status", {
+        p_lead_id: leadId,
+      });
+      if (error) {
+        console.error("[useLeadAiStatus] RPC error:", error);
+        return { ai_disabled: false };
+      }
+      const parsed = typeof data === 'string' ? JSON.parse(data) : data;
+      return { ai_disabled: parsed?.ai_disabled ?? false };
+    },
+    enabled: !!leadId,
+    staleTime: 30_000, // 30s — evita refetch excessivo
+  });
+}
+
+/**
  * Toggle AI disabled status for a lead
  * When disabled, the Copilot agent will not respond to messages from this lead
  */
@@ -630,6 +655,11 @@ export function useToggleLeadAI() {
       queryClient.setQueryData(["pipe_whatsapp"], updatePipe);
       queryClient.setQueryData(["pipe_confirmacao"], updatePipe);
       queryClient.setQueryData(["pipe_propostas"], updatePipe);
+
+      // Atualizar lead_ai_status diretamente (fonte de verdade do switch)
+      queryClient.setQueryData(["lead_ai_status", variables.leadId], {
+        ai_disabled: variables.disabled,
+      });
 
       // Invalidar APENAS queries que NÃO usam RLS de leads para refetch
       queryClient.invalidateQueries({ queryKey: ["conversation-history", variables.leadId] });

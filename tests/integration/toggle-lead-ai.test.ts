@@ -153,6 +153,29 @@ describe('toggle_lead_ai RPC', () => {
     expect(error!.message).toContain('Lead not found');
   });
 
+  it('should persist ai_disabled state across navigation (get_lead_ai_status)', async () => {
+    // Disable AI on lead A
+    await userClient.rpc('toggle_lead_ai', { p_lead_id: leadAId, p_disabled: true });
+
+    // Simulate "navigating away" by checking lead B status
+    const { data: statusB } = await userClient.rpc('get_lead_ai_status', { p_lead_id: leadBId });
+    const parsedB = parseRpcResponse(statusB);
+    expect(parsedB.ai_disabled).toBe(false); // Lead B unaffected
+
+    // Simulate "navigating back" by checking lead A status again
+    const { data: statusA } = await userClient.rpc('get_lead_ai_status', { p_lead_id: leadAId });
+    const parsedA = parseRpcResponse(statusA);
+    expect(parsedA.ai_disabled).toBe(true); // Lead A still disabled!
+
+    // Re-enable for cleanup
+    await userClient.rpc('toggle_lead_ai', { p_lead_id: leadAId, p_disabled: false });
+
+    // Verify re-enabled
+    const { data: statusAfter } = await userClient.rpc('get_lead_ai_status', { p_lead_id: leadAId });
+    const parsedAfter = parseRpcResponse(statusAfter);
+    expect(parsedAfter.ai_disabled).toBe(false);
+  });
+
   it('should reject lead from another organization', async () => {
     // Create lead in a different org (skip if org doesn't exist)
     const { data: otherOrg } = await admin.from('organizations')

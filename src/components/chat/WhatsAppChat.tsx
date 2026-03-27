@@ -46,7 +46,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
-import { useToggleLeadAI, useToggleConversationAI } from "@/hooks/useLeads";
+import { useToggleLeadAI, useToggleConversationAI, useLeadAiStatus } from "@/hooks/useLeads";
 import {
   useWhatsAppContacts,
   useWhatsAppMessages,
@@ -1360,23 +1360,10 @@ function ChatWindow({
   const [imageCaption, setImageCaption] = useState("");
   const toggleAIMutation = useToggleLeadAI();
   const toggleConversationAIMutation = useToggleConversationAI();
-  // Estado local otimista para feedback visual imediato
-  const [optimisticAiDisabled, setOptimisticAiDisabled] = useState<boolean | null>(null);
 
-  // Usar estado otimista se disponível, senão usar o valor da prop
-  const currentAiDisabled = optimisticAiDisabled !== null ? optimisticAiDisabled : (leadAiDisabled ?? false);
-
-  // Limpar estado otimista ao trocar de conversa (leadId muda)
-  useEffect(() => {
-    setOptimisticAiDisabled(null);
-  }, [leadId]);
-
-  // Quando a prop leadAiDisabled refletir o valor otimista, limpar o estado otimista
-  useEffect(() => {
-    if (optimisticAiDisabled !== null && leadAiDisabled === optimisticAiDisabled) {
-      setOptimisticAiDisabled(null);
-    }
-  }, [leadAiDisabled, optimisticAiDisabled]);
+  // Ler ai_disabled via RPC dedicado (bypass RLS) — fonte de verdade
+  const { data: aiStatus } = useLeadAiStatus(leadId);
+  const currentAiDisabled = aiStatus?.ai_disabled ?? false;
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -1691,21 +1678,14 @@ function ChatWindow({
               <Switch
                 checked={!currentAiDisabled}
                 onCheckedChange={(checked) => {
-                  setOptimisticAiDisabled(!checked);
-
                   if (leadId) {
-                    // Lead existe: usar toggle direto por leadId
                     toggleAIMutation.mutate(
                       { leadId, disabled: !checked },
                       {
                         onSuccess: () => {
                           toast.success(checked ? "IA ativada" : "IA desativada");
-                          // Não limpar optimistic aqui. O onSuccess do useLeads.ts
-                          // já atualizou o cache diretamente. O useEffect sync
-                          // limpa o optimistic quando leadAiDisabled prop atualizar.
                         },
                         onError: (err: any) => {
-                          setOptimisticAiDisabled(null);
                           const msg = err?.message || "Erro desconhecido";
                           toast.error(`Erro ao alterar Copilot: ${msg}`);
                           console.error("[toggleAI] Error:", err);
@@ -1713,18 +1693,13 @@ function ChatWindow({
                       }
                     );
                   } else {
-                    // Sem lead: criar shadow lead + toggle por telefone
                     toggleConversationAIMutation.mutate(
                       { phone: phoneNumber, disabled: !checked },
                       {
                         onSuccess: () => {
                           toast.success(checked ? "IA ativada" : "IA desativada");
-                          // Não limpar optimistic aqui. O onSuccess do useLeads.ts
-                          // já atualizou o cache diretamente. O useEffect sync
-                          // limpa o optimistic quando leadAiDisabled prop atualizar.
                         },
                         onError: (err: any) => {
-                          setOptimisticAiDisabled(null);
                           const msg = err?.message || "Erro desconhecido";
                           toast.error(`Erro ao alterar Copilot: ${msg}`);
                           console.error("[toggleAI] Error:", err);
