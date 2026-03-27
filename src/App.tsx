@@ -60,6 +60,7 @@ const ApiDocs = lazy(() => lazyRetry(() => import("./pages/ApiDocs")));
 const CopilotWizard = lazy(() => lazyRetry(() => import("@/components/copilot/CopilotWizard").then(m => ({ default: m.CopilotWizard }))));
 const CopilotPlayground = lazy(() => lazyRetry(() => import("@/components/copilot/playground").then(m => ({ default: m.CopilotPlayground }))));
 const CopilotWizardTest = lazy(() => lazyRetry(() => import("./pages/CopilotWizardTest")));
+const ChecklistPage = lazy(() => lazyRetry(() => import("./pages/ChecklistPage")));
 const Automacoes = lazy(() => lazyRetry(() => import("./pages/Automacoes")));
 const AutomacoesEditor = lazy(() => lazyRetry(() => import("./pages/AutomacoesEditor")));
 const AutomacoesExecucoes = lazy(() => lazyRetry(() => import("./pages/AutomacoesExecucoes")));
@@ -289,6 +290,18 @@ function AppRoutes() {
             <LayoutWrapper>
               <PermissionProtectedRoute featureKey="followups.view">
                 <PipeFollowUps />
+              </PermissionProtectedRoute>
+            </LayoutWrapper>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/checklists"
+        element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <PermissionProtectedRoute featureKey="checklists.view">
+                <ChecklistPage />
               </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>

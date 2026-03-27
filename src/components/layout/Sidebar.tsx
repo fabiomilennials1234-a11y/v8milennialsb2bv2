@@ -36,6 +36,7 @@ import {
   Star,
   ShoppingBag,
   Gift,
+  ListChecks,
 } from "lucide-react";
 import torqueLogo from "@/assets/torque-logo.png";
 import torqueIcon from "@/assets/torque-icon.png";
@@ -88,6 +89,7 @@ const navItems: NavItemWithChildren[] = [
   { label: "Funis", icon: GitBranch, path: "/funis", children: funisSubItems },
   { label: "Agenda", icon: CalendarDays, path: "/agenda" },
   { label: "Revisão", icon: Wrench, path: "/follow-ups" },
+  { label: "Checklists", icon: ListChecks, path: "/checklists" },
   { label: "Combustível", icon: Fuel, path: "/leads" },
   { label: "Pódio", icon: Trophy, path: "/performance" },
   { label: "Comissões", icon: DollarSign, path: "/comissoes" },
@@ -141,6 +143,7 @@ const SIDEBAR_VIEW_PERMISSIONS: Record<string, string> = {
   "/upsell": "upsell.view",
   "/agenda": "agenda.view",
   "/follow-ups": "followups.view",
+  "/checklists": "checklists.view",
   "/leads": "leads.view",
   "/performance": "performance.view",
   "/comissoes": "commissions.view",
