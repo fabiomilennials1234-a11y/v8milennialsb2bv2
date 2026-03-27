@@ -206,8 +206,8 @@ serve(withSentry('process-agent-document', async (req) => {
       );
     }
 
-    // 4.5. Content sera salvo junto com o summary no step 7 (via RPC para contornar schema cache)
-    const contentToSave = textContent.substring(0, 500000);
+    // 4.5. Sanitizar content para PostgreSQL (remover null bytes que TEXT nao aceita)
+    const contentToSave = textContent.substring(0, 500000).replace(/\x00/g, "");
 
     // 5. Buscar contexto do agente para o resumo ser relevante
     const { data: agent } = await supabase
@@ -287,16 +287,7 @@ REGRAS:
       );
     }
 
-    // 7. Salvar resumo + content extraido e marcar como ready
-    //    Usa RPC com SQL direto para contornar schema cache do PostgREST
-    //    que pode nao reconhecer a coluna 'content' recem-adicionada.
-    const { error: saveError } = await supabase.rpc("save_document_content", {
-      p_doc_id: documentId,
-      p_content: contentToSave,
-    });
-    if (saveError) {
-      console.warn("[process-agent-document] RPC save_document_content failed (non-fatal):", saveError.message);
-    }
+    // 7. Salvar resumo e marcar como ready
     await supabase
       .from("copilot_agent_documents")
       .update({
@@ -307,15 +298,42 @@ REGRAS:
       })
       .eq("id", documentId);
 
+    // 7.5. Salvar content extraido via fetch direto na REST API
+    //      (contorna schema cache interno do PostgREST das Edge Functions)
+    try {
+      const patchRes = await fetch(
+        `${supabaseUrl}/rest/v1/copilot_agent_documents?id=eq.${documentId}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            "apikey": supabaseServiceKey,
+            "Authorization": `Bearer ${supabaseServiceKey}`,
+            "Prefer": "return=minimal",
+          },
+          body: JSON.stringify({ content: contentToSave }),
+        }
+      );
+      if (patchRes.ok) {
+        console.log(`[process-agent-document] Content saved: ${contentToSave.length} chars`);
+      } else {
+        console.warn("[process-agent-document] Content save failed:", patchRes.status, await patchRes.text());
+      }
+    } catch (e) {
+      console.warn("[process-agent-document] Content save error (non-fatal):", e);
+    }
+
     // 8. RAG: gerar chunks + embeddings do conteudo EXTRAIDO (texto real, nao base64)
+    //    Sanitizar null bytes antes de chunking (PostgreSQL TEXT nao aceita \x00)
     //    (fire-and-forget: nao bloqueia o retorno ao usuario)
+    const textForChunking = contentToSave.substring(0, 100000);
     generateAndStoreChunkEmbeddings(
       supabase,
       OPENROUTER_API_KEY,
       documentId,
       doc.agent_id,
       doc.organization_id,
-      textContent.substring(0, 100000) // max 100k chars para chunking (agora e texto real)
+      textForChunking
     ).catch(e => console.warn("[process-agent-document] Chunk embeddings failed (non-fatal):", e));
 
     await logRuntime({
