@@ -10,6 +10,20 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Modelo para extracao de texto de PDFs (suporte nativo a PDF via multimodal)
+const PDF_EXTRACTION_MODEL = "google/gemini-2.5-flash";
+// Modelo para extracao de texto de imagens (GPT-4o vision — melhor OCR)
+const IMAGE_EXTRACTION_MODEL = "openai/gpt-4o";
+// Modelo para geracao de resumo (rapido e barato)
+const SUMMARY_MODEL = "openai/gpt-4o-mini";
+// Limite para envio multimodal inline (base64)
+const MAX_MULTIMODAL_BYTES = 4 * 1024 * 1024; // 4MB
+
+// MIME types que sao imagens (processados via vision)
+const IMAGE_MIMES = new Set([
+  "image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif",
+]);
+
 interface ProcessDocumentRequest {
   documentId: string;
 }
@@ -64,10 +78,12 @@ serve(withSentry('process-agent-document', async (req) => {
 
     // 3. Extrair texto do documento
     let textContent = "";
+    const isImage = IMAGE_MIMES.has(doc.mime_type || "");
+    const isPdf = doc.mime_type === "application/pdf";
+    const needsVision = isPdf || isImage;
 
-    if (doc.mime_type === "application/pdf") {
-      // PDFs: baixar via signed URL fetch (mais eficiente que supabase.storage.download),
-      // limitar a 2MB para caber na memoria da Edge Function, e enviar como base64 multimodal
+    if (needsVision) {
+      // ========== PDFs e IMAGENS: usar GPT-4o Vision via OpenRouter ==========
       const { data: signedUrlData, error: signedUrlErr } = await supabase.storage
         .from("agent-documents")
         .createSignedUrl(doc.file_path, 600);
@@ -75,39 +91,43 @@ serve(withSentry('process-agent-document', async (req) => {
       if (signedUrlErr || !signedUrlData?.signedUrl) {
         await supabase
           .from("copilot_agent_documents")
-          .update({ status: "error", error_message: `Failed to generate signed URL: ${signedUrlErr?.message || "unknown"}`, updated_at: new Date().toISOString() })
+          .update({ status: "error", error_message: `Signed URL failed: ${signedUrlErr?.message || "unknown"}`, updated_at: new Date().toISOString() })
           .eq("id", documentId);
         return new Response(
-          JSON.stringify({ error: "Failed to generate signed URL for PDF" }),
+          JSON.stringify({ error: "Failed to generate signed URL" }),
           { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      // Baixar PDF via fetch nativo (mais leve que supabase SDK)
-      const pdfResponse = await fetch(signedUrlData.signedUrl);
-      if (!pdfResponse.ok) {
+      // Baixar arquivo via fetch nativo
+      const fileResponse = await fetch(signedUrlData.signedUrl);
+      if (!fileResponse.ok) {
         await supabase
           .from("copilot_agent_documents")
-          .update({ status: "error", error_message: "Failed to download PDF", updated_at: new Date().toISOString() })
+          .update({ status: "error", error_message: "Failed to download file", updated_at: new Date().toISOString() })
           .eq("id", documentId);
         return new Response(
-          JSON.stringify({ error: "Failed to download PDF" }),
+          JSON.stringify({ error: "Failed to download file" }),
           { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      const pdfBuffer = await pdfResponse.arrayBuffer();
-      const pdfBytes = new Uint8Array(pdfBuffer);
-      console.log(`[process-agent-document] Downloaded PDF: ${pdfBytes.length} bytes`);
+      const fileBuffer = await fileResponse.arrayBuffer();
+      const fileBytes = new Uint8Array(fileBuffer);
+      console.log(`[process-agent-document] Downloaded ${isPdf ? "PDF" : "image"}: ${fileBytes.length} bytes`);
 
-      // Para PDFs pequenos (< 4MB), usar multimodal API com base64 inline
-      // Para PDFs grandes (>= 4MB), extrair texto programaticamente do binario
-      const MAX_MULTIMODAL_SIZE = 4 * 1024 * 1024;
+      if (fileBytes.length < MAX_MULTIMODAL_BYTES) {
+        // Arquivo cabe no multimodal inline — usar GPT-4o Vision
+        const base64 = encodeBase64(fileBytes);
+        const mimeForDataUri = isImage ? (doc.mime_type || "image/png") : "application/pdf";
 
-      if (pdfBytes.length < MAX_MULTIMODAL_SIZE) {
-        // PDFs pequenos: multimodal com base64 inline
-        const base64 = encodeBase64(pdfBytes);
-        console.log(`[process-agent-document] Small PDF — multimodal extraction (${base64.length} chars base64)`);
+        const extractionPrompt = isImage
+          ? `Descreva detalhadamente o conteudo desta imagem. Se for um catalogo, tabela de precos, flyer ou material comercial, transcreva TODOS os textos visiveis, incluindo precos, nomes de produtos, especificacoes e informacoes de contato. Transcreva tabelas em formato markdown. Responda APENAS com o conteudo extraido.`
+          : `Extraia TODO o texto deste documento PDF de forma completa e fiel. Transcreva tabelas em markdown. NAO resuma, NAO omita. Se houver imagens com texto, transcreva o texto visivel (OCR). Responda APENAS com o texto extraido.`;
+
+        // PDFs usam Gemini (suporte nativo), imagens usam GPT-4o (melhor OCR)
+        const model = isPdf ? PDF_EXTRACTION_MODEL : IMAGE_EXTRACTION_MODEL;
+        console.log(`[process-agent-document] Calling ${model} for ${mimeForDataUri} (${base64.length} chars base64)`);
 
         const extractionResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
           method: "POST",
@@ -115,68 +135,53 @@ serve(withSentry('process-agent-document', async (req) => {
             "Content-Type": "application/json",
             Authorization: `Bearer ${OPENROUTER_API_KEY}`,
             "HTTP-Referer": Deno.env.get("OPENROUTER_REFERER_URL") || "https://v8millennials.com",
-            "X-Title": "V8 Millennials - PDF Text Extraction",
+            "X-Title": "V8 Millennials - Document Extraction",
           },
           body: JSON.stringify({
-            model: "google/gemini-2.5-flash",
+            model,
             messages: [{
               role: "user",
               content: [
-                { type: "text", text: `Extraia TODO o texto deste documento PDF de forma completa e fiel. Transcreva tabelas em markdown. NAO resuma, NAO omita. Responda APENAS com o texto extraido.` },
-                { type: "image_url", image_url: { url: `data:application/pdf;base64,${base64}` } },
+                { type: "text", text: extractionPrompt },
+                { type: "image_url", image_url: { url: `data:${mimeForDataUri};base64,${base64}` } },
               ],
             }],
             temperature: 0.1,
-            max_tokens: 32000,
+            max_tokens: 16000,
           }),
         });
 
         if (extractionResponse.ok) {
           const extractResult = await extractionResponse.json();
           textContent = extractResult.choices?.[0]?.message?.content || "";
-          console.log("[process-agent-document] Multimodal extraction got", textContent.length, "chars");
+          console.log(`[process-agent-document] GPT-4o extraction got ${textContent.length} chars`);
         } else {
-          console.error("[process-agent-document] Extraction failed:", extractionResponse.status, await extractionResponse.text().then(t => t.substring(0, 200)));
+          const errBody = await extractionResponse.text();
+          console.error(`[process-agent-document] GPT-4o extraction failed: ${extractionResponse.status}`, errBody.substring(0, 300));
         }
       } else {
-        // PDFs grandes (>= 4MB): extrair texto programaticamente do binario PDF
-        console.log(`[process-agent-document] Large PDF (${pdfBytes.length} bytes) — extracting text from binary`);
-        const decoder = new TextDecoder("latin1");
-        const rawText = decoder.decode(pdfBytes);
-        // Extrair texto entre operadores de texto do PDF (BT...ET blocks)
+        // PDF grande (>= 4MB): extrair texto programaticamente do binario
+        console.log(`[process-agent-document] Large PDF (${fileBytes.length} bytes) — binary text extraction`);
+        const rawText = new TextDecoder("latin1").decode(fileBytes);
         const textBlocks: string[] = [];
         const btEtRegex = /BT\s([\s\S]*?)ET/g;
         let match;
         while ((match = btEtRegex.exec(rawText)) !== null) {
-          // Extrair strings entre parenteses (operadores Tj/TJ)
           const blockContent = match[1];
           const stringRegex = /\(([^)]*)\)/g;
           let strMatch;
           while ((strMatch = stringRegex.exec(blockContent)) !== null) {
             const text = strMatch[1].replace(/\\n/g, "\n").replace(/\\r/g, "").replace(/\\\(/g, "(").replace(/\\\)/g, ")");
-            if (text.trim().length > 0) {
-              textBlocks.push(text);
-            }
+            if (text.trim().length > 0) textBlocks.push(text);
           }
         }
         if (textBlocks.length > 0) {
           textContent = textBlocks.join(" ").replace(/\s{2,}/g, " ").trim();
-          console.log(`[process-agent-document] Binary extraction got ${textContent.length} chars from ${textBlocks.length} blocks`);
-        }
-
-        // Se extracao binaria falhou, tentar decodificar como UTF-8
-        if (!textContent || textContent.length < 100) {
-          const utf8Text = new TextDecoder("utf-8", { fatal: false }).decode(pdfBytes);
-          const printable = utf8Text.replace(/[^\x20-\x7E\xA0-\xFF\n\r\t]/g, " ").replace(/\s{3,}/g, " ").trim();
-          const wordCount = printable.split(/\s+/).filter((w: string) => w.length > 2).length;
-          if (printable.length > 500 && wordCount > 50) {
-            textContent = printable;
-            console.log(`[process-agent-document] UTF-8 fallback got ${textContent.length} chars, ${wordCount} words`);
-          }
+          console.log(`[process-agent-document] Binary extraction got ${textContent.length} chars`);
         }
       }
     } else {
-      // Para texto/markdown/csv/docx: baixar e ler diretamente (arquivos menores)
+      // ========== Texto/Markdown/CSV/DOCX: baixar e ler diretamente ==========
       const { data: fileData, error: downloadError } = await supabase.storage
         .from("agent-documents")
         .download(doc.file_path);
@@ -184,7 +189,7 @@ serve(withSentry('process-agent-document', async (req) => {
       if (downloadError || !fileData) {
         await supabase
           .from("copilot_agent_documents")
-          .update({ status: "error", error_message: "Failed to download file from storage", updated_at: new Date().toISOString() })
+          .update({ status: "error", error_message: "Failed to download file", updated_at: new Date().toISOString() })
           .eq("id", documentId);
         return new Response(
           JSON.stringify({ error: "Failed to download file" }),
@@ -202,17 +207,16 @@ serve(withSentry('process-agent-document', async (req) => {
         .from("copilot_agent_documents")
         .update({ status: "error", error_message: errMsg, updated_at: new Date().toISOString() })
         .eq("id", documentId);
-
       return new Response(
         JSON.stringify({ error: errMsg }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // 4.5. Sanitizar content para PostgreSQL (remover null bytes que TEXT nao aceita)
+    // 4. Sanitizar content para PostgreSQL (remover null bytes)
     const contentToSave = textContent.substring(0, 500000).replace(/\x00/g, "");
 
-    // 5. Buscar contexto do agente para o resumo ser relevante
+    // 5. Buscar contexto do agente para o resumo
     const { data: agent } = await supabase
       .from("copilot_agents")
       .select("name, template_type, business_context")
@@ -222,24 +226,23 @@ serve(withSentry('process-agent-document', async (req) => {
     const businessContext = (agent?.business_context || {}) as Record<string, string>;
     const companyName = businessContext.companyName || "a empresa";
 
-    // 6. Chamar LLM para gerar resumo
-    const systemPrompt = `Você é um especialista em extração e sumarização de documentos corporativos.
+    // 6. Gerar resumo via GPT-4o-mini (rapido e barato)
+    const systemPrompt = `Voce e um especialista em extracao e sumarizacao de documentos corporativos.
 
-Sua tarefa é gerar um RESUMO CONCISO e ÚTIL do documento fornecido, focando em informações que um agente de vendas B2B precisa saber.
+Sua tarefa e gerar um RESUMO CONCISO e UTIL do documento fornecido, focando em informacoes que um agente de vendas B2B precisa saber.
 
 Contexto:
 - Empresa: ${companyName}
 - Tipo de agente: ${agent?.template_type || "vendas B2B"}
 
 REGRAS:
-- Máximo 2000 caracteres no resumo
-- Foque em: produtos/serviços, preços, condições, diferenciais, processos, políticas
-- Ignore headers, footers, números de página e formatação
-- Use bullet points para organizar as informações
-- Comece com uma frase resumo do que é o documento
-- Responda APENAS com o resumo, sem explicações adicionais`;
+- Maximo 2000 caracteres no resumo
+- Foque em: produtos/servicos, precos, condicoes, diferenciais, processos, politicas
+- Ignore headers, footers, numeros de pagina e formatacao
+- Use bullet points para organizar as informacoes
+- Comece com uma frase resumo do que e o documento
+- Responda APENAS com o resumo, sem explicacoes adicionais`;
 
-    // Truncar conteudo extraido para caber no contexto do LLM
     const truncatedContent = textContent.substring(0, 50000);
 
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
@@ -251,7 +254,7 @@ REGRAS:
         "X-Title": "V8 Millennials - Document Summary",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model: SUMMARY_MODEL,
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: `Gere o resumo deste documento:\n\n---\n${truncatedContent}\n---` },
@@ -263,12 +266,11 @@ REGRAS:
 
     if (!response.ok) {
       const error = await response.text();
-      console.error("OpenRouter error:", error);
+      console.error("Summary generation error:", error);
       await supabase
         .from("copilot_agent_documents")
         .update({ status: "error", error_message: "LLM failed to generate summary", updated_at: new Date().toISOString() })
         .eq("id", documentId);
-
       return new Response(
         JSON.stringify({ error: "Failed to generate summary" }),
         { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -283,7 +285,6 @@ REGRAS:
         .from("copilot_agent_documents")
         .update({ status: "error", error_message: "Generated summary too short", updated_at: new Date().toISOString() })
         .eq("id", documentId);
-
       return new Response(
         JSON.stringify({ error: "Generated summary too short" }),
         { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -302,7 +303,6 @@ REGRAS:
       .eq("id", documentId);
 
     // 7.5. Salvar content extraido via fetch direto na REST API
-    //      (contorna schema cache interno do PostgREST das Edge Functions)
     try {
       const patchRes = await fetch(
         `${supabaseUrl}/rest/v1/copilot_agent_documents?id=eq.${documentId}`,
@@ -326,9 +326,7 @@ REGRAS:
       console.warn("[process-agent-document] Content save error (non-fatal):", e);
     }
 
-    // 8. RAG: gerar chunks + embeddings do conteudo EXTRAIDO (texto real, nao base64)
-    //    Sanitizar null bytes antes de chunking (PostgreSQL TEXT nao aceita \x00)
-    //    (fire-and-forget: nao bloqueia o retorno ao usuario)
+    // 8. RAG: gerar chunks + embeddings (fire-and-forget)
     const textForChunking = contentToSave.substring(0, 100000);
     generateAndStoreChunkEmbeddings(
       supabase,
@@ -369,8 +367,8 @@ REGRAS:
 }));
 
 /**
- * Item #5 RAG: Divide o conteúdo em chunks, gera embeddings e salva na tabela
- * copilot_agent_document_chunks. Chamada em background (fire-and-forget).
+ * RAG: Divide conteudo em chunks, gera embeddings e salva.
+ * Fire-and-forget — nao bloqueia a resposta.
  */
 async function generateAndStoreChunkEmbeddings(
   supabase: ReturnType<typeof createClient>,
@@ -380,7 +378,6 @@ async function generateAndStoreChunkEmbeddings(
   organizationId: string,
   textContent: string
 ): Promise<void> {
-  // Limpar chunks antigos do documento (re-processamento)
   await supabase
     .from("copilot_agent_document_chunks")
     .delete()
@@ -391,10 +388,8 @@ async function generateAndStoreChunkEmbeddings(
 
   console.log(`[RAG] Gerando embeddings para ${chunks.length} chunks do documento ${documentId}`);
 
-  // Gerar embeddings em batch
   const embeddings = await generateEmbeddingsBatch(chunks, apiKey);
 
-  // Montar linhas para inserção
   const rows = chunks.map((content, i) => ({
     document_id: documentId,
     agent_id: agentId,
@@ -404,7 +399,6 @@ async function generateAndStoreChunkEmbeddings(
     embedding: `[${embeddings[i].join(",")}]`,
   }));
 
-  // Inserir em batches de 50
   const INSERT_BATCH = 50;
   for (let i = 0; i < rows.length; i += INSERT_BATCH) {
     const batch = rows.slice(i, i + INSERT_BATCH);

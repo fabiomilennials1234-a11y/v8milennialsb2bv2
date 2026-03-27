@@ -38,6 +38,11 @@ const ACCEPTED_TYPES = [
   "text/csv",
   "application/msword",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "image/png",
+  "image/jpeg",
+  "image/jpg",
+  "image/webp",
+  "image/gif",
 ];
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
