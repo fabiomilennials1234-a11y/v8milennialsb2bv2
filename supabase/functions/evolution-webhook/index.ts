@@ -517,7 +517,7 @@ async function triggerAgentMessage(
   messageText: string,
   pushName?: string,
   incomingMessageType?: string
-): Promise<{ success: boolean; message?: string; error?: string }> {
+): Promise<{ success: boolean; message?: string; error?: string; media_attachments?: Array<{ type: string; document_id: string; caption?: string }> }> {
   try {
     console.log("[Evolution Webhook] Triggering agent-message for:", {
       organizationId,
@@ -563,7 +563,7 @@ async function triggerAgentMessage(
       action: result.action_executed,
     });
 
-    return { success: true, message: result.message };
+    return { success: true, message: result.message, media_attachments: result.media_attachments };
   } catch (error) {
     console.error("[Evolution Webhook] Error calling agent-message:", error);
     return { success: false, error: String(error) };
@@ -1242,6 +1242,11 @@ async function handleMessagesUpsert(
                   console.log("[Evolution Webhook] Outgoing agent message saved");
                 }
               }
+            }
+            // Documentos anexados pelo copilot sao enviados pelo ai-action-executor via fila
+            if (agentResult.media_attachments && agentResult.media_attachments.length > 0) {
+              console.log("[Evolution Webhook] Agent requested document send:",
+                agentResult.media_attachments.map((a: any) => a.document_id));
             }
           } else if (!agentResult.success) {
             console.error("[Evolution Webhook] Agent processing FAILED:", {

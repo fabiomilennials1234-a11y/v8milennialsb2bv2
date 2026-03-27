@@ -217,7 +217,7 @@ export class AgentEngine {
     let executionResult: Record<string, unknown> | null = null;
     if (actionToExecute) {
       // Injetar lead_id para ações que precisam
-      const needsLeadId = ['SCHEDULE_MEETING', 'TRANSFER_HUMAN', 'UPDATE_LEAD', 'QUALIFY_LEAD', 'DISQUALIFY_LEAD', 'ADVANCE_STAGE', 'UPDATE_QUALIFICATION_SCORE', 'CONFIRM_MEETING', 'ADVANCE_CONFIRMATION_STAGE', 'CREATE_CUSTOM_FIELD', 'TRANSFER_SZ_CHAT'];
+      const needsLeadId = ['SCHEDULE_MEETING', 'TRANSFER_HUMAN', 'UPDATE_LEAD', 'QUALIFY_LEAD', 'DISQUALIFY_LEAD', 'ADVANCE_STAGE', 'UPDATE_QUALIFICATION_SCORE', 'CONFIRM_MEETING', 'ADVANCE_CONFIRMATION_STAGE', 'CREATE_CUSTOM_FIELD', 'TRANSFER_SZ_CHAT', 'SEND_DOCUMENT'];
       let currentAction = actionToExecute;
       if (this.currentLeadId && needsLeadId.includes(currentAction.action)) {
         currentAction = {
@@ -297,9 +297,20 @@ export class AgentEngine {
       .catch(e => console.warn('[AgentEngine] Long-term memory extraction failed (non-fatal):', e));
 
     // 14. Return Response
+    // Se a acao foi SEND_DOCUMENT, incluir media_attachments na resposta
+    let mediaAttachments: Array<{ type: string; document_id: string; caption?: string }> | undefined;
+    if (actionToExecute?.action === 'SEND_DOCUMENT' && actionToExecute.params) {
+      mediaAttachments = [{
+        type: 'document',
+        document_id: actionToExecute.params.document_id as string,
+        caption: (actionToExecute.params.caption as string) || undefined,
+      }];
+    }
+
     return {
       message: cleanMessage,
       messages: messageParts.length > 1 ? messageParts : undefined,
+      media_attachments: mediaAttachments,
       state: nextState,
       action_executed: actionToExecute?.action,
       execution_result: executionResult,
@@ -1631,14 +1642,19 @@ Regras:
       sections.push("");
       sections.push("# BASE DE CONHECIMENTO CORPORATIVO");
       sections.push("");
-      sections.push("Use as informações abaixo como fonte de referência para responder perguntas do lead. Estas foram extraídas de documentos oficiais da empresa.");
+      sections.push("Abaixo estao resumos dos documentos oficiais da empresa. Use estas informacoes como FONTE DE VERDADE para responder perguntas sobre produtos, servicos, precos, catalogos e especificacoes.");
       sections.push("");
       documentSummaries.forEach((doc, index) => {
         sections.push(`## Documento ${index + 1}: ${doc.file_name}`);
         sections.push(doc.summary);
         sections.push("");
       });
-      sections.push("**IMPORTANTE:** Quando usar informações dos documentos, não mencione 'segundo o documento' — fale como se fosse conhecimento natural da empresa.");
+      sections.push("**REGRAS OBRIGATORIAS DA BASE DE CONHECIMENTO:**");
+      sections.push("1. Quando o lead perguntar sobre produtos, precos, especificacoes ou servicos, responda SOMENTE com informacoes que estejam nos documentos acima ou no contexto semantico abaixo.");
+      sections.push("2. Se a informacao NAO estiver nos documentos, diga honestamente: 'Nao tenho essa informacao especifica no momento. Posso encaminhar seu pedido para um especialista.' NAO INVENTE dados, precos ou produtos.");
+      sections.push("3. Catalogo = fonte de verdade. Nunca crie itens, precos ou especificacoes que nao existam nos documentos.");
+      sections.push("4. Fale naturalmente, sem mencionar 'segundo o documento' ou 'de acordo com o catalogo'.");
+      sections.push("5. Se o lead pedir o documento/catalogo/arquivo, use a ferramenta send_document para enviar o arquivo original.");
       sections.push("");
     }
 
@@ -1661,10 +1677,10 @@ Regras:
     // =====================================================
     if (semanticContext && semanticContext.trim().length > 0) {
       sections.push("");
-      sections.push("# CONTEXTO SEMÂNTICO RELEVANTE (recuperado por similaridade)");
-      sections.push("As informações abaixo foram selecionadas automaticamente por serem relevantes à pergunta atual do lead.");
+      sections.push("# CONTEXTO DETALHADO (recuperado por similaridade com a pergunta)");
+      sections.push("As informacoes abaixo sao trechos EXATOS dos documentos da empresa, selecionados por relevancia a pergunta atual.");
       sections.push(semanticContext);
-      sections.push("**IMPORTANTE:** Use este contexto como referência, mas responda de forma natural, sem mencionar que recuperou essas informações.");
+      sections.push("**REGRA:** Priorize estas informacoes detalhadas sobre os resumos acima. Cite dados especificos (precos, medidas, modelos) quando disponiveis aqui. Responda naturalmente sem mencionar a fonte.");
       sections.push("");
     }
 
@@ -1675,7 +1691,7 @@ Regras:
       const { data: recentTransfer } = await this.supabase
         .from("lead_history")
         .select("metadata, created_at")
-        .eq("lead_id", leadId)
+        .eq("lead_id", this.currentLeadId)
         .eq("action", "ai_toggled")
         .not("metadata", "is", null)
         .order("created_at", { ascending: false })
@@ -2171,6 +2187,44 @@ Regras:
       });
     }
 
+    // Tool: Enviar documento da base de conhecimento ao lead via WhatsApp
+    try {
+      const { data: agentDocs } = await this.supabase
+        .from('copilot_agent_documents')
+        .select('id, file_name, summary')
+        .eq('agent_id', capabilities.id)
+        .eq('status', 'ready');
+
+      if (agentDocs && agentDocs.length > 0) {
+        const docList = agentDocs
+          .map((d: { id: string; file_name: string; summary: string | null }) =>
+            `- "${d.file_name}" (id: ${d.id})${d.summary ? ` — ${d.summary.substring(0, 80)}...` : ''}`
+          )
+          .join('\n');
+
+        tools.push({
+          name: 'send_document',
+          description: `Envia um documento/arquivo da base de conhecimento para o lead via WhatsApp. Use quando o lead pedir um catalogo, proposta, tabela de precos, ou qualquer documento disponivel.\n\nDocumentos disponiveis:\n${docList}`,
+          input_schema: {
+            type: 'object',
+            properties: {
+              document_id: {
+                type: 'string',
+                description: 'ID do documento a enviar (use os IDs listados acima)',
+              },
+              caption: {
+                type: 'string',
+                description: 'Mensagem curta que acompanha o arquivo (opcional, max 200 chars)',
+              },
+            },
+            required: ['document_id'],
+          },
+        });
+      }
+    } catch (e) {
+      console.warn('[AgentEngine] Failed to load documents for send_document tool:', e);
+    }
+
     // Tool para transferir atendimento para outro setor via SZ.chat
     let szChatConfig: { team_mappings: Record<string, unknown> } | null = null;
     try {
@@ -2436,7 +2490,7 @@ Regras:
    */
   private async processLLMResponse(response: any, conversation: any, capabilities: any) {
     let assistantMessage = '';
-    let actionToExecute = null;
+    let actionToExecute: { action: string; params: Record<string, unknown>; tenant_id: string } | null = null;
     let nextState = conversation.state;
 
     // OpenRouter retorna no formato OpenAI
@@ -2495,6 +2549,7 @@ Regras:
       'advance_confirmation_stage': 'ADVANCE_CONFIRMATION_STAGE',
       'create_custom_field': 'CREATE_CUSTOM_FIELD',
       'transfer_sz_chat': 'TRANSFER_SZ_CHAT',
+      'send_document': 'SEND_DOCUMENT',
     };
     return mapping[toolName] || 'UNKNOWN';
   }
@@ -2512,6 +2567,7 @@ Regras:
     if (toolName === 'advance_confirmation_stage') return currentState;
     if (toolName === 'create_custom_field') return currentState;
     if (toolName === 'transfer_sz_chat') return 'CLOSED_WON';
+    if (toolName === 'send_document') return currentState;
     if (currentState === 'NEW_LEAD') return 'QUALIFYING';
     return currentState;
   }
@@ -2537,6 +2593,7 @@ Regras:
       'ADVANCE_CONFIRMATION_STAGE': 'advance_confirmation_stage',
       'CREATE_CUSTOM_FIELD': 'create_custom_field',
       'TRANSFER_SZ_CHAT': 'transfer_sz_chat',
+      'SEND_DOCUMENT': 'send_document',
     };
 
     const actionType = ACTION_MAP[action.action];

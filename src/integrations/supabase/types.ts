@@ -1587,6 +1587,7 @@ export type Database = {
       copilot_agent_documents: {
         Row: {
           agent_id: string
+          content: string | null
           created_at: string | null
           error_message: string | null
           file_name: string
@@ -1601,6 +1602,7 @@ export type Database = {
         }
         Insert: {
           agent_id: string
+          content?: string | null
           created_at?: string | null
           error_message?: string | null
           file_name: string
@@ -1615,6 +1617,7 @@ export type Database = {
         }
         Update: {
           agent_id?: string
+          content?: string | null
           created_at?: string | null
           error_message?: string | null
           file_name?: string

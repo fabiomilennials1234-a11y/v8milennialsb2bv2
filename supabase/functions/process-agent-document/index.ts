@@ -1,5 +1,6 @@
 import { withSentry } from '../_shared/sentry.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { encode as encodeBase64 } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { generateEmbeddingsBatch, chunkText } from "../_shared/embeddings.ts";
 import { logRuntime } from "../_shared/logger.ts";
@@ -61,40 +62,142 @@ serve(withSentry('process-agent-document', async (req) => {
       .update({ status: "processing", updated_at: new Date().toISOString() })
       .eq("id", documentId);
 
-    // 3. Baixar o arquivo do storage
-    const { data: fileData, error: downloadError } = await supabase.storage
-      .from("agent-documents")
-      .download(doc.file_path);
-
-    if (downloadError || !fileData) {
-      await supabase
-        .from("copilot_agent_documents")
-        .update({ status: "error", error_message: "Failed to download file from storage", updated_at: new Date().toISOString() })
-        .eq("id", documentId);
-
-      return new Response(
-        JSON.stringify({ error: "Failed to download file" }),
-        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // 4. Extrair texto do documento
+    // 3. Extrair texto do documento
     let textContent = "";
 
     if (doc.mime_type === "application/pdf") {
-      // Para PDFs, enviar como base64 para o LLM processar
-      const arrayBuffer = await fileData.arrayBuffer();
-      const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
-      textContent = `[PDF Document: ${doc.file_name}]\n\nConteúdo base64 do PDF (o LLM deve extrair o texto):\n${base64.substring(0, 50000)}`;
+      // PDFs: baixar via signed URL fetch (mais eficiente que supabase.storage.download),
+      // limitar a 2MB para caber na memoria da Edge Function, e enviar como base64 multimodal
+      const { data: signedUrlData, error: signedUrlErr } = await supabase.storage
+        .from("agent-documents")
+        .createSignedUrl(doc.file_path, 600);
+
+      if (signedUrlErr || !signedUrlData?.signedUrl) {
+        await supabase
+          .from("copilot_agent_documents")
+          .update({ status: "error", error_message: `Failed to generate signed URL: ${signedUrlErr?.message || "unknown"}`, updated_at: new Date().toISOString() })
+          .eq("id", documentId);
+        return new Response(
+          JSON.stringify({ error: "Failed to generate signed URL for PDF" }),
+          { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Baixar PDF via fetch nativo (mais leve que supabase SDK)
+      const pdfResponse = await fetch(signedUrlData.signedUrl);
+      if (!pdfResponse.ok) {
+        await supabase
+          .from("copilot_agent_documents")
+          .update({ status: "error", error_message: "Failed to download PDF", updated_at: new Date().toISOString() })
+          .eq("id", documentId);
+        return new Response(
+          JSON.stringify({ error: "Failed to download PDF" }),
+          { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const pdfBuffer = await pdfResponse.arrayBuffer();
+      const pdfBytes = new Uint8Array(pdfBuffer);
+
+      // Para PDFs pequenos (< 4MB), usar multimodal API com base64 inline
+      // Para PDFs grandes (>= 4MB), extrair texto programaticamente do binario
+      const MAX_MULTIMODAL_SIZE = 4 * 1024 * 1024;
+
+      if (pdfBytes.length < MAX_MULTIMODAL_SIZE) {
+        // PDFs pequenos: multimodal com base64 inline
+        const base64 = encodeBase64(pdfBytes);
+        console.log(`[process-agent-document] Small PDF — multimodal extraction (${base64.length} chars base64)`);
+
+        const extractionResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+            "HTTP-Referer": Deno.env.get("OPENROUTER_REFERER_URL") || "https://v8millennials.com",
+            "X-Title": "V8 Millennials - PDF Text Extraction",
+          },
+          body: JSON.stringify({
+            model: "google/gemini-2.5-flash-preview",
+            messages: [{
+              role: "user",
+              content: [
+                { type: "text", text: `Extraia TODO o texto deste documento PDF de forma completa e fiel. Transcreva tabelas em markdown. NAO resuma, NAO omita. Responda APENAS com o texto extraido.` },
+                { type: "image_url", image_url: { url: `data:application/pdf;base64,${base64}` } },
+              ],
+            }],
+            temperature: 0.1,
+            max_tokens: 32000,
+          }),
+        });
+
+        if (extractionResponse.ok) {
+          const extractResult = await extractionResponse.json();
+          textContent = extractResult.choices?.[0]?.message?.content || "";
+          console.log("[process-agent-document] Multimodal extraction got", textContent.length, "chars");
+        } else {
+          console.error("[process-agent-document] Multimodal extraction failed:", await extractionResponse.text());
+        }
+      } else {
+        // PDFs grandes (>= 4MB): extrair texto programaticamente do binario PDF
+        console.log(`[process-agent-document] Large PDF (${pdfBytes.length} bytes) — extracting text from binary`);
+        const decoder = new TextDecoder("latin1");
+        const rawText = decoder.decode(pdfBytes);
+        // Extrair texto entre operadores de texto do PDF (BT...ET blocks)
+        const textBlocks: string[] = [];
+        const btEtRegex = /BT\s([\s\S]*?)ET/g;
+        let match;
+        while ((match = btEtRegex.exec(rawText)) !== null) {
+          // Extrair strings entre parenteses (operadores Tj/TJ)
+          const blockContent = match[1];
+          const stringRegex = /\(([^)]*)\)/g;
+          let strMatch;
+          while ((strMatch = stringRegex.exec(blockContent)) !== null) {
+            const text = strMatch[1].replace(/\\n/g, "\n").replace(/\\r/g, "").replace(/\\\(/g, "(").replace(/\\\)/g, ")");
+            if (text.trim().length > 0) {
+              textBlocks.push(text);
+            }
+          }
+        }
+        if (textBlocks.length > 0) {
+          textContent = textBlocks.join(" ").replace(/\s{2,}/g, " ").trim();
+          console.log(`[process-agent-document] Binary extraction got ${textContent.length} chars from ${textBlocks.length} blocks`);
+        }
+
+        // Se extracao binaria falhou, tentar decodificar como UTF-8
+        if (!textContent || textContent.length < 100) {
+          const utf8Text = new TextDecoder("utf-8", { fatal: false }).decode(pdfBytes);
+          const printable = utf8Text.replace(/[^\x20-\x7E\xA0-\xFF\n\r\t]/g, " ").replace(/\s{3,}/g, " ").trim();
+          const wordCount = printable.split(/\s+/).filter((w: string) => w.length > 2).length;
+          if (printable.length > 500 && wordCount > 50) {
+            textContent = printable;
+            console.log(`[process-agent-document] UTF-8 fallback got ${textContent.length} chars, ${wordCount} words`);
+          }
+        }
+      }
     } else {
-      // Para texto/markdown/csv, ler diretamente
+      // Para texto/markdown/csv/docx: baixar e ler diretamente (arquivos menores)
+      const { data: fileData, error: downloadError } = await supabase.storage
+        .from("agent-documents")
+        .download(doc.file_path);
+
+      if (downloadError || !fileData) {
+        await supabase
+          .from("copilot_agent_documents")
+          .update({ status: "error", error_message: "Failed to download file from storage", updated_at: new Date().toISOString() })
+          .eq("id", documentId);
+        return new Response(
+          JSON.stringify({ error: "Failed to download file" }),
+          { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       textContent = await fileData.text();
     }
 
     if (!textContent || textContent.trim().length < 10) {
       await supabase
         .from("copilot_agent_documents")
-        .update({ status: "error", error_message: "Document content too short or empty", updated_at: new Date().toISOString() })
+        .update({ status: "error", error_message: "Document content too short or empty. The PDF may be image-only without readable text.", updated_at: new Date().toISOString() })
         .eq("id", documentId);
 
       return new Response(
@@ -102,6 +205,9 @@ serve(withSentry('process-agent-document', async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    // 4.5. Content sera salvo junto com o summary no step 7 (via RPC para contornar schema cache)
+    const contentToSave = textContent.substring(0, 500000);
 
     // 5. Buscar contexto do agente para o resumo ser relevante
     const { data: agent } = await supabase
@@ -128,11 +234,10 @@ REGRAS:
 - Ignore headers, footers, números de página e formatação
 - Use bullet points para organizar as informações
 - Comece com uma frase resumo do que é o documento
-- Se o documento for um PDF em base64, extraia o máximo de texto legível possível
 - Responda APENAS com o resumo, sem explicações adicionais`;
 
-    // Truncar conteúdo para não estourar tokens
-    const truncatedContent = textContent.substring(0, 30000);
+    // Truncar conteudo extraido para caber no contexto do LLM
+    const truncatedContent = textContent.substring(0, 50000);
 
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
@@ -182,7 +287,16 @@ REGRAS:
       );
     }
 
-    // 7. Salvar resumo e marcar como ready
+    // 7. Salvar resumo + content extraido e marcar como ready
+    //    Usa RPC com SQL direto para contornar schema cache do PostgREST
+    //    que pode nao reconhecer a coluna 'content' recem-adicionada.
+    const { error: saveError } = await supabase.rpc("save_document_content", {
+      p_doc_id: documentId,
+      p_content: contentToSave,
+    });
+    if (saveError) {
+      console.warn("[process-agent-document] RPC save_document_content failed (non-fatal):", saveError.message);
+    }
     await supabase
       .from("copilot_agent_documents")
       .update({
@@ -193,15 +307,15 @@ REGRAS:
       })
       .eq("id", documentId);
 
-    // 8. Item #5 RAG: gerar chunks + embeddings do conteúdo original
-    //    (fire-and-forget: não bloqueia o retorno ao usuário)
+    // 8. RAG: gerar chunks + embeddings do conteudo EXTRAIDO (texto real, nao base64)
+    //    (fire-and-forget: nao bloqueia o retorno ao usuario)
     generateAndStoreChunkEmbeddings(
       supabase,
       OPENROUTER_API_KEY,
       documentId,
       doc.agent_id,
       doc.organization_id,
-      textContent.substring(0, 60000) // max 60k chars para chunking
+      textContent.substring(0, 100000) // max 100k chars para chunking (agora e texto real)
     ).catch(e => console.warn("[process-agent-document] Chunk embeddings failed (non-fatal):", e));
 
     await logRuntime({
