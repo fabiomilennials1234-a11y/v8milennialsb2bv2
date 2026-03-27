@@ -179,7 +179,11 @@ export function KanbanCard({ lead, onClick }: KanbanCardProps) {
                             ? "O Copilot voltará a responder mensagens deste lead."
                             : "O Copilot não responderá mais mensagens deste lead.",
                         });
-                        // NÃO resetar optimistic aqui — evita flicker
+                        setOptimisticAiDisabled(prev => {
+                          const newState = { ...prev };
+                          delete newState[lead.leadId!];
+                          return newState;
+                        });
                       },
                       onError: () => {
                         setOptimisticAiDisabled(prev => {

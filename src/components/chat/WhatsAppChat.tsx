@@ -46,7 +46,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
-import { useToggleLeadAI } from "@/hooks/useLeads";
+import { useToggleLeadAI, useToggleConversationAI } from "@/hooks/useLeads";
 import {
   useWhatsAppContacts,
   useWhatsAppMessages,
@@ -1359,9 +1359,10 @@ function ChatWindow({
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [imageCaption, setImageCaption] = useState("");
   const toggleAIMutation = useToggleLeadAI();
+  const toggleConversationAIMutation = useToggleConversationAI();
   // Estado local otimista para feedback visual imediato
   const [optimisticAiDisabled, setOptimisticAiDisabled] = useState<boolean | null>(null);
-  
+
   // Usar estado otimista se disponível, senão usar o valor da prop
   const currentAiDisabled = optimisticAiDisabled !== null ? optimisticAiDisabled : (leadAiDisabled ?? false);
 
@@ -1637,80 +1638,93 @@ function ChatWindow({
           )}
         </Button>
 
-        {/* AI Toggle - sempre visível quando há lead; vendedores com acesso ao lead podem ativar/desativar o Copilot nesta conversa */}
-        {hasLead && leadId && (
-          <motion.div 
-            className={cn(
-              "flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-colors duration-200",
-              currentAiDisabled ? "bg-muted/50" : "bg-primary/10"
-            )}
-            title="Ativar ou desativar o Copilot nesta conversa. Quem pode editar o lead pode alterar."
-            onClick={(e) => {
-              e.stopPropagation();
-              e.preventDefault();
+        {/* AI Toggle - sempre visível em qualquer conversa (com ou sem lead/card) */}
+        <motion.div
+          className={cn(
+            "flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-colors duration-200",
+            currentAiDisabled ? "bg-muted/50" : "bg-primary/10"
+          )}
+          title="Ativar ou desativar o Copilot nesta conversa"
+          onClick={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+          }}
+          onPointerDown={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <motion.div
+            animate={{
+              scale: (toggleAIMutation.isPending || toggleConversationAIMutation.isPending) ? [1, 1.2, 1] : 1,
+              rotate: (toggleAIMutation.isPending || toggleConversationAIMutation.isPending) ? [0, 10, -10, 0] : 0,
             }}
-            onPointerDown={(e) => e.stopPropagation()}
-            onMouseDown={(e) => e.stopPropagation()}
+            transition={{
+              duration: 0.5,
+              repeat: (toggleAIMutation.isPending || toggleConversationAIMutation.isPending) ? Infinity : 0,
+            }}
           >
+            <Bot className={cn(
+              "w-4 h-4 transition-colors duration-200",
+              currentAiDisabled ? "text-muted-foreground" : "text-primary"
+            )} />
+          </motion.div>
+          <motion.span
+            className="text-xs text-muted-foreground hidden sm:inline"
+            animate={{
+              opacity: currentAiDisabled ? 0.5 : 1,
+            }}
+            transition={{ duration: 0.2 }}
+          >
+            IA
+          </motion.span>
+          <div onClick={(e) => e.stopPropagation()}>
             <motion.div
               animate={{
-                scale: toggleAIMutation.isPending ? [1, 1.2, 1] : 1,
-                rotate: toggleAIMutation.isPending ? [0, 10, -10, 0] : 0,
+                scale: (toggleAIMutation.isPending || toggleConversationAIMutation.isPending) ? 0.95 : 1,
               }}
-              transition={{ 
-                duration: 0.5,
-                repeat: toggleAIMutation.isPending ? Infinity : 0,
-              }}
+              transition={{ duration: 0.15 }}
             >
-              <Bot className={cn(
-                "w-4 h-4 transition-colors duration-200",
-                currentAiDisabled ? "text-muted-foreground" : "text-primary"
-              )} />
-            </motion.div>
-            <motion.span 
-              className="text-xs text-muted-foreground hidden sm:inline"
-              animate={{
-                opacity: currentAiDisabled ? 0.5 : 1,
-              }}
-              transition={{ duration: 0.2 }}
-            >
-              IA
-            </motion.span>
-            <div onClick={(e) => e.stopPropagation()}>
-              <motion.div
-                animate={{
-                  scale: toggleAIMutation.isPending ? 0.95 : 1,
-                }}
-                transition={{ duration: 0.15 }}
-              >
-                <Switch
-                  checked={!currentAiDisabled}
-                  onCheckedChange={(checked) => {
-                    // Atualização otimista local imediata
-                    setOptimisticAiDisabled(!checked);
+              <Switch
+                checked={!currentAiDisabled}
+                onCheckedChange={(checked) => {
+                  setOptimisticAiDisabled(!checked);
+
+                  if (leadId) {
+                    // Lead existe: usar toggle direto por leadId
                     toggleAIMutation.mutate(
                       { leadId, disabled: !checked },
                       {
                         onSuccess: () => {
                           toast.success(checked ? "IA ativada" : "IA desativada");
-                          // NÃO resetar optimisticAiDisabled aqui — o estado otimista
-                          // persiste até o onError ou até a prop leadAiDisabled atualizar
-                          // via refetch, evitando flicker de race condition.
+                          setOptimisticAiDisabled(null);
                         },
                         onError: () => {
-                          // Reverter estado otimista em caso de erro
                           setOptimisticAiDisabled(null);
                           toast.error("Erro ao alterar Copilot. Tente novamente.");
                         },
                       }
                     );
-                  }}
-                  disabled={toggleAIMutation.isPending}
-                />
-              </motion.div>
-            </div>
-          </motion.div>
-        )}
+                  } else {
+                    // Sem lead: criar shadow lead + toggle por telefone
+                    toggleConversationAIMutation.mutate(
+                      { phone: phoneNumber, disabled: !checked },
+                      {
+                        onSuccess: () => {
+                          toast.success(checked ? "IA ativada" : "IA desativada");
+                          setOptimisticAiDisabled(null);
+                        },
+                        onError: () => {
+                          setOptimisticAiDisabled(null);
+                          toast.error("Erro ao alterar Copilot. Tente novamente.");
+                        },
+                      }
+                    );
+                  }
+                }}
+                disabled={toggleAIMutation.isPending || toggleConversationAIMutation.isPending}
+              />
+            </motion.div>
+          </div>
+        </motion.div>
 
         {/* Transfer / AI state badge */}
         {hasLead && leadId && isWaitingHuman && (
@@ -1719,7 +1733,7 @@ function ChatWindow({
             Aguardando humano
           </Badge>
         )}
-        {hasLead && leadId && currentAiDisabled && !isWaitingHuman && (
+        {currentAiDisabled && !isWaitingHuman && (
           <Badge variant="outline" className="text-muted-foreground gap-1.5 text-xs">
             IA desativada
           </Badge>

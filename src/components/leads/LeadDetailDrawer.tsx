@@ -472,7 +472,7 @@ export const LeadDetailDrawer = memo(function LeadDetailDrawer({
               ? "O Copilot voltará a responder mensagens deste lead."
               : "O Copilot não responderá mais mensagens deste lead.",
           });
-          // NÃO resetar optimistic aqui — evita flicker de race condition
+          setOptimisticAiDisabled(null);
         },
         onError: () => {
           hookToast({ title: "Erro", description: "Não foi possível alterar o status da IA.", variant: "destructive" });

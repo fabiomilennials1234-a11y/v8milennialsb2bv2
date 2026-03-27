@@ -309,7 +309,7 @@ export function LeadDetailModal({ open, onOpenChange, leadId, onEdit }: LeadDeta
                                         ? "O Copilot voltará a responder mensagens deste lead."
                                         : "O Copilot não responderá mais mensagens deste lead.",
                                     });
-                                    // NÃO resetar optimistic aqui — evita flicker
+                                    setOptimisticAiDisabled(null);
                                   },
                                   onError: () => {
                                     toast({

@@ -583,7 +583,27 @@ export function useToggleLeadAI() {
       }
     },
     onSuccess: (_, variables) => {
-      // Invalidar apenas queries renderizadas (refetchType: 'active') para evitar cascata
+      // Atualizar cache DIRETAMENTE com o novo valor antes de invalidar.
+      // Isso evita a race condition onde o componente limpa o estado otimista
+      // mas o refetch ainda não completou (causando flicker).
+      const updateAiDisabled = (old: any) => {
+        if (!old) return old;
+        if (old.id === variables.leadId) {
+          return { ...old, ai_disabled: variables.disabled };
+        }
+        return old;
+      };
+
+      // Atualizar lead_by_phone (usado no WhatsAppChat)
+      const queryCache = queryClient.getQueryCache();
+      queryCache.findAll({ queryKey: ["lead_by_phone"] }).forEach((query) => {
+        queryClient.setQueryData(query.queryKey, updateAiDisabled);
+      });
+
+      // Atualizar lead-detail (usado nos modais)
+      queryClient.setQueryData(["lead-detail", variables.leadId], updateAiDisabled);
+
+      // Invalidar para eventual consistency (refetch em background)
       queryClient.invalidateQueries({ queryKey: ["leads"], refetchType: 'active' });
       queryClient.invalidateQueries({ queryKey: ["lead-detail", variables.leadId] });
       queryClient.invalidateQueries({ queryKey: ["pipe_whatsapp"], refetchType: 'active' });
@@ -592,6 +612,36 @@ export function useToggleLeadAI() {
       queryClient.invalidateQueries({ queryKey: ["lead_by_phone"], refetchType: 'active' });
       queryClient.invalidateQueries({ queryKey: ["conversation-history", variables.leadId] });
       queryClient.invalidateQueries({ queryKey: ["waiting-human-leads"], refetchType: 'active' });
+    },
+  });
+}
+
+/**
+ * Toggle AI for a conversation by phone number.
+ * If no lead exists, creates a shadow lead automatically.
+ * Use this when the user wants to disable AI for a contact that has no lead card.
+ */
+export function useToggleConversationAI() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ phone, disabled }: { phone: string; disabled: boolean }) => {
+      const { data, error } = await supabase.rpc("toggle_conversation_ai", {
+        p_phone: phone,
+        p_disabled: disabled,
+      });
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["lead_by_phone"], refetchType: "active" });
+      queryClient.invalidateQueries({ queryKey: ["leads"], refetchType: "active" });
+      queryClient.invalidateQueries({ queryKey: ["pipe_whatsapp"], refetchType: "active" });
+      queryClient.invalidateQueries({ queryKey: ["waiting-human-leads"], refetchType: "active" });
+      if (data && typeof data === "object" && "id" in data) {
+        queryClient.invalidateQueries({ queryKey: ["lead-detail", (data as any).id] });
+      }
     },
   });
 }
