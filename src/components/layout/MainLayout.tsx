@@ -1,6 +1,5 @@
 import { ReactNode } from "react";
-import { Sidebar } from "./Sidebar";
-import { OrgSwitcher } from "./OrgSwitcher";
+import { TopNavigation } from "./TopNavigation";
 
 interface MainLayoutProps {
   children: ReactNode;
@@ -8,13 +7,10 @@ interface MainLayoutProps {
 
 export function MainLayout({ children }: MainLayoutProps) {
   return (
-    <div className="flex min-h-screen bg-background" data-layout="main">
-      <Sidebar />
+    <div className="flex flex-col min-h-screen bg-background" data-layout="main">
+      <TopNavigation />
       <main className="flex-1 overflow-auto">
-        <div className="flex items-center justify-end px-6 lg:px-8 pt-4">
-          <OrgSwitcher />
-        </div>
-        <div className="p-6 lg:p-8">
+        <div className="px-6 lg:px-10 xl:px-12 py-6 lg:py-8 max-w-[1600px] mx-auto w-full">
           {children}
         </div>
       </main>
