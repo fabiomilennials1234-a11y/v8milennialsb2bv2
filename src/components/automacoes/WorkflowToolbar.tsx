@@ -27,6 +27,7 @@ import {
   Globe,
   CornerDownRight,
   History,
+  Download,
 } from "lucide-react";
 import type { WorkflowNodeType } from "@/types/workflow";
 
@@ -40,6 +41,7 @@ interface WorkflowToolbarProps {
   onAddNode: (type: WorkflowNodeType) => void;
   isNew: boolean;
   workflowId?: string;
+  onExport?: () => void;
 }
 
 interface NodeOption {
@@ -91,6 +93,7 @@ export function WorkflowToolbar({
   onAddNode,
   isNew,
   workflowId,
+  onExport,
 }: WorkflowToolbarProps) {
   const navigate = useNavigate();
 
@@ -148,6 +151,14 @@ export function WorkflowToolbar({
             ))}
           </DropdownMenuContent>
         </DropdownMenu>
+
+        {/* Export */}
+        {!isNew && onExport && (
+          <Button variant="outline" size="sm" onClick={onExport}>
+            <Download className="w-4 h-4 mr-1" />
+            Exportar
+          </Button>
+        )}
 
         {/* Executions link */}
         {!isNew && workflowId && (

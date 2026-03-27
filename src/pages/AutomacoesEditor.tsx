@@ -12,6 +12,7 @@ import {
   useCreateWorkflow,
   useUpdateWorkflow,
 } from "@/hooks/useWorkflows";
+import { useExportWorkflow } from "@/hooks/useWorkflowPortability";
 import type {
   WorkflowNode,
   WorkflowEdge,
@@ -95,6 +96,7 @@ export default function AutomacoesEditor() {
   const { data: workflow, isLoading } = useWorkflow(isNew ? undefined : id);
   const createWorkflow = useCreateWorkflow();
   const updateWorkflow = useUpdateWorkflow();
+  const handleExport = useExportWorkflow();
 
   const [name, setName] = useState("Novo Workflow");
   const [isActive, setIsActive] = useState(false);
@@ -287,6 +289,7 @@ export default function AutomacoesEditor() {
         onAddNode={handleAddNode}
         isNew={isNew}
         workflowId={id}
+        onExport={!isNew && workflow ? () => handleExport(workflow) : undefined}
       />
 
       <div className="flex flex-1 overflow-hidden">
