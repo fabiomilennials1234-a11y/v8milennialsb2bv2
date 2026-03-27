@@ -30,7 +30,13 @@ export type FeatureKey =
   | "api_access"
   | "white_label"
   // Integrations
-  | "external_cadastro";
+  | "external_cadastro"
+  // Funnels & Campaigns v2
+  | "funnels_custom"
+  | "carteira"
+  | "campaigns_indicacao"
+  | "campaigns_prospeccao"
+  | "campaigns_reativacao";
 
 export type LimitKey =
   | "max_leads"
@@ -39,7 +45,8 @@ export type LimitKey =
   | "max_copilot_agents"
   | "max_whatsapp_instances"
   | "max_funnels"
-  | "max_documents_per_agent";
+  | "max_documents_per_agent"
+  | "max_active_campaigns";
 
 // ─── Feature Metadata ──────────────────────────────────────────
 export interface FeatureMeta {
@@ -89,6 +96,12 @@ export const FEATURES: FeatureMeta[] = [
   { key: "api_access", label: "Acesso API", description: "Acesso à API pública", icon: "Code", category: "advanced" },
   { key: "white_label", label: "White Label", description: "Personalização completa de marca", icon: "Palette", category: "advanced" },
   { key: "external_cadastro", label: "Cadastro Externo", description: "Cadastro automático de clientes no sistema externo", icon: "UserPlus", category: "advanced" },
+  // Funnels & Campaigns v2
+  { key: "funnels_custom", label: "Funis Customizados", description: "Criar funis personalizados", icon: "GitBranch", category: "modules" },
+  { key: "carteira", label: "Carteira", description: "Gestão de carteira de clientes", icon: "TrendingUp", category: "modules", sidebarPath: "/upsell" },
+  { key: "campaigns_indicacao", label: "Campanha de Indicação", description: "Campanhas de indicação com templates", icon: "Heart", category: "campaigns" },
+  { key: "campaigns_prospeccao", label: "Campanha de Prospecção", description: "Campanhas de prospecção ativa", icon: "Target", category: "campaigns" },
+  { key: "campaigns_reativacao", label: "Campanha de Reativação", description: "Campanhas de reativação de base", icon: "RefreshCw", category: "campaigns" },
 ];
 
 // ─── Limits Catalog ────────────────────────────────────────────
@@ -100,6 +113,7 @@ export const LIMITS: LimitMeta[] = [
   { key: "max_whatsapp_instances", label: "Instâncias WhatsApp", description: "Número de instâncias WhatsApp conectadas", unit: "instâncias" },
   { key: "max_funnels", label: "Funis", description: "Número máximo de pipelines de vendas", unit: "funis" },
   { key: "max_documents_per_agent", label: "Docs por Agente", description: "Documentos na base de conhecimento por agente", unit: "documentos" },
+  { key: "max_active_campaigns", label: "Campanhas Ativas", description: "Número máximo de campanhas ativas simultâneas", unit: "campanhas" },
 ];
 
 // ─── Sidebar Path → Feature Key Map ───────────────────────────
@@ -115,6 +129,7 @@ for (const f of FEATURES) {
 SIDEBAR_FEATURE_MAP["/pipe-whatsapp"] = "funnels";
 SIDEBAR_FEATURE_MAP["/pipe-confirmacao"] = "funnels";
 SIDEBAR_FEATURE_MAP["/pipe-propostas"] = "funnels";
+SIDEBAR_FEATURE_MAP["/upsell"] = "carteira";
 
 // ─── Campaign Type → Feature Key Map ──────────────────────────
 export const CAMPAIGN_TYPE_FEATURE_MAP: Record<string, FeatureKey> = {
