@@ -14,6 +14,7 @@ import { MainLayout } from "@/components/layout/MainLayout";
 import { useAutoAdminAssignment } from "@/hooks/useAutoAdminAssignment";
 import { SubscriptionProtectedRoute } from "@/components/SubscriptionProtectedRoute";
 import { GlobalErrorBoundary } from "@/components/GlobalErrorBoundary";
+import { OnboardingGate } from "@/components/onboarding/OnboardingGate";
 import { Loader2 } from "lucide-react";
 
 // Retry helper para chunks que falham ao carregar (comum após deploy)
@@ -64,6 +65,7 @@ const Automacoes = lazy(() => lazyRetry(() => import("./pages/Automacoes")));
 const AutomacoesEditor = lazy(() => lazyRetry(() => import("./pages/AutomacoesEditor")));
 const AutomacoesExecucoes = lazy(() => lazyRetry(() => import("./pages/AutomacoesExecucoes")));
 const NotFound = lazy(() => lazyRetry(() => import("./pages/NotFound")));
+const Onboarding = lazy(() => lazyRetry(() => import("./pages/Onboarding")));
 
 // Master Admin — lazy loaded (com retry)
 const MasterDashboard = lazy(() => lazyRetry(() => import("./pages/master/MasterDashboard")));
@@ -128,7 +130,9 @@ function LayoutWrapper({ children }: { children: React.ReactNode }) {
   useAutoAdminAssignment();
   return (
     <OrgFeaturesProvider>
-      <MainLayout>{children}</MainLayout>
+      <OnboardingGate>
+        <MainLayout>{children}</MainLayout>
+      </OnboardingGate>
     </OrgFeaturesProvider>
   );
 }
@@ -158,6 +162,16 @@ function AppRoutes() {
       <Route path="/auth" element={<AuthRoute />} />
       <Route path="/privacidade" element={<Privacidade />} />
       <Route path="/docs" element={<ApiDocs />} />
+      <Route
+        path="/onboarding"
+        element={
+          <ProtectedRoute>
+            <OrgFeaturesProvider>
+              <Onboarding />
+            </OrgFeaturesProvider>
+          </ProtectedRoute>
+        }
+      />
       <Route
         path="/"
         element={
