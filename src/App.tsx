@@ -46,6 +46,7 @@ const Configuracoes = lazy(() => lazyRetry(() => import("./pages/Configuracoes")
 const TVDashboard = lazy(() => lazyRetry(() => import("./pages/TVDashboard")));
 const Campanhas = lazy(() => lazyRetry(() => import("./pages/Campanhas")));
 const CampanhaDetail = lazy(() => lazyRetry(() => import("./pages/CampanhaDetail")));
+const FunisHub = lazy(() => lazyRetry(() => import("./pages/FunisHub")));
 const Marketing = lazy(() => lazyRetry(() => import("./pages/Marketing")));
 const Analytics = lazy(() => lazyRetry(() => import("./pages/Analytics")));
 const Produtos = lazy(() => lazyRetry(() => import("./pages/Produtos")));
@@ -169,16 +170,20 @@ function AppRoutes() {
         }
       />
       <Route
-        path="/campanhas"
+        path="/funis"
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <PermissionProtectedRoute featureKey="campaigns.view">
-                <Campanhas />
+              <PermissionProtectedRoute featureKey="pipeline.view">
+                <FunisHub />
               </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
+      />
+      <Route
+        path="/campanhas"
+        element={<Navigate to="/funis" replace />}
       />
       <Route
         path="/campanhas/:id"
