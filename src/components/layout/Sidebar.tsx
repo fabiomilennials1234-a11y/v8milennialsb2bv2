@@ -71,17 +71,16 @@ interface NavItemWithChildren extends NavItem {
   children?: NavItem[];
 }
 
-// Subitens do menu Funis (ordem: Qualificação > Confirmação > Propostas)
+// Subitens do menu Funis (ordem: Oportunidades > Agendamentos > Orçamentos)
 const funisSubItems: NavItem[] = [
-  { label: "Qualificação", icon: MessageSquare, path: "/pipe-whatsapp" },
-  { label: "Confirmação", icon: Calendar, path: "/pipe-confirmacao" },
-  { label: "Propostas", icon: Kanban, path: "/pipe-propostas" },
+  { label: "Oportunidades", icon: MessageSquare, path: "/pipe-whatsapp" },
+  { label: "Agendamentos", icon: Calendar, path: "/pipe-confirmacao" },
+  { label: "Orçamentos", icon: Kanban, path: "/pipe-propostas" },
   { label: "Carteira", icon: TrendingUp, path: "/upsell" },
 ];
 
 const navItems: NavItemWithChildren[] = [
   { label: "Central de Comando", icon: Gauge, path: "/" },
-  { label: "Campanhas", icon: Target, path: "/campanhas" },
   { label: "Marketing", icon: BarChart2, path: "/marketing" },
   { label: "Analytics", icon: BarChart3, path: "/analytics", masterOnly: true },
   { label: "Chat", icon: Zap, path: "/chat" },
