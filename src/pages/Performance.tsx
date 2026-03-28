@@ -673,6 +673,7 @@ export default function Performance() {
     value: c.value,
     position: c.position,
     goalProgress: c.goalProgress,
+    avatarUrl: avatarMap.get(c.id),
   }));
 
   // Goals calculations

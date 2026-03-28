@@ -96,7 +96,7 @@ const navItems: NavItemWithChildren[] = [
   { label: "Agenda", icon: CalendarDays, path: "/agenda" },
   { label: "Revisão", icon: Wrench, path: "/follow-ups" },
   { label: "Leads", icon: Fuel, path: "/leads" },
-  { label: "Pódio", icon: Trophy, path: "/performance" },
+  { label: "Ranking", icon: Trophy, path: "/performance" },
   { label: "Comissões", icon: DollarSign, path: "/comissoes" },
   { label: "Copilot", icon: Bot, path: "/copilot" },
   { label: "Automações", icon: Workflow, path: "/automacoes" },
