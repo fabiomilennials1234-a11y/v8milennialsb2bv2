@@ -1973,18 +1973,19 @@ function ChatWindow({
               className="flex-1 rounded-full border-border/60 bg-muted/30 focus:bg-background"
             />
 
+            {/* Botão de agendar — sempre visível */}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setScheduleModalOpen(true)}
+              title="Agendar mensagem"
+              className="text-muted-foreground hover:text-primary"
+            >
+              <Clock className="w-4 h-4" />
+            </Button>
+
             {/* Botão de enviar ou gravar */}
             {newMessage.trim() ? (
-              <>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setScheduleModalOpen(true)}
-                title="Agendar mensagem"
-                className="text-muted-foreground hover:text-primary"
-              >
-                <Clock className="w-4 h-4" />
-              </Button>
               <Button
                 onClick={handleSend}
                 disabled={sendMessage.isPending}
@@ -1996,7 +1997,6 @@ function ChatWindow({
                   <Send className="w-4 h-4" />
                 )}
               </Button>
-              </>
             ) : (
               <Button
                 variant="ghost"
