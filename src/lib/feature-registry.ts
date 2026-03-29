@@ -20,7 +20,7 @@ export type FeatureKey =
   | "analytics"
   | "tv_dashboard"
   | "products"
-  // Campaign types
+  // Campaign types (legacy — deprecated, kept for backward compat)
   | "campaigns_manual"
   | "campaigns_semi"
   | "campaigns_auto"
@@ -31,9 +31,13 @@ export type FeatureKey =
   | "white_label"
   // Integrations
   | "external_cadastro"
-  // Funnels & Campaigns v2
+  // Funnels v2
   | "funnels_custom"
   | "carteira"
+  | "funnels_template_indicacao"
+  | "funnels_template_prospeccao"
+  | "funnels_template_reativacao"
+  // Legacy campaign keys (deprecated — use funnels_template_* instead)
   | "campaigns_indicacao"
   | "campaigns_prospeccao"
   | "campaigns_reativacao";
@@ -41,12 +45,14 @@ export type FeatureKey =
 export type LimitKey =
   | "max_leads"
   | "max_users"
-  | "max_campaigns"
+  | "max_campaigns" // legacy — deprecated
   | "max_copilot_agents"
   | "max_whatsapp_instances"
   | "max_funnels"
   | "max_documents_per_agent"
-  | "max_active_campaigns";
+  | "max_active_campaigns" // legacy — deprecated
+  | "max_custom_funnels"
+  | "max_temporary_funnels";
 
 // ─── Feature Metadata ──────────────────────────────────────────
 export interface FeatureMeta {
@@ -96,12 +102,16 @@ export const FEATURES: FeatureMeta[] = [
   { key: "api_access", label: "Acesso API", description: "Acesso à API pública", icon: "Code", category: "advanced" },
   { key: "white_label", label: "White Label", description: "Personalização completa de marca", icon: "Palette", category: "advanced" },
   { key: "external_cadastro", label: "Cadastro Externo", description: "Cadastro automático de clientes no sistema externo", icon: "UserPlus", category: "advanced" },
-  // Funnels & Campaigns v2
+  // Funnels v2
   { key: "funnels_custom", label: "Funis Customizados", description: "Criar funis personalizados", icon: "GitBranch", category: "modules" },
   { key: "carteira", label: "Carteira", description: "Gestão de carteira de clientes", icon: "TrendingUp", category: "modules", sidebarPath: "/upsell" },
-  { key: "campaigns_indicacao", label: "Campanha de Indicação", description: "Campanhas de indicação com templates", icon: "Heart", category: "campaigns" },
-  { key: "campaigns_prospeccao", label: "Campanha de Prospecção", description: "Campanhas de prospecção ativa", icon: "Target", category: "campaigns" },
-  { key: "campaigns_reativacao", label: "Campanha de Reativação", description: "Campanhas de reativação de base", icon: "RefreshCw", category: "campaigns" },
+  { key: "funnels_template_indicacao", label: "Funil de Indicação", description: "Funis temporários de indicação", icon: "Heart", category: "modules" },
+  { key: "funnels_template_prospeccao", label: "Funil de Prospecção", description: "Funis temporários de prospecção ativa", icon: "Target", category: "modules" },
+  { key: "funnels_template_reativacao", label: "Funil de Reativação", description: "Funis temporários de reativação de base", icon: "RefreshCw", category: "modules" },
+  // Legacy campaign keys (deprecated — kept for backward compat with existing orgs)
+  { key: "campaigns_indicacao", label: "Campanha de Indicação (legacy)", description: "Deprecated — use funnels_template_indicacao", icon: "Heart", category: "campaigns" },
+  { key: "campaigns_prospeccao", label: "Campanha de Prospecção (legacy)", description: "Deprecated — use funnels_template_prospeccao", icon: "Target", category: "campaigns" },
+  { key: "campaigns_reativacao", label: "Campanha de Reativação (legacy)", description: "Deprecated — use funnels_template_reativacao", icon: "RefreshCw", category: "campaigns" },
 ];
 
 // ─── Limits Catalog ────────────────────────────────────────────
@@ -111,9 +121,11 @@ export const LIMITS: LimitMeta[] = [
   { key: "max_campaigns", label: "Campanhas", description: "Número máximo de campanhas ativas", unit: "campanhas" },
   { key: "max_copilot_agents", label: "Agentes Copilot", description: "Número máximo de agentes de IA", unit: "agentes" },
   { key: "max_whatsapp_instances", label: "Instâncias WhatsApp", description: "Número de instâncias WhatsApp conectadas", unit: "instâncias" },
-  { key: "max_funnels", label: "Funis", description: "Número máximo de pipelines de vendas", unit: "funis" },
+  { key: "max_funnels", label: "Funis (legacy)", description: "Deprecated — use max_custom_funnels", unit: "funis" },
   { key: "max_documents_per_agent", label: "Docs por Agente", description: "Documentos na base de conhecimento por agente", unit: "documentos" },
-  { key: "max_active_campaigns", label: "Campanhas Ativas", description: "Número máximo de campanhas ativas simultâneas", unit: "campanhas" },
+  { key: "max_active_campaigns", label: "Campanhas Ativas (legacy)", description: "Deprecated — use max_temporary_funnels", unit: "campanhas" },
+  { key: "max_custom_funnels", label: "Funis Custom", description: "Número máximo de funis customizados permanentes", unit: "funis" },
+  { key: "max_temporary_funnels", label: "Funis Temporários", description: "Número máximo de funis temporários ativos simultâneos", unit: "funis" },
 ];
 
 // ─── Sidebar Path → Feature Key Map ───────────────────────────
@@ -131,11 +143,18 @@ SIDEBAR_FEATURE_MAP["/pipe-confirmacao"] = "funnels";
 SIDEBAR_FEATURE_MAP["/pipe-propostas"] = "funnels";
 SIDEBAR_FEATURE_MAP["/upsell"] = "carteira";
 
-// ─── Campaign Type → Feature Key Map ──────────────────────────
+// ─── Campaign Type → Feature Key Map (legacy) ────────────────
 export const CAMPAIGN_TYPE_FEATURE_MAP: Record<string, FeatureKey> = {
   manual: "campaigns_manual",
   semi_automatica: "campaigns_semi",
   automatica: "campaigns_auto",
+};
+
+// ─── Funnel Template Type → Feature Key Map ──────────────────
+export const FUNNEL_TEMPLATE_FEATURE_MAP: Record<string, FeatureKey> = {
+  indicacao: "funnels_template_indicacao",
+  prospeccao: "funnels_template_prospeccao",
+  reativacao: "funnels_template_reativacao",
 };
 
 // ─── Helpers ───────────────────────────────────────────────────

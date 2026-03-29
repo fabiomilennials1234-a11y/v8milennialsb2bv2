@@ -43,7 +43,7 @@ export function UserAvatar({
 
   return (
     <Avatar className={cn(sizeClasses[size], className)}>
-      {avatarUrl && <AvatarImage src={avatarUrl} alt={name} />}
+      <AvatarImage src={avatarUrl || ""} alt={name} />
       <AvatarFallback
         className={cn(
           textSizeClasses[size],

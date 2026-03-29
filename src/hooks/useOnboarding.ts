@@ -20,6 +20,7 @@ export interface OnboardingAnswers {
     sales_cycle?: string;
     uses_proposal?: boolean;
     schedules_meeting?: boolean;
+    wants_carteira?: boolean;
   };
 }
 

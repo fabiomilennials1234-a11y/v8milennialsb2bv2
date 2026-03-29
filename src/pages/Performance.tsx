@@ -1,9 +1,15 @@
-import { useState, useMemo } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { 
-  Trophy, Target, Gift, Medal, Award, TrendingUp, Zap, Star, Crown, 
+import { useState, useMemo, useCallback } from "react";
+import { motion } from "framer-motion";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  Trophy, Target, Gift, Medal, Award, TrendingUp, Star, Crown,
   Flame, Calendar, Users, Plus, Edit2, Trash2, CheckCircle, Lock, Sparkles
 } from "lucide-react";
+import { useActiveCompetition, useCompetitionParticipants, useCompetitionPrizes, type Competition } from "@/hooks/useCompetitions";
+import { CompetitionPodiumV2 } from "@/components/performance/CompetitionPodiumV2";
+import { CompetitionRankingListV2 } from "@/components/performance/CompetitionRankingListV2";
+import { CreateCompetitionModal } from "@/components/performance/CreateCompetitionModal";
+import { useRankingTransitions } from "@/hooks/useRankingTransitions";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { useAvatarMap } from "@/hooks/useAvatarMap";
@@ -40,7 +46,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { TopThreePodium } from "@/components/gamification/LeaderboardCard";
 import { ProgressRing, MiniProgressRing } from "@/components/gamification/ProgressRing";
 import { AchievementBadge, BadgeType } from "@/components/gamification/AchievementBadge";
 import { CelebrationEffect } from "@/components/gamification/CelebrationEffect";
@@ -607,6 +612,82 @@ function AwardFormDialog({
   );
 }
 
+// ============ COMPETITION INLINE COMPONENTS ============
+
+function CompetitionHeader({
+  competition,
+  participantCount,
+}: {
+  competition: Competition;
+  participantCount: number;
+}) {
+  const daysLeft = Math.max(0, Math.ceil((new Date(competition.end_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
+
+  return (
+    <div className="rounded-xl bg-gradient-to-r from-primary/10 to-primary/5 border border-border p-5">
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="text-xl">🏆</span>
+            <h2 className="text-xl font-extrabold bg-gradient-to-r from-yellow-400 to-orange-500 bg-clip-text text-transparent">
+              {competition.name}
+            </h2>
+            <Badge variant="outline" className="bg-green-500/20 text-green-400 border-green-500/30 text-[10px] font-bold uppercase">
+              {competition.status === "active" ? "Ativo" : competition.status}
+            </Badge>
+          </div>
+          <p className="text-sm text-muted-foreground mt-1">
+            {competition.metric_type === "sales" ? "Vendas" : "Reuniões"} · {competition.criteria === "absolute_value" ? "Valor absoluto" : "% da meta"}
+          </p>
+        </div>
+        <div className="flex items-center gap-6">
+          <div className="text-center">
+            <p className="text-2xl font-extrabold text-yellow-400">{daysLeft}</p>
+            <p className="text-[10px] text-muted-foreground uppercase">Dias restantes</p>
+          </div>
+          <div className="text-center">
+            <p className="text-2xl font-extrabold text-purple-400">{participantCount}</p>
+            <p className="text-[10px] text-muted-foreground uppercase">Competidores</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EmptyCompetitionState({ onCreateClick, onSeedClick, isSeeding }: { onCreateClick: () => void; onSeedClick?: () => void; isSeeding?: boolean }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="flex flex-col items-center justify-center py-16 text-center"
+    >
+      <motion.div
+        animate={{ rotate: [0, -10, 10, -10, 0], scale: [1, 1.1, 1] }}
+        transition={{ duration: 2, repeat: Infinity, repeatDelay: 3 }}
+      >
+        <Trophy className="w-16 h-16 text-muted-foreground/30" />
+      </motion.div>
+      <h3 className="text-lg font-bold mt-4">Nenhuma competição ativa</h3>
+      <p className="text-sm text-muted-foreground mt-2 max-w-md">
+        Crie uma competição para engajar seu time com ranking, metas e prêmios em tempo real.
+      </p>
+      <div className="flex gap-3 mt-6">
+        <Button onClick={onCreateClick} className="gap-2">
+          <Plus className="w-4 h-4" />
+          Criar Competição
+        </Button>
+        {onSeedClick && (
+          <Button onClick={onSeedClick} variant="outline" className="gap-2" disabled={isSeeding}>
+            <Sparkles className="w-4 h-4" />
+            {isSeeding ? "Criando..." : "Criar Competição Demo"}
+          </Button>
+        )}
+      </div>
+    </motion.div>
+  );
+}
+
 // ============ MAIN COMPONENT ============
 export default function Performance() {
   const now = new Date();
@@ -617,6 +698,9 @@ export default function Performance() {
   const [editingGoal, setEditingGoal] = useState<Goal | null>(null);
   const [editingAward, setEditingAward] = useState<AwardType | null>(null);
   const [deleteGoalId, setDeleteGoalId] = useState<string | null>(null);
+  const [showCreateCompetition, setShowCreateCompetition] = useState(false);
+  const [isSeeding, setIsSeeding] = useState(false);
+  const queryClient = useQueryClient();
 
   // Hooks
   const { allowed: canManageGoals } = useFeaturePermission('performance.manage_goals');
@@ -634,6 +718,82 @@ export default function Performance() {
   const createAward = useCreateAward();
   const updateAward = useUpdateAward();
   const deleteAward = useDeleteAward();
+
+  // Competition hooks
+  const activeCompetition = useActiveCompetition(selectedMonth, selectedYear);
+  const { data: participants = [] } = useCompetitionParticipants(activeCompetition?.id ?? null);
+  const { data: prizes = [] } = useCompetitionPrizes(activeCompetition?.id ?? null);
+
+  const participantIds = useMemo(() => new Set(participants.map(p => p.team_member_id)), [participants]);
+
+  // Seed demo competition (temporary — remove after testing)
+  const handleSeedCompetition = useCallback(async () => {
+    if (!organizationId) return;
+    setIsSeeding(true);
+    try {
+      // Get all active sales members
+      const salesMembers = teamMembers.filter(m => m.metric_type === "sales" && m.is_active);
+      const meetingsMembers = teamMembers.filter(m => m.metric_type === "meetings" && m.is_active);
+      const allActive = [...salesMembers, ...meetingsMembers];
+
+      if (allActive.length === 0) {
+        toast.error("Nenhum membro ativo encontrado para criar competição demo");
+        setIsSeeding(false);
+        return;
+      }
+
+      // Create competition
+      const { data: comp, error: compError } = await supabase
+        .from("competitions")
+        .insert({
+          organization_id: organizationId,
+          name: `Competição de Vendas — ${months[selectedMonth - 1]} ${selectedYear}`,
+          description: "Competição demo criada automaticamente",
+          criteria: "absolute_value" as const,
+          metric_type: "sales" as const,
+          month: selectedMonth,
+          year: selectedYear,
+          start_date: new Date(selectedYear, selectedMonth - 1, 1).toISOString(),
+          end_date: new Date(selectedYear, selectedMonth, 0).toISOString(),
+          status: "active" as const,
+        })
+        .select()
+        .single();
+
+      if (compError) throw compError;
+
+      // Add participants (sales members, or all if no sales members)
+      const membersToAdd = salesMembers.length > 0 ? salesMembers : allActive;
+      const { error: partError } = await supabase
+        .from("competition_participants")
+        .insert(membersToAdd.map(m => ({
+          competition_id: comp.id,
+          team_member_id: m.id,
+        })));
+
+      if (partError) throw partError;
+
+      // Add prizes
+      const { error: prizeError } = await supabase
+        .from("competition_prizes")
+        .insert([
+          { competition_id: comp.id, position: 1, prize_name: "iPhone 15", prize_icon: "🏆", prize_value: 5000 },
+          { competition_id: comp.id, position: 2, prize_name: "Fone Bluetooth", prize_icon: "🎧", prize_value: 300 },
+          { competition_id: comp.id, position: 3, prize_name: "Vale iFood", prize_icon: "🎁", prize_value: 150 },
+        ]);
+
+      if (prizeError) throw prizeError;
+
+      toast.success("Competição demo criada com sucesso!");
+      queryClient.invalidateQueries({ queryKey: ["competitions"] });
+      queryClient.invalidateQueries({ queryKey: ["competition-participants"] });
+      queryClient.invalidateQueries({ queryKey: ["competition-prizes"] });
+    } catch (error: any) {
+      toast.error(error.message || "Erro ao criar competição demo");
+    } finally {
+      setIsSeeding(false);
+    }
+  }, [organizationId, teamMembers, selectedMonth, selectedYear, queryClient]);
 
   const dayOfMonth = now.getDate();
   const daysInMonth = new Date(selectedYear, selectedMonth, 0).getDate();
@@ -674,6 +834,59 @@ export default function Performance() {
     position: c.position,
     goalProgress: c.goalProgress,
     avatarUrl: avatarMap.get(c.id),
+  }));
+
+  // Competition ranking data
+  const competitionRanking = useMemo(() => {
+    if (!activeCompetition || participants.length === 0) return [];
+
+    const source = activeCompetition.metric_type === "sales"
+      ? (rankingData?.salesRanking ?? [])
+      : (rankingData?.meetingsRanking ?? []);
+
+    // Build a map of ranking data by member id
+    const rankMap = new Map(source.map(u => [u.id, u]));
+
+    // Build ranking for ALL participants, even those with 0 activity
+    // Participants without ranking data get value=0
+    const participantMembers = participants.map(p => {
+      const member = teamMembers.find(m => m.id === p.team_member_id);
+      const rank = rankMap.get(p.team_member_id);
+      return {
+        id: p.team_member_id,
+        name: rank?.name ?? member?.name ?? "Sem nome",
+        role: rank?.role ?? "Vendas",
+        value: rank?.value ?? 0,
+        conversions: rank?.conversions ?? 0,
+        meetings: rank?.meetings ?? 0,
+        goalProgress: rank?.goalProgress ?? 0,
+        goal: rank?.goal ?? 0,
+        position: 0, // will be set below
+        avatarUrl: avatarMap.get(p.team_member_id),
+      };
+    });
+
+    // Sort by value descending and assign positions
+    return participantMembers
+      .sort((a, b) => b.value - a.value)
+      .map((u, i) => ({ ...u, position: i + 1 }));
+  }, [activeCompetition, rankingData, participants, teamMembers, avatarMap]);
+
+  // Ranking transitions (replay animation of position changes)
+  const rankingTransitions = useRankingTransitions(
+    activeCompetition?.id ?? null,
+    competitionRanking.map(u => ({ id: u.id, position: u.position })),
+    2500,
+  );
+
+  const compPodiumUsers = competitionRanking.slice(0, 3);
+  const restUsers = competitionRanking.slice(3);
+
+  const podiumPrizes = prizes.map(p => ({
+    position: p.position,
+    prize_name: p.prize_name,
+    prize_icon: p.prize_icon,
+    prize_value: p.prize_value,
   }));
 
   // Goals calculations
@@ -821,10 +1034,10 @@ export default function Performance() {
             className="text-2xl font-bold flex items-center gap-3"
           >
             <Trophy className="w-7 h-7 text-primary" />
-            Performance & Metas
+            Ranking de Vendas
           </motion.h1>
           <p className="text-muted-foreground mt-1">
-            Ranking, metas e premiações do time
+            Acompanhe a competição do time
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -861,19 +1074,11 @@ export default function Performance() {
       </div>
 
       {/* Main Tabs */}
-      <Tabs defaultValue="ranking" className="space-y-6">
-        <TabsList className="grid w-full max-w-lg grid-cols-4">
-          <TabsTrigger value="ranking" className="flex items-center gap-1.5">
+      <Tabs defaultValue="ranking_vendas" className="space-y-6">
+        <TabsList className="grid w-full max-w-lg grid-cols-2">
+          <TabsTrigger value="ranking_vendas" className="flex items-center gap-1.5">
             <Trophy className="w-4 h-4" />
-            <span className="hidden sm:inline">Ranking</span>
-          </TabsTrigger>
-          <TabsTrigger value="metas" className="flex items-center gap-1.5">
-            <Target className="w-4 h-4" />
-            <span className="hidden sm:inline">Metas</span>
-          </TabsTrigger>
-          <TabsTrigger value="premiacoes" className="flex items-center gap-1.5">
-            <Gift className="w-4 h-4" />
-            <span className="hidden sm:inline">Prêmios</span>
+            <span className="hidden sm:inline">Ranking de Vendas</span>
           </TabsTrigger>
           {canManageGoals && (
             <TabsTrigger value="gestao" className="flex items-center gap-1.5">
@@ -883,494 +1088,84 @@ export default function Performance() {
           )}
         </TabsList>
 
-        {/* ========== RANKING TAB ========== */}
-        <TabsContent value="ranking" className="space-y-6">
-          {/* Podium */}
-          {isLoading ? (
-            <Skeleton className="h-[280px] rounded-2xl" />
-          ) : closers.length >= 3 ? (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="bg-gradient-to-br from-accent to-accent/80 rounded-2xl p-6 text-accent-foreground relative overflow-hidden"
-            >
-              <div className="absolute inset-0 opacity-10">
-                <div className="absolute top-10 left-10 w-32 h-32 bg-primary rounded-full blur-3xl" />
-                <div className="absolute bottom-10 right-10 w-40 h-40 bg-primary rounded-full blur-3xl" />
-              </div>
-              <div className="relative">
-                <div className="text-center mb-4">
-                  <h2 className="text-lg font-medium opacity-80">🏆 Top Vendedores do Mês</h2>
-                </div>
-                <TopThreePodium users={podiumUsers} />
-              </div>
-            </motion.div>
-          ) : closers[0] ? (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="bg-gradient-to-br from-accent to-accent/80 rounded-2xl p-8 text-accent-foreground text-center"
-            >
-              <h2 className="text-lg font-medium opacity-80">Líder do Mês</h2>
-              <div className="flex items-center justify-center gap-3 mt-2">
-                <Zap className="w-6 h-6 text-primary" />
-                <span className="text-3xl font-bold">{closers[0].name}</span>
-                <Zap className="w-6 h-6 text-primary" />
-              </div>
-              <p className="text-4xl font-bold text-primary mt-2">
-                R$ {closers[0].value.toLocaleString("pt-BR")}
-              </p>
-            </motion.div>
-          ) : null}
-
-          {/* Rankings Lists */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Closers */}
-            <Card className="glass-card">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <TrendingUp className="w-4 h-4 text-primary" />
-                  Ranking Vendas
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {isLoading ? (
-                  Array(3).fill(0).map((_, i) => <Skeleton key={i} className="h-20" />)
-                ) : closers.length > 0 ? (
-                  closers.map((user) => (
-                    <RankingCard key={user.id} user={user} avatarUrl={avatarMap.get(user.id)} />
-                  ))
-                ) : (
-                  <p className="text-muted-foreground text-center py-8">Nenhum membro de vendas com faturamento.</p>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* SDRs */}
-            <Card className="glass-card">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-chart-5" />
-                  Ranking Reuniões
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {isLoading ? (
-                  Array(3).fill(0).map((_, i) => <Skeleton key={i} className="h-20" />)
-                ) : sdrs.length > 0 ? (
-                  sdrs.map((user) => (
-                    <RankingCard key={user.id} user={user} showValue={false} avatarUrl={avatarMap.get(user.id)} />
-                  ))
-                ) : (
-                  <p className="text-muted-foreground text-center py-8">Nenhum membro de reuniões com dados.</p>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-        {/* ========== METAS TAB ========== */}
-        <TabsContent value="metas" className="space-y-6">
-          {/* Badges */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="bg-card rounded-xl border border-border p-6"
-          >
-            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-              <Star className="w-5 h-5 text-primary fill-primary" />
-              Suas Conquistas
-            </h2>
-            <div className="flex items-center gap-6 overflow-x-auto pb-2">
-              {badgeAchievements.map((achievement, index) => (
-                <motion.div
-                  key={achievement.type}
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: index * 0.1 }}
-                >
-                  <AchievementBadge
-                    type={achievement.type}
-                    title={achievement.title}
-                    earned={achievement.earned}
-                    size="md"
-                  />
-                </motion.div>
-              ))}
-            </div>
-          </motion.div>
-
-          {/* Progress Rings */}
-          {isLoading ? (
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
-              {Array(4).fill(0).map((_, i) => <Skeleton key={i} className="h-48 rounded-xl" />)}
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
-              {faturamentoGoal && (
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="bg-card rounded-xl border border-border p-6 flex flex-col items-center"
-                >
-                  <ProgressRing
-                    progress={faturamentoProgress}
-                    icon={Target}
-                    label="Faturamento"
-                    value={`R$ ${(currentFaturamento / 1000).toFixed(0)}K`}
-                    color={faturamentoProgress >= 100 ? "success" : "primary"}
-                    size={140}
-                  />
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Meta: R$ {(faturamentoGoal.target_value / 1000).toFixed(0)}K
-                  </p>
-                </motion.div>
-              )}
-              
-              {clientesGoal && (
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.1 }}
-                  className="bg-card rounded-xl border border-border p-6 flex flex-col items-center"
-                >
-                  <ProgressRing
-                    progress={clientesProgress}
-                    icon={Users}
-                    label="Novos Clientes"
-                    value={currentClientes.toString()}
-                    color={clientesProgress >= 100 ? "success" : "primary"}
-                    size={140}
-                  />
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Meta: {clientesGoal.target_value} clientes
-                  </p>
-                </motion.div>
-              )}
-              
-              {reunioesGoal && (
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.2 }}
-                  className="bg-card rounded-xl border border-border p-6 flex flex-col items-center"
-                >
-                  <ProgressRing
-                    progress={reunioesProgress}
-                    icon={Calendar}
-                    label="Reuniões"
-                    value={currentReunioes.toString()}
-                    color={reunioesProgress >= 100 ? "success" : "warning"}
-                    size={140}
-                  />
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Meta: {reunioesGoal.target_value} reuniões
-                  </p>
-                </motion.div>
-              )}
-              
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 }}
-                className="bg-card rounded-xl border border-border p-6 flex flex-col items-center"
-              >
-                <ProgressRing
-                  progress={expectedProgress}
-                  icon={TrendingUp}
-                  label="Progresso do Mês"
-                  color={faturamentoDiff >= 0 ? "success" : "destructive"}
-                  size={140}
+        {/* ========== RANKING VENDAS TAB ========== */}
+        <TabsContent value="ranking_vendas" className="space-y-6">
+          {activeCompetition ? (
+            <>
+              <CompetitionHeader
+                competition={activeCompetition}
+                participantCount={participants.length}
+              />
+              <CompetitionPodiumV2
+                users={compPodiumUsers}
+                prizes={podiumPrizes}
+                metricType={activeCompetition.metric_type}
+                getChange={rankingTransitions.getChange}
+                isAnimatingTransitions={rankingTransitions.isAnimating}
+                previousRanking={rankingTransitions.previousRanking}
+              />
+              {restUsers.length > 0 && (
+                <CompetitionRankingListV2
+                  users={restUsers}
+                  metricType={activeCompetition.metric_type}
+                  getChange={rankingTransitions.getChange}
+                  isAnimatingTransitions={rankingTransitions.isAnimating}
                 />
-                <p className={`text-xs mt-2 font-medium ${faturamentoDiff >= 0 ? "text-success" : "text-destructive"}`}>
-                  {faturamentoDiff >= 0 ? "+" : ""}{faturamentoDiff.toFixed(0)}% vs esperado
-                </p>
-              </motion.div>
-            </div>
-          )}
-
-          {/* Individual Goals */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Closers Goals */}
-            <Card className="glass-card">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Trophy className="w-4 h-4 text-primary" />
-                  Metas Vendas
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {rankingLoading ? (
-                  Array(3).fill(0).map((_, i) => <Skeleton key={i} className="h-20" />)
-                ) : closerGoals.length > 0 ? (
-                  closerGoals
-                    .sort((a, b) => b.percentage - a.percentage)
-                    .map((vendedor, index) => {
-                      const position = index + 1;
-                      const PositionIcon = getPositionIcon(position);
-                      const isTop3 = position <= 3;
-                      
-                      return (
-                        <motion.div 
-                          key={vendedor.id} 
-                          initial={{ opacity: 0, x: -20 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: index * 0.05 }}
-                          className={`flex items-center gap-4 p-3 rounded-xl border transition-all ${
-                            isTop3 
-                              ? `bg-gradient-to-r ${getPositionStyle(position)} bg-opacity-10 border-opacity-50` 
-                              : "bg-muted/30 border-transparent"
-                          }`}
-                        >
-                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                            isTop3 ? `bg-gradient-to-br ${getPositionStyle(position)}` : "bg-muted"
-                          }`}>
-                            {PositionIcon ? (
-                              <PositionIcon className={`w-5 h-5 ${isTop3 ? "text-white" : "text-muted-foreground"}`} />
-                            ) : (
-                              <span className="text-sm font-bold text-muted-foreground">{position}</span>
-                            )}
-                          </div>
-                          <UserAvatar
-                            name={vendedor.name}
-                            avatarUrl={avatarMap.get(vendedor.id)}
-                            size="md"
-                            fallbackClassName="bg-accent text-accent-foreground"
-                          />
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="text-sm font-medium truncate">{vendedor.name}</span>
-                              <span className={`text-sm font-bold ${
-                                vendedor.percentage >= 100 ? "text-success" : "text-muted-foreground"
-                              }`}>
-                                {vendedor.percentage}%
-                              </span>
-                            </div>
-                            <div className="progress-bar">
-                              <motion.div
-                                initial={{ width: 0 }}
-                                animate={{ width: `${Math.min(vendedor.percentage, 100)}%` }}
-                                transition={{ duration: 0.6, delay: index * 0.1 }}
-                                className={`progress-fill ${
-                                  vendedor.percentage >= 100 ? "bg-success" : "gradient-gold"
-                                }`}
-                              />
-                            </div>
-                            <p className="text-xs text-muted-foreground mt-1">
-                              R$ {vendedor.current.toLocaleString("pt-BR")} / R$ {vendedor.goal.toLocaleString("pt-BR")}
-                            </p>
-                          </div>
-                          {vendedor.percentage >= 80 && (
-                            <div className="flex items-center gap-1 px-2 py-1 bg-orange-500/10 rounded-full">
-                              <Flame className="w-4 h-4 text-orange-500" />
-                            </div>
-                          )}
-                        </motion.div>
-                      );
-                    })
-                ) : (
-                  <p className="text-muted-foreground text-center py-4">Nenhuma meta individual para vendas.</p>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* SDRs Goals */}
-            <Card className="glass-card">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-chart-5" />
-                  Metas Reuniões
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {rankingLoading ? (
-                  Array(3).fill(0).map((_, i) => <Skeleton key={i} className="h-20" />)
-                ) : sdrGoals.length > 0 ? (
-                  sdrGoals
-                    .sort((a, b) => b.percentage - a.percentage)
-                    .map((sdr, index) => {
-                      const position = index + 1;
-                      const PositionIcon = getPositionIcon(position);
-                      const isTop3 = position <= 3;
-                      
-                      return (
-                        <motion.div 
-                          key={sdr.id}
-                          initial={{ opacity: 0, x: -20 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: index * 0.05 }}
-                          className={`flex items-center gap-4 p-3 rounded-xl border transition-all ${
-                            isTop3 
-                              ? `bg-gradient-to-r ${getPositionStyle(position)} bg-opacity-10 border-opacity-50` 
-                              : "bg-muted/30 border-transparent"
-                          }`}
-                        >
-                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                            isTop3 ? `bg-gradient-to-br ${getPositionStyle(position)}` : "bg-muted"
-                          }`}>
-                            {PositionIcon ? (
-                              <PositionIcon className={`w-5 h-5 ${isTop3 ? "text-white" : "text-muted-foreground"}`} />
-                            ) : (
-                              <span className="text-sm font-bold text-muted-foreground">{position}</span>
-                            )}
-                          </div>
-                          <UserAvatar
-                            name={sdr.name}
-                            avatarUrl={avatarMap.get(sdr.id)}
-                            size="md"
-                            fallbackClassName="bg-accent text-accent-foreground"
-                          />
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="text-sm font-medium truncate">{sdr.name}</span>
-                              <span className={`text-sm font-bold ${
-                                sdr.percentage >= 100 ? "text-success" : "text-muted-foreground"
-                              }`}>
-                                {sdr.percentage}%
-                              </span>
-                            </div>
-                            <div className="progress-bar">
-                              <motion.div
-                                initial={{ width: 0 }}
-                                animate={{ width: `${Math.min(sdr.percentage, 100)}%` }}
-                                transition={{ duration: 0.6, delay: index * 0.1 }}
-                                className={`progress-fill ${
-                                  sdr.percentage >= 100 ? "bg-success" : "gradient-gold"
-                                }`}
-                              />
-                            </div>
-                            <p className="text-xs text-muted-foreground mt-1">
-                              {sdr.current} / {sdr.goal} reuniões
-                            </p>
-                          </div>
-                          {sdr.percentage >= 80 && (
-                            <div className="flex items-center gap-1 px-2 py-1 bg-orange-500/10 rounded-full">
-                              <Flame className="w-4 h-4 text-orange-500" />
-                            </div>
-                          )}
-                        </motion.div>
-                      );
-                    })
-                ) : (
-                  <p className="text-muted-foreground text-center py-4">Nenhuma meta individual para reuniões.</p>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-        {/* ========== PREMIACOES TAB ========== */}
-        <TabsContent value="premiacoes" className="space-y-6">
-          {/* Summary Stats */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="glass-card p-6"
-            >
-              <div className="flex items-center gap-3">
-                <div className="p-3 rounded-xl bg-success/10">
-                  <Trophy className="w-6 h-6 text-success" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold">{achievements.filter(a => a.isUnlocked).length}</p>
-                  <p className="text-sm text-muted-foreground">Conquistas Desbloqueadas</p>
-                </div>
-              </div>
-            </motion.div>
-
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.05 }}
-              className="glass-card p-6"
-            >
-              <div className="flex items-center gap-3">
-                <div className="p-3 rounded-xl bg-primary/10">
-                  <Target className="w-6 h-6 text-primary" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold">{achievements.length - achievements.filter(a => a.isUnlocked).length}</p>
-                  <p className="text-sm text-muted-foreground">Em Progresso</p>
-                </div>
-              </div>
-            </motion.div>
-
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 }}
-              className="glass-card p-6"
-            >
-              <div className="flex items-center gap-3">
-                <div className="p-3 rounded-xl bg-chart-5/10">
-                  <Flame className="w-6 h-6 text-chart-5" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold">
-                    {achievements.length > 0 
-                      ? Math.round((achievements.filter(a => a.isUnlocked).length / achievements.length) * 100) 
-                      : 0}%
-                  </p>
-                  <p className="text-sm text-muted-foreground">Taxa de Conquista</p>
-                </div>
-              </div>
-            </motion.div>
-          </div>
-
-          {/* Admin add button */}
-          {canManageAwards && (
-            <div className="flex justify-end">
-              <Button onClick={() => { setEditingAward(null); setAwardDialogOpen(true); }}>
-                <Plus className="w-4 h-4 mr-2" />
-                Nova Premiação
-              </Button>
-            </div>
-          )}
-
-          {/* Achievements Grid */}
-          {awardsLoading ? (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {Array(6).fill(0).map((_, i) => <Skeleton key={i} className="h-[140px] rounded-xl" />)}
-            </div>
-          ) : achievements.length > 0 ? (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              <AnimatePresence mode="popLayout">
-                {achievements.map((achievement, index) => (
-                  <div key={achievement.award.id} className="relative">
-                    <AchievementCard achievement={achievement} index={index} />
-                    {canManageAwards && (
-                      <div className="absolute top-2 right-2 flex gap-1 opacity-0 hover:opacity-100 transition-opacity">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7"
-                          onClick={() => { setEditingAward(achievement.award); setAwardDialogOpen(true); }}
-                        >
-                          <Edit2 className="w-3 h-3" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-destructive"
-                          onClick={() => handleDeleteAward(achievement.award.id)}
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </AnimatePresence>
-            </div>
+              )}
+            </>
           ) : (
-            <div className="text-center py-12 bg-muted/30 rounded-xl">
-              <Gift className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-              <h3 className="font-semibold">Nenhuma premiação configurada</h3>
-              <p className="text-muted-foreground text-sm mt-1">
-                {canManageAwards ? "Clique em 'Nova Premiação' para criar." : "Aguarde o admin configurar as premiações."}
-              </p>
-            </div>
+            <>
+              <EmptyCompetitionState
+                onCreateClick={() => setShowCreateCompetition(true)}
+                onSeedClick={handleSeedCompetition}
+                isSeeding={isSeeding}
+              />
+              {/* Fallback: simple ranking without competition */}
+              {rankingData && (rankingData.salesRanking.length > 0 || rankingData.meetingsRanking.length > 0) && (
+                <div className="space-y-6 opacity-60">
+                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Ranking Simples</h3>
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Closers */}
+                    <Card className="glass-card">
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-base flex items-center gap-2">
+                          <TrendingUp className="w-4 h-4 text-primary" />
+                          Ranking Vendas
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-2">
+                        {closers.length > 0 ? (
+                          closers.map((user) => (
+                            <RankingCard key={user.id} user={user} avatarUrl={avatarMap.get(user.id)} />
+                          ))
+                        ) : (
+                          <p className="text-muted-foreground text-center py-8">Nenhum membro de vendas com faturamento.</p>
+                        )}
+                      </CardContent>
+                    </Card>
+
+                    {/* SDRs */}
+                    <Card className="glass-card">
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-base flex items-center gap-2">
+                          <Calendar className="w-4 h-4 text-chart-5" />
+                          Ranking Reuniões
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-2">
+                        {sdrs.length > 0 ? (
+                          sdrs.map((user) => (
+                            <RankingCard key={user.id} user={user} showValue={false} avatarUrl={avatarMap.get(user.id)} />
+                          ))
+                        ) : (
+                          <p className="text-muted-foreground text-center py-8">Nenhum membro de reuniões com dados.</p>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </TabsContent>
 
@@ -1492,6 +1287,111 @@ export default function Performance() {
                 )}
               </CardContent>
             </Card>
+
+            {/* Competition Management */}
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <Trophy className="w-5 h-5 text-yellow-500" />
+                Competição do Mês
+              </h2>
+              {!activeCompetition && (
+                <Button onClick={() => setShowCreateCompetition(true)} variant="outline" className="gap-2">
+                  <Plus className="w-4 h-4" />
+                  Criar Competição
+                </Button>
+              )}
+            </div>
+
+            {activeCompetition ? (
+              <Card className="glass-card">
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      🏆 {activeCompetition.name}
+                      <Badge variant="outline" className="bg-green-500/20 text-green-600 border-green-500/30 text-[10px] font-bold uppercase ml-2">
+                        Ativo
+                      </Badge>
+                    </CardTitle>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {/* Competition Info */}
+                  <div className="grid grid-cols-3 gap-4 text-sm">
+                    <div className="p-3 rounded-lg bg-muted/50">
+                      <p className="text-muted-foreground text-xs">Tipo</p>
+                      <p className="font-semibold">{activeCompetition.metric_type === "sales" ? "Vendas" : "Reuniões"}</p>
+                    </div>
+                    <div className="p-3 rounded-lg bg-muted/50">
+                      <p className="text-muted-foreground text-xs">Critério</p>
+                      <p className="font-semibold">{activeCompetition.criteria === "absolute_value" ? "Valor absoluto" : "% da meta"}</p>
+                    </div>
+                    <div className="p-3 rounded-lg bg-muted/50">
+                      <p className="text-muted-foreground text-xs">Participantes</p>
+                      <p className="font-semibold">{participants.length} vendedores</p>
+                    </div>
+                  </div>
+
+                  {/* Prizes */}
+                  <div>
+                    <p className="text-sm font-semibold mb-2 flex items-center gap-2">
+                      <Gift className="w-4 h-4" />
+                      Prêmios por Colocação
+                    </p>
+                    <div className="space-y-2">
+                      {prizes.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">Nenhum prêmio configurado.</p>
+                      ) : (
+                        prizes.sort((a, b) => a.position - b.position).map((prize) => (
+                          <div key={prize.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                            <div className="flex items-center gap-3">
+                              <span className="text-lg">{prize.prize_icon}</span>
+                              <div>
+                                <p className="text-sm font-semibold">{prize.position}º Lugar — {prize.prize_name}</p>
+                                {prize.prize_description && (
+                                  <p className="text-xs text-muted-foreground">{prize.prize_description}</p>
+                                )}
+                              </div>
+                            </div>
+                            {prize.prize_value != null && (
+                              <span className="text-sm font-bold text-primary">
+                                R$ {prize.prize_value.toLocaleString("pt-BR")}
+                              </span>
+                            )}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Participants list */}
+                  <div>
+                    <p className="text-sm font-semibold mb-2 flex items-center gap-2">
+                      <Users className="w-4 h-4" />
+                      Participantes
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {participants.map((p) => {
+                        const member = teamMembers.find(m => m.id === p.team_member_id);
+                        return (
+                          <div key={p.id} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/50">
+                            <UserAvatar name={member?.name || "?"} avatarUrl={avatarMap.get(p.team_member_id)} size="xs" />
+                            <span className="text-sm">{member?.name || "Desconhecido"}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card className="glass-card">
+                <CardContent className="py-8 text-center text-muted-foreground">
+                  <Trophy className="w-10 h-10 mx-auto mb-2 opacity-30" />
+                  <p className="text-sm">Nenhuma competição ativa para {months[selectedMonth - 1]} {selectedYear}.</p>
+                  <p className="text-xs mt-1">Crie uma competição para motivar o time.</p>
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
         )}
       </Tabs>
@@ -1528,6 +1428,11 @@ export default function Performance() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <CreateCompetitionModal
+        open={showCreateCompetition}
+        onOpenChange={setShowCreateCompetition}
+      />
     </div>
   );
 }

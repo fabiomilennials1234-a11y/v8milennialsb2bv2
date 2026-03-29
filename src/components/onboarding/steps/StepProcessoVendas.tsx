@@ -52,6 +52,13 @@ export function StepProcessoVendas({ answers, onChange }: Props) {
           onChange={(v) => onChange("schedules_meeting", v)}
         />
       )}
+      <OnboardingQuestion
+        title="Quer gerenciar carteira de clientes?"
+        subtitle="Acompanhar clientes ativos, inativos e oportunidades de upsell"
+        type="boolean"
+        value={answers.wants_carteira as boolean}
+        onChange={(v) => onChange("wants_carteira", v)}
+      />
     </div>
   );
 }

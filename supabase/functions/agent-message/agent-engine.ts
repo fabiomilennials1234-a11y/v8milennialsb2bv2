@@ -117,6 +117,7 @@ export class AgentEngine {
       longTermMemories,
       orgCustomFields,
       pipelineStages,
+      productCatalog,
     ] = await Promise.all([
       this.resolveABVariant(leadId, capabilities.id),
       this.loadConversation(leadId, capabilities.id).then(c => c || this.createConversation(leadId, capabilities.id)),
@@ -127,6 +128,7 @@ export class AgentEngine {
       this.retrieveLongTermMemories(userMessage, leadId),
       this.loadOrgCustomFields(),
       capabilities.can_qualify_lead ? this.loadPipelineStages() : Promise.resolve([]),
+      this.loadProductCatalog(),
     ]);
 
     // Apply A/B variant overrides (item #18)
@@ -155,7 +157,7 @@ export class AgentEngine {
 
     // 4. Build Dynamic Prompt
     console.log('[AgentEngine] Step 4: Building prompt...');
-    const systemPrompt = await this.buildDynamicPrompt(capabilities, conversation, leadData, documentSummaries, semanticContext, longTermMemories);
+    const systemPrompt = await this.buildDynamicPrompt(capabilities, conversation, leadData, documentSummaries, semanticContext, longTermMemories, productCatalog);
 
     // 5. Build Tools (based on capabilities)
     console.log('[AgentEngine] Step 5: Building tools...');
@@ -334,11 +336,17 @@ export class AgentEngine {
 
     // 14. Return Response
     // Se a acao foi SEND_DOCUMENT, incluir media_attachments na resposta
-    let mediaAttachments: Array<{ type: string; document_id: string; caption?: string }> | undefined;
+    let mediaAttachments: Array<{ type: string; document_id?: string; material_id?: string; caption?: string }> | undefined;
     if (actionToExecute?.action === 'SEND_DOCUMENT' && actionToExecute.params) {
       mediaAttachments = [{
         type: 'document',
         document_id: actionToExecute.params.document_id as string,
+        caption: (actionToExecute.params.caption as string) || undefined,
+      }];
+    } else if (actionToExecute?.action === 'SEND_PRODUCT_MATERIAL' && actionToExecute.params) {
+      mediaAttachments = [{
+        type: 'product_material',
+        material_id: actionToExecute.params.material_id as string,
         caption: (actionToExecute.params.caption as string) || undefined,
       }];
     }
@@ -642,6 +650,66 @@ export class AgentEngine {
     } catch (e) {
       console.warn('[AgentEngine] Failed to load KB:', e);
       return [];
+    }
+  }
+
+  /**
+   * Load product catalog for the org (all active products + materials).
+   * Injected into prompt so the agent knows what products exist.
+   */
+  private async loadProductCatalog(): Promise<string> {
+    try {
+      const { data: products, error } = await this.supabase
+        .from('products')
+        .select('id, name, type, description, ticket, ticket_minimo, entregaveis, materiais, links')
+        .eq('organization_id', this.organizationId)
+        .eq('is_active', true)
+        .order('name');
+
+      if (error || !products?.length) return '';
+
+      // Load materials for all products in one query
+      const productIds = products.map(p => p.id);
+      const { data: materials } = await this.supabase
+        .from('product_materials')
+        .select('id, product_id, file_name, material_type, summary, file_path')
+        .in('product_id', productIds)
+        .eq('is_active', true);
+
+      const materialsByProduct = new Map<string, typeof materials>();
+      for (const m of materials || []) {
+        const list = materialsByProduct.get(m.product_id) || [];
+        list.push(m);
+        materialsByProduct.set(m.product_id, list);
+      }
+
+      const typeLabels: Record<string, string> = { mrr: 'Recorrência', projeto: 'Projeto', unitario: 'Unitário' };
+
+      const lines = products.map(p => {
+        const parts: string[] = [];
+        parts.push(`Produto: "${p.name}"`);
+        parts.push(`Tipo: ${typeLabels[p.type] || p.type}`);
+        if (p.ticket) parts.push(`Ticket: R$ ${p.ticket.toLocaleString('pt-BR')}`);
+        if (p.ticket_minimo) parts.push(`Ticket mínimo: R$ ${p.ticket_minimo.toLocaleString('pt-BR')}`);
+        if (p.description) parts.push(`Descrição: ${p.description}`);
+        if (p.entregaveis) parts.push(`Entregáveis: ${p.entregaveis}`);
+
+        const mats = materialsByProduct.get(p.id) || [];
+        if (mats.length > 0) {
+          parts.push('Materiais disponíveis para envio:');
+          for (const m of mats) {
+            parts.push(`  - "${m.file_name}" (id: ${m.id}, tipo: ${m.material_type}) — use send_product_material para enviar ao lead`);
+          }
+        }
+
+        return parts.join('\n');
+      });
+
+      console.log(`[AgentEngine] Product catalog loaded: ${products.length} products, ${materials?.length || 0} materials`);
+      return lines.join('\n\n');
+    } catch (e) {
+      console.warn('[AgentEngine] Failed to load product catalog:', e);
+      return '';
     }
   }
 
@@ -1480,7 +1548,7 @@ Regras:
    * 3. Adiciona capabilities dinâmicas (feature flags) ao final
    * 4. Adiciona dados do lead para contexto personalizado
    */
-  private async buildDynamicPrompt(capabilities: any, conversation: any, leadData?: any, documentSummaries?: Array<{file_name: string; summary: string}>, semanticContext?: string, longTermMemories?: string): Promise<string> {
+  private async buildDynamicPrompt(capabilities: any, conversation: any, leadData?: any, documentSummaries?: Array<{file_name: string; summary: string}>, semanticContext?: string, longTermMemories?: string, productCatalog?: string): Promise<string> {
     const sections: string[] = [];
 
     // =====================================================
@@ -1761,6 +1829,26 @@ Regras:
       sections.push("- Se a busca nao retornar informacoes relevantes, diga honestamente: 'Vou verificar essa informacao e te retorno em breve.'");
       sections.push("- Se o lead pedir um documento, catalogo ou arquivo, use a ferramenta send_document.");
       sections.push("- Fale naturalmente — nunca mencione 'base de conhecimento', 'documento' ou 'ferramenta de busca'.");
+      sections.push("");
+    }
+
+    // =====================================================
+    // 1.52 CATÁLOGO DE PRODUTOS — dados estruturados dos produtos da empresa
+    // =====================================================
+    if (productCatalog && productCatalog.trim().length > 0) {
+      sections.push("");
+      sections.push("# CATÁLOGO DE PRODUTOS");
+      sections.push("");
+      sections.push("Abaixo estão os produtos da empresa com detalhes reais. Use ESTES dados para responder sobre produtos, preços e condições:");
+      sections.push("");
+      sections.push(productCatalog);
+      sections.push("");
+      sections.push("REGRAS SOBRE PRODUTOS:");
+      sections.push("- Use EXATAMENTE os valores de ticket e condições listados acima. Não invente preços.");
+      sections.push("- Se o lead perguntar sobre um produto que não está na lista, diga que vai verificar.");
+      sections.push("- Se um produto tem materiais disponíveis (PDF, imagem, catálogo), ofereça enviar quando fizer sentido comercial.");
+      sections.push("- Para enviar material de produto, use a ferramenta send_product_material com o ID do material.");
+      sections.push("- Não envie materiais sem contexto. Acompanhe com mensagem explicativa.");
       sections.push("");
     }
 
@@ -2350,6 +2438,42 @@ Regras:
       console.warn('[AgentEngine] Failed to load documents for send_document tool:', e);
     }
 
+    // Tool: send_product_material — send product-specific files (PDFs, images) to lead
+    try {
+      const { data: productMats } = await this.supabase
+        .from('product_materials')
+        .select('id, product_id, file_name, material_type, products!inner(name)')
+        .eq('organization_id', this.organizationId)
+        .eq('is_active', true);
+
+      if (productMats && productMats.length > 0) {
+        const matList = productMats.map((m: any) =>
+          `- "${m.file_name}" (id: ${m.id}, produto: ${m.products?.name || 'N/A'}, tipo: ${m.material_type})`
+        ).join('\n');
+
+        tools.push({
+          name: 'send_product_material',
+          description: `Envia um material de produto (PDF comercial, catalogo, imagem, flyer) para o lead via WhatsApp. Use quando o lead demonstrar interesse em um produto e fizer sentido enviar material de apoio.\n\nMateriais disponiveis:\n${matList}`,
+          input_schema: {
+            type: 'object',
+            properties: {
+              material_id: {
+                type: 'string',
+                description: 'ID do material a enviar (use os IDs listados acima)',
+              },
+              caption: {
+                type: 'string',
+                description: 'Mensagem curta que acompanha o material (opcional, max 200 chars)',
+              },
+            },
+            required: ['material_id'],
+          },
+        });
+      }
+    } catch (e) {
+      console.warn('[AgentEngine] Failed to load product materials for send_product_material tool:', e);
+    }
+
     // Tool para transferir atendimento para outro setor via SZ.chat
     let szChatConfig: { team_mappings: Record<string, unknown> } | null = null;
     try {
@@ -2675,6 +2799,7 @@ Regras:
       'create_custom_field': 'CREATE_CUSTOM_FIELD',
       'transfer_sz_chat': 'TRANSFER_SZ_CHAT',
       'send_document': 'SEND_DOCUMENT',
+      'send_product_material': 'SEND_PRODUCT_MATERIAL',
       'search_knowledge': 'SEARCH_KNOWLEDGE',
     };
     return mapping[toolName] || 'UNKNOWN';
@@ -2694,6 +2819,7 @@ Regras:
     if (toolName === 'create_custom_field') return currentState;
     if (toolName === 'transfer_sz_chat') return 'CLOSED_WON';
     if (toolName === 'send_document') return currentState;
+    if (toolName === 'send_product_material') return currentState;
     if (toolName === 'search_knowledge') return currentState;
     if (currentState === 'NEW_LEAD') return 'QUALIFYING';
     return currentState;
@@ -2721,6 +2847,7 @@ Regras:
       'CREATE_CUSTOM_FIELD': 'create_custom_field',
       'TRANSFER_SZ_CHAT': 'transfer_sz_chat',
       'SEND_DOCUMENT': 'send_document',
+      'SEND_PRODUCT_MATERIAL': 'send_product_material',
     };
 
     const actionType = ACTION_MAP[action.action];

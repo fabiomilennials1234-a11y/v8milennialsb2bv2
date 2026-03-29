@@ -315,6 +315,195 @@ Qual o problema principal e qual a tarefa prioritária de hoje?`;
   });
 }
 
+// ---- TV Analysis mode handler (structured diagnosis for TV Dashboard) ----
+async function handleTVAnalysisMode(body: any) {
+  const { organization_id, tv_data, team_members } = body;
+
+  if (!organization_id) {
+    return new Response(
+      JSON.stringify({ error: "Missing organization_id" }),
+      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
+  const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+  );
+
+  const now = new Date();
+  const dayOfMonth = now.getDate();
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const diasRestantes = daysInMonth - dayOfMonth;
+  const progressoEsperado = ((dayOfMonth / daysInMonth) * 100).toFixed(0);
+
+  // Fetch rich context
+  const startOfMonth = new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1)).toISOString();
+  const endOfMonth = new Date(Date.UTC(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999)).toISOString();
+
+  const [metricsRes, rankingRes] = await Promise.all([
+    supabase.rpc("get_dashboard_metrics", {
+      p_org_id: organization_id,
+      p_start_date: startOfMonth,
+      p_end_date: endOfMonth,
+      p_filter_member_id: null,
+    }),
+    supabase.rpc("get_ranking_data", {
+      p_month: now.getMonth() + 1,
+      p_year: now.getFullYear(),
+      p_organization_id: organization_id,
+    }),
+  ]);
+
+  const m = Array.isArray(metricsRes.data) ? metricsRes.data[0] : metricsRes.data;
+  const ranking = Array.isArray(rankingRes.data) ? rankingRes.data[0] : rankingRes.data;
+
+  // Build the rich context prompt
+  const tvMetrics = tv_data || {};
+  const metaVendas = tvMetrics.metaVendasMes || 0;
+  const vendasRealizadas = tvMetrics.vendasRealizadas || m?.vendaTotal || 0;
+  const ondeDeveria = tvMetrics.ondeDeveriamEstar || ((metaVendas * dayOfMonth) / daysInMonth);
+  const diferenca = vendasRealizadas - ondeDeveria;
+
+  const salesRanking = ranking?.salesRanking || [];
+  const meetingsRanking = ranking?.meetingsRanking || ranking?.sdrRanking || [];
+
+  // Build team member context
+  const membersContext = (team_members || []).map((tm: any) => {
+    const isSales = tm.metric_type === "sales";
+    return `- ${tm.name} (${isSales ? "Closer" : "SDR"}): ${
+      isSales
+        ? `R$ ${(tm.current || 0).toLocaleString("pt-BR")} / meta R$ ${(tm.goal || 0).toLocaleString("pt-BR")} (${tm.percentage || 0}%)`
+        : `${tm.current || 0} / meta ${tm.goal || 0} reuniões (${tm.percentage || 0}%)`
+    }`;
+  }).join("\n");
+
+  const systemPrompt = `Você é o Oráculo Comercial — um executivo comercial sênior que analisa a operação em tempo real e entrega diagnósticos acionáveis.
+
+Você NÃO é um coach motivacional. Você é um analista de receita pragmático. Seu trabalho é identificar gargalos, oportunidades e dar direção clara.
+
+DADOS OPERACIONAIS DO MÊS (dia ${dayOfMonth} de ${daysInMonth}, faltam ${diasRestantes} dias):
+
+RECEITA:
+- Meta: R$ ${metaVendas.toLocaleString("pt-BR")}
+- Realizado: R$ ${vendasRealizadas.toLocaleString("pt-BR")}
+- Deveria estar em: R$ ${Math.round(ondeDeveria).toLocaleString("pt-BR")}
+- Diferença: ${diferenca >= 0 ? "+" : ""}R$ ${Math.round(diferenca).toLocaleString("pt-BR")} (${diferenca >= 0 ? "ACIMA" : "ATRÁS"})
+- Progresso esperado: ${progressoEsperado}% do mês
+
+FUNIL:
+- Leads captados: ${m?.totalLeads || 0}
+- Reuniões marcadas: ${m?.reunioesMarcadas || 0}
+- Reuniões comparecidas: ${m?.reunioesComparecidas || 0}
+- Propostas enviadas: ${m?.propostasEnviadas || 0}
+- Vendas fechadas: ${m?.novosClientes || 0}
+- Taxa de conversão geral: ${(m?.taxaConversao || m?.taxaConversaoGeral || 0).toFixed(1)}%
+- Taxa no-show: ${(m?.taxaNoShow || 0).toFixed(1)}%
+- Ticket médio recorrência: R$ ${(m?.ticketMedioMRR || 0).toLocaleString("pt-BR")}
+- Ticket médio projeto: R$ ${(m?.ticketMedioProjeto || 0).toLocaleString("pt-BR")}
+
+PROPOSTAS QUENTES: ${(tvMetrics.propostasQuentes || []).length} em andamento
+${(tvMetrics.propostasQuentes || []).slice(0, 5).map((p: any) => `- ${p.lead?.name || "Lead"}: R$ ${(p.sale_value || 0).toLocaleString("pt-BR")}`).join("\n")}
+
+METAS INDIVIDUAIS:
+${membersContext || "Sem dados de metas individuais"}
+
+TOP VENDEDORES:
+${salesRanking.slice(0, 5).map((s: any, i: number) => `${i + 1}. ${s.name}: R$ ${(s.value || 0).toLocaleString("pt-BR")} (${s.goalProgress || 0}% da meta)`).join("\n") || "Sem dados"}
+
+TOP SDRs:
+${meetingsRanking.slice(0, 5).map((s: any, i: number) => `${i + 1}. ${s.name}: ${s.meetings || s.value || 0} reuniões (${s.goalProgress || 0}% da meta)`).join("\n") || "Sem dados"}
+
+REGRAS DE RESPOSTA:
+- Responda APENAS em JSON válido conforme o formato abaixo
+- Use SOMENTE dados acima — NUNCA invente números
+- Seja direto, executivo, pragmático
+- Foque em AÇÃO, não em motivação
+- Cada campo deve ter no máximo 2 frases
+- Para vendor_actions: identifique os 3 vendedores que mais precisam de atenção (pior desempenho, maior oportunidade, ou risco)
+
+FORMATO JSON OBRIGATÓRIO:
+{
+  "diagnostico": "Frase principal: qual o estado real da operação AGORA",
+  "causa": "Por que está acontecendo — gargalo específico identificado",
+  "acao_prioritaria": "A ÚNICA coisa mais importante que precisa acontecer HOJE",
+  "acao_secundaria": "Segunda ação de maior impacto",
+  "oportunidade": "Ganho rápido identificado nos dados (ou null se não houver)",
+  "alerta": "Risco crítico que precisa de atenção (ou null se estiver tudo ok)",
+  "vendor_actions": [
+    { "name": "Nome do vendedor", "action": "O que essa pessoa precisa fazer agora", "reason": "Por que" }
+  ]
+}`;
+
+  const openRouterApiKey = Deno.env.get("OPENROUTER_API_KEY");
+  const referer = Deno.env.get("OPENROUTER_REFERER_URL") || "https://v8millennials.com";
+
+  if (!openRouterApiKey) {
+    throw new Error("OPENROUTER_API_KEY is not configured");
+  }
+
+  const aiResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${openRouterApiKey}`,
+      "Content-Type": "application/json",
+      "HTTP-Referer": referer,
+    },
+    body: JSON.stringify({
+      model: "google/gemini-3-flash-preview",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: "Analise a operação e entregue o diagnóstico completo em JSON." },
+      ],
+      temperature: 0.5,
+      max_tokens: 800,
+    }),
+  });
+
+  if (!aiResponse.ok) {
+    const errorText = await aiResponse.text();
+    console.error("OpenRouter error:", aiResponse.status, errorText);
+    throw new Error(`OpenRouter error: ${aiResponse.status}`);
+  }
+
+  const aiData = await aiResponse.json();
+  const content = aiData.choices?.[0]?.message?.content || "";
+
+  let result: any = null;
+  try {
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      result = JSON.parse(jsonMatch[0]);
+    }
+  } catch (e) {
+    console.error("Failed to parse TV analysis response:", content);
+  }
+
+  if (!result) {
+    result = {
+      diagnostico: "Não foi possível gerar análise completa",
+      causa: "Dados insuficientes ou erro de processamento",
+      acao_prioritaria: "Revise o pipeline e priorize follow-ups pendentes",
+      acao_secundaria: "Atualize as metas individuais no sistema",
+      oportunidade: null,
+      alerta: null,
+      vendor_actions: [],
+    };
+  }
+
+  await logRuntime({
+    module: "copilot",
+    action: "oraculo_tv_analysis",
+    status: "success",
+    payloadSnapshot: { organization_id, day: dayOfMonth },
+  });
+
+  return new Response(JSON.stringify(result), {
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
 // ---- Main handler ----
 serve(withSentry('oraculo-comercial', async (req) => {
   if (req.method === "OPTIONS") {
@@ -324,9 +513,12 @@ serve(withSentry('oraculo-comercial', async (req) => {
   try {
     const body = await req.json();
 
-    // Route to chat mode or legacy mode
+    // Route to appropriate mode
     if (body.mode === "chat") {
       return await handleChatMode(body);
+    }
+    if (body.mode === "tv_analysis") {
+      return await handleTVAnalysisMode(body);
     }
 
     // Legacy mode: expects { metrics: MetricsData }

@@ -53,8 +53,9 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { AlertsDropdown } from "@/components/notifications/AlertsDropdown";
-import { useCustomPipelines } from "@/hooks/useCustomPipelines";
-import { CreatePipelineModal } from "@/components/custom-pipelines/CreatePipelineModal";
+import { usePermanentCustomFunnels, useActiveTemporaryFunnels } from "@/hooks/useCustomPipelines";
+import { usePipelineDisplayConfig } from "@/hooks/usePipelineDisplayConfig";
+import { CreateFunilOuCampanhaModal } from "@/components/funis/CreateFunilOuCampanhaModal";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -94,12 +95,20 @@ interface NavItemWithChildren extends NavItem {
 }
 
 // ─── Nav Data ───────────────────────────────────────────────
-const funisSubItems: NavItem[] = [
-  { label: "Qualificação", icon: MessageSquare, path: "/pipe-whatsapp" },
-  { label: "Confirmação", icon: Calendar, path: "/pipe-confirmacao" },
-  { label: "Propostas", icon: Kanban, path: "/pipe-propostas" },
-  { label: "Carteira", icon: TrendingUp, path: "/upsell" },
-];
+// funisSubItems is now dynamic — built inside the component from usePipelineDisplayConfig
+
+const PIPE_ICON_MAP: Record<string, React.ElementType> = {
+  whatsapp: MessageSquare,
+  confirmacao: Calendar,
+  propostas: Kanban,
+  upsell: TrendingUp,
+};
+const PIPE_PATH_MAP: Record<string, string> = {
+  whatsapp: "/pipe-whatsapp",
+  confirmacao: "/pipe-confirmacao",
+  propostas: "/pipe-propostas",
+  upsell: "/upsell",
+};
 
 const turboSubItems: NavItem[] = [
   { label: "Copilot", icon: Bot, path: "/copilot" },
@@ -109,35 +118,35 @@ const turboSubItems: NavItem[] = [
 // Primary items — always visible in the top bar
 const primaryNavItems: NavItemWithChildren[] = [
   { label: "Comando", icon: Gauge, path: "/" },
-  { label: "Campanhas", icon: Target, path: "/campanhas" },
   { label: "Chat", icon: Zap, path: "/chat" },
-  { label: "Funis", icon: GitBranch, path: "/funis", children: funisSubItems },
+  { label: "Funis", icon: GitBranch, path: "/funis", children: [] }, // children set dynamically via displayConfig
   { label: "Turbo", icon: Zap, path: "/turbo", children: turboSubItems },
-  { label: "Agenda", icon: CalendarDays, path: "/agenda" },
-  { label: "Pódio", icon: Trophy, path: "/performance" },
+  // { label: "Agenda", icon: CalendarDays, path: "/agenda" }, // HIDDEN — reativar futuramente
+  { label: "Ranking", icon: Trophy, path: "/performance" },
   { label: "Comissões", icon: DollarSign, path: "/comissoes" },
 ];
 
 // Secondary items — go inside "Mais" overflow menu
 const moreNavItems: NavItemWithChildren[] = [
-  { label: "Marketing", icon: BarChart2, path: "/marketing" },
-  { label: "Analytics", icon: BarChart3, path: "/analytics", masterOnly: true },
-  { label: "Revisão", icon: Wrench, path: "/follow-ups" },
+  // HIDDEN — reativar futuramente:
+  // { label: "Marketing", icon: BarChart2, path: "/marketing" },
+  // { label: "Analytics", icon: BarChart3, path: "/analytics" },
+  // { label: "Revisão", icon: Wrench, path: "/follow-ups" },
   { label: "Combustível", icon: Fuel, path: "/leads" },
 ];
 
 // All items combined for mobile
 const allNavItems: NavItemWithChildren[] = [
   { label: "Comando", icon: Gauge, path: "/" },
-  { label: "Campanhas", icon: Target, path: "/campanhas" },
-  { label: "Marketing", icon: BarChart2, path: "/marketing" },
-  { label: "Analytics", icon: BarChart3, path: "/analytics", masterOnly: true },
+  // HIDDEN — reativar futuramente:
+  // { label: "Marketing", icon: BarChart2, path: "/marketing" },
+  // { label: "Analytics", icon: BarChart3, path: "/analytics" },
+  // { label: "Agenda", icon: CalendarDays, path: "/agenda" },
+  // { label: "Revisão", icon: Wrench, path: "/follow-ups" },
   { label: "Chat", icon: Zap, path: "/chat" },
-  { label: "Funis", icon: GitBranch, path: "/funis", children: funisSubItems },
-  { label: "Agenda", icon: CalendarDays, path: "/agenda" },
-  { label: "Revisão", icon: Wrench, path: "/follow-ups" },
+  { label: "Funis", icon: GitBranch, path: "/funis", children: [] }, // children set dynamically via displayConfig
   { label: "Combustível", icon: Fuel, path: "/leads" },
-  { label: "Pódio", icon: Trophy, path: "/performance" },
+  { label: "Ranking", icon: Trophy, path: "/performance" },
   { label: "Comissões", icon: DollarSign, path: "/comissoes" },
   { label: "Turbo", icon: Zap, path: "/turbo", children: turboSubItems },
 ];
@@ -214,7 +223,25 @@ export function TopNavigation() {
   const { data: userRole } = useUserRole();
   const { jobTitle } = useJobTitle();
   const { hasFeature } = useOrgFeatures();
-  const { data: customPipelines = [] } = useCustomPipelines();
+  const { data: displayConfig } = usePipelineDisplayConfig();
+  const { data: permanentPipelines = [] } = usePermanentCustomFunnels();
+  const { data: temporaryFunnels = [] } = useActiveTemporaryFunnels();
+
+  // Build dynamic funnel sub-items from display config
+  const dynamicFunisChildren: NavItem[] = (displayConfig ?? [])
+    .filter((c) => c.is_visible)
+    .sort((a, b) => a.position - b.position)
+    .map((c) => ({
+      label: c.display_name,
+      icon: PIPE_ICON_MAP[c.pipe_type] ?? GitBranch,
+      path: PIPE_PATH_MAP[c.pipe_type] ?? "/",
+    }));
+
+  // Inject dynamic children into the Funis nav items
+  const funisItemPrimary = primaryNavItems.find((n) => n.path === "/funis");
+  if (funisItemPrimary) funisItemPrimary.children = dynamicFunisChildren;
+  const funisItemAll = allNavItems.find((n) => n.path === "/funis");
+  if (funisItemAll) funisItemAll.children = dynamicFunisChildren;
   const { data: featurePerms } = useFeaturePermissions();
   const { isAdmin } = useIsAdmin();
   const { isMaster } = useMasterAuth();
@@ -335,8 +362,8 @@ export function TopNavigation() {
   const visibleAdminItems = isOutboundMember ? [] : adminNavItems.filter((item) => canViewRoute(item.path));
   const visibleBottomItems = isOutboundMember ? [] : bottomNavItems.filter((item) => canViewRoute(item.path));
   const visibleFunisSubItems = isOutboundMember
-    ? funisSubItems.filter((s) => OUTBOUND_MEMBER_ALLOWED_PATHS.includes(s.path as any))
-    : funisSubItems;
+    ? dynamicFunisChildren.filter((s) => OUTBOUND_MEMBER_ALLOWED_PATHS.includes(s.path as any))
+    : dynamicFunisChildren;
 
   // Check if any "Mais" item or admin item is currently active
   const isMoreActive = visibleMore.some((item) => isActive(item.path)) ||
@@ -407,11 +434,11 @@ export function TopNavigation() {
             );
           })}
 
-          {/* Custom pipelines */}
-          {isFunis && !isOutboundMember && customPipelines.length > 0 && (
+          {/* Custom pipelines — permanent */}
+          {isFunis && !isOutboundMember && permanentPipelines.length > 0 && (
             <>
               <div className="h-px bg-border/40 my-1.5" />
-              {customPipelines.map((pipe) => {
+              {permanentPipelines.map((pipe) => {
                 const PipeIcon = CUSTOM_PIPE_ICON_MAP[pipe.icon] || Kanban;
                 const pipePath = `/pipe/custom/${pipe.slug}`;
                 return (
@@ -421,6 +448,25 @@ export function TopNavigation() {
                     className={cn("topnav-dropdown-item", isActive(pipePath) && "topnav-dropdown-item-active")}
                   >
                     <PipeIcon className="w-4 h-4 flex-shrink-0" style={{ color: pipe.color }} />
+                    <span className="flex-1">{pipe.name}</span>
+                  </NavLink>
+                );
+              })}
+            </>
+          )}
+          {/* Custom pipelines — temporary (with deadline) */}
+          {isFunis && !isOutboundMember && temporaryFunnels.length > 0 && (
+            <>
+              <div className="h-px bg-border/40 my-1.5" />
+              {temporaryFunnels.map((pipe) => {
+                const pipePath = `/pipe/custom/${pipe.slug}`;
+                return (
+                  <NavLink
+                    key={pipe.id}
+                    to={pipePath}
+                    className={cn("topnav-dropdown-item", isActive(pipePath) && "topnav-dropdown-item-active")}
+                  >
+                    <Target className="w-4 h-4 flex-shrink-0 text-purple-400" />
                     <span className="flex-1">{pipe.name}</span>
                   </NavLink>
                 );
@@ -539,7 +585,7 @@ export function TopNavigation() {
                 </NavLink>
               );
             })}
-            {isFunis && !isOutboundMember && customPipelines.length > 0 && customPipelines.map((pipe) => {
+            {isFunis && !isOutboundMember && permanentPipelines.length > 0 && permanentPipelines.map((pipe) => {
               const PipeIcon = CUSTOM_PIPE_ICON_MAP[pipe.icon] || Kanban;
               const pipePath = `/pipe/custom/${pipe.slug}`;
               return (
@@ -881,7 +927,7 @@ export function TopNavigation() {
         featureDescription={upgradeModal.description}
       />
 
-      <CreatePipelineModal open={showCreatePipeline} onOpenChange={setShowCreatePipeline} />
+      <CreateFunilOuCampanhaModal open={showCreatePipeline} onOpenChange={setShowCreatePipeline} />
     </>
   );
 }

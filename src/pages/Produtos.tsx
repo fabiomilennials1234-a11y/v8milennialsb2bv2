@@ -2,8 +2,9 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Edit2, Trash2, Package, FileText, Link as LinkIcon, FileSpreadsheet, Layers, Barcode } from "lucide-react";
+import { Plus, Edit2, Trash2, Package, FileText, Link as LinkIcon, FileSpreadsheet, Layers, Barcode, Bot } from "lucide-react";
 import { useProductsWithVariants, useDeleteProduct, Product } from "@/hooks/useProducts";
+import { useProductMaterialCounts } from "@/hooks/useProductMaterials";
 import { CreateProductModal } from "@/components/products/CreateProductModal";
 import { EditProductModal } from "@/components/products/EditProductModal";
 import { ProductImportModal } from "@/components/products/ProductImportModal";
@@ -22,6 +23,7 @@ import { useFeaturePermission } from "@/hooks/useUserRole";
 export default function Produtos() {
   const { data: products, isLoading } = useProductsWithVariants();
   const deleteProduct = useDeleteProduct();
+  const { data: materialCounts = new Map() } = useProductMaterialCounts();
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
@@ -121,12 +123,18 @@ export default function Produtos() {
                           <Badge
                             variant={product.type === "mrr" ? "default" : product.type === "unitario" ? "outline" : "secondary"}
                           >
-                            {product.type === "mrr" ? "MRR" : product.type === "unitario" ? "Unitário" : "Projeto"}
+                            {product.type === "mrr" ? "Recorrência" : product.type === "unitario" ? "Unitário" : "Projeto"}
                           </Badge>
                           {product.has_variants && product.variants && product.variants.length > 0 && (
                             <Badge variant="outline" className="text-xs gap-1">
                               <Layers className="h-3 w-3" />
                               {product.variants.length} var.
+                            </Badge>
+                          )}
+                          {(materialCounts.get(product.id) || 0) > 0 && (
+                            <Badge variant="outline" className="text-xs gap-1 text-primary border-primary/30">
+                              <Bot className="h-3 w-3" />
+                              {materialCounts.get(product.id)} {materialCounts.get(product.id) === 1 ? "material" : "materiais"}
                             </Badge>
                           )}
                         </div>

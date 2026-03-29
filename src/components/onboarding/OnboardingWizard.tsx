@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useOnboarding, type OnboardingAnswers } from "@/hooks/useOnboarding";
 import { useOrganization } from "@/hooks/useOrganization";
 import { generateSuggestions, type SuggestedPipeline, type SuggestedAutomation } from "@/lib/onboarding-suggestions";
+import { generatePipelineDisplayConfig, applyPipelineDisplayConfig } from "@/lib/pipeline-config-from-quiz";
 import { track } from "@/lib/analytics";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -91,6 +92,10 @@ export function OnboardingWizard() {
         }));
         await supabase.from("custom_pipeline_stages").insert(stageRows);
       }
+      // Apply pipeline display config from quiz answers (names + visibility)
+      const pipelineConfig = generatePipelineDisplayConfig(localAnswers);
+      await applyPipelineDisplayConfig(supabase, organizationId, pipelineConfig);
+
       await markApplied();
       toast.success("Sistema configurado com sucesso!");
       setCurrentStep(4);

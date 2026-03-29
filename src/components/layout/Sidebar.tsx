@@ -52,8 +52,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { AlertsDropdown } from "@/components/notifications/AlertsDropdown";
 import { SidebarPerformanceWidget } from "./SidebarPerformanceWidget";
-import { useCustomPipelines } from "@/hooks/useCustomPipelines";
-import { CreateNewModal } from "@/components/shared/CreateNewModal";
+import { usePermanentCustomFunnels, useActiveTemporaryFunnels } from "@/hooks/useCustomPipelines";
+import { CreateFunilOuCampanhaModal } from "@/components/funis/CreateFunilOuCampanhaModal";
 import { usePipelineDisplayConfig } from "@/hooks/usePipelineDisplayConfig";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
@@ -88,13 +88,13 @@ const PIPE_PATH_MAP: Record<string, string> = {
 
 const navItems: NavItemWithChildren[] = [
   { label: "Central de Comandos", icon: Gauge, path: "/" },
-  { label: "Campanhas", icon: Target, path: "/campanhas" },
-  { label: "Marketing", icon: BarChart2, path: "/marketing" },
-  { label: "Analytics", icon: BarChart3, path: "/analytics", masterOnly: true },
+  // HIDDEN — reativar futuramente:
+  // { label: "Marketing", icon: BarChart2, path: "/marketing" },
+  // { label: "Analytics", icon: BarChart3, path: "/analytics" },
+  // { label: "Agenda", icon: CalendarDays, path: "/agenda" },
+  // { label: "Revisão", icon: Wrench, path: "/follow-ups" },
   { label: "Chat", icon: Zap, path: "/chat" },
   { label: "Funis", icon: GitBranch, path: "/funis", children: [] }, // children set dynamically via displayConfig
-  { label: "Agenda", icon: CalendarDays, path: "/agenda" },
-  { label: "Revisão", icon: Wrench, path: "/follow-ups" },
   { label: "Leads", icon: Fuel, path: "/leads" },
   { label: "Ranking", icon: Trophy, path: "/performance" },
   { label: "Comissões", icon: DollarSign, path: "/comissoes" },
@@ -205,7 +205,8 @@ export function Sidebar() {
       setExpandedMenus(prev => [...prev, "Funis"]);
     }
   }, [location.pathname]);
-  const { data: customPipelines = [] } = useCustomPipelines();
+  const { data: permanentPipelines = [] } = usePermanentCustomFunnels();
+  const { data: temporaryFunnels = [] } = useActiveTemporaryFunnels();
   const { data: featurePerms } = useFeaturePermissions();
   const { isAdmin } = useIsAdmin();
   const { isMaster } = useMasterAuth();
@@ -338,8 +339,8 @@ export function Sidebar() {
   const visibleBottomItems = isOutboundMember ? [] : bottomNavItems;
 
   const visibleFunisSubItems = isOutboundMember
-    ? funisSubItems.filter((s) => OUTBOUND_MEMBER_ALLOWED_PATHS.includes(s.path as any))
-    : funisSubItems;
+    ? dynamicFunisChildren.filter((s) => OUTBOUND_MEMBER_ALLOWED_PATHS.includes(s.path as any))
+    : dynamicFunisChildren;
 
   return (
     <aside
@@ -505,10 +506,10 @@ export function Sidebar() {
                         </span>
                       </NavLink>
                     ))}
-                    {/* Funis customizados dinâmicos */}
-                    {item.label === "Funis" && !isOutboundMember && customPipelines.length > 0 && (
+                    {/* Funis customizados permanentes */}
+                    {item.label === "Funis" && !isOutboundMember && permanentPipelines.length > 0 && (
                       <div className="border-t border-sidebar-border/50 mt-1 pt-1">
-                        {customPipelines.map((pipe) => {
+                        {permanentPipelines.map((pipe) => {
                           const PipeIcon = CUSTOM_PIPE_ICON_MAP[pipe.icon] || Kanban;
                           const pipePath = `/pipe/custom/${pipe.slug}`;
                           return (
@@ -528,6 +529,36 @@ export function Sidebar() {
                         })}
                       </div>
                     )}
+                    {/* Funis temporários ativos */}
+                    {item.label === "Funis" && !isOutboundMember && temporaryFunnels.length > 0 && (
+                      <div className="border-t border-sidebar-border/50 mt-1 pt-1">
+                        {temporaryFunnels.map((pipe) => {
+                          const pipePath = `/pipe/custom/${pipe.slug}`;
+                          return (
+                            <NavLink
+                              key={pipe.id}
+                              to={pipePath}
+                              className={`sidebar-item pl-4 ${
+                                isActive(pipePath) ? "sidebar-item-active" : ""
+                              }`}
+                            >
+                              <Target className="w-4 h-4 flex-shrink-0 text-purple-400" />
+                              <span className="overflow-hidden whitespace-nowrap flex-1">
+                                {pipe.name}
+                              </span>
+                              <span className={cn(
+                                "text-[9px] font-semibold uppercase px-1 py-0.5 rounded flex-shrink-0",
+                                pipe.status === "active" ? "bg-green-500/15 text-green-400" :
+                                pipe.status === "paused" ? "bg-yellow-500/15 text-yellow-400" :
+                                "bg-muted text-muted-foreground"
+                              )}>
+                                {pipe.status === "active" ? "Ativo" : pipe.status === "paused" ? "Pausa" : "Draft"}
+                              </span>
+                            </NavLink>
+                          );
+                        })}
+                      </div>
+                    )}
                     {item.label === "Funis" && !isOutboundMember && (
                       <button
                         onClick={() => setShowCreateNew(true)}
@@ -535,7 +566,7 @@ export function Sidebar() {
                       >
                         <Plus className="w-4 h-4 flex-shrink-0" />
                         <span className="overflow-hidden whitespace-nowrap flex-1 text-left text-xs">
-                          Criar Funil
+                          Criar funil
                         </span>
                       </button>
                     )}
@@ -775,7 +806,7 @@ export function Sidebar() {
         featureDescription={upgradeModal.description}
       />
 
-      <CreateNewModal
+      <CreateFunilOuCampanhaModal
         open={showCreateNew}
         onOpenChange={setShowCreateNew}
       />

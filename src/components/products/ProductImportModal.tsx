@@ -27,7 +27,7 @@ const SYSTEM_FIELDS = [
   { key: "sku", label: "SKU", required: false, scope: "both" },
   { key: "parent_sku", label: "SKU do Produto-Pai", required: false, scope: "variant" },
   { key: "name", label: "Nome", required: true, scope: "both" },
-  { key: "type", label: "Tipo (mrr/projeto/unitario)", required: false, scope: "product" },
+  { key: "type", label: "Tipo (recorrencia/projeto/unitario)", required: false, scope: "product" },
   { key: "description", label: "Descrição", required: false, scope: "product" },
   { key: "base_unit", label: "Unidade Base", required: false, scope: "product" },
   { key: "ticket", label: "Ticket (R$)", required: false, scope: "both" },
