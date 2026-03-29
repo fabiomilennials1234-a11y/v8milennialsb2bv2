@@ -549,6 +549,17 @@ function CompetitionPodiumV2Base({
     };
   }, [hasTransition]);
 
+  // Memoize change lookup to prevent re-renders
+  // NOTE: This useMemo MUST be called before any early returns to satisfy
+  // the Rules of Hooks (same number of hooks on every render).
+  const changeMap = useMemo(() => {
+    const map = new Map<string, RankingChange | undefined>();
+    for (const user of top3) {
+      map.set(user.id, getChange?.(user.id));
+    }
+    return map;
+  }, [top3, getChange]);
+
   if (top3.length === 0) return null;
 
   // Edge case: single user
@@ -597,15 +608,6 @@ function CompetitionPodiumV2Base({
   }
 
   const visualSlots = buildVisualSlots(displayUsers);
-
-  // Memoize change lookup to prevent re-renders
-  const changeMap = useMemo(() => {
-    const map = new Map<string, RankingChange | undefined>();
-    for (const user of top3) {
-      map.set(user.id, getChange?.(user.id));
-    }
-    return map;
-  }, [top3, getChange]);
 
   return (
     <div className="relative w-full overflow-hidden rounded-2xl bg-gradient-to-b from-muted/50 via-background to-muted/30 px-2 pb-2 pt-6 sm:px-4">
