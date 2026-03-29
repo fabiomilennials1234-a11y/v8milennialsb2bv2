@@ -92,6 +92,7 @@ export function AICoachSection() {
 
       if (fnError) throw fnError;
       if (data?.error) throw new Error(data.error);
+      if (!data?.diagnostico) throw new Error("Resposta inválida do Oráculo");
 
       setAnalysis(data as TVAnalysis);
     } catch (e: any) {

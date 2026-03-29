@@ -762,27 +762,33 @@ export default function Performance() {
 
       if (compError) throw compError;
 
-      // Add participants (sales members, or all if no sales members)
-      const membersToAdd = salesMembers.length > 0 ? salesMembers : allActive;
-      const { error: partError } = await supabase
-        .from("competition_participants")
-        .insert(membersToAdd.map(m => ({
-          competition_id: comp.id,
-          team_member_id: m.id,
-        })));
+      try {
+        // Add participants (sales members, or all if no sales members)
+        const membersToAdd = salesMembers.length > 0 ? salesMembers : allActive;
+        const { error: partError } = await supabase
+          .from("competition_participants")
+          .insert(membersToAdd.map(m => ({
+            competition_id: comp.id,
+            team_member_id: m.id,
+          })));
 
-      if (partError) throw partError;
+        if (partError) throw partError;
 
-      // Add prizes
-      const { error: prizeError } = await supabase
-        .from("competition_prizes")
-        .insert([
-          { competition_id: comp.id, position: 1, prize_name: "iPhone 15", prize_icon: "🏆", prize_value: 5000 },
-          { competition_id: comp.id, position: 2, prize_name: "Fone Bluetooth", prize_icon: "🎧", prize_value: 300 },
-          { competition_id: comp.id, position: 3, prize_name: "Vale iFood", prize_icon: "🎁", prize_value: 150 },
-        ]);
+        // Add prizes
+        const { error: prizeError } = await supabase
+          .from("competition_prizes")
+          .insert([
+            { competition_id: comp.id, position: 1, prize_name: "iPhone 15", prize_icon: "🏆", prize_value: 5000 },
+            { competition_id: comp.id, position: 2, prize_name: "Fone Bluetooth", prize_icon: "🎧", prize_value: 300 },
+            { competition_id: comp.id, position: 3, prize_name: "Vale iFood", prize_icon: "🎁", prize_value: 150 },
+          ]);
 
-      if (prizeError) throw prizeError;
+        if (prizeError) throw prizeError;
+      } catch (innerError) {
+        // Rollback: delete orphaned competition
+        await supabase.from("competitions").delete().eq("id", comp.id);
+        throw innerError;
+      }
 
       toast.success("Competição demo criada com sucesso!");
       queryClient.invalidateQueries({ queryKey: ["competitions"] });
@@ -1031,9 +1037,8 @@ export default function Performance() {
           <motion.h1
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="text-2xl font-bold flex items-center gap-3"
+            className="text-2xl font-bold"
           >
-            <Trophy className="w-7 h-7 text-primary" />
             Ranking de Vendas
           </motion.h1>
           <p className="text-muted-foreground mt-1">

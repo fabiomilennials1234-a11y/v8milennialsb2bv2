@@ -78,6 +78,13 @@ export function useRankingTransitions(
   const [previousRanking, setPreviousRanking] = useState<RankingEntry[] | null>(null);
   const [isAnimating, setIsAnimating] = useState(false);
   const hasProcessed = useRef(false);
+  const lastCompetitionId = useRef<string | null>(null);
+
+  // Reset when competition changes
+  if (competitionId !== lastCompetitionId.current) {
+    lastCompetitionId.current = competitionId;
+    hasProcessed.current = false;
+  }
 
   // Compute changes on first render only (not on re-renders from data updates)
   useEffect(() => {

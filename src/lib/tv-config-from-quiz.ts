@@ -99,7 +99,7 @@ export function generateTVConfig(answers?: OnboardingAnswers | null): TVConfig {
   }
 
   // Fill up to 6 KPIs if we have less
-  const fallbackPool = [KPI_TICKET_PROJ, KPI_LEADS, KPI_PROPOSTAS, KPI_LEADS_NOVOS];
+  const fallbackPool = [KPI_TICKET_PROJ, KPI_LEADS, KPI_PROPOSTAS, KPI_LEADS_NOVOS, KPI_REUNIOES, KPI_NOSHOW, KPI_RESPOSTAS, KPI_BASE_ATIVA];
   for (const fallback of fallbackPool) {
     if (kpis.length >= 6) break;
     if (!kpis.some(k => k.key === fallback.key)) {
