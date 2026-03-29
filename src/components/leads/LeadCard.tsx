@@ -26,7 +26,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
-import { useScheduledMessagesForLead } from "@/hooks/useScheduledMessages";
 import { ScheduleMessageModal } from "@/components/chat/ScheduleMessageModal";
 import { useOpenWhatsAppChat, formatPhoneForWhatsApp } from "@/lib/whatsapp";
 import { formatDistanceToNow, isToday, isTomorrow, isPast, differenceInDays, differenceInHours } from "date-fns";
@@ -314,8 +313,6 @@ export const LeadCard = memo(function LeadCard({
   ...overrides
 }: LeadCardProps) {
   const [scheduleOpen, setScheduleOpen] = useState(false);
-  const { data: scheduledMsgs = [] } = useScheduledMessagesForLead(lead.leadId || null);
-  const hasScheduled = scheduledMsgs.length > 0;
   const config = { ...VARIANT_CONFIG[variant], ...pickDefined(overrides) };
   const origin = ORIGIN_COLORS[lead.origin || "outro"] || ORIGIN_COLORS.outro;
   const urgency = lead.urgency ? URGENCY_COLORS[lead.urgency] : null;
@@ -440,11 +437,6 @@ export const LeadCard = memo(function LeadCard({
         )}
         {lead.rating != null && lead.rating > 0 && (
           <CalorPopover calor={lead.rating} onChange={onCalorChange} />
-        )}
-        {hasScheduled && (
-          <span className="flex items-center gap-0.5 text-primary/70" title={`${scheduledMsgs.length} agendada(s)`}>
-            <Clock className="w-3 h-3" />
-          </span>
         )}
       </div>
 
