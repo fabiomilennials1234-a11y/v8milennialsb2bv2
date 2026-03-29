@@ -108,10 +108,7 @@ BEGIN
          OR closer_id = p_filter_member_id OR responsible_id = p_filter_member_id);
   v_funnel_propostas := v_propostas_enviadas;
 
-  -- Total in pipe (for conversion rate — vendas / total, same formula as propostas page)
-  v_total_in_pipe := v_propostas_enviadas; -- all proposals in period, no status filter
-
-  -- 4. Vendas
+  -- 4. Vendas (vendido no período por closed_at/metrics_period_at)
   SELECT COUNT(*) INTO v_funnel_vendas
   FROM pipe_propostas
   WHERE organization_id = p_org_id AND status = 'vendido'
@@ -121,7 +118,19 @@ BEGIN
          OR closer_id = p_filter_member_id OR responsible_id = p_filter_member_id);
   v_novos_clientes := v_funnel_vendas;
 
-  -- Taxa de conversão (vendas / total no pipe, matching propostas page)
+  -- Perdidos no período (for conversion rate: vendas / (vendas + perdidos))
+  SELECT COUNT(*) INTO v_total_in_pipe
+  FROM pipe_propostas
+  WHERE organization_id = p_org_id AND status = 'perdido'
+    AND (
+      (metrics_period_at IS NOT NULL AND metrics_period_at >= p_start_date AND metrics_period_at <= p_end_date)
+      OR (metrics_period_at IS NULL AND closed_at >= p_start_date AND closed_at <= p_end_date)
+    )
+    AND (p_filter_member_id IS NULL
+         OR closer_id = p_filter_member_id OR responsible_id = p_filter_member_id);
+  v_total_in_pipe := v_funnel_vendas + v_total_in_pipe; -- closed deals = won + lost
+
+  -- Taxa de conversão = vendas / (vendas + perdidos) — matches propostas page formula
   IF v_total_in_pipe > 0 THEN
     v_taxa_conversao := ROUND((v_funnel_vendas::NUMERIC / v_total_in_pipe) * 100, 1);
   END IF;
