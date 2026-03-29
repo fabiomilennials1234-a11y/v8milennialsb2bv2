@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { usePersistedState } from "@/hooks/usePersistedState";
 import { motion } from "framer-motion";
-import { Plus, Calendar, Loader2, LayoutGrid, List, Settings2 } from "lucide-react";
+import { Plus, Calendar, Loader2, LayoutGrid, List, Settings2, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -48,6 +48,7 @@ import { useLogLeadAction } from "@/hooks/useLogLeadAction";
 import { useCreateAcaoDoDia } from "@/hooks/useAcoesDoDia";
 import { toast } from "sonner";
 import { useOrganization } from "@/hooks/useOrganization";
+import { useLeadsWithScheduledMessages } from "@/hooks/useScheduledMessages";
 import { track, trackModuleVisit } from "@/lib/analytics";
 import { useFeaturePermission } from "@/hooks/useUserRole";
 
@@ -184,6 +185,9 @@ export default function PipeConfirmacao() {
     (v: "kanban" | "timeline") => setFilterState((f) => ({ ...f, viewMode: v })),
     [setFilterState]
   );
+  const { data: leadsWithSchedule } = useLeadsWithScheduledMessages();
+  const [filterScheduled, setFilterScheduled] = useState(false);
+
   const [isLeadModalOpen, setIsLeadModalOpen] = useState(false);
   const [isMeetingModalOpen, setIsMeetingModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -361,11 +365,13 @@ export default function PipeConfirmacao() {
           }
 
           const matchesStatus = selectedStatuses.length === 0 || selectedStatuses.includes(item.status);
-          
+
           // Responsible filter
           const matchesResponsible = selectedResponsibleId === "all" || item.responsible_id === selectedResponsibleId;
 
-          return matchesSearch && matchesOrigin && matchesUrgency && matchesTime && matchesStatus && matchesResponsible;
+          const matchesScheduled = !filterScheduled || (leadsWithSchedule?.has(item.lead_id) ?? false);
+
+          return matchesSearch && matchesOrigin && matchesUrgency && matchesTime && matchesStatus && matchesResponsible && matchesScheduled;
         })
         // Sort by created_at — leads mais recentes primeiro
         .sort((a, b) => {
@@ -377,7 +383,7 @@ export default function PipeConfirmacao() {
 
       return { ...col, items: columnItems };
     });
-  }, [pipeData, searchQuery, originFilter, urgencyFilter, timeFilter, selectedStatuses, selectedResponsibleId, overdueDays]);
+  }, [pipeData, searchQuery, originFilter, urgencyFilter, timeFilter, selectedStatuses, selectedResponsibleId, overdueDays, filterScheduled, leadsWithSchedule]);
 
   const handleStatusChange = async (itemId: string, newStatus: string) => {
     const item = pipeData?.find(p => p.id === itemId);
@@ -607,22 +613,28 @@ export default function PipeConfirmacao() {
       <ConfirmacaoStats data={statsData} />
 
       {/* Filters */}
-      <ConfirmacaoFilters
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
-        originFilter={originFilter}
-        onOriginFilterChange={setOriginFilter}
-        timeFilter={timeFilter}
-        onTimeFilterChange={setTimeFilter}
-        urgencyFilter={urgencyFilter}
-        onUrgencyFilterChange={setUrgencyFilter}
-        selectedStatuses={selectedStatuses}
-        onStatusesChange={setSelectedStatuses}
-        statusOptions={statusColumns}
-        teamMembers={teamMemberOptions}
-        selectedResponsibleId={selectedResponsibleId}
-        onResponsibleFilterChange={setSelectedResponsibleId}
-      />
+      <div className="flex flex-wrap items-center gap-2">
+        <ConfirmacaoFilters
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          originFilter={originFilter}
+          onOriginFilterChange={setOriginFilter}
+          timeFilter={timeFilter}
+          onTimeFilterChange={setTimeFilter}
+          urgencyFilter={urgencyFilter}
+          onUrgencyFilterChange={setUrgencyFilter}
+          selectedStatuses={selectedStatuses}
+          onStatusesChange={setSelectedStatuses}
+          statusOptions={statusColumns}
+          teamMembers={teamMemberOptions}
+          selectedResponsibleId={selectedResponsibleId}
+          onResponsibleFilterChange={setSelectedResponsibleId}
+        />
+        <Button variant={filterScheduled ? "default" : "outline"} size="sm" onClick={() => setFilterScheduled(!filterScheduled)} className="gap-1.5">
+          <Clock className="w-4 h-4" />
+          Agendados
+        </Button>
+      </div>
 
       {/* Content */}
       {viewMode === "kanban" ? (

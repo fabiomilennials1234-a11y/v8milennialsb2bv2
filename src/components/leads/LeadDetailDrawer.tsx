@@ -89,6 +89,7 @@ import {
 import { ConversationHistoryTab } from "./ConversationHistoryTab";
 import { TimelineItem } from "./TimelineItem";
 import { ScheduleFollowUpButton } from "@/components/followups/ScheduleFollowUpButton";
+import { ScheduleMessageModal } from "@/components/chat/ScheduleMessageModal";
 import { ORIGIN_COLORS } from "./LeadCard";
 import { cn } from "@/lib/utils";
 import { useOpenWhatsAppChat, formatPhoneForWhatsApp } from "@/lib/whatsapp";
@@ -180,6 +181,7 @@ export const LeadDetailDrawer = memo(function LeadDetailDrawer({
   const [activeTab, setActiveTab] = useState("dados");
   const [quickNote, setQuickNote] = useState("");
   const [isSavingNote, setIsSavingNote] = useState(false);
+  const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
 
   // ─── Lead query ─────────────────────────────────────────
   const { data: lead, isLoading } = useQuery({
@@ -520,6 +522,7 @@ export const LeadDetailDrawer = memo(function LeadDetailDrawer({
 
   // ─── Render ─────────────────────────────────────────────
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[900px] max-h-[90vh] p-0 overflow-hidden flex flex-col">
         {isLoading ? (
@@ -611,6 +614,18 @@ export const LeadDetailDrawer = memo(function LeadDetailDrawer({
                       variant="button"
                       size="sm"
                     />
+                  )}
+
+                  {leadId && lead?.phone && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setScheduleModalOpen(true)}
+                      className="gap-1.5"
+                    >
+                      <Clock className="w-4 h-4" />
+                      Agendar mensagem
+                    </Button>
                   )}
 
                   {/* Menu */}
@@ -1418,6 +1433,17 @@ export const LeadDetailDrawer = memo(function LeadDetailDrawer({
         )}
       </DialogContent>
     </Dialog>
+
+    {leadId && lead?.phone && (
+      <ScheduleMessageModal
+        open={scheduleModalOpen}
+        onOpenChange={setScheduleModalOpen}
+        leadId={leadId}
+        leadName={lead?.name || ""}
+        phoneNumber={lead?.phone || ""}
+      />
+    )}
+    </>
   );
 });
 

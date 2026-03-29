@@ -52,6 +52,7 @@ import { useTinyErpStatus } from "@/hooks/useTinyErp";
 import { useCadastroExternoEnabled } from "@/hooks/useCadastroExterno";
 import { CadastroExternoConfirmDialog } from "@/components/proposals/CadastroExternoConfirmDialog";
 import { useCreateAcaoDoDia } from "@/hooks/useAcoesDoDia";
+import { useLeadsWithScheduledMessages } from "@/hooks/useScheduledMessages";
 import { supabase } from "@/integrations/supabase/client";
 import { CalorAnalyticsChart } from "@/components/proposals/CalorAnalyticsChart";
 import { ProductAnalyticsChart } from "@/components/proposals/ProductAnalyticsChart";
@@ -157,6 +158,8 @@ export default function PipePropostas() {
     (v: "kanban" | "analytics") => setFilterState((f) => ({ ...f, viewMode: v })),
     [setFilterState]
   );
+  const { data: leadsWithSchedule } = useLeadsWithScheduledMessages();
+  const [filterScheduled, setFilterScheduled] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
@@ -359,7 +362,9 @@ export default function PipePropostas() {
             matchesCalor = calor < 4;
           }
 
-          return matchesSearch && matchesResponsible && matchesType && matchesPriority && matchesCalor;
+          const matchesScheduled = !filterScheduled || (leadsWithSchedule?.has(item.lead_id) ?? false);
+
+          return matchesSearch && matchesResponsible && matchesType && matchesPriority && matchesCalor && matchesScheduled;
         })
         .map(transformToCard)
         .toSorted((a, b) => {
@@ -372,7 +377,7 @@ export default function PipePropostas() {
         items: columnItems,
       };
     });
-  }, [pipeData, searchTerm, filterResponsible, filterProductType, filterPriority, filterCalor, metricsPeriod, periodRange]);
+  }, [pipeData, searchTerm, filterResponsible, filterProductType, filterPriority, filterCalor, filterScheduled, leadsWithSchedule, metricsPeriod, periodRange]);
 
   // Calculate stats (Vendas Total / Rec. Vendida / Projetos Vendidos por item quando houver items)
   const stats = useMemo(() => {
@@ -1123,6 +1128,10 @@ export default function PipePropostas() {
                   </SelectItem>
                 </SelectContent>
               </Select>
+              <Button variant={filterScheduled ? "default" : "outline"} size="sm" onClick={() => setFilterScheduled(!filterScheduled)} className="gap-1.5">
+                <Clock className="w-4 h-4" />
+                Agendados
+              </Button>
             </div>
 
             {/* Kanban Board with Drag-and-Drop */}

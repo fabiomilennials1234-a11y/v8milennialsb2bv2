@@ -77,6 +77,8 @@ import { useIsAdmin } from "@/hooks/useUserRole";
 import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
 import { ChannelBadge, type ChannelType } from "./ChannelBadge";
 import { LeadDetailContent } from "./LeadDetailContent";
+import { ScheduleMessageModal } from "./ScheduleMessageModal";
+import { ScheduledMessagesBanner } from "./ScheduledMessagesBanner";
 import { WhatsAppSettings } from "@/components/settings/WhatsAppSettings";
 import {
   Dialog,
@@ -1358,6 +1360,7 @@ function ChatWindow({
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [imageCaption, setImageCaption] = useState("");
+  const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
   const toggleAIMutation = useToggleLeadAI();
   const toggleConversationAIMutation = useToggleConversationAI();
 
@@ -1781,6 +1784,16 @@ function ChatWindow({
         )}
       </div>
 
+      {/* Banner de mensagens agendadas */}
+      {selectedContact && selectedContact.lead_id && (
+        <ScheduledMessagesBanner
+          leadId={selectedContact.lead_id}
+          leadName={selectedContact.lead_name || selectedContact.push_name || selectedContact.phone_number}
+          phoneNumber={selectedContact.phone_number}
+          instanceId={instanceId}
+        />
+      )}
+
       {/* Área de mensagens: altura limitada com scroll interno; boundary evita "fewer hooks" ao isolar erros */}
       <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
         <ScrollArea className="flex-1 h-full">
@@ -1962,6 +1975,16 @@ function ChatWindow({
 
             {/* Botão de enviar ou gravar */}
             {newMessage.trim() ? (
+              <>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setScheduleModalOpen(true)}
+                title="Agendar mensagem"
+                className="text-muted-foreground hover:text-primary"
+              >
+                <Clock className="w-4 h-4" />
+              </Button>
               <Button
                 onClick={handleSend}
                 disabled={sendMessage.isPending}
@@ -1973,6 +1996,7 @@ function ChatWindow({
                   <Send className="w-4 h-4" />
                 )}
               </Button>
+              </>
             ) : (
               <Button
                 variant="ghost"
@@ -1993,6 +2017,22 @@ function ChatWindow({
         isOpen={!!previewImageUrl}
         onClose={() => setPreviewImageUrl(null)}
       />
+
+      {selectedContact && (
+        <ScheduleMessageModal
+          open={scheduleModalOpen}
+          onOpenChange={(v) => {
+            setScheduleModalOpen(v);
+            if (!v) setNewMessage("");
+          }}
+          leadId={selectedContact.lead_id || ""}
+          leadName={selectedContact.lead_name || selectedContact.push_name || selectedContact.phone_number}
+          phoneNumber={selectedContact.phone_number}
+          instanceId={instanceId}
+          instanceName={instanceName}
+          initialMessage={newMessage}
+        />
+      )}
     </div>
   );
 }
