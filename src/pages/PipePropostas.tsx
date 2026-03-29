@@ -374,7 +374,7 @@ export default function PipePropostas() {
     });
   }, [pipeData, searchTerm, filterResponsible, filterProductType, filterPriority, filterCalor, metricsPeriod, periodRange]);
 
-  // Calculate stats (Vendas Total / MRR Vendido / Projetos Vendidos por item quando houver items)
+  // Calculate stats (Vendas Total / Rec. Vendida / Projetos Vendidos por item quando houver items)
   const stats = useMemo(() => {
     if (!pipeData) return { 
       total: 0, 
@@ -403,7 +403,7 @@ export default function PipePropostas() {
           const val = Number(it.sale_value) || 0;
           const t = it.product?.type;
           if (t === "mrr") {
-            mrr += val;             // MRR Vendido = valor mensal recorrente
+            mrr += val;             // Rec. Vendida = valor mensal recorrente
             sold += val * duration; // Venda Total = mensal × duração do contrato
           } else if (t === "projeto") {
             projeto += val;
@@ -977,7 +977,7 @@ export default function PipePropostas() {
           className="stat-card"
         >
           <div className="flex items-center justify-between mb-2">
-            <p className="text-xs text-muted-foreground">MRR Vendido</p>
+            <p className="text-xs text-muted-foreground">Rec. Vendida</p>
             <ArrowUpRight className="w-4 h-4 text-chart-5" />
           </div>
           <p className="text-xl font-bold text-chart-5">{formatCurrency(displayStats.mrr)}</p>
@@ -1065,7 +1065,7 @@ export default function PipePropostas() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos Tipos</SelectItem>
-                  <SelectItem value="mrr">MRR</SelectItem>
+                  <SelectItem value="mrr">Recorrência</SelectItem>
                   <SelectItem value="projeto">Projeto</SelectItem>
                 </SelectContent>
               </Select>

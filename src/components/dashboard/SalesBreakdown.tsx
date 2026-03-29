@@ -14,7 +14,7 @@ function SalesBreakdownBase() {
     if (!metrics) return [];
     
     return [
-      { name: "MRR", value: metrics.vendaMRR, color: "hsl(var(--chart-5))" },
+      { name: "Recorrência", value: metrics.vendaMRR, color: "hsl(var(--chart-5))" },
       { name: "Projeto", value: metrics.vendaProjeto, color: "hsl(var(--primary))" },
     ].filter(d => d.value > 0);
   }, [metrics]);
@@ -91,14 +91,14 @@ function SalesBreakdownBase() {
                 className="p-3 rounded-lg bg-chart-5/10"
               >
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-sm font-medium">MRR</span>
+                  <span className="text-sm font-medium">Recorrência</span>
                   <span className="text-xs text-muted-foreground">{mrrPercent}%</span>
                 </div>
                 <p className="text-lg font-bold text-chart-5">
                   {formatCurrency(metrics?.vendaMRR || 0)}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Ticket médio: {formatCurrency(metrics?.ticketMedioMRR || 0)}
+                  Ticket médio Rec.: {formatCurrency(metrics?.ticketMedioMRR || 0)}
                 </p>
               </motion.div>
               

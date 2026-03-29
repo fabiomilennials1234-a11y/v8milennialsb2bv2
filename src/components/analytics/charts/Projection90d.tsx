@@ -27,7 +27,7 @@ function ScenarioCard({ label, projectedMRR, projectedRevenue, colorClass, bgCla
     <div className={`rounded-xl border p-3 space-y-2 ${bgClass}`}>
       <p className={`text-xs font-semibold uppercase tracking-wide ${colorClass}`}>{label}</p>
       <div>
-        <p className="text-xs text-muted-foreground">MRR Projetado</p>
+        <p className="text-xs text-muted-foreground">Rec. Projetada</p>
         <p className={`text-lg font-bold ${colorClass}`}>{formatCurrency(projectedMRR)}</p>
       </div>
       <div>
@@ -124,7 +124,7 @@ export function Projection90d({ mrrEvolution, totalRevenue, newCustomers }: Prop
         </div>
         <p className="text-xs text-muted-foreground mt-3 text-center">
           Baseado na taxa de crescimento dos últimos meses.
-          {baseMRR === 0 && " Adicione dados de MRR para projeções mais precisas."}
+          {baseMRR === 0 && " Adicione dados de recorrência para projeções mais precisas."}
         </p>
       </CardContent>
     </Card>

@@ -294,7 +294,7 @@ export function PropostasContext({ lead, pipeData: proposta, onSuccess }: Propos
                         {products.map((p) => (
                           <SelectItem key={p.id} value={p.id}>
                             <div className="flex items-center gap-2">
-                              <Badge variant={p.type === "mrr" ? "default" : "secondary"} className="text-xs">{p.type === "mrr" ? "MRR" : "Projeto"}</Badge>
+                              <Badge variant={p.type === "mrr" ? "default" : "secondary"} className="text-xs">{p.type === "mrr" ? "Rec." : "Projeto"}</Badge>
                               {p.name}
                             </div>
                           </SelectItem>

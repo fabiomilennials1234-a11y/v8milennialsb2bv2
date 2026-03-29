@@ -501,7 +501,7 @@ export const LeadCard = memo(function LeadCard({
                       "bg-primary/10 text-primary border-primary/20"
                     )}
                   >
-                    {p.type === "mrr" ? "MRR" : p.type === "unitario" ? "Unit" : "Proj"}
+                    {p.type === "mrr" ? "Rec." : p.type === "unitario" ? "Unit" : "Proj"}
                   </Badge>
                 )}
                 <span className="truncate">{p.name}</span>

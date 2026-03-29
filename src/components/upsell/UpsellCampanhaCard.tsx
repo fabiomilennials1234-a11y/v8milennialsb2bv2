@@ -58,7 +58,7 @@ export function UpsellCampanhaCard({ campanha, onClick }: UpsellCampanhaCardProp
               <div className="p-0.5 rounded bg-blue-500/10">
                 <DollarSign className="h-3 w-3 text-blue-500" />
               </div>
-              <span>MRR: R$ {Number(campanha.mrr_planejado).toLocaleString("pt-BR")}</span>
+              <span>Rec.: R$ {Number(campanha.mrr_planejado).toLocaleString("pt-BR")}</span>
             </div>
           ) : null}
           {campanha.projeto_planejado ? (

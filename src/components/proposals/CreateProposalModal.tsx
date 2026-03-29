@@ -397,7 +397,7 @@ export function CreateProposalModal({
                                         variant={p.type === "mrr" ? "default" : "secondary"} 
                                         className="text-xs"
                                       >
-                                        {p.type === "mrr" ? "MRR" : "Projeto"}
+                                        {p.type === "mrr" ? "Rec." : "Projeto"}
                                       </Badge>
                                       {p.name}
                                     </div>

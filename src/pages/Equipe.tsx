@@ -508,7 +508,7 @@ export default function Equipe() {
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="grid gap-2">
-                    <Label htmlFor="commission_mrr">Comissão MRR (%)</Label>
+                    <Label htmlFor="commission_mrr">Comissão Rec. (%)</Label>
                     <Input
                       id="commission_mrr"
                       type="number"
@@ -783,7 +783,7 @@ export default function Equipe() {
               <TableHead>Status</TableHead>
               <TableHead className="text-right">OTE Base</TableHead>
               <TableHead className="text-right">OTE Bônus</TableHead>
-              <TableHead className="text-right">Comissão MRR</TableHead>
+              <TableHead className="text-right">Comissão Rec.</TableHead>
               <TableHead className="text-right">Comissão Projeto</TableHead>
               {isAdmin && <TableHead className="w-[50px]"></TableHead>}
             </TableRow>

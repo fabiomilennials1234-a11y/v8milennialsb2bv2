@@ -33,7 +33,7 @@ const statusLabels: Record<PipePropostasStatus, string> = {
 };
 
 const productTypeLabels: Record<string, string> = {
-  mrr: "MRR (Recorrente)",
+  mrr: "Recorrência",
   projeto: "Projeto (Único)",
 };
 

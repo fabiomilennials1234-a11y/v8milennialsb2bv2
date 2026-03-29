@@ -188,7 +188,7 @@ export function QuickSaleModal({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="mrr">MRR</SelectItem>
+                  <SelectItem value="mrr">Recorrência</SelectItem>
                   <SelectItem value="projeto">Projeto</SelectItem>
                   <SelectItem value="unitario">Unitario</SelectItem>
                 </SelectContent>

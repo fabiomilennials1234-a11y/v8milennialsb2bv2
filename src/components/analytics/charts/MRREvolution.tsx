@@ -50,10 +50,10 @@ export function MRREvolution({ data }: Props) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm">Evolução de MRR</CardTitle>
+          <CardTitle className="text-sm">Evolução de Recorrência</CardTitle>
         </CardHeader>
         <CardContent>
-          <AnalyticsEmptyState message="Sem dados de MRR no período." />
+          <AnalyticsEmptyState message="Sem dados de recorrência no período." />
         </CardContent>
       </Card>
     );
@@ -74,7 +74,7 @@ export function MRREvolution({ data }: Props) {
       <CardHeader className="pb-2">
         <CardTitle className="text-sm flex items-center gap-2">
           <TrendingUp className="h-4 w-4" />
-          Evolução de MRR
+          Evolução de Recorrência
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -93,7 +93,7 @@ export function MRREvolution({ data }: Props) {
             <Legend wrapperStyle={{ fontSize: "11px" }} />
             <Bar
               dataKey="new_mrr"
-              name="Novo MRR"
+              name="Nova Rec."
               fill="hsl(var(--chart-2))"
               radius={[3, 3, 0, 0]}
             />
@@ -109,11 +109,11 @@ export function MRREvolution({ data }: Props) {
         {/* Summary row */}
         <div className="grid grid-cols-3 gap-2 pt-1">
           <div className="rounded-lg bg-muted/40 p-2 text-center">
-            <p className="text-xs text-muted-foreground">Novo MRR</p>
+            <p className="text-xs text-muted-foreground">Nova Rec.</p>
             <p className="text-sm font-semibold text-green-600">{formatCurrency(totalNewMRR)}</p>
           </div>
           <div className="rounded-lg bg-muted/40 p-2 text-center">
-            <p className="text-xs text-muted-foreground">Churn MRR</p>
+            <p className="text-xs text-muted-foreground">Churn Rec.</p>
             <p className="text-sm font-semibold text-destructive">{formatCurrency(totalChurned)}</p>
           </div>
           <div className="rounded-lg bg-muted/40 p-2 text-center">

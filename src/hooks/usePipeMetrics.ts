@@ -52,7 +52,7 @@ function getMonthRange(month: number, year: number) {
 type SoldRow = {
   sale_value: number | null;
   product_type: string | null;
-  /** Duração do contrato em meses. Usado para calcular Venda Total em contratos MRR. */
+  /** Duração do contrato em meses. Usado para calcular Venda Total em contratos de Recorrência. */
   contract_duration?: number | null;
   items?: Array<{ sale_value: number | null; product?: { type: string } | null }> | null;
 };
@@ -60,7 +60,7 @@ type SoldRow = {
 /**
  * Agrega vendidos por item.
  * Regra de Venda Total:
- *   - MRR:     mrr += sale_value (mensal);  sold += sale_value * contract_duration
+ *   - Rec.:    mrr += sale_value (mensal);  sold += sale_value * contract_duration
  *   - Projeto: projeto += sale_value;        sold += sale_value
  *   - Unitário:                              sold += sale_value
  * contract_duration nulo/inválido → fallback de 1 mês (evita zerar o contrato).
@@ -78,7 +78,7 @@ function aggregateSoldByItem(rows: SoldRow[]): { sold: number; mrr: number; proj
         const val = Number(item.sale_value) || 0;
         const t = item.product?.type;
         if (t === "mrr") {
-          mrr += val;             // MRR Vendido = valor mensal recorrente
+          mrr += val;             // Rec. Vendida = valor mensal recorrente
           sold += val * duration; // Venda Total = mensal × duração do contrato
         } else if (t === "projeto") {
           projeto += val;
@@ -104,8 +104,8 @@ function aggregateSoldByItem(rows: SoldRow[]): { sold: number; mrr: number; proj
 }
 
 /**
- * Métricas do pipe de Propostas: vendido, MRR, projeto, pipeline ativo, taxa de conversão.
- * Agregação por item: MRR/Projeto por product.type do item; unitário só em Vendas Total.
+ * Métricas do pipe de Propostas: vendido, Recorrência, projeto, pipeline ativo, taxa de conversão.
+ * Agregação por item: Rec./Projeto por product.type do item; unitário só em Vendas Total.
  * period "month" = apenas itens cujo período de métrica (ou closed_at) está no mês.
  * period "all" = totais históricos do pipe.
  */

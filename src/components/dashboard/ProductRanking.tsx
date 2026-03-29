@@ -69,7 +69,7 @@ function ProductRankingBase({ month, year }: Props) {
                   {sorted.map((p, i) => (
                     <motion.tr key={p.product_id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.03 }} className="border-b border-border/30">
                       <td className="py-2 font-medium truncate max-w-[140px]">{p.product_name}</td>
-                      <td className="py-2"><span className={`text-xs px-1.5 py-0.5 rounded ${p.product_type === "mrr" ? "bg-primary/10 text-primary" : "bg-success/10 text-success"}`}>{p.product_type === "mrr" ? "MRR" : "Projeto"}</span></td>
+                      <td className="py-2"><span className={`text-xs px-1.5 py-0.5 rounded ${p.product_type === "mrr" ? "bg-primary/10 text-primary" : "bg-success/10 text-success"}`}>{p.product_type === "mrr" ? "Rec." : "Projeto"}</span></td>
                       <td className="py-2">{p.qty_sold}</td>
                       <td className="py-2 font-medium">{fmt(p.total_value)}</td>
                       <td className="py-2">{fmt(p.ticket_medio)}</td>

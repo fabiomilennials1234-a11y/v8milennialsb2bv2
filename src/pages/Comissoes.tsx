@@ -153,7 +153,7 @@ function MemberCommissionCard({ memberId, memberName, memberRole, month, year, a
             </div>
             <div className="space-y-1">
               <p className="text-xs text-muted-foreground flex items-center gap-1">
-                <Percent className="w-3 h-3" /> Comissão MRR
+                <Percent className="w-3 h-3" /> Comissão Rec.
               </p>
               <p className="text-sm font-medium text-chart-3">{formatCurrency(summary.commissionMRR)}</p>
             </div>
@@ -191,7 +191,7 @@ function MemberCommissionCard({ memberId, memberName, memberRole, month, year, a
             <p className="text-xs text-muted-foreground mb-2">Vendas do Mês</p>
             <div className="flex items-center gap-4 text-sm">
               <span className="text-chart-3">
-                MRR: {formatCurrency(summary.totalMRR)}
+                Rec.: {formatCurrency(summary.totalMRR)}
               </span>
               <span className="text-chart-4">
                 Projeto: {formatCurrency(summary.totalProjeto)}

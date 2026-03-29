@@ -370,7 +370,7 @@ export function CreateProductModal({ open, onOpenChange }: CreateProductModalPro
                       <Input
                         value={variant.sku}
                         onChange={(e) => updateVariant(index, "sku", e.target.value)}
-                        placeholder="Ex: MRR-0001-01"
+                        placeholder="Ex: REC-0001-01"
                       />
                     </div>
                   </div>
