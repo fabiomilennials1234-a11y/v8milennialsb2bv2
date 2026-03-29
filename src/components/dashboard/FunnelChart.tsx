@@ -13,7 +13,7 @@ interface FunnelChartProps {
 }
 
 function FunnelChartBase({ title, steps }: FunnelChartProps) {
-  const maxValue = Math.max(...steps.map((s) => s.value));
+  const maxValue = Math.max(...steps.map((s) => s.value), 1);
 
   return (
     <div className="bg-card rounded-xl border border-border p-5">
@@ -21,9 +21,9 @@ function FunnelChartBase({ title, steps }: FunnelChartProps) {
 
       <div className="space-y-3">
         {steps.map((step, index) => {
-          const widthPercentage = (step.value / maxValue) * 100;
+          const widthPercentage = maxValue > 0 ? (step.value / maxValue) * 100 : 0;
           const conversionRate =
-            index > 0
+            index > 0 && steps[index - 1].value > 0
               ? ((step.value / steps[index - 1].value) * 100).toFixed(1)
               : null;
 

@@ -1,4 +1,5 @@
 import { memo, useRef, useEffect, useCallback } from "react";
+import { useTheme } from "next-themes";
 
 interface SpeedometerGaugeProps {
   currentPercent: number;
@@ -31,6 +32,17 @@ function SpeedometerGaugeBase({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animRef = useRef<number>();
   const startTimeRef = useRef<number>(0);
+  const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme === "dark";
+
+  // Theme-aware colors
+  const bgArc = isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.08)";
+  const tickMajor = isDark ? "rgba(255,255,255,0.4)" : "rgba(0,0,0,0.5)";
+  const tickMinor = isDark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.15)";
+  const tickLabel = isDark ? "rgba(255,255,255,0.35)" : "rgba(0,0,0,0.45)";
+  const hubFill = isDark ? "hsl(240, 10%, 3.9%)" : "hsl(0, 0%, 98%)";
+  const hubStroke = isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.15)";
+  const pctText = isDark ? "#fafafa" : "#1a1a1a";
 
   const clampedCurrent = Math.min(Math.max(currentPercent, 0), MAX_PCT);
   const clampedExpected = Math.min(Math.max(expectedPercent, 0), MAX_PCT);
@@ -52,7 +64,7 @@ function SpeedometerGaugeBase({
     // Background arc
     ctx.beginPath();
     ctx.arc(CX, CY, R, START_ANGLE, START_ANGLE + SWEEP, false);
-    ctx.strokeStyle = "rgba(255,255,255,0.06)";
+    ctx.strokeStyle = bgArc;
     ctx.lineWidth = 14;
     ctx.lineCap = "round";
     ctx.setLineDash([]);
@@ -96,7 +108,7 @@ function SpeedometerGaugeBase({
       ctx.beginPath();
       ctx.moveTo(CX + Math.cos(angle) * innerR, CY + Math.sin(angle) * innerR);
       ctx.lineTo(CX + Math.cos(angle) * outerR, CY + Math.sin(angle) * outerR);
-      ctx.strokeStyle = isMajor ? "rgba(255,255,255,0.4)" : "rgba(255,255,255,0.15)";
+      ctx.strokeStyle = isMajor ? tickMajor : tickMinor;
       ctx.lineWidth = isMajor ? 2 : 1;
       ctx.setLineDash([]);
       ctx.stroke();
@@ -105,7 +117,7 @@ function SpeedometerGaugeBase({
         const lx = CX + Math.cos(angle) * (R - 30);
         const ly = CY + Math.sin(angle) * (R - 30);
         ctx.font = "500 11px -apple-system, BlinkMacSystemFont, sans-serif";
-        ctx.fillStyle = "rgba(255,255,255,0.35)";
+        ctx.fillStyle = tickLabel;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.fillText(pct + "%", lx, ly);
@@ -160,9 +172,9 @@ function SpeedometerGaugeBase({
     // Center hub
     ctx.beginPath();
     ctx.arc(CX, CY, 16, 0, Math.PI * 2);
-    ctx.fillStyle = "hsl(240, 10%, 3.9%)";
+    ctx.fillStyle = hubFill;
     ctx.fill();
-    ctx.strokeStyle = "rgba(255,255,255,0.1)";
+    ctx.strokeStyle = hubStroke;
     ctx.lineWidth = 2;
     ctx.setLineDash([]);
     ctx.stroke();
@@ -174,13 +186,13 @@ function SpeedometerGaugeBase({
     // Percentage text
     const displayPct = Math.round(clampedCurrent * ease);
     ctx.font = "bold 32px -apple-system, BlinkMacSystemFont, sans-serif";
-    ctx.fillStyle = "#fafafa";
+    ctx.fillStyle = pctText;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(displayPct + "%", CX, CY + 50);
 
     animRef.current = requestAnimationFrame(draw);
-  }, [clampedCurrent, clampedExpected, isAhead]);
+  }, [clampedCurrent, clampedExpected, isAhead, bgArc, tickMajor, tickMinor, tickLabel, hubFill, hubStroke, pctText]);
 
   useEffect(() => {
     startTimeRef.current = 0;
