@@ -6,7 +6,7 @@ import { useCountUp } from "@/hooks/useCountUp";
 interface KPICardProps {
   title: string;
   value: number;
-  format?: "currency" | "number" | "percent" | "hours";
+  format?: "currency" | "number" | "percent" | "hours" | "minutes";
   icon: LucideIcon;
   trend?: { value: number; isPositive: boolean };
   delay?: number;
@@ -22,6 +22,9 @@ function formatValue(value: number, format: string): string {
       return `${Math.round(value)}%`;
     case "hours":
       return `${value.toFixed(1)}h`;
+    case "minutes":
+      if (value >= 60) return `${(value / 60).toFixed(1)}h`;
+      return `${Math.round(value)}min`;
     default:
       return Math.round(value).toLocaleString("pt-BR");
   }

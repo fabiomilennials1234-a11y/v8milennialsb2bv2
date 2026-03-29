@@ -109,7 +109,7 @@ function TabVisaoGeralBase({ month, year, isAdmin }: TabVisaoGeralProps) {
         />
         <KPICard
           title="Taxa de Conversão"
-          value={taxaConversao}
+          value={displayMetrics?.taxaConversao ?? taxaConversao}
           format="percent"
           icon={TrendingUp}
           delay={0.2}
@@ -117,7 +117,7 @@ function TabVisaoGeralBase({ month, year, isAdmin }: TabVisaoGeralProps) {
         <KPICard
           title="Tempo de Resposta"
           value={displayMetrics?.tempoMedioResposta || 0}
-          format="hours"
+          format="minutes"
           icon={Clock}
           delay={0.25}
         />
