@@ -29,6 +29,7 @@ interface DashboardMetrics {
   tempoMedioResposta: number;
   vendaPrimeiroPedido: number;
   vendaBaseAtiva: number;
+  taxaConversao: number;
   dailySales: Array<{ day: string; revenue: number; count: number }>;
 }
 
@@ -74,7 +75,7 @@ export function useDashboardMetrics(month?: number, year?: number, filterMemberI
           vendaProjeto: 0, ticketMedio: 0, ticketMedioMRR: 0,
           ticketMedioProjeto: 0, novosClientes: 0,
           propostasEnviadas: 0, tempoMedioResposta: 0,
-          vendaPrimeiroPedido: 0, vendaBaseAtiva: 0, dailySales: [],
+          vendaPrimeiroPedido: 0, vendaBaseAtiva: 0, taxaConversao: 0, dailySales: [],
         };
       }
 
@@ -93,7 +94,7 @@ export function useDashboardMetrics(month?: number, year?: number, filterMemberI
           vendaProjeto: 0, ticketMedio: 0, ticketMedioMRR: 0,
           ticketMedioProjeto: 0, novosClientes: 0,
           propostasEnviadas: 0, tempoMedioResposta: 0,
-          vendaPrimeiroPedido: 0, vendaBaseAtiva: 0, dailySales: [],
+          vendaPrimeiroPedido: 0, vendaBaseAtiva: 0, taxaConversao: 0, dailySales: [],
         };
       }
 
@@ -119,6 +120,7 @@ export function useDashboardMetrics(month?: number, year?: number, filterMemberI
         tempoMedioResposta: d?.tempoMedioResposta ?? 0,
         vendaPrimeiroPedido: d?.vendaPrimeiroPedido ?? 0,
         vendaBaseAtiva: d?.vendaBaseAtiva ?? 0,
+        taxaConversao: d?.taxaConversao ?? 0,
         dailySales: (d?.dailySales as any[]) ?? [],
       };
     },
