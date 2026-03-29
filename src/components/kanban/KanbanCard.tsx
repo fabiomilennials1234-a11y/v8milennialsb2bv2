@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Phone, Building2, Bot, Clock } from "lucide-react";
+import { Phone, Building2, Bot } from "lucide-react";
 import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
@@ -9,7 +9,7 @@ import { useToggleLeadAI } from "@/hooks/useLeads";
 import { useLogLeadAction } from "@/hooks/useLogLeadAction";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { useScheduledMessagesForLead } from "@/hooks/useScheduledMessages";
+// Badge de agendamento usa prop hasScheduledMessages passada pelo pipe pai
 
 export interface LeadTag {
   name: string;
@@ -70,8 +70,6 @@ export function KanbanCard({ lead, onClick }: KanbanCardProps) {
   const toggleAIMutation = useToggleLeadAI();
   const logAction = useLogLeadAction();
   const [optimisticAiDisabled, setOptimisticAiDisabled] = useState<Record<string, boolean>>({});
-  const { data: scheduledMsgs = [] } = useScheduledMessagesForLead(lead.leadId || null);
-  const hasScheduled = scheduledMsgs.length > 0;
 
   const currentAiDisabled = optimisticAiDisabled[lead.leadId || ""] !== undefined
     ? optimisticAiDisabled[lead.leadId || ""]
@@ -132,11 +130,6 @@ export function KanbanCard({ lead, onClick }: KanbanCardProps) {
           {originLabels[lead.origin]}
         </Badge>
 
-        {hasScheduled && (
-          <span className="flex items-center gap-0.5 text-primary/70" title={`${scheduledMsgs.length} agendada(s)`}>
-            <Clock className="w-3 h-3" />
-          </span>
-        )}
 
         {lead.leadId && (
           <motion.div

@@ -36,10 +36,12 @@ export function useScheduledMessagesForLead(leadId: string | null) {
         .eq("lead_id", leadId)
         .eq("status", "scheduled")
         .order("scheduled_at", { ascending: true });
-      if (error) throw error;
-      return data as ScheduledMessage[];
+      if (error) return [];
+      return (data ?? []) as ScheduledMessage[];
     },
     enabled: !!leadId,
+    retry: false,
+    staleTime: 60_000,
   });
 }
 
@@ -55,10 +57,11 @@ export function useLeadsWithScheduledMessages() {
         .select("lead_id")
         .eq("organization_id", organizationId)
         .eq("status", "scheduled");
-      if (error) throw error;
-      return new Set(data.map((r) => r.lead_id));
+      if (error) return new Set<string>();
+      return new Set((data ?? []).map((r) => r.lead_id));
     },
     enabled: !!organizationId,
+    retry: false,
     refetchInterval: 60_000,
   });
 }
