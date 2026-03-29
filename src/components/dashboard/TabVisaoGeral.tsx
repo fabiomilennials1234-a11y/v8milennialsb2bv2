@@ -59,10 +59,8 @@ function TabVisaoGeralBase({ month, year, isAdmin }: TabVisaoGeralProps) {
     color: step.color.replace("hsl(var(--", "bg-").replace("))", ""),
   })) || [];
 
-  // Taxa de conversão: vendas / propostas
-  const taxaConversao = (displayMetrics?.propostasEnviadas ?? 0) > 0
-    ? ((displayMetrics?.novosClientes ?? 0) / (displayMetrics?.propostasEnviadas ?? 1)) * 100
-    : 0;
+  // Taxa de conversão — vem do RPC (vendas / total no pipe, mesma fórmula da página de propostas)
+  const taxaConversao = displayMetrics?.taxaConversao ?? 0;
 
   if (metricsLoading) {
     return (

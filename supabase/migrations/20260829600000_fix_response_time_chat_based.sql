@@ -108,15 +108,8 @@ BEGIN
          OR closer_id = p_filter_member_id OR responsible_id = p_filter_member_id);
   v_funnel_propostas := v_propostas_enviadas;
 
-  -- Total in pipe (for conversion rate matching propostas page)
-  SELECT COUNT(*) INTO v_total_in_pipe
-  FROM pipe_propostas
-  WHERE organization_id = p_org_id
-    AND COALESCE(metrics_period_at, created_at) >= p_start_date
-    AND COALESCE(metrics_period_at, created_at) <= p_end_date
-    AND status NOT IN ('perdido')
-    AND (p_filter_member_id IS NULL
-         OR closer_id = p_filter_member_id OR responsible_id = p_filter_member_id);
+  -- Total in pipe (for conversion rate — vendas / total, same formula as propostas page)
+  v_total_in_pipe := v_propostas_enviadas; -- all proposals in period, no status filter
 
   -- 4. Vendas
   SELECT COUNT(*) INTO v_funnel_vendas
