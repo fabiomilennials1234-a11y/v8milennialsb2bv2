@@ -103,7 +103,8 @@ function RankingRow({ user, index, metricType, change }: RankingRowProps) {
 
   useEffect(() => {
     controls.start({ width: `${clampedProgress}%` });
-  }, [clampedProgress, controls]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clampedProgress]);
 
   const formattedValue = formatValue(animatedValue, metricType);
 

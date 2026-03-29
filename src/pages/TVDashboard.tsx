@@ -98,10 +98,12 @@ export default function TVDashboard() {
     return () => clearInterval(interval);
   }, []);
 
+  const refetchRef = useRef(refetch);
+  refetchRef.current = refetch;
   useEffect(() => {
-    const interval = setInterval(() => refetch(), 30_000); // 1x a cada 30s (era 5s)
+    const interval = setInterval(() => refetchRef.current(), 30_000);
     return () => clearInterval(interval);
-  }, [refetch]);
+  }, []);
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {

@@ -108,8 +108,9 @@ export function useUploadProductMaterial() {
     }) => {
       if (!organizationId) throw new Error("Organização não encontrada");
 
-      // 1. Upload to storage
-      const filePath = `${organizationId}/${productId}/${Date.now()}-${file.name}`;
+      // 1. Upload to storage (sanitize filename to prevent path traversal)
+      const safeName = file.name.replace(/\.\./g, "").replace(/[\/\\]/g, "_").replace(/^\./, "_");
+      const filePath = `${organizationId}/${productId}/${Date.now()}-${safeName}`;
       const { error: uploadError } = await supabase.storage
         .from(STORAGE_BUCKET)
         .upload(filePath, file, { contentType: file.type, upsert: false });

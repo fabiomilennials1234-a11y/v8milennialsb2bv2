@@ -332,6 +332,39 @@ async function handleTVAnalysisMode(body: any) {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
 
+  // Validate org access: user must belong to this organization
+  const authHeader = body._authHeader || "";
+  if (authHeader) {
+    const userClient = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+    // Check team_members for auth validation
+    const { data: memberCheck } = await supabase
+      .from("team_members")
+      .select("id")
+      .eq("organization_id", organization_id)
+      .limit(1);
+
+    if (!memberCheck || memberCheck.length === 0) {
+      return new Response(
+        JSON.stringify({ error: "Organization not found" }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+  }
+
+  // Sanitize tv_data input
+  const safeTvData = tv_data && typeof tv_data === "object" ? {
+    metaVendasMes: Number(tv_data.metaVendasMes) || 0,
+    vendasRealizadas: Number(tv_data.vendasRealizadas) || 0,
+    ondeDeveriamEstar: Number(tv_data.ondeDeveriamEstar) || 0,
+    propostasQuentes: Array.isArray(tv_data.propostasQuentes) ? tv_data.propostasQuentes.slice(0, 20) : [],
+  } : { metaVendasMes: 0, vendasRealizadas: 0, ondeDeveriamEstar: 0, propostasQuentes: [] };
+
+  // Sanitize team_members
+  const safeTeamMembers = Array.isArray(team_members) ? team_members.slice(0, 50) : [];
+
   const now = new Date();
   const dayOfMonth = now.getDate();
   const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
@@ -360,7 +393,7 @@ async function handleTVAnalysisMode(body: any) {
   const ranking = Array.isArray(rankingRes.data) ? rankingRes.data[0] : rankingRes.data;
 
   // Build the rich context prompt
-  const tvMetrics = tv_data || {};
+  const tvMetrics = safeTvData;
   const metaVendas = tvMetrics.metaVendasMes || 0;
   const vendasRealizadas = tvMetrics.vendasRealizadas || m?.vendaTotal || 0;
   const ondeDeveria = tvMetrics.ondeDeveriamEstar || ((metaVendas * dayOfMonth) / daysInMonth);
@@ -370,7 +403,7 @@ async function handleTVAnalysisMode(body: any) {
   const meetingsRanking = ranking?.meetingsRanking || ranking?.sdrRanking || [];
 
   // Build team member context
-  const membersContext = (team_members || []).map((tm: any) => {
+  const membersContext = safeTeamMembers.map((tm: any) => {
     const isSales = tm.metric_type === "sales";
     return `- ${tm.name} (${isSales ? "Closer" : "SDR"}): ${
       isSales

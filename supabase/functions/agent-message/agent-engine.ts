@@ -344,11 +344,25 @@ export class AgentEngine {
         caption: (actionToExecute.params.caption as string) || undefined,
       }];
     } else if (actionToExecute?.action === 'SEND_PRODUCT_MATERIAL' && actionToExecute.params) {
-      mediaAttachments = [{
-        type: 'product_material',
-        material_id: actionToExecute.params.material_id as string,
-        caption: (actionToExecute.params.caption as string) || undefined,
-      }];
+      const materialId = actionToExecute.params.material_id as string;
+      // Validate material exists and belongs to org before sending
+      const { data: validMaterial } = await this.supabase
+        .from('product_materials')
+        .select('id')
+        .eq('id', materialId)
+        .eq('organization_id', this.organizationId)
+        .eq('is_active', true)
+        .maybeSingle();
+
+      if (validMaterial) {
+        mediaAttachments = [{
+          type: 'product_material',
+          material_id: materialId,
+          caption: (actionToExecute.params.caption as string) || undefined,
+        }];
+      } else {
+        console.warn('[AgentEngine] Invalid material_id from LLM:', materialId);
+      }
     }
 
     return {

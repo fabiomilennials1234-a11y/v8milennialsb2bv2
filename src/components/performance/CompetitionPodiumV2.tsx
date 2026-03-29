@@ -1,4 +1,4 @@
-import { memo, useState, useEffect } from "react";
+import { memo, useState, useEffect, useMemo } from "react";
 import { motion, LayoutGroup, AnimatePresence } from "framer-motion";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { cn } from "@/lib/utils";
@@ -152,7 +152,7 @@ function PositionBadge({ position }: { position: number }) {
   );
 }
 
-function TransitionBadge({ change }: { change: RankingChange | undefined }) {
+const TransitionBadge = memo(function TransitionBadge({ change }: { change: RankingChange | undefined }) {
   if (!change || (change.delta === 0 && !change.isNew && !change.isNewLeader)) return null;
 
   if (change.isNewLeader) {
@@ -199,7 +199,7 @@ function TransitionBadge({ change }: { change: RankingChange | undefined }) {
       {movedUp ? `↑${positions}` : `↓${positions}`}
     </motion.div>
   );
-}
+});
 
 function GoalProgressBar({
   progress,
@@ -598,6 +598,15 @@ function CompetitionPodiumV2Base({
 
   const visualSlots = buildVisualSlots(displayUsers);
 
+  // Memoize change lookup to prevent re-renders
+  const changeMap = useMemo(() => {
+    const map = new Map<string, RankingChange | undefined>();
+    for (const user of top3) {
+      map.set(user.id, getChange?.(user.id));
+    }
+    return map;
+  }, [top3, getChange]);
+
   return (
     <div className="relative w-full overflow-hidden rounded-2xl bg-gradient-to-b from-muted/50 via-background to-muted/30 px-2 pb-2 pt-6 sm:px-4">
       <RadialGlow />
@@ -626,7 +635,7 @@ function CompetitionPodiumV2Base({
                   metricType={metricType}
                   animDelay={phase === "old" ? animDelay : 0}
                   isFirst={isFirst}
-                  change={showBadges ? getChange?.(user.id) : undefined}
+                  change={showBadges ? changeMap.get(user.id) : undefined}
                 />
               </motion.div>
             );

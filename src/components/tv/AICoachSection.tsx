@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Zap,
@@ -49,8 +49,8 @@ export function AICoachSection() {
   const now = new Date();
   const { data: individualGoals } = useIndividualGoals(now.getMonth() + 1, now.getFullYear());
 
-  // Build team members with goals for context
-  const membersWithGoals = (teamMembers || [])
+  // Build team members with goals for context (memoized to prevent re-render loops)
+  const membersWithGoals = useMemo(() => (teamMembers || [])
     .filter((m) => m.is_active)
     .map((m) => {
       const isSales = m.metric_type === "sales";
@@ -65,7 +65,7 @@ export function AICoachSection() {
         goal: memberGoal?.goal || 0,
         percentage: memberGoal?.percentage || 0,
       };
-    });
+    }), [teamMembers, individualGoals]);
 
   const fetchAnalysis = useCallback(async () => {
     if (!organizationId) return;
@@ -97,27 +97,33 @@ export function AICoachSection() {
     } catch (e: any) {
       console.error("[AICoach] TV analysis error:", e);
       setError(e.message || "Erro ao gerar análise");
+      setAnalysis(null);
     } finally {
       setIsLoading(false);
     }
   }, [organizationId, tvData, membersWithGoals]);
 
+  // Stable ref for fetch to avoid interval recreation
+  const fetchRef = useRef(fetchAnalysis);
+  fetchRef.current = fetchAnalysis;
+
   // Auto-fetch on mount and every 5 minutes
   useEffect(() => {
     if (!organizationId || !tvData) return;
-    fetchAnalysis();
-    const interval = setInterval(fetchAnalysis, 5 * 60 * 1000);
+    fetchRef.current();
+    const interval = setInterval(() => fetchRef.current(), 5 * 60 * 1000);
     return () => clearInterval(interval);
-  }, [organizationId, !!tvData]);
+  }, [organizationId, tvData]);
 
   // Auto-rotate vendor actions
+  const vendorCount = analysis?.vendor_actions?.length ?? 0;
   useEffect(() => {
-    if (!analysis?.vendor_actions?.length) return;
+    if (vendorCount === 0) return;
     const interval = setInterval(() => {
-      setActiveVendorIdx((prev) => (prev + 1) % analysis.vendor_actions.length);
+      setActiveVendorIdx((prev) => (prev + 1) % vendorCount);
     }, 8000);
     return () => clearInterval(interval);
-  }, [analysis?.vendor_actions?.length]);
+  }, [vendorCount]);
 
   // Loading state
   if (isLoading && !analysis) {
