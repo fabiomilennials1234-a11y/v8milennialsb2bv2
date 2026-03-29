@@ -63,7 +63,7 @@ function TopPerformersBase() {
       <CardContent className="space-y-4">
         {/* Top Closers */}
         <div>
-          <p className="text-xs text-muted-foreground mb-2 font-medium">CLOSERS</p>
+          <p className="text-xs text-muted-foreground mb-2 font-medium">VENDEDORES</p>
           <div className="space-y-2">
             {topClosers.length > 0 ? topClosers.map((closer, index) => {
               const Icon = positionIcons[index];
@@ -100,7 +100,7 @@ function TopPerformersBase() {
               );
             }) : (
               <p className="text-sm text-muted-foreground text-center py-2">
-                Nenhum closer com vendas
+                Nenhum vendedor com vendas
               </p>
             )}
           </div>
@@ -108,7 +108,7 @@ function TopPerformersBase() {
 
         {/* Top SDRs */}
         <div>
-          <p className="text-xs text-muted-foreground mb-2 font-medium">SDRs</p>
+          <p className="text-xs text-muted-foreground mb-2 font-medium">REUNIÕES</p>
           <div className="space-y-2">
             {topSDRs.length > 0 ? topSDRs.map((sdr, index) => {
               const Icon = positionIcons[index];

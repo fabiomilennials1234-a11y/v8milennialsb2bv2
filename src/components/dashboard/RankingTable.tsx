@@ -37,8 +37,8 @@ function RankingTableBase({ month, year }: Props) {
           </CardTitle>
           <Tabs value={tab} onValueChange={(v) => setTab(v as "closers" | "sdrs")}>
             <TabsList className="h-8">
-              <TabsTrigger value="closers" className="text-xs px-3 h-7">Closers</TabsTrigger>
-              <TabsTrigger value="sdrs" className="text-xs px-3 h-7">SDRs</TabsTrigger>
+              <TabsTrigger value="closers" className="text-xs px-3 h-7">Vendas</TabsTrigger>
+              <TabsTrigger value="sdrs" className="text-xs px-3 h-7">Reuniões</TabsTrigger>
             </TabsList>
           </Tabs>
         </div>
