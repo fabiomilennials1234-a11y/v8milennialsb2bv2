@@ -130,7 +130,7 @@ function TabVisaoGeralBase({ month, year, isAdmin }: TabVisaoGeralProps) {
           transition={{ delay: 0.3 }}
           className="lg:col-span-3 bg-card border border-border rounded-lg p-6"
         >
-          <h3 className="font-semibold text-sm mb-4">Meta do Mês</h3>
+          <p className="stat-card-label mb-4">Meta do Mês</p>
           {faturamentoGoal ? (
             <SpeedometerGauge
               currentPercent={currentPercent}

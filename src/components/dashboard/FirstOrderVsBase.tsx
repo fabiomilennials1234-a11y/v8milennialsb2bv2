@@ -30,7 +30,7 @@ function FirstOrderVsBaseBase({ firstOrderValue, baseActiveValue }: FirstOrderVs
       animate={{ opacity: 1, y: 0 }}
       className="bg-card border border-border rounded-lg p-5"
     >
-      <h3 className="font-semibold text-sm mb-4">Receita por Tipo de Cliente</h3>
+      <p className="stat-card-label mb-4">Receita por Tipo de Cliente</p>
       <div className="flex items-center gap-4">
         <div className="w-28 h-28">
           <ResponsiveContainer width="100%" height="100%">
