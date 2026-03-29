@@ -195,13 +195,13 @@ function formatContactTime(timestamp: string): string {
 function MessageStatusIcon({ status }: { status: string }) {
   switch (status) {
     case "pending":
-      return <Clock className="w-3 h-3 text-muted-foreground" />;
+      return <Clock className="w-2.5 h-2.5 text-muted-foreground/40" />;
     case "sent":
-      return <Check className="w-3 h-3 text-muted-foreground" />;
+      return <Check className="w-2.5 h-2.5 text-muted-foreground/40" />;
     case "delivered":
-      return <CheckCheck className="w-3 h-3 text-muted-foreground" />;
+      return <CheckCheck className="w-2.5 h-2.5 text-muted-foreground/40" />;
     case "read":
-      return <CheckCheck className="w-3 h-3 text-blue-500" />;
+      return <CheckCheck className="w-2.5 h-2.5 text-blue-500/70" />;
     default:
       return null;
   }
@@ -470,9 +470,7 @@ function ContactList({
                             onRemoveTag={onRemoveTag}
                           />
                           {!contact.lead_id && (
-                            <span className="text-[10px] font-normal text-muted-foreground/70 bg-muted px-1 py-0.5 rounded leading-none shrink-0">
-                              Novo
-                            </span>
+                            <span className="w-2 h-2 rounded-full bg-primary/60 shrink-0" title="Novo" />
                           )}
                           {/* Tag pills */}
                           {contact.tags.slice(0, 2).map((tag) => (
@@ -498,13 +496,10 @@ function ContactList({
                           {formatContactTime(contact.last_message_time)}
                         </span>
                       </div>
-                      <div className="flex items-center justify-between gap-2 mt-1">
-                        <p className="text-sm text-muted-foreground truncate flex-1 min-w-0 flex items-center gap-1.5">
+                      <div className="flex items-center justify-between gap-2 mt-0.5">
+                        <p className="text-[12px] text-muted-foreground/60 truncate flex-1 min-w-0 flex items-center gap-1">
                           {contact.last_message_direction === "outgoing" && (
-                            <span className="text-primary shrink-0 font-medium" title="Você enviou">Você:</span>
-                          )}
-                          {contact.last_message_direction === "incoming" && (
-                            <span className="text-muted-foreground shrink-0 italic" title="Contato enviou">Contato:</span>
+                            <span className="text-foreground/50 shrink-0" title="Você enviou">Você:</span>
                           )}
                           <span className="truncate min-w-0">{contact.last_message || "Sem mensagens"}</span>
                         </p>
@@ -1072,17 +1067,17 @@ function MessageBubble({
     >
       <div
         className={cn(
-          "max-w-[75%] rounded-2xl px-4 py-2.5 shadow-sm border border-border/40",
+          "max-w-[75%] rounded-2xl px-4 py-2.5",
           isOutgoing
-            ? "bg-primary text-primary-foreground rounded-br-md"
-            : "bg-muted/80 rounded-bl-md"
+            ? "bg-primary/12 border border-primary/20 rounded-br-sm"
+            : "bg-muted/60 border border-border/30 rounded-bl-sm"
         )}
       >
         {/* Sender label for AI messages */}
         {isOutgoing && message.sent_by_ai && (
           <div className="flex items-center gap-1 mb-1">
-            <Bot className="h-3 w-3 text-primary-foreground/70" />
-            <span className="text-[10px] text-primary-foreground/70 font-medium">Copilot</span>
+            <Bot className="h-3 w-3 text-primary/60" />
+            <span className="text-[10px] text-primary/60 font-medium">Copilot</span>
           </div>
         )}
 
@@ -1141,13 +1136,8 @@ function MessageBubble({
         )}
 
         {/* Linha: data/hora e status */}
-        <div
-          className={cn(
-            "flex items-center justify-end gap-2 mt-1.5 flex-wrap",
-            isOutgoing ? "text-primary-foreground/80" : "text-muted-foreground"
-          )}
-        >
-          <span className="text-xs">{formatMessageTime(message.timestamp)}</span>
+        <div className="flex items-center justify-end gap-1.5 mt-1.5">
+          <span className="text-[10px] text-muted-foreground/50">{formatMessageTime(message.timestamp)}</span>
           {isOutgoing && <MessageStatusIcon status={message.status} />}
         </div>
       </div>
@@ -1607,7 +1597,6 @@ function ChatWindow({
               {phoneNumber}
             </p>
           </div>
-          <UserCircle className="w-5 h-5 text-muted-foreground shrink-0" />
         </div>
 
         {/* Botão para ver ou criar lead */}
@@ -1633,51 +1622,18 @@ function ChatWindow({
           )}
         </Button>
 
-        {/* AI Toggle - sempre visível em qualquer conversa (com ou sem lead/card) */}
-        <motion.div
+        {/* AI Toggle */}
+        <div
           className={cn(
-            "flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-colors duration-200",
-            currentAiDisabled ? "bg-muted/50" : "bg-primary/10"
+            "flex items-center gap-1.5 px-2 py-1 rounded-full border border-border/40 shrink-0",
+            currentAiDisabled ? "bg-muted/30" : "bg-primary/8"
           )}
-          title="Ativar ou desativar o Copilot nesta conversa"
-          onClick={(e) => {
-            e.stopPropagation();
-            e.preventDefault();
-          }}
+          onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
           onPointerDown={(e) => e.stopPropagation()}
-          onMouseDown={(e) => e.stopPropagation()}
         >
-          <motion.div
-            animate={{
-              scale: (toggleAIMutation.isPending || toggleConversationAIMutation.isPending) ? [1, 1.2, 1] : 1,
-              rotate: (toggleAIMutation.isPending || toggleConversationAIMutation.isPending) ? [0, 10, -10, 0] : 0,
-            }}
-            transition={{
-              duration: 0.5,
-              repeat: (toggleAIMutation.isPending || toggleConversationAIMutation.isPending) ? Infinity : 0,
-            }}
-          >
-            <Bot className={cn(
-              "w-4 h-4 transition-colors duration-200",
-              currentAiDisabled ? "text-muted-foreground" : "text-primary"
-            )} />
-          </motion.div>
-          <motion.span
-            className="text-xs text-muted-foreground hidden sm:inline"
-            animate={{
-              opacity: currentAiDisabled ? 0.5 : 1,
-            }}
-            transition={{ duration: 0.2 }}
-          >
-            IA
-          </motion.span>
+          <Bot className={cn("w-3.5 h-3.5", currentAiDisabled ? "text-muted-foreground/50" : "text-primary/70")} />
+          <span className="text-[11px] text-muted-foreground/70 hidden sm:inline">IA</span>
           <div onClick={(e) => e.stopPropagation()}>
-            <motion.div
-              animate={{
-                scale: (toggleAIMutation.isPending || toggleConversationAIMutation.isPending) ? 0.95 : 1,
-              }}
-              transition={{ duration: 0.15 }}
-            >
               <Switch
                 checked={!currentAiDisabled}
                 onCheckedChange={(checked) => {
@@ -1713,9 +1669,8 @@ function ChatWindow({
                 }}
                 disabled={toggleAIMutation.isPending || toggleConversationAIMutation.isPending}
               />
-            </motion.div>
           </div>
-        </motion.div>
+        </div>
 
         {/* Transfer / AI state badge */}
         {hasLead && leadId && isWaitingHuman && (
@@ -1805,9 +1760,9 @@ function ChatWindow({
               </div>
             ) : messages.length === 0 ? (
               <div className="flex flex-col items-center justify-center min-h-[200px] text-center">
-                <MessageSquare className="w-12 h-12 text-muted-foreground/50 mb-4" />
-                <p className="text-sm text-muted-foreground">
-                  Nenhuma mensagem ainda. Envie uma mensagem para iniciar a conversa.
+                <MessageSquare className="w-10 h-10 text-muted-foreground/30 mb-3" />
+                <p className="text-sm font-medium text-muted-foreground/60">
+                  Nenhuma mensagem ainda
                 </p>
               </div>
             ) : (
@@ -1863,7 +1818,7 @@ function ChatWindow({
                       <div key={safeKey}>
                         {showDateSeparator && (
                           <div className="flex justify-center py-3">
-                            <span className="text-xs text-muted-foreground bg-muted/50 px-3 py-1 rounded-full">
+                            <span className="text-[11px] font-medium tracking-wider uppercase text-muted-foreground/40 bg-muted/30 px-3 py-1 rounded-full">
                               {dateLabel}
                             </span>
                           </div>
@@ -1959,18 +1914,19 @@ function ChatWindow({
               size="icon"
               onClick={() => fileInputRef.current?.click()}
               disabled={sendMessage.isPending || sendMedia.isPending}
+              className="opacity-50 hover:opacity-100 transition-opacity"
             >
               <ImageIcon className="w-5 h-5 text-muted-foreground" />
             </Button>
 
             {/* Input de texto */}
             <Input
-              placeholder={`Bate-papo com ${contactName}: escreva uma mensagem...`}
+              placeholder={`Mensagem para ${contactName}...`}
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
               onKeyDown={handleKeyDown}
               disabled={sendMessage.isPending || sendMedia.isPending}
-              className="flex-1 rounded-full border-border/60 bg-muted/30 focus:bg-background"
+              className="flex-1 rounded-full border border-border/60 bg-background focus:ring-1 focus:ring-primary/30"
             />
 
             {/* Botão de agendar — sempre visível */}
@@ -1979,7 +1935,7 @@ function ChatWindow({
               size="icon"
               onClick={() => setScheduleModalOpen(true)}
               title="Agendar mensagem"
-              className="text-muted-foreground hover:text-primary"
+              className="opacity-50 hover:opacity-100 hover:text-primary transition-all"
             >
               <Clock className="w-4 h-4" />
             </Button>
@@ -1990,6 +1946,7 @@ function ChatWindow({
                 onClick={handleSend}
                 disabled={sendMessage.isPending}
                 size="icon"
+                className="gradient-primary text-white border-0"
               >
                 {sendMessage.isPending ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
@@ -2003,6 +1960,7 @@ function ChatWindow({
                 size="icon"
                 onClick={() => setIsRecording(true)}
                 disabled={sendMedia.isPending}
+                className="opacity-50 hover:opacity-100 transition-opacity"
               >
                 <Mic className="w-5 h-5 text-muted-foreground" />
               </Button>
@@ -2307,10 +2265,9 @@ export function WhatsAppChat() {
             />
           ) : selectedPhone ? null : (
             <div className="flex flex-col items-center justify-center h-full w-full text-center p-8">
-              <MessageSquare className="w-16 h-16 text-muted-foreground/50 mb-4" />
-              <h3 className="text-lg font-medium mb-2">Selecione uma conversa</h3>
-              <p className="text-muted-foreground">
-                Escolha um contato na lista para ver as mensagens
+              <MessageSquare className="w-10 h-10 text-muted-foreground/25 mb-3" />
+              <p className="text-sm font-medium text-muted-foreground/50">
+                Selecione uma conversa
               </p>
             </div>
           )}
