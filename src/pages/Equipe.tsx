@@ -385,9 +385,8 @@ export default function Equipe() {
           <motion.h1
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="text-2xl font-bold flex items-center gap-2"
+            className="text-2xl font-bold"
           >
-            <Users className="w-6 h-6 text-primary" />
             Equipe
           </motion.h1>
           <p className="text-muted-foreground mt-1">
@@ -704,18 +703,18 @@ export default function Equipe() {
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="glass-card p-4"
+          className="stat-card"
         >
-          <p className="text-xs text-muted-foreground mb-1">Total Membros</p>
+          <p className="stat-card-label">Total Membros</p>
           <p className="text-xl font-bold">{members.length}</p>
         </motion.div>
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.05 }}
-          className="glass-card p-4"
+          className="stat-card"
         >
-          <p className="text-xs text-muted-foreground mb-1">Reuniões</p>
+          <p className="stat-card-label">Reuniões</p>
           <p className="text-xl font-bold text-chart-5">
             {members.filter((m) => (m as any).metric_type === "meetings" && m.is_active).length}
           </p>
@@ -724,9 +723,9 @@ export default function Equipe() {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="glass-card p-4"
+          className="stat-card"
         >
-          <p className="text-xs text-muted-foreground mb-1">Vendas</p>
+          <p className="stat-card-label">Vendas</p>
           <p className="text-xl font-bold text-primary">
             {members.filter((m) => (m as any).metric_type === "sales" && m.is_active).length}
           </p>
@@ -735,9 +734,9 @@ export default function Equipe() {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.15 }}
-          className="glass-card p-4"
+          className="stat-card"
         >
-          <p className="text-xs text-muted-foreground mb-1">Folha OTE Total</p>
+          <p className="stat-card-label">Folha OTE Total</p>
           <p className="text-xl font-bold text-success">
             {formatCurrency(
               members

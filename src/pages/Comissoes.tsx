@@ -267,9 +267,8 @@ export default function Comissoes() {
           <motion.h1
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="text-2xl font-bold flex items-center gap-2"
+            className="text-2xl font-bold"
           >
-            <DollarSign className="w-6 h-6 text-primary" />
             Comissões
           </motion.h1>
           <p className="text-muted-foreground mt-1">
@@ -347,36 +346,36 @@ export default function Comissoes() {
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="glass-card p-4"
+            className="stat-card"
           >
-            <p className="text-xs text-muted-foreground mb-1">Total Vendas</p>
+            <p className="stat-card-label">Total Vendas</p>
             <p className="text-xl font-bold">{visibleVendas.length}</p>
           </motion.div>
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.05 }}
-            className="glass-card p-4"
+            className="stat-card"
           >
-            <p className="text-xs text-muted-foreground mb-1">Total Reuniões</p>
+            <p className="stat-card-label">Total Reuniões</p>
             <p className="text-xl font-bold">{visibleReunioes.length}</p>
           </motion.div>
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
-            className="glass-card p-4"
+            className="stat-card"
           >
-            <p className="text-xs text-muted-foreground mb-1">Comissões Pagas</p>
+            <p className="stat-card-label">Comissões Pagas</p>
             <p className="text-xl font-bold text-success">{formatCurrency(totalPaidCommissions)}</p>
           </motion.div>
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.15 }}
-            className="glass-card p-4"
+            className="stat-card"
           >
-            <p className="text-xs text-muted-foreground mb-1">Comissões Pendentes</p>
+            <p className="stat-card-label">Comissões Pendentes</p>
             <p className="text-xl font-bold text-chart-5">{formatCurrency(totalPendingCommissions)}</p>
           </motion.div>
         </div>

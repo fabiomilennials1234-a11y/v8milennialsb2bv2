@@ -15,13 +15,14 @@ import { StepConfiguracaoInicial } from "./steps/StepConfiguracaoInicial";
 import { StepAtivacao } from "./steps/StepAtivacao";
 import { StepRevisao } from "./steps/StepRevisao";
 import { cn } from "@/lib/utils";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, Building2, Users, GitBranch, Settings, Rocket, CheckCircle } from "lucide-react";
 import torqueLogo from "@/assets/torque-logo.png";
 import torqueLogoDark from "@/assets/torque-logo-dark.png";
 import { useTheme } from "next-themes";
 
 const STEP_KEYS = ["perfil", "estrutura", "processo", "configuracao", "ativacao", "revisao"] as const;
 const STEP_LABELS = ["Perfil", "Estrutura", "Processo", "Configuração", "Ativação", "Revisão"];
+const STEP_ICONS = [Building2, Users, GitBranch, Settings, Rocket, CheckCircle];
 
 export function OnboardingWizard() {
   const navigate = useNavigate();
@@ -112,6 +113,7 @@ export function OnboardingWizard() {
     if (organizationId) {
       track({ event: "onboarding_step_completed", organizationId, metadata: { step: "completed" } });
     }
+    toast.success("Tudo pronto! Bem-vindo ao Torque.", { duration: 4000 });
     navigate("/", { replace: true });
   };
 
@@ -132,20 +134,30 @@ export function OnboardingWizard() {
       </div>
 
       <div className="px-6 py-4">
-        <div className="flex gap-1.5 max-w-lg mx-auto">
-          {STEP_KEYS.map((_, i) => (
-            <div
-              key={i}
-              className={cn(
-                "h-1 flex-1 rounded-full transition-all duration-300",
-                i <= currentStep ? "bg-primary" : "bg-border/50"
-              )}
-            />
-          ))}
+        <div className="flex items-center gap-1 max-w-xl mx-auto">
+          {STEP_KEYS.map((_, i) => {
+            const StepIcon = STEP_ICONS[i];
+            const isActive = i === currentStep;
+            const isDone = i < currentStep;
+            return (
+              <div key={i} className="flex items-center flex-1 min-w-0">
+                <div className={cn(
+                  "flex items-center gap-1.5 text-[11px] font-medium whitespace-nowrap transition-all duration-300",
+                  isActive ? "text-foreground" : isDone ? "text-primary" : "text-muted-foreground/50"
+                )}>
+                  <StepIcon className={cn("w-3.5 h-3.5 flex-shrink-0", isDone && "text-primary")} />
+                  <span className="hidden sm:inline">{STEP_LABELS[i]}</span>
+                </div>
+                {i < STEP_KEYS.length - 1 && (
+                  <div className={cn(
+                    "h-px flex-1 mx-2 rounded-full transition-all duration-300",
+                    isDone ? "bg-primary" : "bg-border/50"
+                  )} />
+                )}
+              </div>
+            );
+          })}
         </div>
-        <p className="text-center text-xs text-muted-foreground mt-2">
-          {STEP_LABELS[currentStep]} ({currentStep + 1}/{STEP_KEYS.length})
-        </p>
       </div>
 
       <div className="flex-1 overflow-y-auto px-6 py-4">

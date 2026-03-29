@@ -519,9 +519,8 @@ export default function PipeConfirmacao() {
           <motion.h1
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="text-2xl font-bold flex items-center gap-2"
+            className="text-2xl font-bold"
           >
-            <Calendar className="w-6 h-6 text-primary" />
             Confirmação de Reunião
           </motion.h1>
           <p className="text-muted-foreground mt-1">

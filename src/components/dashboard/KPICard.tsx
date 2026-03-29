@@ -35,28 +35,33 @@ function KPICardBase({ title, value, format = "number", icon: Icon, trend, delay
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
+      initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, delay }}
-      className="bg-card/80 backdrop-blur-sm border border-border/50 rounded-xl p-5 hover:border-primary/20 transition-colors"
+      transition={{ duration: 0.35, delay }}
+      className="relative bg-card rounded-lg border border-border p-5 hover:border-border/80 transition-colors overflow-hidden group"
     >
+      {/* Accent bar — racing stripe */}
+      <div className="absolute left-0 top-0 w-[3px] h-full bg-primary/60 group-hover:bg-primary transition-colors" />
+
       <div className="flex items-start justify-between">
-        <div className="flex-1">
-          <p className="text-sm font-medium text-muted-foreground">{title}</p>
-          <div className="flex items-baseline gap-2 mt-1">
-            <p className="text-3xl font-bold tracking-tight">
+        <div className="flex-1 min-w-0">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
+            {title}
+          </p>
+          <div className="flex items-baseline gap-2 mt-1.5">
+            <p className="text-2xl font-extrabold tracking-[-0.03em] tabular-nums">
               {formatValue(animated, format)}
             </p>
             {trend && (
-              <span className={`flex items-center text-xs font-medium ${trend.isPositive ? "text-success" : "text-destructive"}`}>
+              <span className={`flex items-center text-[11px] font-semibold tabular-nums ${trend.isPositive ? "text-success" : "text-destructive"}`}>
                 {trend.isPositive ? <TrendingUp className="w-3 h-3 mr-0.5" /> : <TrendingDown className="w-3 h-3 mr-0.5" />}
                 {Math.abs(trend.value)}%
               </span>
             )}
           </div>
         </div>
-        <div className="p-3 rounded-xl bg-primary/10">
-          <Icon className="w-5 h-5 text-primary" />
+        <div className="p-2.5 rounded-lg bg-muted">
+          <Icon className="w-4 h-4 text-muted-foreground" />
         </div>
       </div>
     </motion.div>

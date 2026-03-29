@@ -128,7 +128,7 @@ function TabVisaoGeralBase({ month, year, isAdmin }: TabVisaoGeralProps) {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
-          className="lg:col-span-3 bg-card/80 backdrop-blur-sm border border-border/50 rounded-xl p-6"
+          className="lg:col-span-3 bg-card border border-border rounded-lg p-6"
         >
           <h3 className="font-semibold text-sm mb-4">Meta do Mês</h3>
           {faturamentoGoal ? (

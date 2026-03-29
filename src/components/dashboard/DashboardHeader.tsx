@@ -48,23 +48,13 @@ function DashboardHeaderBase({ month, year, onMonthChange }: DashboardHeaderProp
       transition={{ duration: 0.4 }}
       className="flex items-center justify-between"
     >
-      <div className="flex items-center gap-3">
-        <motion.div
-          initial={{ scale: 0 }}
-          animate={{ scale: 1 }}
-          transition={{ delay: 0.15, type: "spring", stiffness: 200 }}
-          className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center"
-        >
-          <LayoutDashboard className="w-6 h-6 text-primary" />
-        </motion.div>
-        <div>
-          <h1 className="text-2xl font-bold">
-            {greeting}, {userName}.
-          </h1>
-          <p className="text-muted-foreground text-sm">
-            Aqui está o panorama do seu mês.
-          </p>
-        </div>
+      <div>
+        <h1 className="text-2xl font-bold" style={{ letterSpacing: "-0.03em" }}>
+          {greeting}, {userName}.
+        </h1>
+        <p className="text-muted-foreground text-sm mt-0.5">
+          Aqui está o panorama do seu mês.
+        </p>
       </div>
 
       <div className="flex items-center gap-1">

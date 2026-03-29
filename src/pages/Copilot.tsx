@@ -122,9 +122,8 @@ export default function Copilot() {
         className="flex items-center justify-between"
       >
         <div>
-          <h1 className="text-3xl font-bold flex items-center gap-3">
-            <Bot className="w-8 h-8 text-primary" />
-            Copilot - Agentes de IA
+          <h1 className="text-2xl font-bold">
+            Copilot — Agentes de IA
           </h1>
           <p className="text-muted-foreground mt-1">
             Configure e gerencie seus agentes de IA personalizados

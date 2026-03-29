@@ -193,8 +193,7 @@ export default function Automacoes() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Workflow className="w-6 h-6 text-primary" />
+          <h1 className="text-2xl font-bold">
             Automações
           </h1>
           <p className="text-muted-foreground">

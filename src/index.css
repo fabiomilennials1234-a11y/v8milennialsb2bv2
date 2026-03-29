@@ -17,15 +17,15 @@
 
 @layer base {
   :root {
-    /* Torque Brand Colors */
-    --background: 45 20% 98%;
-    --foreground: 30 18% 20%;
+    /* Torque Brand Colors — Light mode with warm personality */
+    --background: 42 25% 96%;
+    --foreground: 30 18% 16%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 30 18% 20%;
+    --card: 42 18% 99%;
+    --card-foreground: 30 18% 16%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 30 18% 20%;
+    --popover-foreground: 30 18% 16%;
 
     /* Primary Yellow - Torque Brand Identity */
     --primary: 47 100% 50%;
@@ -36,8 +36,8 @@
     --secondary-foreground: 30 18% 20%;
 
     /* Muted */
-    --muted: 45 20% 95%;
-    --muted-foreground: 30 10% 50%;
+    --muted: 42 18% 93%;
+    --muted-foreground: 30 10% 46%;
 
     /* Accent - Dark Brown */
     --accent: 36 20% 22%;
@@ -55,8 +55,8 @@
     --warning: 38 92% 50%;
     --warning-foreground: 30 18% 15%;
 
-    --border: 45 20% 90%;
-    --input: 45 20% 90%;
+    --border: 40 15% 88%;
+    --input: 40 15% 88%;
     --ring: 47 100% 50%;
 
     --radius: 0.75rem;
@@ -169,18 +169,52 @@
     transition: color 0.45s ease, border-color 0.35s ease, background-color 0.45s ease;
   }
 
-  h1, h2, h3, h4, h5, h6 {
+  h1 {
+    @apply text-2xl font-bold;
+    letter-spacing: -0.03em;
+  }
+
+  h2 {
+    @apply text-xl font-bold;
+    letter-spacing: -0.025em;
+  }
+
+  h3 {
+    @apply text-base font-semibold;
+    letter-spacing: -0.015em;
+  }
+
+  h4, h5, h6 {
     @apply font-semibold tracking-tight;
   }
 }
 
 @layer components {
   .glass-card {
-    @apply bg-card/80 backdrop-blur-md border border-border/50 shadow-md;
+    @apply bg-card border border-border shadow-sm;
+  }
+
+  .stat-card {
+    @apply relative bg-card rounded-lg border border-border p-4 shadow-sm overflow-hidden;
+  }
+
+  .stat-card::before {
+    content: '';
+    @apply absolute left-0 top-0 w-[3px] h-full bg-primary/50;
+  }
+
+  .stat-card-label {
+    @apply text-[11px] font-semibold uppercase text-muted-foreground;
+    letter-spacing: 0.06em;
+  }
+
+  .stat-card-value {
+    @apply text-xl font-bold tabular-nums mt-1;
+    letter-spacing: -0.02em;
   }
 
   .metric-card {
-    @apply bg-card rounded-xl border border-border p-5 shadow-sm transition-all duration-200 hover:shadow-md hover:-translate-y-0.5;
+    @apply bg-card rounded-lg border border-border p-5 shadow-sm transition-all duration-200 hover:shadow-md hover:-translate-y-0.5;
   }
 
   .kanban-column {
@@ -188,7 +222,19 @@
   }
 
   .kanban-card {
-    @apply bg-card rounded-lg p-4 shadow-sm border border-border cursor-grab active:cursor-grabbing transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 min-w-0 overflow-visible;
+    @apply relative bg-card rounded-lg p-4 shadow-sm border border-border cursor-grab active:cursor-grabbing transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 min-w-0 overflow-hidden;
+  }
+
+  /* Calor/priority accent — set via inline style: --card-accent */
+  .kanban-card::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 3px;
+    height: 100%;
+    background: var(--card-accent, hsl(var(--border)));
+    transition: background 0.2s ease;
   }
 
   .sidebar-item {
@@ -209,16 +255,16 @@
   }
 
   .topnav-item {
-    @apply flex items-center gap-1.5 px-3 py-1.5 text-[13.5px] text-foreground/60 rounded-md cursor-pointer select-none;
+    @apply flex items-center gap-1.5 px-3 py-1.5 text-[13.5px] text-foreground/55 rounded-md cursor-pointer select-none;
     @apply transition-all duration-150 ease-out;
-    @apply hover:text-foreground/90;
-    font-weight: 450;
+    @apply hover:text-foreground/85;
+    font-weight: 460;
     letter-spacing: -0.01em;
   }
 
   .topnav-item-active {
     @apply text-foreground;
-    font-weight: 650;
+    font-weight: 600;
   }
 
   .topnav-item-locked {

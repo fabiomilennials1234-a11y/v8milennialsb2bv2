@@ -35,14 +35,23 @@ function SpeedometerGaugeBase({
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === "dark";
 
+  // Pull colors from CSS custom properties for design system alignment
+  const getCssColor = useCallback((varName: string): string => {
+    const root = document.documentElement;
+    const raw = getComputedStyle(root).getPropertyValue(varName).trim();
+    return raw ? `hsl(${raw})` : "";
+  }, []);
+
   // Theme-aware colors
   const bgArc = isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.08)";
   const tickMajor = isDark ? "rgba(255,255,255,0.4)" : "rgba(0,0,0,0.5)";
   const tickMinor = isDark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.15)";
   const tickLabel = isDark ? "rgba(255,255,255,0.35)" : "rgba(0,0,0,0.45)";
-  const hubFill = isDark ? "hsl(240, 10%, 3.9%)" : "hsl(0, 0%, 98%)";
+  const hubFill = getCssColor("--background") || (isDark ? "hsl(240, 10%, 3.9%)" : "hsl(0, 0%, 98%)");
   const hubStroke = isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.15)";
-  const pctText = isDark ? "#fafafa" : "#1a1a1a";
+  const pctText = getCssColor("--foreground") || (isDark ? "#fafafa" : "#1a1a1a");
+  const successColor = getCssColor("--success") || "#22c55e";
+  const destructiveColor = getCssColor("--destructive") || "rgba(239,68,68,0.5)";
 
   const clampedCurrent = Math.min(Math.max(currentPercent, 0), MAX_PCT);
   const clampedExpected = Math.min(Math.max(expectedPercent, 0), MAX_PCT);
@@ -92,7 +101,7 @@ function SpeedometerGaugeBase({
     const progressAngle = pctToAngle(clampedCurrent * ease);
     ctx.beginPath();
     ctx.arc(CX, CY, R, START_ANGLE, progressAngle, false);
-    ctx.strokeStyle = isAhead ? "#22c55e" : "hsl(221.2, 83.2%, 53.3%)";
+    ctx.strokeStyle = isAhead ? successColor : "hsl(221.2, 83.2%, 53.3%)";
     ctx.lineWidth = 14;
     ctx.lineCap = "round";
     ctx.setLineDash([]);
@@ -131,14 +140,14 @@ function SpeedometerGaugeBase({
     ctx.beginPath();
     ctx.moveTo(CX, CY);
     ctx.lineTo(expTipX, expTipY);
-    ctx.strokeStyle = "rgba(239,68,68,0.5)";
+    ctx.strokeStyle = destructiveColor;
     ctx.lineWidth = 2;
     ctx.lineCap = "round";
     ctx.setLineDash([]);
     ctx.stroke();
     ctx.beginPath();
     ctx.arc(expTipX, expTipY, 3, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(239,68,68,0.5)";
+    ctx.fillStyle = destructiveColor;
     ctx.fill();
 
     // Current needle (green/blue, thicker)
@@ -148,14 +157,14 @@ function SpeedometerGaugeBase({
     ctx.beginPath();
     ctx.moveTo(CX, CY);
     ctx.lineTo(curTipX, curTipY);
-    ctx.strokeStyle = isAhead ? "#22c55e" : "hsl(221.2, 83.2%, 53.3%)";
+    ctx.strokeStyle = isAhead ? successColor : "hsl(221.2, 83.2%, 53.3%)";
     ctx.lineWidth = 3.5;
     ctx.lineCap = "round";
     ctx.setLineDash([]);
     ctx.stroke();
     ctx.beginPath();
     ctx.arc(curTipX, curTipY, 5, 0, Math.PI * 2);
-    ctx.fillStyle = isAhead ? "#22c55e" : "hsl(221.2, 83.2%, 53.3%)";
+    ctx.fillStyle = isAhead ? successColor : "hsl(221.2, 83.2%, 53.3%)";
     ctx.fill();
 
     // Glow on tip
@@ -164,7 +173,7 @@ function SpeedometerGaugeBase({
       ctx.beginPath();
       ctx.arc(curTipX, curTipY, 10, 0, Math.PI * 2);
       ctx.fillStyle = isAhead
-        ? `rgba(34,197,94,${glowOpacity})`
+        ? successColor.replace(")", ` / ${glowOpacity})`).replace("hsl(", "hsl(")
         : `rgba(99,102,241,${glowOpacity})`;
       ctx.fill();
     }
@@ -192,7 +201,7 @@ function SpeedometerGaugeBase({
     ctx.fillText(displayPct + "%", CX, CY + 50);
 
     animRef.current = requestAnimationFrame(draw);
-  }, [clampedCurrent, clampedExpected, isAhead, bgArc, tickMajor, tickMinor, tickLabel, hubFill, hubStroke, pctText]);
+  }, [clampedCurrent, clampedExpected, isAhead, bgArc, tickMajor, tickMinor, tickLabel, hubFill, hubStroke, pctText, successColor, destructiveColor]);
 
   useEffect(() => {
     startTimeRef.current = 0;

@@ -54,7 +54,7 @@ export default function Dashboard() {
       />
 
       <Tabs defaultValue="visao-geral" className="w-full">
-        <TabsList className="grid w-full max-w-lg grid-cols-3">
+        <TabsList>
           <TabsTrigger value="visao-geral">Visão Geral</TabsTrigger>
           <TabsTrigger value="performance">Performance</TabsTrigger>
           <TabsTrigger value="inteligencia">Inteligência</TabsTrigger>

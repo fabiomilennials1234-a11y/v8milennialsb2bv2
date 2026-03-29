@@ -268,7 +268,7 @@ export default function CopilotMetrics() {
             {isLoading ? <Skeleton className="h-16" /> : (
               <>
                 <p className="text-sm text-muted-foreground">Score Geral</p>
-                <p className={`text-3xl font-bold ${scoreColor(globalAvg)}`}>
+                <p className={`text-2xl font-bold ${scoreColor(globalAvg)}`}>
                   {globalAvg.toFixed(1)}<span className="text-base text-muted-foreground">/10</span>
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">Média LLM-as-a-judge</p>
@@ -282,7 +282,7 @@ export default function CopilotMetrics() {
             {isLoading ? <Skeleton className="h-16" /> : (
               <>
                 <p className="text-sm text-muted-foreground">Avaliações</p>
-                <p className="text-3xl font-bold">{totalEvals.toLocaleString()}</p>
+                <p className="text-2xl font-bold">{totalEvals.toLocaleString()}</p>
                 <p className="text-xs text-muted-foreground mt-1">Últimos {days} dias</p>
               </>
             )}
@@ -294,7 +294,7 @@ export default function CopilotMetrics() {
             {isLoading ? <Skeleton className="h-16" /> : (
               <>
                 <p className="text-sm text-muted-foreground">Taxa de Qualificação</p>
-                <p className="text-3xl font-bold text-blue-600">{qualRate}%</p>
+                <p className="text-2xl font-bold text-blue-600">{qualRate}%</p>
                 <p className="text-xs text-muted-foreground mt-1">Leads qualificados (score ≥ 70)</p>
               </>
             )}
@@ -306,7 +306,7 @@ export default function CopilotMetrics() {
             {isLoading ? <Skeleton className="h-16" /> : (
               <>
                 <p className="text-sm text-muted-foreground">Agentes Ativos</p>
-                <p className="text-3xl font-bold">{agentSummaries.length}</p>
+                <p className="text-2xl font-bold">{agentSummaries.length}</p>
                 <p className="text-xs text-muted-foreground mt-1">Com avaliações no período</p>
               </>
             )}

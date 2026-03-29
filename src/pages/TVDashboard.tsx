@@ -145,9 +145,12 @@ export default function TVDashboard() {
   const sdrs = data?.individualGoals?.sdrs || [];
 
   return (
-    <div className="h-screen bg-[hsl(36,20%,8%)] overflow-hidden flex flex-col">
+    <div className="h-screen bg-[hsl(36,20%,8%)] overflow-hidden flex flex-col relative">
+      {/* Racing identity — subtle checkered texture */}
+      <div className="absolute inset-0 checkered-pattern opacity-[0.015] pointer-events-none" />
+
       {/* Header - Clean & Minimal */}
-      <header className="flex items-center justify-between px-6 py-3 border-b border-white/5">
+      <header className="relative z-10 flex items-center justify-between px-6 py-3 border-b border-white/5">
         <div className="flex items-center gap-4">
           <img src={torqueLogo} alt="Torque CRM" className="h-8" />
           <div className="h-6 w-px bg-white/10" />
@@ -176,7 +179,7 @@ export default function TVDashboard() {
       </header>
 
       {/* Main Grid */}
-      <div className="flex-1 p-3 grid grid-cols-12 gap-3 overflow-hidden">
+      <div className="relative z-10 flex-1 p-3 grid grid-cols-12 gap-3 overflow-hidden">
 
         {/* Left Column - Meta do Mês */}
         <div className="col-span-3 flex flex-col gap-3">
@@ -228,11 +231,11 @@ export default function TVDashboard() {
                         className="absolute inset-0 rounded-xl bg-yellow-400/50"
                       />
                     )}
-                    <p className="text-2xl font-black text-white drop-shadow-lg text-center">
+                    <p className="text-2xl font-black text-white drop-shadow-lg text-center font-racing">
                       R$ {formatCurrency(meta)}
                     </p>
-                    <p className="text-[10px] font-medium text-white/80 text-center">
-                      {percentage >= 100 ? "META BATIDA!" : "Meta do Mês"}
+                    <p className="text-[10px] font-medium text-white/80 text-center uppercase tracking-wider">
+                      {percentage >= 100 ? "Meta Batida!" : "Meta do Mês"}
                     </p>
                   </motion.div>
 
@@ -291,7 +294,7 @@ export default function TVDashboard() {
                     }`}
                     style={{ width: 72, height: 72 }}
                   >
-                    <span className="text-xl font-black text-white drop-shadow-md">
+                    <span className={`text-xl font-black text-white drop-shadow-md font-racing ${percentage >= 100 ? "animate-turbo" : ""}`}>
                       {percentage.toFixed(0)}%
                     </span>
                     <span className="text-[9px] text-white/80 font-medium">atingido</span>

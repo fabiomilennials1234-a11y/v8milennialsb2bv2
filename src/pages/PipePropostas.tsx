@@ -863,8 +863,7 @@ export default function PipePropostas() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Package className="w-7 h-7 text-primary" />
+          <h1 className="text-2xl font-bold">
             Gestão de Propostas
           </h1>
           <p className="text-muted-foreground text-sm mt-1">
@@ -947,7 +946,7 @@ export default function PipePropostas() {
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="glass-card p-4"
+          className="stat-card"
         >
           <div className="flex items-center justify-between mb-2">
             <p className="text-xs text-muted-foreground">Pipeline Ativo</p>
@@ -961,7 +960,7 @@ export default function PipePropostas() {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.05 }}
-          className="glass-card p-4"
+          className="stat-card"
         >
           <div className="flex items-center justify-between mb-2">
             <p className="text-xs text-muted-foreground">Vendas Total</p>
@@ -975,7 +974,7 @@ export default function PipePropostas() {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="glass-card p-4"
+          className="stat-card"
         >
           <div className="flex items-center justify-between mb-2">
             <p className="text-xs text-muted-foreground">MRR Vendido</p>
@@ -989,7 +988,7 @@ export default function PipePropostas() {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.15 }}
-          className="glass-card p-4"
+          className="stat-card"
         >
           <div className="flex items-center justify-between mb-2">
             <p className="text-xs text-muted-foreground">Projetos Vendidos</p>
@@ -1003,7 +1002,7 @@ export default function PipePropostas() {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
-          className="glass-card p-4"
+          className="stat-card"
         >
           <div className="flex items-center justify-between mb-2">
             <p className="text-xs text-muted-foreground">Taxa de Conversão</p>

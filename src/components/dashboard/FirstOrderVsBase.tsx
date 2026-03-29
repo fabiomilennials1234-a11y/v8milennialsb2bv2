@@ -28,7 +28,7 @@ function FirstOrderVsBaseBase({ firstOrderValue, baseActiveValue }: FirstOrderVs
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-card/80 backdrop-blur-sm border border-border/50 rounded-xl p-5"
+      className="bg-card border border-border rounded-lg p-5"
     >
       <h3 className="font-semibold text-sm mb-4">Receita por Tipo de Cliente</h3>
       <div className="flex items-center gap-4">

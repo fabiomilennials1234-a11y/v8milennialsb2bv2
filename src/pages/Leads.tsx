@@ -410,11 +410,9 @@ export default function Leads() {
           <motion.h1
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
-            className="text-2xl font-bold flex items-center gap-2"
+            className="text-2xl font-bold"
           >
-            <Fuel className="w-6 h-6 text-primary" />
             Tanque de Combustível
-            <span className="text-lg">⛽</span>
           </motion.h1>
           <p className="text-muted-foreground mt-1">
             Gerencie todo o combustível da sua máquina de vendas
@@ -436,36 +434,36 @@ export default function Leads() {
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="glass-card p-4"
+          className="stat-card"
         >
-          <p className="text-xs text-muted-foreground mb-1">Total de Leads</p>
+          <p className="stat-card-label">Total de Leads</p>
           <p className="text-xl font-bold">{stats.total}</p>
         </motion.div>
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.05 }}
-          className="glass-card p-4"
+          className="stat-card"
         >
-          <p className="text-xs text-muted-foreground mb-1">Alta Qualidade (7+)</p>
+          <p className="stat-card-label">Alta Qualidade (7+)</p>
           <p className="text-xl font-bold text-chart-5">{stats.highRating}</p>
         </motion.div>
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="glass-card p-4"
+          className="stat-card"
         >
-          <p className="text-xs text-muted-foreground mb-1">Este Mês</p>
+          <p className="stat-card-label">Este Mês</p>
           <p className="text-xl font-bold text-primary">{stats.thisMonth}</p>
         </motion.div>
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.15 }}
-          className="glass-card p-4"
+          className="stat-card"
         >
-          <p className="text-xs text-muted-foreground mb-1">Com Responsável</p>
+          <p className="stat-card-label">Com Responsável</p>
           <p className="text-xl font-bold text-success">{stats.withSDR}</p>
         </motion.div>
       </div>

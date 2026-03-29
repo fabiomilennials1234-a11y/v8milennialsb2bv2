@@ -334,6 +334,15 @@ export const LeadCard = memo(function LeadCard({
         "kanban-card group cursor-pointer relative",
         lead.isInactive && "opacity-60"
       )}
+      style={{
+        '--card-accent': lead.calor != null && lead.calor >= 8
+          ? 'hsl(0 80% 55%)'
+          : lead.calor != null && lead.calor >= 4
+            ? 'hsl(38 92% 50%)'
+            : lead.calor != null && lead.calor > 0
+              ? 'hsl(210 80% 55%)'
+              : undefined,
+      } as React.CSSProperties}
       onClick={onClick}
     >
       {/* ── Row 1: Name + ⋮ Menu ── */}

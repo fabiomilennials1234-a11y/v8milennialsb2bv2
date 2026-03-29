@@ -6,10 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { Mail, Lock, User, ArrowRight, Loader2 } from 'lucide-react';
+import { Mail, Lock, User, ArrowRight, Loader2, Flag, Fuel, Trophy } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import torqueLogo from '@/assets/torque-logo.png';
-import torqueHexagons from '@/assets/torque-hexagons.png';
 
 export default function Auth() {
   const [isLogin, setIsLogin] = useState(true);
@@ -97,96 +96,86 @@ export default function Auth() {
   return (
     <div className="min-h-screen bg-background flex overflow-hidden">
       {/* Left Panel - V8 Branding */}
-      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-sidebar-background via-sidebar-accent to-sidebar-background relative overflow-hidden">
-        {/* Hexagonal background pattern */}
-        <motion.img
-          src={torqueHexagons}
-          alt=""
-          className="absolute -bottom-[8%] right-[2%] w-[50%] opacity-[0.12] pointer-events-none select-none -rotate-12"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 0.12 }}
-          transition={{ duration: 1, ease: "easeOut" }}
-        />
-        <motion.img
-          src={torqueHexagons}
-          alt=""
-          className="absolute top-[18%] left-[62%] w-[30%] opacity-[0.08] pointer-events-none select-none rotate-[160deg]"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 0.08 }}
-          transition={{ duration: 1, ease: "easeOut", delay: 0.15 }}
-        />
-        
+      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden" style={{ background: 'linear-gradient(160deg, hsl(36 20% 8%) 0%, hsl(36 20% 14%) 50%, hsl(36 20% 8%) 100%)' }}>
+        {/* Racing stripe accent */}
+        <div className="absolute left-0 top-0 w-[3px] h-full bg-primary/40" />
+        <div className="absolute left-[6px] top-0 w-[1px] h-full bg-primary/20" />
+
+        {/* Checkered pattern — subtle brand texture */}
+        <div className="absolute inset-0 checkered-pattern opacity-[0.025] pointer-events-none" />
+
         <div className="relative z-10 flex flex-col justify-between p-12 w-full">
           <div className="flex items-center gap-3">
             <motion.img
               src={torqueLogo}
               alt="Torque CRM"
-              className="h-16 object-contain drop-shadow-lg"
-              initial={{ scale: 0.5, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ duration: 0.5, type: "spring" }}
+              className="h-14 object-contain"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.5 }}
             />
           </div>
-          
+
           <div className="space-y-6">
             <motion.div
-              initial={{ opacity: 0, x: -50 }}
+              initial={{ opacity: 0, x: -30 }}
               animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.3, duration: 0.6 }}
+              transition={{ delay: 0.3, duration: 0.5 }}
             >
-              <h1 className="text-5xl font-black text-sidebar-foreground leading-tight">
+              <h1 className="text-5xl font-black leading-tight" style={{ letterSpacing: '-0.04em', color: 'hsl(45 20% 90%)' }}>
                 CRM de Vendas
                 <br />
                 <span className="text-gradient-primary">Alta Performance</span>
               </h1>
             </motion.div>
-            
+
             <motion.p
-              initial={{ opacity: 0, x: -50 }}
+              initial={{ opacity: 0, x: -30 }}
               animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.4, duration: 0.6 }}
-              className="text-sidebar-foreground/70 text-lg max-w-md"
+              transition={{ delay: 0.4, duration: 0.5 }}
+              className="text-lg max-w-md leading-relaxed"
+              style={{ color: 'hsl(45 15% 60%)' }}
             >
               Acelere suas vendas com um sistema de alta performance.
               Cada lead é uma oportunidade, cada vendedor é um campeão.
             </motion.p>
 
             <motion.div
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.5 }}
-              className="flex flex-wrap items-center gap-4 pt-4"
+              className="flex flex-wrap items-center gap-3 pt-4"
             >
               {[
-                { icon: '🏁', text: 'Central de Comando' },
-                { icon: '⛽', text: 'Leads = Combustível' },
-                { icon: '🏆', text: 'Pilotos no Pódio' },
+                { icon: Flag, text: 'Central de Comando' },
+                { icon: Fuel, text: 'Leads = Combustível' },
+                { icon: Trophy, text: 'Pilotos no Pódio' },
               ].map((feature, i) => (
-                <motion.div 
-                  key={feature.text} 
-                  className="flex items-center gap-2 bg-sidebar-accent/50 px-3 py-2 rounded-full"
-                  initial={{ opacity: 0, scale: 0.8 }}
+                <motion.div
+                  key={feature.text}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg border"
+                  style={{ borderColor: 'hsl(36 15% 22%)', background: 'hsl(36 15% 12%)' }}
+                  initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ delay: 0.6 + i * 0.1 }}
                 >
-                  <span className="text-lg">{feature.icon}</span>
-                  <span className="text-sm font-medium text-sidebar-foreground/80">{feature.text}</span>
+                  <feature.icon className="w-4 h-4 text-primary/70" />
+                  <span className="text-sm font-medium" style={{ color: 'hsl(45 15% 70%)' }}>{feature.text}</span>
                 </motion.div>
               ))}
             </motion.div>
           </div>
 
-          <div className="flex items-center gap-2 text-sidebar-foreground/40 text-sm flex-wrap">
-            <span>⚙️</span>
+          <div className="flex items-center gap-2 text-sm flex-wrap" style={{ color: 'hsl(45 10% 35%)' }}>
             <span>Torque CRM</span>
-            <span className="mx-2">•</span>
-            <span>© {new Date().getFullYear()} Torque</span>
-            <span className="mx-2">•</span>
+            <span className="mx-1">·</span>
+            <span>&copy; {new Date().getFullYear()}</span>
+            <span className="mx-1">·</span>
             <Link
               to="/privacidade"
-              className="hover:text-sidebar-foreground/70 transition-colors underline underline-offset-2"
+              className="underline underline-offset-2 transition-colors hover:text-[hsl(45_10%_50%)]"
             >
-              Política de Privacidade
+              Privacidade
             </Link>
           </div>
         </div>
@@ -194,23 +183,6 @@ export default function Auth() {
 
       {/* Right Panel - Auth Form */}
       <div className="flex-1 flex items-center justify-center p-8 relative overflow-hidden">
-        {/* Subtle hexagonal decorations */}
-        <motion.img
-          src={torqueHexagons}
-          alt=""
-          className="absolute -top-[8%] -right-[8%] w-[40%] opacity-[0.04] pointer-events-none select-none rotate-[55deg]"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 0.04 }}
-          transition={{ duration: 1.2, ease: "easeOut", delay: 0.3 }}
-        />
-        <motion.img
-          src={torqueHexagons}
-          alt=""
-          className="absolute -bottom-[10%] -right-[5%] w-[45%] opacity-[0.04] pointer-events-none select-none -rotate-[110deg]"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 0.04 }}
-          transition={{ duration: 1.2, ease: "easeOut", delay: 0.4 }}
-        />
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -223,7 +195,7 @@ export default function Auth() {
             </div>
           </div>
 
-          <div className="glass-card p-8">
+          <div className="bg-card border border-border rounded-xl p-8 shadow-sm">
             <div className="text-center mb-8">
               <h2 className="text-2xl font-bold text-foreground">
                 {isLogin ? 'Acelere para a pista' : 'Entre para a equipe'}

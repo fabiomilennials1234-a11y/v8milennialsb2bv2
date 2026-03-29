@@ -40,12 +40,12 @@ function FunnelChartBase({ title, steps }: FunnelChartProps) {
                   )}
                 </div>
               </div>
-              <div className="h-8 bg-muted rounded-lg overflow-hidden">
+              <div className="h-8 bg-muted/40 rounded-md overflow-hidden">
                 <motion.div
                   initial={{ width: 0 }}
                   animate={{ width: `${widthPercentage}%` }}
                   transition={{ duration: 0.6, delay: index * 0.1, ease: "easeOut" }}
-                  className={`h-full rounded-lg flex items-center justify-end pr-2 ${step.color}`}
+                  className={`h-full rounded-md flex items-center justify-end pr-2 ${step.color}`}
                 >
                   {widthPercentage > 20 && (
                     <span className="text-xs font-semibold text-primary-foreground">
