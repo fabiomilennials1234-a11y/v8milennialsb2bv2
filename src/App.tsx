@@ -70,6 +70,8 @@ const NotFound = lazy(() => lazyRetry(() => import("./pages/NotFound")));
 const Landing = lazy(() => lazyRetry(() => import("./pages/Landing")));
 const Signup = lazy(() => lazyRetry(() => import("./pages/Signup")));
 const Onboarding = lazy(() => lazyRetry(() => import("./pages/Onboarding")));
+const Checkout = lazy(() => lazyRetry(() => import("./pages/Checkout")));
+const CheckoutSuccess = lazy(() => lazyRetry(() => import("./pages/CheckoutSuccess")));
 
 // Master Admin — lazy loaded (com retry)
 const MasterDashboard = lazy(() => lazyRetry(() => import("./pages/master/MasterDashboard")));
@@ -168,6 +170,22 @@ function AppRoutes() {
       <Route path="/signup" element={<Signup />} />
       <Route path="/privacidade" element={<Privacidade />} />
       <Route path="/docs" element={<ApiDocs />} />
+      <Route
+        path="/checkout"
+        element={
+          <ProtectedRoute requireOrganization={false}>
+            <Checkout />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/checkout/success"
+        element={
+          <ProtectedRoute requireOrganization={false}>
+            <CheckoutSuccess />
+          </ProtectedRoute>
+        }
+      />
       <Route
         path="/onboarding"
         element={
