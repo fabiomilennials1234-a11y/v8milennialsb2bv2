@@ -78,6 +78,11 @@ import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
 import { ChannelBadge, type ChannelType } from "./ChannelBadge";
 import { LeadDetailContent } from "./LeadDetailContent";
 import { ScheduleMessageModal } from "./ScheduleMessageModal";
+import { SlashCommandPopover } from "@/components/chat/SlashCommandPopover";
+import { useMessageTemplates } from "@/hooks/useMessageTemplates";
+import { resolveVariables } from "@/lib/template-variables";
+import type { LeadContext, AttendantContext } from "@/lib/template-variables";
+import type { MessageTemplate } from "@/hooks/useMessageTemplates";
 import { ScheduledMessagesBanner } from "./ScheduledMessagesBanner";
 import { WhatsAppSettings } from "@/components/settings/WhatsAppSettings";
 import {
@@ -1346,6 +1351,8 @@ function ChatWindow({
   selectedLeadName?: string | null;
 }) {
   const [newMessage, setNewMessage] = useState("");
+  const [showSlashPopover, setShowSlashPopover] = useState(false);
+  const { data: templates } = useMessageTemplates();
   const [isRecording, setIsRecording] = useState(false);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
@@ -1445,7 +1452,19 @@ function ChatWindow({
     }
   };
 
+  const handleSlashSelect = (template: MessageTemplate) => {
+    const leadCtx: LeadContext = {
+      name: selectedContact?.lead_name ?? selectedContact?.push_name ?? undefined,
+      phone: phoneNumber ?? undefined,
+    };
+    const attendantCtx: AttendantContext = { name: undefined };
+    const resolved = resolveVariables(template.body, leadCtx, attendantCtx);
+    setNewMessage(resolved);
+    setShowSlashPopover(false);
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (showSlashPopover) return;
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -1898,7 +1917,7 @@ function ChatWindow({
             onCancel={() => setIsRecording(false)}
           />
         ) : (
-          <div className="flex items-center gap-2">
+          <div className="relative flex items-center gap-2">
             {/* Input de arquivo oculto */}
             <input
               ref={fileInputRef}
@@ -1907,7 +1926,7 @@ function ChatWindow({
               onChange={handleImageSelect}
               className="hidden"
             />
-            
+
             {/* Botão de imagem */}
             <Button
               variant="ghost"
@@ -1919,11 +1938,24 @@ function ChatWindow({
               <ImageIcon className="w-5 h-5 text-muted-foreground" />
             </Button>
 
+            {showSlashPopover && templates && (
+              <SlashCommandPopover
+                query={newMessage}
+                templates={templates}
+                onSelect={handleSlashSelect}
+                onClose={() => setShowSlashPopover(false)}
+              />
+            )}
+
             {/* Input de texto */}
             <Input
               placeholder={`Mensagem para ${contactName}...`}
               value={newMessage}
-              onChange={(e) => setNewMessage(e.target.value)}
+              onChange={(e) => {
+                const val = e.target.value;
+                setNewMessage(val);
+                setShowSlashPopover(val.startsWith("/") && val.length > 0);
+              }}
               onKeyDown={handleKeyDown}
               disabled={sendMessage.isPending || sendMedia.isPending}
               className="flex-1 rounded-full border border-border/60 bg-background focus:ring-1 focus:ring-primary/30"
