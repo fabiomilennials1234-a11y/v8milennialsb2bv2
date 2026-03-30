@@ -22,7 +22,7 @@ import { ACTION_CATEGORIES, ACTION_LABELS } from "@/types/workflow";
 import type { ActionNodeData, WorkflowActionType } from "@/types/workflow";
 import { useWhatsAppInstances } from "@/hooks/useWhatsAppInstances";
 import { useOrganization } from "@/hooks/useOrganization";
-import { useMessageTemplates } from "@/hooks/useMessageTemplates";
+import { useCampaignTemplatesByType } from "@/hooks/useCampaignTemplates";
 import { supabase } from "@/integrations/supabase/client";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
 import { convertAudioBlobToMp3, preloadLamejs } from "@/lib/audioToMp3";
@@ -877,7 +877,7 @@ function WhatsAppTextPanel({
     (data.useTemplate ? "meta_template" : "free");
 
   const { data: templates, isLoading: templatesLoading, isError: templatesError } =
-    useMessageTemplates("text");
+    useCampaignTemplatesByType("text");
   const [templateSearch, setTemplateSearch] = useState("");
 
   const filteredTemplates = (templates ?? []).filter(
@@ -1092,7 +1092,7 @@ function AudioTemplatePicker({
   selectedId?: string;
   onSelect: (template: CampaignTemplate) => void;
 }) {
-  const { data: templates, isLoading, isError } = useMessageTemplates("audio");
+  const { data: templates, isLoading, isError } = useCampaignTemplatesByType("audio");
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const audioRef = useRef<HTMLAudioElement | null>(null);

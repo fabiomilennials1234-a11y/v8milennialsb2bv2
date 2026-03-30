@@ -1,32 +1,135 @@
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { useOrganization } from "./useOrganization";
-import type { CampaignTemplate, CampaignTemplateMessageType } from "./useCampaignTemplates";
-
 /**
- * Busca templates de mensagem da org atual filtrados por tipo (text | audio | image | document).
- * Reutiliza a tabela campaign_templates existente.
+ * useMessageTemplates — CRUD hook para message_templates.
  */
-export function useMessageTemplates(type: CampaignTemplateMessageType) {
+
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useOrganization } from "@/hooks/useOrganization";
+import { toast } from "sonner";
+
+export interface MessageTemplate {
+  id: string;
+  organization_id: string;
+  command: string;
+  display_name: string;
+  body: string;
+  created_by: string;
+  updated_at: string;
+  created_at: string;
+}
+
+const QUERY_KEY = "message-templates";
+
+export function useMessageTemplates() {
   const { organizationId } = useOrganization();
 
-  return useQuery({
-    queryKey: ["message-templates", organizationId, type],
-    queryFn: async (): Promise<CampaignTemplate[]> => {
+  return useQuery<MessageTemplate[]>({
+    queryKey: [QUERY_KEY, organizationId],
+    queryFn: async () => {
       if (!organizationId) return [];
-
       const { data, error } = await supabase
-        .from("campaign_templates")
-        .select("id, organization_id, name, content, message_type, audio_url, available_variables, is_active, created_at, updated_at")
+        .from("message_templates")
+        .select("*")
         .eq("organization_id", organizationId)
-        .eq("message_type", type)
-        .eq("is_active", true)
-        .order("name");
-
+        .order("command");
       if (error) throw error;
-      return (data ?? []) as CampaignTemplate[];
+      return (data ?? []) as unknown as MessageTemplate[];
     },
     enabled: !!organizationId,
-    staleTime: 2 * 60 * 1000,
+    staleTime: 1000 * 60 * 5,
+  });
+}
+
+export function useCreateMessageTemplate() {
+  const queryClient = useQueryClient();
+  const { organizationId } = useOrganization();
+
+  return useMutation({
+    mutationFn: async (payload: {
+      command: string;
+      display_name: string;
+      body: string;
+    }) => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user || !organizationId) throw new Error("Não autenticado");
+
+      const { error } = await supabase.from("message_templates").insert({
+        organization_id: organizationId,
+        command: payload.command.toLowerCase().trim(),
+        display_name: payload.display_name.trim(),
+        body: payload.body,
+        created_by: user.id,
+      } as any);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEY] });
+      toast.success("Template criado!");
+    },
+    onError: (error: any) => {
+      if (error.message?.includes("unique") || error.code === "23505") {
+        toast.error("Já existe um template com esse comando.");
+      } else {
+        toast.error(error.message || "Erro ao criar template");
+      }
+    },
+  });
+}
+
+export function useUpdateMessageTemplate() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (payload: {
+      id: string;
+      command: string;
+      display_name: string;
+      body: string;
+    }) => {
+      const { error } = await supabase
+        .from("message_templates")
+        .update({
+          command: payload.command.toLowerCase().trim(),
+          display_name: payload.display_name.trim(),
+          body: payload.body,
+          updated_at: new Date().toISOString(),
+        } as any)
+        .eq("id", payload.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEY] });
+      toast.success("Template atualizado!");
+    },
+    onError: (error: any) => {
+      if (error.message?.includes("unique") || error.code === "23505") {
+        toast.error("Já existe um template com esse comando.");
+      } else {
+        toast.error(error.message || "Erro ao atualizar template");
+      }
+    },
+  });
+}
+
+export function useDeleteMessageTemplate() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from("message_templates")
+        .delete()
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEY] });
+      toast.success("Template removido.");
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Erro ao remover template");
+    },
   });
 }
