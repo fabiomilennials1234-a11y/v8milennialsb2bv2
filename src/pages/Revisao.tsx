@@ -77,7 +77,7 @@ export default function Revisao() {
       isAutomated: fu.is_automated,
     }));
 
-    const smTasks: RevisionTask[] = scheduledMessages.map((sm: any) => ({
+    const smTasks: RevisionTask[] = scheduledMessages.map((sm) => ({
       id: sm.id,
       type: "scheduled-message" as const,
       title: sm.message_content?.slice(0, 60) || `[${sm.media_type || "mídia"}]`,

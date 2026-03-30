@@ -91,7 +91,7 @@ export function RevisionItem({
 
   const handleComplete = () => {
     onComplete(task.id);
-    if (task.type === "follow-up") {
+    if (task.type === "follow-up" && task.leadPhone) {
       setShowCompletionBanner(true);
       setTimeout(() => setShowCompletionBanner(false), 5000);
     }

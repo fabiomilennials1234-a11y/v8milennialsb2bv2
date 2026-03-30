@@ -26,7 +26,6 @@ interface ScheduleMessageModalProps {
   leadName: string;
   phoneNumber: string;
   instanceId?: string;
-  instanceName?: string;
   initialMessage?: string;
   initialMediaFile?: File;
   editingId?: string;

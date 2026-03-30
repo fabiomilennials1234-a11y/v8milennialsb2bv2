@@ -1987,7 +1987,6 @@ function ChatWindow({
           leadName={selectedContact.lead_name || selectedContact.push_name || selectedContact.phone_number}
           phoneNumber={selectedContact.phone_number}
           instanceId={instanceId}
-          instanceName={instanceName}
           initialMessage={newMessage}
         />
       )}
