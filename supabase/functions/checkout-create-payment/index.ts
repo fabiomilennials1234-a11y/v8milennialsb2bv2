@@ -472,6 +472,11 @@ serve(
       team_members,
       total_monthly: pricing.total_monthly,
       total_cycle: pricing.total_cycle,
+      // Full discount breakdown for provision-org to record accurately
+      subtotal_monthly: pricing.subtotal_monthly,
+      volume_discount: pricing.volume_discount,
+      coupon_discount: pricing.coupon_discount,
+      cycle_discount: pricing.cycle_discount,
       addon_id: addon?.id ?? null,
     };
 

@@ -318,11 +318,13 @@ CREATE INDEX IF NOT EXISTS idx_coupons_active
   WHERE is_active = true;
 
 -- Cupom inicial: MILENNIALS35 — 35% em todos os planos
+-- applies_to = '{}' (empty array) means applies to ALL plans, matching the
+-- validate_coupon check: array_length(applies_to, 1) > 0 → false → skip filter.
 INSERT INTO public.coupons (code, discount_pct, applies_to, max_uses, valid_from, valid_until, is_active)
 VALUES (
   'MILENNIALS35',
   35,
-  ARRAY['torque-1.0', 'torque-2.0', 'torque-v8'],
+  '{}'::TEXT[],  -- empty array = applies to all plans (NOT NULL to satisfy constraint)
   NULL,
   NOW(),
   NULL,

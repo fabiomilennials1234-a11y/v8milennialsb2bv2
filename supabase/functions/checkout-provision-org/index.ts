@@ -49,6 +49,10 @@ interface CheckoutData {
   team_members: TeamMemberEntry[];
   total_monthly: number;
   total_cycle: number;
+  subtotal_monthly?: number;
+  volume_discount?: number;
+  coupon_discount?: number;
+  cycle_discount?: number;
   asaas_customer_id?: string;
   asaas_payment_id?: string;
   asaas_subscription_id?: string;
@@ -127,25 +131,34 @@ serve(
     }
 
     // ── Auth: internal calls only ─────────────────────────────────────────────
-    // Accept either a service_role JWT or a matching X-Internal-Api-Key header.
+    // SECURITY: Only accept requests with a valid X-Internal-Api-Key or a
+    // Bearer token that exactly matches SUPABASE_SERVICE_ROLE_KEY. This is
+    // never exposed publicly — only called by checkout-create-payment and
+    // asaas-webhook.
     const authHeader = req.headers.get("Authorization");
     const internalKey = req.headers.get("X-Internal-Api-Key");
     const expectedInternalKey = Deno.env.get("INTERNAL_API_KEY");
+    const serviceRoleKeyEnv = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
+    // Fail closed: if INTERNAL_API_KEY is not configured, reject everything
+    // that doesn't carry the service_role key as Bearer token.
     const hasValidInternalKey =
-      expectedInternalKey && internalKey === expectedInternalKey;
+      !!expectedInternalKey && !!internalKey && internalKey === expectedInternalKey;
 
-    // We will validate the token against Supabase below; for now just ensure
-    // the header is present so we can extract it.
-    if (!authHeader?.startsWith("Bearer ") && !hasValidInternalKey) {
+    const bearerToken = authHeader?.startsWith("Bearer ")
+      ? authHeader.slice(7).trim()
+      : null;
+    const hasValidServiceRoleBearer =
+      !!serviceRoleKeyEnv && !!bearerToken && bearerToken === serviceRoleKeyEnv;
+
+    if (!hasValidInternalKey && !hasValidServiceRoleBearer) {
       return jsonResp({ success: false, error: "Unauthorized" }, 401, cors);
     }
 
     // ── Supabase service-role client ──────────────────────────────────────────
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    const supabase = createClient(supabaseUrl, serviceRoleKey, {
+    const supabase = createClient(supabaseUrl, serviceRoleKeyEnv!, {
       auth: { persistSession: false },
     });
 
@@ -203,15 +216,105 @@ serve(
       team_members: checkoutMembers,
       total_monthly,
       total_cycle,
+      subtotal_monthly: cd_subtotal_monthly,
+      volume_discount: cd_volume_discount,
+      coupon_discount: cd_coupon_discount,
+      cycle_discount: cd_cycle_discount,
       asaas_customer_id,
     } = checkoutData;
+
+    // ── 1b. Validate checkout_data from body (not from trusted user metadata) ──
+    // When checkout_data is forwarded directly in the request body, validate it
+    // against the DB to prevent spoofed plan_id, pricing, or user_count.
+    if (body.checkout_data) {
+      // Validate plan_id exists and is active
+      const { data: planRow, error: planErr } = await supabase
+        .from("subscription_plans")
+        .select("id, min_users, is_active")
+        .eq("id", plan_id)
+        .eq("is_active", true)
+        .maybeSingle();
+
+      if (planErr || !planRow) {
+        console.error("[checkout-provision-org] plan_id validation failed:", plan_id);
+        return jsonResp(
+          { success: false, error: "Plano inválido ou inativo" },
+          422,
+          cors,
+        );
+      }
+
+      // Validate monetary values
+      if (typeof total_monthly !== "number" || total_monthly <= 0) {
+        return jsonResp(
+          { success: false, error: "total_monthly deve ser > 0" },
+          422,
+          cors,
+        );
+      }
+      if (typeof total_cycle !== "number" || total_cycle <= 0) {
+        return jsonResp(
+          { success: false, error: "total_cycle deve ser > 0" },
+          422,
+          cors,
+        );
+      }
+
+      // Validate user_count against plan minimum
+      if (typeof user_count !== "number" || user_count < planRow.min_users) {
+        return jsonResp(
+          {
+            success: false,
+            error: `user_count (${user_count}) é menor que o mínimo do plano (${planRow.min_users})`,
+          },
+          422,
+          cors,
+        );
+      }
+    }
 
     // Resolve payment identifiers (body takes precedence over checkout_data)
     const resolvedPaymentId = asaas_payment_id ?? checkoutData.asaas_payment_id ?? null;
     const resolvedSubscriptionId =
       asaas_subscription_id ?? checkoutData.asaas_subscription_id ?? null;
 
-    // ── 2. Idempotency: check if org already exists for this user ─────────────
+    // ── 2a. Advisory lock: prevent double-provisioning from concurrent calls ──
+    // Uses the try_provision_lock RPC (created by migration). If it returns false,
+    // another process is already provisioning for this user.
+    try {
+      const { data: lockAcquired, error: lockErr } = await supabase.rpc(
+        "try_provision_lock",
+        { p_user_id: user_id },
+      );
+
+      if (!lockErr && lockAcquired === false) {
+        console.log(
+          "[checkout-provision-org] Advisory lock not acquired — another process is provisioning for user:",
+          user_id,
+        );
+        // Return success — the other process will complete provisioning
+        return jsonResp(
+          {
+            success: true,
+            organization_id: "pending",
+            organization_name: org_name,
+            already_provisioned: true,
+          },
+          200,
+          cors,
+        );
+      }
+
+      if (lockErr) {
+        // RPC may not exist yet — fall through to idempotency check
+        console.warn("[checkout-provision-org] Advisory lock RPC unavailable, relying on idempotency check:", lockErr.message);
+      }
+    } catch (e) {
+      // Best-effort: if the lock mechanism fails, the idempotency check still protects us
+      console.warn("[checkout-provision-org] Advisory lock failed, proceeding:", e);
+    }
+
+    // ── 2b. Idempotency: check if org already exists for this user ─────────────
     const { data: existingMember, error: memberCheckErr } = await supabase
       .from("team_members")
       .select("organization_id, organizations!inner(id, name)")
@@ -292,12 +395,33 @@ serve(
     // ── 4. Create org_subscriptions ───────────────────────────────────────────
     const now = new Date();
     const renews_at = calculateRenewsAt(billing_cycle, now);
+    const cycleMonths = billing_cycle === "annual" ? 12 : billing_cycle === "semester" ? 6 : 1;
 
-    // discount_amount = total_cycle * (coupon_discount_pct / 100), or 0
-    const baseAmountCycle = total_cycle / (1 - (coupon_discount_pct > 0 ? coupon_discount_pct / 100 : 0));
-    const discountAmount = coupon_discount_pct > 0
-      ? Math.round((baseAmountCycle - total_cycle) * 100) / 100
-      : 0;
+    // Use the full discount breakdown from checkout_data if available (set by
+    // checkout-create-payment). Fall back to legacy reverse-engineering only
+    // if the fields are absent (e.g. old webhook paths).
+    let baseAmount: number;
+    let discountAmount: number;
+    let finalAmount: number;
+
+    if (
+      cd_subtotal_monthly != null &&
+      cd_volume_discount != null &&
+      cd_coupon_discount != null &&
+      cd_cycle_discount != null
+    ) {
+      // Authoritative breakdown from checkout-create-payment
+      baseAmount = Math.round(cd_subtotal_monthly * cycleMonths * 100) / 100;
+      discountAmount = Math.round(
+        (cd_volume_discount + cd_coupon_discount + cd_cycle_discount) * cycleMonths * 100,
+      ) / 100;
+      finalAmount = total_cycle;
+    } else {
+      // Legacy fallback: best-effort calculation
+      baseAmount = total_cycle;
+      discountAmount = 0;
+      finalAmount = total_cycle;
+    }
 
     const { error: subErr } = await supabase.from("org_subscriptions").insert({
       organization_id: organizationId,
@@ -306,9 +430,9 @@ serve(
       user_count: user_count,
       addon_turbo_count: turbo_count,
       coupon_id: coupon_id ?? null,
-      base_amount: Math.round((total_monthly + discountAmount) * 100) / 100,
+      base_amount: baseAmount,
       discount_amount: discountAmount,
-      final_amount: total_monthly,
+      final_amount: finalAmount,
       started_at: now.toISOString(),
       renews_at: renews_at.toISOString(),
     });

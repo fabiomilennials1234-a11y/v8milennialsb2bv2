@@ -18,6 +18,7 @@ interface Props {
   state: CheckoutState;
   setOrgName: (name: string) => void;
   addTeamMember: () => void;
+  setTeamMembersCount: (count: number) => void;
   removeTeamMember: (index: number) => void;
   updateTeamMember: (
     index: number,
@@ -33,22 +34,22 @@ export function OrgSetup({
   state,
   setOrgName,
   addTeamMember,
+  setTeamMembersCount,
   removeTeamMember,
   updateTeamMember,
   onBack,
   onContinue,
   canContinue,
 }: Props) {
-  // Ensure we have enough member slots for the user count
+  // Ensure we have enough member slots for the user count.
+  // Uses setTeamMembersCount (single setState) instead of looping addTeamMember
+  // to prevent re-render loops where each addTeamMember triggers a state change
+  // that re-triggers the effect.
   useEffect(() => {
-    const currentSlots = state.team_members.length;
-    if (currentSlots < state.user_count) {
-      const slotsNeeded = state.user_count - currentSlots;
-      for (let i = 0; i < slotsNeeded; i++) {
-        addTeamMember();
-      }
+    if (state.team_members.length < state.user_count) {
+      setTeamMembersCount(state.user_count);
     }
-  }, [state.user_count, state.team_members.length, addTeamMember]);
+  }, [state.user_count, state.team_members.length, setTeamMembersCount]);
 
   const remainingSlots = Math.max(
     state.user_count - state.team_members.length,

@@ -171,6 +171,7 @@ export function CheckoutWizard() {
                     state={state}
                     setOrgName={checkout.setOrgName}
                     addTeamMember={checkout.addTeamMember}
+                    setTeamMembersCount={checkout.setTeamMembersCount}
                     removeTeamMember={checkout.removeTeamMember}
                     updateTeamMember={checkout.updateTeamMember}
                     onBack={goToStep1}

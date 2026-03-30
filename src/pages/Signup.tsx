@@ -142,7 +142,8 @@ export default function Signup() {
           full_name: name.trim(),
           phone: phone.replace(/\D/g, ''),
           document: document.replace(/\D/g, ''),
-          subscription_status: 'pending_payment',
+          // subscription_status is set server-side by a DB trigger on auth.users
+          // to prevent client-side paywall bypass.
         },
       },
     });

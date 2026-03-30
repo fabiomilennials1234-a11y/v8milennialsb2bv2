@@ -349,6 +349,25 @@ export function useCheckout() {
     }));
   }, []);
 
+  /** Set team_members array to exactly `count` entries in a single setState call.
+   *  Preserves existing entries and pads with empty slots as needed. */
+  const setTeamMembersCount = useCallback((count: number) => {
+    setState((prev) => {
+      const current = prev.team_members;
+      if (current.length === count) return prev;
+      if (current.length > count) {
+        // Trim from the end (never remove the first entry = current user)
+        return { ...prev, team_members: current.slice(0, count) };
+      }
+      // Pad with empty entries
+      const padding: TeamMember[] = Array.from(
+        { length: count - current.length },
+        () => ({ name: "", email: "" }),
+      );
+      return { ...prev, team_members: [...current, ...padding] };
+    });
+  }, []);
+
   const removeTeamMember = useCallback((index: number) => {
     setState((prev) => ({
       ...prev,
@@ -485,6 +504,7 @@ export function useCheckout() {
     clearCoupon,
     setOrgName,
     addTeamMember,
+    setTeamMembersCount,
     removeTeamMember,
     updateTeamMember,
     submitPayment,

@@ -58,46 +58,25 @@ export function ProtectedRoute({ children, requireOrganization = true }: Protect
   }
 
   // SECURITY: Validate organization membership (master bypassa todas as validações)
+  // A user with no team_member record AND no org is a newly signed-up user who
+  // hasn't paid yet — redirect them to /checkout instead of showing an error.
+  // This is the DB-backed equivalent of the old JWT metadata pending_payment check.
   if (requireOrganization && !isMaster) {
-    // No team member record
+    // No team member record → user has no org → redirect to checkout (pending payment)
     if (!teamMember) {
-      return (
-        <div className="min-h-screen flex items-center justify-center bg-background">
-          <div className="flex flex-col items-center gap-4 max-w-md text-center p-6">
-            <AlertTriangle className="h-12 w-12 text-yellow-500" />
-            <h2 className="text-xl font-semibold">Acesso Restrito</h2>
-            <p className="text-muted-foreground">
-              Sua conta não está vinculada a nenhuma organização. 
-              Entre em contato com o administrador do sistema para solicitar acesso.
-            </p>
-            <Button onClick={() => signOut()} variant="outline">
-              Fazer logout
-            </Button>
-          </div>
-        </div>
-      );
+      if (!CHECKOUT_PATHS.includes(location.pathname)) {
+        return <Navigate to="/checkout" replace />;
+      }
+      // If already on a checkout path, let them through
+      return <>{children}</>;
     }
 
-    // No organization linked
+    // Has team_member but no organization linked → redirect to checkout
     if (!teamMember.organization_id) {
-      return (
-        <div className="min-h-screen flex items-center justify-center bg-background">
-          <div className="flex flex-col items-center gap-4 max-w-md text-center p-6">
-            <AlertTriangle className="h-12 w-12 text-yellow-500" />
-            <h2 className="text-xl font-semibold">Organização Não Configurada</h2>
-            <p className="text-muted-foreground">
-              Seu perfil ainda não foi associado a uma organização. 
-              Entre em contato com o administrador para completar a configuração.
-            </p>
-            <div className="text-xs text-muted-foreground bg-muted p-2 rounded">
-              ID do usuário: {user.id?.slice(0, 8)}...
-            </div>
-            <Button onClick={() => signOut()} variant="outline">
-              Fazer logout
-            </Button>
-          </div>
-        </div>
-      );
+      if (!CHECKOUT_PATHS.includes(location.pathname)) {
+        return <Navigate to="/checkout" replace />;
+      }
+      return <>{children}</>;
     }
 
     // Team member is not active
