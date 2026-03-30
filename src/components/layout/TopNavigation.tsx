@@ -788,7 +788,7 @@ export function TopNavigation() {
                 <Menu className="w-5 h-5" />
               </Button>
             </SheetTrigger>
-            <SheetContent side="right" className="w-[300px] p-0 bg-background/98 backdrop-blur-xl border-l border-border/30">
+            <SheetContent side="right" className="w-[min(300px,85vw)] p-0 bg-background/98 backdrop-blur-xl border-l border-border/30 [&>button]:hidden">
               <div className="flex flex-col h-full">
                 {/* Mobile sheet header */}
                 <div className="flex items-center justify-between px-5 py-4 border-b border-border/30">
