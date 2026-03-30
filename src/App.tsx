@@ -68,6 +68,7 @@ const AutomacoesEditor = lazy(() => lazyRetry(() => import("./pages/AutomacoesEd
 const AutomacoesExecucoes = lazy(() => lazyRetry(() => import("./pages/AutomacoesExecucoes")));
 const NotFound = lazy(() => lazyRetry(() => import("./pages/NotFound")));
 const Landing = lazy(() => lazyRetry(() => import("./pages/Landing")));
+const Signup = lazy(() => lazyRetry(() => import("./pages/Signup")));
 const Onboarding = lazy(() => lazyRetry(() => import("./pages/Onboarding")));
 
 // Master Admin — lazy loaded (com retry)
@@ -164,6 +165,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/landing" element={<Landing />} />
       <Route path="/auth" element={<AuthRoute />} />
+      <Route path="/signup" element={<Signup />} />
       <Route path="/privacidade" element={<Privacidade />} />
       <Route path="/docs" element={<ApiDocs />} />
       <Route
