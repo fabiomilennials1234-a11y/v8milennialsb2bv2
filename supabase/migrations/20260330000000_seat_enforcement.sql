@@ -90,6 +90,9 @@ DECLARE
 BEGIN
   -- Só checa quando ativando um membro (is_active false → true) ou criando ativo
   IF NEW.is_active = true AND (TG_OP = 'INSERT' OR (TG_OP = 'UPDATE' AND OLD.is_active = false)) THEN
+    -- Lock na org para serializar ativações concorrentes (evita race condition)
+    PERFORM 1 FROM public.organizations WHERE id = NEW.organization_id FOR UPDATE;
+
     v_usage := public.org_get_seat_usage(NEW.organization_id);
 
     -- Se não é ilimitado E já está no limite (sem contar o novo)

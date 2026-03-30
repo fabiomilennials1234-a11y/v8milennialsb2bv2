@@ -22,7 +22,9 @@ export function SeatUsageBar({ usage }: SeatUsageBarProps) {
     );
   }
 
-  const pct = Math.min((usage.active_members / usage.paid_seats) * 100, 100);
+  const pct = usage.paid_seats > 0
+    ? Math.min((usage.active_members / usage.paid_seats) * 100, 100)
+    : (usage.active_members > 0 ? 100 : 0);
   const isAtLimit = usage.active_members >= usage.paid_seats;
   const isNearLimit = pct >= 80 && !isAtLimit;
 

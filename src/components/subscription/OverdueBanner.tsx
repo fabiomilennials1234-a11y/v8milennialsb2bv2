@@ -10,10 +10,20 @@ interface OverdueBannerProps {
   graceRemaining: number;
 }
 
+const DISMISS_KEY = "overdue-banner-dismissed";
+
 export function OverdueBanner({ graceRemaining }: OverdueBannerProps) {
-  const [dismissed, setDismissed] = useState(false);
+  const today = new Date().toISOString().split("T")[0];
+  const [dismissed, setDismissed] = useState(
+    () => sessionStorage.getItem(DISMISS_KEY) === today
+  );
 
   if (dismissed) return null;
+
+  const handleDismiss = () => {
+    sessionStorage.setItem(DISMISS_KEY, today);
+    setDismissed(true);
+  };
 
   return (
     <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-3">
@@ -28,7 +38,7 @@ export function OverdueBanner({ graceRemaining }: OverdueBannerProps) {
           </p>
         </div>
         <button
-          onClick={() => setDismissed(true)}
+          onClick={handleDismiss}
           className="text-amber-500 hover:text-amber-600 shrink-0"
         >
           <X className="w-4 h-4" />

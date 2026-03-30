@@ -39,7 +39,7 @@ export function SubscriptionBlockedPage({ status, plan }: SubscriptionBlockedPag
   const config = STATUS_CONFIG[status];
   const Icon = config.icon;
 
-  const whatsappUrl = `https://wa.me/5511999999999?text=${encodeURIComponent(
+  const whatsappUrl = `https://wa.me/5548991897070?text=${encodeURIComponent(
     `Olá, preciso de ajuda com minha assinatura (status: ${status}, plano: ${plan || "N/A"}).`
   )}`;
 
