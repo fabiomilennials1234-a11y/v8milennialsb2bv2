@@ -1235,8 +1235,8 @@ export const LeadDetailDrawer = memo(function LeadDetailDrawer({
                 </TabsContent>
 
                 {/* ─── Tab 4: IA Copilot ──────────────── */}
-                <TabsContent value="ai" className="m-0">
-                  <ConversationHistoryTab leadId={lead.id} leadName={lead.name} />
+                <TabsContent value="ai" className="m-0 flex-1 flex flex-col min-h-0 h-[500px]">
+                  <ConversationHistoryTab leadId={lead.id} leadName={lead.name} leadPhone={lead.phone} />
                 </TabsContent>
 
                 {/* ─── Tab 5: Pipeline ────────────────── */}

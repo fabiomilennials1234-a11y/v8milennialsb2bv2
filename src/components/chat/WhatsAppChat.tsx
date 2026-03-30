@@ -124,7 +124,7 @@ import { toast } from "sonner";
  * Isso evita CORS: o navegador recebe o áudio da mesma origem (Supabase Functions com CORS),
  * em vez de pedir direto ao Storage (que pode bloquear por CORS).
  */
-function getAudioPlaybackUrl(mediaUrl: string | null): string | null {
+export function getAudioPlaybackUrl(mediaUrl: string | null): string | null {
   if (!mediaUrl) return null;
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
   if (!supabaseUrl?.trim()) return mediaUrl;
@@ -139,7 +139,7 @@ function getAudioPlaybackUrl(mediaUrl: string | null): string | null {
 }
 
 /** Error boundary só para a área de mensagens; evita "fewer hooks" ao não desmontar o ChatWindow */
-class MessagesAreaErrorBoundary extends Component<
+export class MessagesAreaErrorBoundary extends Component<
   { children: React.ReactNode },
   { hasError: boolean }
 > {
@@ -166,7 +166,7 @@ class MessagesAreaErrorBoundary extends Component<
   }
 }
 
-function formatMessageTime(timestamp: string): string {
+export function formatMessageTime(timestamp: string): string {
   if (!timestamp) return "--:--";
   const date = new Date(timestamp);
   if (Number.isNaN(date.getTime())) return "--:--";
@@ -192,7 +192,7 @@ function formatContactTime(timestamp: string): string {
   return format(date, "dd/MM", { locale: ptBR });
 }
 
-function MessageStatusIcon({ status }: { status: string }) {
+export function MessageStatusIcon({ status }: { status: string }) {
   switch (status) {
     case "pending":
       return <Clock className="w-2.5 h-2.5 text-muted-foreground/40" />;
@@ -1044,7 +1044,7 @@ function MessageDocument({
   );
 }
 
-function MessageBubble({
+export function MessageBubble({
   message,
   onImagePreview,
 }: {
@@ -1146,7 +1146,7 @@ function MessageBubble({
 }
 
 // Componente de gravação de áudio
-function AudioRecorder({
+export function AudioRecorder({
   onRecorded,
   onCancel,
 }: {
@@ -1290,7 +1290,7 @@ function AudioRecorder({
 }
 
 // Modal de preview de imagem
-function ImagePreviewModal({
+export function ImagePreviewModal({
   imageUrl,
   isOpen,
   onClose,
