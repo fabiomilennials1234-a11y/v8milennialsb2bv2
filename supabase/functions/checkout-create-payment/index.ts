@@ -207,25 +207,6 @@ function jsonResp(
   });
 }
 
-/** Best-effort coupon usage increment — never throws. */
-async function incrementCouponUses(
-  supabase: ReturnType<typeof createClient>,
-  couponId: string,
-): Promise<void> {
-  try {
-    // PostgREST does not support expressions in .update(), so we use a raw RPC.
-    // If the RPC doesn't exist yet, the error is swallowed and logged.
-    const { error } = await supabase.rpc("increment_coupon_uses", {
-      p_coupon_id: couponId,
-    });
-    if (error) {
-      console.warn("[checkout-create-payment] increment_coupon_uses failed:", error.message);
-    }
-  } catch (e) {
-    console.warn("[checkout-create-payment] increment_coupon_uses threw:", e);
-  }
-}
-
 // ─── Edge Function Handler ────────────────────────────────────────────────────
 
 serve(
@@ -298,6 +279,18 @@ serve(
     }
     if (!Number.isInteger(turbo_count) || turbo_count < 0) {
       return jsonResp({ success: false, error: "turbo_count inválido (mínimo 0)" }, 400, cors);
+    }
+    if (user_count > 100) {
+      return jsonResp(
+        { success: false, error: "Máximo de 100 usuários. Para mais, fale com vendas." },
+        400, cors,
+      );
+    }
+    if (turbo_count > 10) {
+      return jsonResp(
+        { success: false, error: "Máximo de 10 copilots Turbo." },
+        400, cors,
+      );
     }
     if (!["pix", "credit_card"].includes(payment_method)) {
       return jsonResp(
@@ -550,8 +543,7 @@ serve(
         },
       });
 
-      // Increment coupon usage (best-effort)
-      if (couponId) await incrementCouponUses(supabase, couponId);
+      // Coupon increment moved to checkout-provision-org (after payment confirmation)
 
       return jsonResp(
         {
@@ -609,8 +601,7 @@ serve(
         },
       });
 
-      // Increment coupon usage (best-effort)
-      if (couponId) await incrementCouponUses(supabase, couponId);
+      // Coupon increment moved to checkout-provision-org (after payment confirmation)
 
       await logRuntime({
         module: "checkout",

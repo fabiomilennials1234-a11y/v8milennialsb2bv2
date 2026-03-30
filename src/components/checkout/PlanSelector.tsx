@@ -239,7 +239,8 @@ export function PlanSelector({
                           e.stopPropagation();
                           setUserCount(state.user_count + 1);
                         }}
-                        className="h-7 w-7 rounded-lg border border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                        disabled={state.user_count >= 100}
+                        className="h-7 w-7 rounded-lg border border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                       >
                         <Plus className="h-3.5 w-3.5" />
                       </button>
@@ -248,6 +249,11 @@ export function PlanSelector({
                   {plan.min_users > 1 && (
                     <p className="text-[10px] text-muted-foreground/60 mt-1.5 text-center">
                       Minimo de {plan.min_users} usuarios
+                    </p>
+                  )}
+                  {state.user_count >= 100 && (
+                    <p className="text-[10px] text-primary mt-1.5 text-center">
+                      Para mais de 100 usuarios, fale com vendas
                     </p>
                   )}
                 </motion.div>
@@ -318,7 +324,8 @@ export function PlanSelector({
                         onClick={() =>
                           setTurboCount(state.turbo_count + 1)
                         }
-                        className="h-7 w-7 rounded-lg border border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                        disabled={state.turbo_count >= 10}
+                        className="h-7 w-7 rounded-lg border border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                       >
                         <Plus className="h-3.5 w-3.5" />
                       </button>

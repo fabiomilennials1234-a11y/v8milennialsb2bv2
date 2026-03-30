@@ -43,10 +43,12 @@ export function OrgSetup({
   useEffect(() => {
     const currentSlots = state.team_members.length;
     if (currentSlots < state.user_count) {
-      // We need to add more slots — the caller can do this via addTeamMember
-      // but we handle it here for auto-fill
+      const slotsNeeded = state.user_count - currentSlots;
+      for (let i = 0; i < slotsNeeded; i++) {
+        addTeamMember();
+      }
     }
-  }, [state.user_count, state.team_members.length]);
+  }, [state.user_count, state.team_members.length, addTeamMember]);
 
   const remainingSlots = Math.max(
     state.user_count - state.team_members.length,

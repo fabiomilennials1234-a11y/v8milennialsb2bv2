@@ -31,7 +31,7 @@ export default function Checkout() {
           .maybeSingle();
 
         if (data?.organization_id) {
-          navigate("/", { replace: true });
+          navigate("/dashboard", { replace: true });
           return;
         }
       } catch {

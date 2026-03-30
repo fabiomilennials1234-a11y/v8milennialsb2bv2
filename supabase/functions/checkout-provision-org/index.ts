@@ -428,6 +428,20 @@ serve(
       // Non-fatal: the org is live; metadata cleanup can be retried.
     }
 
+    // ── 7b. Increment coupon usage (after payment confirmed) ─────────────────
+    if (coupon_id) {
+      try {
+        const { error: couponErr } = await supabase.rpc("increment_coupon_uses", {
+          p_coupon_id: coupon_id,
+        });
+        if (couponErr) {
+          console.warn("[checkout-provision-org] increment_coupon_uses failed:", couponErr.message);
+        }
+      } catch (e) {
+        console.warn("[checkout-provision-org] increment_coupon_uses threw:", e);
+      }
+    }
+
     // ── 8. Log success ────────────────────────────────────────────────────────
     await logRuntime({
       module: "checkout",

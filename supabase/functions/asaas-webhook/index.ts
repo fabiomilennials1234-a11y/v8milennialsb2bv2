@@ -204,6 +204,35 @@ async function handlePaymentConfirmed(
 
     console.log(`[asaas-webhook] ${eventName}: first payment — provisioning org for user ${userId}`);
 
+    // ── Validate payment amount against checkout_data (C3 + M1) ──────────
+    const { data: { user: payingUser } } = await supabase.auth.admin.getUserById(userId);
+    const checkoutData = (payingUser?.user_metadata as Record<string, unknown>)?.checkout_data as
+      | { total_cycle?: number; coupon_id?: string }
+      | undefined;
+
+    if (checkoutData?.total_cycle != null) {
+      const expectedAmount = checkoutData.total_cycle;
+      const actualAmount = payment.value;
+      const tolerance = expectedAmount * 0.01; // 1% tolerance for rounding
+
+      if (Math.abs(actualAmount - expectedAmount) > tolerance) {
+        console.error(
+          `[asaas-webhook] ${eventName}: amount mismatch — expected ${expectedAmount}, got ${actualAmount} (payment ${payment.id})`,
+        );
+        await logRuntime({
+          module: "asaas-webhook",
+          action: `${eventName.toLowerCase()}_amount_mismatch`,
+          status: "error",
+          errorMessage: `Expected ${expectedAmount}, received ${actualAmount}`,
+          entityType: "payment",
+          entityId: payment.id,
+          triggeredBy: userId,
+          payloadSnapshot: { expected: expectedAmount, actual: actualAmount },
+        });
+        return; // Skip provisioning — possible fake/partial payment
+      }
+    }
+
     const provisionRes = await fetch(
       `${SUPABASE_URL}/functions/v1/checkout-provision-org`,
       {

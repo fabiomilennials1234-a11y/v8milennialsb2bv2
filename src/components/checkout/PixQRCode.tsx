@@ -50,6 +50,8 @@ export function PixQRCode({
           clearInterval(intervalRef.current);
           intervalRef.current = null;
         }
+        // Refresh session so JWT has updated metadata (subscription_status, org_id)
+        await supabase.auth.refreshSession();
         onConfirmed();
       }
     } catch {

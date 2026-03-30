@@ -30,6 +30,8 @@ export interface CheckoutState {
   team_members: TeamMember[];
   payment_method: "pix" | "credit_card" | null;
   payment_id: string | null;
+  qr_code_base64: string | null;
+  pix_payload: string | null;
   payment_status:
     | "idle"
     | "processing"
@@ -81,6 +83,8 @@ const INITIAL_STATE: CheckoutState = {
   team_members: [],
   payment_method: null,
   payment_id: null,
+  qr_code_base64: null,
+  pix_payload: null,
   payment_status: "idle",
   error: null,
 };
@@ -303,14 +307,14 @@ export function useCheckout() {
   const setUserCount = useCallback(
     (count: number) => {
       const minUsers = currentPlan?.min_users ?? 1;
-      const clamped = Math.max(count, minUsers);
+      const clamped = Math.min(Math.max(count, minUsers), 100);
       setState((prev) => ({ ...prev, user_count: clamped }));
     },
     [currentPlan],
   );
 
   const setTurboCount = useCallback((count: number) => {
-    setState((prev) => ({ ...prev, turbo_count: Math.max(0, count) }));
+    setState((prev) => ({ ...prev, turbo_count: Math.min(Math.max(0, count), 10) }));
   }, []);
 
   const applyCoupon = useCallback(
@@ -429,9 +433,15 @@ export function useCheckout() {
           setState((prev) => ({
             ...prev,
             payment_id: data.payment_id,
+            qr_code_base64: data.qr_code ?? null,
+            pix_payload: data.qr_code_payload ?? null,
             payment_status: "awaiting_pix",
           }));
         } else {
+          // Refresh session so JWT has updated metadata after card confirmation
+          if (data.status === "confirmed") {
+            await supabase.auth.refreshSession();
+          }
           setState((prev) => ({
             ...prev,
             payment_id: data.payment_id,

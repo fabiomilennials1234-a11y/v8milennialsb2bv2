@@ -76,9 +76,27 @@ export function PaymentStep({
 
   // ── Card validation ──────────────────────────────────────────────────────
   const cardNumberClean = cardNumber.replace(/\s/g, "");
+
+  // Check if expiry is not in the past
+  const isExpiryValid = (() => {
+    if (cardExpiry.length !== 5) return false;
+    const [mm, yy] = cardExpiry.split("/");
+    const expiryMonth = parseInt(mm, 10);
+    const expiryYear = 2000 + parseInt(yy, 10);
+    if (isNaN(expiryMonth) || isNaN(expiryYear)) return false;
+    if (expiryMonth < 1 || expiryMonth > 12) return false;
+    const now = new Date();
+    const currentMonth = now.getMonth() + 1;
+    const currentYear = now.getFullYear();
+    return expiryYear > currentYear || (expiryYear === currentYear && expiryMonth >= currentMonth);
+  })();
+
+  const expiryTouched = cardExpiry.length === 5;
+  const showExpiryError = expiryTouched && !isExpiryValid;
+
   const isCardValid =
     cardNumberClean.length >= 13 &&
-    cardExpiry.length === 5 &&
+    isExpiryValid &&
     cardCvv.length >= 3 &&
     cardHolder.trim().length >= 3;
 
@@ -194,11 +212,14 @@ export function PaymentStep({
                   placeholder="MM/AA"
                   value={cardExpiry}
                   onChange={(e) => setCardExpiry(maskExpiry(e.target.value))}
-                  className="h-12 text-base font-mono"
+                  className={`h-12 text-base font-mono ${showExpiryError ? "border-destructive" : ""}`}
                   inputMode="numeric"
                   autoComplete="cc-exp"
                   disabled={isProcessing}
                 />
+                {showExpiryError && (
+                  <p className="text-xs text-destructive">Cartao expirado</p>
+                )}
               </div>
               <div className="space-y-1.5">
                 <Label className="text-sm font-medium">CVV</Label>
@@ -308,6 +329,8 @@ export function PaymentStep({
           >
             <PixQRCode
               paymentId={state.payment_id}
+              qrCodeBase64={state.qr_code_base64 ?? undefined}
+              pixPayload={state.pix_payload ?? undefined}
               onConfirmed={onPaymentConfirmed}
             />
           </motion.div>
