@@ -94,7 +94,6 @@ export function useUpdateMessageTemplate() {
           command: payload.command.toLowerCase().trim(),
           display_name: payload.display_name.trim(),
           body: payload.body,
-          updated_at: new Date().toISOString(),
         } as any)
         .eq("id", payload.id);
       if (error) throw error;

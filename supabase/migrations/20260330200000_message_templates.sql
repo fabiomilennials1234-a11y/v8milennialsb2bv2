@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS public.message_templates (
   command          TEXT        NOT NULL,
   display_name     TEXT        NOT NULL,
   body             TEXT        NOT NULL,
-  created_by       UUID        NOT NULL REFERENCES auth.users(id) ON DELETE SET NULL,
+  created_by       UUID        REFERENCES auth.users(id) ON DELETE SET NULL,
   updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
@@ -27,6 +27,14 @@ CREATE TABLE IF NOT EXISTS public.message_templates (
 COMMENT ON TABLE public.message_templates IS 'Templates de mensagem com slash commands por organização';
 COMMENT ON COLUMN public.message_templates.command IS 'Slug do comando sem / (ex: saudacao). Lowercase, números, hifens.';
 COMMENT ON COLUMN public.message_templates.body IS 'Corpo da mensagem com variáveis {nome}, {empresa}, etc.';
+
+-- Auto-update updated_at on row modification
+CREATE OR REPLACE FUNCTION public.message_templates_updated_at()
+RETURNS TRIGGER AS $$ BEGIN NEW.updated_at = NOW(); RETURN NEW; END; $$ LANGUAGE plpgsql;
+
+CREATE TRIGGER set_message_templates_updated_at
+  BEFORE UPDATE ON public.message_templates
+  FOR EACH ROW EXECUTE FUNCTION public.message_templates_updated_at();
 
 CREATE INDEX IF NOT EXISTS idx_message_templates_org
   ON public.message_templates (organization_id);

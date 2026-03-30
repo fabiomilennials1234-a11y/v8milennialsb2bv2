@@ -33,12 +33,6 @@ export function SlashCommandPopover({
     setSelectedIndex(0);
   }, [search]);
 
-  useEffect(() => {
-    if (filtered.length === 0 && search.length > 0) {
-      onClose();
-    }
-  }, [filtered.length, search, onClose]);
-
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if (e.key === "ArrowDown") {

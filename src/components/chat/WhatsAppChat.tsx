@@ -1353,6 +1353,22 @@ function ChatWindow({
   const [newMessage, setNewMessage] = useState("");
   const [showSlashPopover, setShowSlashPopover] = useState(false);
   const { data: templates } = useMessageTemplates();
+
+  // Lead data for template variable resolution
+  const { data: leadForTemplates } = useQuery({
+    queryKey: ["lead-for-templates", leadId],
+    queryFn: async () => {
+      if (!leadId) return null;
+      const { data } = await supabase
+        .from("leads")
+        .select("name, company, email, phone, source, interest, segment, campaign_name")
+        .eq("id", leadId)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!leadId,
+    staleTime: 1000 * 60 * 5,
+  });
   const [isRecording, setIsRecording] = useState(false);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
@@ -1454,10 +1470,16 @@ function ChatWindow({
 
   const handleSlashSelect = (template: MessageTemplate) => {
     const leadCtx: LeadContext = {
-      name: selectedContact?.lead_name ?? selectedContact?.push_name ?? undefined,
-      phone: phoneNumber ?? undefined,
+      name: leadForTemplates?.name ?? selectedContact?.lead_name ?? selectedContact?.push_name ?? undefined,
+      company: leadForTemplates?.company ?? undefined,
+      email: leadForTemplates?.email ?? undefined,
+      phone: leadForTemplates?.phone ?? phoneNumber ?? undefined,
+      source: leadForTemplates?.source ?? undefined,
+      interest: leadForTemplates?.interest ?? undefined,
+      segment: leadForTemplates?.segment ?? undefined,
+      campaign_name: leadForTemplates?.campaign_name ?? undefined,
     };
-    const attendantCtx: AttendantContext = { name: undefined };
+    const attendantCtx: AttendantContext = { name: teamMemberCW?.name ?? undefined };
     const resolved = resolveVariables(template.body, leadCtx, attendantCtx);
     setNewMessage(resolved);
     setShowSlashPopover(false);
