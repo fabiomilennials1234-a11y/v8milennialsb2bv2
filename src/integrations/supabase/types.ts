@@ -2860,45 +2860,81 @@ export type Database = {
       }
       custom_pipelines: {
         Row: {
+          bonus_description: string | null
+          bonus_value: number | null
           color: string | null
           created_at: string | null
           created_by: string | null
           description: string | null
+          ends_at: string | null
           icon: string | null
           id: string
+          individual_goal: number | null
           is_active: boolean | null
+          lead_source_config: Json | null
+          lifecycle_type: string
           name: string
+          objective_pipe_type: string | null
+          objective_stage_key: string | null
           organization_id: string
           position: number | null
           slug: string
+          starts_at: string | null
+          status: string
+          team_goal: number | null
+          template_type: string | null
           updated_at: string | null
         }
         Insert: {
+          bonus_description?: string | null
+          bonus_value?: number | null
           color?: string | null
           created_at?: string | null
           created_by?: string | null
           description?: string | null
+          ends_at?: string | null
           icon?: string | null
           id?: string
+          individual_goal?: number | null
           is_active?: boolean | null
+          lead_source_config?: Json | null
+          lifecycle_type?: string
           name: string
+          objective_pipe_type?: string | null
+          objective_stage_key?: string | null
           organization_id: string
           position?: number | null
           slug: string
+          starts_at?: string | null
+          status?: string
+          team_goal?: number | null
+          template_type?: string | null
           updated_at?: string | null
         }
         Update: {
+          bonus_description?: string | null
+          bonus_value?: number | null
           color?: string | null
           created_at?: string | null
           created_by?: string | null
           description?: string | null
+          ends_at?: string | null
           icon?: string | null
           id?: string
+          individual_goal?: number | null
           is_active?: boolean | null
+          lead_source_config?: Json | null
+          lifecycle_type?: string
           name?: string
+          objective_pipe_type?: string | null
+          objective_stage_key?: string | null
           organization_id?: string
           position?: number | null
           slug?: string
+          starts_at?: string | null
+          status?: string
+          team_goal?: number | null
+          template_type?: string | null
           updated_at?: string | null
         }
         Relationships: [
