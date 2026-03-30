@@ -137,7 +137,9 @@ function LayoutWrapper({ children }: { children: React.ReactNode }) {
   return (
     <OrgFeaturesProvider>
       <OnboardingGate>
-        <MainLayout>{children}</MainLayout>
+        <SubscriptionProtectedRoute>
+          <MainLayout>{children}</MainLayout>
+        </SubscriptionProtectedRoute>
       </OnboardingGate>
     </OrgFeaturesProvider>
   );
@@ -524,11 +526,11 @@ function AppRoutes() {
         path="/copilot/novo"
         element={
           <ProtectedRoute>
-            <SubscriptionProtectedRoute requireActive>
-              <LayoutWrapper>
+            <LayoutWrapper>
+              <SubscriptionProtectedRoute requireActive>
                 <CopilotPlayground />
-              </LayoutWrapper>
-            </SubscriptionProtectedRoute>
+              </SubscriptionProtectedRoute>
+            </LayoutWrapper>
           </ProtectedRoute>
         }
       />
@@ -536,11 +538,11 @@ function AppRoutes() {
         path="/copilot/:id/editar"
         element={
           <ProtectedRoute>
-            <SubscriptionProtectedRoute requireActive>
-              <LayoutWrapper>
+            <LayoutWrapper>
+              <SubscriptionProtectedRoute requireActive>
                 <CopilotPlayground />
-              </LayoutWrapper>
-            </SubscriptionProtectedRoute>
+              </SubscriptionProtectedRoute>
+            </LayoutWrapper>
           </ProtectedRoute>
         }
       />
@@ -548,11 +550,11 @@ function AppRoutes() {
         path="/copilot/novo-wizard"
         element={
           <ProtectedRoute>
-            <SubscriptionProtectedRoute requireActive>
-              <LayoutWrapper>
+            <LayoutWrapper>
+              <SubscriptionProtectedRoute requireActive>
                 <CopilotWizard />
-              </LayoutWrapper>
-            </SubscriptionProtectedRoute>
+              </SubscriptionProtectedRoute>
+            </LayoutWrapper>
           </ProtectedRoute>
         }
       />
