@@ -5,7 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { OrgFeaturesProvider } from "@/contexts/OrgFeaturesContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
@@ -143,13 +143,29 @@ function LayoutWrapper({ children }: { children: React.ReactNode }) {
   );
 }
 
+// Root route: Landing for visitors, redirect for authenticated users
+function RootRedirect() {
+  const { user, loading } = useAuth();
+
+  if (loading) return <PageLoader />;
+
+  if (!user) return <Landing />;
+
+  // Authenticated: check if pending payment
+  if (user.user_metadata?.subscription_status === 'pending_payment') {
+    return <Navigate to="/checkout" replace />;
+  }
+
+  return <Navigate to="/dashboard" replace />;
+}
+
 // Auth route that redirects to dashboard if already logged in
 function AuthRoute() {
   const { user, loading } = useAuth();
-  
+
   if (loading) return null;
-  if (user) return <Navigate to="/" replace />;
-  
+  if (user) return <Navigate to="/dashboard" replace />;
+
   return <Auth />;
 }
 
@@ -196,8 +212,10 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      <Route path="/" element={<RootRedirect />} />
+      <Route path="/pricing" element={<Navigate to="/#pricing" replace />} />
       <Route
-        path="/"
+        path="/dashboard"
         element={
           <ProtectedRoute>
             <LayoutWrapper>

@@ -1,5 +1,5 @@
 import { ReactNode } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCurrentTeamMember } from '@/hooks/useTeamMembers';
 import { useMasterAuth } from '@/hooks/useMasterAuth';
@@ -11,10 +11,14 @@ interface ProtectedRouteProps {
   requireOrganization?: boolean;
 }
 
+// Paths that a pending_payment user is allowed to visit
+const CHECKOUT_PATHS = ['/checkout', '/checkout/success'];
+
 export function ProtectedRoute({ children, requireOrganization = true }: ProtectedRouteProps) {
   const { user, loading: authLoading, signOut } = useAuth();
   const { data: teamMember, isLoading: teamMemberLoading, error: teamMemberError } = useCurrentTeamMember();
   const { isMaster, isLoading: masterLoading } = useMasterAuth();
+  const location = useLocation();
 
   // Loading state - auth ou master
   if (authLoading || masterLoading) {
@@ -31,6 +35,14 @@ export function ProtectedRoute({ children, requireOrganization = true }: Protect
   // Not authenticated
   if (!user) {
     return <Navigate to="/auth" replace />;
+  }
+
+  // Pending payment: gate all protected routes except checkout itself
+  if (
+    user.user_metadata?.subscription_status === 'pending_payment' &&
+    !CHECKOUT_PATHS.includes(location.pathname)
+  ) {
+    return <Navigate to="/checkout" replace />;
   }
 
   // Loading team member data (master bypass: virtual member resolve assíncrono)
