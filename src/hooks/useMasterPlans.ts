@@ -11,8 +11,22 @@ export interface Plan {
   name: string;
   display_name: string;
   description: string | null;
+  // Legacy pricing (kept for backward compat)
   price_monthly: number;
   price_yearly: number;
+  // New Torque pricing model
+  price_per_user_monthly: number | null;
+  base_price_monthly: number | null;
+  min_users: number;
+  included_users: number;
+  included_copilots: number;
+  extra_user_price: number;
+  // Discounts
+  discount_semester_pct: number;
+  discount_annual_pct: number;
+  discount_volume_pct: number;
+  discount_volume_min: number;
+  // Features & limits
   features: Record<string, boolean>;
   limits: Record<string, number>;
   is_active: boolean;
@@ -31,7 +45,7 @@ export function useMasterPlans() {
         .select("*")
         .order("position");
       if (error) throw error;
-      return data as Plan[];
+      return data as unknown as Plan[];
     },
   });
 }
@@ -44,7 +58,7 @@ export function useUpdatePlan() {
       const { id, ...rest } = payload;
       const { error } = await supabase
         .from("subscription_plans")
-        .update(rest)
+        .update(rest as any)
         .eq("id", id);
       if (error) throw error;
     },
