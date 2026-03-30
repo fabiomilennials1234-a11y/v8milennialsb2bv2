@@ -193,3 +193,44 @@ export function useUpdateScheduledMessage() {
     },
   });
 }
+
+/** Todas as mensagens agendadas do membro logado (ou da org para admin) */
+export function useMyScheduledMessages(filters?: {
+  showCompleted?: boolean;
+  assignedTo?: string;
+}) {
+  const { organizationId } = useOrganization();
+  const { data: member } = useCurrentTeamMember();
+
+  return useQuery({
+    queryKey: ["scheduled-messages", "my", organizationId, member?.id, filters],
+    queryFn: async () => {
+      if (!organizationId || !member) return [];
+
+      let query = supabase
+        .from("scheduled_user_messages")
+        .select("*, lead:leads(name, company, phone)")
+        .eq("organization_id", organizationId)
+        .order("scheduled_at", { ascending: true });
+
+      if (filters?.assignedTo && filters.assignedTo !== "all") {
+        query = query.eq("created_by", filters.assignedTo);
+      } else if (!filters?.assignedTo) {
+        query = query.eq("created_by", member.id);
+      }
+
+      if (filters?.showCompleted) {
+        query = query.in("status", ["scheduled", "sent", "cancelled", "failed"]);
+      } else {
+        query = query.eq("status", "scheduled");
+      }
+
+      const { data, error } = await query;
+      if (error) return [];
+      return data ?? [];
+    },
+    enabled: !!organizationId && !!member,
+    retry: false,
+    staleTime: 30_000,
+  });
+}
