@@ -402,6 +402,19 @@ export function distributePercentages(count: number): number[] {
   return percentages;
 }
 
+/** Metrics returned by get_split_ab_metrics RPC */
+export interface SplitAbVariantMetrics {
+  variant_id: string;
+  variant_label: string;
+  total_leads: number;
+  total_executions: number;
+  messages_sent: number;
+  completed: number;
+  failed: number;
+  waiting_response: number;
+  in_progress: number;
+}
+
 export interface WebhookCallNodeData {
   type: "webhook_call";
   label: string;
