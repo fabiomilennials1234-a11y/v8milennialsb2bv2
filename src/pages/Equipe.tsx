@@ -52,6 +52,8 @@ import { useOrganization } from "@/hooks/useOrganization";
 import { useIsAdmin } from "@/hooks/useUserRole";
 import { MemberPermissions } from "@/components/team/MemberPermissions";
 import { useProfiles } from "@/hooks/useProfiles";
+import { useSeatUsage } from "@/hooks/useSeatUsage";
+import { SeatUsageBar } from "@/components/team/SeatUsageBar";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 type TeamRole = "admin" | "member";
@@ -102,6 +104,7 @@ export default function Equipe() {
   const { organizationId } = useOrganization();
   const { isAdmin } = useIsAdmin();
   const queryClient = useQueryClient();
+  const { data: seatUsage } = useSeatUsage(organizationId);
 
   const { data: orgKeyData } = useQuery({
     queryKey: ["organization", "user_creation_key", organizationId],
@@ -251,6 +254,7 @@ export default function Equipe() {
         toast.success("Membro removido e dados de cadastro apagados. O email pode ser reutilizado.");
       }
       queryClient.invalidateQueries({ queryKey: ["team_members"] });
+      queryClient.invalidateQueries({ queryKey: ["seat-usage"] });
     } catch (error) {
       toast.error("Erro ao remover membro. Tente novamente.");
       console.error(error);
@@ -351,6 +355,7 @@ export default function Equipe() {
         toast.success("Usuário criado. A pessoa pode entrar com este email e a senha que você definiu.");
       }
       queryClient.invalidateQueries({ queryKey: ["team_members"] });
+      queryClient.invalidateQueries({ queryKey: ["seat-usage"] });
     } catch (err) {
       toast.error("Erro ao criar usuário. Tente novamente.");
       console.error(err);
@@ -582,7 +587,7 @@ export default function Equipe() {
             </Dialog>
             <Dialog open={isCreateUserDialogOpen} onOpenChange={handleCreateUserDialogOpen}>
               <DialogTrigger asChild>
-                <Button className="gap-2">
+                <Button className="gap-2" disabled={seatUsage ? !seatUsage.can_add : false}>
                   <UserPlus className="w-4 h-4" />
                   Criar usuário
                 </Button>
@@ -697,6 +702,13 @@ export default function Equipe() {
           </div>
         )}
       </div>
+
+      {seatUsage && <SeatUsageBar usage={seatUsage} />}
+      {seatUsage && !seatUsage.can_add && (
+        <p className="text-xs text-destructive">
+          Limite de seats atingido. Faça upgrade para adicionar mais membros.
+        </p>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
