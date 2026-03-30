@@ -40,7 +40,8 @@ export type FeatureKey =
   // Legacy campaign keys (deprecated — use funnels_template_* instead)
   | "campaigns_indicacao"
   | "campaigns_prospeccao"
-  | "campaigns_reativacao";
+  | "campaigns_reativacao"
+  | "message_templates";
 
 export type LimitKey =
   | "max_leads"
@@ -105,6 +106,7 @@ export const FEATURES: FeatureMeta[] = [
   // Funnels v2
   { key: "funnels_custom", label: "Funis Customizados", description: "Criar funis personalizados", icon: "GitBranch", category: "modules" },
   { key: "carteira", label: "Carteira", description: "Gestão de carteira de clientes", icon: "TrendingUp", category: "modules", sidebarPath: "/upsell" },
+  { key: "message_templates", label: "Templates", description: "Modelos de mensagem com slash commands", icon: "FileText", category: "modules", sidebarPath: "/templates" },
   { key: "funnels_template_indicacao", label: "Funil de Indicação", description: "Funis temporários de indicação", icon: "Heart", category: "modules" },
   { key: "funnels_template_prospeccao", label: "Funil de Prospecção", description: "Funis temporários de prospecção ativa", icon: "Target", category: "modules" },
   { key: "funnels_template_reativacao", label: "Funil de Reativação", description: "Funis temporários de reativação de base", icon: "RefreshCw", category: "modules" },
@@ -142,6 +144,7 @@ SIDEBAR_FEATURE_MAP["/pipe-whatsapp"] = "funnels";
 SIDEBAR_FEATURE_MAP["/pipe-confirmacao"] = "funnels";
 SIDEBAR_FEATURE_MAP["/pipe-propostas"] = "funnels";
 SIDEBAR_FEATURE_MAP["/upsell"] = "carteira";
+SIDEBAR_FEATURE_MAP["/templates"] = "message_templates";
 
 // ─── Campaign Type → Feature Key Map (legacy) ────────────────
 export const CAMPAIGN_TYPE_FEATURE_MAP: Record<string, FeatureKey> = {

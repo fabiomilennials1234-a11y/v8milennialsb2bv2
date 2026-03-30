@@ -36,6 +36,7 @@ import {
   Star,
   ShoppingBag,
   Gift,
+  FileText,
 } from "lucide-react";
 import torqueLogo from "@/assets/torque-logo.png";
 import torqueIcon from "@/assets/torque-icon.png";
@@ -100,6 +101,7 @@ const navItems: NavItemWithChildren[] = [
   { label: "Comissões", icon: DollarSign, path: "/comissoes" },
   { label: "Copilot", icon: Bot, path: "/copilot" },
   { label: "Automações", icon: Workflow, path: "/automacoes" },
+  { label: "Templates", icon: FileText, path: "/templates" },
 ];
 
 const adminNavItems: NavItem[] = [
@@ -153,6 +155,7 @@ const SIDEBAR_VIEW_PERMISSIONS: Record<string, string> = {
   "/comissoes": "commissions.view",
   "/copilot": "copilot.view",
   "/automacoes": "workflows.view",
+  "/templates": "message_templates.view",
   "/equipe": "team.view",
   "/produtos": "products.view",
   "/configuracoes": "settings.view",

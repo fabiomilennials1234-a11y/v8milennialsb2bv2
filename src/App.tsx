@@ -63,6 +63,7 @@ const ApiDocs = lazy(() => lazyRetry(() => import("./pages/ApiDocs")));
 const CopilotWizard = lazy(() => lazyRetry(() => import("@/components/copilot/CopilotWizard").then(m => ({ default: m.CopilotWizard }))));
 const CopilotPlayground = lazy(() => lazyRetry(() => import("@/components/copilot/playground").then(m => ({ default: m.CopilotPlayground }))));
 const CopilotWizardTest = lazy(() => lazyRetry(() => import("./pages/CopilotWizardTest")));
+const MessageTemplates = lazy(() => lazyRetry(() => import("./pages/MessageTemplates")));
 const Automacoes = lazy(() => lazyRetry(() => import("./pages/Automacoes")));
 const AutomacoesEditor = lazy(() => lazyRetry(() => import("./pages/AutomacoesEditor")));
 const AutomacoesExecucoes = lazy(() => lazyRetry(() => import("./pages/AutomacoesExecucoes")));
@@ -602,6 +603,16 @@ function AppRoutes() {
               <PermissionProtectedRoute featureKey="workflows.view">
                 <AutomacoesExecucoes />
               </PermissionProtectedRoute>
+            </LayoutWrapper>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/templates"
+        element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <MessageTemplates />
             </LayoutWrapper>
           </ProtectedRoute>
         }
