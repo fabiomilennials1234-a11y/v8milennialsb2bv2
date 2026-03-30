@@ -1,26 +1,29 @@
 /**
- * Rota protegida que verifica subscription ativa
+ * SubscriptionProtectedRoute — guard de lifecycle completo.
  *
- * Redireciona para página de subscription required se:
- * - Usuário não tem subscription válida
- * - Subscription expirou
- * - Subscription está suspensa/cancelada
- *
- * Admin, Master e members com permissão de copilot bypassam requireActive.
- * Master bypassa TODA verificação de subscription.
+ * - Master users bypass everything.
+ * - billing_override orgs bypass everything.
+ * - 'active' / 'trial' → allowed (trial blocked if requireActive=true and not admin).
+ * - 'overdue' → allowed with OverdueBanner warning.
+ * - 'suspended' / 'cancelled' / 'expired' → SubscriptionBlockedPage.
  */
 
-import { ReactNode, useEffect, useState } from 'react';
-import { Navigate } from 'react-router-dom';
-import { useAuth } from '@/contexts/AuthContext';
-import { checkCurrentUserSubscription, type SubscriptionStatus } from '@/lib/subscription';
-import { useUserRole, useCanManageCopilot } from '@/hooks/useUserRole';
-import { useMasterAuth } from '@/hooks/useMasterAuth';
-import { Loader2 } from 'lucide-react';
+import { ReactNode, useEffect, useState } from "react";
+import { Navigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+import {
+  checkCurrentUserSubscription,
+  type SubscriptionStatus,
+} from "@/lib/subscription";
+import { useUserRole, useCanManageCopilot } from "@/hooks/useUserRole";
+import { useMasterAuth } from "@/hooks/useMasterAuth";
+import { Loader2 } from "lucide-react";
+import { OverdueBanner } from "@/components/subscription/OverdueBanner";
+import { SubscriptionBlockedPage } from "@/components/subscription/SubscriptionBlockedPage";
 
 interface SubscriptionProtectedRouteProps {
   children: ReactNode;
-  requireActive?: boolean; // Se true, requer subscription ativa (não trial). Admin e Master bypassam.
+  requireActive?: boolean;
 }
 
 export function SubscriptionProtectedRoute({
@@ -30,14 +33,17 @@ export function SubscriptionProtectedRoute({
   const { user, loading: authLoading } = useAuth();
   const { data: userRole, isLoading: roleLoading } = useUserRole();
   const { isMaster, isLoading: masterLoading } = useMasterAuth();
-  const { canManage: canManageCopilot, isLoading: copilotLoading } = useCanManageCopilot();
-  const [subscription, setSubscription] = useState<SubscriptionStatus | null>(null);
+  const { canManage: canManageCopilot, isLoading: copilotLoading } =
+    useCanManageCopilot();
+  const [subscription, setSubscription] = useState<SubscriptionStatus | null>(
+    null
+  );
   const [loading, setLoading] = useState(true);
 
-  const canBypassSubscription = isMaster || userRole?.role === 'admin' || canManageCopilot;
+  const canBypassSubscription =
+    isMaster || userRole?.role === "admin" || canManageCopilot;
 
   useEffect(() => {
-    // Master bypassa toda verificação de subscription
     if (isMaster && !masterLoading) {
       setLoading(false);
       return;
@@ -63,7 +69,7 @@ export function SubscriptionProtectedRoute({
     );
   }
 
-  // Master bypassa todas as verificações de subscription
+  // Master bypasses everything
   if (isMaster) {
     return <>{children}</>;
   }
@@ -73,19 +79,40 @@ export function SubscriptionProtectedRoute({
   }
 
   if (!subscription) {
-    // Usuário sem organização
     return <Navigate to="/subscription-required" replace />;
   }
 
-  if (!subscription.isValid) {
-    // Subscription inválida
-    return <Navigate to="/subscription-required" replace />;
+  // Blocked states — full-page block
+  if (subscription.isBlocked) {
+    return (
+      <SubscriptionBlockedPage
+        status={subscription.status as "suspended" | "cancelled" | "expired"}
+        plan={subscription.plan}
+      />
+    );
   }
 
-  if (requireActive && subscription.status === 'trial' && !canBypassSubscription) {
-    // Requer subscription ativa mas está em trial (admin bypassa)
-    return <Navigate to="/subscription-required?reason=trial_expired" replace />;
+  // Trial + requireActive check (only for premium features like copilot creation)
+  if (
+    requireActive &&
+    subscription.status === "trial" &&
+    !canBypassSubscription
+  ) {
+    return (
+      <Navigate to="/subscription-required?reason=trial_expired" replace />
+    );
   }
 
+  // Overdue — allow access but show warning banner
+  if (subscription.isOverdue) {
+    return (
+      <>
+        <OverdueBanner graceRemaining={subscription.graceRemaining ?? 0} />
+        {children}
+      </>
+    );
+  }
+
+  // Active or trial — normal access
   return <>{children}</>;
 }
