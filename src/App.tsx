@@ -39,6 +39,7 @@ const PipeConfirmacao = lazy(() => lazyRetry(() => import("./pages/PipeConfirmac
 const PipePropostas = lazy(() => lazyRetry(() => import("./pages/PipePropostas")));
 const PipeWhatsapp = lazy(() => lazyRetry(() => import("./pages/PipeWhatsapp")));
 const PipeFollowUps = lazy(() => lazyRetry(() => import("./pages/PipeFollowUps")));
+const Revisao = lazy(() => lazyRetry(() => import("./pages/Revisao")));
 const Performance = lazy(() => lazyRetry(() => import("./pages/Performance")));
 const Equipe = lazy(() => lazyRetry(() => import("./pages/Equipe")));
 const Comissoes = lazy(() => lazyRetry(() => import("./pages/Comissoes")));
@@ -307,7 +308,7 @@ function AppRoutes() {
           <ProtectedRoute>
             <LayoutWrapper>
               <PermissionProtectedRoute featureKey="followups.view">
-                <PipeFollowUps />
+                <Revisao />
               </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>

@@ -92,7 +92,7 @@ const navItems: NavItemWithChildren[] = [
   // { label: "Marketing", icon: BarChart2, path: "/marketing" },
   // { label: "Analytics", icon: BarChart3, path: "/analytics" },
   // { label: "Agenda", icon: CalendarDays, path: "/agenda" },
-  // { label: "Revisão", icon: Wrench, path: "/follow-ups" },
+  { label: "Revisão", icon: Wrench, path: "/follow-ups" },
   { label: "Chat", icon: Zap, path: "/chat" },
   { label: "Funis", icon: GitBranch, path: "/funis", children: [] }, // children set dynamically via displayConfig
   { label: "Leads", icon: Fuel, path: "/leads" },
