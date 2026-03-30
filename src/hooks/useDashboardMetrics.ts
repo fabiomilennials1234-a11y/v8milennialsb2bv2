@@ -236,9 +236,9 @@ export function useFunnelData(month?: number, year?: number) {
       const raw = Array.isArray(data) && data.length > 0 ? data[0] : data;
       const d = raw as Record<string, number> | null;
       return [
-        { label: "Leads", value: d?.funnelLeads ?? 0, color: "hsl(var(--primary))" },
-        { label: "Reuniões Marcadas", value: d?.funnelReunioes ?? 0, color: "hsl(var(--chart-2))" },
-        { label: "Compareceu", value: d?.funnelComparecidas ?? 0, color: "hsl(var(--chart-3))" },
+        { label: "Leads", value: d?.totalLeads ?? 0, color: "hsl(var(--primary))" },
+        { label: "Reuniões Marcadas", value: d?.funnelReunioesMarcadas ?? 0, color: "hsl(var(--chart-2))" },
+        { label: "Compareceu", value: d?.funnelCompareceu ?? 0, color: "hsl(var(--chart-3))" },
         { label: "Propostas", value: d?.funnelPropostas ?? 0, color: "hsl(var(--chart-4))" },
         { label: "Vendas", value: d?.funnelVendas ?? 0, color: "hsl(var(--chart-5))" },
       ];
