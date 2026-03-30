@@ -191,7 +191,7 @@ export function useIndividualGoals(month?: number, year?: number) {
           .lte("closed_at", endStr),
         supabase
           .from("pipe_confirmacao")
-          .select("responsible_id, sdr_id")
+          .select("responsible_id, sdr_id, closer_id")
           .eq("organization_id", organizationId)
           .eq("status", "compareceu")
           .not("metrics_period_at", "is", null)
@@ -199,7 +199,7 @@ export function useIndividualGoals(month?: number, year?: number) {
           .lte("metrics_period_at", endStr),
         supabase
           .from("pipe_confirmacao")
-          .select("responsible_id, sdr_id")
+          .select("responsible_id, sdr_id, closer_id")
           .eq("organization_id", organizationId)
           .eq("status", "compareceu")
           .is("metrics_period_at", null)
@@ -237,7 +237,7 @@ export function useIndividualGoals(month?: number, year?: number) {
         const goal = goals?.find(
           (g) => g.team_member_id === member.id && g.type === "reunioes"
         );
-        const currentValue = confData.filter((c) => (c.responsible_id || c.sdr_id) === member.id).length;
+        const currentValue = confData.filter((c) => c.responsible_id === member.id || c.sdr_id === member.id || c.closer_id === member.id).length;
         const targetValue = goal?.target_value || 0;
         return {
           id: member.id,
