@@ -94,7 +94,7 @@ const ACTION_CONFIG: Record<string, { icon: React.ReactNode; label: string; colo
   product_linked: { icon: <Package className="w-3.5 h-3.5" />, label: "Produto vinculado", color: "bg-purple-500/20 text-purple-600" },
   followup_created: { icon: <ListTodo className="w-3.5 h-3.5" />, label: "Tarefa criada", color: "bg-blue-500/20 text-blue-600" },
   followup_completed: { icon: <CheckSquare className="w-3.5 h-3.5" />, label: "Tarefa concluida", color: "bg-green-500/20 text-green-600" },
-  ai_toggled: { icon: <Bot className="w-3.5 h-3.5" />, label: "IA Copilot", color: "bg-primary/20 text-primary" },
+  ai_toggled: { icon: <Bot className="w-3.5 h-3.5" />, label: "IA", color: "bg-primary/20 text-primary" },
   copilot_interaction: { icon: <Bot className="w-3.5 h-3.5" />, label: "Copilot atendeu", color: "bg-primary/20 text-primary" },
 };
 

@@ -1595,6 +1595,7 @@ export type Database = {
       }
       conversation_summaries: {
         Row: {
+          coaching_tips: Json | null
           conversation_id: string | null
           created_at: string | null
           id: string
@@ -1611,6 +1612,7 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          coaching_tips?: Json | null
           conversation_id?: string | null
           created_at?: string | null
           id?: string
@@ -1627,6 +1629,7 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          coaching_tips?: Json | null
           conversation_id?: string | null
           created_at?: string | null
           id?: string

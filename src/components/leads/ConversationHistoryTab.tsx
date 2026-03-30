@@ -9,6 +9,7 @@ import {
   Loader2,
   ChevronDown,
   ChevronUp,
+  Lightbulb,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -216,6 +217,23 @@ export function ConversationHistoryTab({ leadId, leadName, leadPhone }: Conversa
                       <div className="p-2 bg-primary/5 rounded-lg border border-primary/20">
                         <h4 className="text-[10px] font-semibold text-primary mb-0.5">Próxima Ação Sugerida</h4>
                         <p className="text-xs">{summary.next_action}</p>
+                      </div>
+                    )}
+
+                    {summary.coaching_tips && summary.coaching_tips.length > 0 && (
+                      <div className="p-2 bg-amber-500/5 rounded-lg border border-amber-500/20">
+                        <h4 className="text-[10px] font-semibold text-amber-600 mb-1.5 flex items-center gap-1">
+                          <Lightbulb className="w-2.5 h-2.5" />
+                          Coaching Comercial
+                        </h4>
+                        <ul className="space-y-1">
+                          {summary.coaching_tips.map((tip, i) => (
+                            <li key={i} className="text-[11px] text-muted-foreground flex items-start gap-1.5">
+                              <ArrowRight className="w-2.5 h-2.5 mt-0.5 text-amber-500 shrink-0" />
+                              {tip}
+                            </li>
+                          ))}
+                        </ul>
                       </div>
                     )}
 

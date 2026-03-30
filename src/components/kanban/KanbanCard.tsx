@@ -173,13 +173,13 @@ export function KanbanCard({ lead, onClick }: KanbanCardProps) {
                     {
                       onSuccess: () => {
                         if (lead.leadId) {
-                          logAction({ leadId: lead.leadId, action: "ai_toggled", description: checked ? "IA Copilot ativada" : "IA Copilot desativada" });
+                          logAction({ leadId: lead.leadId, action: "ai_toggled", description: checked ? "IA ativada" : "IA desativada" });
                         }
                         toast({
                           title: checked ? "IA ativada" : "IA desativada",
                           description: checked
-                            ? "O Copilot voltará a responder mensagens deste lead."
-                            : "O Copilot não responderá mais mensagens deste lead.",
+                            ? "A IA voltará a responder mensagens deste lead."
+                            : "A IA não responderá mais mensagens deste lead.",
                         });
                         // Não limpar optimistic — cache update direto cuida disso
                       },

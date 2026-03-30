@@ -285,7 +285,7 @@ export function LeadDetailModal({ open, onOpenChange, leadId, onEdit }: LeadDeta
                           }}
                           transition={{ duration: 0.2 }}
                         >
-                          IA Copilot
+                          IA
                         </motion.span>
                         <motion.div
                           animate={{
@@ -302,12 +302,12 @@ export function LeadDetailModal({ open, onOpenChange, leadId, onEdit }: LeadDeta
                                 { leadId: lead.id, disabled: !checked },
                                 {
                                   onSuccess: () => {
-                                    logAction({ leadId: lead.id, action: "ai_toggled", description: checked ? "IA Copilot ativada" : "IA Copilot desativada" });
+                                    logAction({ leadId: lead.id, action: "ai_toggled", description: checked ? "IA ativada" : "IA desativada" });
                                     toast({
                                       title: checked ? "IA ativada" : "IA desativada",
                                       description: checked
-                                        ? "O Copilot voltará a responder mensagens deste lead."
-                                        : "O Copilot não responderá mais mensagens deste lead.",
+                                        ? "A IA voltará a responder mensagens deste lead."
+                                        : "A IA não responderá mais mensagens deste lead.",
                                     });
                                     // Não limpar optimistic — useEffect sync cuida disso
                                   },
@@ -341,8 +341,8 @@ export function LeadDetailModal({ open, onOpenChange, leadId, onEdit }: LeadDeta
                   <TabsTrigger value="pipeline">Pipeline</TabsTrigger>
                   <TabsTrigger value="history">Histórico</TabsTrigger>
                   <TabsTrigger value="ai" className="flex items-center gap-1">
-                    <Bot className="w-3.5 h-3.5" />
-                    IA Copilot
+                    <MessageSquare className="w-3.5 h-3.5" />
+                    Chat
                   </TabsTrigger>
                 </TabsList>
               </div>

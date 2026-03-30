@@ -5,7 +5,7 @@
  *   1. Dados       — two-column layout (form + sidebar with quick-note, tags, etc.)
  *   2. Histórico   — advanced timeline (useLeadTimeline + filters)
  *   3. Contexto    — variant-specific funnel actions (meeting, products, orders…)
- *   4. IA Copilot  — ConversationHistoryTab
+ *   4. Chat        — ConversationHistoryTab
  *   5. Pipeline    — journey across all pipes
  *
  * Layout: Dialog central, max-w-[900px], max-h-[90vh]
@@ -467,12 +467,12 @@ export const LeadDetailDrawer = memo(function LeadDetailDrawer({
       { leadId: lead.id, disabled: !checked },
       {
         onSuccess: () => {
-          logAction({ leadId: lead.id, action: "ai_toggled", description: checked ? "IA Copilot ativada" : "IA Copilot desativada" });
+          logAction({ leadId: lead.id, action: "ai_toggled", description: checked ? "IA ativada" : "IA desativada" });
           hookToast({
             title: checked ? "IA ativada" : "IA desativada",
             description: checked
-              ? "O Copilot voltará a responder mensagens deste lead."
-              : "O Copilot não responderá mais mensagens deste lead.",
+              ? "A IA voltará a responder mensagens deste lead."
+              : "A IA não responderá mais mensagens deste lead.",
           });
           // Não limpar optimistic — useEffect sync cuida disso
         },
@@ -641,7 +641,7 @@ export const LeadDetailDrawer = memo(function LeadDetailDrawer({
                         onClick={(e) => { e.preventDefault(); handleToggleAI(!currentAiDisabled ? false : true); }}
                       >
                         <Bot className="w-4 h-4 mr-2" />
-                        {currentAiDisabled ? "Ativar IA Copilot" : "Desativar IA Copilot"}
+                        {currentAiDisabled ? "Ativar IA" : "Desativar IA"}
                       </DropdownMenuItem>
                       {lead.phone && (
                         <DropdownMenuItem asChild>
@@ -676,8 +676,8 @@ export const LeadDetailDrawer = memo(function LeadDetailDrawer({
                   <TabsTrigger value="historico">Histórico</TabsTrigger>
                   <TabsTrigger value="contexto">Contexto do funil</TabsTrigger>
                   <TabsTrigger value="ai" className="flex items-center gap-1">
-                    <Bot className="w-3.5 h-3.5" />
-                    IA Copilot
+                    <MessageSquare className="w-3.5 h-3.5" />
+                    Chat
                   </TabsTrigger>
                   <TabsTrigger value="pipeline">Pipeline</TabsTrigger>
                 </TabsList>
@@ -1234,7 +1234,7 @@ export const LeadDetailDrawer = memo(function LeadDetailDrawer({
                   )}
                 </TabsContent>
 
-                {/* ─── Tab 4: IA Copilot ──────────────── */}
+                {/* ─── Tab 4: Chat ────────────────────── */}
                 <TabsContent value="ai" className="m-0 flex-1 flex flex-col min-h-0 h-[500px]">
                   <ConversationHistoryTab leadId={lead.id} leadName={lead.name} leadPhone={lead.phone} />
                 </TabsContent>
