@@ -79,7 +79,9 @@ export function useWhatsAppInstancesForUser() {
   const { data: teamMember } = useCurrentTeamMember();
   const organizationId = teamMember?.organization_id;
   const teamMemberId = teamMember?.id;
+  const teamMemberRole = teamMember?.role;
   const isMasterVirtual = isVirtualTeamMember(teamMemberId);
+  const isAdmin = teamMemberRole === "admin";
 
   return useQuery({
     queryKey: ["whatsapp_instances_for_user", organizationId, teamMemberId],
@@ -96,8 +98,8 @@ export function useWhatsAppInstancesForUser() {
       if (instError) throw instError;
       if (!instances?.length) return [];
 
-      // Master (shadow user) vê todas as instâncias sem restrição
-      if (isMasterVirtual) {
+      // Master (shadow user) e admins veem todas as instâncias sem restrição
+      if (isMasterVirtual || isAdmin) {
         return instances as WhatsAppInstanceForUser[];
       }
 
