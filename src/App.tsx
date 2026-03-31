@@ -73,6 +73,7 @@ const Landing = lazy(() => lazyRetry(() => import("./pages/Landing")));
 const Signup = lazy(() => lazyRetry(() => import("./pages/Signup")));
 const Onboarding = lazy(() => lazyRetry(() => import("./pages/Onboarding")));
 const Checkout = lazy(() => lazyRetry(() => import("./pages/Checkout")));
+const ResetPassword = lazy(() => lazyRetry(() => import("./pages/ResetPassword")));
 const CheckoutSuccess = lazy(() => lazyRetry(() => import("./pages/CheckoutSuccess")));
 
 // Master Admin — lazy loaded (com retry)
@@ -187,6 +188,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/landing" element={<Landing />} />
       <Route path="/auth" element={<AuthRoute />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/signup" element={<Signup />} />
       <Route path="/privacidade" element={<Privacidade />} />
       <Route path="/docs" element={<ApiDocs />} />
