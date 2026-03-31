@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FollowUpCard } from "@/components/followups/FollowUpCard";
+import { ScheduleFollowUpModal } from "@/components/followups/ScheduleFollowUpModal";
 import { LeadDetailDrawer } from "@/components/leads/LeadDetailDrawer";
 import { AutomationSettings } from "@/components/followups/AutomationSettings";
 import { AcoesDoDia } from "@/components/followups/AcoesDoDia";
@@ -98,6 +99,14 @@ export default function PipeFollowUps() {
   const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; followUpId: string } | null>(null);
   const [isDetailDrawerOpen, setIsDetailDrawerOpen] = useState(false);
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
+  const [scheduleContext, setScheduleContext] = useState<{
+    leadId: string;
+    leadName: string;
+    sourcePipe?: "whatsapp" | "confirmacao" | "propostas";
+    sourcePipeId?: string;
+    assignedTo?: string;
+  } | null>(null);
+  const [showPostCompletionPrompt, setShowPostCompletionPrompt] = useState(false);
 
   const { data: userRole } = useUserRole();
   const { data: teamMembers } = useTeamMembers();
@@ -199,6 +208,14 @@ export default function PipeFollowUps() {
     completeFollowUp.mutate(id);
     if (fup) {
       logAction({ leadId: fup.lead_id, action: "followup_completed", description: `Follow-up concluído: ${fup.title}` });
+      setScheduleContext({
+        leadId: fup.lead_id,
+        leadName: fup.lead?.name || "Lead",
+        sourcePipe: fup.source_pipe || undefined,
+        sourcePipeId: fup.source_pipe_id || undefined,
+        assignedTo: fup.assigned_to || undefined,
+      });
+      setShowPostCompletionPrompt(true);
     }
   };
 
@@ -516,6 +533,47 @@ export default function PipeFollowUps() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Post-completion: offer to schedule new follow-up */}
+      <AlertDialog open={showPostCompletionPrompt} onOpenChange={setShowPostCompletionPrompt}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <CheckCircle2 className="w-5 h-5 text-success" />
+              Follow-up concluído
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Deseja agendar um novo follow-up para <span className="font-medium text-foreground">{scheduleContext?.leadName}</span>?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => { setShowPostCompletionPrompt(false); setScheduleContext(null); }}>
+              Pular
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setShowPostCompletionPrompt(false);
+              }}
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
+            >
+              Agendar novo follow-up
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Schedule follow-up modal (reuses existing component) */}
+      {scheduleContext && !showPostCompletionPrompt && (
+        <ScheduleFollowUpModal
+          open={!!scheduleContext}
+          onOpenChange={(open) => { if (!open) setScheduleContext(null); }}
+          leadId={scheduleContext.leadId}
+          leadName={scheduleContext.leadName}
+          sourcePipe={scheduleContext.sourcePipe}
+          sourcePipeId={scheduleContext.sourcePipeId}
+          defaultAssignedTo={scheduleContext.assignedTo}
+        />
+      )}
     </div>
   );
 }
