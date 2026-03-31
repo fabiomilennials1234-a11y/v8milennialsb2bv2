@@ -26,6 +26,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
+import { ScheduleMessageModal } from "@/components/chat/ScheduleMessageModal";
 import { useOpenWhatsAppChat, formatPhoneForWhatsApp } from "@/lib/whatsapp";
 import { formatDistanceToNow, isToday, isTomorrow, isPast, differenceInDays, differenceInHours } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -311,6 +312,7 @@ export const LeadCard = memo(function LeadCard({
   onQuickAction,
   ...overrides
 }: LeadCardProps) {
+  const [scheduleOpen, setScheduleOpen] = useState(false);
   const config = { ...VARIANT_CONFIG[variant], ...pickDefined(overrides) };
   const origin = ORIGIN_COLORS[lead.origin || "outro"] || ORIGIN_COLORS.outro;
   const urgency = lead.urgency ? URGENCY_COLORS[lead.urgency] : null;
@@ -327,6 +329,7 @@ export const LeadCard = memo(function LeadCard({
     (config.showDate && parsedDate);
 
   return (
+    <>
     <motion.div
       whileHover={{ scale: 1.01, y: -1 }}
       transition={{ type: "spring", stiffness: 400, damping: 30 }}
@@ -334,6 +337,15 @@ export const LeadCard = memo(function LeadCard({
         "kanban-card group cursor-pointer relative",
         lead.isInactive && "opacity-60"
       )}
+      style={{
+        '--card-accent': lead.calor != null && lead.calor >= 8
+          ? 'hsl(0 80% 55%)'
+          : lead.calor != null && lead.calor >= 4
+            ? 'hsl(38 92% 50%)'
+            : lead.calor != null && lead.calor > 0
+              ? 'hsl(210 80% 55%)'
+              : undefined,
+      } as React.CSSProperties}
       onClick={onClick}
     >
       {/* ── Row 1: Name + ⋮ Menu ── */}
@@ -354,6 +366,10 @@ export const LeadCard = memo(function LeadCard({
                 WhatsApp
               </DropdownMenuItem>
             )}
+            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setScheduleOpen(true); }}>
+              <Clock className="w-4 h-4 mr-2" />
+              Agendar mensagem
+            </DropdownMenuItem>
             {onRemove && (
               <DropdownMenuItem
                 className="text-destructive focus:text-destructive"
@@ -492,7 +508,7 @@ export const LeadCard = memo(function LeadCard({
                       "bg-primary/10 text-primary border-primary/20"
                     )}
                   >
-                    {p.type === "mrr" ? "MRR" : p.type === "unitario" ? "Unit" : "Proj"}
+                    {p.type === "mrr" ? "Rec." : p.type === "unitario" ? "Unit" : "Proj"}
                   </Badge>
                 )}
                 <span className="truncate">{p.name}</span>
@@ -558,6 +574,17 @@ export const LeadCard = memo(function LeadCard({
         )}
       </div>
     </motion.div>
+
+    {scheduleOpen && (
+      <ScheduleMessageModal
+        open={scheduleOpen}
+        onOpenChange={setScheduleOpen}
+        leadId={lead.leadId || ""}
+        leadName={lead.name}
+        phoneNumber={lead.phone || ""}
+      />
+    )}
+    </>
   );
 });
 

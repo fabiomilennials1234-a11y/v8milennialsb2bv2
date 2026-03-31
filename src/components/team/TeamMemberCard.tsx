@@ -245,7 +245,7 @@ export function TeamMemberCard({
       <div className="mt-4 pt-4 border-t border-border">
         <div className="grid grid-cols-2 gap-4 text-xs">
           <div>
-            <p className="text-muted-foreground">Comissão MRR</p>
+            <p className="text-muted-foreground">Comissão Rec.</p>
             <p className="font-medium">{member.commission_mrr_percent || 0}%</p>
           </div>
           <div>

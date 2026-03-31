@@ -1,30 +1,28 @@
 /**
  * Shared Embedding Service
  *
- * Gera embeddings via OpenAI text-embedding-3-small usando a chave OpenRouter.
- * OpenRouter roteia /embeddings para OpenAI diretamente.
+ * Gera embeddings via OpenAI text-embedding-3-small.
  * Dimensão: 1536 (compatível com pgvector vector(1536))
  */
 
-const EMBEDDING_MODEL = "openai/text-embedding-3-small";
+const EMBEDDING_MODEL = "text-embedding-3-small";
+const OPENAI_API_URL = "https://api.openai.com/v1";
 const EMBEDDING_DIM = 1536;
 const MAX_TOKENS_PER_CHUNK = 512; // ~2000 chars por chunk
 const CHUNK_OVERLAP = 50; // caracteres de sobreposição
 
 /**
- * Gera embedding para um texto usando OpenRouter → OpenAI
+ * Gera embedding para um texto usando OpenAI
  */
 export async function generateEmbedding(
   text: string,
   apiKey: string
 ): Promise<number[]> {
-  const response = await fetch("https://openrouter.ai/api/v1/embeddings", {
+  const response = await fetch(`${OPENAI_API_URL}/embeddings`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       "Authorization": `Bearer ${apiKey}`,
-      "HTTP-Referer": Deno.env.get("OPENROUTER_REFERER_URL") || "https://v8millennials.com",
-      "X-Title": "V8 Millennials - Embeddings",
     },
     body: JSON.stringify({
       model: EMBEDDING_MODEL,
@@ -54,13 +52,11 @@ export async function generateEmbeddingsBatch(
   for (let i = 0; i < texts.length; i += BATCH_SIZE) {
     const batch = texts.slice(i, i + BATCH_SIZE).map(t => t.substring(0, 8000));
 
-    const response = await fetch("https://openrouter.ai/api/v1/embeddings", {
+    const response = await fetch(`${OPENAI_API_URL}/embeddings`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${apiKey}`,
-        "HTTP-Referer": Deno.env.get("OPENROUTER_REFERER_URL") || "https://v8millennials.com",
-        "X-Title": "V8 Millennials - Embeddings Batch",
       },
       body: JSON.stringify({
         model: EMBEDDING_MODEL,

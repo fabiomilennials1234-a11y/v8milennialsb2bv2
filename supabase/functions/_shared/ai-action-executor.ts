@@ -165,6 +165,12 @@ const ACTION_HISTORY_MAP: Record<string, HistoryMapping> = {
     descriptionFn: (p) => `Pipeline atualizado para ${p.new_stage} pelo Copilot`,
     source: "agent",
   },
+  send_document: {
+    action: "document_sent",
+    descriptionFn: (payload) =>
+      `Documento "${payload.file_name || 'arquivo'}" enviado ao lead via WhatsApp`,
+    source: "agent",
+  },
 };
 
 // ─── Main Router ──────────────────────────────────────────────────────────────
@@ -220,6 +226,9 @@ export async function executeAiAction(
       break;
     case "transfer_sz_chat":
       result = await executeTransferSzChat(supabase, lead_id, organization_id, payload);
+      break;
+    case "send_document":
+      result = await executeSendDocument(supabase, payload, organization_id, lead_id);
       break;
     default:
       return { success: false, error: `Tipo de ação desconhecido: ${action_type}` };
@@ -1139,5 +1148,130 @@ async function upsertPipeWhatsapp(
     }
   } catch (e) {
     console.warn("[ai-action-executor] Failed to upsert pipe_whatsapp:", e);
+  }
+}
+
+// ── Send Document to Lead via WhatsApp ───────────────────────────────────────
+
+async function executeSendDocument(
+  supabase: SupabaseClient,
+  payload: Record<string, unknown>,
+  organizationId: string,
+  leadId: string | null,
+): Promise<ActionResult> {
+  const documentId = payload.document_id as string;
+  const caption = payload.caption as string | undefined;
+
+  if (!documentId) {
+    return { success: false, error: "document_id is required" };
+  }
+  if (!leadId) {
+    return { success: false, error: "lead_id is required to send document" };
+  }
+
+  // 1. Buscar documento e metadados
+  const { data: doc, error: docError } = await supabase
+    .from("copilot_agent_documents")
+    .select("id, file_name, file_path, mime_type, organization_id")
+    .eq("id", documentId)
+    .eq("organization_id", organizationId)
+    .single();
+
+  if (docError || !doc) {
+    return { success: false, error: `Document not found: ${docError?.message || "not found"}` };
+  }
+
+  // 2. Gerar URL assinada (valida por 1 hora)
+  const { data: signedUrlData, error: signedUrlError } = await supabase.storage
+    .from("agent-documents")
+    .createSignedUrl(doc.file_path, 3600);
+
+  if (signedUrlError || !signedUrlData?.signedUrl) {
+    return { success: false, error: `Failed to generate signed URL: ${signedUrlError?.message || "unknown"}` };
+  }
+
+  // 3. Buscar telefone do lead e instancia WhatsApp
+  const { data: lead } = await supabase
+    .from("leads")
+    .select("phone")
+    .eq("id", leadId)
+    .single();
+
+  if (!lead?.phone) {
+    return { success: false, error: "Lead has no phone number" };
+  }
+
+  const { data: instance } = await supabase
+    .from("whatsapp_instances")
+    .select("instance_name")
+    .eq("organization_id", organizationId)
+    .eq("status", "open")
+    .limit(1)
+    .maybeSingle();
+
+  if (!instance?.instance_name) {
+    return { success: false, error: "No active WhatsApp instance found" };
+  }
+
+  // 4. Enviar via Evolution API
+  const EVOLUTION_API_URL = Deno.env.get("EVOLUTION_API_URL");
+  const EVOLUTION_API_KEY = Deno.env.get("EVOLUTION_API_KEY");
+  if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY) {
+    return { success: false, error: "Evolution API not configured" };
+  }
+
+  let phone = lead.phone.replace(/\D/g, "");
+  if (!phone.startsWith("55")) phone = "55" + phone;
+
+  const sendBody: Record<string, unknown> = {
+    number: phone,
+    mediatype: "document",
+    media: signedUrlData.signedUrl,
+    fileName: doc.file_name,
+  };
+  if (caption) sendBody.caption = caption;
+
+  try {
+    const response = await fetch(
+      `${EVOLUTION_API_URL}/message/sendMedia/${instance.instance_name}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", apikey: EVOLUTION_API_KEY },
+        body: JSON.stringify(sendBody),
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      return { success: false, error: `Evolution API error: HTTP ${response.status}: ${errorText}` };
+    }
+
+    const sendResult = await response.json();
+
+    // 5. Registrar mensagem de saida
+    await supabase.from("whatsapp_messages").insert({
+      organization_id: organizationId,
+      message_id: sendResult.key?.id || `doc_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+      remote_jid: `${phone}@s.whatsapp.net`,
+      phone_number: phone,
+      direction: "outgoing",
+      message_type: "document",
+      content: caption || `[Documento: ${doc.file_name}]`,
+      media_url: signedUrlData.signedUrl,
+      status: "sent",
+      timestamp: new Date().toISOString(),
+      sent_by_ai: true,
+    }).catch(e => console.warn("[executeSendDocument] Failed to log outgoing message:", e));
+
+    return {
+      success: true,
+      message: `Documento "${doc.file_name}" enviado com sucesso`,
+      data: { file_name: doc.file_name, message_id: sendResult.key?.id },
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: `Failed to send document: ${error instanceof Error ? error.message : String(error)}`,
+    };
   }
 }

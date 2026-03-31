@@ -104,7 +104,7 @@ function OverviewTab() {
                   Jobs Executados ({periodLabel[interval]})
                 </span>
               </div>
-              <div className="text-3xl font-bold">{data?.jobs_total ?? 0}</div>
+              <div className="text-2xl font-bold">{data?.jobs_total ?? 0}</div>
             </CardContent>
           </Card>
 
@@ -116,7 +116,7 @@ function OverviewTab() {
                   Jobs com Erro
                 </span>
               </div>
-              <div className={cn("text-3xl font-bold", isHighError && "text-red-600")}>
+              <div className={cn("text-2xl font-bold", isHighError && "text-red-600")}>
                 {data?.jobs_error ?? 0}
               </div>
             </CardContent>
@@ -130,7 +130,7 @@ function OverviewTab() {
                   Taxa de Erro
                 </span>
               </div>
-              <div className={cn("text-3xl font-bold", isHighError && "text-red-600")}>
+              <div className={cn("text-2xl font-bold", isHighError && "text-red-600")}>
                 {errorRate.toFixed(1)}%
               </div>
             </CardContent>
@@ -144,7 +144,7 @@ function OverviewTab() {
                   Organizações Ativas
                 </span>
               </div>
-              <div className="text-3xl font-bold">{data?.orgs_active ?? 0}</div>
+              <div className="text-2xl font-bold">{data?.orgs_active ?? 0}</div>
             </CardContent>
           </Card>
         </div>

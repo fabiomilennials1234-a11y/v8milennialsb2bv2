@@ -5,7 +5,7 @@
  *   1. Dados       — two-column layout (form + sidebar with quick-note, tags, etc.)
  *   2. Histórico   — advanced timeline (useLeadTimeline + filters)
  *   3. Contexto    — variant-specific funnel actions (meeting, products, orders…)
- *   4. IA Copilot  — ConversationHistoryTab
+ *   4. Chat        — ConversationHistoryTab
  *   5. Pipeline    — journey across all pipes
  *
  * Layout: Dialog central, max-w-[900px], max-h-[90vh]
@@ -89,6 +89,7 @@ import {
 import { ConversationHistoryTab } from "./ConversationHistoryTab";
 import { TimelineItem } from "./TimelineItem";
 import { ScheduleFollowUpButton } from "@/components/followups/ScheduleFollowUpButton";
+import { ScheduleMessageModal } from "@/components/chat/ScheduleMessageModal";
 import { ORIGIN_COLORS } from "./LeadCard";
 import { cn } from "@/lib/utils";
 import { useOpenWhatsAppChat, formatPhoneForWhatsApp } from "@/lib/whatsapp";
@@ -180,6 +181,7 @@ export const LeadDetailDrawer = memo(function LeadDetailDrawer({
   const [activeTab, setActiveTab] = useState("dados");
   const [quickNote, setQuickNote] = useState("");
   const [isSavingNote, setIsSavingNote] = useState(false);
+  const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
 
   // ─── Lead query ─────────────────────────────────────────
   const { data: lead, isLoading } = useQuery({
@@ -465,14 +467,14 @@ export const LeadDetailDrawer = memo(function LeadDetailDrawer({
       { leadId: lead.id, disabled: !checked },
       {
         onSuccess: () => {
-          logAction({ leadId: lead.id, action: "ai_toggled", description: checked ? "IA Copilot ativada" : "IA Copilot desativada" });
+          logAction({ leadId: lead.id, action: "ai_toggled", description: checked ? "IA ativada" : "IA desativada" });
           hookToast({
             title: checked ? "IA ativada" : "IA desativada",
             description: checked
-              ? "O Copilot voltará a responder mensagens deste lead."
-              : "O Copilot não responderá mais mensagens deste lead.",
+              ? "A IA voltará a responder mensagens deste lead."
+              : "A IA não responderá mais mensagens deste lead.",
           });
-          setOptimisticAiDisabled(null);
+          // Não limpar optimistic — useEffect sync cuida disso
         },
         onError: () => {
           hookToast({ title: "Erro", description: "Não foi possível alterar o status da IA.", variant: "destructive" });
@@ -498,6 +500,13 @@ export const LeadDetailDrawer = memo(function LeadDetailDrawer({
 
   const currentAiDisabled = optimisticAiDisabled !== null ? optimisticAiDisabled : (lead?.ai_disabled ?? false);
 
+  // Sincronizar: quando a prop refletir o valor otimista, limpar estado otimista
+  useEffect(() => {
+    if (optimisticAiDisabled !== null && lead?.ai_disabled === optimisticAiDisabled) {
+      setOptimisticAiDisabled(null);
+    }
+  }, [lead?.ai_disabled, optimisticAiDisabled]);
+
   // Compute relative dates for footer
   const createdAgo = lead?.created_at
     ? formatDistanceToNow(new Date(lead.created_at), { addSuffix: true, locale: ptBR })
@@ -513,6 +522,7 @@ export const LeadDetailDrawer = memo(function LeadDetailDrawer({
 
   // ─── Render ─────────────────────────────────────────────
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[900px] max-h-[90vh] p-0 overflow-hidden flex flex-col">
         {isLoading ? (
@@ -606,6 +616,18 @@ export const LeadDetailDrawer = memo(function LeadDetailDrawer({
                     />
                   )}
 
+                  {leadId && lead?.phone && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setScheduleModalOpen(true)}
+                      className="gap-1.5"
+                    >
+                      <Clock className="w-4 h-4" />
+                      Agendar mensagem
+                    </Button>
+                  )}
+
                   {/* Menu */}
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -619,7 +641,7 @@ export const LeadDetailDrawer = memo(function LeadDetailDrawer({
                         onClick={(e) => { e.preventDefault(); handleToggleAI(!currentAiDisabled ? false : true); }}
                       >
                         <Bot className="w-4 h-4 mr-2" />
-                        {currentAiDisabled ? "Ativar IA Copilot" : "Desativar IA Copilot"}
+                        {currentAiDisabled ? "Ativar IA" : "Desativar IA"}
                       </DropdownMenuItem>
                       {lead.phone && (
                         <DropdownMenuItem asChild>
@@ -654,8 +676,8 @@ export const LeadDetailDrawer = memo(function LeadDetailDrawer({
                   <TabsTrigger value="historico">Histórico</TabsTrigger>
                   <TabsTrigger value="contexto">Contexto do funil</TabsTrigger>
                   <TabsTrigger value="ai" className="flex items-center gap-1">
-                    <Bot className="w-3.5 h-3.5" />
-                    IA Copilot
+                    <MessageSquare className="w-3.5 h-3.5" />
+                    Chat
                   </TabsTrigger>
                   <TabsTrigger value="pipeline">Pipeline</TabsTrigger>
                 </TabsList>
@@ -1212,9 +1234,9 @@ export const LeadDetailDrawer = memo(function LeadDetailDrawer({
                   )}
                 </TabsContent>
 
-                {/* ─── Tab 4: IA Copilot ──────────────── */}
-                <TabsContent value="ai" className="m-0">
-                  <ConversationHistoryTab leadId={lead.id} leadName={lead.name} />
+                {/* ─── Tab 4: Chat ────────────────────── */}
+                <TabsContent value="ai" className="m-0 flex-1 flex flex-col min-h-0 h-[500px]">
+                  <ConversationHistoryTab leadId={lead.id} leadName={lead.name} leadPhone={lead.phone} />
                 </TabsContent>
 
                 {/* ─── Tab 5: Pipeline ────────────────── */}
@@ -1411,6 +1433,17 @@ export const LeadDetailDrawer = memo(function LeadDetailDrawer({
         )}
       </DialogContent>
     </Dialog>
+
+    {leadId && lead?.phone && (
+      <ScheduleMessageModal
+        open={scheduleModalOpen}
+        onOpenChange={setScheduleModalOpen}
+        leadId={leadId}
+        leadName={lead?.name || ""}
+        phoneNumber={lead?.phone || ""}
+      />
+    )}
+    </>
   );
 });
 

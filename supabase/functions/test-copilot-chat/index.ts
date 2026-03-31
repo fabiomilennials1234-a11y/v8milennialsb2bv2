@@ -3,6 +3,7 @@
  *
  * Simula conversa com o copilot no wizard.
  * Item #11: agora aceita agentId para buscar system_prompt e FAQs do DB em tempo real.
+ * Migrado de OpenRouter para OpenAI API com suporte a attachments (imagens/PDFs).
  *
  * Modos:
  * - generateFirstMessage=true: agente proativo gera a primeira mensagem
@@ -18,9 +19,19 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
+const CHAT_MODEL = "gpt-4o";
+const CHAT_MODEL_MINI = "gpt-4o-mini";
+
 interface ChatMessage {
   role: "user" | "assistant";
   content: string;
+}
+
+interface Attachment {
+  base64: string;
+  mimeType: string;
+  fileName: string;
 }
 
 interface TestCopilotChatRequest {
@@ -33,10 +44,82 @@ interface TestCopilotChatRequest {
   firstMessageTemplate?: string;
   /** Item #11: Se fornecido, busca system_prompt + FAQs reais do banco */
   agentId?: string;
+  /** Attachment (imagem ou PDF) enviado pelo usuario */
+  attachment?: Attachment;
 }
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+
+/**
+ * Build multimodal content array when attachment is present.
+ * For images: uses image_url with base64 data URL.
+ * For PDFs: uses file type with base64 data.
+ */
+function buildUserContent(text: string, attachment?: Attachment): string | Array<Record<string, unknown>> {
+  if (!attachment) return text;
+
+  const parts: Array<Record<string, unknown>> = [];
+
+  if (text) {
+    parts.push({ type: "text", text });
+  }
+
+  if (attachment.mimeType.startsWith("image/")) {
+    parts.push({
+      type: "image_url",
+      image_url: {
+        url: `data:${attachment.mimeType};base64,${attachment.base64}`,
+        detail: "auto",
+      },
+    });
+  } else if (attachment.mimeType === "application/pdf") {
+    parts.push({
+      type: "file",
+      file: {
+        filename: attachment.fileName,
+        file_data: `data:${attachment.mimeType};base64,${attachment.base64}`,
+      },
+    });
+  }
+
+  return parts;
+}
+
+/**
+ * Call OpenAI Chat Completions API.
+ * Uses gpt-4o when attachment is present (multimodal), gpt-4o-mini otherwise.
+ */
+async function callOpenAI(
+  apiKey: string,
+  llmMessages: Array<Record<string, unknown>>,
+  maxTokens: number,
+  hasAttachment: boolean,
+): Promise<Record<string, unknown>> {
+  const model = hasAttachment ? CHAT_MODEL : CHAT_MODEL_MINI;
+
+  const response = await fetch(OPENAI_API_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      messages: llmMessages,
+      temperature: 0.7,
+      max_tokens: maxTokens,
+    }),
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    console.error("OpenAI error:", errText);
+    throw new Error(`OpenAI API error: ${response.status}`);
+  }
+
+  return await response.json();
+}
 
 Deno.serve(withSentry('test-copilot-chat', async (req) => {
   if (req.method === "OPTIONS") {
@@ -44,16 +127,16 @@ Deno.serve(withSentry('test-copilot-chat', async (req) => {
   }
 
   try {
-    const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
-    if (!OPENROUTER_API_KEY) {
+    const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+    if (!OPENAI_API_KEY) {
       return new Response(
-        JSON.stringify({ error: "OpenRouter API key not configured" }),
+        JSON.stringify({ error: "OpenAI API key not configured" }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     const body: TestCopilotChatRequest = await req.json();
-    const { messages = [], userMessage, generateFirstMessage = false, firstMessageTemplate, agentId } = body;
+    const { messages = [], userMessage, generateFirstMessage = false, firstMessageTemplate, agentId, attachment } = body;
     let { systemPrompt } = body;
 
     // Item #11: Se agentId fornecido, buscar system_prompt atualizado do banco
@@ -75,6 +158,41 @@ Deno.serve(withSentry('test-copilot-chat', async (req) => {
               .map((f: any) => `P: ${f.question}\nR: ${f.answer}`)
               .join("\n\n");
             systemPrompt += `\n\n## FAQs\n${faqBlock}`;
+          }
+
+          // Injetar Knowledge Base — conteudo COMPLETO dos documentos
+          let kbContent = "";
+          try {
+            const kbRes = await fetch(
+              `${SUPABASE_URL}/rest/v1/copilot_agent_documents?agent_id=eq.${agentId}&status=eq.ready&select=content,summary`,
+              { headers: { "apikey": SUPABASE_SERVICE_ROLE_KEY, "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` } }
+            );
+            if (kbRes.ok) {
+              const kbDocs = await kbRes.json();
+              kbContent = (kbDocs || [])
+                .map((d: any) => (d.content || d.summary || "").substring(0, 30000))
+                .filter((t: string) => t.length > 10)
+                .join("\n\n");
+            }
+          } catch { /* fallback below */ }
+
+          // Fallback se REST nao retornou content
+          if (!kbContent) {
+            const { data: docs } = await supabase
+              .from("copilot_agent_documents")
+              .select("summary")
+              .eq("agent_id", agentId)
+              .eq("status", "ready")
+              .not("summary", "is", null);
+            if (docs && docs.length > 0) {
+              kbContent = docs.map((d: any) => d.summary).join("\n\n");
+            }
+          }
+
+          if (kbContent) {
+            // No Playground, injetamos o conteudo direto (sem multi-turn tool).
+            // Em producao, o agente usa search_knowledge como tool.
+            systemPrompt += `\n\n# BASE DE CONHECIMENTO (preview)\n\nNo ambiente real, voce usaria a ferramenta search_knowledge para consultar estas informacoes. Neste preview, elas ja estao disponiveis:\n\n${kbContent}\n\n---\nUse estas informacoes para responder com precisao. Cite nomes de produtos e detalhes exatamente como estao acima. Se nao encontrar, diga que vai verificar. NUNCA invente. Fale naturalmente.`;
           }
         }
       } catch (dbErr) {
@@ -105,36 +223,17 @@ Deno.serve(withSentry('test-copilot-chat', async (req) => {
           `Template: "${firstMessageTemplate}"`;
       }
 
-      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-          "HTTP-Referer": Deno.env.get("OPENROUTER_REFERER_URL") || "https://v8millennials.com",
-          "X-Title": "V8 Millennials - Test Copilot Chat (First Message)",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-3-flash-preview",
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: triggerInstruction },
-          ],
-          temperature: 0.7,
-          max_tokens: 400,
-        }),
-      });
+      const result = await callOpenAI(
+        OPENAI_API_KEY,
+        [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: triggerInstruction },
+        ],
+        400,
+        false,
+      );
 
-      if (!response.ok) {
-        const errText = await response.text();
-        console.error("OpenRouter error (first message):", errText);
-        return new Response(
-          JSON.stringify({ error: "Failed to generate first message" }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      const result = await response.json();
-      const rawContent: string = result.choices?.[0]?.message?.content || "";
+      const rawContent: string = (result as any).choices?.[0]?.message?.content || "";
 
       const messageParts = rawContent
         .split("||SPLIT||")
@@ -168,38 +267,19 @@ Deno.serve(withSentry('test-copilot-chat', async (req) => {
     }
 
     const recentHistory = messages.slice(-12);
+    const hasAttachment = !!attachment;
 
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-        "HTTP-Referer": Deno.env.get("OPENROUTER_REFERER_URL") || "https://v8millennials.com",
-        "X-Title": "V8 Millennials - Test Copilot Chat",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [
-          { role: "system", content: systemPrompt },
-          ...recentHistory,
-          { role: "user", content: userMessage },
-        ],
-        temperature: 0.7,
-        max_tokens: 500,
-      }),
-    });
+    const userContent = buildUserContent(userMessage, attachment);
 
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error("OpenRouter error:", errText);
-      return new Response(
-        JSON.stringify({ error: "Failed to generate response" }),
-        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    const llmMessages: Array<Record<string, unknown>> = [
+      { role: "system", content: systemPrompt },
+      ...recentHistory,
+      { role: "user", content: userContent },
+    ];
 
-    const result = await response.json();
-    const rawContent: string = result.choices?.[0]?.message?.content || "";
+    const result = await callOpenAI(OPENAI_API_KEY, llmMessages, 500, hasAttachment);
+
+    const rawContent: string = (result as any).choices?.[0]?.message?.content || "";
 
     const messageParts = rawContent
       .split("||SPLIT||")
@@ -212,7 +292,7 @@ Deno.serve(withSentry('test-copilot-chat', async (req) => {
       module: "copilot",
       action: "test_chat",
       status: "success",
-      payloadSnapshot: { mode: "reactive", historyLength: recentHistory.length },
+      payloadSnapshot: { mode: "reactive", historyLength: recentHistory.length, hasAttachment },
     });
 
     return new Response(

@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Search, Plus, Zap, Loader2, Globe, Calendar, Settings2, AlertCircle } from "lucide-react";
+import { Search, Plus, Zap, Loader2, Globe, Calendar, Settings2, AlertCircle, Clock } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -46,6 +46,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { useOrganization } from "@/hooks/useOrganization";
 import { track, trackModuleVisit } from "@/lib/analytics";
+import { useLeadsWithScheduledMessages } from "@/hooks/useScheduledMessages";
 
 // Origin labels and colors mapping (origens do enum lead_origin)
 const originLabels: Record<string, { label: string; color: string }> = {
@@ -83,6 +84,8 @@ export default function PipeWhatsapp() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterResponsible, setFilterResponsible] = useState("all");
   const [filterOrigin, setFilterOrigin] = useState("all");
+  const { data: leadsWithSchedule } = useLeadsWithScheduledMessages();
+  const [filterScheduled, setFilterScheduled] = useState(false);
   const [isCreateLeadModalOpen, setIsCreateLeadModalOpen] = useState(false);
   const [isOpportunityModalOpen, setIsOpportunityModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -170,7 +173,8 @@ export default function PipeWhatsapp() {
     // Origin filter
     const matchesOrigin = filterOrigin === "all" || lead?.origin === filterOrigin;
 
-    return matchesSearch && matchesResponsible && matchesOrigin;
+    const matchesScheduled = !filterScheduled || (leadsWithSchedule?.has(item.lead_id) ?? false);
+    return matchesSearch && matchesResponsible && matchesOrigin && matchesScheduled;
   };
 
   // Converte etapas do banco para o formato do Kanban (com fallback)
@@ -326,9 +330,8 @@ export default function PipeWhatsapp() {
           <motion.h1
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="text-2xl font-bold flex items-center gap-2"
+            className="text-2xl font-bold"
           >
-            <Zap className="w-6 h-6 text-primary" />
             Funil de Qualificação
           </motion.h1>
           <p className="text-muted-foreground mt-1">
@@ -455,6 +458,16 @@ export default function PipeWhatsapp() {
             ))}
           </SelectContent>
         </Select>
+
+        <Button
+          variant={filterScheduled ? "default" : "outline"}
+          size="sm"
+          onClick={() => setFilterScheduled(!filterScheduled)}
+          className="gap-1.5"
+        >
+          <Clock className="w-4 h-4" />
+          Agendados
+        </Button>
       </div>
 
       {/* Kanban Board with Drag-and-Drop */}
@@ -521,24 +534,7 @@ export default function PipeWhatsapp() {
         open={isCreateLeadModalOpen}
         onOpenChange={setIsCreateLeadModalOpen}
         lead={null}
-        onSuccess={async (newLeadId) => {
-          if (newLeadId && organizationId) {
-            try {
-              const firstStage = pipelineStages.length > 0
-                ? pipelineStages.sort((a, b) => a.position - b.position)[0].stage_key
-                : "novo";
-              await createPipeWhatsapp.mutateAsync({
-                lead_id: newLeadId,
-                status: firstStage,
-                organization_id: organizationId,
-              });
-            } catch (err) {
-              console.error("[PipeWhatsapp] Erro ao inserir no funil:", err);
-              toast.error("Lead criado, mas não foi possível adicioná-lo ao funil.");
-            }
-          }
-          refetch();
-        }}
+        onSuccess={() => refetch()}
       />
 
       {/* Lead Detail Drawer */}

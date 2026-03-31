@@ -159,3 +159,15 @@ verify_jwt = false
 # elevenlabs-proxy: JWT validado internamente (admin check)
 [functions.elevenlabs-proxy]
 verify_jwt = false
+
+# checkout-create-payment: JWT validado internamente (user auth via Bearer token)
+[functions.checkout-create-payment]
+verify_jwt = false
+
+# checkout-provision-org: autenticação via X-Internal-Api-Key ou service_role Bearer
+[functions.checkout-provision-org]
+verify_jwt = false
+
+# asaas-webhook: autenticação via asaas-access-token header
+[functions.asaas-webhook]
+verify_jwt = false

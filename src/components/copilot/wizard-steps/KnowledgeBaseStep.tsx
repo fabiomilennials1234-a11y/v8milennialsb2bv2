@@ -38,9 +38,14 @@ const ACCEPTED_TYPES = [
   "text/csv",
   "application/msword",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "image/png",
+  "image/jpeg",
+  "image/jpg",
+  "image/webp",
+  "image/gif",
 ];
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
 const MAX_FILES = 5;
 
 function formatFileSize(bytes: number): string {
@@ -222,7 +227,7 @@ export function KnowledgeBaseStep() {
               Arraste arquivos aqui ou clique para selecionar
             </p>
             <p className="text-xs text-muted-foreground mt-1">
-              PDF, TXT, MD, CSV, DOC/DOCX — Máx. 10MB por arquivo — Até {MAX_FILES}{" "}
+              PDF, TXT, MD, CSV, DOC/DOCX — Máx. 100MB por arquivo — Até {MAX_FILES}{" "}
               documentos
             </p>
             <input
@@ -379,7 +384,7 @@ export function KnowledgeBaseManager({
           {uploadPending ? "Enviando..." : "Arraste ou clique para enviar novo documento"}
         </p>
         <p className="text-xs text-muted-foreground mt-1">
-          PDF, TXT, MD, CSV, DOC/DOCX — Máx. 10MB por arquivo
+          PDF, TXT, MD, CSV, DOC/DOCX — Máx. 100MB por arquivo
         </p>
         <input
           ref={fileInputRef}

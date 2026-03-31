@@ -176,6 +176,16 @@ export function BillingOverrideModal({
     return orgFeatures?.some((of) => of.feature_key === key && of.enabled) || false;
   };
 
+  const formatPlanPrice = (plan: any) => {
+    if (plan.price_per_user_monthly) {
+      return `R$ ${plan.price_per_user_monthly}/usuário/mês (mín. ${plan.min_users})`;
+    }
+    if (plan.base_price_monthly) {
+      return `R$ ${plan.base_price_monthly}/mês + R$ ${plan.extra_user_price}/extra`;
+    }
+    return `R$ ${plan.price_monthly}/mês`;
+  };
+
   if (!organization) return null;
 
   return (
@@ -234,10 +244,10 @@ export function BillingOverrideModal({
                 <SelectContent>
                   {plans?.map((plan) => (
                     <SelectItem key={plan.id} value={plan.name}>
-                      <div className="flex items-center justify-between w-full">
+                      <div className="flex flex-col">
                         <span>{plan.display_name}</span>
-                        <span className="text-muted-foreground ml-4">
-                          R$ {plan.price_monthly}/mês
+                        <span className="text-xs text-muted-foreground">
+                          {formatPlanPrice(plan)}
                         </span>
                       </div>
                     </SelectItem>

@@ -24,6 +24,7 @@ interface ConversationSummary {
   objections: string[];
   questions_asked: string[];
   next_action: string;
+  coaching_tips: string[];
   message_count: number;
 }
 
@@ -67,23 +68,26 @@ Deno.serve(withSentry('summarize-conversation', async (req) => {
       .single();
 
     if (leadError || !lead) {
-      return new Response(JSON.stringify({ error: "Lead not found" }), {
+      return new Response(JSON.stringify({ error: "Lead não encontrado." }), {
         status: 404,
         headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
     }
 
-    // 2. Buscar a conversa do lead
+    // 2. Buscar a conversa do lead (mais recente)
     let conversationQuery = supabase
       .from('conversations')
       .select('*')
       .eq('lead_id', lead_id);
-    
+
     if (conversation_id) {
       conversationQuery = conversationQuery.eq('id', conversation_id);
     }
 
-    const { data: conversation, error: convError } = await conversationQuery.maybeSingle();
+    const { data: conversation, error: convError } = await conversationQuery
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
     if (convError) {
       console.error('[summarize-conversation] Error fetching conversation:', convError);
@@ -125,11 +129,10 @@ Deno.serve(withSentry('summarize-conversation', async (req) => {
       }
     }
 
-    // Se não houver mensagens, retornar erro
+    // Se não houver mensagens, retornar erro amigável
     if (messages.length === 0) {
-      return new Response(JSON.stringify({ 
-        error: "No messages found for this lead",
-        lead_id,
+      return new Response(JSON.stringify({
+        error: "Nenhuma mensagem encontrada para este lead. Inicie uma conversa antes de gerar o resumo.",
       }), {
         status: 404,
         headers: { ...corsHeaders, "Content-Type": "application/json" }
@@ -164,28 +167,32 @@ Deno.serve(withSentry('summarize-conversation', async (req) => {
 
     // 4. Preparar prompt para a IA
     const conversationText = messages
-      .map(m => `${m.role === 'user' ? 'Lead' : 'Bot'}: ${m.content}`)
+      .map(m => `${m.role === 'user' ? 'Lead' : 'Vendedor'}: ${m.content}`)
       .join('\n');
 
-    const systemPrompt = `Você é um analista de conversas de vendas. Analise a conversa abaixo entre um lead e um agente de vendas (bot).
+    const systemPrompt = `Você é um especialista comercial sênior com mais de 15 anos de experiência em prospecção B2B, fechamento de vendas consultivas e quebra de objeções. Você domina metodologias como SPIN Selling, Challenger Sale e BANT. Sua missão é analisar conversas de vendas e fornecer coaching prático para o vendedor melhorar.
 
-Retorne APENAS um JSON válido (sem markdown, sem explicações) com a seguinte estrutura:
+Analise a conversa abaixo entre um lead e um vendedor/agente. Retorne APENAS um JSON válido (sem markdown, sem explicações) com a seguinte estrutura:
+
 {
-  "summary": "Resumo da conversa em 2-3 frases",
+  "summary": "Resumo da conversa em 2-3 frases, com tom de coaching comercial — destaque o que foi bem feito e onde o vendedor pode melhorar",
   "key_points": ["ponto 1", "ponto 2", "ponto 3"],
   "sentiment": "positive" | "neutral" | "negative",
   "lead_temperature": "cold" | "warm" | "hot",
-  "objections": ["objeção 1", "objeção 2"],
-  "questions_asked": ["pergunta 1", "pergunta 2"],
-  "next_action": "Próxima ação sugerida"
+  "objections": ["objeção identificada com sugestão de como quebrá-la"],
+  "questions_asked": ["pergunta do lead"],
+  "next_action": "Próxima ação concreta e específica que o vendedor deve tomar, com sugestão de abordagem",
+  "coaching_tips": ["dica prática 1 de como o vendedor pode melhorar nesta conversa", "dica prática 2"]
 }
 
 Regras:
-- sentiment: positive se o lead demonstra interesse, negative se demonstra desinteresse/frustração, neutral caso contrário
-- lead_temperature: hot se está próximo de fechar, warm se demonstra interesse ativo, cold se está apenas explorando
-- Extraia objeções levantadas pelo lead (preço alto, timing ruim, etc)
-- Extraia perguntas feitas pelo lead
-- Sugira a próxima ação baseada no estado da conversa
+- summary: Seja direto e prático. Foque no que importa para fechar a venda. Aponte erros de abordagem se houver (ex: falar demais, não fazer perguntas abertas, não qualificar o lead).
+- sentiment: positive se demonstra interesse real de compra, negative se há frustração/desinteresse, neutral caso contrário.
+- lead_temperature: hot se deu sinais claros de compra (pediu preço, perguntou próximos passos, demonstrou urgência), warm se há interesse mas faltam sinais de compra, cold se está apenas explorando ou não engajou.
+- objections: Extraia cada objeção e adicione entre parênteses uma sugestão prática de como quebrá-la. Ex: "Preço alto (mostrar ROI em 3 meses, comparar com custo de não ter a solução)".
+- questions_asked: Extraia as perguntas do lead — elas revelam o que mais importa pra ele.
+- next_action: Seja específico. Não diga "fazer follow-up". Diga "Enviar comparativo de preços destacando ROI e agendar call para quinta-feira".
+- coaching_tips: Dê 2-3 dicas práticas e acionáveis sobre o que o vendedor pode melhorar. Foque em: qualificação, perguntas abertas, escuta ativa, timing de follow-up, técnicas de fechamento, e quebra de objeções.
 
 IMPORTANTE: Retorne APENAS o JSON, nada mais.`;
 
@@ -205,13 +212,14 @@ IMPORTANTE: Retorne APENAS o JSON, nada mais.`;
           { role: 'user', content: `Conversa:\n\n${conversationText}` }
         ],
         temperature: 0.3,
-        max_tokens: 1000,
+        max_tokens: 1500,
       }),
     });
 
     if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`OpenRouter API error: ${response.status} ${error}`);
+      const errorBody = await response.text();
+      console.error('[summarize-conversation] OpenRouter error:', response.status, errorBody);
+      throw new Error("Falha ao gerar resumo com IA. Tente novamente em alguns instantes.");
     }
 
     const aiResponse = await response.json();
@@ -240,6 +248,7 @@ IMPORTANTE: Retorne APENAS o JSON, nada mais.`;
         objections: [],
         questions_asked: [],
         next_action: "Continuar qualificação",
+        coaching_tips: [],
         message_count: messages.length,
       };
     }
@@ -261,6 +270,7 @@ IMPORTANTE: Retorne APENAS o JSON, nada mais.`;
         objections: summaryData.objections,
         questions_asked: summaryData.questions_asked,
         next_action: summaryData.next_action,
+        coaching_tips: summaryData.coaching_tips || [],
         message_count: summaryData.message_count,
         updated_at: new Date().toISOString(),
       }, {
@@ -299,14 +309,15 @@ IMPORTANTE: Retorne APENAS o JSON, nada mais.`;
 
   } catch (error) {
     console.error('[summarize-conversation] Error:', error);
+    const errorMessage = error instanceof Error ? error.message : "Erro desconhecido";
     await logRuntime({
       module: "copilot",
       action: "summarize",
       status: "error",
-      errorMessage: error instanceof Error ? error.message : "Unknown error",
+      errorMessage,
     });
     return new Response(JSON.stringify({
-      error: error instanceof Error ? error.message : "Unknown error",
+      error: errorMessage,
     }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" }

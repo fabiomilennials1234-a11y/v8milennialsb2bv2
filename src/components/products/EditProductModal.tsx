@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { ProductMaterialsSection } from "./ProductMaterialsSection";
 import {
   Dialog,
   DialogContent,
@@ -44,7 +45,7 @@ interface VariantForm {
 }
 
 const SKU_PREFIXES: Record<ProductType, string> = {
-  mrr: "MRR",
+  mrr: "REC",
   projeto: "PRJ",
   unitario: "UNI",
 };
@@ -254,7 +255,7 @@ export function EditProductModal({ product, open, onOpenChange }: EditProductMod
                   id="sku"
                   value={formData.sku}
                   onChange={(e) => setFormData((prev) => ({ ...prev, sku: e.target.value }))}
-                  placeholder="Ex: MRR-0001"
+                  placeholder="Ex: REC-0001"
                 />
                 <Button type="button" variant="outline" size="icon" onClick={generateSku} title="Gerar SKU automático">
                   <Wand2 className="h-4 w-4" />
@@ -276,7 +277,7 @@ export function EditProductModal({ product, open, onOpenChange }: EditProductMod
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="mrr">MRR (Recorrente)</SelectItem>
+                  <SelectItem value="mrr">Recorrência</SelectItem>
                   <SelectItem value="projeto">Projeto</SelectItem>
                   <SelectItem value="unitario">Unitário (Pontual)</SelectItem>
                 </SelectContent>
@@ -398,7 +399,7 @@ export function EditProductModal({ product, open, onOpenChange }: EditProductMod
                       <Input
                         value={variant.sku}
                         onChange={(e) => updateVariantField(index, "sku", e.target.value)}
-                        placeholder="Ex: MRR-0001-01"
+                        placeholder="Ex: REC-0001-01"
                       />
                     </div>
                   </div>
@@ -561,6 +562,13 @@ export function EditProductModal({ product, open, onOpenChange }: EditProductMod
               />
             </div>
           </div>
+
+          {/* Materials (only when editing existing product) */}
+          {product?.id && (
+            <div className="border-t border-border pt-4">
+              <ProductMaterialsSection productId={product.id} />
+            </div>
+          )}
 
           {/* Active */}
           <div className="flex items-center gap-2">

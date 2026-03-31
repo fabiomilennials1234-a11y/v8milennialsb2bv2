@@ -2,25 +2,63 @@
  * Step: Testar Conversa (Preview ao vivo)
  *
  * Dois modos:
- * - Reativo (qualificador): usuário envia primeira mensagem → agente responde
- * - Proativo (sdr, prospectador, followup, agendador): agente envia primeira mensagem → usuário responde como lead
+ * - Reativo (qualificador): usuario envia primeira mensagem -> agente responde
+ * - Proativo (sdr, prospectador, followup, agendador): agente envia primeira mensagem -> usuario responde como lead
+ * - Suporte a attachments (imagens e PDFs)
  */
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useFormContext } from "react-hook-form";
+import { useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Send, Loader2, MessageSquare, RefreshCw, Bot, User, Play } from "lucide-react";
+import { Send, Loader2, MessageSquare, RefreshCw, Bot, User, Play, Paperclip, X, FileText } from "lucide-react";
 import { generatePrompt } from "@/hooks/useCopilotPromptBuilder";
 import { mapWizardDataToAgentPreview } from "@/lib/copilot/prompt-utils";
 import type { CopilotWizardData } from "@/types/copilot";
 
+interface ChatAttachment {
+  base64: string;
+  mimeType: string;
+  fileName: string;
+  previewUrl?: string;
+}
+
 interface ChatMessage {
   role: "user" | "assistant";
   content: string;
+  attachment?: {
+    type: "image" | "pdf";
+    previewUrl?: string;
+    fileName: string;
+  };
+}
+
+const ACCEPTED_TYPES = [
+  "image/png",
+  "image/jpeg",
+  "image/jpg",
+  "image/webp",
+  "image/gif",
+  "application/pdf",
+];
+
+const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      const base64 = result.split(",")[1];
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 }
 
 /** Tipos de agentes que iniciam o contato (proativos) */
@@ -28,32 +66,34 @@ const PROACTIVE_TYPES = new Set(["followup", "agendador", "sdr", "prospectador"]
 
 const PROACTIVE_LABELS: Record<string, string> = {
   followup: "Follow-up",
-  agendador: "Confirmador de Reuniões",
+  agendador: "Confirmador de Reunioes",
   sdr: "SDR Outbound",
   prospectador: "Prospectador",
 };
 
 const PROACTIVE_HINTS: Record<string, string[]> = {
-  followup: ["Tudo bem, pode me lembrar mais tarde", "Ainda tenho interesse sim!", "Não tenho interesse mais"],
-  agendador: ["Confirmo! Estarei lá", "Preciso remarcar", "Qual o link da reunião?"],
-  sdr: ["Oi, quem é você?", "Me conta mais sobre isso", "Não tenho interesse, obrigado"],
-  prospectador: ["Pode me falar mais?", "Qual o preço?", "Não estou interessado no momento"],
+  followup: ["Tudo bem, pode me lembrar mais tarde", "Ainda tenho interesse sim!", "Nao tenho interesse mais"],
+  agendador: ["Confirmo! Estarei la", "Preciso remarcar", "Qual o link da reuniao?"],
+  sdr: ["Oi, quem e voce?", "Me conta mais sobre isso", "Nao tenho interesse, obrigado"],
+  prospectador: ["Pode me falar mais?", "Qual o preco?", "Nao estou interessado no momento"],
 };
 
 export function TestConversationStep() {
   const { watch } = useFormContext<CopilotWizardData>();
+  const { id: editAgentId } = useParams<{ id: string }>();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
   const [hasStarted, setHasStarted] = useState(false);
   const [systemPrompt, setSystemPrompt] = useState<string>("");
+  const [pendingAttachment, setPendingAttachment] = useState<ChatAttachment | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const watchedData = watch();
   const templateType = watchedData.templateType || "";
   const operationMode = watchedData.operationMode || "inbound";
-  // Proativo: por templateType OU por operationMode outbound/hybrid
   const isProactive = PROACTIVE_TYPES.has(templateType) || operationMode === "outbound" || operationMode === "hybrid";
   const agentName = watchedData.name || "Agente";
 
@@ -87,9 +127,10 @@ export function TestConversationStep() {
     setMessages([]);
     setHasStarted(false);
     setInputValue("");
+    setPendingAttachment(null);
   }, [templateType]);
 
-  // Scroll para última mensagem
+  // Scroll para ultima mensagem
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -101,10 +142,47 @@ export function TestConversationStep() {
   // Template de primeira mensagem para outbound/hybrid
   const firstMessageTemplate = watchedData.outboundConfig?.firstMessageTemplate || "";
 
+  const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    if (!file) return;
+
+    if (!ACCEPTED_TYPES.includes(file.type)) {
+      toast.error("Tipo de arquivo nao suportado", {
+        description: "Envie imagens (PNG, JPG, WebP, GIF) ou PDFs.",
+      });
+      return;
+    }
+
+    if (file.size > MAX_FILE_SIZE) {
+      toast.error("Arquivo muito grande", {
+        description: "O tamanho maximo e 20MB.",
+      });
+      return;
+    }
+
+    try {
+      const base64 = await fileToBase64(file);
+      const previewUrl = file.type.startsWith("image/")
+        ? URL.createObjectURL(file)
+        : undefined;
+
+      setPendingAttachment({
+        base64,
+        mimeType: file.type,
+        fileName: file.name,
+        previewUrl,
+      });
+    } catch {
+      toast.error("Erro ao ler arquivo");
+    }
+  }, []);
+
   const callEdgeFunction = useCallback(async (
     currentMessages: ChatMessage[],
     userMsg: string,
-    isFirst: boolean
+    isFirst: boolean,
+    attachment?: ChatAttachment,
   ): Promise<string[]> => {
     const response = await fetch(`${supabaseUrl}/functions/v1/test-copilot-chat`, {
       method: "POST",
@@ -115,10 +193,12 @@ export function TestConversationStep() {
       },
       body: JSON.stringify({
         systemPrompt,
-        messages: currentMessages.slice(-10),
+        messages: currentMessages.slice(-10).map(({ role, content }) => ({ role, content })),
         userMessage: userMsg,
         generateFirstMessage: isFirst,
         ...(isFirst && firstMessageTemplate ? { firstMessageTemplate } : {}),
+        ...(editAgentId ? { agentId: editAgentId } : {}),
+        ...(attachment ? { attachment: { base64: attachment.base64, mimeType: attachment.mimeType, fileName: attachment.fileName } } : {}),
       }),
     });
 
@@ -126,14 +206,14 @@ export function TestConversationStep() {
     try {
       result = await response.json();
     } catch {
-      throw new Error(`Resposta inválida do servidor (HTTP ${response.status})`);
+      throw new Error(`Resposta invalida do servidor (HTTP ${response.status})`);
     }
     if (!response.ok) throw new Error((result?.error as string) || `Erro HTTP ${response.status}`);
 
     const parts = (result?.messages as string[] | undefined) || [result?.message as string];
     if (!parts[0]) throw new Error("Resposta vazia do agente");
     return parts;
-  }, [systemPrompt, firstMessageTemplate, supabaseUrl, anonKey]);
+  }, [systemPrompt, firstMessageTemplate, supabaseUrl, anonKey, editAgentId]);
 
   /** Agentes proativos: dispara a primeira mensagem do agente */
   const handleStartProactive = async () => {
@@ -155,18 +235,33 @@ export function TestConversationStep() {
     }
   };
 
-  /** Agentes reativos e continuação para ambos os tipos */
+  /** Agentes reativos e continuacao para ambos os tipos */
   const handleSend = async () => {
-    if (!inputValue.trim() || isSending || !canTest) return;
+    if ((!inputValue.trim() && !pendingAttachment) || isSending || !canTest) return;
 
     const userMessage = inputValue.trim();
     setInputValue("");
-    const updatedMessages: ChatMessage[] = [...messages, { role: "user", content: userMessage }];
+
+    const msgAttachment = pendingAttachment
+      ? {
+          type: (pendingAttachment.mimeType.startsWith("image/") ? "image" : "pdf") as "image" | "pdf",
+          previewUrl: pendingAttachment.previewUrl,
+          fileName: pendingAttachment.fileName,
+        }
+      : undefined;
+
+    const currentAttachment = pendingAttachment || undefined;
+    setPendingAttachment(null);
+
+    const updatedMessages: ChatMessage[] = [
+      ...messages,
+      { role: "user", content: userMessage || (msgAttachment ? `[${msgAttachment.fileName}]` : ""), attachment: msgAttachment },
+    ];
     setMessages(updatedMessages);
     setIsSending(true);
 
     try {
-      const parts = await callEdgeFunction(messages, userMessage, false);
+      const parts = await callEdgeFunction(messages, userMessage || "[Arquivo enviado]", false, currentAttachment);
       for (let i = 0; i < parts.length; i++) {
         if (i > 0) await new Promise<void>((r) => setTimeout(r, 700));
         setMessages((prev) => [...prev, { role: "assistant", content: parts[i] }]);
@@ -191,11 +286,12 @@ export function TestConversationStep() {
     setMessages([]);
     setHasStarted(false);
     setInputValue("");
+    setPendingAttachment(null);
   };
 
-  // Sugestões de resposta (apenas para proativos após primeira mensagem)
+  // Sugestoes de resposta (apenas para proativos apos primeira mensagem)
   const proactiveHints = PROACTIVE_HINTS[templateType] || [];
-  const reactiveSuggestions = ["Olá, quero saber mais", "Qual o preço?", "Como funciona?"];
+  const reactiveSuggestions = ["Ola, quero saber mais", "Qual o preco?", "Como funciona?"];
 
   return (
     <div className="space-y-4">
@@ -207,8 +303,8 @@ export function TestConversationStep() {
           </h2>
           <p className="text-muted-foreground">
             {isProactive
-              ? `Este agente é proativo — ele inicia o contato. Clique em "Iniciar teste" para ver a primeira mensagem que ele enviaria.`
-              : "Simule uma conversa com seu agente antes de finalizar a criação."}
+              ? `Este agente e proativo — ele inicia o contato. Clique em "Iniciar teste" para ver a primeira mensagem que ele enviaria.`
+              : "Simule uma conversa com seu agente antes de finalizar a criacao."}
           </p>
         </div>
         {messages.length > 0 && (
@@ -229,7 +325,7 @@ export function TestConversationStep() {
         <Card className="p-6 text-center border-dashed">
           <MessageSquare className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
           <p className="text-muted-foreground text-sm">
-            Preencha o contexto do negócio e o objetivo do agente para habilitar o teste.
+            Preencha o contexto do negocio e o objetivo do agente para habilitar o teste.
           </p>
         </Card>
       ) : (
@@ -241,7 +337,7 @@ export function TestConversationStep() {
                 Modo proativo
               </Badge>
               <span className="text-xs text-muted-foreground">
-                {PROACTIVE_LABELS[templateType] || agentName} envia a primeira mensagem — você responde como lead
+                {PROACTIVE_LABELS[templateType] || agentName} envia a primeira mensagem — voce responde como lead
               </span>
             </div>
           )}
@@ -287,7 +383,7 @@ export function TestConversationStep() {
                   ) : (
                     <>
                       <p className="text-sm text-muted-foreground">
-                        Envie uma mensagem para começar o teste
+                        Envie uma mensagem para comecar o teste
                       </p>
                       <div className="flex flex-wrap gap-2 justify-center mt-1">
                         {reactiveSuggestions.map((s) => (
@@ -323,6 +419,20 @@ export function TestConversationStep() {
                             : "bg-muted rounded-bl-sm"
                         }`}
                       >
+                        {/* Attachment preview in message */}
+                        {msg.attachment && msg.attachment.type === "image" && msg.attachment.previewUrl && (
+                          <img
+                            src={msg.attachment.previewUrl}
+                            alt={msg.attachment.fileName}
+                            className="max-w-[200px] max-h-[150px] rounded-lg mb-1 object-cover"
+                          />
+                        )}
+                        {msg.attachment && msg.attachment.type === "pdf" && (
+                          <div className="flex items-center gap-1.5 mb-1 px-2 py-1 rounded bg-black/10 text-xs">
+                            <FileText className="w-3.5 h-3.5" />
+                            {msg.attachment.fileName}
+                          </div>
+                        )}
                         {msg.content}
                       </div>
                       {msg.role === "user" && (
@@ -333,7 +443,7 @@ export function TestConversationStep() {
                     </div>
                   ))}
 
-                  {/* Sugestões de resposta para proativos, após primeira mensagem do agente */}
+                  {/* Sugestoes de resposta para proativos, apos primeira mensagem do agente */}
                   {isProactive && !isSending && !isStarting && messages[messages.length - 1]?.role === "assistant" && (
                     <div className="flex flex-wrap gap-1.5 justify-end pt-1">
                       {proactiveHints.map((hint) => (
@@ -364,9 +474,56 @@ export function TestConversationStep() {
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Input — aparece sempre para reativos; para proativos só após iniciar */}
+            {/* Pending attachment preview */}
+            {pendingAttachment && (
+              <div className="px-3 pt-2 flex items-center gap-2 border-t">
+                {pendingAttachment.mimeType.startsWith("image/") && pendingAttachment.previewUrl ? (
+                  <img
+                    src={pendingAttachment.previewUrl}
+                    alt={pendingAttachment.fileName}
+                    className="w-12 h-12 rounded object-cover border"
+                  />
+                ) : (
+                  <div className="flex items-center gap-1.5 px-2 py-1.5 rounded border bg-muted text-xs">
+                    <FileText className="w-3.5 h-3.5" />
+                    {pendingAttachment.fileName}
+                  </div>
+                )}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  onClick={() => {
+                    if (pendingAttachment.previewUrl) URL.revokeObjectURL(pendingAttachment.previewUrl);
+                    setPendingAttachment(null);
+                  }}
+                >
+                  <X className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            )}
+
+            {/* Input — aparece sempre para reativos; para proativos so apos iniciar */}
             {(!isProactive || hasStarted) && (
               <div className="flex gap-2 p-3 border-t">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept={ACCEPTED_TYPES.join(",")}
+                  onChange={handleFileSelect}
+                  className="hidden"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-9 w-9 flex-shrink-0"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isSending || isStarting}
+                >
+                  <Paperclip className="w-4 h-4" />
+                </Button>
                 <Input
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
@@ -383,7 +540,7 @@ export function TestConversationStep() {
                   type="button"
                   size="icon"
                   onClick={handleSend}
-                  disabled={!inputValue.trim() || isSending || isStarting}
+                  disabled={(!inputValue.trim() && !pendingAttachment) || isSending || isStarting}
                 >
                   {isSending ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
@@ -396,7 +553,7 @@ export function TestConversationStep() {
           </Card>
 
           <p className="text-xs text-muted-foreground text-center">
-            Simulação usando o prompt gerado em tempo real. O comportamento real pode variar.
+            Simulacao usando o prompt gerado em tempo real. O comportamento real pode variar.
           </p>
         </>
       )}

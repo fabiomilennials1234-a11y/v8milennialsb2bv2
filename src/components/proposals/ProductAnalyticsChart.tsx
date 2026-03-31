@@ -289,7 +289,7 @@ export function ProductAnalyticsChart({ data }: ProductAnalyticsChartProps) {
                           )}
                         >
                           {product.productType === "mrr"
-                            ? "MRR"
+                            ? "Rec."
                             : product.productType === "unitario"
                             ? "Unitário"
                             : "Projeto"}

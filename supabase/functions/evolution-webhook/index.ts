@@ -31,6 +31,7 @@ const MAX_RESPONSE_DELAY_SECONDS = 10;
 const DEFAULT_BATCH_WAIT_SECONDS = 8;
 const MAX_MESSAGE_LENGTH = 350; // Máximo de caracteres por mensagem
 const DELAY_BETWEEN_MESSAGES_MS = 1500; // Delay entre mensagens (1.5s)
+const HUMAN_TAKEOVER_TIMEOUT_MINUTES = 10; // Copilot pausa 10min após atendente humano enviar msg
 
 interface EvolutionWebhookPayload {
   event: string;
@@ -517,7 +518,7 @@ async function triggerAgentMessage(
   messageText: string,
   pushName?: string,
   incomingMessageType?: string
-): Promise<{ success: boolean; message?: string; error?: string }> {
+): Promise<{ success: boolean; message?: string; error?: string; media_attachments?: Array<{ type: string; document_id: string; caption?: string }> }> {
   try {
     console.log("[Evolution Webhook] Triggering agent-message for:", {
       organizationId,
@@ -563,7 +564,7 @@ async function triggerAgentMessage(
       action: result.action_executed,
     });
 
-    return { success: true, message: result.message };
+    return { success: true, message: result.message, media_attachments: result.media_attachments };
   } catch (error) {
     console.error("[Evolution Webhook] Error calling agent-message:", error);
     return { success: false, error: String(error) };
@@ -1061,6 +1062,52 @@ async function handleMessagesUpsert(
             continue;
           }
 
+          // =====================================================
+          // HUMAN TAKEOVER: Se um atendente humano enviou mensagem
+          // nos últimos 10 min, pausar copilot para não interferir
+          // =====================================================
+          const humanTimeoutAgo = new Date(
+            Date.now() - HUMAN_TAKEOVER_TIMEOUT_MINUTES * 60 * 1000
+          ).toISOString();
+
+          const { data: recentHumanMsg } = await supabase
+            .from("whatsapp_messages")
+            .select("message_id, created_at")
+            .eq("organization_id", instance.organization_id)
+            .eq("phone_number", phoneNumber)
+            .eq("direction", "outgoing")
+            .not("sent_by_ai", "is", true)
+            .gte("created_at", humanTimeoutAgo)
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (recentHumanMsg) {
+            console.log("[Evolution Webhook] Human agent active, skipping copilot:", {
+              phone: phoneNumber,
+              lastHumanMsgAt: recentHumanMsg.created_at,
+              timeoutMinutes: HUMAN_TAKEOVER_TIMEOUT_MINUTES,
+            });
+
+            // Marcar mensagens incoming como processadas para não reprocessar
+            const { data: pendingToMark } = await supabase
+              .from("whatsapp_messages")
+              .select("message_id")
+              .eq("organization_id", instance.organization_id)
+              .eq("phone_number", phoneNumber)
+              .eq("direction", "incoming")
+              .is("processed_by_agent_at", null);
+
+            if (pendingToMark && pendingToMark.length > 0) {
+              await supabase
+                .from("whatsapp_messages")
+                .update({ processed_by_agent_at: new Date().toISOString() })
+                .in("message_id", pendingToMark.map((m: { message_id: string }) => m.message_id));
+            }
+
+            continue;
+          }
+
           // Esta é a mensagem mais recente! Buscar TODAS não processadas
           const { data: pendingMessages, error: fetchError } = await supabase
             .from("whatsapp_messages")
@@ -1243,6 +1290,11 @@ async function handleMessagesUpsert(
                 }
               }
             }
+            // Documentos anexados pelo copilot sao enviados pelo ai-action-executor via fila
+            if (agentResult.media_attachments && agentResult.media_attachments.length > 0) {
+              console.log("[Evolution Webhook] Agent requested document send:",
+                agentResult.media_attachments.map((a: any) => a.document_id));
+            }
           } else if (!agentResult.success) {
             console.error("[Evolution Webhook] Agent processing FAILED:", {
               error: agentResult.error,
@@ -1351,12 +1403,23 @@ async function handleSendMessage(
 
   const message = msg.message || (data as Record<string, unknown>).message as Record<string, unknown> | undefined;
   if (message) {
-    if ((message as Record<string, unknown>).imageMessage) messageType = "image";
-    else if ((message as Record<string, unknown>).audioMessage) {
-      messageType = ((message as Record<string, unknown>).audioMessage as Record<string, unknown>)?.ptt ? "ptt" : "audio";
+    const m = message as Record<string, unknown>;
+    if (m.imageMessage) {
+      messageType = "image";
+      mediaUrl = (m.imageMessage as Record<string, unknown>)?.url as string || null;
+    } else if (m.audioMessage) {
+      messageType = (m.audioMessage as Record<string, unknown>)?.ptt ? "ptt" : "audio";
+      mediaUrl = (m.audioMessage as Record<string, unknown>)?.url as string || null;
+    } else if (m.videoMessage) {
+      messageType = "video";
+      mediaUrl = (m.videoMessage as Record<string, unknown>)?.url as string || null;
+    } else if (m.documentMessage) {
+      messageType = "document";
+      mediaUrl = (m.documentMessage as Record<string, unknown>)?.url as string || null;
+    } else if (m.stickerMessage) {
+      messageType = "sticker";
+      mediaUrl = (m.stickerMessage as Record<string, unknown>)?.url as string || null;
     }
-    else if ((message as Record<string, unknown>).videoMessage) messageType = "video";
-    else if ((message as Record<string, unknown>).documentMessage) messageType = "document";
   }
 
   console.log("[Evolution Webhook] send.message saving:", {
@@ -1365,7 +1428,9 @@ async function handleSendMessage(
     messageId: key.id,
   });
 
-  const { error: msgError } = await supabase.from("whatsapp_messages").insert({
+  // Upsert: se já existe (ex: MESSAGES_UPSERT chegou primeiro), atualiza media_url
+  // para garantir que a URL correta do Storage sobrescreva null ou CDN URL expirada.
+  const { error: msgError } = await supabase.from("whatsapp_messages").upsert({
     organization_id: instance.organization_id,
     instance_id: instance.id,
     message_id: key.id,
@@ -1381,14 +1446,10 @@ async function handleSendMessage(
       ? new Date(Number(msg.messageTimestamp) * 1000).toISOString()
       : new Date().toISOString(),
     raw_payload: data as unknown as Record<string, unknown>,
-  });
+  }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
 
   if (msgError) {
-    if (!msgError.message?.includes("duplicate")) {
-      console.error("[Evolution Webhook] Error saving send.message:", msgError);
-    } else {
-      console.log("[Evolution Webhook] send.message already exists (duplicate), OK");
-    }
+    console.error("[Evolution Webhook] Error saving send.message:", msgError);
   } else {
     console.log("[Evolution Webhook] send.message saved successfully");
   }

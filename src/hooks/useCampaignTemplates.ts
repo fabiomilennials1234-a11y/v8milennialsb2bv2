@@ -253,6 +253,32 @@ export function useCampaignTemplates() {
 }
 
 /**
+ * Busca templates ativos da organização filtrados por tipo de mensagem.
+ * Substitui o antigo useMessageTemplates(type) que foi removido de useMessageTemplates.ts.
+ */
+export function useCampaignTemplatesByType(type: CampaignTemplateMessageType) {
+  const { organizationId } = useOrganization();
+
+  return useQuery({
+    queryKey: ["campaign_templates", organizationId, type],
+    queryFn: async (): Promise<CampaignTemplate[]> => {
+      if (!organizationId) return [];
+      const { data, error } = await supabase
+        .from("campaign_templates")
+        .select("id, organization_id, name, content, message_type, audio_url, available_variables, is_active, created_at, updated_at")
+        .eq("organization_id", organizationId)
+        .eq("message_type", type)
+        .eq("is_active", true)
+        .order("name");
+      if (error) throw error;
+      return (data ?? []) as CampaignTemplate[];
+    },
+    enabled: !!organizationId,
+    staleTime: 2 * 60 * 1000,
+  });
+}
+
+/**
  * Busca um template específico da organização atual (isolado por organização)
  */
 export function useCampaignTemplate(id: string | undefined) {

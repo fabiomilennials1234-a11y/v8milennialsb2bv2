@@ -9,6 +9,7 @@ import { useToggleLeadAI } from "@/hooks/useLeads";
 import { useLogLeadAction } from "@/hooks/useLogLeadAction";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+// Badge de agendamento usa prop hasScheduledMessages passada pelo pipe pai
 
 export interface LeadTag {
   name: string;
@@ -129,6 +130,7 @@ export function KanbanCard({ lead, onClick }: KanbanCardProps) {
           {originLabels[lead.origin]}
         </Badge>
 
+
         {lead.leadId && (
           <motion.div
             className="flex items-center gap-1 cursor-pointer"
@@ -171,19 +173,15 @@ export function KanbanCard({ lead, onClick }: KanbanCardProps) {
                     {
                       onSuccess: () => {
                         if (lead.leadId) {
-                          logAction({ leadId: lead.leadId, action: "ai_toggled", description: checked ? "IA Copilot ativada" : "IA Copilot desativada" });
+                          logAction({ leadId: lead.leadId, action: "ai_toggled", description: checked ? "IA ativada" : "IA desativada" });
                         }
                         toast({
                           title: checked ? "IA ativada" : "IA desativada",
                           description: checked
-                            ? "O Copilot voltará a responder mensagens deste lead."
-                            : "O Copilot não responderá mais mensagens deste lead.",
+                            ? "A IA voltará a responder mensagens deste lead."
+                            : "A IA não responderá mais mensagens deste lead.",
                         });
-                        setOptimisticAiDisabled(prev => {
-                          const newState = { ...prev };
-                          delete newState[lead.leadId!];
-                          return newState;
-                        });
+                        // Não limpar optimistic — cache update direto cuida disso
                       },
                       onError: () => {
                         setOptimisticAiDisabled(prev => {

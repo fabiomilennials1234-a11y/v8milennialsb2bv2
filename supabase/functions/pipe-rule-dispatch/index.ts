@@ -417,6 +417,7 @@ async function processPipeQueue(
               status: "sent",
               lead_id: lead.id,
               timestamp: new Date().toISOString(),
+              sent_by_ai: true,
             });
           } catch (chatSyncErr) {
             console.warn("[pipe-rule-dispatch] chat sync error:", chatSyncErr);
@@ -750,6 +751,7 @@ async function processExpiredTimeouts(
                   status: "sent",
                   lead_id: lead.id,
                   timestamp: new Date().toISOString(),
+                  sent_by_ai: true,
                 });
               } catch (_) { /* ignore */ }
             }

@@ -45,7 +45,7 @@ export function MonthlySales({ sales, totalMRR, totalProjeto }: MonthlySalesProp
         
         <div className="flex gap-4">
           <div className="text-right">
-            <p className="text-xs text-muted-foreground">MRR</p>
+            <p className="text-xs text-muted-foreground">Rec.</p>
             <p className="text-sm font-bold text-primary">{formatCurrency(totalMRR)}</p>
           </div>
           <div className="text-right">
@@ -92,7 +92,7 @@ export function MonthlySales({ sales, totalMRR, totalProjeto }: MonthlySalesProp
                         ? "bg-primary/20 text-primary" 
                         : "bg-purple-400/20 text-purple-400"
                     }`}>
-                      {sale.type?.toUpperCase() || "N/A"}
+                      {sale.type === "mrr" ? "Rec." : sale.type ? sale.type.charAt(0).toUpperCase() + sale.type.slice(1) : "N/A"}
                     </span>
                   </div>
                 </div>

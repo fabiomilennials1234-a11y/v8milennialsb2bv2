@@ -31,37 +31,13 @@ export interface CustomPipelineStatus {
 
 export type PipelineStatus = StandardPipelineStatus | CustomPipelineStatus;
 
-// ─── Standard pipeline stage definitions ─────────────────────
-
-const QUALIFICACAO_STAGES = [
-  { id: "novo", label: "Novo", color: "#6366f1" },
-  { id: "abordado", label: "Abordado", color: "#f59e0b" },
-  { id: "respondeu", label: "Respondeu", color: "#3b82f6" },
-  { id: "esfriou", label: "Esfriou", color: "#ef4444" },
-  { id: "agendado", label: "Agendado", color: "#22c55e" },
-];
-
-const CONFIRMACAO_STAGES = [
-  { id: "pre_confirmacao", label: "Pré-Confirmação", color: "#6366f1" },
-  { id: "confirmado", label: "Confirmado", color: "#22c55e" },
-  { id: "remarcado", label: "Remarcado", color: "#f59e0b" },
-  { id: "cancelado", label: "Cancelado", color: "#ef4444" },
-  { id: "realizada", label: "Realizada", color: "#10b981" },
-];
-
-const PROPOSTAS_STAGES = [
-  { id: "proposta_enviada", label: "Proposta Enviada", color: "#6366f1" },
-  { id: "em_negociacao", label: "Em Negociação", color: "#f59e0b" },
-  { id: "fechado_ganho", label: "Fechado Ganho", color: "#22c55e" },
-  { id: "fechado_perdido", label: "Fechado Perdido", color: "#ef4444" },
-];
-
-const UPSELL_STAGES = [
-  { id: "ativo", label: "Ativo", color: "#22c55e" },
-  { id: "em_expansao", label: "Em Expansão", color: "#3b82f6" },
-  { id: "churn_risco", label: "Risco de Churn", color: "#f59e0b" },
-  { id: "churned", label: "Churned", color: "#ef4444" },
-];
+// ─── Pipeline type mapping (pipeType alias → pipeline_stages.pipeline_type) ──
+const PIPE_TYPE_MAP: Record<string, string> = {
+  qualificacao: "whatsapp",
+  confirmacao: "confirmacao",
+  propostas: "propostas",
+  upsell: "upsell_base",
+};
 
 // ─── Main hook: fetch lead status across all pipelines ────────
 
@@ -75,12 +51,13 @@ export function useLeadAllPipelines(leadId: string | null) {
     queryFn: async (): Promise<PipelineStatus[]> => {
       if (!leadId || !orgId) return [];
 
-      // Fetch all standard pipelines + custom entries in parallel
+      // Fetch all standard pipelines + dynamic stages + custom entries in parallel
       const [
         { data: pipeWhatsapp },
         { data: pipeConfirmacao },
         { data: pipePropostas },
         { data: pipeUpsell },
+        { data: dynamicStages },
         { data: customEntries },
         { data: customStagesAll },
       ] = await Promise.all([
@@ -109,6 +86,12 @@ export function useLeadAllPipelines(leadId: string | null) {
           .eq("organization_id", orgId)
           .maybeSingle(),
         supabase
+          .from("pipeline_stages")
+          .select("pipeline_type, stage_key, name, color, position")
+          .eq("organization_id", orgId)
+          .eq("is_active", true)
+          .order("position", { ascending: true }),
+        supabase
           .from("custom_pipe_entries")
           .select("id, pipeline_id, stage_id")
           .eq("lead_id", leadId)
@@ -121,52 +104,43 @@ export function useLeadAllPipelines(leadId: string | null) {
           .order("position", { ascending: true }),
       ]);
 
+      // Build dynamic stage lists keyed by pipeline_type
+      const stagesByDbType = new Map<string, { id: string; label: string; color: string }[]>();
+      (dynamicStages || []).forEach((s) => {
+        const arr = stagesByDbType.get(s.pipeline_type) || [];
+        arr.push({ id: s.stage_key, label: s.name, color: s.color || "#64748b" });
+        stagesByDbType.set(s.pipeline_type, arr);
+      });
+
+      // Helper: get dynamic stages for a pipeType alias, with empty fallback
+      const getStages = (pipeType: string) => stagesByDbType.get(PIPE_TYPE_MAP[pipeType] || pipeType) || [];
+
       const results: PipelineStatus[] = [];
 
-      // Standard pipelines
-      results.push({
-        type: "standard",
-        pipeType: "qualificacao",
-        label: "Qualificação",
-        color: "#6366f1",
-        pipeId: pipeWhatsapp?.id || null,
-        currentStage: pipeWhatsapp?.status || null,
-        currentStageLabel: QUALIFICACAO_STAGES.find((s) => s.id === pipeWhatsapp?.status)?.label || null,
-        stages: QUALIFICACAO_STAGES,
-      });
+      // Standard pipelines — stages come from pipeline_stages (dynamic)
+      const buildStandard = (
+        pipeType: "qualificacao" | "confirmacao" | "propostas" | "upsell",
+        label: string,
+        color: string,
+        pipeEntry: { id: string; status: string } | null,
+      ): StandardPipelineStatus => {
+        const stages = getStages(pipeType);
+        return {
+          type: "standard",
+          pipeType,
+          label,
+          color,
+          pipeId: pipeEntry?.id || null,
+          currentStage: pipeEntry?.status || null,
+          currentStageLabel: stages.find((s) => s.id === pipeEntry?.status)?.label || null,
+          stages,
+        };
+      };
 
-      results.push({
-        type: "standard",
-        pipeType: "confirmacao",
-        label: "Confirmação",
-        color: "#22c55e",
-        pipeId: pipeConfirmacao?.id || null,
-        currentStage: pipeConfirmacao?.status || null,
-        currentStageLabel: CONFIRMACAO_STAGES.find((s) => s.id === pipeConfirmacao?.status)?.label || null,
-        stages: CONFIRMACAO_STAGES,
-      });
-
-      results.push({
-        type: "standard",
-        pipeType: "propostas",
-        label: "Propostas",
-        color: "#f59e0b",
-        pipeId: pipePropostas?.id || null,
-        currentStage: pipePropostas?.status || null,
-        currentStageLabel: PROPOSTAS_STAGES.find((s) => s.id === pipePropostas?.status)?.label || null,
-        stages: PROPOSTAS_STAGES,
-      });
-
-      results.push({
-        type: "standard",
-        pipeType: "upsell",
-        label: "Carteira",
-        color: "#3b82f6",
-        pipeId: pipeUpsell?.id || null,
-        currentStage: pipeUpsell?.status || null,
-        currentStageLabel: UPSELL_STAGES.find((s) => s.id === pipeUpsell?.status)?.label || null,
-        stages: UPSELL_STAGES,
-      });
+      results.push(buildStandard("qualificacao", "Qualificação", "#6366f1", pipeWhatsapp));
+      results.push(buildStandard("confirmacao", "Confirmação", "#22c55e", pipeConfirmacao));
+      results.push(buildStandard("propostas", "Propostas", "#f59e0b", pipePropostas));
+      results.push(buildStandard("upsell", "Carteira", "#3b82f6", pipeUpsell));
 
       // Custom pipelines
       const entriesMap = new Map((customEntries || []).map((e) => [e.pipeline_id, e]));

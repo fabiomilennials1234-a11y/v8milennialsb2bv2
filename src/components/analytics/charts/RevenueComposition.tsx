@@ -25,7 +25,7 @@ const COLORS = [
 ];
 
 const TYPE_LABELS: Record<string, string> = {
-  mrr: "MRR",
+  mrr: "Recorrência",
   projeto: "Projeto",
   unitario: "Unitário",
   physical: "Físico",

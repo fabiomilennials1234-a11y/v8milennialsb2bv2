@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Building, Phone, Mail, User, Tag, Plus, Type, Hash, Calendar, List, ToggleLeft, Clock, History, UserPlus, UserCheck, ArrowRight, Edit2, FileText, CheckCircle, XCircle, CalendarX, DollarSign, TrendingUp, Trash2, Package, ListTodo, CheckSquare, Bot, Loader2, ChevronDown, ChevronUp, Users, Send } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -34,11 +34,15 @@ import {
 } from "@/hooks/useLeadCustomFields";
 import { useLeadHistory } from "@/hooks/useLeadHistory";
 import { ScheduleFollowUpButton } from "@/components/followups/ScheduleFollowUpButton";
+import { useCustomPipelines, useCustomPipelineStages, useAddLeadToCustomPipe } from "@/hooks/useCustomPipelines";
+import { useAllPipelineStageOptions, getPipelineTypeName } from "@/hooks/usePipelineStages";
+import { useCreatePipeWhatsapp } from "@/hooks/usePipeWhatsapp";
+import { useCreatePipeConfirmacao } from "@/hooks/usePipeConfirmacao";
+import { useCreatePipeProposta } from "@/hooks/usePipePropostas";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
 
 const originLabels: Record<string, string> = {
   whatsapp: "WhatsApp",
@@ -56,6 +60,8 @@ interface LeadModalProps {
   lead?: any;
   onSuccess?: (newLeadId?: string) => void;
   defaultResponsibleId?: string | null;
+  /** Hide pipe/funnel selector — used when the caller already handles pipe insertion (e.g. PipeWhatsapp) */
+  skipPipeSelector?: boolean;
 }
 
 interface FormData {
@@ -88,7 +94,7 @@ const ACTION_CONFIG: Record<string, { icon: React.ReactNode; label: string; colo
   product_linked: { icon: <Package className="w-3.5 h-3.5" />, label: "Produto vinculado", color: "bg-purple-500/20 text-purple-600" },
   followup_created: { icon: <ListTodo className="w-3.5 h-3.5" />, label: "Tarefa criada", color: "bg-blue-500/20 text-blue-600" },
   followup_completed: { icon: <CheckSquare className="w-3.5 h-3.5" />, label: "Tarefa concluida", color: "bg-green-500/20 text-green-600" },
-  ai_toggled: { icon: <Bot className="w-3.5 h-3.5" />, label: "IA Copilot", color: "bg-primary/20 text-primary" },
+  ai_toggled: { icon: <Bot className="w-3.5 h-3.5" />, label: "IA", color: "bg-primary/20 text-primary" },
   copilot_interaction: { icon: <Bot className="w-3.5 h-3.5" />, label: "Copilot atendeu", color: "bg-primary/20 text-primary" },
 };
 
@@ -176,7 +182,8 @@ export function LeadModal({
   onOpenChange,
   lead,
   onSuccess,
-  defaultResponsibleId
+  defaultResponsibleId,
+  skipPipeSelector
 }: LeadModalProps) {
   const isEditing = !!lead;
 
@@ -207,6 +214,48 @@ export function LeadModal({
   const { data: customFields = [] } = useLeadCustomFields();
   const { data: fieldValues = [] } = useLeadCustomFieldValues(lead?.id || null);
   const saveFieldValue = useSaveCustomFieldValue();
+
+  // ── Pipe/funnel selection (creation mode only) ──
+  const [selectedPipe, setSelectedPipe] = useState("");
+  const [selectedStage, setSelectedStage] = useState("");
+  const { data: customPipelines = [] } = useCustomPipelines();
+  const customPipelineId = selectedPipe.startsWith("custom:") ? selectedPipe.slice(7) : undefined;
+  const { data: customStages = [] } = useCustomPipelineStages(customPipelineId);
+  const { stagesByPipe } = useAllPipelineStageOptions();
+  const createPipeWhatsapp = useCreatePipeWhatsapp();
+  const createPipeConfirmacao = useCreatePipeConfirmacao();
+  const createPipeProposta = useCreatePipeProposta();
+  const addLeadToCustomPipe = useAddLeadToCustomPipe();
+
+  const showPipeSelector = !isEditing && !skipPipeSelector;
+
+  const pipeOptions = useMemo(() => {
+    const standard = [
+      { value: "std:whatsapp", label: getPipelineTypeName("whatsapp") },
+      { value: "std:confirmacao", label: getPipelineTypeName("confirmacao") },
+      { value: "std:propostas", label: getPipelineTypeName("propostas") },
+    ];
+    const custom = customPipelines.map(p => ({ value: `custom:${p.id}`, label: p.name }));
+    return [...standard, ...custom];
+  }, [customPipelines]);
+
+  const stageOptions = useMemo(() => {
+    if (selectedPipe.startsWith("std:")) {
+      const pipeType = selectedPipe.slice(4);
+      return (stagesByPipe[pipeType] || []).map(s => ({ value: s.value, label: s.label }));
+    }
+    if (selectedPipe.startsWith("custom:") && customStages.length > 0) {
+      return customStages.map(s => ({ value: s.id, label: s.name }));
+    }
+    return [];
+  }, [selectedPipe, stagesByPipe, customStages]);
+
+  // Auto-select first stage when pipe changes or stages load
+  useEffect(() => {
+    if (selectedPipe && stageOptions.length > 0 && !selectedStage) {
+      setSelectedStage(stageOptions[0].value);
+    }
+  }, [selectedPipe, stageOptions, selectedStage]);
 
   const fieldValuesKey = lead?.id ?? "";
   const fieldValuesSnapshot = fieldValues.length > 0
@@ -331,7 +380,28 @@ export function LeadModal({
         }
       }
 
-      toast.success(isEditing ? "Lead atualizado!" : "Lead criado!");
+      // Insert lead into selected funnel/stage
+      let pipeInserted = false;
+      if (showPipeSelector && !isEditing && leadId && selectedPipe && selectedStage) {
+        try {
+          if (selectedPipe === "std:whatsapp") {
+            await createPipeWhatsapp.mutateAsync({ lead_id: leadId, status: selectedStage, organization_id: currentTeamMember.organization_id });
+          } else if (selectedPipe === "std:confirmacao") {
+            await createPipeConfirmacao.mutateAsync({ lead_id: leadId, status: selectedStage, organization_id: currentTeamMember.organization_id });
+          } else if (selectedPipe === "std:propostas") {
+            await createPipeProposta.mutateAsync({ lead_id: leadId, status: selectedStage, organization_id: currentTeamMember.organization_id });
+          } else if (selectedPipe.startsWith("custom:")) {
+            await addLeadToCustomPipe.mutateAsync({ pipeline_id: selectedPipe.slice(7), lead_id: leadId, stage_id: selectedStage });
+          }
+          pipeInserted = true;
+        } catch (pipeError: any) {
+          console.error("Erro ao inserir lead no funil:", pipeError);
+          toast.error("Lead criado, mas houve erro ao inseri-lo no funil.");
+        }
+      }
+
+      const pipeName = pipeInserted ? pipeOptions.find(p => p.value === selectedPipe)?.label : null;
+      toast.success(isEditing ? "Lead atualizado!" : (pipeName ? `Lead criado e adicionado ao funil ${pipeName}!` : "Lead criado!"));
       onOpenChange(false);
       onSuccess?.(isEditing ? undefined : leadId);
     } catch (error: any) {
@@ -368,6 +438,8 @@ export function LeadModal({
         notes: lead?.notes || "",
         responsible_id: lead?.responsible_id || defaultResponsibleId || "",
       });
+      setSelectedPipe("");
+      setSelectedStage("");
     }
   }, [open, lead, defaultResponsibleId]);
 
@@ -455,6 +527,46 @@ export function LeadModal({
                       </div>
                     </div>
                   </div>
+
+                  {/* FUNIL — only visible when creating a new lead */}
+                  {showPipeSelector && (
+                    <div>
+                      <h3 className="text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-3">Funil</h3>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="grid gap-1.5">
+                          <Label className="text-xs">Adicionar ao Funil</Label>
+                          <Select
+                            value={selectedPipe}
+                            onValueChange={(v) => { setSelectedPipe(v); setSelectedStage(""); }}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Nenhum (opcional)" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {pipeOptions.map((opt) => (
+                                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        {selectedPipe && stageOptions.length > 0 && (
+                          <div className="grid gap-1.5">
+                            <Label className="text-xs">Etapa Inicial</Label>
+                            <Select value={selectedStage} onValueChange={setSelectedStage}>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Selecione..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {stageOptions.map((opt) => (
+                                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
 
                   {/* DETALHES */}
                   <div>

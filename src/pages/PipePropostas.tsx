@@ -52,6 +52,7 @@ import { useTinyErpStatus } from "@/hooks/useTinyErp";
 import { useCadastroExternoEnabled } from "@/hooks/useCadastroExterno";
 import { CadastroExternoConfirmDialog } from "@/components/proposals/CadastroExternoConfirmDialog";
 import { useCreateAcaoDoDia } from "@/hooks/useAcoesDoDia";
+import { useLeadsWithScheduledMessages } from "@/hooks/useScheduledMessages";
 import { supabase } from "@/integrations/supabase/client";
 import { CalorAnalyticsChart } from "@/components/proposals/CalorAnalyticsChart";
 import { ProductAnalyticsChart } from "@/components/proposals/ProductAnalyticsChart";
@@ -157,6 +158,8 @@ export default function PipePropostas() {
     (v: "kanban" | "analytics") => setFilterState((f) => ({ ...f, viewMode: v })),
     [setFilterState]
   );
+  const { data: leadsWithSchedule } = useLeadsWithScheduledMessages();
+  const [filterScheduled, setFilterScheduled] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
@@ -359,7 +362,9 @@ export default function PipePropostas() {
             matchesCalor = calor < 4;
           }
 
-          return matchesSearch && matchesResponsible && matchesType && matchesPriority && matchesCalor;
+          const matchesScheduled = !filterScheduled || (leadsWithSchedule?.has(item.lead_id) ?? false);
+
+          return matchesSearch && matchesResponsible && matchesType && matchesPriority && matchesCalor && matchesScheduled;
         })
         .map(transformToCard)
         .toSorted((a, b) => {
@@ -372,9 +377,9 @@ export default function PipePropostas() {
         items: columnItems,
       };
     });
-  }, [pipeData, searchTerm, filterResponsible, filterProductType, filterPriority, filterCalor, metricsPeriod, periodRange]);
+  }, [pipeData, searchTerm, filterResponsible, filterProductType, filterPriority, filterCalor, filterScheduled, leadsWithSchedule, metricsPeriod, periodRange]);
 
-  // Calculate stats (Vendas Total / MRR Vendido / Projetos Vendidos por item quando houver items)
+  // Calculate stats (Vendas Total / Rec. Vendida / Projetos Vendidos por item quando houver items)
   const stats = useMemo(() => {
     if (!pipeData) return { 
       total: 0, 
@@ -403,7 +408,7 @@ export default function PipePropostas() {
           const val = Number(it.sale_value) || 0;
           const t = it.product?.type;
           if (t === "mrr") {
-            mrr += val;             // MRR Vendido = valor mensal recorrente
+            mrr += val;             // Rec. Vendida = valor mensal recorrente
             sold += val * duration; // Venda Total = mensal × duração do contrato
           } else if (t === "projeto") {
             projeto += val;
@@ -863,8 +868,7 @@ export default function PipePropostas() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Package className="w-7 h-7 text-primary" />
+          <h1 className="text-2xl font-bold">
             Gestão de Propostas
           </h1>
           <p className="text-muted-foreground text-sm mt-1">
@@ -947,7 +951,7 @@ export default function PipePropostas() {
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="glass-card p-4"
+          className="stat-card"
         >
           <div className="flex items-center justify-between mb-2">
             <p className="text-xs text-muted-foreground">Pipeline Ativo</p>
@@ -961,7 +965,7 @@ export default function PipePropostas() {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.05 }}
-          className="glass-card p-4"
+          className="stat-card"
         >
           <div className="flex items-center justify-between mb-2">
             <p className="text-xs text-muted-foreground">Vendas Total</p>
@@ -975,10 +979,10 @@ export default function PipePropostas() {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="glass-card p-4"
+          className="stat-card"
         >
           <div className="flex items-center justify-between mb-2">
-            <p className="text-xs text-muted-foreground">MRR Vendido</p>
+            <p className="text-xs text-muted-foreground">Rec. Vendida</p>
             <ArrowUpRight className="w-4 h-4 text-chart-5" />
           </div>
           <p className="text-xl font-bold text-chart-5">{formatCurrency(displayStats.mrr)}</p>
@@ -989,7 +993,7 @@ export default function PipePropostas() {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.15 }}
-          className="glass-card p-4"
+          className="stat-card"
         >
           <div className="flex items-center justify-between mb-2">
             <p className="text-xs text-muted-foreground">Projetos Vendidos</p>
@@ -1003,7 +1007,7 @@ export default function PipePropostas() {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
-          className="glass-card p-4"
+          className="stat-card"
         >
           <div className="flex items-center justify-between mb-2">
             <p className="text-xs text-muted-foreground">Taxa de Conversão</p>
@@ -1066,7 +1070,7 @@ export default function PipePropostas() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos Tipos</SelectItem>
-                  <SelectItem value="mrr">MRR</SelectItem>
+                  <SelectItem value="mrr">Recorrência</SelectItem>
                   <SelectItem value="projeto">Projeto</SelectItem>
                 </SelectContent>
               </Select>
@@ -1124,6 +1128,10 @@ export default function PipePropostas() {
                   </SelectItem>
                 </SelectContent>
               </Select>
+              <Button variant={filterScheduled ? "default" : "outline"} size="sm" onClick={() => setFilterScheduled(!filterScheduled)} className="gap-1.5">
+                <Clock className="w-4 h-4" />
+                Agendados
+              </Button>
             </div>
 
             {/* Kanban Board with Drag-and-Drop */}

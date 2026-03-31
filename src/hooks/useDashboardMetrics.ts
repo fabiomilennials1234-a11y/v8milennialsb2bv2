@@ -24,6 +24,13 @@ interface DashboardMetrics {
   ticketMedioMRR: number;
   ticketMedioProjeto: number;
   novosClientes: number;
+  // New fields for Central de Comandos B2B
+  propostasEnviadas: number;
+  tempoMedioResposta: number;
+  vendaPrimeiroPedido: number;
+  vendaBaseAtiva: number;
+  taxaConversao: number;
+  dailySales: Array<{ day: string; revenue: number; count: number }>;
 }
 
 interface ConversionRate {
@@ -63,18 +70,12 @@ export function useDashboardMetrics(month?: number, year?: number, filterMemberI
       if (!organizationId) {
         console.warn("⚠️ [useDashboardMetrics] organizationId é null — retornando zeros");
         return {
-          totalLeads: 0,
-          reunioesMarcadas: 0,
-          reunioesComparecidas: 0,
-          noShow: 0,
-          taxaNoShow: 0,
-          vendaTotal: 0,
-          vendaMRR: 0,
-          vendaProjeto: 0,
-          ticketMedio: 0,
-          ticketMedioMRR: 0,
-          ticketMedioProjeto: 0,
-          novosClientes: 0,
+          totalLeads: 0, reunioesMarcadas: 0, reunioesComparecidas: 0,
+          noShow: 0, taxaNoShow: 0, vendaTotal: 0, vendaMRR: 0,
+          vendaProjeto: 0, ticketMedio: 0, ticketMedioMRR: 0,
+          ticketMedioProjeto: 0, novosClientes: 0,
+          propostasEnviadas: 0, tempoMedioResposta: 0,
+          vendaPrimeiroPedido: 0, vendaBaseAtiva: 0, taxaConversao: 0, dailySales: [],
         };
       }
 
@@ -92,6 +93,8 @@ export function useDashboardMetrics(month?: number, year?: number, filterMemberI
           noShow: 0, taxaNoShow: 0, vendaTotal: 0, vendaMRR: 0,
           vendaProjeto: 0, ticketMedio: 0, ticketMedioMRR: 0,
           ticketMedioProjeto: 0, novosClientes: 0,
+          propostasEnviadas: 0, tempoMedioResposta: 0,
+          vendaPrimeiroPedido: 0, vendaBaseAtiva: 0, taxaConversao: 0, dailySales: [],
         };
       }
 
@@ -113,6 +116,12 @@ export function useDashboardMetrics(month?: number, year?: number, filterMemberI
         ticketMedioMRR: d?.ticketMedioMRR ?? 0,
         ticketMedioProjeto: d?.ticketMedioProjeto ?? 0,
         novosClientes: d?.novosClientes ?? 0,
+        propostasEnviadas: d?.propostasEnviadas ?? 0,
+        tempoMedioResposta: d?.tempoMedioResposta ?? 0,
+        vendaPrimeiroPedido: d?.vendaPrimeiroPedido ?? 0,
+        vendaBaseAtiva: d?.vendaBaseAtiva ?? 0,
+        taxaConversao: d?.taxaConversao ?? 0,
+        dailySales: (d?.dailySales as any[]) ?? [],
       };
     },
     enabled: !!organizationId,
@@ -143,8 +152,8 @@ export function useConversionRates(month?: number, year?: number) {
       const meetingsMembers = teamMembers?.filter((m) => m.metric_type === "meetings") || [];
 
       const [{ data: conf1 }, { data: conf2 }] = await Promise.all([
-        supabase.from("pipe_confirmacao").select("sdr_id, status").eq("organization_id", organizationId).not("metrics_period_at", "is", null).gte("metrics_period_at", startStr).lte("metrics_period_at", endStr),
-        supabase.from("pipe_confirmacao").select("sdr_id, status").eq("organization_id", organizationId).is("metrics_period_at", null).gte("created_at", startStr).lte("created_at", endStr),
+        supabase.from("pipe_confirmacao").select("sdr_id, closer_id, responsible_id, status").eq("organization_id", organizationId).not("metrics_period_at", "is", null).gte("metrics_period_at", startStr).lte("metrics_period_at", endStr),
+        supabase.from("pipe_confirmacao").select("sdr_id, closer_id, responsible_id, status").eq("organization_id", organizationId).is("metrics_period_at", null).gte("created_at", startStr).lte("created_at", endStr),
       ]);
       const confirmacaoData = [...(conf1 || []), ...(conf2 || [])];
 
@@ -156,9 +165,9 @@ export function useConversionRates(month?: number, year?: number) {
 
       // Calculate meetings conversion (reuniões marcadas -> comparecidas)
       const meetingsRates: ConversionRate[] = meetingsMembers.map((member) => {
-        const total = confirmacaoData?.filter((c) => (c.responsible_id || c.sdr_id) === member.id).length || 0;
+        const total = confirmacaoData?.filter((c) => c.responsible_id === member.id || c.sdr_id === member.id || c.closer_id === member.id).length || 0;
         const comparecidas = confirmacaoData?.filter(
-          (c) => (c.responsible_id || c.sdr_id) === member.id && c.status === "compareceu"
+          (c) => (c.responsible_id === member.id || c.sdr_id === member.id || c.closer_id === member.id) && c.status === "compareceu"
         ).length || 0;
         return {
           id: member.id,
@@ -227,9 +236,9 @@ export function useFunnelData(month?: number, year?: number) {
       const raw = Array.isArray(data) && data.length > 0 ? data[0] : data;
       const d = raw as Record<string, number> | null;
       return [
-        { label: "Leads", value: d?.funnelLeads ?? 0, color: "hsl(var(--primary))" },
-        { label: "Reuniões Marcadas", value: d?.funnelReunioes ?? 0, color: "hsl(var(--chart-2))" },
-        { label: "Compareceu", value: d?.funnelComparecidas ?? 0, color: "hsl(var(--chart-3))" },
+        { label: "Leads", value: d?.totalLeads ?? 0, color: "hsl(var(--primary))" },
+        { label: "Reuniões Marcadas", value: d?.funnelReunioesMarcadas ?? 0, color: "hsl(var(--chart-2))" },
+        { label: "Compareceu", value: d?.funnelCompareceu ?? 0, color: "hsl(var(--chart-3))" },
         { label: "Propostas", value: d?.funnelPropostas ?? 0, color: "hsl(var(--chart-4))" },
         { label: "Vendas", value: d?.funnelVendas ?? 0, color: "hsl(var(--chart-5))" },
       ];

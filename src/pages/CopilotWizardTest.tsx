@@ -212,7 +212,7 @@ export default function CopilotWizardTest() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold flex items-center gap-3">
+            <h1 className="text-2xl font-bold flex items-center gap-3">
               <FlaskConical className="w-8 h-8 text-primary" />
               Teste do Wizard v3
             </h1>

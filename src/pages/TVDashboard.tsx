@@ -10,8 +10,15 @@ import {
 import { useTVDashboardData } from "@/hooks/useTVDashboardData";
 import { AICoachSection } from "@/components/tv/AICoachSection";
 import { SalesFunnel } from "@/components/tv/SalesFunnel";
+import { TVCompetitionBlockV2 } from "@/components/tv/TVCompetitionBlockV2";
+import { useActiveCompetition, useCompetitionParticipants, useCompetitionPrizes } from "@/hooks/useCompetitions";
+import { useRankingData } from "@/hooks/useDashboardMetrics";
+import { useAvatarMap } from "@/hooks/useAvatarMap";
 import { Button } from "@/components/ui/button";
 import torqueLogo from "@/assets/torque-logo.png";
+import { TVRankingSimple } from "@/components/tv/TVRankingSimple";
+import { generateTVConfig } from "@/lib/tv-config-from-quiz";
+import { useOnboarding } from "@/hooks/useOnboarding";
 
 // Animated counter component
 function AnimatedNumber({ value, prefix = "", suffix = "", decimals = 0 }: { 
@@ -38,15 +45,65 @@ export default function TVDashboard() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [isFullscreen, setIsFullscreen] = useState(false);
 
+  // Competition data for TV ranking block
+  const now = new Date();
+  const activeCompetition = useActiveCompetition(now.getMonth() + 1, now.getFullYear());
+  const { data: compParticipants = [] } = useCompetitionParticipants(activeCompetition?.id ?? null);
+  const { data: compPrizes = [] } = useCompetitionPrizes(activeCompetition?.id ?? null);
+  const { data: rankingData } = useRankingData(now.getMonth() + 1, now.getFullYear());
+  const avatarMap = useAvatarMap();
+
+  const tvCompetitionUsers = (() => {
+    if (!activeCompetition || !rankingData) return [];
+    const participantIds = new Set(compParticipants.map(p => p.team_member_id));
+    const source = activeCompetition.metric_type === "sales"
+      ? rankingData.salesRanking
+      : rankingData.meetingsRanking;
+    return source
+      .filter(u => participantIds.has(u.id))
+      .sort((a, b) => b.value - a.value)
+      .map((u, i) => ({
+        id: u.id,
+        name: u.name || "Sem nome",
+        value: u.value,
+        goalProgress: u.goalProgress,
+        position: i + 1,
+        avatarUrl: avatarMap.get(u.id),
+      }));
+  })();
+
+  const tvCompetitionDaysLeft = activeCompetition
+    ? Math.max(0, Math.ceil((new Date(activeCompetition.end_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+    : 0;
+
+  // Quiz-driven TV config
+  const { onboarding } = useOnboarding();
+  const tvConfig = generateTVConfig(onboarding?.answers);
+
+  const simpleRankingUsers = (() => {
+    if (!rankingData) return [];
+    const source = rankingData.salesRanking.length > 0 ? rankingData.salesRanking : rankingData.meetingsRanking;
+    return source.slice(0, 5).map((u, i) => ({
+      id: u.id,
+      name: u.name || "Sem nome",
+      value: u.value,
+      goalProgress: u.goalProgress,
+      position: i + 1,
+      avatarUrl: avatarMap.get(u.id),
+    }));
+  })();
+
   useEffect(() => {
     const interval = setInterval(() => setCurrentTime(new Date()), 60_000); // 1x por minuto (era 1x por segundo)
     return () => clearInterval(interval);
   }, []);
 
+  const refetchRef = useRef(refetch);
+  refetchRef.current = refetch;
   useEffect(() => {
-    const interval = setInterval(() => refetch(), 30_000); // 1x a cada 30s (era 5s)
+    const interval = setInterval(() => refetchRef.current(), 30_000);
     return () => clearInterval(interval);
-  }, [refetch]);
+  }, []);
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -88,9 +145,12 @@ export default function TVDashboard() {
   const sdrs = data?.individualGoals?.sdrs || [];
 
   return (
-    <div className="h-screen bg-[hsl(36,20%,8%)] overflow-hidden flex flex-col">
+    <div className="h-screen bg-[hsl(36,20%,8%)] overflow-hidden flex flex-col relative">
+      {/* Racing identity — subtle checkered texture */}
+      <div className="absolute inset-0 checkered-pattern opacity-[0.015] pointer-events-none" />
+
       {/* Header - Clean & Minimal */}
-      <header className="flex items-center justify-between px-6 py-3 border-b border-white/5">
+      <header className="relative z-10 flex items-center justify-between px-6 py-3 border-b border-white/5">
         <div className="flex items-center gap-4">
           <img src={torqueLogo} alt="Torque CRM" className="h-8" />
           <div className="h-6 w-px bg-white/10" />
@@ -119,7 +179,7 @@ export default function TVDashboard() {
       </header>
 
       {/* Main Grid */}
-      <div className="flex-1 p-3 grid grid-cols-12 gap-3 overflow-hidden">
+      <div className="relative z-10 flex-1 p-3 grid grid-cols-12 gap-3 overflow-hidden">
 
         {/* Left Column - Meta do Mês */}
         <div className="col-span-3 flex flex-col gap-3">
@@ -171,11 +231,11 @@ export default function TVDashboard() {
                         className="absolute inset-0 rounded-xl bg-yellow-400/50"
                       />
                     )}
-                    <p className="text-2xl font-black text-white drop-shadow-lg text-center">
+                    <p className="text-2xl font-black text-white drop-shadow-lg text-center font-racing">
                       R$ {formatCurrency(meta)}
                     </p>
-                    <p className="text-[10px] font-medium text-white/80 text-center">
-                      {percentage >= 100 ? "META BATIDA!" : "Meta do Mês"}
+                    <p className="text-[10px] font-medium text-white/80 text-center uppercase tracking-wider">
+                      {percentage >= 100 ? "Meta Batida!" : "Meta do Mês"}
                     </p>
                   </motion.div>
 
@@ -234,7 +294,7 @@ export default function TVDashboard() {
                     }`}
                     style={{ width: 72, height: 72 }}
                   >
-                    <span className="text-xl font-black text-white drop-shadow-md">
+                    <span className={`text-xl font-black text-white drop-shadow-md font-racing ${percentage >= 100 ? "animate-turbo" : ""}`}>
                       {percentage.toFixed(0)}%
                     </span>
                     <span className="text-[9px] text-white/80 font-medium">atingido</span>
@@ -305,146 +365,65 @@ export default function TVDashboard() {
         <div className="col-span-9 flex flex-col gap-3">
           {/* KPIs Row - Compact */}
           <div className="grid grid-cols-6 gap-3">
-            <KPICard 
-              icon={Calendar}
-              label="Reuniões"
-              value={data?.reunioesComparecidas || 0}
-              color="blue"
-            />
-            <KPICard 
-              icon={TrendingUp}
-              label="Conversão"
-              value={(data?.taxaConversaoGeral || 0).toFixed(0)}
-              suffix="%"
-              color="emerald"
-            />
-            <KPICard 
-              icon={AlertTriangle}
-              label="No-Show"
-              value={(data?.noShowGeral || 0).toFixed(0)}
-              suffix="%"
-              color={(data?.noShowGeral || 0) > 30 ? "red" : "amber"}
-            />
-            <KPICard 
-              icon={DollarSign}
-              label="Ticket MRR"
-              value={formatCurrency(data?.ticketMedioMRR || 0)}
-              prefix="R$ "
-              color="primary"
-            />
-            <KPICard 
-              icon={DollarSign}
-              label="Ticket Proj"
-              value={formatCurrency(data?.ticketMedioProjeto || 0)}
-              prefix="R$ "
-              color="purple"
-            />
-            <KPICard 
-              icon={Users}
-              label="Leads"
-              value={data?.leadsParaTrabalhar || 0}
-              color={(data?.leadsParaTrabalhar || 0) > 15 ? "red" : "emerald"}
-            />
+            {tvConfig.kpis.map((kpi) => {
+              let value: number | string = 0;
+              let suffix = "";
+              switch (kpi.key) {
+                case "reunioes": value = data?.reunioesComparecidas || 0; break;
+                case "conversao": value = (data?.taxaConversaoGeral || 0).toFixed(0); suffix = "%"; break;
+                case "noshow": value = (data?.noShowGeral || 0).toFixed(0); suffix = "%"; break;
+                case "ticket_mrr": value = formatCurrency(data?.ticketMedioMRR || 0); break;
+                case "ticket_proj": value = formatCurrency(data?.ticketMedioProjeto || 0); break;
+                case "leads": value = data?.leadsParaTrabalhar || 0; break;
+                case "leads_novos": value = data?.leadsNovo || 0; break;
+                case "propostas": value = (data?.propostasQuentes || []).length; break;
+                case "base_ativa": value = 0; break;
+                case "respostas": value = data?.leadsAbordado || 0; break;
+              }
+              const iconMap: Record<string, any> = {
+                reunioes: Calendar, conversao: TrendingUp, noshow: AlertTriangle,
+                ticket_mrr: DollarSign, ticket_proj: DollarSign, leads: Users,
+                leads_novos: Users, propostas: Flame, base_ativa: Users, respostas: Zap,
+              };
+              return (
+                <KPICard
+                  key={kpi.key}
+                  icon={iconMap[kpi.key] || Target}
+                  label={kpi.label}
+                  value={value}
+                  suffix={suffix}
+                  color={kpi.color}
+                />
+              );
+            })}
           </div>
 
           {/* Main Content Area - Grid */}
-          <div className="flex-1 grid grid-cols-3 gap-3 min-h-0">
-            {/* Left Side - Sales Funnel */}
-            <TVCard className="flex flex-col">
-              <SalesFunnel
-                reunioesMarcadas={data?.funnel?.reunioesMarcadas || 0}
-                comparecidas={data?.funnel?.comparecidas || 0}
-                marcandoR2={data?.funnel?.marcandoR2 || 0}
-                marcandoR2Value={data?.funnel?.marcandoR2Value || 0}
-                r2Marcadas={data?.funnel?.r2Marcadas || 0}
-                r2MarcadasValue={data?.funnel?.r2MarcadasValue || 0}
-                vendido={data?.funnel?.vendido || 0}
-                vendidoValue={data?.funnel?.vendidoValue || 0}
-              />
-            </TVCard>
-
-            {/* Middle - Individual Goals */}
-            <TVCard className="flex flex-col">
-              <div className="flex items-center gap-2 mb-2">
-                <TrendingUp className="w-5 h-5 text-primary" />
-                <span className="text-sm font-bold text-white uppercase tracking-wider">Metas Individuais</span>
-              </div>
-
-              <div className="flex-1 grid grid-cols-2 gap-3 overflow-y-auto">
-                {/* Closers */}
-                <div className="flex flex-col">
-                  <p className="text-xs text-white/50 uppercase tracking-wider mb-2 font-semibold">Closers</p>
-                  <div className="space-y-2 flex-1">
-                    {closers.map((closer: any, i: number) => (
-                      <GoalBar key={closer.id} data={closer} index={i} type="closer" formatCurrency={formatCurrency} />
-                    ))}
-                    {closers.length === 0 && <p className="text-xs text-white/30">Sem metas</p>}
-                  </div>
-                </div>
-
-                {/* SDRs */}
-                <div className="flex flex-col">
-                  <p className="text-xs text-white/50 uppercase tracking-wider mb-2 font-semibold">SDRs</p>
-                  <div className="space-y-2 flex-1">
-                    {sdrs.map((sdr: any, i: number) => (
-                      <GoalBar key={sdr.id} data={sdr} index={i} type="sdr" formatCurrency={formatCurrency} />
-                    ))}
-                    {sdrs.length === 0 && <p className="text-xs text-white/30">Sem metas</p>}
-                  </div>
-                </div>
-              </div>
-            </TVCard>
-
-            {/* Right Side - Propostas + Vendas + Coach */}
-            <div className="flex flex-col gap-3">
-              {/* Hot Proposals */}
-              <TVCard className="flex-1">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <Flame className="w-5 h-5 text-orange-500" />
-                    <span className="text-sm font-bold text-white uppercase tracking-wider">Propostas Quentes</span>
-                  </div>
-                  <span className="text-sm font-bold text-orange-400">{(data?.propostasQuentes || []).length}</span>
-                </div>
-
-                <div className="space-y-2 overflow-y-auto max-h-[150px]">
-                  {(data?.propostasQuentes || []).slice(0, 5).map((p: any, i: number) => (
-                    <motion.div 
-                      key={p.id}
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: i * 0.05 }}
-                      className="flex items-center justify-between p-2.5 rounded-lg bg-white/[0.03] border border-white/5 hover:bg-white/[0.05] transition-colors"
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-400 to-red-500 flex items-center justify-center text-white text-sm font-bold shadow-lg shadow-orange-500/20">
-                          {p.calor || 7}
-                        </div>
-                        <span className="text-sm text-white/80 truncate max-w-[100px]">{p.lead?.name}</span>
-                      </div>
-                      <span className="text-sm font-bold text-primary">R$ {formatCurrency(p.sale_value || 0)}</span>
-                    </motion.div>
-                  ))}
-                  {(data?.propostasQuentes || []).length === 0 && (
-                    <p className="text-sm text-white/30 text-center py-4">Sem propostas quentes</p>
-                  )}
-                </div>
+          <div className="flex-1 grid grid-cols-12 gap-3 min-h-0">
+            {/* Left — Dynamic block: Funnel or Monthly Sales */}
+            {tvConfig.showFunnel ? (
+              <TVCard className="col-span-3 flex flex-col">
+                <SalesFunnel
+                  reunioesMarcadas={data?.funnel?.reunioesMarcadas || 0}
+                  comparecidas={data?.funnel?.comparecidas || 0}
+                  marcandoR2={data?.funnel?.marcandoR2 || 0}
+                  marcandoR2Value={data?.funnel?.marcandoR2Value || 0}
+                  r2Marcadas={data?.funnel?.r2Marcadas || 0}
+                  r2MarcadasValue={data?.funnel?.r2MarcadasValue || 0}
+                  vendido={data?.funnel?.vendido || 0}
+                  vendidoValue={data?.funnel?.vendidoValue || 0}
+                />
               </TVCard>
-
-              {/* Monthly Sales */}
-              <TVCard className="flex-1">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <DollarSign className="w-5 h-5 text-emerald-500" />
-                    <span className="text-sm font-bold text-white uppercase tracking-wider">Vendas do Mês</span>
-                  </div>
-                  <span className="text-sm font-bold text-emerald-400">{(data?.vendasDoMes || []).length}</span>
+            ) : (
+              <TVCard className="col-span-3 flex flex-col">
+                <div className="flex items-center gap-2 mb-3">
+                  <DollarSign className="w-5 h-5 text-emerald-500" />
+                  <span className="text-sm font-bold text-white uppercase tracking-wider">{tvConfig.salesLabel} do Mês</span>
+                  <span className="text-sm font-bold text-emerald-400 ml-auto">{(data?.vendasDoMes || []).length}</span>
                 </div>
-
-                {/* Summary Pills */}
                 <div className="flex gap-3 mb-3">
                   <div className="flex-1 text-center py-2 px-3 rounded-lg bg-white/[0.03] border border-white/5">
-                    <p className="text-xs text-white/40 mb-0.5">MRR</p>
+                    <p className="text-xs text-white/40 mb-0.5">Recorrência</p>
                     <p className="text-lg font-bold text-primary">R$ {formatCurrency(data?.vendasMRR || 0)}</p>
                   </div>
                   <div className="flex-1 text-center py-2 px-3 rounded-lg bg-white/[0.03] border border-white/5">
@@ -452,34 +431,68 @@ export default function TVDashboard() {
                     <p className="text-lg font-bold text-purple-400">R$ {formatCurrency(data?.vendasProjeto || 0)}</p>
                   </div>
                 </div>
-
-                <div className="space-y-1.5 max-h-[100px] overflow-y-auto">
-                  {(data?.vendasDoMes || []).slice(0, 5).map((sale: any, i: number) => (
-                    <motion.div 
+                <div className="space-y-1.5 flex-1 overflow-y-auto">
+                  {(data?.vendasDoMes || []).slice(0, 8).map((sale: any, i: number) => (
+                    <motion.div
                       key={sale.id}
                       initial={{ opacity: 0, x: -10 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: i * 0.05 }}
-                      className="flex items-center justify-between py-2 px-3 rounded-lg bg-emerald-500/5 border border-emerald-500/10"
+                      className="flex items-center justify-between p-2 rounded-lg bg-white/[0.03] border border-white/5"
                     >
-                      <span className="text-sm text-white/70 truncate max-w-[120px]">{sale.leadName}</span>
-                      <span className="text-sm font-bold text-emerald-400">R$ {formatCurrency(sale.value)}</span>
+                      <span className="text-xs text-white/70 truncate max-w-[120px]">{sale.lead?.name || "Lead"}</span>
+                      <span className="text-xs font-bold text-emerald-400">R$ {formatCurrency(sale.sale_value || 0)}</span>
                     </motion.div>
                   ))}
+                  {(data?.vendasDoMes || []).length === 0 && (
+                    <p className="text-xs text-white/30 text-center py-4">Sem vendas no mês</p>
+                  )}
                 </div>
               </TVCard>
+            )}
 
-              {/* AI Coach - Smaller */}
-              <TVCard accent="purple">
-                <div className="flex items-center gap-2 mb-2">
-                  <Zap className="w-4 h-4 text-purple-400" />
-                  <span className="text-xs font-bold text-white uppercase tracking-wider">Coach IA</span>
+            {/* Center — RANKING DE VENDAS (always visible) */}
+            <TVCard className="col-span-5 flex flex-col overflow-hidden p-0">
+              {activeCompetition && tvCompetitionUsers.length > 0 ? (
+                <TVCompetitionBlockV2
+                  competitionName={activeCompetition.name}
+                  daysLeft={tvCompetitionDaysLeft}
+                  users={tvCompetitionUsers}
+                  prizes={compPrizes.map(p => ({
+                    position: p.position,
+                    prize_name: p.prize_name,
+                    prize_icon: p.prize_icon,
+                    prize_value: p.prize_value,
+                  }))}
+                  metricType={activeCompetition.metric_type}
+                  participantCount={compParticipants.length}
+                />
+              ) : (
+                <div className="p-4 h-full">
+                  <TVRankingSimple
+                    users={simpleRankingUsers}
+                    metricType={simpleRankingUsers[0]?.value != null ? "sales" : "meetings"}
+                  />
                 </div>
-                <div className="max-h-[80px] overflow-y-auto">
-                  <AICoachSection />
-                </div>
-              </TVCard>
-            </div>
+              )}
+            </TVCard>
+
+            {/* Right — COACH IA (amplified, full column) */}
+            <TVCard className="col-span-4 flex flex-col" accent="purple">
+              <div className="flex items-center gap-2 mb-3">
+                <motion.div
+                  animate={{ scale: [1, 1.15, 1] }}
+                  transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
+                >
+                  <Zap className="w-5 h-5 text-purple-400" />
+                </motion.div>
+                <span className="text-sm font-bold text-white uppercase tracking-wider">Coach IA — Foco do Dia</span>
+                <span className="ml-auto text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">IA</span>
+              </div>
+              <div className="flex-1 overflow-y-auto">
+                <AICoachSection />
+              </div>
+            </TVCard>
           </div>
         </div>
       </div>

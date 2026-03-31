@@ -42,6 +42,7 @@ interface ConversationSummary {
   objections: string[];
   questions_asked: string[];
   next_action: string;
+  coaching_tips: string[];
   message_count: number;
   created_at: string;
   updated_at: string;
@@ -214,7 +215,11 @@ export function useGenerateSummary() {
       });
 
       if (error) {
-        throw error;
+        // Extract meaningful message from FunctionsHttpError
+        const msg =
+          data?.error ??
+          (error instanceof Error ? error.message : "Erro ao gerar resumo. Tente novamente.");
+        throw new Error(msg);
       }
 
       return data as ConversationSummary;

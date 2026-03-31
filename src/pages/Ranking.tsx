@@ -209,7 +209,7 @@ export default function Ranking() {
             <h2 className="text-lg font-medium opacity-80">Líder do Mês</h2>
             <div className="flex items-center justify-center gap-3 mt-2">
               <Zap className="w-6 h-6 text-primary" />
-              <span className="text-3xl font-bold">{leader.name}</span>
+              <span className="text-2xl font-bold">{leader.name}</span>
               <Zap className="w-6 h-6 text-primary" />
             </div>
             <p className="text-4xl font-bold text-primary mt-2">

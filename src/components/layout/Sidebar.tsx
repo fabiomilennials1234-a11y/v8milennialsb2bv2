@@ -37,6 +37,7 @@ import {
   ShoppingBag,
   Gift,
   ListChecks,
+  FileText,
 } from "lucide-react";
 import torqueLogo from "@/assets/torque-logo.png";
 import torqueIcon from "@/assets/torque-icon.png";
@@ -53,8 +54,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { AlertsDropdown } from "@/components/notifications/AlertsDropdown";
 import { SidebarPerformanceWidget } from "./SidebarPerformanceWidget";
-import { useCustomPipelines } from "@/hooks/useCustomPipelines";
-import { CreatePipelineModal } from "@/components/custom-pipelines/CreatePipelineModal";
+import { usePermanentCustomFunnels, useActiveTemporaryFunnels } from "@/hooks/useCustomPipelines";
+import { CreateFunilOuCampanhaModal } from "@/components/funis/CreateFunilOuCampanhaModal";
+import { usePipelineDisplayConfig } from "@/hooks/usePipelineDisplayConfig";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -72,39 +74,46 @@ interface NavItemWithChildren extends NavItem {
   children?: NavItem[];
 }
 
-// Subitens do menu Funis (ordem: Qualificação > Confirmação > Propostas)
-const funisSubItems: NavItem[] = [
-  { label: "Qualificação", icon: MessageSquare, path: "/pipe-whatsapp" },
-  { label: "Confirmação", icon: Calendar, path: "/pipe-confirmacao" },
-  { label: "Propostas", icon: Kanban, path: "/pipe-propostas" },
-  { label: "Carteira", icon: TrendingUp, path: "/upsell" },
-];
+// Ícones por pipe_type para funis dinâmicos (labels vêm de pipeline_display_config)
+const PIPE_ICON_MAP: Record<string, React.ElementType> = {
+  whatsapp: MessageSquare,
+  confirmacao: Calendar,
+  propostas: Kanban,
+  upsell: TrendingUp,
+};
+const PIPE_PATH_MAP: Record<string, string> = {
+  whatsapp: "/pipe-whatsapp",
+  confirmacao: "/pipe-confirmacao",
+  propostas: "/pipe-propostas",
+  upsell: "/upsell",
+};
 
 const navItems: NavItemWithChildren[] = [
-  { label: "Central de Comando", icon: Gauge, path: "/" },
-  { label: "Campanhas", icon: Target, path: "/campanhas" },
-  { label: "Marketing", icon: BarChart2, path: "/marketing" },
-  { label: "Analytics", icon: BarChart3, path: "/analytics", masterOnly: true },
-  { label: "Chat", icon: Zap, path: "/chat" },
-  { label: "Funis", icon: GitBranch, path: "/funis", children: funisSubItems },
-  { label: "Agenda", icon: CalendarDays, path: "/agenda" },
+  { label: "Central de Comandos", icon: Gauge, path: "/" },
+  // HIDDEN — reativar futuramente:
+  // { label: "Marketing", icon: BarChart2, path: "/marketing" },
+  // { label: "Analytics", icon: BarChart3, path: "/analytics" },
+  // { label: "Agenda", icon: CalendarDays, path: "/agenda" },
   { label: "Revisão", icon: Wrench, path: "/follow-ups" },
   { label: "Checklists", icon: ListChecks, path: "/checklists" },
+  { label: "Chat", icon: Zap, path: "/chat" },
+  { label: "Funis", icon: GitBranch, path: "/funis", children: [] }, // children set dynamically via displayConfig
   { label: "Combustível", icon: Fuel, path: "/leads" },
   { label: "Pódio", icon: Trophy, path: "/performance" },
   { label: "Comissões", icon: DollarSign, path: "/comissoes" },
   { label: "Copilot", icon: Bot, path: "/copilot" },
   { label: "Automações", icon: Workflow, path: "/automacoes" },
+  { label: "Templates", icon: FileText, path: "/templates" },
 ];
 
 const adminNavItems: NavItem[] = [
-  { label: "Pilotos", icon: Flag, path: "/equipe" },
+  { label: "Equipe", icon: Flag, path: "/equipe" },
   { label: "Produtos", icon: Package, path: "/produtos" },
   { label: "TV Dashboard", icon: Tv, path: "/tv" },
 ];
 
 const bottomNavItems: NavItem[] = [
-  { label: "Pitstop", icon: Settings, path: "/configuracoes" },
+  { label: "Configurações", icon: Settings, path: "/configuracoes" },
 ];
 
 const FUNIS_PATHS = ["/pipe-whatsapp", "/pipe-confirmacao", "/pipe-propostas", "/upsell", "/funis", "/pipe/custom"] as const;
@@ -149,6 +158,7 @@ const SIDEBAR_VIEW_PERMISSIONS: Record<string, string> = {
   "/comissoes": "commissions.view",
   "/copilot": "copilot.view",
   "/automacoes": "workflows.view",
+  "/templates": "message_templates.view",
   "/equipe": "team.view",
   "/produtos": "products.view",
   "/configuracoes": "settings.view",
@@ -178,7 +188,22 @@ export function Sidebar() {
   const { data: userRole } = useUserRole();
   const { jobTitle } = useJobTitle();
   const { hasFeature } = useOrgFeatures();
-  const [showCreatePipeline, setShowCreatePipeline] = useState(false);
+  const [showCreateNew, setShowCreateNew] = useState(false);
+  const { data: displayConfig } = usePipelineDisplayConfig();
+
+  // Build dynamic funnel sub-items from display config
+  const dynamicFunisChildren: NavItem[] = (displayConfig ?? [])
+    .filter((c) => c.is_visible)
+    .sort((a, b) => a.position - b.position)
+    .map((c) => ({
+      label: c.display_name,
+      icon: PIPE_ICON_MAP[c.pipe_type] ?? GitBranch,
+      path: PIPE_PATH_MAP[c.pipe_type] ?? "/",
+    }));
+
+  // Inject dynamic children into the Funis nav item
+  const funisItem = navItems.find((n) => n.path === "/funis");
+  if (funisItem) funisItem.children = dynamicFunisChildren;
 
   // Auto-expand Funis when navigating to a funis page
   useEffect(() => {
@@ -186,7 +211,8 @@ export function Sidebar() {
       setExpandedMenus(prev => [...prev, "Funis"]);
     }
   }, [location.pathname]);
-  const { data: customPipelines = [] } = useCustomPipelines();
+  const { data: permanentPipelines = [] } = usePermanentCustomFunnels();
+  const { data: temporaryFunnels = [] } = useActiveTemporaryFunnels();
   const { data: featurePerms } = useFeaturePermissions();
   const { isAdmin } = useIsAdmin();
   const { isMaster } = useMasterAuth();
@@ -319,8 +345,8 @@ export function Sidebar() {
   const visibleBottomItems = isOutboundMember ? [] : bottomNavItems;
 
   const visibleFunisSubItems = isOutboundMember
-    ? funisSubItems.filter((s) => OUTBOUND_MEMBER_ALLOWED_PATHS.includes(s.path as any))
-    : funisSubItems;
+    ? dynamicFunisChildren.filter((s) => OUTBOUND_MEMBER_ALLOWED_PATHS.includes(s.path as any))
+    : dynamicFunisChildren;
 
   return (
     <aside
@@ -336,12 +362,15 @@ export function Sidebar() {
       {/* Logo */}
       <div className="p-4 flex items-center justify-between border-b border-sidebar-border min-h-[80px]">
         {/* Logo area - crossfade between icon (collapsed) and full logo (expanded) */}
-        <div
-          className="relative flex-shrink-0"
+        <NavLink
+          to="/"
+          className="relative flex-shrink-0 cursor-pointer"
+          title="Central de Comando"
           style={{
             width: open ? 150 : 40,
             height: 40,
             transition: `width 0.55s ${sidebarEase}`,
+            display: "block",
           }}
         >
           {/* Collapsed: icon only */}
@@ -367,7 +396,7 @@ export function Sidebar() {
               transitionDelay: open ? "0.15s" : "0s",
             }}
           />
-        </div>
+        </NavLink>
 
         {/* Alerts + collapse button (expanded) */}
         <div
@@ -483,10 +512,10 @@ export function Sidebar() {
                         </span>
                       </NavLink>
                     ))}
-                    {/* Funis customizados dinâmicos */}
-                    {item.label === "Funis" && !isOutboundMember && customPipelines.length > 0 && (
+                    {/* Funis customizados permanentes */}
+                    {item.label === "Funis" && !isOutboundMember && permanentPipelines.length > 0 && (
                       <div className="border-t border-sidebar-border/50 mt-1 pt-1">
-                        {customPipelines.map((pipe) => {
+                        {permanentPipelines.map((pipe) => {
                           const PipeIcon = CUSTOM_PIPE_ICON_MAP[pipe.icon] || Kanban;
                           const pipePath = `/pipe/custom/${pipe.slug}`;
                           return (
@@ -506,14 +535,44 @@ export function Sidebar() {
                         })}
                       </div>
                     )}
+                    {/* Funis temporários ativos */}
+                    {item.label === "Funis" && !isOutboundMember && temporaryFunnels.length > 0 && (
+                      <div className="border-t border-sidebar-border/50 mt-1 pt-1">
+                        {temporaryFunnels.map((pipe) => {
+                          const pipePath = `/pipe/custom/${pipe.slug}`;
+                          return (
+                            <NavLink
+                              key={pipe.id}
+                              to={pipePath}
+                              className={`sidebar-item pl-4 ${
+                                isActive(pipePath) ? "sidebar-item-active" : ""
+                              }`}
+                            >
+                              <Target className="w-4 h-4 flex-shrink-0 text-purple-400" />
+                              <span className="overflow-hidden whitespace-nowrap flex-1">
+                                {pipe.name}
+                              </span>
+                              <span className={cn(
+                                "text-[9px] font-semibold uppercase px-1 py-0.5 rounded flex-shrink-0",
+                                pipe.status === "active" ? "bg-green-500/15 text-green-400" :
+                                pipe.status === "paused" ? "bg-yellow-500/15 text-yellow-400" :
+                                "bg-muted text-muted-foreground"
+                              )}>
+                                {pipe.status === "active" ? "Ativo" : pipe.status === "paused" ? "Pausa" : "Draft"}
+                              </span>
+                            </NavLink>
+                          );
+                        })}
+                      </div>
+                    )}
                     {item.label === "Funis" && !isOutboundMember && (
                       <button
-                        onClick={() => setShowCreatePipeline(true)}
+                        onClick={() => setShowCreateNew(true)}
                         className="sidebar-item pl-4 w-full text-muted-foreground hover:text-foreground"
                       >
                         <Plus className="w-4 h-4 flex-shrink-0" />
                         <span className="overflow-hidden whitespace-nowrap flex-1 text-left text-xs">
-                          Criar Funil
+                          Criar funil
                         </span>
                       </button>
                     )}
@@ -753,9 +812,9 @@ export function Sidebar() {
         featureDescription={upgradeModal.description}
       />
 
-      <CreatePipelineModal
-        open={showCreatePipeline}
-        onOpenChange={setShowCreatePipeline}
+      <CreateFunilOuCampanhaModal
+        open={showCreateNew}
+        onOpenChange={setShowCreateNew}
       />
     </aside>
   );

@@ -128,7 +128,7 @@ export function CreateCampanhaModal({ open, onOpenChange }: CreateCampanhaModalP
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
-                  <Label>MRR Planejado (R$)</Label>
+                  <Label>Rec. Planejada (R$)</Label>
                   <Input
                     type="number"
                     min="0"
@@ -167,7 +167,7 @@ export function CreateCampanhaModal({ open, onOpenChange }: CreateCampanhaModalP
               <div className="p-3 bg-muted rounded-lg space-y-1">
                 <p><strong>Cliente:</strong> {selectedClient?.name}</p>
                 <p><strong>Responsável:</strong> {teamMembers.find((m) => m.id === formData.responsible_id)?.name || "Nenhum"}</p>
-                <p><strong>MRR Planejado:</strong> R$ {formData.mrr_planejado || "0"}</p>
+                <p><strong>Rec. Planejada:</strong> R$ {formData.mrr_planejado || "0"}</p>
                 <p><strong>Projeto Planejado:</strong> R$ {formData.projeto_planejado || "0"}</p>
                 {formData.notes && <p><strong>Notas:</strong> {formData.notes}</p>}
               </div>

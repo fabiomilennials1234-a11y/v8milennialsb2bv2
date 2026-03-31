@@ -5,7 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { OrgFeaturesProvider } from "@/contexts/OrgFeaturesContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
@@ -14,6 +14,7 @@ import { MainLayout } from "@/components/layout/MainLayout";
 import { useAutoAdminAssignment } from "@/hooks/useAutoAdminAssignment";
 import { SubscriptionProtectedRoute } from "@/components/SubscriptionProtectedRoute";
 import { GlobalErrorBoundary } from "@/components/GlobalErrorBoundary";
+import { OnboardingGate } from "@/components/onboarding/OnboardingGate";
 import { Loader2 } from "lucide-react";
 
 // Retry helper para chunks que falham ao carregar (comum após deploy)
@@ -38,6 +39,7 @@ const PipeConfirmacao = lazy(() => lazyRetry(() => import("./pages/PipeConfirmac
 const PipePropostas = lazy(() => lazyRetry(() => import("./pages/PipePropostas")));
 const PipeWhatsapp = lazy(() => lazyRetry(() => import("./pages/PipeWhatsapp")));
 const PipeFollowUps = lazy(() => lazyRetry(() => import("./pages/PipeFollowUps")));
+const Revisao = lazy(() => lazyRetry(() => import("./pages/Revisao")));
 const Performance = lazy(() => lazyRetry(() => import("./pages/Performance")));
 const Equipe = lazy(() => lazyRetry(() => import("./pages/Equipe")));
 const Comissoes = lazy(() => lazyRetry(() => import("./pages/Comissoes")));
@@ -46,6 +48,7 @@ const Configuracoes = lazy(() => lazyRetry(() => import("./pages/Configuracoes")
 const TVDashboard = lazy(() => lazyRetry(() => import("./pages/TVDashboard")));
 const Campanhas = lazy(() => lazyRetry(() => import("./pages/Campanhas")));
 const CampanhaDetail = lazy(() => lazyRetry(() => import("./pages/CampanhaDetail")));
+const FunisHub = lazy(() => lazyRetry(() => import("./pages/FunisHub")));
 const Marketing = lazy(() => lazyRetry(() => import("./pages/Marketing")));
 const Analytics = lazy(() => lazyRetry(() => import("./pages/Analytics")));
 const Produtos = lazy(() => lazyRetry(() => import("./pages/Produtos")));
@@ -61,10 +64,16 @@ const CopilotWizard = lazy(() => lazyRetry(() => import("@/components/copilot/Co
 const CopilotPlayground = lazy(() => lazyRetry(() => import("@/components/copilot/playground").then(m => ({ default: m.CopilotPlayground }))));
 const CopilotWizardTest = lazy(() => lazyRetry(() => import("./pages/CopilotWizardTest")));
 const ChecklistPage = lazy(() => lazyRetry(() => import("./pages/ChecklistPage")));
+const MessageTemplates = lazy(() => lazyRetry(() => import("./pages/MessageTemplates")));
 const Automacoes = lazy(() => lazyRetry(() => import("./pages/Automacoes")));
 const AutomacoesEditor = lazy(() => lazyRetry(() => import("./pages/AutomacoesEditor")));
 const AutomacoesExecucoes = lazy(() => lazyRetry(() => import("./pages/AutomacoesExecucoes")));
 const NotFound = lazy(() => lazyRetry(() => import("./pages/NotFound")));
+const Landing = lazy(() => lazyRetry(() => import("./pages/Landing")));
+const Signup = lazy(() => lazyRetry(() => import("./pages/Signup")));
+const Onboarding = lazy(() => lazyRetry(() => import("./pages/Onboarding")));
+const Checkout = lazy(() => lazyRetry(() => import("./pages/Checkout")));
+const CheckoutSuccess = lazy(() => lazyRetry(() => import("./pages/CheckoutSuccess")));
 
 // Master Admin — lazy loaded (com retry)
 const MasterDashboard = lazy(() => lazyRetry(() => import("./pages/master/MasterDashboard")));
@@ -129,18 +138,38 @@ function LayoutWrapper({ children }: { children: React.ReactNode }) {
   useAutoAdminAssignment();
   return (
     <OrgFeaturesProvider>
-      <MainLayout>{children}</MainLayout>
+      <OnboardingGate>
+        <SubscriptionProtectedRoute>
+          <MainLayout>{children}</MainLayout>
+        </SubscriptionProtectedRoute>
+      </OnboardingGate>
     </OrgFeaturesProvider>
   );
+}
+
+// Root route: Landing for visitors, redirect for authenticated users
+function RootRedirect() {
+  const { user, loading } = useAuth();
+
+  if (loading) return <PageLoader />;
+
+  if (!user) return <Landing />;
+
+  // Authenticated: check if pending payment
+  if (user.user_metadata?.subscription_status === 'pending_payment') {
+    return <Navigate to="/checkout" replace />;
+  }
+
+  return <Navigate to="/dashboard" replace />;
 }
 
 // Auth route that redirects to dashboard if already logged in
 function AuthRoute() {
   const { user, loading } = useAuth();
-  
+
   if (loading) return null;
-  if (user) return <Navigate to="/" replace />;
-  
+  if (user) return <Navigate to="/dashboard" replace />;
+
   return <Auth />;
 }
 
@@ -156,11 +185,41 @@ function AppRoutes() {
   return (
     <Suspense fallback={<PageLoader />}>
     <Routes>
+      <Route path="/landing" element={<Landing />} />
       <Route path="/auth" element={<AuthRoute />} />
+      <Route path="/signup" element={<Signup />} />
       <Route path="/privacidade" element={<Privacidade />} />
       <Route path="/docs" element={<ApiDocs />} />
       <Route
-        path="/"
+        path="/checkout"
+        element={
+          <ProtectedRoute requireOrganization={false}>
+            <Checkout />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/checkout/success"
+        element={
+          <ProtectedRoute requireOrganization={false}>
+            <CheckoutSuccess />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/onboarding"
+        element={
+          <ProtectedRoute>
+            <OrgFeaturesProvider>
+              <Onboarding />
+            </OrgFeaturesProvider>
+          </ProtectedRoute>
+        }
+      />
+      <Route path="/" element={<RootRedirect />} />
+      <Route path="/pricing" element={<Navigate to="/#pricing" replace />} />
+      <Route
+        path="/dashboard"
         element={
           <ProtectedRoute>
             <LayoutWrapper>
@@ -170,16 +229,20 @@ function AppRoutes() {
         }
       />
       <Route
-        path="/campanhas"
+        path="/funis"
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <PermissionProtectedRoute featureKey="campaigns.view">
-                <Campanhas />
+              <PermissionProtectedRoute featureKey="pipeline.view">
+                <FunisHub />
               </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
+      />
+      <Route
+        path="/campanhas"
+        element={<Navigate to="/funis" replace />}
       />
       <Route
         path="/campanhas/:id"
@@ -289,7 +352,7 @@ function AppRoutes() {
           <ProtectedRoute>
             <LayoutWrapper>
               <PermissionProtectedRoute featureKey="followups.view">
-                <PipeFollowUps />
+                <Revisao />
               </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
@@ -477,11 +540,11 @@ function AppRoutes() {
         path="/copilot/novo"
         element={
           <ProtectedRoute>
-            <SubscriptionProtectedRoute requireActive>
-              <LayoutWrapper>
+            <LayoutWrapper>
+              <SubscriptionProtectedRoute requireActive>
                 <CopilotPlayground />
-              </LayoutWrapper>
-            </SubscriptionProtectedRoute>
+              </SubscriptionProtectedRoute>
+            </LayoutWrapper>
           </ProtectedRoute>
         }
       />
@@ -489,11 +552,11 @@ function AppRoutes() {
         path="/copilot/:id/editar"
         element={
           <ProtectedRoute>
-            <SubscriptionProtectedRoute requireActive>
-              <LayoutWrapper>
+            <LayoutWrapper>
+              <SubscriptionProtectedRoute requireActive>
                 <CopilotPlayground />
-              </LayoutWrapper>
-            </SubscriptionProtectedRoute>
+              </SubscriptionProtectedRoute>
+            </LayoutWrapper>
           </ProtectedRoute>
         }
       />
@@ -501,11 +564,11 @@ function AppRoutes() {
         path="/copilot/novo-wizard"
         element={
           <ProtectedRoute>
-            <SubscriptionProtectedRoute requireActive>
-              <LayoutWrapper>
+            <LayoutWrapper>
+              <SubscriptionProtectedRoute requireActive>
                 <CopilotWizard />
-              </LayoutWrapper>
-            </SubscriptionProtectedRoute>
+              </SubscriptionProtectedRoute>
+            </LayoutWrapper>
           </ProtectedRoute>
         }
       />
@@ -553,6 +616,16 @@ function AppRoutes() {
               <PermissionProtectedRoute featureKey="workflows.view">
                 <AutomacoesExecucoes />
               </PermissionProtectedRoute>
+            </LayoutWrapper>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/templates"
+        element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <MessageTemplates />
             </LayoutWrapper>
           </ProtectedRoute>
         }

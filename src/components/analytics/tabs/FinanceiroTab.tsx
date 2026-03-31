@@ -23,7 +23,7 @@ export function FinanceiroTab() {
 
   return (
     <div className="space-y-4">
-      {/* Row 1: Revenue Composition + MRR Evolution */}
+      {/* Row 1: Revenue Composition + Recorrência Evolution */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <AnalyticsErrorBoundary>
           <RevenueComposition

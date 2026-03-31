@@ -24,14 +24,18 @@ import {
   Trash2,
   Edit,
   Clock,
+  Download,
   Zap,
   GitBranch,
   Tag,
   TrendingUp,
+  Upload,
   Timer,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useFeaturePermission } from "@/hooks/useUserRole";
+import { useExportWorkflow, useImportWorkflow } from "@/hooks/useWorkflowPortability";
+import { WorkflowImportDialog } from "@/components/automacoes/WorkflowImportDialog";
 import { TRIGGER_LABELS } from "@/types/workflow";
 import type { Workflow as WorkflowType } from "@/types/workflow";
 import { formatDistanceToNow } from "date-fns";
@@ -51,6 +55,15 @@ export default function Automacoes() {
   const toggleWorkflow = useToggleWorkflow();
   const deleteWorkflow = useDeleteWorkflow();
   const [deleteTarget, setDeleteTarget] = useState<WorkflowType | null>(null);
+  const handleExport = useExportWorkflow();
+  const {
+    importWorkflow,
+    isImporting,
+    report: importReport,
+    isOpen: isImportOpen,
+    openImport,
+    closeImport,
+  } = useImportWorkflow();
   const { allowed: canCreateAutomation } = useFeaturePermission("automations.create");
   const { allowed: canEditAutomation } = useFeaturePermission("automations.edit");
   const { allowed: canDeleteAutomation } = useFeaturePermission("automations.delete");
@@ -141,6 +154,18 @@ export default function Automacoes() {
               <Button
                 variant="ghost"
                 size="icon"
+                className="h-8 w-8"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleExport(workflow);
+                }}
+                title="Exportar workflow"
+              >
+                <Download className="w-4 h-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
                 className="h-8 w-8 text-destructive hover:text-destructive"
                 disabled={!canDeleteAutomation}
                 onClick={(e) => {
@@ -168,18 +193,23 @@ export default function Automacoes() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Workflow className="w-6 h-6 text-primary" />
+          <h1 className="text-2xl font-bold">
             Automações
           </h1>
           <p className="text-muted-foreground">
             Crie e gerencie workflows visuais para automatizar ações no CRM
           </p>
         </div>
-        <Button onClick={() => navigate("/automacoes/novo")} disabled={!canCreateAutomation}>
-          <Plus className="w-4 h-4 mr-2" />
-          Novo Workflow
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={openImport} disabled={!canCreateAutomation}>
+            <Upload className="w-4 h-4 mr-2" />
+            Importar
+          </Button>
+          <Button onClick={() => navigate("/automacoes/novo")} disabled={!canCreateAutomation}>
+            <Plus className="w-4 h-4 mr-2" />
+            Novo Workflow
+          </Button>
+        </div>
       </div>
 
       {isLoading ? (
@@ -251,6 +281,15 @@ export default function Automacoes() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Import Dialog */}
+      <WorkflowImportDialog
+        open={isImportOpen}
+        onClose={closeImport}
+        onImport={(json) => importWorkflow(json)}
+        isImporting={isImporting}
+        report={importReport}
+      />
     </div>
   );
 }

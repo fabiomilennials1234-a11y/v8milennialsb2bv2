@@ -49,7 +49,7 @@ const ACTION_CONFIG: Record<string, { icon: React.ElementType; label: string; co
   product_linked: { icon: Package, label: "Produto vinculado", color: "bg-purple-500/20 text-purple-600" },
   followup_created: { icon: ListTodo, label: "Tarefa criada", color: "bg-blue-500/20 text-blue-600" },
   followup_completed: { icon: CheckSquare, label: "Tarefa concluída", color: "bg-green-500/20 text-green-600" },
-  ai_toggled: { icon: Bot, label: "IA Copilot", color: "bg-primary/20 text-primary" },
+  ai_toggled: { icon: Bot, label: "IA", color: "bg-primary/20 text-primary" },
   copilot_interaction: { icon: Bot, label: "Copilot atendeu", color: "bg-primary/20 text-primary" },
   message_sent: { icon: MessageSquare, label: "Mensagem enviada", color: "bg-green-500/20 text-green-600" },
   automation_triggered: { icon: Zap, label: "Automação executada", color: "bg-orange-500/20 text-orange-600" },

@@ -52,6 +52,8 @@ import { useOrganization } from "@/hooks/useOrganization";
 import { useIsAdmin } from "@/hooks/useUserRole";
 import { MemberPermissions } from "@/components/team/MemberPermissions";
 import { useProfiles } from "@/hooks/useProfiles";
+import { useSeatUsage } from "@/hooks/useSeatUsage";
+import { SeatUsageBar } from "@/components/team/SeatUsageBar";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 type TeamRole = "admin" | "member";
@@ -102,6 +104,7 @@ export default function Equipe() {
   const { organizationId } = useOrganization();
   const { isAdmin } = useIsAdmin();
   const queryClient = useQueryClient();
+  const { data: seatUsage } = useSeatUsage(organizationId);
 
   const { data: orgKeyData } = useQuery({
     queryKey: ["organization", "user_creation_key", organizationId],
@@ -251,6 +254,7 @@ export default function Equipe() {
         toast.success("Membro removido e dados de cadastro apagados. O email pode ser reutilizado.");
       }
       queryClient.invalidateQueries({ queryKey: ["team_members"] });
+      queryClient.invalidateQueries({ queryKey: ["seat-usage"] });
     } catch (error) {
       toast.error("Erro ao remover membro. Tente novamente.");
       console.error(error);
@@ -351,6 +355,7 @@ export default function Equipe() {
         toast.success("Usuário criado. A pessoa pode entrar com este email e a senha que você definiu.");
       }
       queryClient.invalidateQueries({ queryKey: ["team_members"] });
+      queryClient.invalidateQueries({ queryKey: ["seat-usage"] });
     } catch (err) {
       toast.error("Erro ao criar usuário. Tente novamente.");
       console.error(err);
@@ -385,9 +390,8 @@ export default function Equipe() {
           <motion.h1
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="text-2xl font-bold flex items-center gap-2"
+            className="text-2xl font-bold"
           >
-            <Users className="w-6 h-6 text-primary" />
             Equipe
           </motion.h1>
           <p className="text-muted-foreground mt-1">
@@ -509,7 +513,7 @@ export default function Equipe() {
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="grid gap-2">
-                    <Label htmlFor="commission_mrr">Comissão MRR (%)</Label>
+                    <Label htmlFor="commission_mrr">Comissão Rec. (%)</Label>
                     <Input
                       id="commission_mrr"
                       type="number"
@@ -583,7 +587,7 @@ export default function Equipe() {
             </Dialog>
             <Dialog open={isCreateUserDialogOpen} onOpenChange={handleCreateUserDialogOpen}>
               <DialogTrigger asChild>
-                <Button className="gap-2">
+                <Button className="gap-2" disabled={seatUsage ? !seatUsage.can_add : false}>
                   <UserPlus className="w-4 h-4" />
                   Criar usuário
                 </Button>
@@ -699,23 +703,30 @@ export default function Equipe() {
         )}
       </div>
 
+      {seatUsage && <SeatUsageBar usage={seatUsage} />}
+      {seatUsage && !seatUsage.can_add && (
+        <p className="text-xs text-destructive">
+          Limite de seats atingido. Faça upgrade para adicionar mais membros.
+        </p>
+      )}
+
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="glass-card p-4"
+          className="stat-card"
         >
-          <p className="text-xs text-muted-foreground mb-1">Total Membros</p>
+          <p className="stat-card-label">Total Membros</p>
           <p className="text-xl font-bold">{members.length}</p>
         </motion.div>
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.05 }}
-          className="glass-card p-4"
+          className="stat-card"
         >
-          <p className="text-xs text-muted-foreground mb-1">Reuniões</p>
+          <p className="stat-card-label">Reuniões</p>
           <p className="text-xl font-bold text-chart-5">
             {members.filter((m) => (m as any).metric_type === "meetings" && m.is_active).length}
           </p>
@@ -724,9 +735,9 @@ export default function Equipe() {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="glass-card p-4"
+          className="stat-card"
         >
-          <p className="text-xs text-muted-foreground mb-1">Vendas</p>
+          <p className="stat-card-label">Vendas</p>
           <p className="text-xl font-bold text-primary">
             {members.filter((m) => (m as any).metric_type === "sales" && m.is_active).length}
           </p>
@@ -735,9 +746,9 @@ export default function Equipe() {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.15 }}
-          className="glass-card p-4"
+          className="stat-card"
         >
-          <p className="text-xs text-muted-foreground mb-1">Folha OTE Total</p>
+          <p className="stat-card-label">Folha OTE Total</p>
           <p className="text-xl font-bold text-success">
             {formatCurrency(
               members
@@ -784,7 +795,7 @@ export default function Equipe() {
               <TableHead>Status</TableHead>
               <TableHead className="text-right">OTE Base</TableHead>
               <TableHead className="text-right">OTE Bônus</TableHead>
-              <TableHead className="text-right">Comissão MRR</TableHead>
+              <TableHead className="text-right">Comissão Rec.</TableHead>
               <TableHead className="text-right">Comissão Projeto</TableHead>
               {isAdmin && <TableHead className="w-[50px]"></TableHead>}
             </TableRow>

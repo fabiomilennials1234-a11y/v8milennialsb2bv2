@@ -1,4 +1,4 @@
-import { X, Trash2 } from "lucide-react";
+import { X, Trash2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { TriggerPanel } from "./sidebar-panels/TriggerPanel";
@@ -12,6 +12,36 @@ import { WebhookCallPanel } from "./sidebar-panels/WebhookCallPanel";
 import { GotoPanel } from "./sidebar-panels/GotoPanel";
 import { NODE_LABELS } from "@/types/workflow";
 import type { WorkflowNode, WorkflowNodeData } from "@/types/workflow";
+
+/**
+ * Fields that reference org-specific resources.
+ * When null, they indicate the node needs configuration after import.
+ */
+const ORG_SPECIFIC_ID_FIELDS: Record<string, string> = {
+  whatsappInstanceId: "Instância WhatsApp",
+  campaignId: "Campanha",
+  campaignStageId: "Estágio da Campanha",
+  campaignTemplateId: "Template da Campanha",
+  templateSourceId: "Fonte do Template",
+  assigneeId: "Responsável",
+  notifyMemberId: "Membro para Notificação",
+  meetingCloserId: "Closer da Reunião",
+  semiAutoApprover: "Aprovador Semi-Automático",
+  aiAgentId: "Agente de IA",
+  tagId: "Tag",
+  tinyProductId: "Produto TinyERP",
+  agentId: "Agente Copilot",
+};
+
+function getUnresolvedFields(data: Record<string, unknown>): string[] {
+  const unresolved: string[] = [];
+  for (const [field, label] of Object.entries(ORG_SPECIFIC_ID_FIELDS)) {
+    if (field in data && data[field] === null) {
+      unresolved.push(label);
+    }
+  }
+  return unresolved;
+}
 
 interface WorkflowSidebarProps {
   selectedNode: WorkflowNode | null;
@@ -78,6 +108,25 @@ export function WorkflowSidebar({
           <X className="w-4 h-4" />
         </Button>
       </div>
+
+      {/* Unresolved references warning */}
+      {(() => {
+        const unresolved = getUnresolvedFields(nodeData as unknown as Record<string, unknown>);
+        if (unresolved.length === 0) return null;
+        return (
+          <div className="mx-4 mt-3 p-3 rounded-md border border-orange-300 bg-orange-50 dark:border-orange-700 dark:bg-orange-950">
+            <div className="flex items-center gap-2 text-sm font-medium text-orange-700 dark:text-orange-300">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              Configuração pendente
+            </div>
+            <ul className="mt-1.5 text-xs text-orange-600 dark:text-orange-400 space-y-0.5 pl-6 list-disc">
+              {unresolved.map((label) => (
+                <li key={label}>{label}</li>
+              ))}
+            </ul>
+          </div>
+        );
+      })()}
 
       {/* Content */}
       <ScrollArea className="flex-1">

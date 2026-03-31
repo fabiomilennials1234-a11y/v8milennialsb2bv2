@@ -448,6 +448,31 @@ export function useDeleteAllLeads() {
 }
 
 /**
+ * Read ai_disabled status for a lead via SECURITY DEFINER RPC.
+ * Bypasses RLS — always returns the real DB value regardless of
+ * whether the user has SELECT permission on the lead via RLS.
+ */
+export function useLeadAiStatus(leadId: string | undefined) {
+  return useQuery({
+    queryKey: ["lead_ai_status", leadId],
+    queryFn: async () => {
+      if (!leadId) return { ai_disabled: false };
+      const { data, error } = await supabase.rpc("get_lead_ai_status", {
+        p_lead_id: leadId,
+      });
+      if (error) {
+        console.error("[useLeadAiStatus] RPC error:", error);
+        return { ai_disabled: false };
+      }
+      const parsed = typeof data === 'string' ? JSON.parse(data) : data;
+      return { ai_disabled: parsed?.ai_disabled ?? false };
+    },
+    enabled: !!leadId,
+    staleTime: 30_000, // 30s — evita refetch excessivo
+  });
+}
+
+/**
  * Toggle AI disabled status for a lead
  * When disabled, the Copilot agent will not respond to messages from this lead
  */
@@ -460,41 +485,16 @@ export function useToggleLeadAI() {
       if (!organizationId) {
         throw new Error("Cannot update lead: No organization context");
       }
-      
-      // Get current user ID
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      const { data, error } = await supabase
-        .from("leads")
-        .update({
-          ai_disabled: disabled,
-          ai_disabled_at: disabled ? new Date().toISOString() : null,
-          ai_disabled_by: disabled ? user?.id : null,
-        })
-        .eq("id", leadId)
-        // SECURITY: Ensure lead belongs to user's organization
-        .eq("organization_id", organizationId)
-        .select()
-        .single();
 
-      if (error) throw error;
+      // Use RPC to bypass leads RLS — any team member can toggle copilot
+      const { data, error } = await supabase.rpc("toggle_lead_ai", {
+        p_lead_id: leadId,
+        p_disabled: disabled,
+      });
 
-      // When reactivating AI: reset conversation state and log
-      if (!disabled) {
-        // Reset conversation state from WAITING_HUMAN to QUALIFYING
-        await supabase
-          .from("conversations")
-          .update({ state: "QUALIFYING" })
-          .eq("lead_id", leadId);
-
-        // Log reactivation in lead_history
-        await supabase.from("lead_history").insert({
-          lead_id: leadId,
-          action: "ai_reactivated",
-          description: "IA Copilot reativada pelo vendedor",
-          source: "manual",
-          metadata: { reactivated_by: user?.id },
-        });
+      if (error) {
+        console.error("[toggleLeadAI] RPC error:", error.message, error.code, error.details);
+        throw new Error(error.message || "Erro desconhecido ao alterar IA");
       }
 
       return data;
@@ -611,15 +611,89 @@ export function useToggleLeadAI() {
       }
     },
     onSuccess: (_, variables) => {
-      // Invalidar apenas queries renderizadas (refetchType: 'active') para evitar cascata
-      queryClient.invalidateQueries({ queryKey: ["leads"], refetchType: 'active' });
-      queryClient.invalidateQueries({ queryKey: ["lead-detail", variables.leadId] });
-      queryClient.invalidateQueries({ queryKey: ["pipe_whatsapp"], refetchType: 'active' });
-      queryClient.invalidateQueries({ queryKey: ["pipe_confirmacao"], refetchType: 'active' });
-      queryClient.invalidateQueries({ queryKey: ["pipe_propostas"], refetchType: 'active' });
-      queryClient.invalidateQueries({ queryKey: ["lead_by_phone"], refetchType: 'active' });
+      // Atualizar cache DIRETAMENTE com o valor confirmado pelo servidor.
+      // NÃO invalidar lead_by_phone nem lead-detail: a invalidação dispara
+      // um refetch que passa pelo RLS, e o RLS pode bloquear o SELECT para
+      // usuários que não são SDR/closer/responsible do lead — sobrescrevendo
+      // o cache correto com null e fazendo o switch reverter.
+      const updateAiDisabled = (old: any) => {
+        if (!old) return old;
+        if (old.id === variables.leadId) {
+          return { ...old, ai_disabled: variables.disabled };
+        }
+        return old;
+      };
+
+      // Atualizar lead_by_phone (usado no WhatsAppChat)
+      const queryCache = queryClient.getQueryCache();
+      queryCache.findAll({ queryKey: ["lead_by_phone"] }).forEach((query) => {
+        queryClient.setQueryData(query.queryKey, updateAiDisabled);
+      });
+
+      // Atualizar lead-detail (usado nos modais)
+      queryClient.setQueryData(["lead-detail", variables.leadId], updateAiDisabled);
+
+      // Atualizar lista de leads
+      queryClient.setQueryData(["leads", organizationId], (old: any) => {
+        if (!old) return old;
+        return old.map((lead: Lead) =>
+          lead.id === variables.leadId
+            ? { ...lead, ai_disabled: variables.disabled }
+            : lead
+        );
+      });
+
+      // Atualizar pipes
+      const updatePipe = (old: any) => {
+        if (!old) return old;
+        return old.map((item: any) =>
+          (item.leadId === variables.leadId || item.lead_id === variables.leadId)
+            ? { ...item, ai_disabled: variables.disabled }
+            : item
+        );
+      };
+      queryClient.setQueryData(["pipe_whatsapp"], updatePipe);
+      queryClient.setQueryData(["pipe_confirmacao"], updatePipe);
+      queryClient.setQueryData(["pipe_propostas"], updatePipe);
+
+      // Atualizar lead_ai_status diretamente (fonte de verdade do switch)
+      queryClient.setQueryData(["lead_ai_status", variables.leadId], {
+        ai_disabled: variables.disabled,
+      });
+
+      // Invalidar APENAS queries que NÃO usam RLS de leads para refetch
       queryClient.invalidateQueries({ queryKey: ["conversation-history", variables.leadId] });
       queryClient.invalidateQueries({ queryKey: ["waiting-human-leads"], refetchType: 'active' });
+    },
+  });
+}
+
+/**
+ * Toggle AI for a conversation by phone number.
+ * If no lead exists, creates a shadow lead automatically.
+ * Use this when the user wants to disable AI for a contact that has no lead card.
+ */
+export function useToggleConversationAI() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ phone, disabled }: { phone: string; disabled: boolean }) => {
+      const { data, error } = await supabase.rpc("toggle_conversation_ai", {
+        p_phone: phone,
+        p_disabled: disabled,
+      });
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["lead_by_phone"], refetchType: "active" });
+      queryClient.invalidateQueries({ queryKey: ["leads"], refetchType: "active" });
+      queryClient.invalidateQueries({ queryKey: ["pipe_whatsapp"], refetchType: "active" });
+      queryClient.invalidateQueries({ queryKey: ["waiting-human-leads"], refetchType: "active" });
+      if (data && typeof data === "object" && "id" in data) {
+        queryClient.invalidateQueries({ queryKey: ["lead-detail", (data as any).id] });
+      }
     },
   });
 }

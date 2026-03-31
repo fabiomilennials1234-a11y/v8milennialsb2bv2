@@ -8,6 +8,10 @@ import { useCanPerformActionAsync } from "@/lib/permissions";
 // Types
 // ────────────────────────────────────────────────────────────
 
+export type LifecycleType = "permanent" | "temporary";
+export type FunnelStatus = "draft" | "active" | "paused" | "ended";
+export type FunnelTemplateType = "indicacao" | "prospeccao" | "reativacao";
+
 export interface CustomPipeline {
   id: string;
   organization_id: string;
@@ -21,6 +25,19 @@ export interface CustomPipeline {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  // Temporal fields
+  lifecycle_type: LifecycleType;
+  starts_at: string | null;
+  ends_at: string | null;
+  status: FunnelStatus;
+  team_goal: number | null;
+  individual_goal: number | null;
+  bonus_value: number | null;
+  bonus_description: string | null;
+  objective_pipe_type: string | null;
+  objective_stage_key: string | null;
+  template_type: FunnelTemplateType | null;
+  lead_source_config: Record<string, unknown> | null;
 }
 
 export interface CustomPipelineStage {
@@ -88,12 +105,35 @@ function generateStageKey(name: string): string {
     .replace(/^_+|_+$/g, "");
 }
 
-// Etapas padrão para novos funis
+// Etapas padrão para novos funis permanentes
 const DEFAULT_CUSTOM_STAGES = [
   { name: "Novo", color: "#3b82f6", is_final_positive: false, is_final_negative: false },
   { name: "Em andamento", color: "#eab308", is_final_positive: false, is_final_negative: false },
   { name: "Concluído", color: "#22c55e", is_final_positive: true, is_final_negative: false },
 ];
+
+// Etapas padrão para funis temporários por template
+export const TEMPORARY_FUNNEL_STAGES: Record<string, typeof DEFAULT_CUSTOM_STAGES> = {
+  indicacao: [
+    { name: "Indicado", color: "#8b5cf6", is_final_positive: false, is_final_negative: false },
+    { name: "Contatado", color: "#3b82f6", is_final_positive: false, is_final_negative: false },
+    { name: "Qualificado", color: "#eab308", is_final_positive: false, is_final_negative: false },
+    { name: "Convertido", color: "#22c55e", is_final_positive: true, is_final_negative: false },
+  ],
+  prospeccao: [
+    { name: "Importado", color: "#64748b", is_final_positive: false, is_final_negative: false },
+    { name: "Abordado", color: "#3b82f6", is_final_positive: false, is_final_negative: false },
+    { name: "Respondeu", color: "#8b5cf6", is_final_positive: false, is_final_negative: false },
+    { name: "Qualificado", color: "#eab308", is_final_positive: false, is_final_negative: false },
+    { name: "Convertido", color: "#22c55e", is_final_positive: true, is_final_negative: false },
+  ],
+  reativacao: [
+    { name: "Selecionado", color: "#64748b", is_final_positive: false, is_final_negative: false },
+    { name: "Reativado", color: "#3b82f6", is_final_positive: false, is_final_negative: false },
+    { name: "Em Negociação", color: "#eab308", is_final_positive: false, is_final_negative: false },
+    { name: "Reconvertido", color: "#22c55e", is_final_positive: true, is_final_negative: false },
+  ],
+};
 
 // ────────────────────────────────────────────────────────────
 // Queries: Pipelines
@@ -121,6 +161,85 @@ export function useCustomPipelines() {
     },
     enabled: !!organizationId,
     staleTime: 5 * 60 * 1000, // 5 minutos — pipelines raramente mudam
+  });
+}
+
+/** Lista funis customizados permanentes */
+export function usePermanentCustomFunnels() {
+  const { data: teamMember } = useCurrentTeamMember();
+  const organizationId = teamMember?.organization_id;
+
+  return useQuery({
+    queryKey: ["custom_pipelines", organizationId, "permanent"],
+    queryFn: async () => {
+      if (!organizationId) return [];
+
+      const { data, error } = await supabase
+        .from("custom_pipelines")
+        .select("*")
+        .eq("organization_id", organizationId)
+        .eq("is_active", true)
+        .eq("lifecycle_type", "permanent")
+        .order("position", { ascending: true });
+
+      if (error) throw error;
+      return (data || []) as CustomPipeline[];
+    },
+    enabled: !!organizationId,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/** Lista funis temporários (ativos, pausados, draft) */
+export function useTemporaryFunnels() {
+  const { data: teamMember } = useCurrentTeamMember();
+  const organizationId = teamMember?.organization_id;
+
+  return useQuery({
+    queryKey: ["custom_pipelines", organizationId, "temporary"],
+    queryFn: async () => {
+      if (!organizationId) return [];
+
+      const { data, error } = await supabase
+        .from("custom_pipelines")
+        .select("*")
+        .eq("organization_id", organizationId)
+        .eq("is_active", true)
+        .eq("lifecycle_type", "temporary")
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      return (data || []) as CustomPipeline[];
+    },
+    enabled: !!organizationId,
+    staleTime: 60 * 1000, // 1 min — temporary funnels change more often
+  });
+}
+
+/** Lista funis temporários ativos (para sidebar) */
+export function useActiveTemporaryFunnels() {
+  const { data: teamMember } = useCurrentTeamMember();
+  const organizationId = teamMember?.organization_id;
+
+  return useQuery({
+    queryKey: ["custom_pipelines", organizationId, "temporary", "active"],
+    queryFn: async () => {
+      if (!organizationId) return [];
+
+      const { data, error } = await supabase
+        .from("custom_pipelines")
+        .select("*")
+        .eq("organization_id", organizationId)
+        .eq("is_active", true)
+        .eq("lifecycle_type", "temporary")
+        .in("status", ["active", "paused", "draft"])
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      return (data || []) as CustomPipeline[];
+    },
+    enabled: !!organizationId,
+    staleTime: 60 * 1000,
   });
 }
 
@@ -207,7 +326,7 @@ export function useCustomPipeEntries(pipelineId: string | undefined) {
 // Mutations: Pipelines
 // ────────────────────────────────────────────────────────────
 
-/** Criar funil customizado + etapas padrão */
+/** Criar funil customizado + etapas padrão (permanente ou temporário) */
 export function useCreateCustomPipeline() {
   const queryClient = useQueryClient();
   const { data: teamMember } = useCurrentTeamMember();
@@ -218,17 +337,44 @@ export function useCreateCustomPipeline() {
       description,
       icon,
       color,
+      // Temporal fields
+      lifecycle_type = "permanent",
+      starts_at,
+      ends_at,
+      team_goal,
+      individual_goal,
+      bonus_value,
+      bonus_description,
+      objective_pipe_type,
+      objective_stage_key,
+      template_type,
+      lead_source_config,
+      // Custom stages (overrides default)
+      custom_stages,
     }: {
       name: string;
       description?: string;
       icon?: string;
       color?: string;
+      lifecycle_type?: LifecycleType;
+      starts_at?: string;
+      ends_at?: string;
+      team_goal?: number;
+      individual_goal?: number;
+      bonus_value?: number;
+      bonus_description?: string;
+      objective_pipe_type?: string;
+      objective_stage_key?: string;
+      template_type?: FunnelTemplateType;
+      lead_source_config?: Record<string, unknown>;
+      custom_stages?: Array<{ name: string; color: string; is_final_positive: boolean; is_final_negative: boolean }>;
     }) => {
       if (!teamMember?.organization_id) {
         throw new Error("Organização não encontrada");
       }
 
       const slug = generateSlug(name);
+      const isTemporary = lifecycle_type === "temporary";
 
       // 1. Criar pipeline
       const { data: pipeline, error: pipeError } = await supabase
@@ -238,23 +384,38 @@ export function useCreateCustomPipeline() {
           name,
           slug,
           description: description || null,
-          icon: icon || "kanban",
-          color: color || "#3b82f6",
+          icon: icon || (isTemporary ? "target" : "kanban"),
+          color: color || (isTemporary ? "#8b5cf6" : "#3b82f6"),
           created_by: teamMember.profile_id,
+          lifecycle_type,
+          status: isTemporary ? "draft" : "active",
+          starts_at: starts_at || null,
+          ends_at: ends_at || null,
+          team_goal: team_goal || null,
+          individual_goal: individual_goal || null,
+          bonus_value: bonus_value || null,
+          bonus_description: bonus_description || null,
+          objective_pipe_type: objective_pipe_type || null,
+          objective_stage_key: objective_stage_key || null,
+          template_type: template_type || null,
+          lead_source_config: lead_source_config || null,
         })
         .select()
         .single();
 
       if (pipeError) {
-        // code 23505 = unique_violation (PostgreSQL)
         if (pipeError.code === "23505" || pipeError.message?.includes("duplicate")) {
           throw new Error("Já existe um funil ativo com esse nome nesta organização");
         }
         throw pipeError;
       }
 
-      // 2. Criar etapas padrão
-      const stageInserts = DEFAULT_CUSTOM_STAGES.map((stage, index) => ({
+      // 2. Criar etapas — do template ou padrão
+      const stageDefs = custom_stages
+        || (isTemporary && template_type ? TEMPORARY_FUNNEL_STAGES[template_type] : null)
+        || DEFAULT_CUSTOM_STAGES;
+
+      const stageInserts = stageDefs.map((stage, index) => ({
         organization_id: teamMember.organization_id,
         pipeline_id: pipeline.id,
         stage_key: generateStageKey(stage.name),
@@ -270,12 +431,83 @@ export function useCreateCustomPipeline() {
         .insert(stageInserts);
 
       if (stagesError) {
-        // Rollback: excluir pipeline se etapas falharam
         await supabase.from("custom_pipelines").delete().eq("id", pipeline.id);
         throw stagesError;
       }
 
       return pipeline as CustomPipeline;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["custom_pipelines"] });
+    },
+  });
+}
+
+/** Ativar funil temporário (draft → active) */
+export function useActivateTemporaryFunnel() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data, error } = await supabase
+        .from("custom_pipelines")
+        .update({
+          status: "active",
+          starts_at: new Date().toISOString(),
+        })
+        .eq("id", id)
+        .eq("lifecycle_type", "temporary")
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data as CustomPipeline;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["custom_pipelines"] });
+    },
+  });
+}
+
+/** Pausar funil temporário */
+export function usePauseTemporaryFunnel() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data, error } = await supabase
+        .from("custom_pipelines")
+        .update({ status: "paused" })
+        .eq("id", id)
+        .eq("lifecycle_type", "temporary")
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data as CustomPipeline;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["custom_pipelines"] });
+    },
+  });
+}
+
+/** Encerrar funil temporário */
+export function useEndTemporaryFunnel() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data, error } = await supabase
+        .from("custom_pipelines")
+        .update({ status: "ended" })
+        .eq("id", id)
+        .eq("lifecycle_type", "temporary")
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data as CustomPipeline;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["custom_pipelines"] });

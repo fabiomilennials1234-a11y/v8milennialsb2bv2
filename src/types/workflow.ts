@@ -74,6 +74,7 @@ export type WorkflowActionType =
   | "create_tinyerp_order"
   | "create_tinyerp_upsell_order"
   // Equipe
+  | "assign_responsible"
   | "assign_sdr"
   | "assign_closer"
   | "notify_team_member"
@@ -577,6 +578,7 @@ export const ACTION_LABELS: Record<WorkflowActionType, string> = {
   create_tinyerp_order: "Criar Pedido TinyERP",
   create_tinyerp_upsell_order: "Criar Pedido Upsell TinyERP",
   // Equipe
+  assign_responsible: "Atribuir Responsável",
   assign_sdr: "Atribuir SDR",
   assign_closer: "Atribuir Closer",
   notify_team_member: "Notificar Membro da Equipe",
@@ -686,7 +688,7 @@ export const ACTION_CATEGORIES: ActionCategory[] = [
   },
   {
     label: "Equipe",
-    actions: ["assign_sdr", "assign_closer", "notify_team_member"],
+    actions: ["assign_responsible", "notify_team_member"],
   },
   {
     label: "Follow-up",

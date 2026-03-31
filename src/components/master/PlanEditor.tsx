@@ -14,11 +14,8 @@ import { Save, Loader2 } from "lucide-react";
 import { PlanFeatureCard } from "./PlanFeatureCard";
 import { useUpdatePlan, type Plan } from "@/hooks/useMasterPlans";
 import {
-  FEATURES,
   LIMITS,
   getFeaturesByCategory,
-  type FeatureKey,
-  type LimitKey,
 } from "@/lib/feature-registry";
 
 interface PlanEditorProps {
@@ -32,8 +29,16 @@ export function PlanEditor({ plan, onClose }: PlanEditorProps) {
   // Local state (cópia editável)
   const [displayName, setDisplayName] = useState(plan.display_name);
   const [description, setDescription] = useState(plan.description ?? "");
-  const [priceMonthly, setPriceMonthly] = useState(plan.price_monthly);
-  const [priceYearly, setPriceYearly] = useState(plan.price_yearly);
+  const [pricePerUserMonthly, setPricePerUserMonthly] = useState<number | null>(plan.price_per_user_monthly);
+  const [basePriceMonthly, setBasePriceMonthly] = useState<number | null>(plan.base_price_monthly);
+  const [minUsers, setMinUsers] = useState(plan.min_users);
+  const [includedUsers, setIncludedUsers] = useState(plan.included_users);
+  const [includedCopilots, setIncludedCopilots] = useState(plan.included_copilots);
+  const [extraUserPrice, setExtraUserPrice] = useState(plan.extra_user_price);
+  const [discountSemesterPct, setDiscountSemesterPct] = useState(plan.discount_semester_pct);
+  const [discountAnnualPct, setDiscountAnnualPct] = useState(plan.discount_annual_pct);
+  const [discountVolumePct, setDiscountVolumePct] = useState(plan.discount_volume_pct);
+  const [discountVolumeMin, setDiscountVolumeMin] = useState(plan.discount_volume_min);
   const [isActive, setIsActive] = useState(plan.is_active);
   const [features, setFeatures] = useState<Record<string, boolean>>(plan.features);
   const [limits, setLimits] = useState<Record<string, number>>(plan.limits);
@@ -45,8 +50,16 @@ export function PlanEditor({ plan, onClose }: PlanEditorProps) {
   useEffect(() => {
     setDisplayName(plan.display_name);
     setDescription(plan.description ?? "");
-    setPriceMonthly(plan.price_monthly);
-    setPriceYearly(plan.price_yearly);
+    setPricePerUserMonthly(plan.price_per_user_monthly);
+    setBasePriceMonthly(plan.base_price_monthly);
+    setMinUsers(plan.min_users);
+    setIncludedUsers(plan.included_users);
+    setIncludedCopilots(plan.included_copilots);
+    setExtraUserPrice(plan.extra_user_price);
+    setDiscountSemesterPct(plan.discount_semester_pct);
+    setDiscountAnnualPct(plan.discount_annual_pct);
+    setDiscountVolumePct(plan.discount_volume_pct);
+    setDiscountVolumeMin(plan.discount_volume_min);
     setIsActive(plan.is_active);
     setFeatures(plan.features);
     setLimits(plan.limits);
@@ -76,11 +89,21 @@ export function PlanEditor({ plan, onClose }: PlanEditorProps) {
       id: plan.id,
       display_name: displayName,
       description: description || null,
-      price_monthly: priceMonthly,
-      price_yearly: priceYearly,
       is_active: isActive,
       features,
       limits,
+      price_per_user_monthly: pricePerUserMonthly,
+      base_price_monthly: basePriceMonthly,
+      min_users: minUsers,
+      included_users: includedUsers,
+      included_copilots: includedCopilots,
+      extra_user_price: extraUserPrice,
+      price_monthly: basePriceMonthly ?? (pricePerUserMonthly ?? 0) * minUsers,
+      price_yearly: 0,
+      discount_semester_pct: discountSemesterPct,
+      discount_annual_pct: discountAnnualPct,
+      discount_volume_pct: discountVolumePct,
+      discount_volume_min: discountVolumeMin,
     });
     setDirty(false);
   };
@@ -88,9 +111,6 @@ export function PlanEditor({ plan, onClose }: PlanEditorProps) {
   const moduleFeatures = getFeaturesByCategory("modules");
   const campaignFeatures = getFeaturesByCategory("campaigns");
   const advancedFeatures = getFeaturesByCategory("advanced");
-
-  const formatCurrency = (value: number) =>
-    new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
 
   return (
     <div className="space-y-6">
@@ -126,6 +146,7 @@ export function PlanEditor({ plan, onClose }: PlanEditorProps) {
 
         {/* TAB: Geral */}
         <TabsContent value="geral" className="space-y-4 mt-4">
+          {/* Name & Slug */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Nome de Exibição</Label>
@@ -139,6 +160,8 @@ export function PlanEditor({ plan, onClose }: PlanEditorProps) {
               <Input value={plan.name} disabled />
             </div>
           </div>
+
+          {/* Description */}
           <div className="space-y-2">
             <Label>Descrição</Label>
             <Textarea
@@ -147,24 +170,114 @@ export function PlanEditor({ plan, onClose }: PlanEditorProps) {
               rows={2}
             />
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Preço Mensal (R$)</Label>
-              <Input
-                type="number"
-                value={priceMonthly}
-                onChange={(e) => { setPriceMonthly(parseFloat(e.target.value) || 0); markDirty(); }}
-              />
+
+          {/* Pricing Model */}
+          <div className="rounded-lg border p-4 space-y-4">
+            <h3 className="text-sm font-semibold">Modelo de Pricing</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Preço por Usuário/mês (R$)</Label>
+                <Input
+                  type="number"
+                  placeholder="NULL = não é per-seat"
+                  value={pricePerUserMonthly ?? ""}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setPricePerUserMonthly(v === "" ? null : parseFloat(v) || 0);
+                    markDirty();
+                  }}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Preço Base Mensal (R$)</Label>
+                <Input
+                  type="number"
+                  placeholder="NULL = não é package"
+                  value={basePriceMonthly ?? ""}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setBasePriceMonthly(v === "" ? null : parseFloat(v) || 0);
+                    markDirty();
+                  }}
+                />
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label>Preço Anual (R$)</Label>
-              <Input
-                type="number"
-                value={priceYearly}
-                onChange={(e) => { setPriceYearly(parseFloat(e.target.value) || 0); markDirty(); }}
-              />
+            <div className="grid grid-cols-4 gap-4">
+              <div className="space-y-2">
+                <Label>Mín. Usuários</Label>
+                <Input
+                  type="number"
+                  value={minUsers}
+                  onChange={(e) => { setMinUsers(parseInt(e.target.value) || 0); markDirty(); }}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Incluídos</Label>
+                <Input
+                  type="number"
+                  value={includedUsers}
+                  onChange={(e) => { setIncludedUsers(parseInt(e.target.value) || 0); markDirty(); }}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Copilots Incl.</Label>
+                <Input
+                  type="number"
+                  value={includedCopilots}
+                  onChange={(e) => { setIncludedCopilots(parseInt(e.target.value) || 0); markDirty(); }}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Extra/Usuário (R$)</Label>
+                <Input
+                  type="number"
+                  value={extraUserPrice}
+                  onChange={(e) => { setExtraUserPrice(parseFloat(e.target.value) || 0); markDirty(); }}
+                />
+              </div>
             </div>
           </div>
+
+          {/* Discounts */}
+          <div className="rounded-lg border p-4 space-y-4">
+            <h3 className="text-sm font-semibold">Descontos</h3>
+            <div className="grid grid-cols-4 gap-4">
+              <div className="space-y-2">
+                <Label>Semestral (%)</Label>
+                <Input
+                  type="number"
+                  value={discountSemesterPct}
+                  onChange={(e) => { setDiscountSemesterPct(parseFloat(e.target.value) || 0); markDirty(); }}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Anual (%)</Label>
+                <Input
+                  type="number"
+                  value={discountAnnualPct}
+                  onChange={(e) => { setDiscountAnnualPct(parseFloat(e.target.value) || 0); markDirty(); }}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Volume (%)</Label>
+                <Input
+                  type="number"
+                  value={discountVolumePct}
+                  onChange={(e) => { setDiscountVolumePct(parseFloat(e.target.value) || 0); markDirty(); }}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Volume Mín. Users</Label>
+                <Input
+                  type="number"
+                  value={discountVolumeMin}
+                  onChange={(e) => { setDiscountVolumeMin(parseInt(e.target.value) || 0); markDirty(); }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Active toggle */}
           <div className="flex items-center justify-between p-3 rounded-lg border">
             <div>
               <p className="text-sm font-medium">Plano Ativo</p>
