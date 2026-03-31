@@ -15,6 +15,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScheduleMessageModal } from "@/components/chat/ScheduleMessageModal";
+import { ScheduleFollowUpModal } from "@/components/followups/ScheduleFollowUpModal";
 import { useOpenWhatsAppChat, formatPhoneForWhatsApp } from "@/lib/whatsapp";
 import { cn } from "@/lib/utils";
 
@@ -36,6 +37,7 @@ export interface RevisionTask {
   assignedTo?: string;
   assignedToName?: string;
   sourcePipe?: string;
+  sourcePipeId?: string;
   isAutomated?: boolean;
   messageContent?: string;
   mediaUrl?: string;
@@ -84,6 +86,7 @@ export function RevisionItem({
   const [expanded, setExpanded] = useState(false);
   const [showCompletionBanner, setShowCompletionBanner] = useState(false);
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
+  const [scheduleFollowUpOpen, setScheduleFollowUpOpen] = useState(false);
   const openWhatsApp = useOpenWhatsAppChat();
 
   const isOverdue = !task.isCompleted && isPast(task.scheduledAt);
@@ -91,9 +94,8 @@ export function RevisionItem({
 
   const handleComplete = () => {
     onComplete(task.id);
-    if (task.type === "follow-up" && task.leadPhone) {
+    if (task.type === "follow-up") {
       setShowCompletionBanner(true);
-      setTimeout(() => setShowCompletionBanner(false), 5000);
     }
   };
 
@@ -172,21 +174,37 @@ export function RevisionItem({
           >
             <div className="flex items-center justify-between gap-3 mx-2 mb-2 px-4 py-2.5 rounded-lg bg-success/5 border border-success/20">
               <span className="text-sm text-foreground/80">
-                Concluído · Enviar mensagem para o lead?
+                Concluído · Próximo passo?
               </span>
               <div className="flex items-center gap-2 shrink-0">
                 <Button
                   size="sm"
                   variant="outline"
-                  className="h-7 text-xs"
+                  className="h-7 text-xs gap-1"
                   onClick={(e) => {
                     e.stopPropagation();
-                    setScheduleModalOpen(true);
+                    setScheduleFollowUpOpen(true);
                     setShowCompletionBanner(false);
                   }}
                 >
-                  Agendar
+                  <Calendar className="w-3 h-3" />
+                  Novo follow-up
                 </Button>
+                {task.leadPhone && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs gap-1"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setScheduleModalOpen(true);
+                      setShowCompletionBanner(false);
+                    }}
+                  >
+                    <MessageSquare className="w-3 h-3" />
+                    Enviar mensagem
+                  </Button>
+                )}
                 <Button
                   size="sm"
                   variant="ghost"
@@ -276,6 +294,16 @@ export function RevisionItem({
         leadId={task.leadId}
         leadName={task.leadName}
         phoneNumber={task.leadPhone || ""}
+      />
+
+      <ScheduleFollowUpModal
+        open={scheduleFollowUpOpen}
+        onOpenChange={setScheduleFollowUpOpen}
+        leadId={task.leadId}
+        leadName={task.leadName}
+        sourcePipe={task.sourcePipe as "whatsapp" | "confirmacao" | "propostas" | undefined}
+        sourcePipeId={task.sourcePipeId}
+        defaultAssignedTo={task.assignedTo}
       />
     </>
   );
