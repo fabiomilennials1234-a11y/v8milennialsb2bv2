@@ -206,9 +206,10 @@ export function useCommissionSummary(teamMemberId: string, month: number, year: 
 
       sales?.forEach(sale => {
         const value = Number(sale.sale_value) || 0;
-        if (sale.product_type === "mrr") {
+        const type = sale.product_type ?? "mrr";
+        if (type === "mrr") {
           totalMRR += value;
-        } else if (sale.product_type === "projeto") {
+        } else if (type === "projeto") {
           totalProjeto += value;
         }
       });
