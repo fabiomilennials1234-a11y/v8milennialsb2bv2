@@ -11,6 +11,7 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { evaluateCondition } from "./workflow-condition-evaluator.ts";
 import { executeWorkflowAction, type ActionResult } from "./workflow-action-handler.ts";
+import { getNextSendTime } from "./followupSchedule.ts";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -116,11 +117,17 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
       continue;
     }
 
-    // Loop detection
-    loopCounters[nodeId] = (loopCounters[nodeId] || 0) + 1;
-    if (loopCounters[nodeId] > loopLimit) {
-      await updateExecution(supabase, executionId, "loop_limit_reached", nodeId, loopCounters, `Loop limit reached at node ${nodeId}`);
-      return { success: false, status: "loop_limit_reached", error: `Loop limit at ${nodeId}`, stepsExecuted };
+    // Loop detection — skip increment for time_window condition re-evaluations (scheduled resume)
+    const isTimeWindowResume = node.type === "condition"
+      && (node.data.conditionMode as string) === "time_window"
+      && params.currentNodeId === nodeId;
+
+    if (!isTimeWindowResume) {
+      loopCounters[nodeId] = (loopCounters[nodeId] || 0) + 1;
+      if (loopCounters[nodeId] > loopLimit) {
+        await updateExecution(supabase, executionId, "loop_limit_reached", nodeId, loopCounters, `Loop limit reached at node ${nodeId}`);
+        return { success: false, status: "loop_limit_reached", error: `Loop limit at ${nodeId}`, stepsExecuted };
+      }
     }
 
     stepsExecuted++;
@@ -174,42 +181,107 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
         }
 
         case "condition": {
-          const condResult = await evaluateCondition(supabase, leadId, {
-            field: node.data.field as string || "",
-            operator: node.data.operator as string || "equals",
-            value: node.data.value as string || "",
-          });
+          const conditionMode = (node.data.conditionMode as string) || "field";
 
-          await recordStep(supabase, executionId, node, "success",
-            { field: node.data.field, operator: node.data.operator, value: node.data.value },
-            { result: condResult },
-          );
+          if (conditionMode === "time_window") {
+            // ── Time window condition: check if "now" is inside the configured window ──
+            const tw = node.data.timeWindow as {
+              days?: string[];
+              startTime?: string;
+              endTime?: string;
+              timezone?: string;
+            } | undefined;
 
-          // Condition routing: true → sourceHandle "true" or first edge, false → sourceHandle "false" or second edge
-          const outEdges = edgeMap.get(nodeId) || [];
-          let nextNodeId: string | undefined;
+            const days = tw?.days || ["seg", "ter", "qua", "qui", "sex"];
+            const startTime = tw?.startTime || "08:00";
+            const endTime = tw?.endTime || "18:00";
+            const timezone = tw?.timezone || "America/Sao_Paulo";
 
-          if (condResult) {
-            // True path: look for sourceHandle containing "true" or "yes", or first edge
-            const trueEdge = outEdges.find(e =>
-              e.sourceHandle?.toLowerCase().includes("true") ||
-              e.sourceHandle?.toLowerCase().includes("yes") ||
-              e.sourceHandle === "a" ||
-              e.sourceHandle === "source-true"
+            const now = new Date();
+            const nextSend = getNextSendTime(
+              {
+                sendOnlyBusinessHours: true,
+                businessHoursStart: startTime,
+                businessHoursEnd: endTime,
+                sendDays: days,
+                timezone,
+              },
+              now,
             );
-            nextNodeId = trueEdge?.target || outEdges[0]?.target;
+
+            const isInsideWindow = nextSend.getTime() <= now.getTime() + 1000; // 1s tolerance
+
+            if (isInsideWindow) {
+              // Inside window — follow true path
+              await recordStep(supabase, executionId, node, "success",
+                { conditionMode: "time_window", days, startTime, endTime, timezone },
+                { result: true, insideWindow: true, evaluatedAt: new Date().toISOString() },
+              );
+
+              const outEdges = edgeMap.get(nodeId) || [];
+              const trueEdge = outEdges.find(e =>
+                e.sourceHandle?.toLowerCase().includes("true") ||
+                e.sourceHandle?.toLowerCase().includes("yes") ||
+                e.sourceHandle === "a" ||
+                e.sourceHandle === "source-true"
+              );
+              const nextNodeId = trueEdge?.target || outEdges[0]?.target;
+              if (nextNodeId) nextNodes.push(nextNodeId);
+            } else {
+              // Outside window — pause and schedule resume at next window start
+              const nextRunAt = nextSend.toISOString();
+
+              await recordStep(supabase, executionId, node, "success",
+                { conditionMode: "time_window", days, startTime, endTime, timezone },
+                { result: "paused_until_window", insideWindow: false, nextRunAt, evaluatedAt: new Date().toISOString() },
+              );
+
+              // Pause execution: set current_node_id to THIS node so it re-evaluates on resume
+              await supabase.from("workflow_executions").update({
+                status: "running",
+                current_node_id: nodeId,
+                next_run_at: nextRunAt,
+                loop_counters: loopCounters,
+              }).eq("id", executionId);
+
+              return { success: true, status: "paused", stepsExecuted };
+            }
           } else {
-            // False path: look for sourceHandle containing "false" or "no", or second edge
-            const falseEdge = outEdges.find(e =>
-              e.sourceHandle?.toLowerCase().includes("false") ||
-              e.sourceHandle?.toLowerCase().includes("no") ||
-              e.sourceHandle === "b" ||
-              e.sourceHandle === "source-false"
-            );
-            nextNodeId = falseEdge?.target || outEdges[1]?.target || outEdges[0]?.target;
-          }
+            // ── Field condition: existing behavior unchanged ──
+            const condResult = await evaluateCondition(supabase, leadId, {
+              field: node.data.field as string || "",
+              operator: node.data.operator as string || "equals",
+              value: node.data.value as string || "",
+            });
 
-          if (nextNodeId) nextNodes.push(nextNodeId);
+            await recordStep(supabase, executionId, node, "success",
+              { field: node.data.field, operator: node.data.operator, value: node.data.value },
+              { result: condResult },
+            );
+
+            const outEdges = edgeMap.get(nodeId) || [];
+            let nextNodeId: string | undefined;
+
+            if (condResult) {
+              const trueEdge = outEdges.find(e =>
+                e.sourceHandle?.toLowerCase().includes("true") ||
+                e.sourceHandle?.toLowerCase().includes("yes") ||
+                e.sourceHandle === "a" ||
+                e.sourceHandle === "source-true"
+              );
+              nextNodeId = trueEdge?.target || outEdges[0]?.target;
+            } else {
+              const falseEdge = outEdges.find(e =>
+                e.sourceHandle?.toLowerCase().includes("false") ||
+                e.sourceHandle?.toLowerCase().includes("no") ||
+                e.sourceHandle === "b" ||
+                e.sourceHandle === "source-false"
+              );
+              nextNodeId = falseEdge?.target || outEdges[1]?.target || outEdges[0]?.target;
+            }
+
+            if (nextNodeId) nextNodes.push(nextNodeId);
+          }
           break;
         }
 

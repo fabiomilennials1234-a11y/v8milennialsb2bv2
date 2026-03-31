@@ -123,6 +123,25 @@ export type ConditionOperator =
 
 export type DelayUnit = "seconds" | "minutes" | "hours" | "days";
 
+export type ConditionMode = "field" | "time_window";
+
+export interface TimeWindowConfig {
+  days: string[];           // ["seg","ter","qua","qui","sex"] — same format as followupSchedule
+  startTime: string;        // "HH:MM" e.g. "08:00"
+  endTime: string;          // "HH:MM" e.g. "18:00"
+  timezone: string;         // e.g. "America/Sao_Paulo"
+}
+
+export const WEEKDAY_OPTIONS = [
+  { value: "seg", label: "Seg" },
+  { value: "ter", label: "Ter" },
+  { value: "qua", label: "Qua" },
+  { value: "qui", label: "Qui" },
+  { value: "sex", label: "Sex" },
+  { value: "sab", label: "Sab" },
+  { value: "dom", label: "Dom" },
+] as const;
+
 // =====================================================
 // TRIGGER CONFIG
 // =====================================================
@@ -316,6 +335,8 @@ export interface ConditionNodeData {
   field: string;
   operator: ConditionOperator;
   value: string;
+  conditionMode?: ConditionMode;
+  timeWindow?: TimeWindowConfig;
   [key: string]: unknown;
 }
 

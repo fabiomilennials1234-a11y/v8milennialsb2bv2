@@ -49,7 +49,7 @@ function createDefaultNodeData(type: WorkflowNodeType): WorkflowNodeData {
     case "action":
       return { type: "action", actionType: "send_whatsapp", label: "Ação" } as ActionNodeData;
     case "condition":
-      return { type: "condition", label: "Condição", field: "", operator: "equals", value: "" } as ConditionNodeData;
+      return { type: "condition", label: "Condição", field: "", operator: "equals", value: "", conditionMode: "field" } as ConditionNodeData;
     case "delay":
       return { type: "delay", label: "Delay", amount: 1, unit: "hours" } as DelayNodeData;
     case "copilot":
