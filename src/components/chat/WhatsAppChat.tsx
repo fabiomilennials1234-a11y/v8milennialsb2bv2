@@ -84,6 +84,7 @@ import { resolveVariables } from "@/lib/template-variables";
 import type { LeadContext, AttendantContext } from "@/lib/template-variables";
 import type { MessageTemplate } from "@/hooks/useMessageTemplates";
 import { ScheduledMessagesBanner } from "./ScheduledMessagesBanner";
+import ConversationNotes from "@/components/chat/ConversationNotes";
 import { WhatsAppSettings } from "@/components/settings/WhatsAppSettings";
 import {
   Dialog,
@@ -1788,6 +1789,11 @@ function ChatWindow({
           phoneNumber={selectedContact.phone_number}
           instanceId={instanceId}
         />
+      )}
+
+      {/* Notas internas da conversa */}
+      {leadId && (
+        <ConversationNotes leadId={leadId} />
       )}
 
       {/* Área de mensagens: altura limitada com scroll interno; boundary evita "fewer hooks" ao isolar erros */}

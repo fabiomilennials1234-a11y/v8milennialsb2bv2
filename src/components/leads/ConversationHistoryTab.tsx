@@ -24,6 +24,7 @@ import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { EmbeddedChatWindow } from "@/components/chat/EmbeddedChatWindow";
+import ConversationNotes from "@/components/chat/ConversationNotes";
 
 interface ConversationHistoryTabProps {
   leadId: string;
@@ -84,15 +85,18 @@ export function ConversationHistoryTab({ leadId, leadName, leadPhone }: Conversa
     );
   };
 
-  // If no phone, show fallback — can't open chat without a phone number
+  // If no phone, show notes + fallback — can't open chat without a phone number
   if (!leadPhone) {
     return (
-      <div className="flex flex-col items-center justify-center py-12 text-center">
-        <Bot className="w-16 h-16 text-muted-foreground/30 mb-4" />
-        <h3 className="text-lg font-medium mb-2">Sem telefone cadastrado</h3>
-        <p className="text-sm text-muted-foreground max-w-sm">
-          Para visualizar a conversa e enviar mensagens, cadastre um telefone na aba Dados.
-        </p>
+      <div className="flex flex-col h-full min-h-0">
+        <ConversationNotes leadId={leadId} />
+        <div className="flex flex-col items-center justify-center py-12 text-center flex-1">
+          <Bot className="w-16 h-16 text-muted-foreground/30 mb-4" />
+          <h3 className="text-lg font-medium mb-2">Sem telefone cadastrado</h3>
+          <p className="text-sm text-muted-foreground max-w-sm">
+            Para visualizar a conversa e enviar mensagens, cadastre um telefone na aba Dados.
+          </p>
+        </div>
       </div>
     );
   }
@@ -264,6 +268,9 @@ export function ConversationHistoryTab({ leadId, leadName, leadPhone }: Conversa
           </div>
         )}
       </div>
+
+      {/* Internal notes panel */}
+      <ConversationNotes leadId={leadId} />
 
       {/* Embedded WhatsApp chat — takes remaining space */}
       <div className="flex-1 min-h-0">
