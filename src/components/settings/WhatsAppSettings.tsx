@@ -216,6 +216,7 @@ export function WhatsAppSettings() {
         teamMemberIds: Array.from(selectedVendedores),
       });
       toast.success("Vendedores atualizados. Somente os selecionados poderão responder neste número.");
+      setVendedoresDirty(false);
       setVendedoresInstance(null);
     } catch (e: any) {
       toast.error(e.message || "Erro ao salvar");
@@ -500,7 +501,10 @@ export function WhatsAppSettings() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => setVendedoresInstance(instance)}
+                      onClick={() => {
+                        setVendedoresDirty(false);
+                        setVendedoresInstance(instance);
+                      }}
                       title="Definir quem pode responder neste número"
                     >
                       <Users className="w-4 h-4 mr-2" />
