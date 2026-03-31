@@ -44,19 +44,22 @@ export function useAllowedMembersForInstance(whatsappInstanceId: string | null) 
 
 /**
  * Retorna se o usuário atual pode responder no chat desta instância.
+ * Admins e master users podem sempre responder.
  * Se a instância não tiver ninguém na lista de permitidos, todos podem.
  */
 export function useCanReplyOnInstance(whatsappInstanceId: string | null) {
   const { data: currentTeamMember } = useCurrentTeamMember();
+  const { isAdmin } = useIsAdmin();
   const { data: allowedList = [], isLoading } = useAllowedMembersForInstance(whatsappInstanceId);
 
   const canReply =
-    !whatsappInstanceId ||
-    !currentTeamMember
+    !whatsappInstanceId || !currentTeamMember
       ? false
-      : allowedList.length === 0
+      : isAdmin
         ? true
-        : allowedList.some((a) => a.team_member_id === currentTeamMember.id);
+        : allowedList.length === 0
+          ? true
+          : allowedList.some((a) => a.team_member_id === currentTeamMember.id);
 
   return { canReply, isLoading, allowedCount: allowedList.length };
 }
@@ -136,10 +139,11 @@ export function useSetAllowedMembersForInstance() {
         }
       }
 
-      await supabase
+      const { error: deleteError } = await supabase
         .from("whatsapp_instance_allowed_members")
         .delete()
         .eq("whatsapp_instance_id", whatsappInstanceId);
+      if (deleteError) throw deleteError;
 
       if (teamMemberIds.length > 0) {
         const { error } = await supabase.from("whatsapp_instance_allowed_members").insert(
@@ -151,11 +155,12 @@ export function useSetAllowedMembersForInstance() {
         if (error) throw error;
       }
     },
-    onSuccess: (_, { whatsappInstanceId }) => {
+    onSettled: (_, __, { whatsappInstanceId }) => {
       queryClient.invalidateQueries({
         queryKey: ["whatsapp_instance_allowed_members", whatsappInstanceId],
       });
       queryClient.invalidateQueries({ queryKey: ["whatsapp_instances"] });
+      queryClient.invalidateQueries({ queryKey: ["whatsapp_instances_for_user"] });
     },
   });
 }
