@@ -110,7 +110,7 @@ Responda APENAS em JSON válido, sem markdown:
         "X-Title": "V8 Millennials - Generate Examples",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model: "google/gemini-2.5-flash-preview",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: `Gere os ${count} ${exampleWord} de conversa agora.` },

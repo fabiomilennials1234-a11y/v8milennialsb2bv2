@@ -104,7 +104,7 @@ Os valores devem ser STRINGS simples.`;
         "X-Title": "V8 Millennials - Generate FAQs",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model: "google/gemini-2.5-flash-preview",
         messages: [{ role: "user", content: prompt }],
         temperature: 0.6,
         max_tokens: 1200,

@@ -135,7 +135,7 @@ REGRAS:
       "HTTP-Referer": referer,
     },
     body: JSON.stringify({
-      model: "google/gemini-3-flash-preview",
+      model: "google/gemini-2.5-flash-preview",
       messages: [
         { role: "system", content: contextPrompt },
         { role: "user", content: question },
@@ -258,7 +258,7 @@ Qual o problema principal e qual a tarefa prioritária de hoje?`;
       "HTTP-Referer": referer,
     },
     body: JSON.stringify({
-      model: "google/gemini-3-flash-preview",
+      model: "google/gemini-2.5-flash-preview",
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
@@ -484,7 +484,7 @@ FORMATO JSON OBRIGATÓRIO:
       "HTTP-Referer": referer,
     },
     body: JSON.stringify({
-      model: "google/gemini-3-flash-preview",
+      model: "google/gemini-2.5-flash-preview",
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: "Analise a operação e entregue o diagnóstico completo em JSON." },

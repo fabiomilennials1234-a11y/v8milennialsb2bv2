@@ -108,7 +108,7 @@ Responda APENAS com JSON válido no formato:
         "X-Title": "V8 Millennials - LLM-as-a-Judge",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model: "google/gemini-2.5-flash-preview",
         messages: [
           { role: "user", content: judgePrompt },
         ],

@@ -209,6 +209,8 @@ export function TestConversationStep() {
       throw new Error(`Resposta invalida do servidor (HTTP ${response.status})`);
     }
     if (!response.ok) throw new Error((result?.error as string) || `Erro HTTP ${response.status}`);
+    // Edge function returns HTTP 200 even on errors (Supabase SDK limitation)
+    if (result?.error) throw new Error(result.error as string);
 
     const parts = (result?.messages as string[] | undefined) || [result?.message as string];
     if (!parts[0]) throw new Error("Resposta vazia do agente");
