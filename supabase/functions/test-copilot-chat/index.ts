@@ -1,9 +1,9 @@
 /**
  * Edge Function: test-copilot-chat
  *
- * Simula conversa com o copilot no wizard.
- * Item #11: agora aceita agentId para buscar system_prompt e FAQs do DB em tempo real.
- * Migrado de OpenRouter para OpenAI API com suporte a attachments (imagens/PDFs).
+ * Simula conversa com o copilot no wizard/playground.
+ * Usa OpenRouter API (mesma infra do agent-message em produção).
+ * Item #11: aceita agentId para buscar system_prompt, FAQs e modelo do DB em tempo real.
  *
  * Modos:
  * - generateFirstMessage=true: agente proativo gera a primeira mensagem
@@ -19,9 +19,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
-const CHAT_MODEL = "gpt-4o";
-const CHAT_MODEL_MINI = "gpt-4o-mini";
+const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
+const DEFAULT_MODEL = "google/gemini-2.5-flash-preview";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -54,7 +53,6 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "
 /**
  * Build multimodal content array when attachment is present.
  * For images: uses image_url with base64 data URL.
- * For PDFs: uses file type with base64 data.
  */
 function buildUserContent(text: string, attachment?: Attachment): string | Array<Record<string, unknown>> {
   if (!attachment) return text;
@@ -74,12 +72,10 @@ function buildUserContent(text: string, attachment?: Attachment): string | Array
       },
     });
   } else if (attachment.mimeType === "application/pdf") {
+    // Inject PDF content as text description since not all models support file type
     parts.push({
-      type: "file",
-      file: {
-        filename: attachment.fileName,
-        file_data: `data:${attachment.mimeType};base64,${attachment.base64}`,
-      },
+      type: "text",
+      text: `[Arquivo PDF enviado: ${attachment.fileName}]`,
     });
   }
 
@@ -87,35 +83,36 @@ function buildUserContent(text: string, attachment?: Attachment): string | Array
 }
 
 /**
- * Call OpenAI Chat Completions API.
- * Uses gpt-4o when attachment is present (multimodal), gpt-4o-mini otherwise.
+ * Call OpenRouter Chat Completions API.
+ * Uses the agent's configured model or falls back to default.
  */
-async function callOpenAI(
+async function callOpenRouter(
   apiKey: string,
+  model: string,
   llmMessages: Array<Record<string, unknown>>,
   maxTokens: number,
-  hasAttachment: boolean,
+  temperature: number,
 ): Promise<Record<string, unknown>> {
-  const model = hasAttachment ? CHAT_MODEL : CHAT_MODEL_MINI;
-
-  const response = await fetch(OPENAI_API_URL, {
+  const response = await fetch(OPENROUTER_API_URL, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
+      "Authorization": `Bearer ${apiKey}`,
+      "HTTP-Referer": Deno.env.get("OPENROUTER_REFERER_URL") || "https://torquecrm.com.br",
+      "X-Title": "Torque CRM - Test Chat",
     },
     body: JSON.stringify({
       model,
       messages: llmMessages,
-      temperature: 0.7,
+      temperature,
       max_tokens: maxTokens,
     }),
   });
 
   if (!response.ok) {
     const errText = await response.text();
-    console.error("OpenAI error:", errText);
-    throw new Error(`OpenAI API error: ${response.status}`);
+    console.error("OpenRouter error:", errText);
+    throw new Error(`OpenRouter API error: ${response.status}`);
   }
 
   return await response.json();
@@ -127,10 +124,10 @@ Deno.serve(withSentry('test-copilot-chat', async (req) => {
   }
 
   try {
-    const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
-    if (!OPENAI_API_KEY) {
+    const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
+    if (!OPENROUTER_API_KEY) {
       return new Response(
-        JSON.stringify({ error: "OpenAI API key not configured" }),
+        JSON.stringify({ error: "OPENROUTER_API_KEY não configurada. Configure em Supabase > Edge Functions > Secrets." }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -138,6 +135,10 @@ Deno.serve(withSentry('test-copilot-chat', async (req) => {
     const body: TestCopilotChatRequest = await req.json();
     const { messages = [], userMessage, generateFirstMessage = false, firstMessageTemplate, agentId, attachment } = body;
     let { systemPrompt } = body;
+
+    // Modelo e temperatura padrão — podem ser sobrescritos pelo agente do DB
+    let model = Deno.env.get("OPENROUTER_DEFAULT_MODEL") || DEFAULT_MODEL;
+    let temperature = 0.7;
 
     // Item #11: Se agentId fornecido, buscar system_prompt atualizado do banco
     if (agentId && SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
@@ -151,6 +152,11 @@ Deno.serve(withSentry('test-copilot-chat', async (req) => {
 
         if (agent?.system_prompt) {
           systemPrompt = agent.system_prompt;
+
+          // Usar modelo e temperatura do agente
+          if (agent.llm_model) model = agent.llm_model;
+          const temperatureModeMap: Record<string, number> = { criativo: 0.9, balanceado: 0.7, preciso: 0.2 };
+          temperature = temperatureModeMap[agent.llm_temperature_mode ?? "balanceado"] ?? 0.7;
 
           // Injetar FAQs no prompt se existirem
           if (agent.copilot_agent_faqs?.length > 0) {
@@ -190,8 +196,6 @@ Deno.serve(withSentry('test-copilot-chat', async (req) => {
           }
 
           if (kbContent) {
-            // No Playground, injetamos o conteudo direto (sem multi-turn tool).
-            // Em producao, o agente usa search_knowledge como tool.
             systemPrompt += `\n\n# BASE DE CONHECIMENTO (preview)\n\nNo ambiente real, voce usaria a ferramenta search_knowledge para consultar estas informacoes. Neste preview, elas ja estao disponiveis:\n\n${kbContent}\n\n---\nUse estas informacoes para responder com precisao. Cite nomes de produtos e detalhes exatamente como estao acima. Se nao encontrar, diga que vai verificar. NUNCA invente. Fale naturalmente.`;
           }
         }
@@ -215,7 +219,6 @@ Deno.serve(withSentry('test-copilot-chat', async (req) => {
         "seguindo toda a sua configuração, objetivo e personalidade. " +
         "Escreva apenas a mensagem como você a enviaria pelo WhatsApp — sem explicações, sem prefixos.";
 
-      // Se há template de outbound, instruir o agente a usá-lo como base
       if (firstMessageTemplate) {
         triggerInstruction +=
           "\n\nIMPORTANTE: Use o template abaixo como base para a mensagem, " +
@@ -223,14 +226,15 @@ Deno.serve(withSentry('test-copilot-chat', async (req) => {
           `Template: "${firstMessageTemplate}"`;
       }
 
-      const result = await callOpenAI(
-        OPENAI_API_KEY,
+      const result = await callOpenRouter(
+        OPENROUTER_API_KEY,
+        model,
         [
           { role: "system", content: systemPrompt },
           { role: "user", content: triggerInstruction },
         ],
         400,
-        false,
+        temperature,
       );
 
       const rawContent: string = (result as any).choices?.[0]?.message?.content || "";
@@ -246,7 +250,7 @@ Deno.serve(withSentry('test-copilot-chat', async (req) => {
         module: "copilot",
         action: "test_chat",
         status: "success",
-        payloadSnapshot: { mode: "proactive", hasTemplate: !!firstMessageTemplate },
+        payloadSnapshot: { mode: "proactive", model, hasTemplate: !!firstMessageTemplate },
       });
 
       return new Response(
@@ -277,7 +281,7 @@ Deno.serve(withSentry('test-copilot-chat', async (req) => {
       { role: "user", content: userContent },
     ];
 
-    const result = await callOpenAI(OPENAI_API_KEY, llmMessages, 500, hasAttachment);
+    const result = await callOpenRouter(OPENROUTER_API_KEY, model, llmMessages, 500, temperature);
 
     const rawContent: string = (result as any).choices?.[0]?.message?.content || "";
 
@@ -292,7 +296,7 @@ Deno.serve(withSentry('test-copilot-chat', async (req) => {
       module: "copilot",
       action: "test_chat",
       status: "success",
-      payloadSnapshot: { mode: "reactive", historyLength: recentHistory.length, hasAttachment },
+      payloadSnapshot: { mode: "reactive", model, historyLength: recentHistory.length, hasAttachment },
     });
 
     return new Response(
