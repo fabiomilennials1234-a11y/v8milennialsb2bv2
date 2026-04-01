@@ -295,7 +295,7 @@ function ContactList({
   return (
     <div className="flex flex-col h-full min-h-0 border-r border-border/60 bg-muted/20">
       <div className="p-3 border-b bg-background shrink-0">
-        {instances && instances.length > 0 && onSelectInstance && selectedInstanceId != null && (
+        {instances && instances.length > 0 && onSelectInstance && (
           <div className="mb-3">
             <div className="flex items-center justify-between mb-1.5">
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
@@ -321,7 +321,18 @@ function ContactList({
               <SelectContent>
                 {instances.map((inst) => (
                   <SelectItem key={inst.id} value={inst.id}>
-                    {inst.instance_name}
+                    <span className="flex items-center gap-2">
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                          inst.status === "connected"
+                            ? "bg-emerald-500"
+                            : inst.status === "connecting"
+                            ? "bg-amber-500"
+                            : "bg-muted-foreground/40"
+                        }`}
+                      />
+                      {inst.instance_name}
+                    </span>
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -2085,7 +2096,10 @@ export function WhatsAppChat() {
   const [activeTab, setActiveTab] = useState<"active" | "archived">("active");
   const [isInstancesModalOpen, setIsInstancesModalOpen] = useState(false);
 
-  const { data: instances = [], isLoading: instancesLoading } = useWhatsAppInstancesForUser();
+  const { data: instances = [], isPending: instancesPending } = useWhatsAppInstancesForUser();
+  // TanStack Query v5: isLoading = isPending && isFetching, so it's false when query is disabled.
+  // Use isPending to also show spinner while waiting for the team member to load (query not yet enabled).
+  const instancesLoading = instancesPending;
   const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(null);
 
   // Track whether instance restoration has already run for this user context
