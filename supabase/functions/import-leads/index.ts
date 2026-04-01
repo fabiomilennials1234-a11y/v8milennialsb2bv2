@@ -898,27 +898,28 @@ async function importToCustomPipeline(
     .maybeSingle();
   if (!stageRow) throw new Error("Etapa padrão não encontrada ou não pertence a este pipeline");
 
-  // Pre-fetch existing leads by phone
+  // Pre-fetch existing leads by phone (skip .in() with empty array — PostgREST rejects it)
   const phones = leads.filter((l) => l.phone).map((l) => formatPhone(l.phone!));
-  const { data: existingLeads } = await supabase
-    .from("leads")
-    .select("id, phone, name, company, email, faturamento, segment, notes, rating, utm_campaign, utm_source, utm_medium, utm_content, utm_term")
-    .eq("organization_id", organizationId)
-    .in("phone", phones);
-
-  const existingMap = new Map<string, NonNullable<typeof existingLeads>[number]>();
-  existingLeads?.forEach((l) => { if (l.phone) existingMap.set(l.phone, l); });
+  const existingMap = new Map<string, { id: string; phone: string | null; name: string; company: string | null; email: string | null; faturamento: string | null; segment: string | null }>();
+  if (phones.length > 0) {
+    const { data: existingLeads } = await supabase
+      .from("leads")
+      .select("id, phone, name, company, email, faturamento, segment, notes, rating, utm_campaign, utm_source, utm_medium, utm_content, utm_term")
+      .eq("organization_id", organizationId)
+      .in("phone", phones);
+    existingLeads?.forEach((l: any) => { if (l.phone) existingMap.set(l.phone, l); });
+  }
 
   // Pre-fetch existing leads by email for leads without phone
   const emailsOnly = leads.filter((l) => !l.phone && l.email).map((l) => l.email!.toLowerCase().trim());
-  const existingEmailMap = new Map<string, NonNullable<typeof existingLeads>[number]>();
+  const existingEmailMap = new Map<string, any>();
   if (emailsOnly.length > 0) {
     const { data: existingByEmail } = await supabase
       .from("leads")
       .select("id, phone, name, company, email, faturamento, segment, notes, rating, utm_campaign, utm_source, utm_medium, utm_content, utm_term")
       .eq("organization_id", organizationId)
       .in("email", emailsOnly);
-    existingByEmail?.forEach((l) => { if (l.email) existingEmailMap.set(l.email.toLowerCase(), l); });
+    existingByEmail?.forEach((l: any) => { if (l.email) existingEmailMap.set(l.email.toLowerCase(), l); });
   }
 
   const processedPhones = new Set<string>();
