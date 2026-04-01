@@ -11,7 +11,12 @@ export interface ChatMessage {
   timestamp: Date;
 }
 
-export function useOraculoChat() {
+interface UseOraculoChatOptions {
+  month?: number;
+  year?: number;
+}
+
+export function useOraculoChat(options?: UseOraculoChatOptions) {
   const { user } = useAuth();
   const { organizationId } = useOrganization();
   const queryClient = useQueryClient();
@@ -54,6 +59,7 @@ export function useOraculoChat() {
           question,
           user_id: user.id,
           organization_id: organizationId,
+          ...(options?.month && options?.year ? { month: options.month, year: options.year } : {}),
         },
       });
 
@@ -85,7 +91,7 @@ export function useOraculoChat() {
     } finally {
       setIsLoading(false);
     }
-  }, [user?.id, organizationId, rateLimit?.remaining, queryClient]);
+  }, [user?.id, organizationId, rateLimit?.remaining, queryClient, options?.month, options?.year]);
 
   return {
     messages,
