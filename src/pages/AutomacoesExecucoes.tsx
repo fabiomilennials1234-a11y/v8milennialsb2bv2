@@ -21,6 +21,7 @@ import { ArrowLeft, CheckCircle2, XCircle, Clock, Pause, AlertTriangle, Loader2 
 import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import type { WorkflowExecution, WorkflowExecutionStep, WorkflowExecutionStatus, WorkflowStepStatus } from "@/types/workflow";
+import SplitAbAnalytics from "@/components/automacoes/SplitAbAnalytics";
 
 const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline"; icon: typeof CheckCircle2 }> = {
   running: { label: "Executando", variant: "default", icon: Loader2 },
@@ -99,6 +100,9 @@ export default function AutomacoesExecucoes() {
           className="text-blue-600"
         />
       </div>
+
+      {/* Split A/B Analytics */}
+      {id && <SplitAbAnalytics workflowId={id} />}
 
       {/* Executions table */}
       {!executions?.length ? (
@@ -247,7 +251,23 @@ function StepsDialog({
                       <p className="text-xs text-red-600 mt-1">{step.error}</p>
                     )}
 
-                    {step.output_data && Object.keys(step.output_data).length > 0 && (
+                    {step.node_type === "split_ab" && step.output_data && (
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        <Badge variant="outline" className="text-xs">
+                          Variante: {(step.output_data as any).chosenVariant}
+                        </Badge>
+                        {(step.output_data as any).reused && (
+                          <Badge variant="secondary" className="text-xs">Reutilizada</Badge>
+                        )}
+                        {(step.output_data as any).roll != null && (
+                          <span className="text-xs text-muted-foreground">
+                            Roll: {(step.output_data as any).roll}
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    {step.node_type !== "split_ab" && step.output_data && Object.keys(step.output_data).length > 0 && (
                       <pre className="text-xs bg-muted p-2 rounded mt-1 overflow-x-auto">
                         {JSON.stringify(step.output_data, null, 2)}
                       </pre>

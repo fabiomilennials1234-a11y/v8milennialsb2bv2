@@ -16,6 +16,7 @@ export const RESOURCE_KEYS = [
   "pipe_confirmacao",
   "pipe_propostas",
   "campanhas",
+  "checklists",
 ] as const;
 
 export const ACTION_KEYS = ["create", "view", "edit", "delete", "export"] as const;
@@ -36,6 +37,7 @@ export const RESOURCE_LABELS: Record<ResourceKey, string> = {
   pipe_confirmacao: "Funil Confirmação",
   pipe_propostas: "Funil Propostas",
   campanhas: "Campanhas",
+  checklists: "Checklists",
 };
 
 export const ACTION_LABELS: Record<ActionKey, string> = {

@@ -11,6 +11,7 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { evaluateCondition } from "./workflow-condition-evaluator.ts";
 import { executeWorkflowAction, type ActionResult } from "./workflow-action-handler.ts";
+import { getNextSendTime } from "./followupSchedule.ts";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -60,6 +61,7 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
   const {
     supabase,
     executionId,
+    workflowId,
     organizationId,
     leadId,
     definition,
@@ -115,11 +117,17 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
       continue;
     }
 
-    // Loop detection
-    loopCounters[nodeId] = (loopCounters[nodeId] || 0) + 1;
-    if (loopCounters[nodeId] > loopLimit) {
-      await updateExecution(supabase, executionId, "loop_limit_reached", nodeId, loopCounters, `Loop limit reached at node ${nodeId}`);
-      return { success: false, status: "loop_limit_reached", error: `Loop limit at ${nodeId}`, stepsExecuted };
+    // Loop detection — skip increment for time_window condition re-evaluations (scheduled resume)
+    const isTimeWindowResume = node.type === "condition"
+      && (node.data.conditionMode as string) === "time_window"
+      && params.currentNodeId === nodeId;
+
+    if (!isTimeWindowResume) {
+      loopCounters[nodeId] = (loopCounters[nodeId] || 0) + 1;
+      if (loopCounters[nodeId] > loopLimit) {
+        await updateExecution(supabase, executionId, "loop_limit_reached", nodeId, loopCounters, `Loop limit reached at node ${nodeId}`);
+        return { success: false, status: "loop_limit_reached", error: `Loop limit at ${nodeId}`, stepsExecuted };
+      }
     }
 
     stepsExecuted++;
@@ -153,47 +161,127 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
             return { success: false, status: "failed", error: result.error, stepsExecuted };
           }
 
+          // Record split funnel event for message-type actions
+          const actionType = (node.data.actionType as string) || "";
+          if (actionType === "send_message" || actionType === "send_template" || actionType === "send_media") {
+            await recordSplitEvent(supabase, {
+              organizationId,
+              workflowId,
+              nodeId,
+              leadId,
+              executionId,
+              eventType: result.success ? "message_sent" : "message_failed",
+              stepNodeId: nodeId,
+              stepNodeType: node.type,
+            });
+          }
+
           nextNodes.push(...getNextNodes(nodeId, edgeMap));
           break;
         }
 
         case "condition": {
-          const condResult = await evaluateCondition(supabase, leadId, {
-            field: node.data.field as string || "",
-            operator: node.data.operator as string || "equals",
-            value: node.data.value as string || "",
-          });
+          const conditionMode = (node.data.conditionMode as string) || "field";
 
-          await recordStep(supabase, executionId, node, "success",
-            { field: node.data.field, operator: node.data.operator, value: node.data.value },
-            { result: condResult },
-          );
+          if (conditionMode === "time_window") {
+            // ── Time window condition: check if "now" is inside the configured window ──
+            const tw = node.data.timeWindow as {
+              days?: string[];
+              startTime?: string;
+              endTime?: string;
+              timezone?: string;
+            } | undefined;
 
-          // Condition routing: true → sourceHandle "true" or first edge, false → sourceHandle "false" or second edge
-          const outEdges = edgeMap.get(nodeId) || [];
-          let nextNodeId: string | undefined;
+            const days = tw?.days || ["seg", "ter", "qua", "qui", "sex"];
+            const startTime = tw?.startTime || "08:00";
+            const endTime = tw?.endTime || "18:00";
+            const timezone = tw?.timezone || "America/Sao_Paulo";
 
-          if (condResult) {
-            // True path: look for sourceHandle containing "true" or "yes", or first edge
-            const trueEdge = outEdges.find(e =>
-              e.sourceHandle?.toLowerCase().includes("true") ||
-              e.sourceHandle?.toLowerCase().includes("yes") ||
-              e.sourceHandle === "a" ||
-              e.sourceHandle === "source-true"
+            const now = new Date();
+            const nextSend = getNextSendTime(
+              {
+                sendOnlyBusinessHours: true,
+                businessHoursStart: startTime,
+                businessHoursEnd: endTime,
+                sendDays: days,
+                timezone,
+              },
+              now,
             );
-            nextNodeId = trueEdge?.target || outEdges[0]?.target;
+
+            const isInsideWindow = nextSend.getTime() <= now.getTime() + 1000; // 1s tolerance
+
+            if (isInsideWindow) {
+              // Inside window — follow true path
+              await recordStep(supabase, executionId, node, "success",
+                { conditionMode: "time_window", days, startTime, endTime, timezone },
+                { result: true, insideWindow: true, evaluatedAt: new Date().toISOString() },
+              );
+
+              const outEdges = edgeMap.get(nodeId) || [];
+              const trueEdge = outEdges.find(e =>
+                e.sourceHandle?.toLowerCase().includes("true") ||
+                e.sourceHandle?.toLowerCase().includes("yes") ||
+                e.sourceHandle === "a" ||
+                e.sourceHandle === "source-true"
+              );
+              const nextNodeId = trueEdge?.target || outEdges[0]?.target;
+              if (nextNodeId) nextNodes.push(nextNodeId);
+            } else {
+              // Outside window — pause and schedule resume at next window start
+              const nextRunAt = nextSend.toISOString();
+
+              await recordStep(supabase, executionId, node, "success",
+                { conditionMode: "time_window", days, startTime, endTime, timezone },
+                { result: "paused_until_window", insideWindow: false, nextRunAt, evaluatedAt: new Date().toISOString() },
+              );
+
+              // Pause execution: set current_node_id to THIS node so it re-evaluates on resume
+              await supabase.from("workflow_executions").update({
+                status: "running",
+                current_node_id: nodeId,
+                next_run_at: nextRunAt,
+                loop_counters: loopCounters,
+              }).eq("id", executionId);
+
+              return { success: true, status: "paused", stepsExecuted };
+            }
           } else {
-            // False path: look for sourceHandle containing "false" or "no", or second edge
-            const falseEdge = outEdges.find(e =>
-              e.sourceHandle?.toLowerCase().includes("false") ||
-              e.sourceHandle?.toLowerCase().includes("no") ||
-              e.sourceHandle === "b" ||
-              e.sourceHandle === "source-false"
-            );
-            nextNodeId = falseEdge?.target || outEdges[1]?.target || outEdges[0]?.target;
-          }
+            // ── Field condition: existing behavior unchanged ──
+            const condResult = await evaluateCondition(supabase, leadId, {
+              field: node.data.field as string || "",
+              operator: node.data.operator as string || "equals",
+              value: node.data.value as string || "",
+            });
 
-          if (nextNodeId) nextNodes.push(nextNodeId);
+            await recordStep(supabase, executionId, node, "success",
+              { field: node.data.field, operator: node.data.operator, value: node.data.value },
+              { result: condResult },
+            );
+
+            const outEdges = edgeMap.get(nodeId) || [];
+            let nextNodeId: string | undefined;
+
+            if (condResult) {
+              const trueEdge = outEdges.find(e =>
+                e.sourceHandle?.toLowerCase().includes("true") ||
+                e.sourceHandle?.toLowerCase().includes("yes") ||
+                e.sourceHandle === "a" ||
+                e.sourceHandle === "source-true"
+              );
+              nextNodeId = trueEdge?.target || outEdges[0]?.target;
+            } else {
+              const falseEdge = outEdges.find(e =>
+                e.sourceHandle?.toLowerCase().includes("false") ||
+                e.sourceHandle?.toLowerCase().includes("no") ||
+                e.sourceHandle === "b" ||
+                e.sourceHandle === "source-false"
+              );
+              nextNodeId = falseEdge?.target || outEdges[1]?.target || outEdges[0]?.target;
+            }
+
+            if (nextNodeId) nextNodes.push(nextNodeId);
+          }
           break;
         }
 
@@ -290,7 +378,6 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
           if (Array.isArray(node.data.variants) && (node.data.variants as any[]).length > 0) {
             variants = node.data.variants as { id: string; label: string; percentage: number }[];
           } else {
-            // Legacy migration: convert splitPercentA to 2-variant format
             const percentA = Number(node.data.splitPercentA) || 50;
             variants = [
               { id: "a", label: (node.data.variantALabel as string) || "A", percentage: percentA },
@@ -298,28 +385,27 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
             ];
           }
 
-          // Weighted random selection
-          const roll = Math.random() * 100;
-          let cumulative = 0;
-          let chosenVariant = variants[0];
-          for (const v of variants) {
-            cumulative += v.percentage;
-            if (roll < cumulative) {
-              chosenVariant = v;
-              break;
-            }
-          }
+          // Sticky assignment: same lead always gets same variant in this split
+          const { variant: chosenVariant, roll, reused } = await resolveOrCreateSplitAssignment(
+            supabase,
+            {
+              organizationId,
+              workflowId,
+              nodeId,
+              leadId,
+              executionId,
+              variants,
+            },
+          );
 
           // Find the edge matching this variant
           const outEdges = edgeMap.get(nodeId) || [];
           let nextNodeId: string | undefined;
 
-          // Try exact match first: variant_{id}
           const exactEdge = outEdges.find(e => e.sourceHandle === `variant_${chosenVariant.id}`);
           if (exactEdge) {
             nextNodeId = exactEdge.target;
           } else {
-            // Legacy fallback: sourceHandle contains the variant id (e.g., "a" or "b")
             const legacyEdge = outEdges.find(e =>
               e.sourceHandle?.toLowerCase().includes(chosenVariant.id.toLowerCase())
             );
@@ -328,10 +414,20 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
 
           await recordStep(supabase, executionId, node, "success",
             { variants, variantCount: variants.length },
-            { chosenVariant: chosenVariant.label, chosenVariantId: chosenVariant.id, roll: Math.round(roll * 100) / 100 },
+            {
+              chosenVariant: chosenVariant.label,
+              chosenVariantId: chosenVariant.id,
+              roll,
+              reused,
+              nextNodeId: nextNodeId || null,
+            },
           );
 
-          if (nextNodeId) nextNodes.push(nextNodeId);
+          if (!nextNodeId) {
+            console.warn(`[workflow-executor] split_ab node ${nodeId}: no edge for variant ${chosenVariant.id}`);
+          } else {
+            nextNodes.push(nextNodeId);
+          }
           break;
         }
 
@@ -518,4 +614,111 @@ async function resolveWebhookBody(supabase: SupabaseClient, leadId: string, temp
   }
 
   return result;
+}
+
+async function resolveOrCreateSplitAssignment(
+  supabase: SupabaseClient,
+  params: {
+    organizationId: string;
+    workflowId: string;
+    nodeId: string;
+    leadId: string;
+    executionId: string;
+    variants: { id: string; label: string; percentage: number }[];
+  },
+): Promise<{ variant: { id: string; label: string; percentage: number }; roll: number | null; reused: boolean }> {
+  const { organizationId, workflowId, nodeId, leadId, executionId, variants } = params;
+
+  // 1. Check existing assignment
+  try {
+    const { data: existing } = await supabase
+      .from("workflow_split_assignments")
+      .select("variant_id, variant_label")
+      .eq("workflow_id", workflowId)
+      .eq("node_id", nodeId)
+      .eq("lead_id", leadId)
+      .maybeSingle();
+
+    if (existing) {
+      const matched = variants.find(v => v.id === existing.variant_id);
+      if (matched) {
+        return { variant: matched, roll: null, reused: true };
+      }
+      // Variant was removed from config — fall through to new assignment
+    }
+  } catch (err) {
+    console.warn("[workflow-executor] Failed to check split assignment:", err);
+  }
+
+  // 2. Weighted random selection
+  const roll = Math.random() * 100;
+  let cumulative = 0;
+  let chosenVariant = variants[variants.length - 1]; // Default to last variant (matches distributePercentages remainder)
+  for (const v of variants) {
+    cumulative += v.percentage;
+    if (roll < cumulative) {
+      chosenVariant = v;
+      break;
+    }
+  }
+
+  // 3. Persist assignment (upsert to handle race conditions)
+  try {
+    await supabase
+      .from("workflow_split_assignments")
+      .upsert({
+        organization_id: organizationId,
+        workflow_id: workflowId,
+        node_id: nodeId,
+        lead_id: leadId,
+        variant_id: chosenVariant.id,
+        variant_label: chosenVariant.label,
+        execution_id: executionId,
+      }, { onConflict: "workflow_id,node_id,lead_id" });
+  } catch (err) {
+    console.warn("[workflow-executor] Failed to persist split assignment:", err);
+  }
+
+  return { variant: chosenVariant, roll: Math.round(roll * 100) / 100, reused: false };
+}
+
+async function recordSplitEvent(
+  supabase: SupabaseClient,
+  params: {
+    organizationId: string;
+    workflowId: string;
+    nodeId: string;
+    leadId: string;
+    executionId: string;
+    eventType: string;
+    stepNodeId?: string;
+    stepNodeType?: string;
+    metadata?: Record<string, unknown>;
+  },
+): Promise<void> {
+  try {
+    // Scope by execution_id to handle workflows with multiple split nodes
+    const { data: assignment } = await supabase
+      .from("workflow_split_assignments")
+      .select("id")
+      .eq("workflow_id", params.workflowId)
+      .eq("lead_id", params.leadId)
+      .eq("execution_id", params.executionId)
+      .limit(1)
+      .maybeSingle();
+
+    if (!assignment) return;
+
+    await supabase.from("workflow_split_events").insert({
+      organization_id: params.organizationId,
+      assignment_id: assignment.id,
+      execution_id: params.executionId,
+      event_type: params.eventType,
+      node_id: params.stepNodeId || null,
+      node_type: params.stepNodeType || null,
+      metadata: params.metadata || {},
+    });
+  } catch (err) {
+    console.warn("[workflow-executor] Failed to record split event:", err);
+  }
 }

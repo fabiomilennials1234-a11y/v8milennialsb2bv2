@@ -84,6 +84,7 @@ import { resolveVariables } from "@/lib/template-variables";
 import type { LeadContext, AttendantContext } from "@/lib/template-variables";
 import type { MessageTemplate } from "@/hooks/useMessageTemplates";
 import { ScheduledMessagesBanner } from "./ScheduledMessagesBanner";
+import ConversationNotes from "@/components/chat/ConversationNotes";
 import { WhatsAppSettings } from "@/components/settings/WhatsAppSettings";
 import {
   Dialog,
@@ -1801,6 +1802,11 @@ function ChatWindow({
         />
       )}
 
+      {/* Notas internas da conversa */}
+      {leadId && (
+        <ConversationNotes leadId={leadId} />
+      )}
+
       {/* Área de mensagens: altura limitada com scroll interno; boundary evita "fewer hooks" ao isolar erros */}
       <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
         <ScrollArea className="flex-1 h-full">
@@ -2070,7 +2076,14 @@ function normalizePhoneForParam(phone: string): string {
   return phone.replace(/\D/g, "") || phone;
 }
 
-const CHAT_SELECTED_INSTANCE_KEY = "whatsapp_chat_selected_instance_id";
+/**
+ * Builds a localStorage key scoped to user + organization.
+ * This ensures instance selection never leaks between users or orgs on the same browser.
+ */
+function getInstanceStorageKey(userId: string | undefined, orgId: string | undefined): string | null {
+  if (!userId || !orgId) return null;
+  return `whatsapp_chat_instance:${userId}:${orgId}`;
+}
 
 export function WhatsAppChat() {
   const queryClient = useQueryClient();
@@ -2083,25 +2096,28 @@ export function WhatsAppChat() {
   const [activeTab, setActiveTab] = useState<"active" | "archived">("active");
   const [isInstancesModalOpen, setIsInstancesModalOpen] = useState(false);
 
-  const { data: instances = [], isLoading: instancesRawLoading, isPending: instancesPending } = useWhatsAppInstancesForUser();
+  const { data: instances = [], isPending: instancesPending } = useWhatsAppInstancesForUser();
   // TanStack Query v5: isLoading = isPending && isFetching, so it's false when query is disabled.
   // Use isPending to also show spinner while waiting for the team member to load (query not yet enabled).
   const instancesLoading = instancesPending;
-  const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(() => {
-    if (typeof sessionStorage === "undefined") return null;
-    return sessionStorage.getItem(CHAT_SELECTED_INSTANCE_KEY);
-  });
+  const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(null);
 
-  const selectedInstance = instances.find((i) => i.id === selectedInstanceId) ?? instances[0] ?? null;
-  const effectiveInstanceId = selectedInstance?.id ?? selectedInstanceId;
-
-  const { data: contacts = [], isLoading: contactsLoading } = useWhatsAppContacts(effectiveInstanceId);
-  const { data: selectedLead, isLoading: selectedLeadLoading } = useLeadByPhone(selectedPhone);
-  const createLeadFromWhatsApp = useCreateLeadFromWhatsApp();
+  // Track whether instance restoration has already run for this user context
+  const instanceRestoredRef = useRef(false);
 
   // Hooks para archive/delete/tags
   const { isAdmin } = useIsAdmin();
   const { data: teamMember } = useCurrentTeamMember();
+
+  // Resolve effective instance: only use selectedInstanceId if it's valid for this user
+  const selectedInstance = selectedInstanceId
+    ? instances.find((i) => i.id === selectedInstanceId) ?? null
+    : null;
+  const effectiveInstanceId = selectedInstance?.id ?? null;
+
+  const { data: contacts = [], isLoading: contactsLoading } = useWhatsAppContacts(effectiveInstanceId);
+  const { data: selectedLead, isLoading: selectedLeadLoading } = useLeadByPhone(selectedPhone);
+  const createLeadFromWhatsApp = useCreateLeadFromWhatsApp();
 
   const { data: waitingHumanLeadIds } = useQuery({
     queryKey: ['waiting-human-leads', teamMember?.organization_id],
@@ -2181,18 +2197,44 @@ export function WhatsAppChat() {
     );
   }, [removeConversationTag]);
 
-  // Persistir e sincronizar instância selecionada
+  // Restore persisted instance when user context + instances become available
   useEffect(() => {
-    if (effectiveInstanceId && typeof sessionStorage !== "undefined") {
-      sessionStorage.setItem(CHAT_SELECTED_INSTANCE_KEY, effectiveInstanceId);
-    }
-  }, [effectiveInstanceId]);
+    if (instanceRestoredRef.current) return;
+    if (!teamMember?.id || !teamMember?.organization_id) return;
+    if (instancesLoading || instances.length === 0) return;
 
-  useEffect(() => {
-    if (instances.length > 0 && !effectiveInstanceId) {
+    instanceRestoredRef.current = true;
+
+    const storageKey = getInstanceStorageKey(teamMember.id, teamMember.organization_id);
+    const persistedId = storageKey ? localStorage.getItem(storageKey) : null;
+
+    // Validate: persisted instance must exist in user's allowed list
+    const persistedIsValid = persistedId ? instances.some((i) => i.id === persistedId) : false;
+
+    if (persistedIsValid) {
+      setSelectedInstanceId(persistedId);
+    } else if (instances.length === 1) {
+      // Only auto-select when there's a single option — no ambiguity
       setSelectedInstanceId(instances[0].id);
     }
-  }, [instances, effectiveInstanceId]);
+    // Multiple instances + no valid persisted → stays null, user must choose
+  }, [teamMember?.id, teamMember?.organization_id, instances, instancesLoading]);
+
+  // Reset restoration flag when user context changes (login switch)
+  useEffect(() => {
+    instanceRestoredRef.current = false;
+    setSelectedInstanceId(null);
+  }, [teamMember?.id, teamMember?.organization_id]);
+
+  // Persist selection to scoped localStorage whenever it changes
+  useEffect(() => {
+    const storageKey = getInstanceStorageKey(teamMember?.id, teamMember?.organization_id);
+    if (!storageKey) return;
+
+    if (effectiveInstanceId) {
+      localStorage.setItem(storageKey, effectiveInstanceId);
+    }
+  }, [effectiveInstanceId, teamMember?.id, teamMember?.organization_id]);
 
   // Abrir conversa pelo parâmetro ?phone= (pipes, campanhas, etc.)
   useEffect(() => {

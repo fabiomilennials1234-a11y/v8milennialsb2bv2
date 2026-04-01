@@ -74,6 +74,7 @@ export default function Revisao() {
       assignedTo: fu.assigned_to || undefined,
       assignedToName: fu.team_member?.name,
       sourcePipe: fu.source_pipe || undefined,
+      sourcePipeId: fu.source_pipe_id || undefined,
       isAutomated: fu.is_automated,
     }));
 

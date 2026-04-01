@@ -63,6 +63,7 @@ const ApiDocs = lazy(() => lazyRetry(() => import("./pages/ApiDocs")));
 const CopilotWizard = lazy(() => lazyRetry(() => import("@/components/copilot/CopilotWizard").then(m => ({ default: m.CopilotWizard }))));
 const CopilotPlayground = lazy(() => lazyRetry(() => import("@/components/copilot/playground").then(m => ({ default: m.CopilotPlayground }))));
 const CopilotWizardTest = lazy(() => lazyRetry(() => import("./pages/CopilotWizardTest")));
+const ChecklistPage = lazy(() => lazyRetry(() => import("./pages/ChecklistPage")));
 const MessageTemplates = lazy(() => lazyRetry(() => import("./pages/MessageTemplates")));
 const Automacoes = lazy(() => lazyRetry(() => import("./pages/Automacoes")));
 const AutomacoesEditor = lazy(() => lazyRetry(() => import("./pages/AutomacoesEditor")));
@@ -72,6 +73,7 @@ const Landing = lazy(() => lazyRetry(() => import("./pages/Landing")));
 const Signup = lazy(() => lazyRetry(() => import("./pages/Signup")));
 const Onboarding = lazy(() => lazyRetry(() => import("./pages/Onboarding")));
 const Checkout = lazy(() => lazyRetry(() => import("./pages/Checkout")));
+const ResetPassword = lazy(() => lazyRetry(() => import("./pages/ResetPassword")));
 const CheckoutSuccess = lazy(() => lazyRetry(() => import("./pages/CheckoutSuccess")));
 
 // Master Admin — lazy loaded (com retry)
@@ -186,6 +188,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/landing" element={<Landing />} />
       <Route path="/auth" element={<AuthRoute />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/signup" element={<Signup />} />
       <Route path="/privacidade" element={<Privacidade />} />
       <Route path="/docs" element={<ApiDocs />} />
@@ -352,6 +355,18 @@ function AppRoutes() {
             <LayoutWrapper>
               <PermissionProtectedRoute featureKey="followups.view">
                 <Revisao />
+              </PermissionProtectedRoute>
+            </LayoutWrapper>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/checklists"
+        element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <PermissionProtectedRoute featureKey="checklists.view">
+                <ChecklistPage />
               </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>

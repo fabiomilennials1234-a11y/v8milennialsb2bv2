@@ -6,19 +6,49 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { Mail, Lock, User, ArrowRight, Loader2, Flag, Fuel, Trophy } from 'lucide-react';
+import { Mail, Lock, User, ArrowRight, ArrowLeft, Loader2, Flag, Fuel, Trophy } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { supabase } from '@/integrations/supabase/client';
 import torqueLogo from '@/assets/torque-logo.png';
 
+type AuthMode = 'login' | 'signup' | 'forgot';
+
 export default function Auth() {
-  const [isLogin, setIsLogin] = useState(true);
+  const [mode, setMode] = useState<AuthMode>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [loading, setLoading] = useState(false);
+  const [resetEmailSent, setResetEmailSent] = useState(false);
   const { signIn, signUp } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+
+  const isLogin = mode === 'login';
+  const isForgot = mode === 'forgot';
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim()) {
+      toast({ title: 'Informe seu e-mail', description: 'Digite o e-mail cadastrado para receber o link.', variant: 'destructive' });
+      return;
+    }
+    setLoading(true);
+    try {
+      const redirectUrl = `${window.location.origin}/reset-password`;
+      const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: redirectUrl });
+      if (error) {
+        toast({ title: 'Erro ao enviar e-mail', description: error.message, variant: 'destructive' });
+      } else {
+        setResetEmailSent(true);
+        toast({ title: 'E-mail enviado', description: 'Verifique sua caixa de entrada para redefinir a senha.' });
+      }
+    } catch {
+      toast({ title: 'Erro inesperado', description: 'Tente novamente mais tarde.', variant: 'destructive' });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -198,107 +228,196 @@ export default function Auth() {
           <div className="bg-card border border-border rounded-xl p-8 shadow-sm">
             <div className="text-center mb-8">
               <h2 className="text-2xl font-bold text-foreground">
-                {isLogin ? 'Acelere para a pista' : 'Entre para a equipe'}
+                {isForgot ? 'Recuperar senha' : isLogin ? 'Acelere para a pista' : 'Entre para a equipe'}
               </h2>
               <p className="text-muted-foreground mt-2">
-                {isLogin 
-                  ? 'Acesse a Central de Comando Torque'
-                  : 'Junte-se aos pilotos de alta performance'}
+                {isForgot
+                  ? 'Informe seu e-mail para receber o link de redefinicao'
+                  : isLogin
+                    ? 'Acesse a Central de Comando Torque'
+                    : 'Junte-se aos pilotos de alta performance'}
               </p>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-5">
-              {!isLogin && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="space-y-2"
-                >
-                  <Label htmlFor="fullName">Nome completo</Label>
-                  <div className="relative">
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      id="fullName"
-                      type="text"
-                      placeholder="Seu nome completo"
-                      value={fullName}
-                      onChange={(e) => setFullName(e.target.value)}
-                      className="pl-10"
-                      required={!isLogin}
-                    />
+            {/* Forgot password mode */}
+            {isForgot ? (
+              resetEmailSent ? (
+                <div className="text-center space-y-4">
+                  <div className="w-16 h-16 mx-auto rounded-full bg-primary/10 flex items-center justify-center">
+                    <Mail className="w-8 h-8 text-primary" />
                   </div>
-                </motion.div>
-              )}
-
-              <div className="space-y-2">
-                <Label htmlFor="email">E-mail</Label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="seu@email.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="pl-10"
-                    required
-                  />
+                  <div>
+                    <h3 className="font-semibold text-foreground">E-mail enviado!</h3>
+                    <p className="text-sm text-muted-foreground mt-2">
+                      Se o e-mail <strong>{email}</strong> estiver cadastrado, voce recebera um link para redefinir sua senha.
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Verifique tambem a pasta de spam.
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    className="mt-4"
+                    onClick={() => { setMode('login'); setResetEmailSent(false); }}
+                  >
+                    <ArrowLeft className="w-4 h-4 mr-2" />
+                    Voltar ao login
+                  </Button>
                 </div>
-              </div>
+              ) : (
+                <form onSubmit={handleForgotPassword} className="space-y-5">
+                  <div className="space-y-2">
+                    <Label htmlFor="email">E-mail</Label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        id="email"
+                        type="email"
+                        placeholder="seu@email.com"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        className="pl-10"
+                        required
+                        autoFocus
+                      />
+                    </div>
+                  </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="password">Senha</Label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    id="password"
-                    type="password"
-                    placeholder="••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="pl-10"
-                    required
-                    minLength={6}
-                  />
+                  <Button
+                    type="submit"
+                    className="w-full gradient-primary gradient-primary-hover text-white font-semibold h-12 border-0"
+                    disabled={loading}
+                  >
+                    {loading ? (
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                    ) : (
+                      <>
+                        Enviar link de recuperacao
+                        <ArrowRight className="ml-2 h-4 w-4" />
+                      </>
+                    )}
+                  </Button>
+
+                  <div className="text-center">
+                    <button
+                      type="button"
+                      onClick={() => setMode('login')}
+                      className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      <ArrowLeft className="w-3 h-3 inline mr-1" />
+                      Voltar ao login
+                    </button>
+                  </div>
+                </form>
+              )
+            ) : (
+              /* Login / Signup mode */
+              <>
+                <form onSubmit={handleSubmit} className="space-y-5">
+                  {!isLogin && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="space-y-2"
+                    >
+                      <Label htmlFor="fullName">Nome completo</Label>
+                      <div className="relative">
+                        <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id="fullName"
+                          type="text"
+                          placeholder="Seu nome completo"
+                          value={fullName}
+                          onChange={(e) => setFullName(e.target.value)}
+                          className="pl-10"
+                          required={!isLogin}
+                        />
+                      </div>
+                    </motion.div>
+                  )}
+
+                  <div className="space-y-2">
+                    <Label htmlFor="email">E-mail</Label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        id="email"
+                        type="email"
+                        placeholder="seu@email.com"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        className="pl-10"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="password">Senha</Label>
+                      {isLogin && (
+                        <button
+                          type="button"
+                          onClick={() => setMode('forgot')}
+                          className="text-xs text-primary hover:text-primary/80 transition-colors"
+                        >
+                          Esqueci minha senha
+                        </button>
+                      )}
+                    </div>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        id="password"
+                        type="password"
+                        placeholder="••••••••"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        className="pl-10"
+                        required
+                        minLength={6}
+                      />
+                    </div>
+                  </div>
+
+                  <Button
+                    type="submit"
+                    className="w-full gradient-primary gradient-primary-hover text-white font-semibold h-12 border-0"
+                    disabled={loading}
+                  >
+                    {loading ? (
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                    ) : (
+                      <>
+                        {isLogin ? 'Entrar' : 'Criar conta'}
+                        <ArrowRight className="ml-2 h-4 w-4" />
+                      </>
+                    )}
+                  </Button>
+                </form>
+
+                <div className="mt-6 text-center">
+                  <button
+                    type="button"
+                    onClick={() => setMode(isLogin ? 'signup' : 'login')}
+                    className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    {isLogin ? (
+                      <>
+                        Nao tem conta?{' '}
+                        <span className="text-primary font-medium">Cadastre-se</span>
+                      </>
+                    ) : (
+                      <>
+                        Ja tem conta?{' '}
+                        <span className="text-primary font-medium">Faca login</span>
+                      </>
+                    )}
+                  </button>
                 </div>
-              </div>
-
-              <Button
-                type="submit"
-                className="w-full gradient-primary gradient-primary-hover text-white font-semibold h-12 border-0"
-                disabled={loading}
-              >
-                {loading ? (
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                ) : (
-                  <>
-                    {isLogin ? 'Entrar' : 'Criar conta'}
-                    <ArrowRight className="ml-2 h-4 w-4" />
-                  </>
-                )}
-              </Button>
-            </form>
-
-            <div className="mt-6 text-center">
-              <button
-                type="button"
-                onClick={() => setIsLogin(!isLogin)}
-                className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-              >
-                {isLogin ? (
-                  <>
-                    Não tem conta?{' '}
-                    <span className="text-primary font-medium">Cadastre-se</span>
-                  </>
-                ) : (
-                  <>
-                    Já tem conta?{' '}
-                    <span className="text-primary font-medium">Faça login</span>
-                  </>
-                )}
-              </button>
-            </div>
+              </>
+            )}
           </div>
           <p className="text-center text-xs text-muted-foreground/50 mt-6">
             <Link
