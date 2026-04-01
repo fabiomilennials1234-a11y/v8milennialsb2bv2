@@ -71,7 +71,7 @@ export interface WhatsAppInstanceForUser {
 }
 
 /**
- * Lista instâncias conectadas às quais o usuário está vinculado (pode ver conversas).
+ * Lista instâncias (exceto com status "error") às quais o usuário está vinculado (pode ver conversas).
  * Se a instância não tiver vendedores em whatsapp_instance_allowed_members, todos da org podem.
  * Caso contrário, só retorna instâncias em que o team_member do usuário está na lista.
  */
@@ -92,7 +92,7 @@ export function useWhatsAppInstancesForUser() {
         .from("whatsapp_instances")
         .select("id, instance_name, status")
         .eq("organization_id", organizationId)
-        .eq("status", "connected")
+        .neq("status", "error")
         .order("instance_name");
 
       if (instError) throw instError;
