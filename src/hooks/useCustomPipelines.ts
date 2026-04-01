@@ -75,7 +75,7 @@ export interface CustomPipeEntry {
   lead?: {
     id: string;
     name: string;
-    company_name: string | null;
+    company: string | null;
     phone: string | null;
     email: string | null;
   };
@@ -308,7 +308,7 @@ export function useCustomPipeEntries(pipelineId: string | undefined) {
         .from("custom_pipe_entries")
         .select(`
           *,
-          lead:leads(id, name, company_name, phone, email),
+          lead:leads(id, name, company, phone, email),
           stage:custom_pipeline_stages(id, name, color, stage_key, position),
           assigned_profile:profiles!custom_pipe_entries_assigned_to_fkey(id, full_name, avatar_url)
         `)

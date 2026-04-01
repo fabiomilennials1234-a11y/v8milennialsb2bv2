@@ -40,7 +40,7 @@ interface AddLeadToPipeModalProps {
 interface LeadResult {
   id: string;
   name: string;
-  company_name: string | null;
+  company: string | null;
   phone: string | null;
   email: string | null;
 }
@@ -69,9 +69,9 @@ export function AddLeadToPipeModal({
       const query = `%${debouncedSearch.trim()}%`;
       const { data, error } = await supabase
         .from("leads")
-        .select("id, name, company_name, phone, email")
+        .select("id, name, company, phone, email")
         .eq("organization_id", teamMember.organization_id)
-        .or(`name.ilike.${query},company_name.ilike.${query},phone.ilike.${query}`)
+        .or(`name.ilike.${query},company.ilike.${query},phone.ilike.${query}`)
         .limit(20);
 
       if (error) throw error;
@@ -156,10 +156,10 @@ export function AddLeadToPipeModal({
                   >
                     <div className="font-medium text-sm">{lead.name}</div>
                     <div className="flex items-center gap-3 mt-0.5">
-                      {lead.company_name && (
+                      {lead.company && (
                         <span className="flex items-center gap-1 text-xs text-muted-foreground">
                           <Building2 className="w-3 h-3" />
-                          {lead.company_name}
+                          {lead.company}
                         </span>
                       )}
                       {lead.phone && (
@@ -185,8 +185,8 @@ export function AddLeadToPipeModal({
               <UserCheck className="w-4 h-4 text-primary shrink-0" />
               <div className="text-sm">
                 <span className="font-medium">{selectedLead.name}</span>
-                {selectedLead.company_name && (
-                  <span className="text-muted-foreground"> — {selectedLead.company_name}</span>
+                {selectedLead.company && (
+                  <span className="text-muted-foreground"> — {selectedLead.company}</span>
                 )}
               </div>
             </div>

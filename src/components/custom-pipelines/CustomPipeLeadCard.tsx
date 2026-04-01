@@ -46,10 +46,10 @@ export function CustomPipeLeadCard({ entry, onRemove, onClick }: CustomPipeLeadC
       </div>
 
       {/* Empresa */}
-      {lead.company_name && (
+      {lead.company && (
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <Building2 className="w-3.5 h-3.5 shrink-0" />
-          <span className="line-clamp-1">{lead.company_name}</span>
+          <span className="line-clamp-1">{lead.company}</span>
         </div>
       )}
 

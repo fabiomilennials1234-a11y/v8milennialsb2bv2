@@ -80,7 +80,7 @@ export function CustomPipelineKanban({
         .toLowerCase()
         .normalize("NFD")
         .replace(/[\u0300-\u036f]/g, "");
-      const company = (entry.lead?.company_name || "")
+      const company = (entry.lead?.company || "")
         .toLowerCase()
         .normalize("NFD")
         .replace(/[\u0300-\u036f]/g, "");
@@ -96,7 +96,7 @@ export function CustomPipelineKanban({
     return {
       id: entry.id,
       name: lead?.name || "Sem nome",
-      company: lead?.company_name || lead?.company || null,
+      company: lead?.company || null,
       phone: lead?.phone || null,
       email: lead?.email || null,
       rating: lead?.rating || 0,
