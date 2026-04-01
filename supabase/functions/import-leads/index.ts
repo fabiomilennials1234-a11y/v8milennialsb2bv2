@@ -53,7 +53,7 @@ interface ParsedLead {
 interface ImportPayload {
   leads: ParsedLead[];
   organization_id: string;
-  destination: "campaign" | "funnel";
+  destination: "campaign" | "funnel" | "custom_pipeline";
 
   // Campaign-specific
   campanha_id?: string;
@@ -75,6 +75,11 @@ interface ImportPayload {
   closer_id?: string;
   metrics_period_month?: number;
   metrics_period_year?: number;
+
+  // Custom pipeline-specific
+  custom_pipeline_id?: string;
+  custom_stage_id?: string;
+  custom_stages?: { id: string; name: string }[];
 }
 
 interface ImportReport {
@@ -853,6 +858,234 @@ async function importToFunnel(
   }
 }
 
+// ─── Import to Custom Pipeline ──────────────────────────
+
+async function importToCustomPipeline(
+  supabase: ReturnType<typeof createClient>,
+  leads: ParsedLead[],
+  payload: ImportPayload,
+  report: ImportReport,
+): Promise<void> {
+  const {
+    organization_id: organizationId,
+    custom_pipeline_id: pipelineId,
+    custom_stage_id: defaultStageId,
+    custom_stages: stages,
+    sdr_id: defaultSdrId,
+    members,
+  } = payload;
+
+  if (!pipelineId) throw new Error("custom_pipeline_id é obrigatório para importação em pipeline custom");
+  if (!defaultStageId) throw new Error("custom_stage_id é obrigatório para importação em pipeline custom");
+
+  // Validate pipeline belongs to this organization and is active
+  const { data: pipelineRow } = await supabase
+    .from("custom_pipelines")
+    .select("id")
+    .eq("id", pipelineId)
+    .eq("organization_id", organizationId)
+    .eq("is_active", true)
+    .maybeSingle();
+  if (!pipelineRow) throw new Error("Pipeline custom não encontrado ou não pertence a esta organização");
+
+  // Validate default stage belongs to this pipeline
+  const { data: stageRow } = await supabase
+    .from("custom_pipeline_stages")
+    .select("id")
+    .eq("id", defaultStageId)
+    .eq("pipeline_id", pipelineId)
+    .eq("is_active", true)
+    .maybeSingle();
+  if (!stageRow) throw new Error("Etapa padrão não encontrada ou não pertence a este pipeline");
+
+  // Pre-fetch existing leads by phone
+  const phones = leads.filter((l) => l.phone).map((l) => formatPhone(l.phone!));
+  const { data: existingLeads } = await supabase
+    .from("leads")
+    .select("id, phone, name, company, email, faturamento, segment, notes, rating, utm_campaign, utm_source, utm_medium, utm_content, utm_term")
+    .eq("organization_id", organizationId)
+    .in("phone", phones);
+
+  const existingMap = new Map<string, NonNullable<typeof existingLeads>[number]>();
+  existingLeads?.forEach((l) => { if (l.phone) existingMap.set(l.phone, l); });
+
+  // Pre-fetch existing leads by email for leads without phone
+  const emailsOnly = leads.filter((l) => !l.phone && l.email).map((l) => l.email!.toLowerCase().trim());
+  const existingEmailMap = new Map<string, NonNullable<typeof existingLeads>[number]>();
+  if (emailsOnly.length > 0) {
+    const { data: existingByEmail } = await supabase
+      .from("leads")
+      .select("id, phone, name, company, email, faturamento, segment, notes, rating, utm_campaign, utm_source, utm_medium, utm_content, utm_term")
+      .eq("organization_id", organizationId)
+      .in("email", emailsOnly);
+    existingByEmail?.forEach((l) => { if (l.email) existingEmailMap.set(l.email.toLowerCase(), l); });
+  }
+
+  const processedPhones = new Set<string>();
+  const createdLeadIds: string[] = [];
+  const BATCH_SIZE = 50;
+  const membersList = members ?? [];
+
+  for (let i = 0; i < leads.length; i += BATCH_SIZE) {
+    const batch = leads.slice(i, i + BATCH_SIZE);
+
+    for (const lead of batch) {
+      const rowIndex = leads.indexOf(lead);
+      const formattedPhone = lead.phone ? formatPhone(lead.phone) : undefined;
+
+      if (formattedPhone && processedPhones.has(formattedPhone)) {
+        report.rejected++;
+        report.errors.push({ row: rowIndex + 1, reason: "Telefone duplicado neste arquivo" });
+        continue;
+      }
+
+      const existingLead = formattedPhone
+        ? existingMap.get(formattedPhone)
+        : lead.email
+          ? existingEmailMap.get(lead.email.toLowerCase().trim())
+          : null;
+
+      try {
+        let leadId: string;
+
+        if (existingLead) {
+          leadId = existingLead.id;
+          const updates: Record<string, unknown> = {};
+          if (shouldReplaceValue(existingLead.name, lead.name, "name")) updates.name = lead.name;
+          if (shouldReplaceValue(existingLead.company, lead.company, "company")) updates.company = lead.company;
+          if (shouldReplaceValue(existingLead.email, lead.email, "email")) updates.email = lead.email;
+          if (shouldReplaceValue(existingLead.faturamento, lead.faturamento ? normalizeFaturamento(lead.faturamento) : undefined, "faturamento"))
+            updates.faturamento = normalizeFaturamento(lead.faturamento!);
+          if (shouldReplaceValue(existingLead.segment, lead.segment, "segment")) updates.segment = lead.segment;
+
+          if (Object.keys(updates).length > 0) {
+            await supabase.from("leads").update(updates).eq("id", existingLead.id);
+            report.updated++;
+          } else {
+            report.rejected++;
+            report.errors.push({ row: rowIndex + 1, reason: "Lead já existe sem dados novos para atualizar" });
+          }
+        } else {
+          const leadInsert: Record<string, unknown> = {
+            organization_id: organizationId,
+            name: lead.name,
+            company: lead.company,
+            phone: formattedPhone,
+            email: lead.email,
+            faturamento: lead.faturamento ? normalizeFaturamento(lead.faturamento) : undefined,
+            segment: lead.segment,
+            notes: mergeNotes(undefined, lead.notes, lead.kommoBlock),
+            origin: "outro",
+            rating: lead.rating || 0,
+            utm_campaign: lead.utm_campaign,
+            utm_source: lead.utm_source,
+            utm_medium: lead.utm_medium,
+            utm_content: lead.utm_content,
+            utm_term: lead.utm_term,
+          };
+
+          const { data: newLead, error: leadError } = await supabase
+            .from("leads").insert(leadInsert).select("id").single();
+
+          if (leadError) {
+            report.rejected++;
+            report.errors.push({ row: rowIndex + 1, reason: `Erro ao inserir lead: ${leadError.message}` });
+            continue;
+          }
+          leadId = newLead.id;
+          report.created++;
+          createdLeadIds.push(newLead.id);
+        }
+
+        // Resolve stage — match by name if stages provided, fallback to default
+        const stageIdForLead = stages?.length
+          ? resolveCustomStageFromName(lead.stage, stages, defaultStageId)
+          : defaultStageId;
+
+        // Resolve seller
+        const assignedTo = resolveSellerToId(lead.seller_name, membersList, defaultSdrId ?? null);
+
+        // Update lead responsible
+        if (assignedTo) {
+          await supabase.from("leads").update({ responsible_id: assignedTo, sdr_id: assignedTo }).eq("id", leadId);
+        }
+
+        // Upsert into custom_pipe_entries
+        const { data: existingEntry } = await supabase
+          .from("custom_pipe_entries")
+          .select("id")
+          .eq("lead_id", leadId)
+          .eq("pipeline_id", pipelineId)
+          .maybeSingle();
+
+        if (existingEntry) {
+          await supabase
+            .from("custom_pipe_entries")
+            .update({
+              stage_id: stageIdForLead,
+              assigned_to: assignedTo,
+              stage_changed_at: new Date().toISOString(),
+            })
+            .eq("id", existingEntry.id);
+        } else {
+          await supabase.from("custom_pipe_entries").insert({
+            lead_id: leadId,
+            organization_id: organizationId,
+            pipeline_id: pipelineId,
+            stage_id: stageIdForLead,
+            assigned_to: assignedTo,
+            entered_at: new Date().toISOString(),
+            stage_changed_at: new Date().toISOString(),
+          });
+        }
+
+        if (formattedPhone) processedPhones.add(formattedPhone);
+      } catch (err) {
+        report.rejected++;
+        report.errors.push({ row: rowIndex + 1, reason: `Erro inesperado: ${(err as Error).message}` });
+      }
+    }
+  }
+
+  // Bulk insert lead_history for created leads
+  if (createdLeadIds.length > 0) {
+    const historyRows = createdLeadIds.map((id) => ({
+      lead_id: id,
+      action: "lead_created",
+      description: "Sistema: Lead importado via pipeline custom",
+      created_by: null,
+    }));
+    await supabase.from("lead_history").insert(historyRows);
+  }
+}
+
+/** Resolve stage name to custom stage ID (with accent normalization and fuzzy match) */
+function resolveCustomStageFromName(
+  stageName: string | undefined,
+  stages: { id: string; name: string }[],
+  defaultStageId: string,
+): string {
+  if (!stageName?.trim()) return defaultStageId;
+  const inputNorm = stageComparable(stageName);
+  if (!inputNorm) return defaultStageId;
+  // 1) Exact match
+  const exact = stages.find((s) => stageComparable(s.name) === inputNorm);
+  if (exact) return exact.id;
+  // 2) Contains match
+  const contains = stages.find((s) => {
+    const n = stageComparable(s.name);
+    return n.includes(inputNorm) || inputNorm.includes(n);
+  });
+  if (contains) return contains.id;
+  // 3) Starts with match
+  const startsWith = stages.find((s) => {
+    const n = stageComparable(s.name);
+    return inputNorm.startsWith(n) || n.startsWith(inputNorm);
+  });
+  if (startsWith) return startsWith.id;
+  return defaultStageId;
+}
+
 // ─── Main Handler ───────────────────────────────────────
 
 Deno.serve(
@@ -914,9 +1147,9 @@ Deno.serve(
       );
     }
 
-    if (!body.destination || !["campaign", "funnel"].includes(body.destination)) {
+    if (!body.destination || !["campaign", "funnel", "custom_pipeline"].includes(body.destination)) {
       return new Response(
-        JSON.stringify({ success: false, error: "destination deve ser 'campaign' ou 'funnel'" }),
+        JSON.stringify({ success: false, error: "destination deve ser 'campaign', 'funnel' ou 'custom_pipeline'" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
@@ -942,6 +1175,8 @@ Deno.serve(
     try {
       if (body.destination === "campaign") {
         await importToCampaign(supabase, validLeads, { ...body, organization_id: organizationId }, report);
+      } else if (body.destination === "custom_pipeline") {
+        await importToCustomPipeline(supabase, validLeads, { ...body, organization_id: organizationId }, report);
       } else {
         await importToFunnel(supabase, validLeads, { ...body, organization_id: organizationId }, report);
       }

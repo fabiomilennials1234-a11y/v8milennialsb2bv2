@@ -818,10 +818,97 @@ export function useMoveLeadInCustomPipe() {
         });
       }
 
+      // Auto-transition: check if target stage has a transition configured
+      try {
+      const { data: stageRow } = await supabase
+        .from("custom_pipeline_stages")
+        .select("is_final_positive, target_pipeline_id, target_stage_id, target_pipe_type, target_stage_key")
+        .eq("id", stage_id)
+        .maybeSingle();
+
+      if (stageRow?.is_final_positive && data.lead_id && data.organization_id) {
+        if (stageRow.target_pipeline_id && stageRow.target_stage_id) {
+          // Transition to another custom pipeline
+          const { data: existingEntry } = await supabase
+            .from("custom_pipe_entries")
+            .select("id")
+            .eq("lead_id", data.lead_id)
+            .eq("pipeline_id", stageRow.target_pipeline_id)
+            .maybeSingle();
+
+          if (existingEntry) {
+            await supabase
+              .from("custom_pipe_entries")
+              .update({ stage_id: stageRow.target_stage_id, stage_changed_at: new Date().toISOString() })
+              .eq("id", existingEntry.id);
+          } else {
+            await supabase.from("custom_pipe_entries").insert({
+              lead_id: data.lead_id,
+              organization_id: data.organization_id,
+              pipeline_id: stageRow.target_pipeline_id,
+              stage_id: stageRow.target_stage_id,
+              entered_at: new Date().toISOString(),
+              stage_changed_at: new Date().toISOString(),
+            });
+          }
+        } else if (stageRow.target_pipe_type && stageRow.target_stage_key) {
+          // Transition to a standard pipeline
+          const pipeType = stageRow.target_pipe_type;
+          const targetStageKey = stageRow.target_stage_key;
+
+          if (pipeType === "whatsapp") {
+            await supabase.from("leads").update({ pipe_whatsapp: targetStageKey }).eq("id", data.lead_id);
+            const { data: existing } = await supabase
+              .from("pipe_whatsapp").select("id").eq("lead_id", data.lead_id).maybeSingle();
+            if (existing) {
+              await supabase.from("pipe_whatsapp").update({ status: targetStageKey }).eq("id", existing.id);
+            } else {
+              await supabase.from("pipe_whatsapp").insert({
+                lead_id: data.lead_id, organization_id: data.organization_id, status: targetStageKey,
+              });
+            }
+          } else if (pipeType === "confirmacao") {
+            const { data: existing } = await supabase
+              .from("pipe_confirmacao").select("id").eq("lead_id", data.lead_id).maybeSingle();
+            if (existing) {
+              await supabase.from("pipe_confirmacao").update({ status: targetStageKey }).eq("id", existing.id);
+            } else {
+              await supabase.from("pipe_confirmacao").insert({
+                lead_id: data.lead_id, organization_id: data.organization_id, status: targetStageKey,
+              });
+            }
+          } else if (pipeType === "propostas") {
+            const { data: existing } = await supabase
+              .from("pipe_propostas").select("id").eq("lead_id", data.lead_id).maybeSingle();
+            if (existing) {
+              await supabase.from("pipe_propostas").update({ status: targetStageKey }).eq("id", existing.id);
+            } else {
+              await supabase.from("pipe_propostas").insert({
+                lead_id: data.lead_id, organization_id: data.organization_id, status: targetStageKey,
+              });
+            }
+          } else if (pipeType === "upsell_base") {
+            await supabase.from("upsell_clients").update({ tipo_cliente_tempo: targetStageKey }).eq("lead_id", data.lead_id);
+          } else if (pipeType === "upsell_gestao") {
+            await supabase.from("upsell_clients").update({ gestao_stage: targetStageKey }).eq("lead_id", data.lead_id);
+          }
+        }
+      }
+      } catch (transitionErr) {
+        console.error("[auto-transition] Failed:", transitionErr);
+      }
+
       return data as CustomPipeEntry;
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["custom_pipe_entries", variables.pipeline_id] });
+      queryClient.invalidateQueries({ queryKey: ["custom_pipe_entries"] });
+      // Invalidate standard pipe queries for cross-pipe transitions
+      queryClient.invalidateQueries({ queryKey: ["pipe_whatsapp"] });
+      queryClient.invalidateQueries({ queryKey: ["pipe_confirmacao"] });
+      queryClient.invalidateQueries({ queryKey: ["pipe_propostas"] });
+      queryClient.invalidateQueries({ queryKey: ["upsell_clients"] });
+      queryClient.invalidateQueries({ queryKey: ["leads"] });
     },
   });
 }

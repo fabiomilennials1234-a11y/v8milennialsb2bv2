@@ -675,16 +675,87 @@ async function handleMoveStage(ctx: ActionContext): Promise<ActionResult> {
       await ctx.supabase.from("upsell_clients").update({ gestao_stage: targetStage }).eq("lead_id", ctx.leadId);
       break;
     default: {
-      // Custom pipeline
+      // Custom pipeline — pipeType is the custom pipeline UUID
+      const customPipelineId = pipeType;
+
+      // targetStage is the custom_pipeline_stages.id
       const { data: stageRow } = await ctx.supabase
-        .from("pipeline_stages")
-        .select("id")
-        .eq("pipeline_type", pipeType)
-        .eq("stage_key", targetStage)
+        .from("custom_pipeline_stages")
+        .select("id, is_final_positive, target_pipeline_id, target_stage_id, target_pipe_type, target_stage_key")
+        .eq("id", targetStage)
+        .eq("pipeline_id", customPipelineId)
         .eq("organization_id", ctx.organizationId)
         .maybeSingle();
-      if (stageRow) {
-        await ctx.supabase.from("leads").update({ pipe_whatsapp: targetStage }).eq("id", ctx.leadId);
+
+      if (!stageRow) {
+        return { success: false, error: `Custom stage ${targetStage} not found in pipeline ${customPipelineId}` };
+      }
+
+      // Upsert into custom_pipe_entries
+      const { data: existingEntry } = await ctx.supabase
+        .from("custom_pipe_entries")
+        .select("id")
+        .eq("lead_id", ctx.leadId)
+        .eq("pipeline_id", customPipelineId)
+        .maybeSingle();
+
+      if (existingEntry) {
+        await ctx.supabase
+          .from("custom_pipe_entries")
+          .update({ stage_id: targetStage, stage_changed_at: new Date().toISOString() })
+          .eq("id", existingEntry.id);
+      } else {
+        await ctx.supabase.from("custom_pipe_entries").insert({
+          lead_id: ctx.leadId,
+          organization_id: ctx.organizationId,
+          pipeline_id: customPipelineId,
+          stage_id: targetStage,
+          entered_at: new Date().toISOString(),
+          stage_changed_at: new Date().toISOString(),
+        });
+      }
+
+      // Auto-transition on success stage
+      if (stageRow.is_final_positive) {
+        if (stageRow.target_pipeline_id && stageRow.target_stage_id) {
+          // Transition to another custom pipeline
+          const { data: targetEntry } = await ctx.supabase
+            .from("custom_pipe_entries").select("id")
+            .eq("lead_id", ctx.leadId).eq("pipeline_id", stageRow.target_pipeline_id).maybeSingle();
+          if (targetEntry) {
+            await ctx.supabase.from("custom_pipe_entries")
+              .update({ stage_id: stageRow.target_stage_id, stage_changed_at: new Date().toISOString() })
+              .eq("id", targetEntry.id);
+          } else {
+            await ctx.supabase.from("custom_pipe_entries").insert({
+              lead_id: ctx.leadId, organization_id: ctx.organizationId,
+              pipeline_id: stageRow.target_pipeline_id, stage_id: stageRow.target_stage_id,
+              entered_at: new Date().toISOString(), stage_changed_at: new Date().toISOString(),
+            });
+          }
+        } else if (stageRow.target_pipe_type && stageRow.target_stage_key) {
+          // Transition to standard pipeline — reuse handleMoveStage logic
+          const transitionPipe = stageRow.target_pipe_type;
+          const transitionStage = stageRow.target_stage_key;
+          if (transitionPipe === "whatsapp") {
+            await ctx.supabase.from("leads").update({ pipe_whatsapp: transitionStage }).eq("id", ctx.leadId);
+            const { data: pw } = await ctx.supabase.from("pipe_whatsapp").select("id").eq("lead_id", ctx.leadId).maybeSingle();
+            if (pw) { await ctx.supabase.from("pipe_whatsapp").update({ status: transitionStage }).eq("id", pw.id); }
+            else { await ctx.supabase.from("pipe_whatsapp").insert({ lead_id: ctx.leadId, organization_id: ctx.organizationId, status: transitionStage }); }
+          } else if (transitionPipe === "confirmacao") {
+            const { data: pc } = await ctx.supabase.from("pipe_confirmacao").select("id").eq("lead_id", ctx.leadId).maybeSingle();
+            if (pc) { await ctx.supabase.from("pipe_confirmacao").update({ status: transitionStage }).eq("id", pc.id); }
+            else { await ctx.supabase.from("pipe_confirmacao").insert({ lead_id: ctx.leadId, organization_id: ctx.organizationId, status: transitionStage }); }
+          } else if (transitionPipe === "propostas") {
+            const { data: pp } = await ctx.supabase.from("pipe_propostas").select("id").eq("lead_id", ctx.leadId).maybeSingle();
+            if (pp) { await ctx.supabase.from("pipe_propostas").update({ status: transitionStage }).eq("id", pp.id); }
+            else { await ctx.supabase.from("pipe_propostas").insert({ lead_id: ctx.leadId, organization_id: ctx.organizationId, status: transitionStage }); }
+          } else if (transitionPipe === "upsell_base") {
+            await ctx.supabase.from("upsell_clients").update({ tipo_cliente_tempo: transitionStage }).eq("lead_id", ctx.leadId);
+          } else if (transitionPipe === "upsell_gestao") {
+            await ctx.supabase.from("upsell_clients").update({ gestao_stage: transitionStage }).eq("lead_id", ctx.leadId);
+          }
+        }
       }
     }
   }

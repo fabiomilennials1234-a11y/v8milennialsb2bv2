@@ -34,6 +34,7 @@ import {
 } from "@/components/automacoes/TemplateTextarea";
 import type { CampaignTemplate } from "@/hooks/useCampaignTemplates";
 import { usePipelineStages, type PipelineType } from "@/hooks/usePipelineStages";
+import { useCustomPipelines, useCustomPipelineStages } from "@/hooks/useCustomPipelines";
 import { useTags } from "@/hooks/useTags";
 import { CampaignSelectorField } from "./CampaignSelectorField";
 import { CampaignStageSelectorField } from "./CampaignStageSelectorField";
@@ -732,30 +733,68 @@ function MoveStageFields({
   data: ActionNodeData;
   onUpdate: (updates: Partial<ActionNodeData>) => void;
 }) {
-  const pipeType = (data.pipeType as PipelineType) || "whatsapp";
-  const { data: stages, isLoading: stagesLoading } = usePipelineStages(pipeType);
+  const pipeType = (data.pipeType as string) || "whatsapp";
+  const isCustomPipe = !PIPE_OPTIONS.some((p) => p.value === pipeType);
 
-  const activeStages = (stages || []).filter((s) => s.is_active);
+  // Standard pipeline stages
+  const { data: standardStages, isLoading: standardLoading } = usePipelineStages(
+    isCustomPipe ? "whatsapp" : (pipeType as PipelineType)
+  );
+  // Custom pipelines list
+  const { data: customPipelines } = useCustomPipelines();
+  // Custom pipeline stages
+  const { data: customStages, isLoading: customLoading } = useCustomPipelineStages(
+    isCustomPipe ? pipeType : undefined
+  );
+
+  const stagesLoading = isCustomPipe ? customLoading : standardLoading;
+  const activeStages = isCustomPipe
+    ? (customStages || []).filter((s) => s.is_active).map((s) => ({
+        key: s.id,
+        name: s.name,
+        color: s.color || "#888",
+      }))
+    : (standardStages || []).filter((s) => s.is_active).map((s) => ({
+        key: s.stage_key,
+        name: s.name,
+        color: s.color || "#888",
+      }));
+
+  const handlePipeChange = (value: string) => {
+    onUpdate({ pipeType: value, targetStage: "" });
+  };
 
   return (
     <>
       <div className="space-y-2">
         <Label>Tipo de Pipe</Label>
-        <Select
-          value={pipeType}
-          onValueChange={(v) =>
-            onUpdate({ pipeType: v, targetStage: "" })
-          }
-        >
+        <Select value={pipeType} onValueChange={handlePipeChange}>
           <SelectTrigger>
             <SelectValue placeholder="Selecione" />
           </SelectTrigger>
           <SelectContent>
-            {PIPE_OPTIONS.map((p) => (
-              <SelectItem key={p.value} value={p.value}>
-                {p.label}
-              </SelectItem>
-            ))}
+            <SelectGroup>
+              <SelectLabel className="text-xs font-semibold text-muted-foreground uppercase">
+                Pipes Padrão
+              </SelectLabel>
+              {PIPE_OPTIONS.map((p) => (
+                <SelectItem key={p.value} value={p.value}>
+                  {p.label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+            {customPipelines && customPipelines.length > 0 && (
+              <SelectGroup>
+                <SelectLabel className="text-xs font-semibold text-muted-foreground uppercase">
+                  Pipes Custom
+                </SelectLabel>
+                {customPipelines.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.name}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            )}
           </SelectContent>
         </Select>
       </div>
@@ -773,11 +812,11 @@ function MoveStageFields({
             </SelectTrigger>
             <SelectContent>
               {activeStages.map((s) => (
-                <SelectItem key={s.stage_key} value={s.stage_key}>
+                <SelectItem key={s.key} value={s.key}>
                   <span className="flex items-center gap-2">
                     <span
                       className="inline-block w-2.5 h-2.5 rounded-full shrink-0"
-                      style={{ backgroundColor: s.color || "#888" }}
+                      style={{ backgroundColor: s.color }}
                     />
                     {s.name}
                   </span>

@@ -22,6 +22,7 @@ import {
   Loader2,
   AlertTriangle,
   Palette,
+  FileSpreadsheet,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -60,13 +61,157 @@ import {
   useDeleteCustomPipelineStage,
   useReorderCustomPipelineStages,
   useUpdateCustomPipeline,
+  useCustomPipelines,
+  useCustomPipelineStages as useCustomPipeStagesQuery,
 } from "@/hooks/useCustomPipelines";
+import { usePipelineStages, type PipelineType } from "@/hooks/usePipelineStages";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { PIPELINE_COLORS, PIPELINE_ICONS } from "./CreatePipelineModal";
+import { ImportCustomPipelineContent } from "./ImportCustomPipelineContent";
+
+const STANDARD_PIPES: { value: string; label: string }[] = [
+  { value: "whatsapp", label: "Qualificação" },
+  { value: "confirmacao", label: "Confirmação" },
+  { value: "propostas", label: "Propostas" },
+  { value: "upsell_base", label: "Carteira Base" },
+  { value: "upsell_gestao", label: "Carteira Gestão" },
+];
 
 const STAGE_COLORS = [
   "#3b82f6", "#22c55e", "#eab308", "#f97316", "#ef4444",
   "#8b5cf6", "#ec4899", "#06b6d4", "#64748b",
 ];
+
+// ────────────────────────────────────────────────────────────
+// Transition Selector (pipeline destino ao sucesso)
+// ────────────────────────────────────────────────────────────
+
+function TransitionSelector({
+  targetPipelineId,
+  targetStageId,
+  targetPipeType,
+  targetStageKey,
+  currentPipelineId,
+  onChangeTarget,
+}: {
+  targetPipelineId: string | null;
+  targetStageId: string | null;
+  targetPipeType: string | null;
+  targetStageKey: string | null;
+  currentPipelineId: string;
+  onChangeTarget: (updates: {
+    targetPipelineId: string | null;
+    targetStageId: string | null;
+    targetPipeType: string | null;
+    targetStageKey: string | null;
+  }) => void;
+}) {
+  const { data: customPipelines } = useCustomPipelines();
+  const isCustomTarget = !!targetPipelineId;
+  const isStandardTarget = !!targetPipeType;
+  const selectedPipeValue = isCustomTarget ? targetPipelineId : isStandardTarget ? targetPipeType : "__none__";
+
+  // Load stages for selected target
+  const { data: customTargetStages } = useCustomPipeStagesQuery(isCustomTarget ? targetPipelineId : undefined);
+  const { data: standardTargetStages } = usePipelineStages(
+    isStandardTarget ? (targetPipeType as PipelineType) : "whatsapp"
+  );
+
+  const targetStages = isCustomTarget
+    ? (customTargetStages || []).filter((s) => s.is_active).map((s) => ({ key: s.id, name: s.name, color: s.color }))
+    : isStandardTarget
+    ? (standardTargetStages || []).filter((s) => s.is_active).map((s) => ({ key: s.stage_key, name: s.name, color: s.color }))
+    : [];
+
+  const selectedStageValue = isCustomTarget ? targetStageId : isStandardTarget ? targetStageKey : "";
+
+  const handlePipeChange = (value: string) => {
+    if (value === "__none__") {
+      onChangeTarget({ targetPipelineId: null, targetStageId: null, targetPipeType: null, targetStageKey: null });
+      return;
+    }
+    const isCustom = customPipelines?.some((p) => p.id === value);
+    if (isCustom) {
+      onChangeTarget({ targetPipelineId: value, targetStageId: null, targetPipeType: null, targetStageKey: null });
+    } else {
+      onChangeTarget({ targetPipelineId: null, targetStageId: null, targetPipeType: value, targetStageKey: null });
+    }
+  };
+
+  const handleStageChange = (value: string) => {
+    if (isCustomTarget) {
+      onChangeTarget({ targetPipelineId, targetStageId: value, targetPipeType: null, targetStageKey: null });
+    } else if (isStandardTarget) {
+      onChangeTarget({ targetPipelineId: null, targetStageId: null, targetPipeType, targetStageKey: value });
+    }
+  };
+
+  // Filter out current pipeline from options
+  const otherCustomPipelines = (customPipelines || []).filter((p) => p.id !== currentPipelineId);
+
+  return (
+    <div className="space-y-2 mt-2 p-3 rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800">
+      <Label className="text-xs font-medium text-green-700 dark:text-green-300">
+        Ao chegar nesta etapa, mover lead para:
+      </Label>
+      <Select value={selectedPipeValue || "__none__"} onValueChange={handlePipeChange}>
+        <SelectTrigger className="h-8 text-xs">
+          <SelectValue placeholder="Nenhum (ficar neste funil)" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="__none__">Nenhum (ficar neste funil)</SelectItem>
+          <SelectGroup>
+            <SelectLabel className="text-xs font-semibold text-muted-foreground uppercase">
+              Pipes Padrão
+            </SelectLabel>
+            {STANDARD_PIPES.map((p) => (
+              <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
+            ))}
+          </SelectGroup>
+          {otherCustomPipelines.length > 0 && (
+            <SelectGroup>
+              <SelectLabel className="text-xs font-semibold text-muted-foreground uppercase">
+                Pipes Custom
+              </SelectLabel>
+              {otherCustomPipelines.map((p) => (
+                <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+              ))}
+            </SelectGroup>
+          )}
+        </SelectContent>
+      </Select>
+
+      {(isCustomTarget || isStandardTarget) && targetStages.length > 0 && (
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Etapa destino</Label>
+          <Select value={selectedStageValue || ""} onValueChange={handleStageChange}>
+            <SelectTrigger className="h-8 text-xs">
+              <SelectValue placeholder="Selecione a etapa" />
+            </SelectTrigger>
+            <SelectContent>
+              {targetStages.map((s) => (
+                <SelectItem key={s.key} value={s.key}>
+                  <span className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: s.color || "#888" }} />
+                    {s.name}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ────────────────────────────────────────────────────────────
 // Sortable Stage Item
@@ -81,10 +226,16 @@ function SortableStageItem({
   editColor,
   editIsFinalPositive,
   editIsFinalNegative,
+  editTargetPipelineId,
+  editTargetStageId,
+  editTargetPipeType,
+  editTargetStageKey,
+  currentPipelineId,
   onEditNameChange,
   onEditColorChange,
   onEditIsFinalPositiveChange,
   onEditIsFinalNegativeChange,
+  onEditTargetChange,
   onSaveEdit,
   onCancelEdit,
   isSaving,
@@ -97,10 +248,21 @@ function SortableStageItem({
   editColor: string;
   editIsFinalPositive: boolean;
   editIsFinalNegative: boolean;
+  editTargetPipelineId: string | null;
+  editTargetStageId: string | null;
+  editTargetPipeType: string | null;
+  editTargetStageKey: string | null;
+  currentPipelineId: string;
   onEditNameChange: (name: string) => void;
   onEditColorChange: (color: string) => void;
   onEditIsFinalPositiveChange: (value: boolean) => void;
   onEditIsFinalNegativeChange: (value: boolean) => void;
+  onEditTargetChange: (updates: {
+    targetPipelineId: string | null;
+    targetStageId: string | null;
+    targetPipeType: string | null;
+    targetStageKey: string | null;
+  }) => void;
   onSaveEdit: () => void;
   onCancelEdit: () => void;
   isSaving: boolean;
@@ -109,18 +271,19 @@ function SortableStageItem({
     useSortable({ id: stage.id });
 
   const style = { transform: CSS.Transform.toString(transform), transition };
+  const hasTransition = stage.target_pipeline_id || stage.target_pipe_type;
 
   return (
     <div
       ref={setNodeRef}
       style={style}
       className={cn(
-        "flex items-center gap-3 p-3 bg-card border rounded-lg",
+        "flex items-start gap-3 p-3 bg-card border rounded-lg",
         isDragging && "opacity-50 shadow-lg"
       )}
     >
       <button
-        className="cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground"
+        className="cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground mt-0.5"
         {...attributes}
         {...listeners}
       >
@@ -178,17 +341,32 @@ function SortableStageItem({
               <Label htmlFor={`neg-${stage.id}`} className="text-sm">Etapa de perda</Label>
             </div>
           </div>
+          {editIsFinalPositive && (
+            <TransitionSelector
+              targetPipelineId={editTargetPipelineId}
+              targetStageId={editTargetStageId}
+              targetPipeType={editTargetPipeType}
+              targetStageKey={editTargetStageKey}
+              currentPipelineId={currentPipelineId}
+              onChangeTarget={onEditTargetChange}
+            />
+          )}
         </div>
       ) : (
         <>
-          <div className="w-4 h-4 rounded-full shrink-0" style={{ backgroundColor: stage.color || "#64748b" }} />
+          <div className="w-4 h-4 rounded-full shrink-0 mt-0.5" style={{ backgroundColor: stage.color || "#64748b" }} />
           <div className="flex-1">
             <span className="font-medium">{stage.name}</span>
             {stage.is_final_positive && (
-              <span className="ml-2 text-xs text-green-600 bg-green-100 px-2 py-0.5 rounded">Sucesso</span>
+              <span className="ml-2 text-xs text-green-600 bg-green-100 dark:bg-green-900/30 px-2 py-0.5 rounded">Sucesso</span>
             )}
             {stage.is_final_negative && (
-              <span className="ml-2 text-xs text-red-600 bg-red-100 px-2 py-0.5 rounded">Perda</span>
+              <span className="ml-2 text-xs text-red-600 bg-red-100 dark:bg-red-900/30 px-2 py-0.5 rounded">Perda</span>
+            )}
+            {hasTransition && (
+              <span className="ml-2 text-xs text-blue-600 bg-blue-100 dark:bg-blue-900/30 px-2 py-0.5 rounded">
+                → Transição
+              </span>
             )}
           </div>
           <div className="flex items-center gap-1">
@@ -219,6 +397,10 @@ function StagesTabContent({
   const [editColor, setEditColor] = useState("");
   const [editIsFinalPositive, setEditIsFinalPositive] = useState(false);
   const [editIsFinalNegative, setEditIsFinalNegative] = useState(false);
+  const [editTargetPipelineId, setEditTargetPipelineId] = useState<string | null>(null);
+  const [editTargetStageId, setEditTargetStageId] = useState<string | null>(null);
+  const [editTargetPipeType, setEditTargetPipeType] = useState<string | null>(null);
+  const [editTargetStageKey, setEditTargetStageKey] = useState<string | null>(null);
   const [newStageName, setNewStageName] = useState("");
   const [newStageColor, setNewStageColor] = useState(STAGE_COLORS[0]);
   const [showNewStageForm, setShowNewStageForm] = useState(false);
@@ -267,17 +449,31 @@ function StagesTabContent({
     setEditColor(stage.color || STAGE_COLORS[0]);
     setEditIsFinalPositive(stage.is_final_positive);
     setEditIsFinalNegative(stage.is_final_negative);
+    setEditTargetPipelineId(stage.target_pipeline_id);
+    setEditTargetStageId(stage.target_stage_id);
+    setEditTargetPipeType(stage.target_pipe_type);
+    setEditTargetStageKey(stage.target_stage_key);
   };
 
   const cancelEditing = () => {
     setEditingId(null);
     setEditName("");
     setEditColor("");
+    setEditTargetPipelineId(null);
+    setEditTargetStageId(null);
+    setEditTargetPipeType(null);
+    setEditTargetStageKey(null);
   };
 
   const handleSaveEdit = async () => {
     if (!editingId || !editName.trim()) return;
     try {
+      // Clear targets if not a success stage
+      const finalTargetPipelineId = editIsFinalPositive ? editTargetPipelineId : null;
+      const finalTargetStageId = editIsFinalPositive ? editTargetStageId : null;
+      const finalTargetPipeType = editIsFinalPositive ? editTargetPipeType : null;
+      const finalTargetStageKey = editIsFinalPositive ? editTargetStageKey : null;
+
       await updateStage.mutateAsync({
         id: editingId,
         pipeline_id: pipeline.id,
@@ -285,6 +481,10 @@ function StagesTabContent({
         color: editColor,
         is_final_positive: editIsFinalPositive,
         is_final_negative: editIsFinalNegative,
+        target_pipeline_id: finalTargetPipelineId,
+        target_stage_id: finalTargetStageId,
+        target_pipe_type: finalTargetPipeType,
+        target_stage_key: finalTargetStageKey,
       });
       toast.success("Etapa atualizada");
       cancelEditing();
@@ -339,10 +539,21 @@ function StagesTabContent({
                   editColor={editColor}
                   editIsFinalPositive={editIsFinalPositive}
                   editIsFinalNegative={editIsFinalNegative}
+                  editTargetPipelineId={editTargetPipelineId}
+                  editTargetStageId={editTargetStageId}
+                  editTargetPipeType={editTargetPipeType}
+                  editTargetStageKey={editTargetStageKey}
+                  currentPipelineId={pipeline.id}
                   onEditNameChange={setEditName}
                   onEditColorChange={setEditColor}
                   onEditIsFinalPositiveChange={setEditIsFinalPositive}
                   onEditIsFinalNegativeChange={setEditIsFinalNegative}
+                  onEditTargetChange={({ targetPipelineId, targetStageId, targetPipeType, targetStageKey }) => {
+                    setEditTargetPipelineId(targetPipelineId);
+                    setEditTargetStageId(targetStageId);
+                    setEditTargetPipeType(targetPipeType);
+                    setEditTargetStageKey(targetStageKey);
+                  }}
                   onSaveEdit={handleSaveEdit}
                   onCancelEdit={cancelEditing}
                   isSaving={updateStage.isPending}
@@ -552,10 +763,14 @@ export function CustomPipeSettingsDialog({
         </DialogHeader>
 
         <Tabs defaultValue="etapas">
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="etapas" className="gap-1.5 text-xs">
               <Layers className="w-3.5 h-3.5" />
               Etapas
+            </TabsTrigger>
+            <TabsTrigger value="importar" className="gap-1.5 text-xs">
+              <FileSpreadsheet className="w-3.5 h-3.5" />
+              Importar
             </TabsTrigger>
             <TabsTrigger value="geral" className="gap-1.5 text-xs">
               <Palette className="w-3.5 h-3.5" />
@@ -566,6 +781,13 @@ export function CustomPipeSettingsDialog({
           <div className="overflow-y-auto max-h-[calc(85vh-12rem)] mt-4 pr-1">
             <TabsContent value="etapas" className="mt-0">
               <StagesTabContent pipeline={pipeline} stages={stages} />
+            </TabsContent>
+            <TabsContent value="importar" className="mt-0">
+              <ImportCustomPipelineContent
+                pipelineId={pipeline.id}
+                pipelineName={pipeline.name}
+                stages={stages}
+              />
             </TabsContent>
             <TabsContent value="geral" className="mt-0">
               <GeneralTabContent pipeline={pipeline} onRequestDelete={onRequestDelete} />

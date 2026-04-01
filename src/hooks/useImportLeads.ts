@@ -345,6 +345,18 @@ interface ParsedLead {
 
 export type FunnelDestination = "qualificacao" | "propostas" | "confirmacao";
 
+export interface ImportLeadsToCustomPipelineOptions {
+  pipelineId: string;
+  /** ID da etapa padrão quando a coluna Etapa estiver vazia */
+  stageId: string;
+  /** Lista de etapas do pipeline para mapear nome → id */
+  stages?: { id: string; name: string }[];
+  /** Lista de vendedores para mapear nome → id */
+  members?: { id: string; name: string }[];
+  userColumnMapping?: Record<string, string>;
+  sdrId?: string | null;
+}
+
 export interface ImportLeadsToFunnelOptions {
   destination: FunnelDestination;
   /** Etapa padrão quando a linha não tem coluna Etapa ou o valor não corresponde a nenhuma etapa. */
@@ -1241,6 +1253,61 @@ export function useImportLeads() {
     }
   };
 
+  const importLeadsToCustomPipeline = async (
+    file: File,
+    options: ImportLeadsToCustomPipelineOptions,
+  ): Promise<ImportFunnelResult> => {
+    if (!organizationId) {
+      throw new Error("Organização não encontrada");
+    }
+
+    setIsImporting(true);
+    setProgress(0);
+    setResult(null);
+
+    try {
+      const parsedLeads = await parseCSV(file, options.userColumnMapping);
+      if (parsedLeads.length === 0) {
+        throw new Error("Nenhum lead válido encontrado no arquivo");
+      }
+
+      setProgress(20);
+
+      const { report } = await callImportEdgeFunction(parsedLeads, {
+        destination: "custom_pipeline",
+        custom_pipeline_id: options.pipelineId,
+        custom_stage_id: options.stageId,
+        custom_stages: options.stages,
+        members: options.members,
+        sdr_id: options.sdrId,
+      });
+
+      setLastReport(report);
+
+      const duplicatePattern = /duplicado|ja existe|já existe|sem dados novos/i;
+      const duplicates = report.errors.filter((e) => duplicatePattern.test(e.reason)).length;
+      const invalid = report.rejected - duplicates;
+
+      const importResult: ImportFunnelResult = {
+        total: report.total,
+        imported: report.created,
+        duplicates,
+        updated: report.updated,
+        invalid: invalid < 0 ? report.rejected : invalid,
+        incomplete: report.incomplete ?? 0,
+      };
+
+      setProgress(100);
+      setResult(importResult as ImportResult);
+      return importResult;
+    } catch (error) {
+      console.error("Import custom pipeline error:", error);
+      throw error;
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
   const resetImport = () => {
     setProgress(0);
     setResult(null);
@@ -1332,6 +1399,7 @@ export function useImportLeads() {
     parseCSV,
     importLeads,
     importLeadsToFunnel,
+    importLeadsToCustomPipeline,
     resetImport,
     fixExistingLeadNames,
     isImporting,
