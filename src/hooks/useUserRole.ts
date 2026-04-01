@@ -8,6 +8,16 @@ import type { Tables } from "@/integrations/supabase/types";
 export type UserRole = Tables<"user_roles">;
 export type AppRole = "admin" | "member";
 
+/**
+ * Determina o role efetivo do usuário.
+ *
+ * Fonte de verdade: team_members.role (conforme migration de sync e
+ * deprecação de user_roles). Se team_members diz 'admin', o usuário
+ * é admin — independente do estado de user_roles.
+ *
+ * Fallback: user_roles, para cobrir edge cases onde team_member
+ * ainda não carregou ou não existe.
+ */
 export function useUserRole() {
   const { user } = useAuth();
   const { data: currentTeamMember } = useCurrentTeamMember();
@@ -17,6 +27,12 @@ export function useUserRole() {
     queryFn: async () => {
       if (!user?.id) return null;
 
+      // team_members.role é a fonte de verdade
+      if (currentTeamMember?.role) {
+        return { user_id: user.id, role: currentTeamMember.role } as UserRole;
+      }
+
+      // Fallback: user_roles (para casos sem team_member carregado)
       const { data, error } = await supabase
         .from("user_roles")
         .select("*")
@@ -25,11 +41,7 @@ export function useUserRole() {
         .maybeSingle();
 
       if (error) throw error;
-      if (data) return data;
-      if (currentTeamMember?.role) {
-        return { user_id: user.id, role: currentTeamMember.role } as UserRole;
-      }
-      return null;
+      return data ?? null;
     },
     enabled: !!user?.id,
   });
