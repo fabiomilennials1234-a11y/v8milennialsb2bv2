@@ -179,6 +179,7 @@ DECLARE
   tables TEXT[] := ARRAY[
     'acoes_do_dia',
     'agent_decision_logs',
+    'automation_webhooks',
     'campaign_dispatch_batches',
     'campanha_allowed_viewers',
     'campanha_dispatch_rule_steps',
@@ -251,8 +252,11 @@ DECLARE
     'whatsapp_conversations',
     'whatsapp_instance_allowed_members',
     'whatsapp_rate_tracking',
+    'workflow_execution_steps',
+    'workflow_executions',
     'workflow_split_assignments',
-    'workflow_split_events'
+    'workflow_split_events',
+    'workflows'
   ];
   t TEXT;
   policy_select TEXT;
