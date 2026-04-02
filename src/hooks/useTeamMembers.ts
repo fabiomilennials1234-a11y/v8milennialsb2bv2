@@ -196,7 +196,7 @@ export function useTeamMembers() {
     queryFn: async () => {
       if (!organizationId) return [];
       const { data, error } = await supabase
-        .from("team_members")
+        .from("org_visible_members" as any)
         .select("*")
         .eq("organization_id", organizationId)
         .order("name");
