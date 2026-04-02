@@ -92,44 +92,34 @@ describe.skipIf(shouldSkip)('RLS: Cross-tenant org isolation', () => {
     });
   });
 
-  /**
-   * NOTE: tags and pipe_whatsapp RLS policies do not enforce strict org isolation.
-   * Both org admins see the same global set of rows. We use >= assertions because
-   * the exact count may vary if other concurrent test suites insert rows.
-   */
   describe('tags', () => {
-    it('Org A admin sees at least 2 tags (no strict org isolation)', async () => {
-      const { count, error } = await adminA
-        .from('tags')
-        .select('id', { count: 'exact', head: true });
+    it('Org A admin sees only own org tags (>= 1)', async () => {
+      const { data, error } = await adminA.from('tags').select('organization_id');
       expect(error).toBeNull();
-      expect(count).toBeGreaterThanOrEqual(2);
+      expect(data!.length).toBeGreaterThanOrEqual(1);
+      // Every tag visible must belong to Org A
+      for (const row of data!) {
+        expect(row.organization_id).toBe('00000000-0000-0000-0000-000000000001');
+      }
     });
 
-    it('Org B admin sees at least 2 tags (no strict org isolation)', async () => {
-      const { count, error } = await adminB
-        .from('tags')
-        .select('id', { count: 'exact', head: true });
+    it('Org B admin sees only own org tags (>= 1)', async () => {
+      const { data, error } = await adminB.from('tags').select('organization_id');
       expect(error).toBeNull();
-      expect(count).toBeGreaterThanOrEqual(2);
+      expect(data!.length).toBeGreaterThanOrEqual(1);
+      for (const row of data!) {
+        expect(row.organization_id).toBe('00000000-0000-0000-0000-000000000002');
+      }
     });
   });
 
   describe('pipe_whatsapp', () => {
-    it('Org A admin sees at least 2 pipe_whatsapp (no strict org isolation)', async () => {
-      const { count, error } = await adminA
-        .from('pipe_whatsapp')
-        .select('id', { count: 'exact', head: true });
-      expect(error).toBeNull();
-      expect(count).toBeGreaterThanOrEqual(2);
+    it('Org A admin sees exactly 1 pipe_whatsapp', async () => {
+      await expectRowCount(adminA, 'pipe_whatsapp', 1);
     });
 
-    it('Org B admin sees at least 2 pipe_whatsapp (no strict org isolation)', async () => {
-      const { count, error } = await adminB
-        .from('pipe_whatsapp')
-        .select('id', { count: 'exact', head: true });
-      expect(error).toBeNull();
-      expect(count).toBeGreaterThanOrEqual(2);
+    it('Org B admin sees exactly 1 pipe_whatsapp', async () => {
+      await expectRowCount(adminB, 'pipe_whatsapp', 1);
     });
   });
 
@@ -168,20 +158,17 @@ describe.skipIf(shouldSkip)('RLS: Cross-tenant org isolation', () => {
       await expectRowCount(master, 'leads', 6);
     });
 
-    it('master sees at least 2 tags', async () => {
-      const { count, error } = await master
-        .from('tags')
-        .select('id', { count: 'exact', head: true });
+    it('master sees tags from both orgs', async () => {
+      const { data, error } = await master.from('tags').select('organization_id');
       expect(error).toBeNull();
-      expect(count).toBeGreaterThanOrEqual(2);
+      expect(data!.length).toBeGreaterThanOrEqual(2);
+      const orgs = new Set(data!.map(r => r.organization_id));
+      expect(orgs.has('00000000-0000-0000-0000-000000000001')).toBe(true);
+      expect(orgs.has('00000000-0000-0000-0000-000000000002')).toBe(true);
     });
 
-    it('master sees at least 2 pipe_whatsapp', async () => {
-      const { count, error } = await master
-        .from('pipe_whatsapp')
-        .select('id', { count: 'exact', head: true });
-      expect(error).toBeNull();
-      expect(count).toBeGreaterThanOrEqual(2);
+    it('master sees all pipe_whatsapp (2 = 1 + 1)', async () => {
+      await expectRowCount(master, 'pipe_whatsapp', 2);
     });
 
     it('master sees all team_members (7 = 5 + 2)', async () => {

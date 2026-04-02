@@ -97,21 +97,13 @@ describe.skipIf(shouldSkip)('RLS: Role-based access', () => {
       expect(error).toBeNull();
     });
 
-    /**
-     * FINDING: tags RLS allows members to INSERT, not just admins.
-     * The current policy does not restrict writes to admin/master roles.
-     * If this is unintended, the RLS INSERT policy on `tags` should add
-     * a role check (e.g., role IN ('admin', 'master')).
-     */
-    it('member CAN INSERT a tag (RLS does not restrict member writes)', async () => {
-      const { error } = await member.from('tags').insert({
+    it('member CANNOT INSERT a tag (admin-only)', async () => {
+      await expectInsertDenied(member, 'tags', {
         id: TEST_TAG_MEMBER_ID,
         name: `__rls_test_member_${Date.now()}`,
         organization_id: TEST_ORG_ID,
         color: '#00FF00',
       });
-
-      expect(error).toBeNull();
     });
 
     it('admin can DELETE a tag they inserted', async () => {
@@ -132,12 +124,8 @@ describe.skipIf(shouldSkip)('RLS: Role-based access', () => {
       expect(count).toBeGreaterThanOrEqual(1);
     });
 
-    /**
-     * FINDING: tags RLS allows members to DELETE, not just admins.
-     * Same issue as INSERT — the DELETE policy does not enforce a role check.
-     */
-    it('member CAN DELETE a tag (RLS does not restrict member deletes)', async () => {
-      // Re-create via service client so there is something to delete
+    it('member CANNOT DELETE a tag (admin-only)', async () => {
+      // Ensure row exists via service client
       await svc.from('tags').upsert({
         id: TEST_TAG_ID,
         name: `__rls_test_member_del_${Date.now()}`,
@@ -145,13 +133,7 @@ describe.skipIf(shouldSkip)('RLS: Role-based access', () => {
         color: '#FF0000',
       });
 
-      const { error, count } = await member
-        .from('tags')
-        .delete({ count: 'exact' })
-        .eq('id', TEST_TAG_ID);
-
-      expect(error).toBeNull();
-      expect(count).toBeGreaterThanOrEqual(1);
+      await expectDeleteDenied(member, 'tags', TEST_TAG_ID);
     });
   });
 

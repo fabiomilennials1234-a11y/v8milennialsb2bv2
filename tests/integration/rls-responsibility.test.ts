@@ -235,35 +235,20 @@ describe.skipIf(shouldSkip)('RLS — Responsibility-based visibility', () => {
       });
     });
 
-    /**
-     * FINDING: pipe_whatsapp RLS does NOT enforce strict org isolation for members.
-     * Members from Org A can see Org B pipe_whatsapp rows. This is a potential
-     * security gap — pipe_whatsapp policies may rely on lead-level filtering
-     * rather than organization_id-based isolation. Documented here so the
-     * RLS policy can be tightened in a future iteration.
-     */
-    it('16. Member1 sees Org B pipe_whatsapp (no strict org isolation on pipe_whatsapp)', async () => {
+    it('16. Member1 CANNOT see Org B pipe_whatsapp entries', async () => {
       const member1 = await getOrgAMember1();
-      const { count, error } = await member1
-        .from('pipe_whatsapp')
-        .select('id', { count: 'exact', head: true })
-        .eq('organization_id', TEST_ORG_B_ID);
-
-      expect(error).toBeNull();
-      // pipe_whatsapp RLS does not filter by org — members can see cross-org rows
-      expect(count).toBeGreaterThanOrEqual(1);
+      await expectRowCount(member1, 'pipe_whatsapp', 0, {
+        column: 'organization_id',
+        value: TEST_ORG_B_ID,
+      });
     });
 
-    it('17. Member2 sees Org B pipe_whatsapp (no strict org isolation on pipe_whatsapp)', async () => {
+    it('17. Member2 CANNOT see Org B pipe_whatsapp entries', async () => {
       const member2 = await getOrgAMember2();
-      const { count, error } = await member2
-        .from('pipe_whatsapp')
-        .select('id', { count: 'exact', head: true })
-        .eq('organization_id', TEST_ORG_B_ID);
-
-      expect(error).toBeNull();
-      // pipe_whatsapp RLS does not filter by org — members can see cross-org rows
-      expect(count).toBeGreaterThanOrEqual(1);
+      await expectRowCount(member2, 'pipe_whatsapp', 0, {
+        column: 'organization_id',
+        value: TEST_ORG_B_ID,
+      });
     });
   });
 
