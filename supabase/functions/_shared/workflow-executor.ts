@@ -351,21 +351,59 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
         }
 
         case "wait_response": {
+          // Check if we're resuming from a resolved wait (timeout or reply)
+          const waitResolved = context._wait_resolved as string | undefined;
+
+          if (waitResolved === "timeout") {
+            // Timeout expired — follow the timeout branch
+            delete context._wait_resolved;
+            delete context._wait_started_at;
+            await recordStep(supabase, executionId, node, "success",
+              { resumeReason: "timeout", channel: node.data.channel },
+              { branch: "timeout", resolved_at: new Date().toISOString() },
+            );
+
+            const nextId = getNextNodeByHandle(nodeId, "timeout", edgeMap);
+            if (nextId) nextNodes.push(nextId);
+            break;
+          }
+
+          if (waitResolved === "replied") {
+            // Lead replied — follow the replied branch
+            const repliedAt = context._replied_at as string | undefined;
+            const replyChannel = context._reply_channel as string | undefined;
+            delete context._wait_resolved;
+            delete context._wait_started_at;
+            delete context._replied_at;
+            delete context._reply_channel;
+            await recordStep(supabase, executionId, node, "success",
+              { resumeReason: "replied", channel: node.data.channel, replyChannel },
+              { branch: "replied", replied_at: repliedAt, resolved_at: new Date().toISOString() },
+            );
+
+            const nextId = getNextNodeByHandle(nodeId, "replied", edgeMap);
+            if (nextId) nextNodes.push(nextId);
+            break;
+          }
+
+          // First time entering the node — set up the wait
           const timeoutHours = Number(node.data.timeoutHours) || 0;
           const timeoutMinutes = Number(node.data.timeoutMinutes) || 0;
-          const totalMs = (timeoutHours * 3_600_000) + (timeoutMinutes * 60_000);
+          // Minimum 1 minute to avoid instant timeout
+          const totalMs = Math.max((timeoutHours * 3_600_000) + (timeoutMinutes * 60_000), 60_000);
 
           const timeoutAt = new Date(Date.now() + totalMs).toISOString();
           await recordStep(supabase, executionId, node, "success",
             { timeoutHours, timeoutMinutes, channel: node.data.channel },
-            { timeout_at: timeoutAt },
+            { timeout_at: timeoutAt, waiting: true },
           );
 
           await supabase.from("workflow_executions").update({
             status: "waiting_response",
             current_node_id: nodeId,
-            next_run_at: timeoutAt, // Resume after timeout
+            next_run_at: timeoutAt,
             loop_counters: loopCounters,
+            context: { ...context, _wait_started_at: new Date().toISOString() },
           }).eq("id", executionId);
 
           return { success: true, status: "waiting_response", stepsExecuted };
@@ -522,6 +560,20 @@ function getNextNodes(
   edgeMap: Map<string, { target: string; sourceHandle?: string | null }[]>,
 ): string[] {
   return (edgeMap.get(nodeId) || []).map(e => e.target);
+}
+
+/**
+ * Get the next node for a specific sourceHandle (e.g. "replied", "timeout").
+ * Falls back to first edge if no handle matches.
+ */
+function getNextNodeByHandle(
+  nodeId: string,
+  handle: string,
+  edgeMap: Map<string, { target: string; sourceHandle?: string | null }[]>,
+): string | undefined {
+  const edges = edgeMap.get(nodeId) || [];
+  const match = edges.find(e => e.sourceHandle === handle);
+  return match?.target || edges[0]?.target;
 }
 
 async function recordStep(
