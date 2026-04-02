@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Trophy, Users, Gift, Check, ArrowLeft, ArrowRight, Plus, X } from "lucide-react";
+import { Trophy, Check, ArrowLeft, ArrowRight, Plus, X, AlertCircle } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,8 +47,21 @@ export function CreateCompetitionModal({ open, onOpenChange }: Props) {
   const avatarMap = useAvatarMap();
   const createCompetition = useCreateCompetition();
 
-  const filteredMembers = teamMembers.filter((m: any) =>
-    m.is_active && (m.metric_type === metricType || metricType === "sales" && m.role === "closer" || metricType === "meetings" && m.role === "sdr")
+  /**
+   * Elegibilidade de participantes:
+   * - Apenas membros ativos
+   * - metric_type deve corresponder ao tipo da competição
+   * - Se metric_type for null (dado legado), aplica fallback consistente
+   *   com a migration (DEFAULT 'meetings')
+   *
+   * Alinhado com: Performance.tsx (seed/ranking), useDashboardMetrics,
+   * Comissoes.tsx — todos usam metric_type como critério único.
+   */
+  const getEffectiveMetricType = (member: any): string =>
+    member.metric_type ?? "meetings";
+
+  const filteredMembers = teamMembers.filter(
+    (m: any) => m.is_active && getEffectiveMetricType(m) === metricType
   );
 
   const toggleMember = (id: string) => {
@@ -198,7 +211,7 @@ export function CreateCompetitionModal({ open, onOpenChange }: Props) {
                 <Label>Tipo</Label>
                 <div className="grid grid-cols-2 gap-2 mt-1">
                   {(["sales", "meetings"] as const).map((t) => (
-                    <button key={t} onClick={() => setMetricType(t)} className={`p-3 rounded-lg border text-sm text-left transition-colors ${metricType === t ? "border-primary bg-primary/5 font-medium" : "border-border"}`}>
+                    <button key={t} onClick={() => { setMetricType(t); setSelectedMembers(new Set()); }} className={`p-3 rounded-lg border text-sm text-left transition-colors ${metricType === t ? "border-primary bg-primary/5 font-medium" : "border-border"}`}>
                       {t === "sales" ? "Vendas" : "Reuniões"}
                     </button>
                   ))}
@@ -210,32 +223,49 @@ export function CreateCompetitionModal({ open, onOpenChange }: Props) {
           {/* Step 1: Participantes */}
           {step === 1 && (
             <motion.div key="step1" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-3">
-              <div className="flex items-center justify-between">
-                <p className="text-sm text-muted-foreground">{selectedMembers.size} de {filteredMembers.length} selecionados</p>
-                <Button variant="outline" size="sm" onClick={toggleAll}>
-                  {selectedMembers.size === filteredMembers.length ? "Desmarcar todos" : "Selecionar todos"}
-                </Button>
-              </div>
-              <div className="space-y-1 max-h-[300px] overflow-y-auto">
-                {filteredMembers.map((member: any) => (
-                  <button
-                    key={member.id}
-                    onClick={() => toggleMember(member.id)}
-                    className={`w-full flex items-center gap-3 p-2.5 rounded-lg border transition-colors ${
-                      selectedMembers.has(member.id) ? "border-primary bg-primary/5" : "border-border/30"
-                    }`}
-                  >
-                    <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${selectedMembers.has(member.id) ? "border-primary bg-primary" : "border-muted"}`}>
-                      {selectedMembers.has(member.id) && <Check className="w-3 h-3 text-primary-foreground" />}
-                    </div>
-                    <UserAvatar name={member.name} avatarUrl={avatarMap.get(member.id)} size="sm" />
-                    <div className="flex-1 text-left">
-                      <p className="text-sm font-medium">{member.name}</p>
-                      <p className="text-xs text-muted-foreground capitalize">{member.role}</p>
-                    </div>
-                  </button>
-                ))}
-              </div>
+              {filteredMembers.length > 0 ? (
+                <>
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-muted-foreground">{selectedMembers.size} de {filteredMembers.length} selecionados</p>
+                    <Button variant="outline" size="sm" onClick={toggleAll}>
+                      {selectedMembers.size === filteredMembers.length ? "Desmarcar todos" : "Selecionar todos"}
+                    </Button>
+                  </div>
+                  <div className="space-y-1 max-h-[300px] overflow-y-auto">
+                    {filteredMembers.map((member: any) => (
+                      <button
+                        key={member.id}
+                        onClick={() => toggleMember(member.id)}
+                        className={`w-full flex items-center gap-3 p-2.5 rounded-lg border transition-colors ${
+                          selectedMembers.has(member.id) ? "border-primary bg-primary/5" : "border-border/30"
+                        }`}
+                      >
+                        <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${selectedMembers.has(member.id) ? "border-primary bg-primary" : "border-muted"}`}>
+                          {selectedMembers.has(member.id) && <Check className="w-3 h-3 text-primary-foreground" />}
+                        </div>
+                        <UserAvatar name={member.name} avatarUrl={avatarMap.get(member.id)} size="sm" />
+                        <div className="flex-1 text-left">
+                          <p className="text-sm font-medium">{member.name}</p>
+                          <p className="text-xs text-muted-foreground">{member.job_title || (getEffectiveMetricType(member) === "sales" ? "Vendas" : "Reuniões")}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <div className="flex flex-col items-center gap-3 py-8 text-center">
+                  <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
+                    <AlertCircle className="w-6 h-6 text-muted-foreground" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">Nenhum membro elegível</p>
+                    <p className="text-xs text-muted-foreground mt-1 max-w-[300px]">
+                      Não há membros ativos com tipo de métrica "{metricType === "sales" ? "Vendas" : "Reuniões"}".
+                      Verifique na página de Equipe se os membros têm o tipo de métrica correto configurado.
+                    </p>
+                  </div>
+                </div>
+              )}
             </motion.div>
           )}
 

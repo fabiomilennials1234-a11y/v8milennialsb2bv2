@@ -64,9 +64,9 @@ export default function Automacoes() {
     openImport,
     closeImport,
   } = useImportWorkflow();
-  const { allowed: canCreateAutomation } = useFeaturePermission("automations.create");
-  const { allowed: canEditAutomation } = useFeaturePermission("automations.edit");
-  const { allowed: canDeleteAutomation } = useFeaturePermission("automations.delete");
+  const { allowed: canCreateAutomation } = useFeaturePermission("workflows.create");
+  const { allowed: canEditAutomation } = useFeaturePermission("workflows.edit");
+  const { allowed: canDeleteAutomation } = useFeaturePermission("workflows.delete");
 
   const activeWorkflows = workflows?.filter((w) => w.is_active) || [];
   const inactiveWorkflows = workflows?.filter((w) => !w.is_active) || [];

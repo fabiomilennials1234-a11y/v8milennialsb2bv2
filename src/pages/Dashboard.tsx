@@ -21,10 +21,11 @@ export default function Dashboard() {
   const { data: userRole } = useUserRole();
   const role = userRole?.role;
   const { data: currentTeamMember, isLoading: teamMemberLoading } = useCurrentTeamMember();
-  const oraculo = useOraculoChat();
 
   const [selectedMonth, setSelectedMonth] = useState(() => new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
+
+  const oraculo = useOraculoChat({ month: selectedMonth, year: selectedYear });
 
   // Outbound members get their own dashboard
   if (orgType === "outbound" && role === "member") {
