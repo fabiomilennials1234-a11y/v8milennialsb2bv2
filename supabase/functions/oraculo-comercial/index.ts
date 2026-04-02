@@ -24,6 +24,116 @@ interface MetricsData {
   diasRestantes?: number;
 }
 
+// ---- Conversation context helper ----
+async function fetchConversationContext(
+  supabase: any,
+  organizationId: string,
+  startDate: string,
+  endDate: string,
+): Promise<string> {
+  // 1. Prioritize conversation_summaries — richest source
+  const { data: summaries } = await supabase
+    .from("conversation_summaries")
+    .select("summary, key_points, sentiment, lead_temperature, objections, questions_asked, next_action, coaching_tips, created_at")
+    .eq("organization_id", organizationId)
+    .gte("created_at", startDate)
+    .lte("created_at", endDate)
+    .order("created_at", { ascending: false })
+    .limit(15);
+
+  if (summaries && summaries.length > 0) {
+    const objections = new Map<string, number>();
+    const questions = new Map<string, number>();
+    const sentiments = { positive: 0, neutral: 0, negative: 0 };
+    const temperatures = { hot: 0, warm: 0, cold: 0 };
+    const tips: string[] = [];
+
+    for (const s of summaries) {
+      if (s.sentiment) sentiments[s.sentiment as keyof typeof sentiments] = (sentiments[s.sentiment as keyof typeof sentiments] || 0) + 1;
+      if (s.lead_temperature) temperatures[s.lead_temperature as keyof typeof temperatures] = (temperatures[s.lead_temperature as keyof typeof temperatures] || 0) + 1;
+      for (const obj of (s.objections || [])) {
+        objections.set(obj, (objections.get(obj) || 0) + 1);
+      }
+      for (const q of (s.questions_asked || [])) {
+        questions.set(q, (questions.get(q) || 0) + 1);
+      }
+      if (s.coaching_tips) tips.push(...s.coaching_tips.slice(0, 2));
+    }
+
+    const topObjections = [...objections.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
+    const topQuestions = [...questions.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
+
+    return `
+CONTEXTO DE CONVERSAS (${summaries.length} conversas analisadas no período):
+- Sentimento: ${sentiments.positive} positivas, ${sentiments.neutral} neutras, ${sentiments.negative} negativas
+- Temperatura: ${temperatures.hot} quentes, ${temperatures.warm} mornas, ${temperatures.cold} frias
+- Objeções mais frequentes: ${topObjections.length > 0 ? topObjections.map(([o, c]) => `"${o}" (${c}x)`).join(", ") : "nenhuma registrada"}
+- Perguntas mais comuns dos leads: ${topQuestions.length > 0 ? topQuestions.map(([q, c]) => `"${q}" (${c}x)`).join(", ") : "nenhuma registrada"}
+- Dicas de coaching: ${tips.slice(0, 3).join("; ") || "nenhuma"}
+- Últimos resumos:
+${summaries.slice(0, 3).map((s: any) => `  • ${s.summary?.slice(0, 200) || "sem resumo"}`).join("\n")}`;
+  }
+
+  // 2. Fallback: conversation_messages via conversations join
+  const { data: conversations } = await supabase
+    .from("conversations")
+    .select("id")
+    .eq("organization_id", organizationId)
+    .gte("last_message_at", startDate)
+    .lte("last_message_at", endDate)
+    .order("last_message_at", { ascending: false })
+    .limit(10);
+
+  if (conversations && conversations.length > 0) {
+    const convIds = conversations.map((c: any) => c.id);
+    const { data: convMessages } = await supabase
+      .from("conversation_messages")
+      .select("role, content, created_at, conversation_id")
+      .in("conversation_id", convIds)
+      .neq("role", "system")
+      .order("created_at", { ascending: false })
+      .limit(40);
+
+    if (convMessages && convMessages.length > 0) {
+      const userMsgs = convMessages.filter((m: any) => m.role === "user");
+      const assistantMsgs = convMessages.filter((m: any) => m.role === "assistant");
+      return `
+CONTEXTO DE CONVERSAS (amostra de ${convMessages.length} mensagens de ${conversations.length} conversas no período):
+- Mensagens de leads: ${userMsgs.length}
+- Mensagens do agente: ${assistantMsgs.length}
+- Últimas mensagens de leads:
+${userMsgs.slice(0, 5).map((m: any) => `  • "${m.content?.slice(0, 150)}"`).join("\n")}
+- Últimas respostas do agente:
+${assistantMsgs.slice(0, 3).map((m: any) => `  • "${m.content?.slice(0, 150)}"`).join("\n")}`;
+    }
+  }
+
+  // 3. Fallback: recent whatsapp_messages sample
+  const { data: recentMessages } = await supabase
+    .from("whatsapp_messages")
+    .select("direction, content, created_at")
+    .eq("organization_id", organizationId)
+    .eq("message_type", "text")
+    .not("content", "is", null)
+    .gte("created_at", startDate)
+    .lte("created_at", endDate)
+    .order("created_at", { ascending: false })
+    .limit(30);
+
+  if (recentMessages && recentMessages.length > 0) {
+    const incoming = recentMessages.filter((m: any) => m.direction === "incoming");
+    const outgoing = recentMessages.filter((m: any) => m.direction === "outgoing");
+    return `
+CONTEXTO DE CONVERSAS (amostra de ${recentMessages.length} mensagens WhatsApp do período):
+- Mensagens de leads: ${incoming.length}
+- Mensagens da equipe: ${outgoing.length}
+- Últimas mensagens de leads:
+${incoming.slice(0, 5).map((m: any) => `  • "${m.content?.slice(0, 150)}"`).join("\n")}`;
+  }
+
+  return "\nCONTEXTO DE CONVERSAS: Nenhuma conversa registrada no período.";
+}
+
 // ---- Chat mode handler ----
 async function handleChatMode(body: any) {
   const { question, user_id, organization_id } = body;
@@ -66,12 +176,17 @@ async function handleChatMode(body: any) {
     );
   }
 
-  // Fetch org metrics for context
+  // Use month/year from payload, fallback to current month
   const now = new Date();
-  const startOfMonth = new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1)).toISOString();
-  const endOfMonth = new Date(Date.UTC(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999)).toISOString();
+  const targetMonth = Number(body.month) || (now.getMonth() + 1);
+  const targetYear = Number(body.year) || now.getFullYear();
+  const startOfMonth = new Date(Date.UTC(targetYear, targetMonth - 1, 1)).toISOString();
+  const endOfMonth = new Date(Date.UTC(targetYear, targetMonth, 0, 23, 59, 59, 999)).toISOString();
 
-  const [metricsRes, rankingRes] = await Promise.all([
+  const isCurrentMonth = targetMonth === (now.getMonth() + 1) && targetYear === now.getFullYear();
+  const monthLabel = new Date(targetYear, targetMonth - 1).toLocaleString("pt-BR", { month: "long", year: "numeric" });
+
+  const [metricsRes, rankingRes, conversationContext] = await Promise.all([
     supabase.rpc("get_dashboard_metrics", {
       p_org_id: organization_id,
       p_start_date: startOfMonth,
@@ -79,21 +194,24 @@ async function handleChatMode(body: any) {
       p_filter_member_id: null,
     }),
     supabase.rpc("get_ranking_data", {
-      p_month: now.getMonth() + 1,
-      p_year: now.getFullYear(),
+      p_month: targetMonth,
+      p_year: targetYear,
       p_organization_id: organization_id,
     }),
+    fetchConversationContext(supabase, organization_id, startOfMonth, endOfMonth),
   ]);
 
   const metrics = Array.isArray(metricsRes.data) ? metricsRes.data[0] : metricsRes.data;
   const ranking = Array.isArray(rankingRes.data) ? rankingRes.data[0] : rankingRes.data;
 
-  const dayOfMonth = now.getDate();
-  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const dayOfMonth = isCurrentMonth ? now.getDate() : new Date(Date.UTC(targetYear, targetMonth, 0)).getDate();
+  const daysInMonth = new Date(targetYear, targetMonth, 0).getDate();
 
   const contextPrompt = `Você é o Oráculo Comercial, um assistente de inteligência comercial B2B. Responda com base nos dados reais do sistema.
 
-DADOS DA OPERAÇÃO (mês atual):
+PERÍODO ANALISADO: ${monthLabel}${isCurrentMonth ? ` (mês em andamento — dia ${dayOfMonth} de ${daysInMonth})` : " (mês encerrado)"}
+
+DADOS DA OPERAÇÃO:
 - Receita: R$ ${metrics?.vendaTotal || 0}
 - Leads captados: ${metrics?.totalLeads || 0}
 - Reuniões marcadas: ${metrics?.reunioesMarcadas || 0}
@@ -104,13 +222,13 @@ DADOS DA OPERAÇÃO (mês atual):
 - Ticket médio MRR: R$ ${metrics?.ticketMedioMRR || 0}
 - Ticket médio Projeto: R$ ${metrics?.ticketMedioProjeto || 0}
 - Taxa no-show: ${metrics?.taxaNoShow || 0}%
-- Dia ${dayOfMonth} de ${daysInMonth}
 
 RANKING DE VENDEDORES:
 ${JSON.stringify(ranking?.salesRanking?.slice(0, 5) || [], null, 2)}
 
 RANKING SDRs:
 ${JSON.stringify(ranking?.sdrRanking?.slice(0, 5) || [], null, 2)}
+${conversationContext}
 
 REGRAS:
 - Responda SEMPRE com base nos dados acima
@@ -118,7 +236,8 @@ REGRAS:
 - Seja direto e executivo
 - Use linguagem de operação comercial B2B
 - Se não tiver dados suficientes para responder, diga claramente
-- Mantenha respostas concisas (máximo 4 parágrafos)`;
+- Mantenha respostas concisas (máximo 4 parágrafos)
+- Quando perguntarem sobre conversas, objeções ou padrões de chat, use o CONTEXTO DE CONVERSAS acima`;
 
   const openRouterApiKey = Deno.env.get("OPENROUTER_API_KEY");
   const referer = Deno.env.get("OPENROUTER_REFERER_URL") || "https://v8millennials.com";
@@ -366,16 +485,20 @@ async function handleTVAnalysisMode(body: any) {
   const safeTeamMembers = Array.isArray(team_members) ? team_members.slice(0, 50) : [];
 
   const now = new Date();
-  const dayOfMonth = now.getDate();
-  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-  const diasRestantes = daysInMonth - dayOfMonth;
+  const targetMonth = Number(body.month) || (now.getMonth() + 1);
+  const targetYear = Number(body.year) || now.getFullYear();
+  const isCurrentMonth = targetMonth === (now.getMonth() + 1) && targetYear === now.getFullYear();
+
+  const dayOfMonth = isCurrentMonth ? now.getDate() : new Date(Date.UTC(targetYear, targetMonth, 0)).getDate();
+  const daysInMonth = new Date(targetYear, targetMonth, 0).getDate();
+  const diasRestantes = isCurrentMonth ? daysInMonth - dayOfMonth : 0;
   const progressoEsperado = ((dayOfMonth / daysInMonth) * 100).toFixed(0);
 
   // Fetch rich context
-  const startOfMonth = new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1)).toISOString();
-  const endOfMonth = new Date(Date.UTC(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999)).toISOString();
+  const startOfMonth = new Date(Date.UTC(targetYear, targetMonth - 1, 1)).toISOString();
+  const endOfMonth = new Date(Date.UTC(targetYear, targetMonth, 0, 23, 59, 59, 999)).toISOString();
 
-  const [metricsRes, rankingRes] = await Promise.all([
+  const [metricsRes, rankingRes, conversationContext] = await Promise.all([
     supabase.rpc("get_dashboard_metrics", {
       p_org_id: organization_id,
       p_start_date: startOfMonth,
@@ -383,10 +506,11 @@ async function handleTVAnalysisMode(body: any) {
       p_filter_member_id: null,
     }),
     supabase.rpc("get_ranking_data", {
-      p_month: now.getMonth() + 1,
-      p_year: now.getFullYear(),
+      p_month: targetMonth,
+      p_year: targetYear,
       p_organization_id: organization_id,
     }),
+    fetchConversationContext(supabase, organization_id, startOfMonth, endOfMonth),
   ]);
 
   const m = Array.isArray(metricsRes.data) ? metricsRes.data[0] : metricsRes.data;
@@ -447,6 +571,7 @@ ${salesRanking.slice(0, 5).map((s: any, i: number) => `${i + 1}. ${s.name}: R$ $
 
 TOP SDRs:
 ${meetingsRanking.slice(0, 5).map((s: any, i: number) => `${i + 1}. ${s.name}: ${s.meetings || s.value || 0} reuniões (${s.goalProgress || 0}% da meta)`).join("\n") || "Sem dados"}
+${conversationContext}
 
 REGRAS DE RESPOSTA:
 - Responda APENAS em JSON válido conforme o formato abaixo
