@@ -257,8 +257,21 @@ DECLARE
   t TEXT;
   policy_select TEXT;
   policy_all TEXT;
+  table_exists BOOLEAN;
 BEGIN
   FOREACH t IN ARRAY tables LOOP
+    -- Verificar se a tabela existe antes de criar policies
+    SELECT EXISTS (
+      SELECT 1 FROM pg_class c
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = 'public' AND c.relname = t AND c.relkind IN ('r', 'p')
+    ) INTO table_exists;
+
+    IF NOT table_exists THEN
+      RAISE NOTICE 'Tabela % não existe, pulando...', t;
+      CONTINUE;
+    END IF;
+
     policy_select := 'master_ghost_select_' || t;
     policy_all := 'master_ghost_all_' || t;
 
