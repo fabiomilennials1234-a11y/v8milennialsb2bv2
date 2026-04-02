@@ -44,8 +44,12 @@ CREATE POLICY "service_role_all_runtime_logs"
   USING (current_setting('role', true) = 'service_role');
 
 -- pg_cron: limpar registros com mais de 90 dias (roda diariamente às 03:00 UTC)
-SELECT cron.schedule(
-  'cleanup_runtime_logs_90d',
-  '0 3 * * *',
-  $$DELETE FROM public.runtime_logs WHERE created_at < NOW() - INTERVAL '90 days'$$
-);
+DO $$ BEGIN
+  PERFORM cron.schedule(
+    'cleanup_runtime_logs_90d',
+    '0 3 * * *',
+    'DELETE FROM public.runtime_logs WHERE created_at < NOW() - INTERVAL ''90 days'''
+  );
+EXCEPTION WHEN invalid_schema_name OR undefined_function THEN
+  RAISE NOTICE 'pg_cron not available — skipping runtime_logs cleanup schedule';
+END $$;

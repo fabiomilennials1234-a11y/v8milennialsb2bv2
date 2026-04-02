@@ -44,8 +44,12 @@ CREATE POLICY "service_role_all_usage_events"
   USING (current_setting('role', true) = 'service_role');
 
 -- pg_cron: limpar registros com mais de 180 dias (roda diariamente às 04:00 UTC)
-SELECT cron.schedule(
-  'cleanup_usage_events_180d',
-  '0 4 * * *',
-  $$DELETE FROM public.usage_events WHERE created_at < NOW() - INTERVAL '180 days'$$
-);
+DO $$ BEGIN
+  PERFORM cron.schedule(
+    'cleanup_usage_events_180d',
+    '0 4 * * *',
+    'DELETE FROM public.usage_events WHERE created_at < NOW() - INTERVAL ''180 days'''
+  );
+EXCEPTION WHEN invalid_schema_name OR undefined_function THEN
+  RAISE NOTICE 'pg_cron not available — skipping usage_events cleanup schedule';
+END $$;

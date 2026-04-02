@@ -16,14 +16,14 @@ VALUES (
 )
 ON CONFLICT (key) DO NOTHING;
 
--- Enable only for the specific organization
+-- Enable only for the specific organization (skip if org doesn't exist locally)
 INSERT INTO public.organization_features (organization_id, feature_key, enabled, override_reason)
-VALUES (
+SELECT
   '6030520a-2ca7-477d-be89-55758e2cd808',
   'external_cadastro',
   true,
   'Integração com Sistema Millennials - cadastro automático de clientes'
-)
+WHERE EXISTS (SELECT 1 FROM public.organizations WHERE id = '6030520a-2ca7-477d-be89-55758e2cd808')
 ON CONFLICT (organization_id, feature_key) DO UPDATE SET
   enabled = true,
   override_reason = EXCLUDED.override_reason,
