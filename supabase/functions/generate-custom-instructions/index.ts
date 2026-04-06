@@ -110,7 +110,7 @@ IMPORTANTE: Responda SOMENTE com o JSON abaixo, sem texto antes ou depois, sem b
         "X-Title": "V8 Millennials - Generate Custom Instructions",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash-preview",
+        model: "google/gemini-3-flash-preview",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: `Problema/Ajuste: ${description.trim()}` },

@@ -178,7 +178,7 @@ export class AgentEngine {
     console.log('[AgentEngine] Total messages to send:', allMessages.length);
     
     // Obter modelo e temperatura do banco ou usar padrões
-    const model = capabilities.llm_model || Deno.env.get('OPENROUTER_DEFAULT_MODEL') || 'google/gemini-2.5-flash-preview';
+    const model = capabilities.llm_model || Deno.env.get('OPENROUTER_DEFAULT_MODEL') || 'google/gemini-3-flash-preview';
     const temperatureModeMap: Record<string, number> = { criativo: 0.9, balanceado: 0.7, preciso: 0.2 };
     const temperature = temperatureModeMap[capabilities.llm_temperature_mode ?? 'balanceado'] ?? 0.7;
     console.log('[AgentEngine] Using model:', model, '| temperature:', temperature, `(${capabilities.llm_temperature_mode ?? 'balanceado'})`);
@@ -733,7 +733,7 @@ export class AgentEngine {
    */
   private async executeSearchKnowledge(query: string, agentId: string): Promise<string> {
     try {
-      const apiKey = Deno.env.get('OPENAI_API_KEY');
+      const apiKey = Deno.env.get('GEMINI_API_KEY');
       if (!apiKey) return 'Erro: API key nao configurada.';
 
       const queryEmbedding = await generateEmbedding(query, apiKey);
@@ -807,7 +807,7 @@ export class AgentEngine {
    */
   private async retrieveSemanticContext(userMessage: string, agentId: string): Promise<string> {
     try {
-      const apiKey = Deno.env.get('OPENAI_API_KEY');
+      const apiKey = Deno.env.get('GEMINI_API_KEY');
       if (!apiKey) return '';
 
       // Gerar embedding da mensagem do usuário
@@ -865,7 +865,7 @@ export class AgentEngine {
    */
   private async retrieveLongTermMemories(userMessage: string, leadId: string): Promise<string> {
     try {
-      const apiKey = Deno.env.get('OPENAI_API_KEY');
+      const apiKey = Deno.env.get('GEMINI_API_KEY');
       if (!apiKey) return '';
 
       const queryEmbedding = await generateEmbedding(userMessage, apiKey);
@@ -910,8 +910,8 @@ export class AgentEngine {
     // Extrair memórias apenas a cada 5 turnos para reduzir custo
     if (turnCount % 5 !== 0) return;
 
-    const apiKey = Deno.env.get('OPENAI_API_KEY');
-    if (!apiKey) return;
+    const geminiKey = Deno.env.get('GEMINI_API_KEY');
+    if (!geminiKey) return;
 
     const extractionPrompt = `Analise este trecho de conversa de vendas B2B e extraia APENAS fatos novos e relevantes sobre o lead.
 
@@ -933,7 +933,7 @@ Regras:
 
     try {
       const response = await this.openRouter.chat({
-        model: 'google/gemini-2.5-flash-preview',
+        model: 'google/gemini-3-flash-preview',
         messages: [{ role: 'user', content: extractionPrompt }],
         temperature: 0.1,
         max_tokens: 400,
@@ -954,7 +954,7 @@ Regras:
       // Gerar embeddings para as memórias
       const contents = extracted.map(m => m.content);
       const { generateEmbeddingsBatch } = await import('../_shared/embeddings.ts');
-      const embeddings = await generateEmbeddingsBatch(contents, apiKey);
+      const embeddings = await generateEmbeddingsBatch(contents, geminiKey);
 
       for (let i = 0; i < extracted.length; i++) {
         const mem = extracted[i];
@@ -2644,7 +2644,7 @@ Regras:
         .join('\n');
 
       const summaryResponse = await this.openRouter.chat({
-        model: 'google/gemini-2.5-flash-preview',
+        model: 'google/gemini-3-flash-preview',
         messages: [
           {
             role: 'system',
@@ -3099,7 +3099,7 @@ Regras:
     ].filter(Boolean).join('\n');
 
     const systemPrompt = basePrompt + '\n' + followupInstruction;
-    const model = capabilities.llm_model || Deno.env.get('OPENROUTER_DEFAULT_MODEL') || 'google/gemini-2.5-flash-preview';
+    const model = capabilities.llm_model || Deno.env.get('OPENROUTER_DEFAULT_MODEL') || 'google/gemini-3-flash-preview';
 
     const messages = [
       ...lastMessages,

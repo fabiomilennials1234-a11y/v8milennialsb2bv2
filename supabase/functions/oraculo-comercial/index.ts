@@ -134,6 +134,161 @@ ${incoming.slice(0, 5).map((m: any) => `  • "${m.content?.slice(0, 150)}"`).jo
   return "\nCONTEXTO DE CONVERSAS: Nenhuma conversa registrada no período.";
 }
 
+// ---- Fetch 3 random full conversations for deep analysis ----
+async function fetchConversationSamples(
+  supabase: any,
+  organizationId: string,
+  startDate: string,
+  endDate: string,
+): Promise<string> {
+  // Get recent conversations with enough messages to be meaningful
+  const { data: conversations } = await supabase
+    .from("conversations")
+    .select("id, lead_id, status, last_message_at, leads:lead_id(name, company)")
+    .eq("organization_id", organizationId)
+    .gte("last_message_at", startDate)
+    .lte("last_message_at", endDate)
+    .order("last_message_at", { ascending: false })
+    .limit(20);
+
+  if (!conversations || conversations.length === 0) {
+    return "\nAMOSTRA DE CONVERSAS: Nenhuma conversa disponível para análise detalhada.";
+  }
+
+  // Pick 3 random conversations from the pool
+  const shuffled = conversations.sort(() => Math.random() - 0.5);
+  const sampled = shuffled.slice(0, 3);
+  const convIds = sampled.map((c: any) => c.id);
+
+  const { data: messages } = await supabase
+    .from("conversation_messages")
+    .select("role, content, created_at, conversation_id")
+    .in("conversation_id", convIds)
+    .neq("role", "system")
+    .order("created_at", { ascending: true })
+    .limit(90); // ~30 messages per conversation
+
+  if (!messages || messages.length === 0) {
+    return "\nAMOSTRA DE CONVERSAS: Mensagens não encontradas para as conversas selecionadas.";
+  }
+
+  // Group messages by conversation
+  const grouped = new Map<string, any[]>();
+  for (const msg of messages) {
+    const arr = grouped.get(msg.conversation_id) || [];
+    arr.push(msg);
+    grouped.set(msg.conversation_id, arr);
+  }
+
+  let output = `\nAMOSTRA DE 3 CONVERSAS PARA ANÁLISE DETALHADA:`;
+  for (const conv of sampled) {
+    const convMsgs = grouped.get(conv.id) || [];
+    if (convMsgs.length === 0) continue;
+    const leadName = conv.leads?.name || "Lead desconhecido";
+    const company = conv.leads?.company || "";
+    const label = company ? `${leadName} (${company})` : leadName;
+
+    output += `\n\n--- Conversa com ${label} | Status: ${conv.status || "ativa"} ---`;
+    // Limit to last 15 messages per conversation to manage token budget
+    for (const m of convMsgs.slice(-15)) {
+      const who = m.role === "user" ? "LEAD" : "AGENTE";
+      output += `\n[${who}]: ${(m.content || "").slice(0, 300)}`;
+    }
+  }
+
+  return output;
+}
+
+// ---- Fetch lost deals with reasons ----
+async function fetchLostDeals(
+  supabase: any,
+  organizationId: string,
+  startDate: string,
+  endDate: string,
+): Promise<string> {
+  const { data: lostDeals } = await supabase
+    .from("pipe_propostas")
+    .select(`
+      id, status, sale_value, loss_reason, closed_at, created_at,
+      lead:leads(name, company, segment),
+      closer:team_members!pipe_propostas_closer_id_fkey(name)
+    `)
+    .eq("organization_id", organizationId)
+    .eq("status", "perdido")
+    .gte("closed_at", startDate)
+    .lte("closed_at", endDate)
+    .order("closed_at", { ascending: false })
+    .limit(10);
+
+  if (!lostDeals || lostDeals.length === 0) {
+    return "\nNEGÓCIOS PERDIDOS: Nenhum registro no período.";
+  }
+
+  const totalLostValue = lostDeals.reduce((sum: number, d: any) => sum + (d.sale_value || 0), 0);
+  const reasons = new Map<string, number>();
+  for (const d of lostDeals) {
+    const reason = d.loss_reason || "Motivo não informado";
+    reasons.set(reason, (reasons.get(reason) || 0) + 1);
+  }
+  const topReasons = [...reasons.entries()].sort((a, b) => b[1] - a[1]);
+
+  let output = `\nNEGÓCIOS PERDIDOS NO PERÍODO (${lostDeals.length} deals, R$ ${totalLostValue.toLocaleString("pt-BR")} em receita perdida):`;
+  output += `\n- Motivos mais frequentes: ${topReasons.map(([r, c]) => `"${r}" (${c}x)`).join(", ")}`;
+  output += `\n- Detalhes:`;
+  for (const d of lostDeals.slice(0, 5)) {
+    const leadName = d.lead?.name || "Lead";
+    const company = d.lead?.company ? ` (${d.lead.company})` : "";
+    const closer = d.closer?.name || "sem closer";
+    output += `\n  • ${leadName}${company} — R$ ${(d.sale_value || 0).toLocaleString("pt-BR")} — Motivo: ${d.loss_reason || "não informado"} — Closer: ${closer}`;
+  }
+
+  return output;
+}
+
+// ---- Fetch historical metrics for trend comparison ----
+async function fetchHistoricalMetrics(
+  supabase: any,
+  organizationId: string,
+  currentMonth: number,
+  currentYear: number,
+): Promise<string> {
+  const months: { label: string; month: number; year: number }[] = [];
+  for (let i = 1; i <= 3; i++) {
+    let m = currentMonth - i;
+    let y = currentYear;
+    if (m <= 0) { m += 12; y -= 1; }
+    const label = new Date(y, m - 1).toLocaleString("pt-BR", { month: "long", year: "numeric" });
+    months.push({ label, month: m, year: y });
+  }
+
+  const results = await Promise.all(
+    months.map(async ({ label, month, year }) => {
+      const start = new Date(Date.UTC(year, month - 1, 1)).toISOString();
+      const end = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999)).toISOString();
+      const { data } = await supabase.rpc("get_dashboard_metrics", {
+        p_org_id: organizationId,
+        p_start_date: start,
+        p_end_date: end,
+        p_filter_member_id: null,
+      });
+      const m = Array.isArray(data) ? data[0] : data;
+      return { label, metrics: m };
+    })
+  );
+
+  if (results.every(r => !r.metrics)) {
+    return "\nHISTÓRICO: Sem dados de meses anteriores.";
+  }
+
+  let output = `\nHISTÓRICO DOS ÚLTIMOS 3 MESES (para análise de tendências):`;
+  for (const { label, metrics: m } of results) {
+    if (!m) { output += `\n- ${label}: sem dados`; continue; }
+    output += `\n- ${label}: Receita R$ ${m.vendaTotal || 0} | Leads ${m.totalLeads || 0} | Reuniões ${m.reunioesMarcadas || 0}→${m.reunioesComparecidas || 0} | Vendas ${m.novosClientes || 0} | No-show ${(m.taxaNoShow || 0).toFixed(0)}% | Ticket MRR R$ ${m.ticketMedioMRR || 0} | Ticket Proj R$ ${m.ticketMedioProjeto || 0}`;
+  }
+
+  return output;
+}
+
 // ---- Chat mode handler ----
 async function handleChatMode(body: any) {
   const { question, user_id, organization_id } = body;
@@ -186,7 +341,11 @@ async function handleChatMode(body: any) {
   const isCurrentMonth = targetMonth === (now.getMonth() + 1) && targetYear === now.getFullYear();
   const monthLabel = new Date(targetYear, targetMonth - 1).toLocaleString("pt-BR", { month: "long", year: "numeric" });
 
-  const [metricsRes, rankingRes, conversationContext] = await Promise.all([
+  const dayOfMonth = isCurrentMonth ? now.getDate() : new Date(Date.UTC(targetYear, targetMonth, 0)).getDate();
+  const daysInMonth = new Date(targetYear, targetMonth, 0).getDate();
+
+  // Fetch all context in parallel: current metrics, ranking, conversations, history, lost deals, conversation samples
+  const [metricsRes, rankingRes, conversationContext, historicalContext, lostDealsContext, conversationSamples] = await Promise.all([
     supabase.rpc("get_dashboard_metrics", {
       p_org_id: organization_id,
       p_start_date: startOfMonth,
@@ -199,45 +358,95 @@ async function handleChatMode(body: any) {
       p_organization_id: organization_id,
     }),
     fetchConversationContext(supabase, organization_id, startOfMonth, endOfMonth),
+    fetchHistoricalMetrics(supabase, organization_id, targetMonth, targetYear),
+    fetchLostDeals(supabase, organization_id, startOfMonth, endOfMonth),
+    fetchConversationSamples(supabase, organization_id, startOfMonth, endOfMonth),
   ]);
 
   const metrics = Array.isArray(metricsRes.data) ? metricsRes.data[0] : metricsRes.data;
   const ranking = Array.isArray(rankingRes.data) ? rankingRes.data[0] : rankingRes.data;
 
-  const dayOfMonth = isCurrentMonth ? now.getDate() : new Date(Date.UTC(targetYear, targetMonth, 0)).getDate();
-  const daysInMonth = new Date(targetYear, targetMonth, 0).getDate();
+  const contextPrompt = `Você é o Diretor Comercial da operação. Não um assistente. Não um coach motivacional. Você é o executivo que responde pelo resultado.
 
-  const contextPrompt = `Você é o Oráculo Comercial, um assistente de inteligência comercial B2B. Responda com base nos dados reais do sistema.
+Você tem acesso a TODOS os dados da operação: métricas atuais, histórico dos últimos 3 meses, ranking de vendedores, negócios perdidos, e transcrições reais de conversas com leads. Use TUDO isso para dar respostas com profundidade de quem dirige uma operação comercial B2B.
 
-PERÍODO ANALISADO: ${monthLabel}${isCurrentMonth ? ` (mês em andamento — dia ${dayOfMonth} de ${daysInMonth})` : " (mês encerrado)"}
+PERÍODO PRINCIPAL: ${monthLabel}${isCurrentMonth ? ` (mês em andamento — dia ${dayOfMonth} de ${daysInMonth})` : " (mês encerrado)"}
 
-DADOS DA OPERAÇÃO:
+═══════════════════════════════════════
+DADOS OPERACIONAIS DO MÊS ATUAL
+═══════════════════════════════════════
 - Receita: R$ ${metrics?.vendaTotal || 0}
 - Leads captados: ${metrics?.totalLeads || 0}
 - Reuniões marcadas: ${metrics?.reunioesMarcadas || 0}
 - Reuniões comparecidas: ${metrics?.reunioesComparecidas || 0}
 - Propostas enviadas: ${metrics?.propostasEnviadas || 0}
 - Vendas fechadas: ${metrics?.novosClientes || 0}
-- Ticket médio: R$ ${metrics?.ticketMedio || 0}
+- Ticket médio geral: R$ ${metrics?.ticketMedio || 0}
 - Ticket médio MRR: R$ ${metrics?.ticketMedioMRR || 0}
 - Ticket médio Projeto: R$ ${metrics?.ticketMedioProjeto || 0}
-- Taxa no-show: ${metrics?.taxaNoShow || 0}%
+- Taxa no-show: ${(metrics?.taxaNoShow || 0).toFixed(1)}%
+- Taxa conversão: ${(metrics?.taxaConversao || metrics?.taxaConversaoGeral || 0).toFixed(1)}%
 
-RANKING DE VENDEDORES:
-${JSON.stringify(ranking?.salesRanking?.slice(0, 5) || [], null, 2)}
+RANKING DE VENDEDORES (CLOSERS):
+${JSON.stringify(ranking?.salesRanking?.slice(0, 8) || [], null, 2)}
 
 RANKING SDRs:
-${JSON.stringify(ranking?.sdrRanking?.slice(0, 5) || [], null, 2)}
+${JSON.stringify(ranking?.sdrRanking?.slice(0, 8) || [], null, 2)}
+
+═══════════════════════════════════════
+INTELIGÊNCIA HISTÓRICA
+═══════════════════════════════════════
+${historicalContext}
+
+═══════════════════════════════════════
+NEGÓCIOS PERDIDOS
+═══════════════════════════════════════
+${lostDealsContext}
+
+═══════════════════════════════════════
+ANÁLISE AGREGADA DE CONVERSAS
+═══════════════════════════════════════
 ${conversationContext}
 
-REGRAS:
-- Responda SEMPRE com base nos dados acima
-- NUNCA invente números
-- Seja direto e executivo
-- Use linguagem de operação comercial B2B
-- Se não tiver dados suficientes para responder, diga claramente
-- Mantenha respostas concisas (máximo 4 parágrafos)
-- Quando perguntarem sobre conversas, objeções ou padrões de chat, use o CONTEXTO DE CONVERSAS acima`;
+═══════════════════════════════════════
+AMOSTRA DE CONVERSAS REAIS (para análise qualitativa)
+═══════════════════════════════════════
+${conversationSamples}
+
+═══════════════════════════════════════
+COMO VOCÊ DEVE RESPONDER
+═══════════════════════════════════════
+
+POSTURA:
+- Você é um diretor comercial experiente analisando a operação. Fale como um executivo que cobra resultado.
+- Use os dados históricos para identificar TENDÊNCIAS — a operação está melhorando ou piorando? Em quê?
+- Compare meses. Identifique padrões. Seja específico com números.
+
+QUANDO PERGUNTAREM SOBRE CONVERSAS OU QUALIDADE DO ATENDIMENTO:
+- Analise as CONVERSAS REAIS acima em detalhe
+- Identifique objeções que o agente não soube contornar
+- Aponte oportunidades perdidas (lead demonstrou interesse mas não foi conduzido ao próximo passo)
+- Avalie se o agente está qualificando corretamente, fazendo perguntas certas, criando urgência
+- Sugira como reformular respostas específicas que poderiam ter sido melhores
+- Identifique padrões: os leads estão saindo em qual momento? Por qual motivo?
+
+QUANDO PERGUNTAREM SOBRE PERFORMANCE:
+- Não repita números — INTERPRETE eles. "Receita caiu 20% vs mês passado e o gargalo está no no-show que subiu de 15% pra 28%"
+- Compare com meses anteriores sempre
+- Identifique o GARGALO principal: é captação? É qualificação? É fechamento? É no-show?
+- Dê uma recomendação ACIONÁVEL baseada nos dados
+
+QUANDO PERGUNTAREM SOBRE NEGÓCIOS PERDIDOS:
+- Use os dados reais de deals perdidos
+- Identifique padrões nos motivos de perda
+- Sugira ajustes no processo de vendas baseado nos motivos reais
+
+REGRAS ABSOLUTAS:
+- Use SOMENTE dados acima — NUNCA invente números
+- Seja direto, executivo, incisivo
+- Quando não tiver dados suficientes, diga claramente
+- Respostas podem ter até 6 parágrafos quando a análise exigir profundidade
+- Cite números específicos e compare com histórico sempre que possível`;
 
   const openRouterApiKey = Deno.env.get("OPENROUTER_API_KEY");
   const referer = Deno.env.get("OPENROUTER_REFERER_URL") || "https://v8millennials.com";
@@ -254,13 +463,13 @@ REGRAS:
       "HTTP-Referer": referer,
     },
     body: JSON.stringify({
-      model: "google/gemini-2.5-flash-preview",
+      model: "google/gemini-3-flash-preview",
       messages: [
         { role: "system", content: contextPrompt },
         { role: "user", content: question },
       ],
       temperature: 0.6,
-      max_tokens: 500,
+      max_tokens: 1200,
     }),
   });
 
@@ -377,7 +586,7 @@ Qual o problema principal e qual a tarefa prioritária de hoje?`;
       "HTTP-Referer": referer,
     },
     body: JSON.stringify({
-      model: "google/gemini-2.5-flash-preview",
+      model: "google/gemini-3-flash-preview",
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
@@ -609,7 +818,7 @@ FORMATO JSON OBRIGATÓRIO:
       "HTTP-Referer": referer,
     },
     body: JSON.stringify({
-      model: "google/gemini-2.5-flash-preview",
+      model: "google/gemini-3-flash-preview",
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: "Analise a operação e entregue o diagnóstico completo em JSON." },
@@ -619,10 +828,30 @@ FORMATO JSON OBRIGATÓRIO:
     }),
   });
 
+  const fallbackResult: Record<string, any> = {
+    diagnostico: "Análise temporariamente indisponível",
+    causa: "O serviço de IA está temporariamente fora do ar",
+    acao_prioritaria: "Revise o pipeline e priorize follow-ups pendentes",
+    acao_secundaria: "Atualize as metas individuais no sistema",
+    oportunidade: null,
+    alerta: null,
+    vendor_actions: [],
+  };
+
   if (!aiResponse.ok) {
     const errorText = await aiResponse.text();
     console.error("OpenRouter error:", aiResponse.status, errorText);
-    throw new Error(`OpenRouter error: ${aiResponse.status}`);
+
+    if (aiResponse.status === 429) {
+      fallbackResult.causa = "Rate limit atingido — tentando novamente em breve";
+    } else if (aiResponse.status === 402) {
+      fallbackResult.causa = "Créditos de IA insuficientes";
+      fallbackResult.alerta = "Créditos OpenRouter esgotados. Recarregue para restaurar o Coach IA.";
+    }
+
+    return new Response(JSON.stringify(fallbackResult), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 
   const aiData = await aiResponse.json();
@@ -639,15 +868,7 @@ FORMATO JSON OBRIGATÓRIO:
   }
 
   if (!result) {
-    result = {
-      diagnostico: "Não foi possível gerar análise completa",
-      causa: "Dados insuficientes ou erro de processamento",
-      acao_prioritaria: "Revise o pipeline e priorize follow-ups pendentes",
-      acao_secundaria: "Atualize as metas individuais no sistema",
-      oportunidade: null,
-      alerta: null,
-      vendor_actions: [],
-    };
+    result = fallbackResult;
   }
 
   await logRuntime({

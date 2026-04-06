@@ -284,21 +284,30 @@ export function useTVDashboardData() {
         return { name: g.name, id: g.id, current: currentValue, goal: goalValue, percentage };
       });
       
-      // ========== FUNNEL DATA ==========
-      const reunioesMarcadasFunnel = confirmacoesFiltradas.length;
-      const comparecidasFunnel = confirmacoesFiltradas.filter(c => c.status === "compareceu").length;
-      
-      const marcandoR2Propostas = propostasFiltradas.filter(p => 
+      // ========== FUNNEL DATA (filtered by current month) ==========
+      // Reuniões: filter by meeting_date in current month
+      const reunioesMarcadasFunnel = currentMonthConfirmacoes.length;
+      const comparecidasFunnel = currentMonthConfirmacoes.filter(c => c.status === "compareceu").length;
+
+      // Propostas: filter by created_at in current month for active pipeline stages
+      const currentMonthPropostasPipeline = propostasFiltradas.filter(p => {
+        const createdAt = p.created_at ? new Date(p.created_at) : null;
+        return createdAt &&
+          createdAt.getMonth() + 1 === currentMonth &&
+          createdAt.getFullYear() === currentYear;
+      });
+
+      const marcandoR2Propostas = currentMonthPropostasPipeline.filter(p =>
         p.status === "marcar_compromisso" || p.status === "reativar"
       );
       const marcandoR2 = marcandoR2Propostas.length;
       const marcandoR2Value = marcandoR2Propostas.reduce((sum, p) => sum + (p.sale_value || 0), 0);
-      
-      const r2MarcadasPropostas = propostasFiltradas.filter(p => p.status === "compromisso_marcado");
+
+      const r2MarcadasPropostas = currentMonthPropostasPipeline.filter(p => p.status === "compromisso_marcado");
       const r2Marcadas = r2MarcadasPropostas.length;
       const r2MarcadasValue = r2MarcadasPropostas.reduce((sum, p) => sum + (p.sale_value || 0), 0);
-      
-      // Vendido: Leads in "vendido" stage (current month)
+
+      // Vendido: Leads in "vendido" stage (current month by closed_at)
       const vendidoFunnel = currentMonthPropostas.length;
       const vendidoValue = vendasRealizadas;
       

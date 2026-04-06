@@ -206,7 +206,7 @@ IMPORTANTE: Retorne APENAS o JSON, nada mais.`;
         'X-Title': 'V8 Millennials CRM - Summarizer',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash-preview',
+        model: 'google/gemini-3-flash-preview',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: `Conversa:\n\n${conversationText}` }
