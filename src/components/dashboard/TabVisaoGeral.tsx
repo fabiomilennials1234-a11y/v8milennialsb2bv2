@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, useMemo } from "react";
 import { motion } from "framer-motion";
 import {
   DollarSign,
@@ -13,7 +13,7 @@ import { SpeedometerGauge } from "./SpeedometerGauge";
 import { FunnelChart } from "./FunnelChart";
 import { TopPerformers } from "./TopPerformers";
 import { FirstOrderVsBase } from "./FirstOrderVsBase";
-import { useDashboardMetrics, useFunnelData, useRankingData } from "@/hooks/useDashboardMetrics";
+import { useDashboardMetrics } from "@/hooks/useDashboardMetrics";
 import { useTeamGoals } from "@/hooks/useGoals";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -32,34 +32,49 @@ function formatCurrency(value: number): string {
 function TabVisaoGeralBase({ month, year, isAdmin }: TabVisaoGeralProps) {
   const { data: metrics, isLoading: metricsLoading } = useDashboardMetrics(month, year);
   const { data: totalMetrics } = useDashboardMetrics(month, year, null);
-  const { data: funnelData, isLoading: funnelLoading } = useFunnelData(month, year);
   const { data: teamGoals } = useTeamGoals(month, year);
 
-  const now = new Date();
-  const dayOfMonth = month === now.getMonth() + 1 && year === now.getFullYear()
-    ? now.getDate()
-    : new Date(year, month, 0).getDate();
-  const daysInMonth = new Date(year, month, 0).getDate();
-  const expectedProgress = (dayOfMonth / daysInMonth) * 100;
+  const { dayOfMonth, daysInMonth, expectedProgress } = useMemo(() => {
+    const now = new Date();
+    const dom = month === now.getMonth() + 1 && year === now.getFullYear()
+      ? now.getDate()
+      : new Date(year, month, 0).getDate();
+    const dim = new Date(year, month, 0).getDate();
+    return { dayOfMonth: dom, daysInMonth: dim, expectedProgress: (dom / dim) * 100 };
+  }, [month, year]);
 
-  const faturamentoGoal = teamGoals?.find((g) => g.type === "faturamento");
+  const faturamentoGoal = useMemo(
+    () => teamGoals?.find((g) => g.type === "faturamento"),
+    [teamGoals]
+  );
 
-  // Use org-wide metrics for admin, personal for sellers
-  const displayMetrics = isAdmin ? metrics : metrics;
+  const displayMetrics = metrics;
   const speedoMetrics = isAdmin ? metrics : totalMetrics;
 
-  const currentPercent = faturamentoGoal && faturamentoGoal.target_value > 0
-    ? ((speedoMetrics?.vendaTotal || 0) / faturamentoGoal.target_value) * 100
-    : 0;
+  const currentPercent = useMemo(
+    () => faturamentoGoal && faturamentoGoal.target_value > 0
+      ? ((speedoMetrics?.vendaTotal || 0) / faturamentoGoal.target_value) * 100
+      : 0,
+    [faturamentoGoal, speedoMetrics?.vendaTotal]
+  );
 
-  // Funnel transformation
-  const funnelSteps = funnelData?.map(step => ({
-    label: step.label,
-    value: step.value,
-    color: step.color.replace("hsl(var(--", "bg-").replace("))", ""),
-  })) || [];
+  // Funnel derived from totalMetrics — eliminates duplicate RPC call
+  const funnelSteps = useMemo(() => {
+    const d = totalMetrics;
+    if (!d) return [
+      { label: "Leads", value: 0, color: "bg-primary" },
+      { label: "Reuniões", value: 0, color: "bg-chart-2" },
+      { label: "Propostas", value: 0, color: "bg-chart-4" },
+      { label: "Vendas", value: 0, color: "bg-success" },
+    ];
+    return [
+      { label: "Leads", value: d.totalLeads ?? 0, color: "bg-primary" },
+      { label: "Reuniões", value: d.reunioesMarcadas ?? 0, color: "bg-chart-2" },
+      { label: "Propostas", value: d.propostasEnviadas ?? 0, color: "bg-chart-4" },
+      { label: "Vendas", value: d.novosClientes ?? 0, color: "bg-success" },
+    ];
+  }, [totalMetrics]);
 
-  // Taxa de conversão — vem do RPC (vendas / total no pipe, mesma fórmula da página de propostas)
   const taxaConversao = displayMetrics?.taxaConversao ?? 0;
 
   if (metricsLoading) {
@@ -153,15 +168,7 @@ function TabVisaoGeralBase({ month, year, isAdmin }: TabVisaoGeralProps) {
           transition={{ delay: 0.35 }}
           className="lg:col-span-2"
         >
-          <FunnelChart
-            title="Funil de Vendas"
-            steps={funnelSteps.length > 0 ? funnelSteps : [
-              { label: "Leads", value: displayMetrics?.totalLeads || 0, color: "bg-primary" },
-              { label: "Reuniões", value: displayMetrics?.reunioesMarcadas || 0, color: "bg-chart-2" },
-              { label: "Propostas", value: displayMetrics?.propostasEnviadas || 0, color: "bg-chart-4" },
-              { label: "Vendas", value: displayMetrics?.novosClientes || 0, color: "bg-success" },
-            ]}
-          />
+          <FunnelChart title="Funil de Vendas" steps={funnelSteps} />
         </motion.div>
       </div>
 

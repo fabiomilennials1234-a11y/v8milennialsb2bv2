@@ -1,12 +1,14 @@
-import { useState } from "react";
+import { useState, lazy, Suspense } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { Loader2 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import { TabVisaoGeral } from "@/components/dashboard/TabVisaoGeral";
 import { TabPerformance } from "@/components/dashboard/TabPerformance";
 import { TabInteligencia } from "@/components/dashboard/TabInteligencia";
-import { TabMarketing } from "@/components/dashboard/TabMarketing";
-import { TabAnalytics } from "@/components/dashboard/TabAnalytics";
+
+const TabMarketing = lazy(() => import("@/components/dashboard/TabMarketing").then(m => ({ default: m.TabMarketing })));
+const TabAnalytics = lazy(() => import("@/components/dashboard/TabAnalytics").then(m => ({ default: m.TabAnalytics })));
 import { OraculoFloatingButton } from "@/components/dashboard/OraculoFloatingButton";
 import { OraculoChat } from "@/components/dashboard/OraculoChat";
 import { useOraculoChat } from "@/hooks/useOraculoChat";
@@ -108,27 +110,31 @@ export default function Dashboard() {
 
         {showMarketing && (
           <TabsContent value="marketing" className="mt-6">
-            <motion.div
-              key="marketing"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3 }}
-            >
-              <TabMarketing month={selectedMonth} year={selectedYear} />
-            </motion.div>
+            <Suspense fallback={<div className="flex items-center justify-center py-16"><Loader2 className="w-7 h-7 animate-spin text-primary" /></div>}>
+              <motion.div
+                key="marketing"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3 }}
+              >
+                <TabMarketing month={selectedMonth} year={selectedYear} />
+              </motion.div>
+            </Suspense>
           </TabsContent>
         )}
 
         {showAnalytics && (
           <TabsContent value="analytics" className="mt-6">
-            <motion.div
-              key="analytics"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3 }}
-            >
-              <TabAnalytics />
-            </motion.div>
+            <Suspense fallback={<div className="flex items-center justify-center py-16"><Loader2 className="w-7 h-7 animate-spin text-primary" /></div>}>
+              <motion.div
+                key="analytics"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3 }}
+              >
+                <TabAnalytics />
+              </motion.div>
+            </Suspense>
           </TabsContent>
         )}
       </Tabs>
