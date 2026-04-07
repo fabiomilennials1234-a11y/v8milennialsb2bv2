@@ -39,7 +39,9 @@ export type WorkflowNodeType =
   | "wait_response"
   | "split_ab"
   | "webhook_call"
-  | "goto";
+  | "goto"
+  | "wait_business_window"
+  | "assign_responsible";
 
 export type WorkflowActionType =
   // Comunicação
@@ -455,6 +457,30 @@ export interface GotoNodeData {
   [key: string]: unknown;
 }
 
+export type AssignMode = "round_robin" | "random" | "manual";
+export type AssignTarget = "responsible" | "sdr" | "closer";
+
+export interface WaitBusinessWindowNodeData {
+  type: "wait_business_window";
+  label: string;
+  days: string[];          // ["seg","ter","qua","qui","sex"]
+  startTime: string;       // "HH:MM" e.g. "08:00"
+  endTime: string;         // "HH:MM" e.g. "18:00"
+  timezone: string;        // e.g. "America/Sao_Paulo"
+  [key: string]: unknown;
+}
+
+export interface AssignResponsibleNodeData {
+  type: "assign_responsible";
+  label: string;
+  assignMode: AssignMode;
+  assignTarget: AssignTarget;
+  assigneeId?: string;      // manual mode
+  assigneeName?: string;    // manual mode display
+  memberIds?: string[];     // subset filter for round_robin/random (empty = all active)
+  [key: string]: unknown;
+}
+
 export type WorkflowNodeData =
   | TriggerNodeData
   | ActionNodeData
@@ -465,7 +491,9 @@ export type WorkflowNodeData =
   | WaitResponseNodeData
   | SplitAbNodeData
   | WebhookCallNodeData
-  | GotoNodeData;
+  | GotoNodeData
+  | WaitBusinessWindowNodeData
+  | AssignResponsibleNodeData;
 
 // =====================================================
 // REACT FLOW NODE/EDGE TYPES
@@ -563,7 +591,9 @@ export const NODE_COLORS: Record<WorkflowNodeType, { border: string; bgLight: st
   wait_response:  { border: "border-orange-500",  bgLight: "bg-orange-50",  bgDark: "dark:bg-orange-950" },
   split_ab:       { border: "border-pink-500",    bgLight: "bg-pink-50",    bgDark: "dark:bg-pink-950" },
   webhook_call:   { border: "border-indigo-500",  bgLight: "bg-indigo-50",  bgDark: "dark:bg-indigo-950" },
-  goto:           { border: "border-teal-500",    bgLight: "bg-teal-50",    bgDark: "dark:bg-teal-950" },
+  goto:                  { border: "border-teal-500",    bgLight: "bg-teal-50",    bgDark: "dark:bg-teal-950" },
+  wait_business_window:  { border: "border-amber-500",   bgLight: "bg-amber-50",   bgDark: "dark:bg-amber-950" },
+  assign_responsible:    { border: "border-rose-500",    bgLight: "bg-rose-50",    bgDark: "dark:bg-rose-950" },
 };
 
 export const NODE_LABELS: Record<WorkflowNodeType, string> = {
@@ -577,6 +607,8 @@ export const NODE_LABELS: Record<WorkflowNodeType, string> = {
   split_ab: "Split A/B",
   webhook_call: "Webhook",
   goto: "Ir Para",
+  wait_business_window: "Janela Comercial",
+  assign_responsible: "Definir Responsável",
 };
 
 export const ACTION_LABELS: Record<WorkflowActionType, string> = {

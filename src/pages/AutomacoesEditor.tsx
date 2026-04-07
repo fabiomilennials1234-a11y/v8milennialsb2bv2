@@ -28,6 +28,8 @@ import type {
   SplitAbNodeData,
   WebhookCallNodeData,
   GotoNodeData,
+  WaitBusinessWindowNodeData,
+  AssignResponsibleNodeData,
 } from "@/types/workflow";
 
 const DEFAULT_TRIGGER_NODE: WorkflowNode = {
@@ -71,6 +73,22 @@ function createDefaultNodeData(type: WorkflowNodeType): WorkflowNodeData {
       return { type: "webhook_call", label: "Webhook", url: "", method: "POST", bodyTemplate: "", outputVariable: "" } as WebhookCallNodeData;
     case "goto":
       return { type: "goto", label: "Ir Para", targetNodeId: "", targetNodeLabel: "" } as GotoNodeData;
+    case "wait_business_window":
+      return {
+        type: "wait_business_window",
+        label: "Janela Comercial",
+        days: ["seg", "ter", "qua", "qui", "sex"],
+        startTime: "08:00",
+        endTime: "18:00",
+        timezone: "America/Sao_Paulo",
+      } as WaitBusinessWindowNodeData;
+    case "assign_responsible":
+      return {
+        type: "assign_responsible",
+        label: "Definir Responsável",
+        assignMode: "round_robin",
+        assignTarget: "responsible",
+      } as AssignResponsibleNodeData;
   }
 }
 

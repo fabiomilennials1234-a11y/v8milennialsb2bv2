@@ -24,6 +24,8 @@ import { WaitResponseNode } from "./nodes/WaitResponseNode";
 import { SplitAbNode } from "./nodes/SplitAbNode";
 import { WebhookCallNode } from "./nodes/WebhookCallNode";
 import { GotoNode } from "./nodes/GotoNode";
+import { WaitBusinessWindowNode } from "./nodes/WaitBusinessWindowNode";
+import { AssignResponsibleNode } from "./nodes/AssignResponsibleNode";
 import { AnimatedEdge } from "./edges/AnimatedEdge";
 import type { WorkflowNode, WorkflowEdge } from "@/types/workflow";
 
@@ -38,6 +40,8 @@ const nodeTypes: NodeTypes = {
   split_ab: SplitAbNode,
   webhook_call: WebhookCallNode,
   goto: GotoNode,
+  wait_business_window: WaitBusinessWindowNode,
+  assign_responsible: AssignResponsibleNode,
 };
 
 const edgeTypes: EdgeTypes = {

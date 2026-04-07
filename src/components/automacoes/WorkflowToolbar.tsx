@@ -28,6 +28,8 @@ import {
   CornerDownRight,
   History,
   Download,
+  CalendarClock,
+  UserRoundPlus,
 } from "lucide-react";
 import type { WorkflowNodeType } from "@/types/workflow";
 
@@ -70,8 +72,15 @@ const ADD_NODE_GROUPS: NodeOptionGroup[] = [
     label: "Controle de Fluxo",
     options: [
       { type: "wait_response", label: "Esperar Resposta", icon: MessageCircle, color: "text-orange-500" },
+      { type: "wait_business_window", label: "Janela Comercial", icon: CalendarClock, color: "text-amber-500" },
       { type: "split_ab", label: "Split A/B", icon: Split, color: "text-pink-500" },
       { type: "goto", label: "Ir Para (Jump)", icon: CornerDownRight, color: "text-teal-500" },
+    ],
+  },
+  {
+    label: "Equipe",
+    options: [
+      { type: "assign_responsible", label: "Definir Responsável", icon: UserRoundPlus, color: "text-rose-500" },
     ],
   },
   {

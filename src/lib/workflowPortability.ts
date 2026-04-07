@@ -44,6 +44,11 @@ const COPILOT_ORG_FIELDS: Record<string, OrgFieldSpec> = {
   agentId: { type: "copilot_agent", hintField: "agentName" },
 };
 
+/** Fields in AssignResponsibleNodeData that reference org-specific resources */
+const ASSIGN_RESPONSIBLE_ORG_FIELDS: Record<string, OrgFieldSpec> = {
+  assigneeId: { type: "team_member", hintField: "assigneeName" },
+};
+
 /** Fields in TriggerConfig that reference org-specific resources */
 const TRIGGER_CONFIG_ORG_FIELDS: Record<string, OrgFieldSpec> = {
   pipeline_id: { type: "custom_pipeline" },
@@ -90,6 +95,8 @@ function getOrgFieldsForNode(nodeType: string): Record<string, OrgFieldSpec> {
       return ACTION_ORG_FIELDS;
     case "copilot":
       return COPILOT_ORG_FIELDS;
+    case "assign_responsible":
+      return ASSIGN_RESPONSIBLE_ORG_FIELDS;
     default:
       return {};
   }
@@ -104,6 +111,18 @@ export function exportWorkflow(workflow: Workflow, orgName?: string): ExportedWo
     const registry = getOrgFieldsForNode(String(nodeData.type));
     const { cleaned, refs } = extractRefsFromData(node.id, nodeData, registry);
     allRefs.push(...refs);
+
+    // Clean assign_responsible memberIds array (org-specific team member IDs)
+    if (String(nodeData.type) === "assign_responsible" && Array.isArray(cleaned.memberIds) && (cleaned.memberIds as unknown[]).length > 0) {
+      allRefs.push({
+        nodeId: node.id,
+        field: "memberIds",
+        type: "team_member" as ExternalReferenceType,
+        originalValue: JSON.stringify(cleaned.memberIds),
+        hint: `${(cleaned.memberIds as unknown[]).length} membros`,
+      });
+      cleaned.memberIds = [];
+    }
 
     // Also clean trigger node's embedded config (mirrors trigger_config at top level)
     if (String(nodeData.type) === "trigger" && typeof cleaned.config === "object" && cleaned.config !== null) {

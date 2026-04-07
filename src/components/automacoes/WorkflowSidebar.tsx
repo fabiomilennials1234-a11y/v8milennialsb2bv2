@@ -10,6 +10,8 @@ import { WaitResponsePanel } from "./sidebar-panels/WaitResponsePanel";
 import { SplitAbPanel } from "./sidebar-panels/SplitAbPanel";
 import { WebhookCallPanel } from "./sidebar-panels/WebhookCallPanel";
 import { GotoPanel } from "./sidebar-panels/GotoPanel";
+import { WaitBusinessWindowPanel } from "./sidebar-panels/WaitBusinessWindowPanel";
+import { AssignResponsiblePanel } from "./sidebar-panels/AssignResponsiblePanel";
 import { NODE_LABELS } from "@/types/workflow";
 import type { WorkflowNode, WorkflowNodeData } from "@/types/workflow";
 
@@ -88,6 +90,10 @@ export function WorkflowSidebar({
         return <WebhookCallPanel data={nodeData as any} onUpdate={handleUpdate} />;
       case "goto":
         return <GotoPanel data={nodeData as any} onUpdate={handleUpdate} allNodes={allNodes} />;
+      case "wait_business_window":
+        return <WaitBusinessWindowPanel data={nodeData as any} onUpdate={handleUpdate} />;
+      case "assign_responsible":
+        return <AssignResponsiblePanel data={nodeData as any} onUpdate={handleUpdate} />;
       case "end":
         return (
           <p className="text-sm text-muted-foreground p-4">

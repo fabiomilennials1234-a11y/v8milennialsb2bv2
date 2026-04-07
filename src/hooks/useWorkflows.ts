@@ -201,6 +201,59 @@ export function useWorkflowExecutionSteps(executionId: string | undefined) {
 }
 
 // =====================================================
+// RETRY
+// =====================================================
+
+export function useRetryWorkflowExecution() {
+  const queryClient = useQueryClient();
+  const { organizationId } = useOrganization();
+
+  return useMutation({
+    mutationFn: async (executionId: string) => {
+      if (!organizationId) throw new Error("Sem organização");
+
+      // PERMISSION: Apenas admin pode repetir execuções
+      await assertIsAdmin();
+
+      // Fetch original execution (cast needed: retry_of not in auto-generated types yet)
+      const { data: rawOriginal, error: fetchError } = await supabase
+        .from("workflow_executions")
+        .select("*")
+        .eq("id", executionId)
+        .eq("organization_id", organizationId)
+        .single();
+
+      if (fetchError || !rawOriginal) throw new Error("Execução não encontrada");
+      const original = rawOriginal as unknown as WorkflowExecution;
+      if (original.status !== "failed") throw new Error("Só é possível repetir execuções que falharam");
+
+      // Create new execution starting from the failed node
+      const { data: newExec, error: insertError } = await supabase
+        .from("workflow_executions")
+        .insert({
+          workflow_id: original.workflow_id,
+          organization_id: organizationId,
+          lead_id: original.lead_id,
+          status: "running",
+          current_node_id: original.current_node_id,
+          loop_counters: original.loop_counters || {},
+          context: original.context || {},
+          retry_of: original.id,
+          next_run_at: new Date().toISOString(),
+        } as any)
+        .select()
+        .single();
+
+      if (insertError) throw insertError;
+      return newExec as unknown as WorkflowExecution;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["workflow-executions", data.workflow_id] });
+    },
+  });
+}
+
+// =====================================================
 // STATS (para lista)
 // =====================================================
 

@@ -117,10 +117,11 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
       continue;
     }
 
-    // Loop detection — skip increment for time_window condition re-evaluations (scheduled resume)
-    const isTimeWindowResume = node.type === "condition"
-      && (node.data.conditionMode as string) === "time_window"
-      && params.currentNodeId === nodeId;
+    // Loop detection — skip increment for time_window/business_window re-evaluations (scheduled resume)
+    const isTimeWindowResume = (
+      (node.type === "condition" && (node.data.conditionMode as string) === "time_window") ||
+      node.type === "wait_business_window"
+    ) && params.currentNodeId === nodeId;
 
     if (!isTimeWindowResume) {
       loopCounters[nodeId] = (loopCounters[nodeId] || 0) + 1;
@@ -520,6 +521,153 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
 
           await recordStep(supabase, executionId, node, "success", { targetNodeId });
           nextNodes.push(targetNodeId);
+          break;
+        }
+
+        case "wait_business_window": {
+          // ── Wait until inside business window, then pass through ──
+          const wbw = node.data as {
+            days?: string[];
+            startTime?: string;
+            endTime?: string;
+            timezone?: string;
+          };
+
+          const wbwDays = wbw.days || ["seg", "ter", "qua", "qui", "sex"];
+          const wbwStart = wbw.startTime || "08:00";
+          const wbwEnd = wbw.endTime || "18:00";
+          const wbwTz = wbw.timezone || "America/Sao_Paulo";
+
+          const wbwNow = new Date();
+          const wbwNextSend = getNextSendTime(
+            {
+              sendOnlyBusinessHours: true,
+              businessHoursStart: wbwStart,
+              businessHoursEnd: wbwEnd,
+              sendDays: wbwDays,
+              timezone: wbwTz,
+            },
+            wbwNow,
+          );
+
+          const wbwInsideWindow = wbwNextSend.getTime() <= wbwNow.getTime() + 1000;
+
+          if (wbwInsideWindow) {
+            await recordStep(supabase, executionId, node, "success",
+              { days: wbwDays, startTime: wbwStart, endTime: wbwEnd, timezone: wbwTz },
+              { insideWindow: true, evaluatedAt: new Date().toISOString() },
+            );
+            nextNodes.push(...getNextNodes(nodeId, edgeMap));
+          } else {
+            const wbwNextRunAt = wbwNextSend.toISOString();
+            await recordStep(supabase, executionId, node, "success",
+              { days: wbwDays, startTime: wbwStart, endTime: wbwEnd, timezone: wbwTz },
+              { insideWindow: false, nextRunAt: wbwNextRunAt, evaluatedAt: new Date().toISOString() },
+            );
+
+            // Pause: set current_node_id to self for re-evaluation on resume
+            await supabase.from("workflow_executions").update({
+              status: "running",
+              current_node_id: nodeId,
+              next_run_at: wbwNextRunAt,
+              loop_counters: loopCounters,
+            }).eq("id", executionId);
+
+            return { success: true, status: "paused", stepsExecuted };
+          }
+          break;
+        }
+
+        case "assign_responsible": {
+          // ── Assign a team member to the lead ──
+          const arMode = (node.data.assignMode as string) || "round_robin";
+          const arTarget = (node.data.assignTarget as string) || "responsible";
+          const arMemberFilter = node.data.memberIds as string[] | undefined;
+          let arAssigneeId: string | undefined;
+          let arAssigneeName: string | undefined;
+
+          if (arMode === "manual") {
+            arAssigneeId = node.data.assigneeId as string;
+            arAssigneeName = node.data.assigneeName as string;
+          } else {
+            // Get eligible members
+            let eligibleMembers: { id: string; name: string }[];
+
+            if (arMemberFilter && arMemberFilter.length > 0) {
+              const { data: filtered } = await supabase
+                .from("team_members")
+                .select("id, name")
+                .eq("organization_id", organizationId)
+                .eq("is_active", true)
+                .in("id", arMemberFilter)
+                .order("id");
+              eligibleMembers = (filtered || []) as { id: string; name: string }[];
+            } else {
+              const { data: allActive } = await supabase
+                .from("team_members")
+                .select("id, name")
+                .eq("organization_id", organizationId)
+                .eq("is_active", true)
+                .order("id");
+              eligibleMembers = (allActive || []) as { id: string; name: string }[];
+            }
+
+            if (eligibleMembers.length === 0) {
+              await recordStep(supabase, executionId, node, "failed", node.data, undefined, "Nenhum membro ativo disponível");
+              await updateExecution(supabase, executionId, "failed", nodeId, loopCounters, "Nenhum membro ativo disponível");
+              return { success: false, status: "failed", error: "Nenhum membro ativo disponível", stepsExecuted };
+            }
+
+            if (arMode === "random") {
+              const randomIdx = Math.floor(Math.random() * eligibleMembers.length);
+              arAssigneeId = eligibleMembers[randomIdx].id;
+              arAssigneeName = eligibleMembers[randomIdx].name;
+            } else {
+              // round_robin: sequential via RPC with advisory lock
+              const memberIds = eligibleMembers.map(m => m.id);
+              const { data: nextId, error: rpcError } = await supabase.rpc("get_next_round_robin_member", {
+                p_workflow_id: workflowId,
+                p_node_id: nodeId,
+                p_organization_id: organizationId,
+                p_member_ids: memberIds,
+              });
+
+              if (rpcError || !nextId) {
+                // Fallback: first member
+                arAssigneeId = eligibleMembers[0].id;
+                arAssigneeName = eligibleMembers[0].name;
+                console.warn("[workflow-executor] round_robin RPC failed, using fallback:", rpcError);
+              } else {
+                arAssigneeId = nextId;
+                arAssigneeName = eligibleMembers.find(m => m.id === nextId)?.name || "";
+              }
+            }
+          }
+
+          if (!arAssigneeId) {
+            await recordStep(supabase, executionId, node, "failed", node.data, undefined, "Nenhum responsável para atribuir");
+            await updateExecution(supabase, executionId, "failed", nodeId, loopCounters, "Nenhum responsável para atribuir");
+            return { success: false, status: "failed", error: "Nenhum responsável para atribuir", stepsExecuted };
+          }
+
+          // Update lead based on target
+          const arUpdateFields: Record<string, string> = { responsible_id: arAssigneeId };
+          if (arTarget === "sdr") {
+            arUpdateFields.sdr_id = arAssigneeId;
+          } else if (arTarget === "closer") {
+            arUpdateFields.closer_id = arAssigneeId;
+          } else {
+            arUpdateFields.sdr_id = arAssigneeId;
+            arUpdateFields.closer_id = arAssigneeId;
+          }
+
+          await supabase.from("leads").update(arUpdateFields).eq("id", leadId);
+
+          await recordStep(supabase, executionId, node, "success",
+            { assignMode: arMode, assignTarget: arTarget },
+            { assigneeId: arAssigneeId, assigneeName: arAssigneeName },
+          );
+          nextNodes.push(...getNextNodes(nodeId, edgeMap));
           break;
         }
 

@@ -1,6 +1,7 @@
 import { useParams, Link } from "react-router-dom";
-import { useWorkflow, useWorkflowExecutions, useWorkflowExecutionSteps } from "@/hooks/useWorkflows";
+import { useWorkflow, useWorkflowExecutions, useWorkflowExecutionSteps, useRetryWorkflowExecution } from "@/hooks/useWorkflows";
 import { useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -17,7 +18,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { ArrowLeft, CheckCircle2, XCircle, Clock, Pause, AlertTriangle, Loader2 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { ArrowLeft, CheckCircle2, XCircle, Clock, Pause, AlertTriangle, Loader2, RotateCw } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import type { WorkflowExecution, WorkflowExecutionStep, WorkflowExecutionStatus, WorkflowStepStatus } from "@/types/workflow";
@@ -44,6 +55,19 @@ export default function AutomacoesExecucoes() {
   const { data: workflow, isLoading: isLoadingWorkflow } = useWorkflow(id);
   const { data: executions, isLoading: isLoadingExecutions } = useWorkflowExecutions(id);
   const [selectedExecutionId, setSelectedExecutionId] = useState<string | null>(null);
+  const [retryTargetId, setRetryTargetId] = useState<string | null>(null);
+  const retryMutation = useRetryWorkflowExecution();
+
+  const handleRetry = async (executionId: string) => {
+    try {
+      await retryMutation.mutateAsync(executionId);
+      toast.success("Execução repetida com sucesso. O fluxo será retomado a partir do ponto de falha.");
+      setRetryTargetId(null);
+      setSelectedExecutionId(null);
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao repetir execução");
+    }
+  };
 
   if (isLoadingWorkflow || isLoadingExecutions) {
     return (
@@ -119,6 +143,7 @@ export default function AutomacoesExecucoes() {
                 <TableHead>Status</TableHead>
                 <TableHead>Duração</TableHead>
                 <TableHead>Erro</TableHead>
+                <TableHead className="w-[80px]" />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -130,6 +155,7 @@ export default function AutomacoesExecucoes() {
                   : exec.status === "running" || exec.status === "processing"
                     ? "Em andamento..."
                     : "-";
+                const retryOf = (exec as any).retry_of as string | null;
 
                 return (
                   <TableRow
@@ -153,16 +179,40 @@ export default function AutomacoesExecucoes() {
                       )}
                     </TableCell>
                     <TableCell>
-                      <Badge variant={statusConf.variant} className="gap-1">
-                        <StatusIcon className="h-3 w-3" />
-                        {statusConf.label}
-                      </Badge>
+                      <div className="flex items-center gap-1.5">
+                        <Badge variant={statusConf.variant} className="gap-1">
+                          <StatusIcon className="h-3 w-3" />
+                          {statusConf.label}
+                        </Badge>
+                        {retryOf && (
+                          <Badge variant="outline" className="gap-1 text-xs">
+                            <RotateCw className="h-2.5 w-2.5" />
+                            Retry
+                          </Badge>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
                       {duration}
                     </TableCell>
                     <TableCell className="max-w-[200px] truncate text-sm text-red-600">
                       {exec.error || "-"}
+                    </TableCell>
+                    <TableCell>
+                      {exec.status === "failed" && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          title="Repetir execução"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setRetryTargetId(exec.id);
+                          }}
+                        >
+                          <RotateCw className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
                     </TableCell>
                   </TableRow>
                 );
@@ -175,9 +225,37 @@ export default function AutomacoesExecucoes() {
       {/* Steps dialog */}
       <StepsDialog
         executionId={selectedExecutionId}
+        executionStatus={executions?.find(e => e.id === selectedExecutionId)?.status || null}
         open={!!selectedExecutionId}
         onClose={() => setSelectedExecutionId(null)}
+        onRetry={(execId) => setRetryTargetId(execId)}
       />
+
+      {/* Retry confirmation */}
+      <AlertDialog open={!!retryTargetId} onOpenChange={(v) => !v && setRetryTargetId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Repetir execução?</AlertDialogTitle>
+            <AlertDialogDescription>
+              O fluxo será retomado a partir do ponto onde falhou, reaproveitando o gatilho e contexto originais.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => retryTargetId && handleRetry(retryTargetId)}
+              disabled={retryMutation.isPending}
+            >
+              {retryMutation.isPending ? (
+                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+              ) : (
+                <RotateCw className="h-4 w-4 mr-1" />
+              )}
+              Repetir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -192,7 +270,6 @@ function StatCard({ label, value, className }: { label: string; value: number; c
 }
 
 function LeadName({ leadId }: { leadId: string }) {
-  // Simple display — could be enhanced with a query
   return (
     <span className="text-sm font-mono text-muted-foreground">
       {leadId.slice(0, 8)}...
@@ -202,12 +279,16 @@ function LeadName({ leadId }: { leadId: string }) {
 
 function StepsDialog({
   executionId,
+  executionStatus,
   open,
   onClose,
+  onRetry,
 }: {
   executionId: string | null;
+  executionStatus: string | null;
   open: boolean;
   onClose: () => void;
+  onRetry: (executionId: string) => void;
 }) {
   const { data: steps, isLoading } = useWorkflowExecutionSteps(executionId || undefined);
 
@@ -215,7 +296,20 @@ function StepsDialog({
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Steps da Execução</DialogTitle>
+          <div className="flex items-center justify-between">
+            <DialogTitle>Steps da Execução</DialogTitle>
+            {executionStatus === "failed" && executionId && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => onRetry(executionId)}
+              >
+                <RotateCw className="h-3.5 w-3.5" />
+                Repetir a partir da falha
+              </Button>
+            )}
+          </div>
         </DialogHeader>
 
         {isLoading ? (
