@@ -89,6 +89,14 @@ export class OpenRouterClient {
 
     if (!response.ok) {
       const error = await response.text();
+      const fallback = 'google/gemini-3-flash-preview';
+
+      // If model is invalid/deprecated, retry with fallback
+      if (response.status === 400 && request.model !== fallback) {
+        console.warn(`[OpenRouterClient] Model "${request.model}" failed with 400, retrying with ${fallback}`);
+        return this.chat({ ...request, model: fallback });
+      }
+
       throw new Error(`OpenRouter API error: ${response.status} ${error}`);
     }
 

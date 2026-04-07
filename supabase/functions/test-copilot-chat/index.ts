@@ -111,7 +111,14 @@ async function callOpenRouter(
 
   if (!response.ok) {
     const errText = await response.text();
-    console.error("OpenRouter error:", errText);
+    console.error("OpenRouter error:", model, errText);
+
+    // If model is invalid/deprecated, retry with default model
+    if (response.status === 400 && model !== DEFAULT_MODEL) {
+      console.warn(`[test-copilot-chat] Model "${model}" failed with 400, retrying with ${DEFAULT_MODEL}`);
+      return callOpenRouter(apiKey, DEFAULT_MODEL, llmMessages, maxTokens, temperature);
+    }
+
     throw new Error(`OpenRouter API error: ${response.status}`);
   }
 
