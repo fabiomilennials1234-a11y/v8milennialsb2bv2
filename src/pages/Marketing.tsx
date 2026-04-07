@@ -1,13 +1,13 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
-  BarChart2,
+  Megaphone,
   DollarSign,
   Users,
   Calendar,
   Target,
   Trophy,
   TrendingUp,
-  Percent,
+  PieChart,
   Loader2,
   Settings2,
 } from "lucide-react";
@@ -20,57 +20,31 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { motion } from "framer-motion";
+import { KPICard } from "@/components/dashboard/KPICard";
+import { FunnelChart } from "@/components/dashboard/FunnelChart";
 import { useMktByOrigin } from "@/hooks/useMktByOrigin";
 import { useMktOriginConfigs } from "@/hooks/useMktOriginConfig";
 import { MktOriginCard } from "@/components/marketing/MktOriginCard";
+import { MktOriginRanking } from "@/components/marketing/MktOriginRanking";
 import { MktConfigModal } from "@/components/marketing/MktConfigModal";
 import { useIsAdmin } from "@/hooks/useUserRole";
-
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(value);
-}
+import { useLeads } from "@/hooks/useLeads";
+import { usePipePropostas } from "@/hooks/usePipePropostas";
 
 const MONTHS = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
 ];
-
 const YEARS = [2024, 2025, 2026, 2027];
 
-interface SummaryCardProps {
-  icon: React.ElementType;
-  label: string;
-  value: string;
-  subtitle?: string;
-  index: number;
-}
-
-function SummaryCard({ icon: Icon, label, value, subtitle, index }: SummaryCardProps) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.04, duration: 0.3 }}
-      className="glass-card rounded-xl p-4 flex flex-col gap-1"
-    >
-      <div className="flex items-center gap-2 text-muted-foreground">
-        <Icon className="w-4 h-4" />
-        <span className="text-xs font-medium">{label}</span>
-      </div>
-      <p className="text-xl font-bold text-foreground">{value}</p>
-      {subtitle && <p className="text-[10px] text-muted-foreground">{subtitle}</p>}
-    </motion.div>
-  );
+function getPrevMonth(month: number, year: number) {
+  if (month <= 1) return { month: 12, year: year - 1 };
+  return { month: month - 1, year };
 }
 
 export default function Marketing() {
   const now = new Date();
-  const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1); // 0 = Geral
+  const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
   const [configOpen, setConfigOpen] = useState(false);
 
@@ -79,25 +53,86 @@ export default function Marketing() {
   const { configMap } = useMktOriginConfigs(selectedMonth, selectedYear);
   const { isAdmin } = useIsAdmin();
 
+  // Raw data for UTM breakdown (uses same React Query cache as useMktByOrigin)
+  const { data: allLeads = [] } = useLeads();
+  const { data: allPropostas = [] } = usePipePropostas();
+
+  // Previous period for trend calculation
+  const prev = isGeral ? { month: 0, year: selectedYear - 1 } : getPrevMonth(selectedMonth, selectedYear);
+  const { summary: prevSummary } = useMktByOrigin(prev.month, prev.year);
+
+  // Calculate trends
+  const trends = useMemo(() => {
+    const calc = (curr: number, prev: number) => {
+      if (prev === 0) return undefined;
+      const pct = ((curr - prev) / prev) * 100;
+      return { value: Math.round(Math.abs(pct)), isPositive: pct >= 0 };
+    };
+    return {
+      investimento: calc(summary.totalInvestimentoReais, prevSummary.totalInvestimentoReais),
+      leads: calc(summary.totalLeads, prevSummary.totalLeads),
+      cpl: calc(summary.totalCustoPorLead, prevSummary.totalCustoPorLead),
+      agendamentos: calc(summary.totalAgendamentos, prevSummary.totalAgendamentos),
+      comparecimentos: calc(summary.totalComparecimentos, prevSummary.totalComparecimentos),
+      vendas: calc(summary.totalVendas, prevSummary.totalVendas),
+      cpv: calc(summary.totalCustoPorVenda, prevSummary.totalCustoPorVenda),
+      conversao: calc(summary.totalConversionRate, prevSummary.totalConversionRate),
+    };
+  }, [summary, prevSummary]);
+
+  // Sort origins by conversion for ranking
+  const sortedOrigins = useMemo(
+    () => [...byOrigin].sort((a, b) => b.conversionRate - a.conversionRate),
+    [byOrigin]
+  );
+
+  // Funnel steps for FunnelChart
+  const funnelSteps = useMemo(
+    () => [
+      { label: "Leads", value: summary.totalLeads, color: "blue" },
+      { label: "Agendamentos", value: summary.totalAgendamentos, color: "violet" },
+      { label: "Comparecimentos", value: summary.totalComparecimentos, color: "amber" },
+      { label: "Vendas", value: summary.totalVendas, color: "emerald" },
+    ],
+    [summary]
+  );
+
+  // Rank map for origin cards
+  const rankMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    sortedOrigins.forEach((o, i) => {
+      map[o.origin] = i + 1;
+    });
+    return map;
+  }, [sortedOrigins]);
+
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <BarChart2 className="w-6 h-6 text-primary" />
-            Marketing
-          </h1>
-          <p className="text-muted-foreground text-sm">
-            Indicadores por origem de lead — investimento, custo e conversão.
-          </p>
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35 }}
+        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
+      >
+        <div className="flex items-center gap-3.5">
+          <div className="w-11 h-11 rounded-xl bg-primary/10 border border-primary/15 flex items-center justify-center shrink-0">
+            <Megaphone className="w-[22px] h-[22px] text-primary" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-extrabold tracking-[-0.03em]">Marketing</h1>
+            <p className="text-[13px] text-muted-foreground">
+              Indicadores por origem — investimento, custo e conversão
+            </p>
+          </div>
         </div>
+
         <div className="flex items-center gap-2 shrink-0">
           <Select
             value={selectedMonth.toString()}
             onValueChange={(v) => setSelectedMonth(Number(v))}
           >
-            <SelectTrigger className="w-[130px]">
+            <SelectTrigger className="w-[130px] h-9 text-[13px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -114,7 +149,7 @@ export default function Marketing() {
               value={selectedYear.toString()}
               onValueChange={(v) => setSelectedYear(Number(v))}
             >
-              <SelectTrigger className="w-[90px]">
+              <SelectTrigger className="w-[90px] h-9 text-[13px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -130,6 +165,7 @@ export default function Marketing() {
             <Button
               variant="outline"
               size="icon"
+              className="h-9 w-9"
               onClick={() => setConfigOpen(true)}
               title="Configurar investimentos e métricas"
             >
@@ -137,80 +173,104 @@ export default function Marketing() {
             </Button>
           )}
         </div>
-      </div>
+      </motion.div>
 
       {isLoading ? (
-        <div className="flex items-center justify-center py-16">
+        <div className="flex items-center justify-center py-20">
           <Loader2 className="w-8 h-8 animate-spin text-primary" />
         </div>
       ) : (
         <>
-          {/* Summary cards (8 metrics) */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 gap-3">
-            <SummaryCard
+          {/* KPI Hero Cards */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <KPICard
+              title="Investimento Total"
+              value={summary.totalInvestimentoReais}
+              format="currency"
               icon={DollarSign}
-              label="Investimento total"
-              value={formatCurrency(summary.totalInvestimentoReais)}
-              index={0}
+              trend={trends.investimento}
+              delay={0.05}
             />
-            <SummaryCard
+            <KPICard
+              title="Total de Leads"
+              value={summary.totalLeads}
+              format="number"
               icon={Users}
-              label="Total de leads"
-              value={summary.totalLeads.toLocaleString("pt-BR")}
-              index={1}
+              trend={trends.leads}
+              delay={0.1}
             />
-            <SummaryCard
+            <KPICard
+              title="Custo por Lead"
+              value={summary.totalCustoPorLead}
+              format="currency"
               icon={DollarSign}
-              label="Custo por lead"
-              value={formatCurrency(summary.totalCustoPorLead)}
-              index={2}
+              trend={trends.cpl ? { ...trends.cpl, isPositive: !trends.cpl.isPositive } : undefined}
+              delay={0.15}
             />
-            <SummaryCard
+            <KPICard
+              title="Agendamentos"
+              value={summary.totalAgendamentos}
+              format="number"
               icon={Calendar}
-              label="Agendamentos"
-              value={summary.totalAgendamentos.toLocaleString("pt-BR")}
-              index={3}
+              trend={trends.agendamentos}
+              delay={0.2}
             />
-            <SummaryCard
+            <KPICard
+              title="Comparecimentos"
+              value={summary.totalComparecimentos}
+              format="number"
               icon={Target}
-              label="Comparecimentos"
-              value={summary.totalComparecimentos.toLocaleString("pt-BR")}
-              index={4}
+              trend={trends.comparecimentos}
+              delay={0.25}
             />
-            <SummaryCard
+            <KPICard
+              title="Vendas"
+              value={summary.totalVendas}
+              format="number"
               icon={Trophy}
-              label="Vendas"
-              value={summary.totalVendas.toLocaleString("pt-BR")}
-              index={5}
+              trend={trends.vendas}
+              delay={0.3}
             />
-            <SummaryCard
+            <KPICard
+              title="Custo por Venda"
+              value={summary.totalCustoPorVenda}
+              format="currency"
               icon={TrendingUp}
-              label="Custo por venda"
-              value={formatCurrency(summary.totalCustoPorVenda)}
-              index={6}
+              trend={trends.cpv ? { ...trends.cpv, isPositive: !trends.cpv.isPositive } : undefined}
+              delay={0.35}
             />
-            <SummaryCard
-              icon={Percent}
-              label="Conversão geral"
-              value={`${summary.totalConversionRate.toFixed(1)}%`}
-              subtitle="leads → vendas"
-              index={7}
+            <KPICard
+              title="Conversão Geral"
+              value={summary.totalConversionRate}
+              format="percent"
+              icon={PieChart}
+              trend={trends.conversao}
+              delay={0.4}
             />
           </div>
 
-          {/* Origin cards grid */}
+          {/* Funnel + Ranking */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <FunnelChart title="Funil de Marketing" steps={funnelSteps} />
+            <MktOriginRanking origins={sortedOrigins} />
+          </div>
+
+          {/* Origin Battle Cards */}
           <div>
-            <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
-              <TrendingUp className="w-5 h-5 text-primary" />
-              Desempenho por origem
-            </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {byOrigin.map((metrics, i) => (
+            <p className="stat-card-label flex items-center gap-1.5 mb-3.5">
+              <TrendingUp className="w-3.5 h-3.5 text-primary/60" />
+              Desempenho por Origem
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5">
+              {sortedOrigins.map((metrics, i) => (
                 <MktOriginCard
                   key={metrics.origin}
                   metrics={metrics}
                   config={configMap[metrics.origin]}
+                  rank={rankMap[metrics.origin]}
                   index={i}
+                  leads={allLeads as any[]}
+                  propostas={allPropostas as any[]}
                 />
               ))}
             </div>
@@ -218,7 +278,6 @@ export default function Marketing() {
         </>
       )}
 
-      {/* Config Modal */}
       <MktConfigModal
         open={configOpen}
         onOpenChange={setConfigOpen}

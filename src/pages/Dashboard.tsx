@@ -5,6 +5,8 @@ import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import { TabVisaoGeral } from "@/components/dashboard/TabVisaoGeral";
 import { TabPerformance } from "@/components/dashboard/TabPerformance";
 import { TabInteligencia } from "@/components/dashboard/TabInteligencia";
+import { TabMarketing } from "@/components/dashboard/TabMarketing";
+import { TabAnalytics } from "@/components/dashboard/TabAnalytics";
 import { OraculoFloatingButton } from "@/components/dashboard/OraculoFloatingButton";
 import { OraculoChat } from "@/components/dashboard/OraculoChat";
 import { useOraculoChat } from "@/hooks/useOraculoChat";
@@ -12,22 +14,26 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useOrganization } from "@/hooks/useOrganization";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
+import { useMasterAuth } from "@/hooks/useMasterAuth";
 import { Skeleton } from "@/components/ui/skeleton";
 import DashboardOutbound from "./DashboardOutbound";
 
 export default function Dashboard() {
-  const { user } = useAuth();
-  const { organizationId, orgType, isLoading: orgLoading } = useOrganization();
+  useAuth();
+  const { orgType, isLoading: orgLoading } = useOrganization();
   const { data: userRole } = useUserRole();
   const role = userRole?.role;
-  const { data: currentTeamMember, isLoading: teamMemberLoading } = useCurrentTeamMember();
+  const { isLoading: teamMemberLoading } = useCurrentTeamMember();
+  const { isMaster } = useMasterAuth();
+
+  const showMarketing = isMaster;
+  const showAnalytics = isMaster;
 
   const [selectedMonth, setSelectedMonth] = useState(() => new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
 
   const oraculo = useOraculoChat({ month: selectedMonth, year: selectedYear });
 
-  // Outbound members get their own dashboard
   if (orgType === "outbound" && role === "member") {
     return <DashboardOutbound />;
   }
@@ -44,7 +50,7 @@ export default function Dashboard() {
     );
   }
 
-  const isAdmin = role === "admin";
+  const isUserAdmin = role === "admin";
 
   return (
     <div className="space-y-6 relative">
@@ -59,6 +65,12 @@ export default function Dashboard() {
           <TabsTrigger value="visao-geral">Visão Geral</TabsTrigger>
           <TabsTrigger value="performance">Performance</TabsTrigger>
           <TabsTrigger value="inteligencia">Inteligência</TabsTrigger>
+          {showMarketing && (
+            <TabsTrigger value="marketing">Marketing</TabsTrigger>
+          )}
+          {showAnalytics && (
+            <TabsTrigger value="analytics">Analytics</TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="visao-geral" className="mt-6">
@@ -68,7 +80,7 @@ export default function Dashboard() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3 }}
           >
-            <TabVisaoGeral month={selectedMonth} year={selectedYear} isAdmin={isAdmin} />
+            <TabVisaoGeral month={selectedMonth} year={selectedYear} isAdmin={isUserAdmin} />
           </motion.div>
         </TabsContent>
 
@@ -90,12 +102,37 @@ export default function Dashboard() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3 }}
           >
-            <TabInteligencia month={selectedMonth} year={selectedYear} isAdmin={isAdmin} />
+            <TabInteligencia month={selectedMonth} year={selectedYear} isAdmin={isUserAdmin} />
           </motion.div>
         </TabsContent>
+
+        {showMarketing && (
+          <TabsContent value="marketing" className="mt-6">
+            <motion.div
+              key="marketing"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              <TabMarketing month={selectedMonth} year={selectedYear} />
+            </motion.div>
+          </TabsContent>
+        )}
+
+        {showAnalytics && (
+          <TabsContent value="analytics" className="mt-6">
+            <motion.div
+              key="analytics"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              <TabAnalytics />
+            </motion.div>
+          </TabsContent>
+        )}
       </Tabs>
 
-      {/* Oráculo Floating Button + Chat Modal */}
       <OraculoFloatingButton
         remaining={oraculo.rateLimit.remaining}
         isOpen={oraculo.isOpen}

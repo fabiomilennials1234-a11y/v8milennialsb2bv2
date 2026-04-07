@@ -49,8 +49,7 @@ const TVDashboard = lazy(() => lazyRetry(() => import("./pages/TVDashboard")));
 const Campanhas = lazy(() => lazyRetry(() => import("./pages/Campanhas")));
 const CampanhaDetail = lazy(() => lazyRetry(() => import("./pages/CampanhaDetail")));
 const FunisHub = lazy(() => lazyRetry(() => import("./pages/FunisHub")));
-const Marketing = lazy(() => lazyRetry(() => import("./pages/Marketing")));
-const Analytics = lazy(() => lazyRetry(() => import("./pages/Analytics")));
+// Marketing and Analytics are now tabs inside Dashboard — see TabMarketing.tsx and TabAnalytics.tsx
 const Produtos = lazy(() => lazyRetry(() => import("./pages/Produtos")));
 const Copilot = lazy(() => lazyRetry(() => import("./pages/Copilot")));
 const CopilotMetrics = lazy(() => lazyRetry(() => import("./pages/CopilotMetrics")));
@@ -258,32 +257,8 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
-      <Route
-        path="/marketing"
-        element={
-          <ProtectedRoute>
-            <LayoutWrapper>
-              <PermissionProtectedRoute featureKey="marketing.view">
-                <Marketing />
-              </PermissionProtectedRoute>
-            </LayoutWrapper>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/analytics"
-        element={
-          <ProtectedRoute>
-            <MasterRoute>
-              <LayoutWrapper>
-                <PermissionProtectedRoute featureKey="analytics.view">
-                  <Analytics />
-                </PermissionProtectedRoute>
-              </LayoutWrapper>
-            </MasterRoute>
-          </ProtectedRoute>
-        }
-      />
+      <Route path="/marketing" element={<Navigate to="/dashboard" replace />} />
+      <Route path="/analytics" element={<Navigate to="/dashboard" replace />} />
       <Route
         path="/pipe-confirmacao"
         element={

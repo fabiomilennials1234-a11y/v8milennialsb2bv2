@@ -194,6 +194,11 @@
     @apply bg-card border border-border shadow-sm;
   }
 
+  @keyframes shimmer {
+    0%, 100% { left: -100%; }
+    50% { left: 200%; }
+  }
+
   .stat-card {
     @apply relative bg-card rounded-lg border border-border p-4 shadow-sm overflow-hidden;
   }

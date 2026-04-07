@@ -1,6 +1,5 @@
 import { useState, useMemo } from "react";
 import {
-  Activity,
   DollarSign,
   Users,
   Percent,
@@ -31,7 +30,7 @@ import { useOrganization } from "@/hooks/useOrganization";
 import { useAnalyticsOverview } from "@/hooks/useAnalyticsOverview";
 import { useAnalyticsEngajamento } from "@/hooks/useAnalyticsEngajamento";
 
-const TAB_CONFIG = [
+const SUB_TABS = [
   { value: "overview", label: "Visão Geral", icon: BarChart3 },
   { value: "financeiro", label: "Financeiro", icon: DollarSign },
   { value: "comercial", label: "Comercial", icon: Target },
@@ -53,32 +52,26 @@ const INSIGHT_VARIANT_MAP: Record<string, "success" | "warning" | "info" | "dang
   padrao: "info",
 };
 
-export default function Analytics() {
-  const [activeTab, setActiveTab] = useState("overview");
+export function TabAnalytics() {
+  const [activeSubTab, setActiveSubTab] = useState("overview");
   const { organizationId } = useOrganization();
   const showUtmsTab = organizationId === "6030520a-2ca7-477d-be89-55758e2cd808";
 
-  // Data for hero KPIs + health score
   const { data: overviewData } = useAnalyticsOverview();
   const { data: engajamentoData } = useAnalyticsEngajamento();
 
-  // Derived KPIs from overview data
   const kpis = useMemo(() => {
     if (!overviewData) return null;
-
     const { attribution, sales_velocity, unit_economics } = overviewData;
-
     const totalLeads = attribution.reduce((s, a) => s + a.lead_count, 0);
     const totalSales = attribution.reduce((s, a) => s + a.sales_count, 0);
     const totalRevenue = attribution.reduce((s, a) => s + a.revenue, 0);
     const conversionRate = totalLeads > 0 ? (totalSales / totalLeads) * 100 : 0;
     const ticketMedio = totalSales > 0 ? totalRevenue / totalSales / 100 : 0;
     const cycleDays = sales_velocity.total_cycle_days;
-
     const responseSeconds = engajamentoData?.kpi_cards?.our_avg_response_seconds ?? 0;
     const responseMinutes = responseSeconds / 60;
     const responseRatePct = engajamentoData?.kpi_cards?.response_rate_pct ?? 0;
-
     return {
       totalRevenue: totalRevenue / 100,
       totalLeads,
@@ -91,7 +84,6 @@ export default function Analytics() {
     };
   }, [overviewData, engajamentoData]);
 
-  // Health score
   const healthScore = useMemo(() => {
     if (!kpis) return 50;
     return calculateHealthScore({
@@ -99,110 +91,43 @@ export default function Analytics() {
       avgCycleDays: kpis.cycleDays,
       responseRatePct: kpis.responseRatePct,
       leadsCount: kpis.totalLeads,
-      prevLeadsCount: kpis.totalLeads, // same period baseline
+      prevLeadsCount: kpis.totalLeads,
       ltvCacRatio: kpis.ltvCacRatio,
     });
   }, [kpis]);
 
-  // Automated insights from overview RPC
-  const insights = useMemo(() => {
-    if (!overviewData?.insights?.length) return [];
-    return overviewData.insights.slice(0, 3);
-  }, [overviewData]);
-
-  // Best origin from attribution
   const bestOrigin = useMemo(() => {
     if (!overviewData?.attribution?.length) return null;
-    const sorted = [...overviewData.attribution].sort(
-      (a, b) => b.conversion_rate - a.conversion_rate
-    );
-    return sorted[0];
+    return [...overviewData.attribution].sort((a, b) => b.conversion_rate - a.conversion_rate)[0];
   }, [overviewData]);
 
-  // Bottleneck from sales velocity
   const bottleneck = useMemo(() => {
     if (!overviewData?.sales_velocity?.bottleneck_stage) return null;
     return overviewData.sales_velocity;
   }, [overviewData]);
 
+  const insights = useMemo(() => {
+    if (!overviewData?.insights?.length) return [];
+    return overviewData.insights.slice(0, 3);
+  }, [overviewData]);
+
   return (
     <div className="space-y-5">
-      {/* Header */}
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35 }}
-        className="flex flex-col gap-4"
-      >
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div className="flex items-center gap-3.5">
-            <div className="w-11 h-11 rounded-xl bg-primary/10 border border-primary/15 flex items-center justify-center shrink-0">
-              <Activity className="w-[22px] h-[22px] text-primary" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-extrabold tracking-[-0.03em]">Analytics</h1>
-              <p className="text-[13px] text-muted-foreground">
-                Inteligência comercial em tempo real
-              </p>
-            </div>
-          </div>
-        </div>
+      <AnalyticsFilters />
 
-        <AnalyticsFilters />
-      </motion.div>
-
-      {/* Hero KPI Cards */}
       {kpis && (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-          <KPICard
-            title="Receita"
-            value={kpis.totalRevenue}
-            format="currency"
-            icon={DollarSign}
-            delay={0.05}
-          />
-          <KPICard
-            title="Leads"
-            value={kpis.totalLeads}
-            format="number"
-            icon={Users}
-            delay={0.1}
-          />
-          <KPICard
-            title="Conversão"
-            value={kpis.conversionRate}
-            format="percent"
-            icon={Percent}
-            delay={0.15}
-          />
-          <KPICard
-            title="Ticket Médio"
-            value={kpis.ticketMedio}
-            format="currency"
-            icon={Receipt}
-            delay={0.2}
-          />
-          <KPICard
-            title="Ciclo de Venda"
-            value={kpis.cycleDays}
-            format="number"
-            icon={Timer}
-            delay={0.25}
-          />
-          <KPICard
-            title="Tempo Resposta"
-            value={kpis.responseMinutes}
-            format="minutes"
-            icon={Clock}
-            delay={0.3}
-          />
+          <KPICard title="Receita" value={kpis.totalRevenue} format="currency" icon={DollarSign} delay={0.05} />
+          <KPICard title="Leads" value={kpis.totalLeads} format="number" icon={Users} delay={0.1} />
+          <KPICard title="Conversão" value={kpis.conversionRate} format="percent" icon={Percent} delay={0.15} />
+          <KPICard title="Ticket Médio" value={kpis.ticketMedio} format="currency" icon={Receipt} delay={0.2} />
+          <KPICard title="Ciclo de Venda" value={kpis.cycleDays} format="number" icon={Timer} delay={0.25} />
+          <KPICard title="Tempo Resposta" value={kpis.responseMinutes} format="minutes" icon={Clock} delay={0.3} />
         </div>
       )}
 
-      {/* Health Score + Insights */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
         <HealthScoreGauge score={healthScore} />
-
         <div className="lg:col-span-3 grid grid-cols-1 sm:grid-cols-3 gap-3 content-start">
           {bestOrigin && (
             <InsightCard
@@ -237,10 +162,9 @@ export default function Analytics() {
         </div>
       </div>
 
-      {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
+      <Tabs value={activeSubTab} onValueChange={setActiveSubTab}>
         <TabsList>
-          {TAB_CONFIG.map((tab) => {
+          {SUB_TABS.map((tab) => {
             const TabIcon = tab.icon;
             return (
               <TabsTrigger key={tab.value} value={tab.value} className="gap-1.5">
@@ -259,31 +183,19 @@ export default function Analytics() {
 
         <AnimatePresence mode="wait">
           <motion.div
-            key={activeTab}
+            key={activeSubTab}
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
             transition={{ duration: 0.2 }}
           >
-            <TabsContent value="overview" className="space-y-4 mt-0">
-              <OverviewTab />
-            </TabsContent>
-            <TabsContent value="financeiro" className="space-y-4 mt-0">
-              <FinanceiroTab />
-            </TabsContent>
-            <TabsContent value="comercial" className="space-y-4 mt-0">
-              <ComercialTab />
-            </TabsContent>
-            <TabsContent value="pipes" className="space-y-4 mt-0">
-              <PipesFunisTab />
-            </TabsContent>
-            <TabsContent value="engajamento" className="space-y-4 mt-0">
-              <EngajamentoTab />
-            </TabsContent>
+            <TabsContent value="overview" className="space-y-4 mt-0"><OverviewTab /></TabsContent>
+            <TabsContent value="financeiro" className="space-y-4 mt-0"><FinanceiroTab /></TabsContent>
+            <TabsContent value="comercial" className="space-y-4 mt-0"><ComercialTab /></TabsContent>
+            <TabsContent value="pipes" className="space-y-4 mt-0"><PipesFunisTab /></TabsContent>
+            <TabsContent value="engajamento" className="space-y-4 mt-0"><EngajamentoTab /></TabsContent>
             {showUtmsTab && (
-              <TabsContent value="utms" className="space-y-4 mt-0">
-                <UtmsTab />
-              </TabsContent>
+              <TabsContent value="utms" className="space-y-4 mt-0"><UtmsTab /></TabsContent>
             )}
           </motion.div>
         </AnimatePresence>
