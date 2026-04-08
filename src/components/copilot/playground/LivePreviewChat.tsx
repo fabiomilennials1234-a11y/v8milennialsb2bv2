@@ -22,11 +22,76 @@ import {
   Paperclip,
   X,
   FileText,
+  Image,
+  Video,
+  File,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+
+// ─── Media card in message bubbles ─────────────────────
+
+const MEDIA_PATTERN = /\[(video|imagem|documento|image|doc)\]\s*(.+?)(?:\n|$)/gi;
+
+function MediaCard({ type, fileName }: { type: string; fileName: string }) {
+  const t = type.toLowerCase();
+  const isVideo = t === "video";
+  const isImage = t === "imagem" || t === "image";
+
+  const Icon = isVideo ? Video : isImage ? Image : File;
+  const label = isVideo ? "Video" : isImage ? "Imagem" : "Documento";
+  const color = isVideo
+    ? "bg-blue-500/10 text-blue-500 border-blue-500/20"
+    : isImage
+    ? "bg-purple-500/10 text-purple-500 border-purple-500/20"
+    : "bg-zinc-500/10 text-zinc-400 border-zinc-500/20";
+
+  return (
+    <div className={`flex items-center gap-2.5 rounded-lg border px-3 py-2 my-1 ${color}`}>
+      <div className="p-1.5 rounded-md bg-black/10">
+        <Icon className="w-4 h-4" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-xs font-medium truncate">{fileName.trim()}</p>
+        <p className="text-[10px] opacity-70">{label} enviado</p>
+      </div>
+    </div>
+  );
+}
+
+function MessageContent({ content, isUser }: { content: string; isUser: boolean }) {
+  if (isUser || !MEDIA_PATTERN.test(content)) {
+    return <>{content}</>;
+  }
+
+  // Reset regex state
+  MEDIA_PATTERN.lastIndex = 0;
+
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = MEDIA_PATTERN.exec(content)) !== null) {
+    // Text before the match
+    if (match.index > lastIndex) {
+      const textBefore = content.slice(lastIndex, match.index).trim();
+      if (textBefore) parts.push(<span key={`t-${lastIndex}`}>{textBefore}</span>);
+    }
+    // Media card
+    parts.push(<MediaCard key={`m-${match.index}`} type={match[1]} fileName={match[2]} />);
+    lastIndex = match.index + match[0].length;
+  }
+
+  // Text after last match
+  const textAfter = content.slice(lastIndex).trim();
+  if (textAfter) parts.push(<span key={`t-${lastIndex}`}>{textAfter}</span>);
+
+  return <>{parts}</>;
+}
+
+// ─── Types ──────────────────────────────────────────────
 
 interface ChatAttachment {
   base64: string;
@@ -415,7 +480,7 @@ export function LivePreviewChat({
                       {msg.attachment.fileName}
                     </div>
                   )}
-                  {msg.content}
+                  <MessageContent content={msg.content} isUser={msg.role === "user"} />
                 </div>
                 {msg.role === "user" && (
                   <div className="w-6 h-6 rounded-full bg-secondary flex items-center justify-center flex-shrink-0 mt-0.5">
