@@ -39,7 +39,8 @@ async function checkEvolutionApi(): Promise<ApiHealthResult> {
 
   const start = Date.now();
   try {
-    const res = await withTimeout(fetch(`${url}/info`, { headers: { apikey: key } }), TIMEOUT_MS);
+    // Root endpoint returns { message, version } — same as testEvolutionConnection
+    const res = await withTimeout(fetch(url, { headers: { apikey: key } }), TIMEOUT_MS);
     const latency = Date.now() - start;
     if (res.ok) return { service: "Evolution API", status: "connected", latency_ms: latency, checked_at: new Date().toISOString() };
     return { service: "Evolution API", status: "error", latency_ms: latency, error: `HTTP ${res.status}`, checked_at: new Date().toISOString() };
