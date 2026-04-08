@@ -54,11 +54,13 @@ import { testEvolutionConnection } from "@/lib/evolutionApi";
 import { toast } from "sonner";
 
 function QRCodeModal({
-  instance,
+  instanceId,
+  instances,
   isOpen,
   onClose,
 }: {
-  instance: WhatsAppInstance | null;
+  instanceId: string | null;
+  instances: WhatsAppInstance[];
   isOpen: boolean;
   onClose: () => void;
 }) {
@@ -66,10 +68,24 @@ function QRCodeModal({
   const checkStatus = useCheckConnectionStatus();
   const [isChecking, setIsChecking] = useState(false);
 
-  useEffect(() => {
-    if (!isOpen || !instance) return;
+  // Always read fresh data from the query cache via instances prop
+  const instance = instances.find((i) => i.id === instanceId) ?? null;
 
-    // Verificar status a cada 3 segundos
+  // Auto-refresh QR when modal opens and instance has no valid QR
+  useEffect(() => {
+    if (!isOpen || !instance?.instance_name) return;
+    if (!instance.qr_code && instance.status !== "connected") {
+      refreshQR.mutateAsync(instance.instance_name).catch((error) => {
+        console.error("Erro ao gerar QR Code:", error);
+        toast.error(error.message || "Erro ao gerar QR Code");
+      });
+    }
+  }, [isOpen, instance?.id, instance?.qr_code, instance?.status]);
+
+  // Poll connection status every 3s — stops when connected
+  useEffect(() => {
+    if (!isOpen || !instance || instance.status === "connected") return;
+
     const interval = setInterval(async () => {
       if (instance.instance_name) {
         setIsChecking(true);
@@ -84,7 +100,7 @@ function QRCodeModal({
     }, 3000);
 
     return () => clearInterval(interval);
-  }, [isOpen, instance, checkStatus]);
+  }, [isOpen, instance?.id, instance?.status]);
 
   const handleRefreshQR = async () => {
     if (!instance?.instance_name) return;
@@ -114,7 +130,12 @@ function QRCodeModal({
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col items-center gap-4 py-4">
-          {instance.qr_code ? (
+          {refreshQR.isPending ? (
+            <div className="flex flex-col items-center gap-3 py-8">
+              <Loader2 className="w-8 h-8 animate-spin text-primary" />
+              <p className="text-sm text-muted-foreground">Gerando QR Code...</p>
+            </div>
+          ) : instance.qr_code ? (
             <>
               <div className="p-4 bg-card rounded-lg border border-border">
                 <img
@@ -179,7 +200,7 @@ function QRCodeModal({
 export function WhatsAppSettings() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [instanceName, setInstanceName] = useState("");
-  const [qrCodeInstance, setQrCodeInstance] = useState<WhatsAppInstance | null>(null);
+  const [qrCodeInstanceId, setQrCodeInstanceId] = useState<string | null>(null);
   const [deleteInstanceId, setDeleteInstanceId] = useState<{ id: string; name: string } | null>(null);
   const [vendedoresInstance, setVendedoresInstance] = useState<WhatsAppInstance | null>(null);
   const [isTestingConnection, setIsTestingConnection] = useState(false);
@@ -271,7 +292,7 @@ export function WhatsAppSettings() {
       toast.success("Instância criada! Escaneie o QR code para conectar.");
       setIsCreateDialogOpen(false);
       setInstanceName("");
-      setQrCodeInstance(newInstance);
+      setQrCodeInstanceId(newInstance.id);
       setApiStatus("connected");
     } catch (error: any) {
       setApiStatus("error");
@@ -511,14 +532,14 @@ export function WhatsAppSettings() {
                       Vendedores
                     </Button>
                   )}
-                  {instance.status !== "connected" && instance.qr_code && (
+                  {instance.status !== "connected" && (
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => setQrCodeInstance(instance)}
+                      onClick={() => setQrCodeInstanceId(instance.id)}
                     >
                       <QrCode className="w-4 h-4 mr-2" />
-                      Ver QR Code
+                      {instance.qr_code ? "Ver QR Code" : "Reconectar"}
                     </Button>
                   )}
                   <Button
@@ -611,13 +632,14 @@ export function WhatsAppSettings() {
 
       {/* QR Code Modal */}
       <QRCodeModal
-        instance={qrCodeInstance}
-        isOpen={!!qrCodeInstance}
+        instanceId={qrCodeInstanceId}
+        instances={instances}
+        isOpen={!!qrCodeInstanceId}
         onClose={() => {
-          setQrCodeInstance(null);
-          // Verificar status ao fechar
-          if (qrCodeInstance?.instance_name) {
-            handleCheckStatus(qrCodeInstance.instance_name);
+          const closingInstance = instances.find((i) => i.id === qrCodeInstanceId);
+          setQrCodeInstanceId(null);
+          if (closingInstance?.instance_name) {
+            handleCheckStatus(closingInstance.instance_name);
           }
         }}
       />
