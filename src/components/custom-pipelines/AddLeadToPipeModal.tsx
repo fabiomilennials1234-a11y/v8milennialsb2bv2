@@ -23,11 +23,12 @@ import {
   useAddLeadToCustomPipe,
   type CustomPipelineStage,
 } from "@/hooks/useCustomPipelines";
-import { Loader2, Search, Building2, Phone, UserCheck } from "lucide-react";
+import { Loader2, Search, Building2, Phone, UserCheck, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { useDebounce } from "@/hooks/useDebounce";
+import { LeadModal } from "@/components/leads/LeadModal";
 
 interface AddLeadToPipeModalProps {
   open: boolean;
@@ -55,6 +56,7 @@ export function AddLeadToPipeModal({
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [selectedStageId, setSelectedStageId] = useState<string>(stages[0]?.id || "");
+  const [isLeadModalOpen, setIsLeadModalOpen] = useState(false);
   const debouncedSearch = useDebounce(searchQuery, 300);
 
   const { data: teamMember } = useCurrentTeamMember();
@@ -99,20 +101,40 @@ export function AddLeadToPipeModal({
     }
   };
 
+  const handleNewLeadCreated = async (newLeadId?: string) => {
+    if (!newLeadId) return;
+    const stageId = selectedStageId || stages[0]?.id;
+    if (!stageId) return;
+
+    try {
+      await addLead.mutateAsync({
+        pipeline_id: pipelineId,
+        lead_id: newLeadId,
+        stage_id: stageId,
+      });
+      toast.success(`Lead criado e adicionado ao funil "${pipelineName}"`);
+      handleClose();
+    } catch (error: any) {
+      toast.error(error.message || "Erro ao adicionar lead ao funil");
+    }
+  };
+
   const handleClose = () => {
     onOpenChange(false);
     setSearchQuery("");
     setSelectedLeadId(null);
     setSelectedStageId(stages[0]?.id || "");
+    setIsLeadModalOpen(false);
   };
 
   return (
+    <>
     <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose(); else onOpenChange(v); }}>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Adicionar Lead ao Funil</DialogTitle>
           <DialogDescription>
-            Busque um lead existente e adicione ao funil "{pipelineName}".
+            Busque um lead existente ou cadastre um novo para adicionar ao funil "{pipelineName}".
           </DialogDescription>
         </DialogHeader>
 
@@ -134,6 +156,16 @@ export function AddLeadToPipeModal({
               />
             </div>
           </div>
+
+          {/* CTA para criar novo lead */}
+          <Button
+            variant="outline"
+            className="w-full justify-center gap-2 border-dashed"
+            onClick={() => setIsLeadModalOpen(true)}
+          >
+            <Plus className="w-4 h-4" />
+            Cadastrar novo lead
+          </Button>
 
           {/* Resultados da busca */}
           {debouncedSearch.trim().length >= 2 && (
@@ -233,5 +265,13 @@ export function AddLeadToPipeModal({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    <LeadModal
+      open={isLeadModalOpen}
+      onOpenChange={setIsLeadModalOpen}
+      skipPipeSelector
+      onSuccess={handleNewLeadCreated}
+    />
+    </>
   );
 }
