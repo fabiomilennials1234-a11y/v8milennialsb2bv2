@@ -521,6 +521,10 @@ export function CopilotPlayground() {
                 documents={data.documents}
                 links={data.links}
                 onDocumentsChange={(documents) => updateData({ documents })}
+                onAddDocuments={(newDocs) => {
+                  setData((prev) => ({ ...prev, documents: [...prev.documents, ...newDocs] }));
+                  bumpConfigVersion();
+                }}
                 onLinksChange={(links) => updateData({ links })}
                 existingDocuments={existingDocs}
                 onDeleteExisting={(docId, filePath) => {
