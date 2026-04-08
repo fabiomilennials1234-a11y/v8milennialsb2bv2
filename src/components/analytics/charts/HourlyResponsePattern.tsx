@@ -12,6 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Clock } from "lucide-react";
 import { type HourlyPatternRow } from "@/hooks/useAnalyticsEngajamento";
 import { AnalyticsEmptyState } from "../AnalyticsEmptyState";
+import { AT } from "../analytics-tokens";
 
 interface Props {
   data: HourlyPatternRow[];
@@ -49,7 +50,7 @@ export function HourlyResponsePattern({ data }: Props) {
     return (
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm flex items-center gap-2">
+          <CardTitle className={`${AT.chartTitle} flex items-center gap-2`}>
             <Clock className="h-4 w-4" />
             Padrão de Resposta por Hora
           </CardTitle>
@@ -79,11 +80,11 @@ export function HourlyResponsePattern({ data }: Props) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm flex items-center gap-2">
+        <CardTitle className={`${AT.chartTitle} flex items-center gap-2`}>
           <Clock className="h-4 w-4" />
           Padrão de Resposta por Hora
         </CardTitle>
-        <p className="text-xs text-muted-foreground">
+        <p className={AT.chartSubtitle}>
           Em quais horários os clientes mais respondem
         </p>
       </CardHeader>

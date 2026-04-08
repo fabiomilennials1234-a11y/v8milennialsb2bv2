@@ -3,6 +3,7 @@ import { Globe } from "lucide-react";
 import { type ResponseByOriginRow } from "@/hooks/useAnalyticsEngajamento";
 import { AnalyticsEmptyState } from "../AnalyticsEmptyState";
 import { formatResponseTime } from "./EngagementKPIs";
+import { AT } from "../analytics-tokens";
 
 interface Props {
   data: ResponseByOriginRow[];
@@ -49,7 +50,7 @@ export function ResponseByOrigin({ data }: Props) {
     return (
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm flex items-center gap-2">
+          <CardTitle className={`${AT.chartTitle} flex items-center gap-2`}>
             <Globe className="h-4 w-4" />
             Engajamento por Origem
           </CardTitle>
@@ -67,11 +68,11 @@ export function ResponseByOrigin({ data }: Props) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm flex items-center gap-2">
+        <CardTitle className={`${AT.chartTitle} flex items-center gap-2`}>
           <Globe className="h-4 w-4" />
           Engajamento por Origem
         </CardTitle>
-        <p className="text-xs text-muted-foreground">
+        <p className={AT.chartSubtitle}>
           Taxa de resposta e fechamento por canal de aquisição
         </p>
       </CardHeader>

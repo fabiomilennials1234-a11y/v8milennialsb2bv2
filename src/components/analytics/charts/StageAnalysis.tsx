@@ -2,6 +2,7 @@ import { AlertTriangle, TrendingDown, TrendingUp } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { type StageAnalysis as StageAnalysisItem } from "@/hooks/useAnalyticsPipesFunis";
 import { AnalyticsEmptyState } from "../AnalyticsEmptyState";
+import { AT } from "../analytics-tokens";
 
 interface Props {
   stages: StageAnalysisItem[];
@@ -32,7 +33,7 @@ export function StageAnalysis({ stages }: Props) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm">Análise de Transições</CardTitle>
+          <CardTitle className={AT.chartTitle}>Análise de Transições</CardTitle>
         </CardHeader>
         <CardContent>
           <AnalyticsEmptyState
@@ -49,7 +50,7 @@ export function StageAnalysis({ stages }: Props) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm">Análise de Transições</CardTitle>
+        <CardTitle className={AT.chartTitle}>Análise de Transições</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
         {stages.map((stage, i) => {

@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Scale } from "lucide-react";
 import { type LossReason } from "@/hooks/useAnalyticsComercial";
 import { AnalyticsEmptyState } from "../AnalyticsEmptyState";
+import { AT } from "../analytics-tokens";
 
 interface Props {
   lossReasons: LossReason[];
@@ -23,7 +24,7 @@ export function WinLossAnalysis({ lossReasons, totalLost, totalLossReasons }: Pr
     return (
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm flex items-center gap-2">
+          <CardTitle className={`${AT.chartTitle} flex items-center gap-2`}>
             <Scale className="h-4 w-4" />
             Análise Win/Loss
           </CardTitle>
@@ -43,7 +44,7 @@ export function WinLossAnalysis({ lossReasons, totalLost, totalLossReasons }: Pr
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm flex items-center gap-2">
+        <CardTitle className={`${AT.chartTitle} flex items-center gap-2`}>
           <Scale className="h-4 w-4" />
           Motivos de Perda
         </CardTitle>

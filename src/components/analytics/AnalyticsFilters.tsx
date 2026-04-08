@@ -49,71 +49,79 @@ export function AnalyticsFilters() {
   const dateLabel = `${format(new Date(filters.startDate), "dd MMM", { locale: ptBR })} — ${format(new Date(filters.endDate), "dd MMM yyyy", { locale: ptBR })}`;
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <div className="flex items-center gap-1 rounded-lg border border-border p-1">
-        {PRESETS.map((p) => (
-          <Button
-            key={p.value}
-            variant={filters.preset === p.value ? "default" : "ghost"}
-            size="sm"
-            className="h-7 px-3 text-xs"
-            onClick={() => setPreset(p.value)}
-          >
-            {p.label}
-          </Button>
-        ))}
-      </div>
-
-      <div className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground">
-        <CalendarDays className="h-3.5 w-3.5" />
-        {dateLabel}
-      </div>
-
-      <Button
-        variant={filters.compareEnabled ? "default" : "outline"}
-        size="sm"
-        className="h-8 text-xs"
-        onClick={toggleCompare}
-      >
-        <GitCompare className="h-3.5 w-3.5 mr-1" />
-        vs anterior
-      </Button>
-
-      <Select
-        value={filters.memberId ?? "all"}
-        onValueChange={(v) => setMemberId(v === "all" ? null : v)}
-      >
-        <SelectTrigger className="w-[180px] h-8 text-xs">
-          <SelectValue placeholder="Todos os vendedores" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">Todos os vendedores</SelectItem>
-          {teamMembers
-            ?.filter((m) => m.is_active)
-            .map((m) => (
-              <SelectItem key={m.id} value={m.id}>
-                {m.name}
-              </SelectItem>
+    <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-sm py-3 -mx-1 px-1 border-b border-border/20">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        {/* Time group — left */}
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-0.5 rounded-lg border border-border bg-muted/30 p-0.5">
+            {PRESETS.map((p) => (
+              <Button
+                key={p.value}
+                variant={filters.preset === p.value ? "default" : "ghost"}
+                size="sm"
+                className="h-7 px-3 text-xs rounded-md"
+                onClick={() => setPreset(p.value)}
+              >
+                {p.label}
+              </Button>
             ))}
-        </SelectContent>
-      </Select>
+          </div>
 
-      <Select
-        value={filters.origin ?? "all"}
-        onValueChange={(v) => setOrigin(v === "all" ? null : v)}
-      >
-        <SelectTrigger className="w-[160px] h-8 text-xs">
-          <SelectValue placeholder="Todas as origens" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">Todas as origens</SelectItem>
-          {ORIGINS.map((o) => (
-            <SelectItem key={o.value} value={o.value}>
-              {o.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+          <div className="flex items-center gap-1.5 rounded-lg border border-border/50 px-3 py-1.5 text-xs text-muted-foreground">
+            <CalendarDays className="h-3.5 w-3.5" />
+            {dateLabel}
+          </div>
+        </div>
+
+        {/* Dimension group — right */}
+        <div className="flex items-center gap-2">
+          <Select
+            value={filters.memberId ?? "all"}
+            onValueChange={(v) => setMemberId(v === "all" ? null : v)}
+          >
+            <SelectTrigger className="w-[180px] h-8 text-xs bg-transparent border-border/50 hover:border-primary/30 transition-colors">
+              <SelectValue placeholder="Todos os vendedores" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os vendedores</SelectItem>
+              {teamMembers
+                ?.filter((m) => m.is_active)
+                .map((m) => (
+                  <SelectItem key={m.id} value={m.id}>
+                    {m.name}
+                  </SelectItem>
+                ))}
+            </SelectContent>
+          </Select>
+
+          <Select
+            value={filters.origin ?? "all"}
+            onValueChange={(v) => setOrigin(v === "all" ? null : v)}
+          >
+            <SelectTrigger className="w-[160px] h-8 text-xs bg-transparent border-border/50 hover:border-primary/30 transition-colors">
+              <SelectValue placeholder="Todas as origens" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas as origens</SelectItem>
+              {ORIGINS.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Button
+            variant={filters.compareEnabled ? "default" : "outline"}
+            size="sm"
+            className="h-8 text-xs border-border/50"
+            onClick={toggleCompare}
+          >
+            <GitCompare className="h-3.5 w-3.5 mr-1" />
+            vs anterior
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }

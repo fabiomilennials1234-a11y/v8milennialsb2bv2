@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Zap } from "lucide-react";
 import { type SpeedConversionRow } from "@/hooks/useAnalyticsEngajamento";
 import { AnalyticsEmptyState } from "../AnalyticsEmptyState";
+import { AT } from "../analytics-tokens";
 
 interface Props {
   data: SpeedConversionRow[];
@@ -26,7 +27,7 @@ export function SpeedConversionCorrelation({ data }: Props) {
     return (
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm flex items-center gap-2">
+          <CardTitle className={`${AT.chartTitle} flex items-center gap-2`}>
             <Zap className="h-4 w-4" />
             Velocidade × Conversão
           </CardTitle>
@@ -52,11 +53,11 @@ export function SpeedConversionCorrelation({ data }: Props) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm flex items-center gap-2">
+        <CardTitle className={`${AT.chartTitle} flex items-center gap-2`}>
           <Zap className="h-4 w-4" />
           Velocidade × Conversão
         </CardTitle>
-        <p className="text-xs text-muted-foreground">
+        <p className={AT.chartSubtitle}>
           Impacto do tempo de resposta na taxa de fechamento
         </p>
       </CardHeader>

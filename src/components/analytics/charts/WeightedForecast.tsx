@@ -2,6 +2,7 @@ import { DollarSign } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { type WeightedForecastStage } from "@/hooks/useAnalyticsPipesFunis";
 import { AnalyticsEmptyState } from "../AnalyticsEmptyState";
+import { AT } from "../analytics-tokens";
 
 interface Props {
   stages: WeightedForecastStage[];
@@ -34,7 +35,7 @@ export function WeightedForecast({ stages, forecastTotal }: Props) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm flex items-center gap-2">
+          <CardTitle className={`${AT.chartTitle} flex items-center gap-2`}>
             <DollarSign className="h-4 w-4" />
             Previsão Ponderada
           </CardTitle>
@@ -55,7 +56,7 @@ export function WeightedForecast({ stages, forecastTotal }: Props) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm flex items-center gap-2">
+        <CardTitle className={`${AT.chartTitle} flex items-center gap-2`}>
           <DollarSign className="h-4 w-4" />
           Previsão Ponderada
         </CardTitle>

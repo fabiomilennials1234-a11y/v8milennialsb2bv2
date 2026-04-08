@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Grid3X3 } from "lucide-react";
 import { type MemberStat } from "@/hooks/useAnalyticsComercial";
 import { AnalyticsEmptyState } from "../AnalyticsEmptyState";
+import { AT } from "../analytics-tokens";
 
 interface Props {
   members: MemberStat[];
@@ -24,7 +25,7 @@ export function ConversionMatrix({ members, totalLeads }: Props) {
   if (members.length === 0) {
     return (
       <Card>
-        <CardHeader><CardTitle className="text-sm">Matriz de Conversão</CardTitle></CardHeader>
+        <CardHeader><CardTitle className={AT.chartTitle}>Matriz de Conversão</CardTitle></CardHeader>
         <CardContent>
           <AnalyticsEmptyState message="Sem dados de vendedores no período." />
         </CardContent>
@@ -39,7 +40,7 @@ export function ConversionMatrix({ members, totalLeads }: Props) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm flex items-center gap-2">
+        <CardTitle className={`${AT.chartTitle} flex items-center gap-2`}>
           <Grid3X3 className="h-4 w-4" />
           Matriz de Conversão — Vendedor × Etapa
         </CardTitle>

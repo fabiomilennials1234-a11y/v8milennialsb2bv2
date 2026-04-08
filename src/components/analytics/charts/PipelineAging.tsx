@@ -2,6 +2,7 @@ import { AlertCircle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { type PipelineAgingStage } from "@/hooks/useAnalyticsPipesFunis";
 import { AnalyticsEmptyState } from "../AnalyticsEmptyState";
+import { AT } from "../analytics-tokens";
 
 interface Props {
   stages: PipelineAgingStage[];
@@ -55,7 +56,7 @@ export function PipelineAging({ stages }: Props) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm">Envelhecimento do Pipeline</CardTitle>
+          <CardTitle className={AT.chartTitle}>Envelhecimento do Pipeline</CardTitle>
         </CardHeader>
         <CardContent>
           <AnalyticsEmptyState
@@ -77,7 +78,7 @@ export function PipelineAging({ stages }: Props) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm">Envelhecimento do Pipeline</CardTitle>
+        <CardTitle className={AT.chartTitle}>Envelhecimento do Pipeline</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Legend */}

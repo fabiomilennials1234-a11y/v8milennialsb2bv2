@@ -12,6 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TrendingUp } from "lucide-react";
 import { type MRREvolutionPoint } from "@/hooks/useAnalyticsFinanceiro";
 import { AnalyticsEmptyState } from "../AnalyticsEmptyState";
+import { AT } from "../analytics-tokens";
 
 interface Props {
   data: MRREvolutionPoint[];
@@ -50,7 +51,7 @@ export function MRREvolution({ data }: Props) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm">Evolução de Recorrência</CardTitle>
+          <CardTitle className={AT.chartTitle}>Evolução de Recorrência</CardTitle>
         </CardHeader>
         <CardContent>
           <AnalyticsEmptyState message="Sem dados de recorrência no período." />
@@ -72,7 +73,7 @@ export function MRREvolution({ data }: Props) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm flex items-center gap-2">
+        <CardTitle className={`${AT.chartTitle} flex items-center gap-2`}>
           <TrendingUp className="h-4 w-4" />
           Evolução de Recorrência
         </CardTitle>

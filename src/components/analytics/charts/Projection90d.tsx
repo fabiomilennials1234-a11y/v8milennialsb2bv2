@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Target } from "lucide-react";
 import { type MRREvolutionPoint } from "@/hooks/useAnalyticsFinanceiro";
+import { AT } from "../analytics-tokens";
 
 interface Props {
   mrrEvolution: MRREvolutionPoint[];
@@ -93,7 +94,7 @@ export function Projection90d({ mrrEvolution, totalRevenue, newCustomers }: Prop
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm flex items-center gap-2">
+        <CardTitle className={`${AT.chartTitle} flex items-center gap-2`}>
           <Target className="h-4 w-4" />
           Projeção 90 dias
         </CardTitle>

@@ -1,6 +1,7 @@
 import { Clock, Users, TrendingUp, CheckCircle2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { type EngagementKPIs as KPIs } from "@/hooks/useAnalyticsEngajamento";
+import { AT } from "../analytics-tokens";
 
 interface Props {
   data: KPIs;
@@ -103,13 +104,13 @@ export function EngagementKPIs({ data }: Props) {
             <CardContent className="pt-4 pb-4">
               <div className="flex items-start justify-between">
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs text-muted-foreground truncate">
+                  <p className={AT.metricLabel}>
                     {card.label}
                   </p>
-                  <p className={`text-2xl font-bold tabular-nums mt-1 ${color}`}>
+                  <p className={`${AT.valueMd} mt-1 ${color}`}>
                     {card.format(raw)}
                   </p>
-                  <p className="text-[10px] text-muted-foreground/70 mt-0.5 leading-tight">
+                  <p className={`${AT.metricSublabel} mt-0.5 leading-tight`}>
                     {card.subtitle}
                   </p>
                 </div>

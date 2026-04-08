@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Users } from "lucide-react";
 import { type CohortRow } from "@/hooks/useAnalyticsOverview";
 import { AnalyticsEmptyState } from "../AnalyticsEmptyState";
+import { AT } from "../analytics-tokens";
 
 interface Props {
   cohortData: CohortRow[];
@@ -26,7 +27,7 @@ export function CohortHeatmap({ cohortData }: Props) {
     return (
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm flex items-center gap-2">
+          <CardTitle className={`${AT.chartTitle} flex items-center gap-2`}>
             <Users className="h-4 w-4" />
             Retenção por Coorte
           </CardTitle>
@@ -44,11 +45,11 @@ export function CohortHeatmap({ cohortData }: Props) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm flex items-center gap-2">
+        <CardTitle className={`${AT.chartTitle} flex items-center gap-2`}>
           <Users className="h-4 w-4" />
           Retenção por Coorte
         </CardTitle>
-        <p className="text-xs text-muted-foreground">
+        <p className={AT.chartSubtitle}>
           % de clientes retidos por mês após aquisição
         </p>
       </CardHeader>

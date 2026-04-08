@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Star, ExternalLink } from "lucide-react";
 import { AnalyticsEmptyState } from "../AnalyticsEmptyState";
+import { AT } from "../analytics-tokens";
 import type { UtmLeadRow } from "@/hooks/useAnalyticsUtms";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -15,7 +16,7 @@ export function UtmLeadsList({ leads, onOpenLead }: Props) {
     return (
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm">Leads</CardTitle>
+          <CardTitle className={AT.chartTitle}>Leads</CardTitle>
         </CardHeader>
         <CardContent>
           <AnalyticsEmptyState
@@ -30,7 +31,7 @@ export function UtmLeadsList({ leads, onOpenLead }: Props) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm">
+        <CardTitle className={AT.chartTitle}>
           Leads ({leads.length})
         </CardTitle>
       </CardHeader>

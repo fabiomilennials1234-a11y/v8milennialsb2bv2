@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TrendingUp } from "lucide-react";
 import { type MemberStat } from "@/hooks/useAnalyticsComercial";
 import { AnalyticsEmptyState } from "../AnalyticsEmptyState";
+import { AT } from "../analytics-tokens";
 
 interface Props {
   members: MemberStat[];
@@ -11,7 +12,7 @@ export function SellerTrend({ members }: Props) {
   if (members.length === 0) {
     return (
       <Card>
-        <CardHeader><CardTitle className="text-sm">Tendência Individual</CardTitle></CardHeader>
+        <CardHeader><CardTitle className={AT.chartTitle}>Tendência Individual</CardTitle></CardHeader>
         <CardContent>
           <AnalyticsEmptyState message="Sem dados de vendedores." />
         </CardContent>
@@ -33,7 +34,7 @@ export function SellerTrend({ members }: Props) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm flex items-center gap-2">
+        <CardTitle className={`${AT.chartTitle} flex items-center gap-2`}>
           <TrendingUp className="h-4 w-4" />
           Tendência Individual — vs Média do Time
         </CardTitle>

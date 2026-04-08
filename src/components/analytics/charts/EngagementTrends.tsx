@@ -3,6 +3,7 @@ import { TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { type MonthlyTrendRow } from "@/hooks/useAnalyticsEngajamento";
 import { AnalyticsEmptyState } from "../AnalyticsEmptyState";
 import { formatResponseTime } from "./EngagementKPIs";
+import { AT } from "../analytics-tokens";
 
 interface Props {
   data: MonthlyTrendRow[];
@@ -79,7 +80,7 @@ export function EngagementTrends({ data }: Props) {
     return (
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm flex items-center gap-2">
+          <CardTitle className={`${AT.chartTitle} flex items-center gap-2`}>
             <TrendingUp className="h-4 w-4" />
             Tendências de Engajamento
           </CardTitle>
@@ -97,11 +98,11 @@ export function EngagementTrends({ data }: Props) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm flex items-center gap-2">
+        <CardTitle className={`${AT.chartTitle} flex items-center gap-2`}>
           <TrendingUp className="h-4 w-4" />
           Tendências de Engajamento (6 meses)
         </CardTitle>
-        <p className="text-xs text-muted-foreground">
+        <p className={AT.chartSubtitle}>
           Verde = melhoria, Vermelho = piora em relação ao mês anterior
         </p>
       </CardHeader>

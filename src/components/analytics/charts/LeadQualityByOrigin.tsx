@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Sparkles } from "lucide-react";
 import { type OriginQuality } from "@/hooks/useAnalyticsComercial";
 import { AnalyticsEmptyState } from "../AnalyticsEmptyState";
+import { AT } from "../analytics-tokens";
 
 interface Props {
   origins: OriginQuality[];
@@ -44,7 +45,7 @@ export function LeadQualityByOrigin({ origins }: Props) {
   if (origins.length === 0) {
     return (
       <Card>
-        <CardHeader><CardTitle className="text-sm">Qualidade por Origem</CardTitle></CardHeader>
+        <CardHeader><CardTitle className={AT.chartTitle}>Qualidade por Origem</CardTitle></CardHeader>
         <CardContent>
           <AnalyticsEmptyState message="Sem dados suficientes por origem." detail="Necessário pelo menos 5 leads por origem." />
         </CardContent>
@@ -55,7 +56,7 @@ export function LeadQualityByOrigin({ origins }: Props) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm flex items-center gap-2">
+        <CardTitle className={`${AT.chartTitle} flex items-center gap-2`}>
           <Sparkles className="h-4 w-4" />
           Qualidade de Lead por Origem
         </CardTitle>

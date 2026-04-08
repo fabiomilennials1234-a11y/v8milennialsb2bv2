@@ -49,7 +49,7 @@ const TVDashboard = lazy(() => lazyRetry(() => import("./pages/TVDashboard")));
 const Campanhas = lazy(() => lazyRetry(() => import("./pages/Campanhas")));
 const CampanhaDetail = lazy(() => lazyRetry(() => import("./pages/CampanhaDetail")));
 const FunisHub = lazy(() => lazyRetry(() => import("./pages/FunisHub")));
-// Marketing and Analytics are now tabs inside Dashboard — see TabMarketing.tsx and TabAnalytics.tsx
+// Marketing and Analytics are unified in the Analytics tab — see TabAnalyticsV2.tsx
 const Produtos = lazy(() => lazyRetry(() => import("./pages/Produtos")));
 const Copilot = lazy(() => lazyRetry(() => import("./pages/Copilot")));
 const CopilotMetrics = lazy(() => lazyRetry(() => import("./pages/CopilotMetrics")));

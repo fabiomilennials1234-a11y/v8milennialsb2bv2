@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Lightbulb, TrendingUp, AlertTriangle, Star } from "lucide-react";
 import { type OverviewInsight } from "@/hooks/useAnalyticsOverview";
 import { AnalyticsEmptyState } from "../AnalyticsEmptyState";
+import { AT } from "../analytics-tokens";
 
 interface Props {
   insights: OverviewInsight[];
@@ -52,7 +53,7 @@ export function AutomatedInsights({ insights }: Props) {
     return (
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm flex items-center gap-2">
+          <CardTitle className={`${AT.chartTitle} flex items-center gap-2`}>
             <Lightbulb className="h-4 w-4" />
             Insights Automatizados
           </CardTitle>
@@ -70,11 +71,11 @@ export function AutomatedInsights({ insights }: Props) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm flex items-center gap-2">
+        <CardTitle className={`${AT.chartTitle} flex items-center gap-2`}>
           <Lightbulb className="h-4 w-4" />
           Insights Automatizados
         </CardTitle>
-        <p className="text-xs text-muted-foreground">
+        <p className={AT.chartSubtitle}>
           Análises geradas automaticamente com base nos dados do período
         </p>
       </CardHeader>

@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { type PipelineAgingStage } from "@/hooks/useAnalyticsPipesFunis";
 import { AnalyticsEmptyState } from "../AnalyticsEmptyState";
+import { AT } from "../analytics-tokens";
 
 // WeeklyPipelineFlow shows a summary table of pipeline stage totals.
 // Without a weekly breakdown RPC, we derive week-like buckets from the aging data
@@ -48,7 +49,7 @@ export function WeeklyPipelineFlow({ stages }: Props) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm">Fluxo Semanal do Pipeline</CardTitle>
+          <CardTitle className={AT.chartTitle}>Fluxo Semanal do Pipeline</CardTitle>
         </CardHeader>
         <CardContent>
           <AnalyticsEmptyState
@@ -63,7 +64,7 @@ export function WeeklyPipelineFlow({ stages }: Props) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm">Fluxo Semanal do Pipeline</CardTitle>
+        <CardTitle className={AT.chartTitle}>Fluxo Semanal do Pipeline</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="overflow-x-auto">
