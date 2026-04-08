@@ -1346,7 +1346,7 @@ export function useExtractLeadToPipe() {
       const stageVal = stage as "novo" | "abordado" | "respondeu" | "esfriou" | "agendado" |
         "reuniao_marcada" | "confirmar_d5" | "confirmar_d3" | "confirmar_d2" | "confirmar_d1" |
         "pre_confirmada" | "confirmacao_no_dia" | "confirmada_no_dia" | "remarcar" | "compareceu" | "perdido" |
-        "marcar_compromisso" | "reativar" | "compromisso_marcado" | "futuro" | "vendido";
+        "marcar_compromisso" | "reativar" | "compromisso_marcado" | "proposta_enviada" | "futuro" | "vendido";
 
       if (target_pipe === "pipe_whatsapp") {
         const { data: existing } = await supabase

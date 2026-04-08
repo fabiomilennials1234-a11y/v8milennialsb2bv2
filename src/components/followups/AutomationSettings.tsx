@@ -79,6 +79,7 @@ const pipeConfig = {
     stages: [
       { value: "marcar_compromisso", label: "Marcar Compromisso" },
       { value: "compromisso_marcado", label: "Compromisso Marcado" },
+      { value: "proposta_enviada", label: "Proposta Enviada" },
       { value: "esfriou", label: "Esfriou" },
       { value: "futuro", label: "Futuro" },
       { value: "vendido", label: "Vendido" },
