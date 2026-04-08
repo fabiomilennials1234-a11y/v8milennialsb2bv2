@@ -22,6 +22,12 @@ export type AgentDocument = {
   error_message: string | null;
   created_at: string;
   updated_at: string;
+  /** document | image | video */
+  file_type: string;
+  /** Human description of media content */
+  description: string | null;
+  /** When should the copilot send this media */
+  send_when: string | null;
 };
 
 /**
@@ -58,10 +64,16 @@ export function useUploadAgentDocument() {
       agentId,
       organizationId,
       file,
+      fileType,
+      description,
+      sendWhen,
     }: {
       agentId: string;
       organizationId: string;
       file: File;
+      fileType?: string;
+      description?: string;
+      sendWhen?: string;
     }) => {
       if (!user?.id) throw new Error("Usuário não autenticado");
 
@@ -78,17 +90,22 @@ export function useUploadAgentDocument() {
       if (uploadError) throw uploadError;
 
       // 2. Criar registro no banco
+      const insertPayload: any = {
+        agent_id: agentId,
+        organization_id: organizationId,
+        file_name: file.name,
+        file_path: filePath,
+        file_size: file.size,
+        mime_type: file.type,
+        status: "pending",
+      };
+      if (fileType) insertPayload.file_type = fileType;
+      if (description) insertPayload.description = description;
+      if (sendWhen) insertPayload.send_when = sendWhen;
+
       const { data: doc, error: insertError } = await supabase
         .from("copilot_agent_documents")
-        .insert({
-          agent_id: agentId,
-          organization_id: organizationId,
-          file_name: file.name,
-          file_path: filePath,
-          file_size: file.size,
-          mime_type: file.type,
-          status: "pending",
-        })
+        .insert(insertPayload)
         .select()
         .single();
 

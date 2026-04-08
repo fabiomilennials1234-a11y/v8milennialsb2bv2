@@ -30,9 +30,9 @@ import { TEMPLATE_PRESETS, getTemplatePreset } from "./template-presets";
 import {
   PLAYGROUND_TOOLS,
   createDefaultPlaygroundData,
+  DEFAULT_PROMPT_SECTIONS,
   type PlaygroundData,
-  type KnowledgeDocument,
-  type KnowledgeLink,
+  type PromptSections,
 } from "./types";
 
 import {
@@ -41,7 +41,7 @@ import {
   useUpdateCopilotAgentFromWizard,
 } from "@/hooks/useCopilotAgents";
 import { useUploadAgentDocument, useAgentDocuments, useDeleteAgentDocument } from "@/hooks/useAgentDocuments";
-import { useAuth } from "@/contexts/AuthContext";
+
 import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
 
 // =============================================================
@@ -49,19 +49,14 @@ import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
 // =============================================================
 
 /**
- * Resolve @menções no prompt, substituindo por instruções que o LLM entende.
- * - @TOOL_ID → instrução de uso da ferramenta (se ativa) ou nome legível
- * - @link_id → alias (URL)
- * - @doc_id → referência ao documento
+ * Resolve @menções em texto, substituindo por instruções que o LLM entende.
  */
-function resolveMentions(prompt: string, data: PlaygroundData): string {
-  let resolved = prompt;
+function resolveMentions(text: string, data: PlaygroundData): string {
+  let resolved = text;
 
-  // Resolve @mentions de tools
   for (const toolDef of PLAYGROUND_TOOLS) {
     const state = data.tools[toolDef.id];
     const mentionRegex = new RegExp(`@${toolDef.id}`, "g");
-
     if (state?.enabled) {
       resolved = resolved.replace(mentionRegex, `[usar ferramenta "${toolDef.name}"]`);
     } else {
@@ -69,13 +64,11 @@ function resolveMentions(prompt: string, data: PlaygroundData): string {
     }
   }
 
-  // Resolve @mentions de links — substituir pelo link real
   for (const link of data.links) {
     const linkMentionRegex = new RegExp(`@${link.id}`, "g");
     resolved = resolved.replace(linkMentionRegex, `${link.alias} (${link.url})`);
   }
 
-  // Resolve @mentions de documentos
   for (const doc of data.documents) {
     const docMentionRegex = new RegExp(`@${doc.id}`, "g");
     resolved = resolved.replace(docMentionRegex, `[documento: ${doc.name}]`);
@@ -84,19 +77,76 @@ function resolveMentions(prompt: string, data: PlaygroundData): string {
   return resolved;
 }
 
+/**
+ * Monta o system prompt final a partir das seções estruturadas + tool instructions.
+ *
+ * Ordem: Personalidade → Objetivo → Fluxo → Ferramentas → Instruções → Links
+ */
 function buildSystemPrompt(data: PlaygroundData): string {
-  let prompt = resolveMentions(data.prompt, data);
+  const parts: string[] = [];
+  const s = data.promptSections;
 
-  // Append links como recursos disponíveis para enviar
-  if (data.links.length > 0) {
-    prompt += "\n\n## Links disponiveis para enviar ao lead:\n";
-    for (const link of data.links) {
-      prompt += `- ${link.alias}: ${link.url}\n`;
-    }
-    prompt += "\nIMPORTANTE: Quando relevante, envie o link completo na mensagem para o lead poder clicar.\n";
+  if (s.personality.trim()) {
+    parts.push(`# PERSONALIDADE\n\n${resolveMentions(s.personality.trim(), data)}`);
   }
 
-  return prompt;
+  if (s.objective.trim()) {
+    parts.push(`# OBJETIVO\n\n${resolveMentions(s.objective.trim(), data)}`);
+  }
+
+  if (s.flow.trim()) {
+    parts.push(`# FLUXO DE ATENDIMENTO\n\n${resolveMentions(s.flow.trim(), data)}`);
+  }
+
+  // Tool instructions — only enabled tools
+  const toolSections: string[] = [];
+  for (const toolDef of PLAYGROUND_TOOLS) {
+    const state = data.tools[toolDef.id];
+    if (!state?.enabled) continue;
+    const instruction = state.instruction?.trim() || toolDef.defaultInstruction;
+    toolSections.push(`## ${toolDef.name}\n${resolveMentions(instruction, data)}`);
+  }
+  if (toolSections.length > 0) {
+    parts.push(`# FERRAMENTAS DISPONÍVEIS\n\n${toolSections.join("\n\n")}`);
+  }
+
+  // Media available for sending
+  const mediaDocs = data.documents.filter(
+    (d) => (d.fileType === "image" || d.fileType === "video") && (d.description || d.sendWhen)
+  );
+  if (mediaDocs.length > 0) {
+    const mediaSections = mediaDocs.map((d) => {
+      const typeLabel = d.fileType === "image" ? "imagem" : "video";
+      let section = `## [${typeLabel}] ${d.name}`;
+      if (d.description) section += `\nDescricao: ${d.description}`;
+      if (d.sendWhen) section += `\nQuando enviar: ${d.sendWhen}`;
+      return section;
+    });
+    parts.push(`# MÍDIA DISPONÍVEL PARA ENVIAR\n\n${mediaSections.join("\n\n")}`);
+  }
+
+  if (s.instructions.trim()) {
+    parts.push(`# INSTRUÇÕES\n\n${resolveMentions(s.instructions.trim(), data)}`);
+  }
+
+  // Links
+  if (data.links.length > 0) {
+    let linkSection = "## Links disponiveis para enviar ao lead:\n";
+    for (const link of data.links) {
+      linkSection += `- ${link.alias}: ${link.url}\n`;
+    }
+    linkSection += "\nIMPORTANTE: Quando relevante, envie o link completo na mensagem para o lead poder clicar.";
+    parts.push(linkSection);
+  }
+
+  return parts.join("\n\n");
+}
+
+/**
+ * Junta todas as seções em texto contínuo para salvar como custom_instructions.
+ */
+function sectionsToFlatText(data: PlaygroundData): string {
+  return buildSystemPrompt(data);
 }
 
 // =============================================================
@@ -119,7 +169,7 @@ function playgroundToAgentPayload(data: PlaygroundData) {
       personality_tone: "profissional",
       personality_style: "consultivo",
       personality_energy: "moderada",
-      main_objective: data.prompt.slice(0, 200),
+      main_objective: (data.promptSections.objective || data.promptSections.personality).slice(0, 200),
       skills: activeTools,
       allowed_topics: [],
       forbidden_topics: [],
@@ -144,8 +194,16 @@ function playgroundToAgentPayload(data: PlaygroundData) {
       can_move_cards: data.tools.MOVER_CARD?.enabled ?? false,
       max_conversation_turns: 20,
       business_context: {},
-      conversation_style: {},
-      custom_instructions: resolveMentions(data.prompt, data),
+      conversation_style: {
+        // Playground structured data (round-trip persistence)
+        promptSections: data.promptSections,
+        toolInstructions: Object.fromEntries(
+          Object.entries(data.tools)
+            .filter(([_, s]) => s.enabled && s.instruction)
+            .map(([id, s]) => [id, s.instruction])
+        ),
+      },
+      custom_instructions: sectionsToFlatText(data),
     },
     faqs: [],
     kanbanRules: [],
@@ -180,12 +238,30 @@ export function CopilotPlayground() {
   useEffect(() => {
     if (!editData?.wizardData) return;
 
-    const wd = editData.wizardData;
+    const wd = editData.wizardData as any;
+
+    // Retrocompat: old agents have prompt (flat text) instead of promptSections
+    const legacyPrompt = wd.customInstructions?.dos || wd.mainObjective || "";
+    const loadedSections: PromptSections = wd.promptSections
+      ? { ...DEFAULT_PROMPT_SECTIONS, ...wd.promptSections }
+      : { ...DEFAULT_PROMPT_SECTIONS, instructions: legacyPrompt };
+
+    // Helper to build tool state with instruction
+    const toolState = (enabled: boolean, toolId: string, config: Record<string, any> = {}): { enabled: boolean; config: Record<string, any>; instruction: string } => {
+      const savedInstruction = wd.toolInstructions?.[toolId] || "";
+      const def = PLAYGROUND_TOOLS.find((t) => t.id === toolId);
+      return {
+        enabled,
+        config,
+        instruction: savedInstruction || (enabled && def ? def.defaultInstruction : ""),
+      };
+    };
+
     setData((prev) => ({
       ...prev,
       name: wd.name,
       templateType: wd.templateType,
-      prompt: wd.customInstructions?.dos || wd.mainObjective || "",
+      promptSections: loadedSections,
       llmTemperatureMode: wd.llmTemperatureMode || "balanceado",
       responseDelayMs: wd.responseDelayMs || 1000,
       availability: wd.availability || prev.availability,
@@ -197,22 +273,25 @@ export function CopilotPlayground() {
       audioSendOrder: wd.outboundConfig?.audioSendOrder || "text_first",
       agentId: editId,
       tools: {
-        QUALIFICAR_LEAD: { enabled: wd.canQualifyLead, config: {} },
-        AGENDAR_REUNIAO: { enabled: wd.canScheduleMeeting, config: {} },
-        MOVER_CARD: { enabled: wd.canMoveCards, config: {} },
-        ENVIAR_FOLLOWUP: { enabled: wd.canSendFollowup, config: {} },
-        TRANSFERIR_HUMANO: { enabled: wd.canTransferHuman, config: {} },
-        CRIAR_LEAD: { enabled: wd.canCreateLead, config: {} },
-        PREENCHER_CAMPOS: { enabled: true, config: {} },
-        CRIAR_CAMPO: { enabled: false, config: {} },
-        RESPONDER_FAQ: { enabled: wd.canAnswerFaq, config: {} },
+        QUALIFICAR_LEAD: toolState(wd.canQualifyLead, "QUALIFICAR_LEAD"),
+        AGENDAR_REUNIAO: toolState(wd.canScheduleMeeting, "AGENDAR_REUNIAO"),
+        MOVER_CARD: toolState(wd.canMoveCards, "MOVER_CARD"),
+        ENVIAR_FOLLOWUP: toolState(wd.canSendFollowup, "ENVIAR_FOLLOWUP"),
+        TRANSFERIR_HUMANO: toolState(wd.canTransferHuman, "TRANSFERIR_HUMANO"),
+        CRIAR_LEAD: toolState(wd.canCreateLead, "CRIAR_LEAD"),
+        PREENCHER_CAMPOS: toolState(true, "PREENCHER_CAMPOS"),
+        CRIAR_CAMPO: toolState(false, "CRIAR_CAMPO"),
+        RESPONDER_FAQ: toolState(wd.canAnswerFaq, "RESPONDER_FAQ"),
       },
-      documents: (editData.existingDocuments || []).map((d) => ({
+      documents: (editData.existingDocuments || []).map((d: any) => ({
         id: d.id,
         name: d.file_name,
         status: "ready" as const,
         existingId: d.id,
         filePath: d.file_path,
+        fileType: d.file_type || "document",
+        description: d.description || "",
+        sendWhen: d.send_when || "",
       })),
     }));
   }, [editData, editId]);
@@ -266,8 +345,9 @@ export function CopilotPlayground() {
       toast.error("Nome obrigatorio", { description: "Informe um nome para o agente." });
       return;
     }
-    if (data.prompt.trim().length < 10) {
-      toast.error("Prompt muito curto", { description: "Escreva pelo menos algumas instrucoes para o agente." });
+    const totalContent = Object.values(data.promptSections).join("").trim();
+    if (totalContent.length < 10) {
+      toast.error("Prompt muito curto", { description: "Preencha pelo menos uma secao do prompt com instrucoes para o agente." });
       return;
     }
     // firstMessageTemplate é opcional — se vazio, o copilot gera a mensagem via IA
@@ -275,8 +355,6 @@ export function CopilotPlayground() {
     setIsSaving(true);
 
     try {
-      const payload = playgroundToAgentPayload(data);
-
       if (isEditMode && editId) {
         // Update existing agent
         await updateAgent.mutateAsync({
@@ -296,6 +374,9 @@ export function CopilotPlayground() {
                   agentId: editId,
                   organizationId,
                   file: doc.file,
+                  fileType: doc.fileType,
+                  description: doc.description,
+                  sendWhen: doc.sendWhen,
                 });
               } catch (e) {
                 console.warn("Erro ao fazer upload de documento:", e);
@@ -305,7 +386,8 @@ export function CopilotPlayground() {
         }
       } else {
         // Create new agent
-        const agent = await createAgent.mutateAsync(payload);
+        const payload = playgroundToAgentPayload(data);
+        const agent = await createAgent.mutateAsync(payload as any);
 
         // Upload pending documents
         if (agent?.id && (organizationId || agent.organization_id)) {
@@ -317,6 +399,9 @@ export function CopilotPlayground() {
                   agentId: agent.id,
                   organizationId: orgId,
                   file: doc.file,
+                  fileType: doc.fileType,
+                  description: doc.description,
+                  sendWhen: doc.sendWhen,
                 });
               } catch (e) {
                 console.warn("Erro ao fazer upload de documento:", e);
@@ -411,8 +496,8 @@ export function CopilotPlayground() {
           {/* Prompt Editor */}
           <div className={`border-b ${isEditorExpanded ? "flex-1" : ""}`}>
             <PromptEditor
-              value={data.prompt}
-              onChange={(prompt) => updateData({ prompt })}
+              sections={data.promptSections}
+              onSectionsChange={(promptSections) => updateData({ promptSections })}
               tools={data.tools}
               toolDefs={PLAYGROUND_TOOLS}
               documents={data.documents}
@@ -467,6 +552,17 @@ export function CopilotPlayground() {
 // =============================================================
 
 function createWizardDataFromPlayground(data: PlaygroundData): any {
+  const flatPrompt = sectionsToFlatText(data);
+  const objectiveText = data.promptSections.objective || data.promptSections.personality;
+
+  // Persist tool instructions for edit round-trip
+  const toolInstructions: Record<string, string> = {};
+  for (const [id, state] of Object.entries(data.tools)) {
+    if (state.enabled && state.instruction) {
+      toolInstructions[id] = state.instruction;
+    }
+  }
+
   return {
     templateType: data.templateType || "custom",
     name: data.name,
@@ -502,8 +598,8 @@ function createWizardDataFromPlayground(data: PlaygroundData): any {
     examples: [],
     availability: data.availability,
     responseDelaySeconds: 0,
-    mainObjective: data.prompt.slice(0, 200),
-    objectiveComposite: { mission: data.prompt.slice(0, 200), success_criteria: "", limits: "" },
+    mainObjective: objectiveText.slice(0, 200),
+    objectiveComposite: { mission: objectiveText.slice(0, 200), success_criteria: "", limits: "" },
     kanbanRules: [],
     operationMode: data.operationMode,
     activationTriggers: data.activationTriggers,
@@ -518,7 +614,7 @@ function createWizardDataFromPlayground(data: PlaygroundData): any {
       onNeedHuman: { moveToStage: "", moveToPipe: null, addTags: [], notifyUserId: null, sendMessage: false, messageTemplate: "" },
     },
     followupRules: [],
-    customInstructions: { dos: resolveMentions(data.prompt, data), donts: "" },
+    customInstructions: { dos: flatPrompt, donts: "" },
     knowledgeBaseFiles: [],
     canQualifyLead: data.tools.QUALIFICAR_LEAD?.enabled ?? false,
     canScheduleMeeting: data.tools.AGENDAR_REUNIAO?.enabled ?? false,
@@ -534,5 +630,8 @@ function createWizardDataFromPlayground(data: PlaygroundData): any {
     llmTemperatureMode: data.llmTemperatureMode,
     personaDescription: "",
     skillsAndTopics: "",
+    // Structured data for round-trip (edit mode)
+    promptSections: data.promptSections,
+    toolInstructions,
   };
 }
