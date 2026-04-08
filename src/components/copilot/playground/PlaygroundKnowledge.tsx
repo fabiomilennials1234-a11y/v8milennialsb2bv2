@@ -46,6 +46,8 @@ interface PlaygroundKnowledgeProps {
   documents: KnowledgeDocument[];
   links: KnowledgeLink[];
   onDocumentsChange: (docs: KnowledgeDocument[]) => void;
+  /** Append docs without depending on current documents closure (avoids stale state) */
+  onAddDocuments: (newDocs: KnowledgeDocument[]) => void;
   onLinksChange: (links: KnowledgeLink[]) => void;
   existingDocuments?: ExistingDocument[];
   onDeleteExisting?: (docId: string, filePath: string) => void;
@@ -90,6 +92,7 @@ export function PlaygroundKnowledge({
   documents,
   links,
   onDocumentsChange,
+  onAddDocuments,
   onLinksChange,
   existingDocuments = [],
   onDeleteExisting,
@@ -133,10 +136,10 @@ export function PlaygroundKnowledge({
       }
 
       if (newDocs.length > 0) {
-        onDocumentsChange([...documents, ...newDocs]);
+        onAddDocuments(newDocs);
       }
     },
-    [documents, onDocumentsChange]
+    [onAddDocuments]
   );
 
   const handleDrop = useCallback(
