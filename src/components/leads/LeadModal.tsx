@@ -528,6 +528,83 @@ export function LeadModal({
                     </div>
                   </div>
 
+                  {/* CAMPOS PERSONALIZADOS */}
+                  {customFields.length > 0 && (
+                    <div>
+                      <h3 className="text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-3">Campos Personalizados</h3>
+                      <div className="grid grid-cols-2 gap-3">
+                        {customFields.map((field) => {
+                          const value = customValues[field.id] || "";
+                          const FieldIcon = {
+                            text: Type,
+                            number: Hash,
+                            date: Calendar,
+                            select: List,
+                            boolean: ToggleLeft,
+                          }[field.field_type] || Type;
+
+                          return (
+                            <div key={field.id} className="grid gap-1.5">
+                              <Label className="flex items-center gap-1.5 text-xs">
+                                <FieldIcon className="w-3 h-3 text-muted-foreground" />
+                                {field.field_name}
+                                {field.is_required && <span className="text-destructive">*</span>}
+                              </Label>
+
+                              {field.field_type === "select" ? (
+                                <Select
+                                  value={value}
+                                  onValueChange={(v) => setCustomValues({ ...customValues, [field.id]: v })}
+                                >
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Selecione..." />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {(field.field_options || []).map((opt: string) => (
+                                      <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              ) : field.field_type === "boolean" ? (
+                                <Select
+                                  value={value}
+                                  onValueChange={(v) => setCustomValues({ ...customValues, [field.id]: v })}
+                                >
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Selecione..." />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="true">Sim</SelectItem>
+                                    <SelectItem value="false">Nao</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              ) : field.field_type === "date" ? (
+                                <Input
+                                  type="date"
+                                  value={value}
+                                  onChange={(e) => setCustomValues({ ...customValues, [field.id]: e.target.value })}
+                                />
+                              ) : field.field_type === "number" ? (
+                                <Input
+                                  type="number"
+                                  value={value}
+                                  onChange={(e) => setCustomValues({ ...customValues, [field.id]: e.target.value })}
+                                  placeholder={`Digite ${field.field_name.toLowerCase()}...`}
+                                />
+                              ) : (
+                                <Input
+                                  value={value}
+                                  onChange={(e) => setCustomValues({ ...customValues, [field.id]: e.target.value })}
+                                  placeholder={`Digite ${field.field_name.toLowerCase()}...`}
+                                />
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
                   {/* FUNIL — only visible when creating a new lead */}
                   {showPipeSelector && (
                     <div>
@@ -615,76 +692,6 @@ export function LeadModal({
                           placeholder="Ex: Alta, Media, Baixa..."
                         />
                       </div>
-
-                      {/* Campos Personalizados inline nos detalhes */}
-                      {customFields.map((field) => {
-                        const value = customValues[field.id] || "";
-                        const FieldIcon = {
-                          text: Type,
-                          number: Hash,
-                          date: Calendar,
-                          select: List,
-                          boolean: ToggleLeft,
-                        }[field.field_type] || Type;
-
-                        return (
-                          <div key={field.id} className="grid gap-1.5">
-                            <Label className="flex items-center gap-1.5 text-xs">
-                              <FieldIcon className="w-3 h-3 text-muted-foreground" />
-                              {field.field_name}
-                              {field.is_required && <span className="text-destructive">*</span>}
-                            </Label>
-
-                            {field.field_type === "select" ? (
-                              <Select
-                                value={value}
-                                onValueChange={(v) => setCustomValues({ ...customValues, [field.id]: v })}
-                              >
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Selecione..." />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {(field.field_options || []).map((opt: string) => (
-                                    <SelectItem key={opt} value={opt}>{opt}</SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            ) : field.field_type === "boolean" ? (
-                              <Select
-                                value={value}
-                                onValueChange={(v) => setCustomValues({ ...customValues, [field.id]: v })}
-                              >
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Selecione..." />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="true">Sim</SelectItem>
-                                  <SelectItem value="false">Nao</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            ) : field.field_type === "date" ? (
-                              <Input
-                                type="date"
-                                value={value}
-                                onChange={(e) => setCustomValues({ ...customValues, [field.id]: e.target.value })}
-                              />
-                            ) : field.field_type === "number" ? (
-                              <Input
-                                type="number"
-                                value={value}
-                                onChange={(e) => setCustomValues({ ...customValues, [field.id]: e.target.value })}
-                                placeholder={`Digite ${field.field_name.toLowerCase()}...`}
-                              />
-                            ) : (
-                              <Input
-                                value={value}
-                                onChange={(e) => setCustomValues({ ...customValues, [field.id]: e.target.value })}
-                                placeholder={`Digite ${field.field_name.toLowerCase()}...`}
-                              />
-                            )}
-                          </div>
-                        );
-                      })}
 
                       {/* Indicacao para adicionar novos campos */}
                       <div className="col-span-2 flex items-center gap-1.5 text-xs text-muted-foreground pt-1">
