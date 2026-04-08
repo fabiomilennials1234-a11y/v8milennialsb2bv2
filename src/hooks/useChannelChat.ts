@@ -108,7 +108,7 @@ export function useChannelContacts(instanceId: string | null) {
       const { data, error } = await query;
       if (error) throw error;
 
-      const normalizePhone = (p: string) => p.replace(/\D/g, "").slice(-10) || p;
+      const normalizePhone = (p: string) => { let c = p.replace(/\D/g, ""); if (!c) return p; if (c.length >= 12 && c.startsWith("55")) c = c.slice(2); if (c.length === 10) c = c.slice(0, 2) + "9" + c.slice(2); return c; };
 
       // Agrupar por contact_key (phone+channel para WhatsApp, sender_id+channel para Meta)
       const contactsMap = new Map<string, ChannelContact>();
@@ -493,7 +493,7 @@ export function useChannelMessagesRealtime(contactId: string | null, channel: Ch
           const msg = (payload.new || payload.old) as ChannelMessage | undefined;
           if (contactId && msg) {
             const msgContact = msg.channel === "whatsapp" ? msg.phone_number : msg.sender_id;
-            const normalizePhone = (p: string) => p.replace(/\D/g, "").slice(-10) || p;
+            const normalizePhone = (p: string) => { let c = p.replace(/\D/g, ""); if (!c) return p; if (c.length >= 12 && c.startsWith("55")) c = c.slice(2); if (c.length === 10) c = c.slice(0, 2) + "9" + c.slice(2); return c; };
 
             const match = msg.channel === "whatsapp"
               ? normalizePhone(msgContact || "") === normalizePhone(contactId)

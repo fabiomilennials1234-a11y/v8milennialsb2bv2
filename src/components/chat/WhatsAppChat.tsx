@@ -2067,13 +2067,22 @@ function ChatWindow({
 
 const LAST_SEEN_KEY = "whatsapp_last_seen_";
 
+/** Normaliza telefone com lógica canônica (remove 55, adiciona 9 se 10 dígitos). */
 function normalizePhoneForStorage(phone: string): string {
-  return phone.replace(/\D/g, "").slice(-10) || phone;
+  let cleaned = phone.replace(/\D/g, "");
+  if (!cleaned) return phone;
+  if (cleaned.length >= 12 && cleaned.startsWith("55")) cleaned = cleaned.slice(2);
+  if (cleaned.length === 10) cleaned = cleaned.slice(0, 2) + "9" + cleaned.slice(2);
+  return cleaned;
 }
 
-/** Normaliza telefone para URL/API: só dígitos. */
+/** Normaliza telefone para URL/API: mesma lógica canônica. */
 function normalizePhoneForParam(phone: string): string {
-  return phone.replace(/\D/g, "") || phone;
+  let cleaned = phone.replace(/\D/g, "");
+  if (!cleaned) return phone;
+  if (cleaned.length >= 12 && cleaned.startsWith("55")) cleaned = cleaned.slice(2);
+  if (cleaned.length === 10) cleaned = cleaned.slice(0, 2) + "9" + cleaned.slice(2);
+  return cleaned;
 }
 
 /**
