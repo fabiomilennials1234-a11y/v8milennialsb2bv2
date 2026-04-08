@@ -8,8 +8,9 @@ import { useAddCampanhaLead, useCampanha, CampanhaStage, CampanhaMember } from "
 import { useLeads } from "@/hooks/useLeads";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Search, UserPlus, Shuffle } from "lucide-react";
+import { Search, UserPlus, Shuffle, Plus } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { LeadModal } from "@/components/leads/LeadModal";
 
 const AUTO_DISTRIBUTE_VALUE = "__auto__";
 
@@ -34,6 +35,7 @@ export function AddLeadToCampanhaModal({
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [selectedStageId, setSelectedStageId] = useState<string>("");
   const [selectedResponsibleId, setSelectedResponsibleId] = useState<string>("");
+  const [isLeadModalOpen, setIsLeadModalOpen] = useState(false);
 
   const { data: allLeads } = useLeads();
   const { data: campanha } = useCampanha(campanhaId);
@@ -99,16 +101,64 @@ export function AddLeadToCampanhaModal({
     }
   };
 
+  const handleNewLeadCreated = async (newLeadId?: string) => {
+    if (!newLeadId) return;
+    if (!selectedStageId) {
+      toast.error("Selecione uma etapa antes de criar o lead");
+      return;
+    }
+
+    try {
+      let responsibleId: string | undefined = selectedResponsibleId && selectedResponsibleId !== AUTO_DISTRIBUTE_VALUE ? selectedResponsibleId : undefined;
+      let closerId: string | undefined = undefined;
+
+      if (!responsibleId && canAutoDistribute) {
+        const { data: nextSdrId, error: sdrError } = await supabase.rpc("get_next_campaign_sdr", {
+          p_campaign_id: campanhaId,
+        });
+        if (sdrError) {
+          console.error("[AddLeadToCampanha] get_next_campaign_sdr error:", sdrError);
+          toast.error("Não foi possível distribuir automaticamente.");
+          return;
+        }
+        responsibleId = nextSdrId ?? undefined;
+
+        const { data: nextCloserId } = await supabase.rpc("get_next_campaign_closer", {
+          p_campaign_id: campanhaId,
+        });
+        if (nextCloserId) closerId = nextCloserId;
+      }
+
+      await addLead.mutateAsync({
+        campanha_id: campanhaId,
+        lead_id: newLeadId,
+        stage_id: selectedStageId,
+        responsible_id: responsibleId,
+        sdr_id: responsibleId,
+        closer_id: closerId,
+      });
+
+      toast.success("Lead criado e adicionado à campanha!");
+      onOpenChange(false);
+      resetForm();
+    } catch (error) {
+      toast.error("Erro ao adicionar lead à campanha");
+      console.error(error);
+    }
+  };
+
   const resetForm = () => {
     setSearch("");
     setSelectedLeadId(null);
     setSelectedStageId("");
     setSelectedResponsibleId("");
+    setIsLeadModalOpen(false);
   };
 
   const selectedLead = allLeads?.find((l) => l.id === selectedLeadId);
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
@@ -132,6 +182,16 @@ export function AddLeadToCampanhaModal({
               />
             </div>
           </div>
+
+          {/* CTA para criar novo lead */}
+          <Button
+            variant="outline"
+            className="w-full justify-center gap-2 border-dashed"
+            onClick={() => setIsLeadModalOpen(true)}
+          >
+            <Plus className="w-4 h-4" />
+            Cadastrar novo lead
+          </Button>
 
           {/* Lead List */}
           <ScrollArea className="h-48 rounded-lg border">
@@ -231,5 +291,13 @@ export function AddLeadToCampanhaModal({
         </div>
       </DialogContent>
     </Dialog>
+
+    <LeadModal
+      open={isLeadModalOpen}
+      onOpenChange={setIsLeadModalOpen}
+      skipPipeSelector
+      onSuccess={handleNewLeadCreated}
+    />
+    </>
   );
 }
