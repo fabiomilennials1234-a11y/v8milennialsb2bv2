@@ -12,6 +12,7 @@ export async function triggerStageChangedWorkflows({
   leadId,
   pipeType,
   pipelineId,
+  campaignId,
   fromStage,
   toStage,
 }: {
@@ -19,6 +20,7 @@ export async function triggerStageChangedWorkflows({
   leadId: string;
   pipeType?: string;
   pipelineId?: string;
+  campaignId?: string;
   fromStage?: string;
   toStage: string;
 }) {
@@ -33,6 +35,7 @@ export async function triggerStageChangedWorkflows({
           trigger: "stage_changed",
           pipe_type: pipeType || null,
           pipeline_id: pipelineId || null,
+          campanha_id: campaignId || null,
           from_stage: fromStage || null,
           to_stage: toStage,
         },

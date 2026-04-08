@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { useOrganization } from "@/hooks/useOrganization";
 import { triggerFollowUpAutomation } from "@/hooks/useAutoFollowUp";
+import { triggerStageChangedWorkflows } from "@/lib/workflowTrigger";
 import { assertIsAdmin, useCanPerformActionAsync } from "@/lib/permissions";
 
 // Tipos para os objetivos de campanha
@@ -747,6 +748,7 @@ export function useAddCampanhaLead() {
 // Hook to update a campaign lead (move between stages)
 export function useUpdateCampanhaLead() {
   const queryClient = useQueryClient();
+  const { organizationId } = useOrganization();
 
   return useMutation({
     mutationFn: async ({ id, campanha_id, ...updates }: { id: string; campanha_id: string; stage_id?: string; responsible_id?: string; sdr_id?: string; closer_id?: string; notes?: string }) => {
@@ -803,6 +805,16 @@ export function useUpdateCampanhaLead() {
       // Always refetch after error or success to sync with server state
       queryClient.invalidateQueries({ queryKey: ["campanha_leads", variables.campanha_id] });
       queryClient.invalidateQueries({ queryKey: ["campanha_members", variables.campanha_id] });
+
+      // Fire workflow stage_changed trigger when campaign lead changes stage
+      if (!error && data && variables.stage_id && data.lead_id && organizationId) {
+        triggerStageChangedWorkflows({
+          organizationId,
+          leadId: data.lead_id,
+          campaignId: variables.campanha_id,
+          toStage: variables.stage_id,
+        }).catch(() => {}); // Non-blocking
+      }
     },
   });
 }
