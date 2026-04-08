@@ -3,9 +3,19 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
 import { triggerFollowUpAutomation } from "./useAutoFollowUp";
 import { triggerStageChangedWorkflows } from "@/lib/workflowTrigger";
-import { useRealtimeSubscription } from "./useRealtimeSubscription";
+import { useRealtimeSubscription, type RealtimeHandlers } from "./useRealtimeSubscription";
 import { useOrganization } from "./useOrganization";
 import { useCanPerformActionAsync } from "@/lib/permissions";
+
+/** Surgical realtime handlers — avoid full refetch for single-item changes */
+const realtimeHandlers: RealtimeHandlers = {
+  onUpdate: (updated, oldData) =>
+    oldData.map((item) =>
+      item.id === updated.id ? { ...item, ...updated } : item
+    ),
+  onDelete: (deleted, oldData) =>
+    oldData.filter((item) => item.id !== deleted.id),
+};
 
 export type PipeConfirmacao = Tables<"pipe_confirmacao">;
 export type PipeConfirmacaoInsert = TablesInsert<"pipe_confirmacao">;
@@ -30,7 +40,7 @@ export const statusColumns: { id: string; title: string; color: string }[] = [
 
 export function usePipeConfirmacao() {
   const { organizationId, isReady } = useOrganization();
-  useRealtimeSubscription("pipe_confirmacao", ["pipe_confirmacao", "follow_ups", "tv-dashboard"]);
+  useRealtimeSubscription("pipe_confirmacao", ["pipe_confirmacao"], realtimeHandlers);
 
   return useQuery({
     queryKey: ["pipe_confirmacao", organizationId],
@@ -60,6 +70,7 @@ export function usePipeConfirmacao() {
       return data;
     },
     enabled: isReady && !!organizationId,
+    staleTime: 10 * 60 * 1000, // 10 min — realtime subscription garante freshness
   });
 }
 
@@ -160,9 +171,7 @@ export function useUpdatePipeConfirmacao() {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["pipe_confirmacao"] });
-      queryClient.invalidateQueries({ queryKey: ["leads"], refetchType: 'active' });
-      queryClient.invalidateQueries({ queryKey: ["follow_ups"] });
+      queryClient.invalidateQueries({ queryKey: ["pipe_confirmacao"], refetchType: "active" });
     },
   });
 }

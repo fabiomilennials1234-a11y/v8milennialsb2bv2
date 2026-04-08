@@ -45,7 +45,7 @@ export function useGoals(month?: number, year?: number) {
       return data as Goal[];
     },
     enabled: isReady && !!organizationId,
-    staleTime: 2 * 60 * 1000,
+    staleTime: 5 * 60 * 1000,
   });
 }
 
@@ -54,7 +54,7 @@ export function useTeamGoals(month?: number, year?: number) {
   const selectedMonth = month ?? now.getMonth() + 1;
   const selectedYear = year ?? now.getFullYear();
   const { organizationId, isReady } = useOrganization();
-  useRealtimeSubscription("goals", ["goals", "team-goals", "individual-goals", "tv-dashboard"]);
+  useRealtimeSubscription("goals", ["goals", "team-goals", "individual-goals"]);
 
   return useQuery({
     queryKey: ["team-goals", selectedMonth, selectedYear, organizationId],
@@ -72,7 +72,7 @@ export function useTeamGoals(month?: number, year?: number) {
       return goals as Goal[];
     },
     enabled: isReady && !!organizationId,
-    staleTime: 2 * 60 * 1000,
+    staleTime: 5 * 60 * 1000,
   });
 }
 
@@ -254,7 +254,7 @@ export function useIndividualGoals(month?: number, year?: number) {
       return { salesGoals, meetingsGoals };
     },
     enabled: isReady && !!organizationId,
-    staleTime: 2 * 60 * 1000,
+    staleTime: 5 * 60 * 1000,
   });
 }
 

@@ -92,9 +92,9 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 1000 * 60 * 5,        // 5 minutos — dados são considerados frescos por 5 min
-      gcTime: 1000 * 60 * 10,           // 10 minutos — cache mantido 10 min após inativo
+      gcTime: 1000 * 60 * 30,           // 30 minutos — cache mantido mais tempo para back-navigation
       refetchOnWindowFocus: false,       // NÃO refetch ao voltar na aba
-      refetchOnReconnect: "always",      // Refetch ao reconectar internet
+      refetchOnReconnect: true,          // Refetch apenas queries stale ao reconectar (não "always")
       retry: 1,                          // 1 retry em caso de erro
     },
   },

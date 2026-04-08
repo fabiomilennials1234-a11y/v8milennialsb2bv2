@@ -1,7 +1,8 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "./useOrganization";
+import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 
 /**
  * Debounce de 2 segundos para evitar cascade de invalidações
@@ -21,9 +22,24 @@ const TABLES_WITHOUT_ORG_ID = new Set([
   "tags",
 ]);
 
-export function useRealtimeSubscription(
+export interface RealtimeHandlers<T = any> {
+  /**
+   * Called on UPDATE events. Receives the updated record (flat, no joins)
+   * and the current cached data. Return the new cache value.
+   * When provided, avoids full invalidation for updates.
+   */
+  onUpdate?: (updatedRecord: T, oldData: T[]) => T[];
+  /**
+   * Called on DELETE events. Receives the old record and current cached data.
+   * Return the new cache value.
+   */
+  onDelete?: (deletedRecord: T, oldData: T[]) => T[];
+}
+
+export function useRealtimeSubscription<T = any>(
   table: string,
-  queryKeys: string[]
+  queryKeys: string[],
+  handlers?: RealtimeHandlers<T>
 ) {
   const queryClient = useQueryClient();
   const { organizationId } = useOrganization();
@@ -32,11 +48,74 @@ export function useRealtimeSubscription(
   // constante no useEffect (arrays criam referência nova a cada render)
   const queryKeysRef = useRef(queryKeys);
   queryKeysRef.current = queryKeys;
+  const handlersRef = useRef(handlers);
+  handlersRef.current = handlers;
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const staggerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Serializar para usar como dependência estável
   const queryKeysKey = JSON.stringify(queryKeys);
+  const hasHandlers = !!handlers;
+
+  const handleRealtimeEvent = useCallback(
+    (payload: RealtimePostgresChangesPayload<any>) => {
+      const keys = queryKeysRef.current;
+      const currentHandlers = handlersRef.current;
+      const eventType = payload.eventType;
+
+      // Surgical update: UPDATE with handler
+      if (eventType === "UPDATE" && currentHandlers?.onUpdate && keys.length > 0) {
+        const updatedRecord = payload.new;
+        // Apply surgical update to all matching query caches
+        queryClient.setQueriesData(
+          { queryKey: [keys[0]] },
+          (oldData: any) => {
+            if (!Array.isArray(oldData)) return oldData;
+            return currentHandlers.onUpdate!(updatedRecord as T, oldData);
+          }
+        );
+        return;
+      }
+
+      // Surgical delete: DELETE with handler
+      if (eventType === "DELETE" && currentHandlers?.onDelete && keys.length > 0) {
+        const deletedRecord = payload.old;
+        queryClient.setQueriesData(
+          { queryKey: [keys[0]] },
+          (oldData: any) => {
+            if (!Array.isArray(oldData)) return oldData;
+            return currentHandlers.onDelete!(deletedRecord as T, oldData);
+          }
+        );
+        return;
+      }
+
+      // Fallback: debounced invalidation (INSERT or no handler provided)
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+      debounceTimerRef.current = setTimeout(() => {
+        if (keys.length > 0) {
+          queryClient.invalidateQueries({ queryKey: [keys[0]], refetchType: "active" });
+
+          if (keys.length > 1) {
+            if (staggerTimerRef.current) {
+              clearTimeout(staggerTimerRef.current);
+            }
+            staggerTimerRef.current = setTimeout(() => {
+              keys.slice(1).forEach((key) => {
+                queryClient.invalidateQueries({ queryKey: [key], refetchType: "active" });
+              });
+              staggerTimerRef.current = null;
+            }, DEBOUNCE_MS);
+          }
+        }
+        debounceTimerRef.current = null;
+      }, DEBOUNCE_MS);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [queryClient, hasHandlers]
+  );
 
   useEffect(() => {
     // Filtrar por organization_id quando a tabela suporta
@@ -59,34 +138,7 @@ export function useRealtimeSubscription(
       .on(
         "postgres_changes",
         pgChangesConfig as any,
-        () => {
-          // Debounce: agrupa múltiplas mudanças em sequência numa única invalidação
-          if (debounceTimerRef.current) {
-            clearTimeout(debounceTimerRef.current);
-          }
-          debounceTimerRef.current = setTimeout(() => {
-            const keys = queryKeysRef.current;
-            if (keys.length > 0) {
-              // Invalidar a primeira key imediatamente (dados primários da tabela)
-              queryClient.invalidateQueries({ queryKey: [keys[0]] });
-
-              // Stagger: invalidar keys secundárias (métricas, dashboards)
-              // após 2s para não sobrecarregar o DB com refetches simultâneos
-              if (keys.length > 1) {
-                if (staggerTimerRef.current) {
-                  clearTimeout(staggerTimerRef.current);
-                }
-                staggerTimerRef.current = setTimeout(() => {
-                  keys.slice(1).forEach((key) => {
-                    queryClient.invalidateQueries({ queryKey: [key] });
-                  });
-                  staggerTimerRef.current = null;
-                }, DEBOUNCE_MS);
-              }
-            }
-            debounceTimerRef.current = null;
-          }, DEBOUNCE_MS);
-        }
+        handleRealtimeEvent
       )
       .subscribe();
 
@@ -100,5 +152,5 @@ export function useRealtimeSubscription(
       supabase.removeChannel(channel);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [table, queryClient, queryKeysKey, organizationId]);
+  }, [table, queryClient, queryKeysKey, organizationId, handleRealtimeEvent]);
 }

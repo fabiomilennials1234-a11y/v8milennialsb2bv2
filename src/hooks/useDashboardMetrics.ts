@@ -125,7 +125,7 @@ export function useDashboardMetrics(month?: number, year?: number, filterMemberI
       };
     },
     enabled: !!organizationId,
-    staleTime: 60000, // 1 minuto — métricas não mudam a cada segundo
+    staleTime: 5 * 60 * 1000, // 5 minutos — métricas sobrevivem navegação entre páginas
   });
 }
 
@@ -196,6 +196,7 @@ export function useConversionRates(month?: number, year?: number) {
       return { meetingsRates, salesRates };
     },
     enabled: !!organizationId,
+    staleTime: 5 * 60 * 1000,
   });
 }
 
@@ -244,6 +245,7 @@ export function useFunnelData(month?: number, year?: number) {
       ];
     },
     enabled: !!organizationId,
+    staleTime: 5 * 60 * 1000,
   });
 }
 
@@ -255,9 +257,9 @@ export function useRankingData(month?: number, year?: number) {
   const { data: currentTeamMember } = useCurrentTeamMember();
   const organizationId = currentTeamMember?.organization_id ?? null;
 
+  // Single subscription — propostas are the primary ranking driver.
+  // Goals and confirmacao changes are infrequent and staleTime: 0 handles fresh fetches.
   useRealtimeSubscription("pipe_propostas", ["ranking-data"]);
-  useRealtimeSubscription("pipe_confirmacao", ["ranking-data"]);
-  useRealtimeSubscription("goals", ["ranking-data"]);
 
   return useQuery({
     queryKey: ["ranking-data", selectedMonth, selectedYear, organizationId],
@@ -305,7 +307,7 @@ export function useRankingData(month?: number, year?: number) {
       };
     },
     enabled: !!organizationId,
-    staleTime: 60000, // 1 minuto — ranking não precisa ser real-time, atualiza via realtime subscription
+    staleTime: 5 * 60 * 1000, // 5 minutos — ranking atualiza via realtime subscription
     refetchOnMount: true,
   });
 }
