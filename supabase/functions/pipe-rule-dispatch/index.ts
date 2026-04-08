@@ -32,6 +32,7 @@ const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
 const DEFAULT_DELAY_MIN_MS = 30000;
 const DEFAULT_DELAY_MAX_MS = 90000;
 const BATCH_SIZE = 50;
+const MAX_SENDS_PER_RUN = 3;
 
 type SupabaseClient = ReturnType<typeof createClient>;
 
@@ -130,7 +131,7 @@ Deno.serve(withSentry('pipe-rule-dispatch', async (req) => {
       console.log("[pipe-rule-dispatch] Multi-pipe mode");
 
       // Reset stale processing items BEFORE checking for pending (prevents items stuck forever)
-      const STALE_MINUTES_GLOBAL = 5;
+      const STALE_MINUTES_GLOBAL = 2;
       const staleThresholdGlobal = new Date(Date.now() - STALE_MINUTES_GLOBAL * 60 * 1000).toISOString();
       const { data: staleGlobalReset } = await supabase
         .from("scheduled_pipe_messages")
@@ -216,7 +217,7 @@ async function processPipeQueue(
   let sent = 0, failed = 0, actionsExecuted = 0, timeoutsProcessed = 0;
 
   // --- 0. Reset stale "processing" items (stuck from crashed/timed-out runs) ---
-  const STALE_MINUTES = 5;
+  const STALE_MINUTES = 2;
   const staleThreshold = new Date(Date.now() - STALE_MINUTES * 60 * 1000).toISOString();
   const { data: staleReset } = await supabase
     .from("scheduled_pipe_messages")
@@ -309,6 +310,17 @@ async function processPipeQueue(
   }
 
   console.log(`[pipe-rule-dispatch][${pipeType}] Processing ${rows.length} item(s)`);
+
+  // Cache rate limit config per org to avoid N+1 queries inside the loop
+  const rateLimitCache = new Map<string, { minDelay: number; maxDelay: number }>();
+  async function getOrgRateLimit(orgId: string) {
+    if (rateLimitCache.has(orgId)) return rateLimitCache.get(orgId)!;
+    const { data: org } = await supabase.from("organizations").select("whatsapp_rate_limit").eq("id", orgId).single();
+    const rl = (org as any)?.whatsapp_rate_limit || {};
+    const config = { minDelay: rl.delay_min_ms ?? DEFAULT_DELAY_MIN_MS, maxDelay: rl.delay_max_ms ?? DEFAULT_DELAY_MAX_MS };
+    rateLimitCache.set(orgId, config);
+    return config;
+  }
 
   for (const row of rows) {
     let jobId: string | null = null;
@@ -465,12 +477,23 @@ async function processPipeQueue(
           failed++;
         }
 
-        // Delay between sends
-        const { data: org } = await supabase.from("organizations").select("whatsapp_rate_limit").eq("id", orgId).single();
-        const rateLimit = org?.whatsapp_rate_limit || {};
-        const minDelay = rateLimit.delay_min_ms ?? DEFAULT_DELAY_MIN_MS;
-        const maxDelay = rateLimit.delay_max_ms ?? DEFAULT_DELAY_MAX_MS;
-        await randomDelay(minDelay, maxDelay);
+        // Guard: stop after MAX_SENDS to avoid Edge Function timeout
+        if (sent + failed >= MAX_SENDS_PER_RUN) {
+          console.log(`[pipe-rule-dispatch][${pipeType}] Max sends reached (${MAX_SENDS_PER_RUN}), releasing remaining items`);
+          const currentIdx = rows.indexOf(row);
+          const remainingIds = rows.slice(currentIdx + 1).map((r) => r.id);
+          if (remainingIds.length > 0) {
+            await supabase.from("scheduled_pipe_messages")
+              .update({ status: "scheduled" })
+              .in("id", remainingIds)
+              .eq("status", "processing");
+          }
+          break;
+        }
+
+        // Delay between sends (cached to avoid N+1) — only if more sends coming
+        const rlConfig = await getOrgRateLimit(orgId);
+        await randomDelay(rlConfig.minDelay, rlConfig.maxDelay);
 
       // =========================
       // ACTION: wait_response
