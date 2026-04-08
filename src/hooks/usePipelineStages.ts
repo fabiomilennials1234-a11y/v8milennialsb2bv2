@@ -71,6 +71,7 @@ export const DEFAULT_STAGES: Record<PipelineType, DefaultStage[]> = {
     { id: "marcar_compromisso", title: "Marcar Compromisso", color: "#F5C518" },
     { id: "reativar", title: "Reativar", color: "#F97316" },
     { id: "compromisso_marcado", title: "Compromisso Marcado", color: "#3B82F6" },
+    { id: "proposta_enviada", title: "Proposta Enviada", color: "#0EA5E9" },
     { id: "esfriou", title: "Esfriou", color: "#64748B" },
     { id: "futuro", title: "Futuro", color: "#8B5CF6" },
     { id: "vendido", title: "Vendido ✓", color: "#22C55E", is_final_positive: true },

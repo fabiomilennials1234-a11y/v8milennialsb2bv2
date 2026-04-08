@@ -135,7 +135,7 @@ export function usePipePropostasMetrics(
         };
       }
 
-      const activeStatuses = ["marcar_compromisso", "compromisso_marcado", "esfriou", "futuro"];
+      const activeStatuses = ["marcar_compromisso", "compromisso_marcado", "proposta_enviada", "esfriou", "futuro"];
       const soldSelect = `id, status, sale_value, product_type, contract_duration, items:pipe_proposta_items(sale_value, product:products(type))`;
 
       if (period === "all") {

@@ -179,8 +179,12 @@ export function PropostasContext({ lead, pipeData: proposta, onSuccess }: Propos
 
   const handleSubmit = async () => {
     if (!formData.responsible_id) { toast.error("Responsável é obrigatório"); return; }
-    const validItems = localItems.filter((i) => i.product_id && i.sale_value);
-    if (validItems.length === 0) { toast.error("Adicione pelo menos um produto"); return; }
+    const itemsProductNoValue = localItems.filter((i) => i.product_id && !i.sale_value);
+    if (itemsProductNoValue.length > 0) { toast.error("Informe o valor para todos os produtos selecionados"); return; }
+    const itemsWithProduct = localItems.filter((i) => i.product_id && i.sale_value);
+    const itemsValueOnly = localItems.filter((i) => !i.product_id && i.sale_value);
+    const allValuedItems = [...itemsWithProduct, ...itemsValueOnly];
+    if (allValuedItems.length === 0) { toast.error("Informe o valor da proposta"); return; }
 
     try {
       if (formData.status !== proposta.status) {
@@ -189,19 +193,27 @@ export function PropostasContext({ lead, pipeData: proposta, onSuccess }: Propos
       }
       if (formData.notes !== proposta.notes && formData.notes) logAction({ leadId: proposta.lead_id, action: "note_added", description: formData.notes });
 
-      const tv = validItems.reduce((sum, i) => sum + Number(i.sale_value), 0);
-      const productTypes = validItems.map((i) => products.find((p) => p.id === i.product_id)?.type).filter(Boolean);
-      const hasOnlyMrr = productTypes.every((t) => t === "mrr");
-      const hasOnlyProjeto = productTypes.every((t) => t === "projeto");
+      const tv = allValuedItems.reduce((sum, i) => sum + Number(i.sale_value), 0);
+      const productTypes = itemsWithProduct.map((i) => products.find((p) => p.id === i.product_id)?.type).filter(Boolean);
+      const hasOnlyMrr = productTypes.length > 0 && productTypes.every((t) => t === "mrr");
+      const hasOnlyProjeto = productTypes.length > 0 && productTypes.every((t) => t === "projeto");
       const mainProductType = hasOnlyMrr ? "mrr" : hasOnlyProjeto ? "projeto" : null;
 
-      for (const item of validItems) {
+      for (const item of itemsWithProduct) {
         if (item.isNew || item.id === "legacy") {
           const productName = products.find((p) => p.id === item.product_id)?.name || "Produto";
           logAction({ leadId: proposta.lead_id, action: "product_linked", description: `Produto "${productName}" vinculado` });
           await createItem.mutateAsync({ pipe_proposta_id: proposta.id, product_id: item.product_id, sale_value: Number(item.sale_value) });
         } else {
           await updateItem.mutateAsync({ id: item.id, product_id: item.product_id, sale_value: Number(item.sale_value) });
+        }
+      }
+
+      // Delete persisted DB items that lost their product (converted to value-only)
+      const keptDbIds = new Set(itemsWithProduct.filter((i) => !i.isNew && i.id !== "legacy").map((i) => i.id));
+      for (const dbItem of itemsData) {
+        if (!keptDbIds.has(dbItem.id)) {
+          await deleteItem.mutateAsync({ id: dbItem.id, propostaId: proposta.id });
         }
       }
 
@@ -213,7 +225,7 @@ export function PropostasContext({ lead, pipeData: proposta, onSuccess }: Propos
         id: proposta.id,
         status: formData.status as PipePropostasStatus,
         product_type: mainProductType,
-        product_id: validItems.length === 1 ? validItems[0].product_id : null,
+        product_id: itemsWithProduct.length === 1 ? itemsWithProduct[0].product_id : null,
         sale_value: tv,
         contract_duration: formData.contract_duration ? Number(formData.contract_duration) : null,
         responsible_id: formData.responsible_id,
@@ -272,7 +284,7 @@ export function PropostasContext({ lead, pipeData: proposta, onSuccess }: Propos
       {/* Products */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <Label className="text-base font-semibold">Produtos</Label>
+          <Label className="text-base font-semibold">Produtos / Valores</Label>
           <Button variant="outline" size="sm" onClick={handleAddItem} className="gap-1.5">
             <Plus className="w-3.5 h-3.5" />
             Adicionar
@@ -287,7 +299,7 @@ export function PropostasContext({ lead, pipeData: proposta, onSuccess }: Propos
               <motion.div key={item.id} initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="flex gap-3 items-start p-3 border rounded-lg bg-muted/30">
                 <div className="flex-1 grid grid-cols-2 gap-3">
                   <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">Produto</Label>
+                    <Label className="text-xs text-muted-foreground">Produto (opcional)</Label>
                     <Select value={item.product_id} onValueChange={(v) => handleItemChange(item.id, "product_id", v)}>
                       <SelectTrigger><SelectValue placeholder="Selecionar" /></SelectTrigger>
                       <SelectContent>
@@ -328,7 +340,7 @@ export function PropostasContext({ lead, pipeData: proposta, onSuccess }: Propos
                 <span className="text-2xl font-bold text-success">{formatCurrency(totalValue)}</span>
               </div>
               <div className="text-right text-sm text-muted-foreground">
-                {localItems.filter((i) => i.product_id && i.sale_value).length} produto(s)
+                {localItems.filter((i) => i.sale_value).length} item(ns)
               </div>
             </div>
           </div>
