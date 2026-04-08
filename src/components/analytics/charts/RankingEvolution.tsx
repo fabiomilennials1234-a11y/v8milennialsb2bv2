@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Medal } from "lucide-react";
 import { type MemberStat } from "@/hooks/useAnalyticsComercial";
 import { AnalyticsEmptyState } from "../AnalyticsEmptyState";
+import { AT } from "../analytics-tokens";
 
 interface Props {
   members: MemberStat[];
@@ -19,7 +20,7 @@ export function RankingEvolution({ members }: Props) {
   if (members.length < 2) {
     return (
       <Card>
-        <CardHeader><CardTitle className="text-sm">Ranking</CardTitle></CardHeader>
+        <CardHeader><CardTitle className={AT.chartTitle}>Ranking</CardTitle></CardHeader>
         <CardContent>
           <AnalyticsEmptyState message="Necessário pelo menos 2 vendedores com dados." />
         </CardContent>
@@ -34,7 +35,7 @@ export function RankingEvolution({ members }: Props) {
       <CardHeader className="pb-2">
         {/* Note: spec calls for 6-month historical ranking. Phase 1 shows current ranking
             only since historical monthly snapshots require additional data aggregation. */}
-        <CardTitle className="text-sm flex items-center gap-2">
+        <CardTitle className={`${AT.chartTitle} flex items-center gap-2`}>
           <Medal className="h-4 w-4" />
           Ranking Atual — Por Receita
         </CardTitle>

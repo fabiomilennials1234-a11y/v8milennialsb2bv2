@@ -7,8 +7,7 @@ import { TabVisaoGeral } from "@/components/dashboard/TabVisaoGeral";
 import { TabPerformance } from "@/components/dashboard/TabPerformance";
 import { TabInteligencia } from "@/components/dashboard/TabInteligencia";
 
-const TabMarketing = lazy(() => import("@/components/dashboard/TabMarketing").then(m => ({ default: m.TabMarketing })));
-const TabAnalytics = lazy(() => import("@/components/dashboard/TabAnalytics").then(m => ({ default: m.TabAnalytics })));
+const TabAnalyticsV2 = lazy(() => import("@/components/dashboard/TabAnalyticsV2").then(m => ({ default: m.TabAnalyticsV2 })));
 import { OraculoFloatingButton } from "@/components/dashboard/OraculoFloatingButton";
 import { OraculoChat } from "@/components/dashboard/OraculoChat";
 import { useOraculoChat } from "@/hooks/useOraculoChat";
@@ -28,7 +27,6 @@ export default function Dashboard() {
   const { isLoading: teamMemberLoading } = useCurrentTeamMember();
   const { isMaster } = useMasterAuth();
 
-  const showMarketing = isMaster;
   const showAnalytics = isMaster;
 
   const [selectedMonth, setSelectedMonth] = useState(() => new Date().getMonth() + 1);
@@ -67,9 +65,6 @@ export default function Dashboard() {
           <TabsTrigger value="visao-geral">Visão Geral</TabsTrigger>
           <TabsTrigger value="performance">Performance</TabsTrigger>
           <TabsTrigger value="inteligencia">Inteligência</TabsTrigger>
-          {showMarketing && (
-            <TabsTrigger value="marketing">Marketing</TabsTrigger>
-          )}
           {showAnalytics && (
             <TabsTrigger value="analytics">Analytics</TabsTrigger>
           )}
@@ -108,21 +103,6 @@ export default function Dashboard() {
           </motion.div>
         </TabsContent>
 
-        {showMarketing && (
-          <TabsContent value="marketing" className="mt-6">
-            <Suspense fallback={<div className="flex items-center justify-center py-16"><Loader2 className="w-7 h-7 animate-spin text-primary" /></div>}>
-              <motion.div
-                key="marketing"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3 }}
-              >
-                <TabMarketing month={selectedMonth} year={selectedYear} />
-              </motion.div>
-            </Suspense>
-          </TabsContent>
-        )}
-
         {showAnalytics && (
           <TabsContent value="analytics" className="mt-6">
             <Suspense fallback={<div className="flex items-center justify-center py-16"><Loader2 className="w-7 h-7 animate-spin text-primary" /></div>}>
@@ -132,7 +112,7 @@ export default function Dashboard() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.3 }}
               >
-                <TabAnalytics />
+                <TabAnalyticsV2 month={selectedMonth} year={selectedYear} />
               </motion.div>
             </Suspense>
           </TabsContent>

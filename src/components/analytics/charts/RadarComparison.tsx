@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Users } from "lucide-react";
 import { type MemberStat } from "@/hooks/useAnalyticsComercial";
 import { AnalyticsEmptyState } from "../AnalyticsEmptyState";
+import { AT } from "../analytics-tokens";
 
 interface Props {
   members: MemberStat[];
@@ -38,7 +39,7 @@ export function RadarComparison({ members }: Props) {
   if (members.length < 2) {
     return (
       <Card>
-        <CardHeader><CardTitle className="text-sm">Perfil Comparativo</CardTitle></CardHeader>
+        <CardHeader><CardTitle className={AT.chartTitle}>Perfil Comparativo</CardTitle></CardHeader>
         <CardContent>
           <AnalyticsEmptyState message="Necessário pelo menos 2 vendedores." />
         </CardContent>
@@ -99,7 +100,7 @@ export function RadarComparison({ members }: Props) {
     <Card>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-sm flex items-center gap-2">
+          <CardTitle className={`${AT.chartTitle} flex items-center gap-2`}>
             <Users className="h-4 w-4" />
             Perfil Comparativo
           </CardTitle>

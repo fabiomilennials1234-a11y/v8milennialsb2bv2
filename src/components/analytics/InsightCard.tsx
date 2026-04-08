@@ -1,15 +1,15 @@
-import { memo } from "react";
+import { memo, useState } from "react";
 import { motion } from "framer-motion";
 import { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { AT } from "./analytics-tokens";
 
 type InsightVariant = "success" | "warning" | "info" | "danger";
 
 interface InsightCardProps {
   icon: LucideIcon;
   title: string;
-  value: string;
-  subtitle: string;
+  description: string;
   variant: InsightVariant;
   delay?: number;
 }
@@ -41,15 +41,17 @@ const VARIANT_STYLES: Record<InsightVariant, { bg: string; border: string; iconB
   },
 };
 
-function InsightCardBase({ icon: Icon, title, value, subtitle, variant, delay = 0 }: InsightCardProps) {
+function InsightCardBase({ icon: Icon, title, description, variant, delay = 0 }: InsightCardProps) {
   const s = VARIANT_STYLES[variant];
+  const [expanded, setExpanded] = useState(false);
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, delay }}
-      whileHover={{ scale: 1.02, y: -2 }}
+      onHoverStart={() => setExpanded(true)}
+      onHoverEnd={() => setExpanded(false)}
       className={cn(
         "rounded-lg border p-4 transition-colors cursor-default",
         s.bg,
@@ -61,13 +63,12 @@ function InsightCardBase({ icon: Icon, title, value, subtitle, variant, delay = 
           <Icon className={cn("w-4 h-4", s.iconColor)} />
         </div>
         <div className="min-w-0">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
+          <p className={cn(AT.chartTitle, expanded ? "" : "line-clamp-2")}>
             {title}
           </p>
-          <p className="text-lg font-extrabold tracking-[-0.02em] tabular-nums mt-0.5 leading-tight">
-            {value}
+          <p className={cn(AT.metricSublabel, "mt-1 leading-relaxed", expanded ? "" : "line-clamp-3")}>
+            {description}
           </p>
-          <p className="text-[11px] text-muted-foreground/60 mt-0.5">{subtitle}</p>
         </div>
       </div>
     </motion.div>

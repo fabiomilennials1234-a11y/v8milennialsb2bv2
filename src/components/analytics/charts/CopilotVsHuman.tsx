@@ -3,6 +3,7 @@ import { Bot } from "lucide-react";
 import { type CopilotVsHuman as CopilotVsHumanData } from "@/hooks/useAnalyticsEngajamento";
 import { AnalyticsEmptyState } from "../AnalyticsEmptyState";
 import { formatResponseTime } from "./EngagementKPIs";
+import { AT } from "../analytics-tokens";
 
 interface Props {
   data: CopilotVsHumanData;
@@ -70,7 +71,7 @@ export function CopilotVsHuman({ data }: Props) {
     return (
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm flex items-center gap-2">
+          <CardTitle className={`${AT.chartTitle} flex items-center gap-2`}>
             <Bot className="h-4 w-4" />
             Copilot vs. Humano
           </CardTitle>
@@ -97,11 +98,11 @@ export function CopilotVsHuman({ data }: Props) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm flex items-center gap-2">
+        <CardTitle className={`${AT.chartTitle} flex items-center gap-2`}>
           <Bot className="h-4 w-4" />
           Copilot vs. Humano
         </CardTitle>
-        <p className="text-xs text-muted-foreground">
+        <p className={AT.chartSubtitle}>
           Comparação de eficiência: agente IA vs. equipe humana
         </p>
       </CardHeader>

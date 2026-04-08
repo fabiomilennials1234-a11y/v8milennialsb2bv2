@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { TrendingUp } from "lucide-react";
 import { type UnitEconomics } from "@/hooks/useAnalyticsOverview";
+import { AT } from "../analytics-tokens";
 
 interface Props {
   data: UnitEconomics;
@@ -72,11 +73,11 @@ export function UnitEconomicsCards({ data }: Props) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm flex items-center gap-2">
+        <CardTitle className={`${AT.chartTitle} flex items-center gap-2`}>
           <TrendingUp className="h-4 w-4" />
           Unit Economics
         </CardTitle>
-        <p className="text-xs text-muted-foreground">
+        <p className={AT.chartSubtitle}>
           Métricas estimadas com base nos dados do período
         </p>
       </CardHeader>
@@ -88,7 +89,7 @@ export function UnitEconomicsCards({ data }: Props) {
               className="rounded-lg border border-border bg-card p-3 flex flex-col gap-1"
             >
               <div className="flex items-center justify-between gap-1 flex-wrap">
-                <span className="text-xs text-muted-foreground">{card.label}</span>
+                <span className={AT.metricLabel}>{card.label}</span>
                 {card.badge && (
                   card.badgeCls ? (
                     <Badge className={`text-[10px] px-1.5 py-0 h-4 ${card.badgeCls}`}>
@@ -101,8 +102,8 @@ export function UnitEconomicsCards({ data }: Props) {
                   )
                 )}
               </div>
-              <div className="text-lg font-bold tabular-nums">{card.value}</div>
-              <div className="text-[10px] text-muted-foreground leading-tight">
+              <div className={AT.valueMd}>{card.value}</div>
+              <div className={`${AT.metricSublabel} leading-tight`}>
                 {card.subtitle}
               </div>
             </div>

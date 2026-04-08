@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Users2 } from "lucide-react";
 import { type SellerProfitability as SellerProfitabilityData } from "@/hooks/useAnalyticsFinanceiro";
 import { AnalyticsEmptyState } from "../AnalyticsEmptyState";
+import { AT } from "../analytics-tokens";
 
 interface Props {
   data: SellerProfitabilityData[];
@@ -28,7 +29,7 @@ export function SellerProfitability({ data }: Props) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm">Rentabilidade por Vendedor</CardTitle>
+          <CardTitle className={AT.chartTitle}>Rentabilidade por Vendedor</CardTitle>
         </CardHeader>
         <CardContent>
           <AnalyticsEmptyState message="Sem dados de vendedores no período." />
@@ -42,7 +43,7 @@ export function SellerProfitability({ data }: Props) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm flex items-center gap-2">
+        <CardTitle className={`${AT.chartTitle} flex items-center gap-2`}>
           <Users2 className="h-4 w-4" />
           Rentabilidade por Vendedor
         </CardTitle>

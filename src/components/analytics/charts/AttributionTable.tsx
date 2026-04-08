@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MapPin } from "lucide-react";
 import { type AttributionRow } from "@/hooks/useAnalyticsOverview";
 import { AnalyticsEmptyState } from "../AnalyticsEmptyState";
+import { AT } from "../analytics-tokens";
 
 interface Props {
   attribution: AttributionRow[];
@@ -28,7 +29,7 @@ export function AttributionTable({ attribution }: Props) {
     return (
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm flex items-center gap-2">
+          <CardTitle className={`${AT.chartTitle} flex items-center gap-2`}>
             <MapPin className="h-4 w-4" />
             Atribuição por Origem
           </CardTitle>
@@ -48,11 +49,11 @@ export function AttributionTable({ attribution }: Props) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm flex items-center gap-2">
+        <CardTitle className={`${AT.chartTitle} flex items-center gap-2`}>
           <MapPin className="h-4 w-4" />
           Atribuição por Origem
         </CardTitle>
-        <p className="text-xs text-muted-foreground">Ordenado por receita</p>
+        <p className={AT.chartSubtitle}>Ordenado por receita</p>
       </CardHeader>
       <CardContent>
         <div className="overflow-x-auto">

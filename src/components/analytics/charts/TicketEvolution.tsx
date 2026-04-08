@@ -12,6 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BarChart3 } from "lucide-react";
 import { type TicketByType } from "@/hooks/useAnalyticsFinanceiro";
 import { AnalyticsEmptyState } from "../AnalyticsEmptyState";
+import { AT } from "../analytics-tokens";
 
 interface Props {
   data: TicketByType[];
@@ -70,7 +71,7 @@ export function TicketEvolution({ data }: Props) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm">Evolução do Ticket Médio</CardTitle>
+          <CardTitle className={AT.chartTitle}>Evolução do Ticket Médio</CardTitle>
         </CardHeader>
         <CardContent>
           <AnalyticsEmptyState message="Sem dados de ticket no período." />
@@ -95,7 +96,7 @@ export function TicketEvolution({ data }: Props) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm flex items-center gap-2">
+        <CardTitle className={`${AT.chartTitle} flex items-center gap-2`}>
           <BarChart3 className="h-4 w-4" />
           Evolução do Ticket Médio
         </CardTitle>

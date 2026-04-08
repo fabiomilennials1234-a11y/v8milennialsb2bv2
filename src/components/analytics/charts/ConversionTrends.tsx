@@ -2,6 +2,7 @@ import { TrendingDown, TrendingUp } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { type ConversionTrend } from "@/hooks/useAnalyticsPipesFunis";
 import { AnalyticsEmptyState } from "../AnalyticsEmptyState";
+import { AT } from "../analytics-tokens";
 
 interface Props {
   trends: ConversionTrend[];
@@ -52,7 +53,7 @@ export function ConversionTrends({ trends }: Props) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm">Tendências de Conversão</CardTitle>
+          <CardTitle className={AT.chartTitle}>Tendências de Conversão</CardTitle>
         </CardHeader>
         <CardContent>
           <AnalyticsEmptyState
@@ -67,7 +68,7 @@ export function ConversionTrends({ trends }: Props) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm">Tendências de Conversão (6 meses)</CardTitle>
+        <CardTitle className={AT.chartTitle}>Tendências de Conversão (6 meses)</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         {trends.map((trend) => {

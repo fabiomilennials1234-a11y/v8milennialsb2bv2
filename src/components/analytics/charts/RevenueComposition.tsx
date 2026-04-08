@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DollarSign } from "lucide-react";
 import { type RevenueByType } from "@/hooks/useAnalyticsFinanceiro";
 import { AnalyticsEmptyState } from "../AnalyticsEmptyState";
+import { AT } from "../analytics-tokens";
 
 interface Props {
   data: RevenueByType[];
@@ -63,7 +64,7 @@ export function RevenueComposition({ data, totalRevenue }: Props) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm">Composição de Receita</CardTitle>
+          <CardTitle className={AT.chartTitle}>Composição de Receita</CardTitle>
         </CardHeader>
         <CardContent>
           <AnalyticsEmptyState message="Sem dados de receita no período." />
@@ -81,7 +82,7 @@ export function RevenueComposition({ data, totalRevenue }: Props) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm flex items-center gap-2">
+        <CardTitle className={`${AT.chartTitle} flex items-center gap-2`}>
           <DollarSign className="h-4 w-4" />
           Composição de Receita
         </CardTitle>

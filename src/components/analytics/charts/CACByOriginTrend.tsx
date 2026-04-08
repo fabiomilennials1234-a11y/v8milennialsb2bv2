@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MapPin } from "lucide-react";
 import { type CACByOrigin } from "@/hooks/useAnalyticsFinanceiro";
 import { AnalyticsEmptyState } from "../AnalyticsEmptyState";
+import { AT } from "../analytics-tokens";
 
 interface Props {
   data: CACByOrigin[];
@@ -28,7 +29,7 @@ export function CACByOriginTrend({ data }: Props) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm">CAC por Origem</CardTitle>
+          <CardTitle className={AT.chartTitle}>CAC por Origem</CardTitle>
         </CardHeader>
         <CardContent>
           <AnalyticsEmptyState message="Sem dados de origem no período." />
@@ -44,7 +45,7 @@ export function CACByOriginTrend({ data }: Props) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm flex items-center gap-2">
+        <CardTitle className={`${AT.chartTitle} flex items-center gap-2`}>
           <MapPin className="h-4 w-4" />
           CAC por Origem
         </CardTitle>

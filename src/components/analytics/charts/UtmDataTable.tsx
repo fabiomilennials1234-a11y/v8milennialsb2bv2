@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ArrowUpDown, ChevronRight } from "lucide-react";
 import { AnalyticsEmptyState } from "../AnalyticsEmptyState";
+import { AT } from "../analytics-tokens";
 import type { UtmCombinedRow, UtmLevel } from "@/hooks/useAnalyticsUtms";
 
 interface Props {
@@ -70,7 +71,7 @@ export function UtmDataTable({ data, level, onDrillDown }: Props) {
     return (
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm">{LEVEL_TITLES[level] || level}</CardTitle>
+          <CardTitle className={AT.chartTitle}>{LEVEL_TITLES[level] || level}</CardTitle>
         </CardHeader>
         <CardContent>
           <AnalyticsEmptyState
@@ -98,7 +99,7 @@ export function UtmDataTable({ data, level, onDrillDown }: Props) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm">{LEVEL_TITLES[level] || level}</CardTitle>
+        <CardTitle className={AT.chartTitle}>{LEVEL_TITLES[level] || level}</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="overflow-x-auto">
