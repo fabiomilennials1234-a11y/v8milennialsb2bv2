@@ -197,18 +197,37 @@ function ApiCardSkeleton() {
 export function ApiStatusTab() {
   const [results, setResults] = useState<ApiHealthResult[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [lastCheck, setLastCheck] = useState<string | null>(null);
 
   const runHealthCheck = useCallback(async () => {
     setIsLoading(true);
+    setFetchError(null);
     try {
       const { data, error } = await supabase.functions.invoke("check-api-health");
-      if (error) throw error;
-      const response = data as HealthCheckResponse;
+
+      if (error) {
+        throw new Error(error.message || "Edge function error");
+      }
+
+      // Handle response — may be string or already parsed
+      let response: HealthCheckResponse;
+      if (typeof data === "string") {
+        response = JSON.parse(data);
+      } else {
+        response = data as HealthCheckResponse;
+      }
+
+      if (!response?.results || !Array.isArray(response.results)) {
+        throw new Error(`Resposta inesperada: ${JSON.stringify(data).substring(0, 200)}`);
+      }
+
       setResults(response.results);
       setLastCheck(response.checked_at);
     } catch (e) {
-      console.error("Health check failed:", e);
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error("Health check failed:", msg);
+      setFetchError(msg);
     } finally {
       setIsLoading(false);
     }
@@ -223,7 +242,7 @@ export function ApiStatusTab() {
 
   // Stats
   const connected = results.filter((r) => r.status === "connected").length;
-  const errors = results.filter((r) => r.status === "error").length;
+  const errorsCount = results.filter((r) => r.status === "error").length;
   const notConfigured = results.filter((r) => r.status === "not_configured").length;
 
   return (
@@ -237,10 +256,10 @@ export function ApiStatusTab() {
                 <CheckCircle2 className="w-3 h-3" />
                 {connected} conectadas
               </Badge>
-              {errors > 0 && (
+              {errorsCount > 0 && (
                 <Badge variant="outline" className="gap-1 text-red-600 dark:text-red-400 border-red-500/30">
                   <XCircle className="w-3 h-3" />
-                  {errors} com erro
+                  {errorsCount} com erro
                 </Badge>
               )}
               {notConfigured > 0 && (
@@ -268,6 +287,21 @@ export function ApiStatusTab() {
           Verificar Agora
         </Button>
       </div>
+
+      {/* Error state */}
+      {fetchError && (
+        <Card className="border-red-500/20">
+          <CardContent className="p-4">
+            <div className="flex items-start gap-3">
+              <XCircle className="w-5 h-5 text-red-500 mt-0.5 shrink-0" />
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-red-600 dark:text-red-400">Falha ao verificar APIs</p>
+                <p className="text-xs text-muted-foreground font-mono break-all">{fetchError}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
