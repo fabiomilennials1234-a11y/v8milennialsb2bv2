@@ -1140,6 +1140,23 @@ async function handleMessagesUpsert(
             .filter((c: string) => c && c.trim())
             .join("\n\n");
 
+          // Re-check ai_disabled AFTER batch wait (defense in depth:
+          // user may have toggled the switch during the 8s wait window)
+          const leadPostBatch = await findLeadByPhoneOrEmail(supabase, instance.organization_id, phoneNumber);
+          if ((leadPostBatch as any)?.ai_disabled === true) {
+            console.log("[Evolution Webhook] AI disabled for lead (post-batch check), skipping copilot:", {
+              leadId: leadPostBatch?.id,
+              phone: phoneNumber,
+            });
+            // Mark messages as processed to avoid reprocessing
+            const skipMsgIds = pendingMessages.map((m: { message_id: string }) => m.message_id);
+            await supabase
+              .from("whatsapp_messages")
+              .update({ processed_by_agent_at: new Date().toISOString() })
+              .in("message_id", skipMsgIds);
+            continue;
+          }
+
           console.log("[Evolution Webhook] Processing batched messages:", {
             // @ts-ignore
             agentName: instance.copilot_agents?.name,
