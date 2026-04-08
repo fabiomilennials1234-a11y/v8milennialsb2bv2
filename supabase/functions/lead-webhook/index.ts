@@ -143,6 +143,11 @@ serve(withSentry('lead-webhook', async (req) => {
       faturamento,
       urgency,
       rating,
+      utm_source: fieldsUtmSource,
+      utm_medium: fieldsUtmMedium,
+      utm_campaign: fieldsUtmCampaign,
+      utm_content: fieldsUtmContent,
+      utm_term: fieldsUtmTerm,
       ...customFields
     } = payload.fields;
 
@@ -198,6 +203,11 @@ serve(withSentry('lead-webhook', async (req) => {
         origin,
         organization_id: organizationId,
         pipe_whatsapp: "novo",
+        utm_source: fieldsUtmSource || null,
+        utm_medium: fieldsUtmMedium || null,
+        utm_campaign: fieldsUtmCampaign || payload.campaign_name || payload.campaign_id || null,
+        utm_content: fieldsUtmContent || null,
+        utm_term: fieldsUtmTerm || null,
       };
       if (payload.assigned_user_id) {
         insertData.sdr_id = payload.assigned_user_id;
@@ -246,9 +256,14 @@ serve(withSentry('lead-webhook', async (req) => {
     const updateData: Record<string, unknown> = {};
     if (name) updateData.name = name;
     if (company !== undefined) updateData.company = company || null;
-    if (payload.campaign_name || payload.campaign_id) {
-      updateData.utm_campaign = payload.campaign_name || payload.campaign_id;
+    // UTM fields: fields.utm_* take precedence, fall back to campaign_name/campaign_id
+    if (fieldsUtmCampaign || payload.campaign_name || payload.campaign_id) {
+      updateData.utm_campaign = fieldsUtmCampaign || payload.campaign_name || payload.campaign_id;
     }
+    if (fieldsUtmSource) updateData.utm_source = fieldsUtmSource;
+    if (fieldsUtmMedium) updateData.utm_medium = fieldsUtmMedium;
+    if (fieldsUtmContent) updateData.utm_content = fieldsUtmContent;
+    if (fieldsUtmTerm) updateData.utm_term = fieldsUtmTerm;
     if (fieldsNotes !== undefined && fieldsNotes !== "") {
       updateData.notes = fieldsNotes;
     } else if (isNewLead) {

@@ -39,8 +39,8 @@ export function isValidEmail(email: string | null | undefined): boolean {
  */
 export function isValidPhone(phone: string | null | undefined): boolean {
   if (!phone) return true; // Phone is optional
-  // Remove common formatting characters
-  const cleaned = phone.replace(/[\s\-\(\)]/g, '');
+  // Remove common formatting characters (including + prefix)
+  const cleaned = phone.replace(/[\s\-\(\)\+]/g, '');
   // Check if it's a valid phone number (at least 10 digits)
   return /^\d{10,15}$/.test(cleaned);
 }
