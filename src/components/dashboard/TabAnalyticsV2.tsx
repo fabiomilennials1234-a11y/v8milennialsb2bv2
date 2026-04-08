@@ -8,6 +8,7 @@ import {
   Clock,
   Radio,
   GitBranch,
+  Link,
   Trophy,
   AlertTriangle,
   TrendingUp,
@@ -40,6 +41,9 @@ const ReceitaSection = lazy(() =>
 const EquipeSection = lazy(() =>
   import("@/components/analytics/sections/EquipeSection").then((m) => ({ default: m.EquipeSection }))
 );
+const UtmsTab = lazy(() =>
+  import("@/components/analytics/tabs/UtmsTab").then((m) => ({ default: m.UtmsTab }))
+);
 
 const INSIGHT_ICON_MAP: Record<string, typeof Trophy> = {
   oportunidade: Trophy,
@@ -60,6 +64,7 @@ const DEEP_TABS = [
   { value: "pipeline", label: "Pipeline", icon: GitBranch },
   { value: "receita", label: "Receita", icon: DollarSign },
   { value: "equipe", label: "Equipe", icon: Users },
+  { value: "utms", label: "UTMs", icon: Link },
 ] as const;
 
 function SectionLoader() {
@@ -280,6 +285,11 @@ export function TabAnalyticsV2({ month, year }: TabAnalyticsV2Props) {
             <TabsContent value="equipe" className="mt-0">
               <Suspense fallback={<SectionLoader />}>
                 <EquipeSection />
+              </Suspense>
+            </TabsContent>
+            <TabsContent value="utms" className="mt-0">
+              <Suspense fallback={<SectionLoader />}>
+                <UtmsTab />
               </Suspense>
             </TabsContent>
           </motion.div>
