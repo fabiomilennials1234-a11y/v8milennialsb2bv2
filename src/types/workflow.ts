@@ -156,6 +156,7 @@ export interface TriggerConfigLeadCreated {
 export interface TriggerConfigStageChanged {
   pipe_type?: string;       // "whatsapp" | "confirmacao" | "propostas" | etc.
   pipeline_id?: string;     // UUID for custom pipelines
+  campanha_id?: string;     // UUID for campaigns
   from_stage?: string;
   to_stage?: string;
   stages?: string[];        // multiple target stages (replaces to_stage for multi-select)

@@ -14,6 +14,7 @@ import { TRIGGER_CATEGORIES } from "@/types/workflow";
 import type { TriggerNodeData, WorkflowTriggerType } from "@/types/workflow";
 import { usePipelineStages, getPipelineTypeName, type PipelineType } from "@/hooks/usePipelineStages";
 import { useCustomPipelines, useCustomPipelineStages } from "@/hooks/useCustomPipelines";
+import { useCampanhas, useCampanhaStages } from "@/hooks/useCampanhas";
 import { CampaignSelectorField } from "./CampaignSelectorField";
 
 interface TriggerPanelProps {
@@ -428,13 +429,16 @@ function StageChangedConfig({
 }) {
   const pipeType = (cfg.pipe_type as string) || "";
   const pipelineId = (cfg.pipeline_id as string) || "";
+  const campanhaId = (cfg.campanha_id as string) || "";
   const selectedStages = (cfg.stages as string[]) || [];
   const isCustom = !!pipelineId;
+  const isCampaign = !!campanhaId;
 
-  // Load custom pipelines
+  // Load custom pipelines and campaigns
   const { data: customPipelines } = useCustomPipelines();
+  const { data: campanhas } = useCampanhas();
 
-  // Load stages for selected pipe
+  // Load stages for selected pipe/campaign
   const isStandardPipe = STANDARD_PIPES.some((p) => p.value === pipeType);
   const { data: standardStages } = usePipelineStages(
     isStandardPipe ? (pipeType as PipelineType) : "whatsapp"
@@ -442,8 +446,13 @@ function StageChangedConfig({
   const { data: customStages } = useCustomPipelineStages(
     isCustom ? pipelineId : undefined
   );
+  const { data: campanhaStages } = useCampanhaStages(
+    isCampaign ? campanhaId : undefined
+  );
 
-  const stages = isCustom
+  const stages = isCampaign
+    ? (campanhaStages || []).map((s) => ({ key: s.id, name: s.name }))
+    : isCustom
     ? (customStages || []).map((s) => ({ key: s.stage_key || s.id, name: s.name }))
     : isStandardPipe
     ? (standardStages || []).map((s) => ({
@@ -453,12 +462,14 @@ function StageChangedConfig({
     : [];
 
   const handlePipeChange = (value: string) => {
-    // Check if it's a custom pipeline UUID
     const isCustomPipe = customPipelines?.some((p) => p.id === value);
-    if (isCustomPipe) {
-      updateConfig({ pipe_type: "", pipeline_id: value, stages: [], from_stage: "", to_stage: "" });
+    const isCampanhaPipe = campanhas?.some((c) => c.id === value);
+    if (isCampanhaPipe) {
+      updateConfig({ pipe_type: "", pipeline_id: "", campanha_id: value, stages: [], from_stage: "", to_stage: "" });
+    } else if (isCustomPipe) {
+      updateConfig({ pipe_type: "", pipeline_id: value, campanha_id: "", stages: [], from_stage: "", to_stage: "" });
     } else {
-      updateConfig({ pipe_type: value, pipeline_id: "", stages: [], from_stage: "", to_stage: "" });
+      updateConfig({ pipe_type: value, pipeline_id: "", campanha_id: "", stages: [], from_stage: "", to_stage: "" });
     }
   };
 
@@ -473,7 +484,7 @@ function StageChangedConfig({
     updateConfig({ stages: current });
   };
 
-  const currentPipeValue = isCustom ? pipelineId : pipeType || "__none__";
+  const currentPipeValue = isCampaign ? campanhaId : isCustom ? pipelineId : pipeType || "__none__";
 
   return (
     <>
@@ -505,6 +516,18 @@ function StageChangedConfig({
                 {customPipelines.map((p) => (
                   <SelectItem key={p.id} value={p.id}>
                     {p.name}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            )}
+            {campanhas && campanhas.length > 0 && (
+              <SelectGroup>
+                <SelectLabel className="text-xs font-semibold text-muted-foreground uppercase">
+                  Campanhas
+                </SelectLabel>
+                {campanhas.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.name}
                   </SelectItem>
                 ))}
               </SelectGroup>
