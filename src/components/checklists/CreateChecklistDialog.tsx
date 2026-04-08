@@ -28,7 +28,7 @@ export function CreateChecklistDialog() {
   const [leadId, setLeadId] = useState<string>("");
 
   const createChecklist = useCreateChecklist();
-  const { data: leadsData } = useLeads(0);
+  const { data: leadsData } = useLeads();
   const leads = leadsData ?? [];
 
   const handleCreate = () => {

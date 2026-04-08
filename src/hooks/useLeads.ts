@@ -12,18 +12,58 @@ export type LeadUpdate = TablesUpdate<"leads">;
 
 const LEADS_PAGE_SIZE = 50;
 
+export interface LeadsFilterParams {
+  page?: number;
+  searchQuery?: string;
+  filterOrigin?: string;
+  filterRating?: string;
+}
+
 /**
- * Fetch leads filtered by current user's organization — COM PAGINAÇÃO
- * SECURITY: Always filters by organization_id to ensure data isolation
- * Retorna até LEADS_PAGE_SIZE leads por página, com hasMore e loadMore.
+ * Apply shared filters to a Supabase query builder.
+ * Used by both useLeads and useLeadsCount to ensure consistency.
  */
-export function useLeads(page: number = 0) {
+function applyLeadsFilters(
+  query: any,
+  organizationId: string,
+  filters: Omit<LeadsFilterParams, "page">
+) {
+  query = query
+    .eq("organization_id", organizationId)
+    .or("is_shadow.is.null,is_shadow.eq.false");
+
+  const search = filters.searchQuery?.trim();
+  if (search) {
+    const pattern = `%${search}%`;
+    query = query.or(`name.ilike.${pattern},company.ilike.${pattern},email.ilike.${pattern}`);
+  }
+
+  if (filters.filterOrigin && filters.filterOrigin !== "all") {
+    query = query.eq("origin", filters.filterOrigin);
+  }
+
+  if (filters.filterRating && filters.filterRating !== "all") {
+    if (filters.filterRating === "high") query = query.gte("rating", 7);
+    else if (filters.filterRating === "medium") query = query.gte("rating", 4).lt("rating", 7);
+    else if (filters.filterRating === "low") query = query.lt("rating", 4);
+  }
+
+  return query;
+}
+
+/**
+ * Fetch leads filtered by current user's organization — COM PAGINAÇÃO E FILTROS SERVER-SIDE
+ * SECURITY: Always filters by organization_id to ensure data isolation
+ * Retorna até LEADS_PAGE_SIZE leads por página.
+ */
+export function useLeads(params: LeadsFilterParams = {}) {
+  const { page = 0, searchQuery, filterOrigin, filterRating } = params;
   const { organizationId, isReady } = useOrganization();
 
   useRealtimeSubscription("leads", ["leads", "pipe_whatsapp", "pipe_confirmacao", "pipe_propostas", "tv-dashboard"]);
 
   return useQuery({
-    queryKey: ["leads", organizationId, page],
+    queryKey: ["leads", organizationId, page, searchQuery, filterOrigin, filterRating],
     queryFn: async () => {
       if (!organizationId) {
         console.warn("[useLeads] No organization_id available - returning empty array");
@@ -33,7 +73,7 @@ export function useLeads(page: number = 0) {
       const from = page * LEADS_PAGE_SIZE;
       const to = from + LEADS_PAGE_SIZE - 1;
 
-      const { data, error } = await supabase
+      let query = supabase
         .from("leads")
         .select(`
           *,
@@ -43,38 +83,41 @@ export function useLeads(page: number = 0) {
           lead_tags(
             tag:tags(id, name, color)
           )
-        `)
-        // SECURITY: Filter by organization_id
-        .eq("organization_id", organizationId)
-        // Shadow leads não aparecem na listagem até serem promovidos
-        .or("is_shadow.is.null,is_shadow.eq.false")
+        `);
+
+      query = applyLeadsFilters(query, organizationId, { searchQuery, filterOrigin, filterRating });
+
+      const { data, error } = await query
         .order("created_at", { ascending: false })
         .range(from, to);
 
       if (error) throw error;
       return data;
     },
-    // Only run query when organization is ready
     enabled: isReady,
     staleTime: 5 * 60 * 1000, // 5 minutos
   });
 }
 
 /**
- * Hook para contar total de leads (para paginação)
+ * Hook para contar total de leads (para paginação) — COM OS MESMOS FILTROS
  */
-export function useLeadsCount() {
+export function useLeadsCount(filters: Omit<LeadsFilterParams, "page"> = {}) {
+  const { searchQuery, filterOrigin, filterRating } = filters;
   const { organizationId, isReady } = useOrganization();
 
   return useQuery({
-    queryKey: ["leads-count", organizationId],
+    queryKey: ["leads-count", organizationId, searchQuery, filterOrigin, filterRating],
     queryFn: async () => {
       if (!organizationId) return 0;
-      const { count, error } = await supabase
+
+      let query = supabase
         .from("leads")
-        .select("*", { count: "exact", head: true })
-        .eq("organization_id", organizationId)
-        .or("is_shadow.is.null,is_shadow.eq.false");
+        .select("*", { count: "exact", head: true });
+
+      query = applyLeadsFilters(query, organizationId, { searchQuery, filterOrigin, filterRating });
+
+      const { count, error } = await query;
       if (error) throw error;
       return count ?? 0;
     },
