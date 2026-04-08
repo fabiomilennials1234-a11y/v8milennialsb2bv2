@@ -3,9 +3,19 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
 import { triggerFollowUpAutomation } from "./useAutoFollowUp";
 import { triggerStageChangedWorkflows } from "@/lib/workflowTrigger";
-import { useRealtimeSubscription } from "./useRealtimeSubscription";
+import { useRealtimeSubscription, type RealtimeHandlers } from "./useRealtimeSubscription";
 import { useOrganization } from "./useOrganization";
 import { useCanPerformActionAsync } from "@/lib/permissions";
+
+/** Surgical realtime handlers — avoid full refetch for single-item changes */
+const realtimeHandlers: RealtimeHandlers = {
+  onUpdate: (updated, oldData) =>
+    oldData.map((item) =>
+      item.id === updated.id ? { ...item, ...updated } : item
+    ),
+  onDelete: (deleted, oldData) =>
+    oldData.filter((item) => item.id !== deleted.id),
+};
 
 export type PipeWhatsapp = Tables<"pipe_whatsapp">;
 export type PipeWhatsappInsert = TablesInsert<"pipe_whatsapp">;
@@ -24,7 +34,7 @@ export const statusColumns: { id: string; title: string; color: string }[] = [
 
 export function usePipeWhatsapp() {
   const { organizationId, isReady } = useOrganization();
-  useRealtimeSubscription("pipe_whatsapp", ["pipe_whatsapp", "follow_ups", "tv-dashboard"]);
+  useRealtimeSubscription("pipe_whatsapp", ["pipe_whatsapp"], realtimeHandlers);
 
   return useQuery({
     queryKey: ["pipe_whatsapp", organizationId],
@@ -55,7 +65,7 @@ export function usePipeWhatsapp() {
     },
     enabled: isReady && !!organizationId,
     retry: 1,
-    staleTime: 30_000,
+    staleTime: 10 * 60 * 1000, // 10 min — realtime subscription garante freshness
   });
 }
 
@@ -146,9 +156,7 @@ export function useUpdatePipeWhatsapp() {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["pipe_whatsapp"] });
-      queryClient.invalidateQueries({ queryKey: ["leads"], refetchType: 'active' });
-      queryClient.invalidateQueries({ queryKey: ["follow_ups"] });
+      queryClient.invalidateQueries({ queryKey: ["pipe_whatsapp"], refetchType: "active" });
     },
   });
 }

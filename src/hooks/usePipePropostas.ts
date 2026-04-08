@@ -3,9 +3,19 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
 import { triggerFollowUpAutomation } from "./useAutoFollowUp";
 import { triggerStageChangedWorkflows } from "@/lib/workflowTrigger";
-import { useRealtimeSubscription } from "./useRealtimeSubscription";
+import { useRealtimeSubscription, type RealtimeHandlers } from "./useRealtimeSubscription";
 import { useOrganization } from "./useOrganization";
 import { useCanPerformActionAsync } from "@/lib/permissions";
+
+/** Surgical realtime handlers — avoid full refetch for single-item changes */
+const realtimeHandlers: RealtimeHandlers = {
+  onUpdate: (updated, oldData) =>
+    oldData.map((item) =>
+      item.id === updated.id ? { ...item, ...updated } : item
+    ),
+  onDelete: (deleted, oldData) =>
+    oldData.filter((item) => item.id !== deleted.id),
+};
 
 export type PipeProposta = Tables<"pipe_propostas">;
 export type PipePropostaInsert = TablesInsert<"pipe_propostas">;
@@ -26,7 +36,7 @@ export const statusColumns: { id: string; title: string; color: string }[] = [
 
 export function usePipePropostas() {
   const { organizationId, isReady } = useOrganization();
-  useRealtimeSubscription("pipe_propostas", ["pipe_propostas", "follow_ups", "recent_activity", "tv-dashboard"]);
+  useRealtimeSubscription("pipe_propostas", ["pipe_propostas"], realtimeHandlers);
 
   return useQuery({
     queryKey: ["pipe_propostas", organizationId],
@@ -60,6 +70,7 @@ export function usePipePropostas() {
       return data;
     },
     enabled: isReady && !!organizationId,
+    staleTime: 10 * 60 * 1000, // 10 min — realtime subscription garante freshness
   });
 }
 
@@ -105,10 +116,8 @@ export function useCreatePipeProposta() {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["pipe_propostas"] });
-      queryClient.invalidateQueries({ queryKey: ["leads"] });
-      queryClient.invalidateQueries({ queryKey: ["recent_activity"] });
-      queryClient.invalidateQueries({ queryKey: ["follow_ups"] });
+      queryClient.invalidateQueries({ queryKey: ["pipe_propostas"], refetchType: "active" });
+      queryClient.invalidateQueries({ queryKey: ["follow_ups"], refetchType: "active" });
     },
   });
 }
@@ -189,10 +198,7 @@ export function useUpdatePipeProposta() {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["pipe_propostas"] });
-      queryClient.invalidateQueries({ queryKey: ["leads"] });
-      queryClient.invalidateQueries({ queryKey: ["recent_activity"] });
-      queryClient.invalidateQueries({ queryKey: ["follow_ups"] });
+      queryClient.invalidateQueries({ queryKey: ["pipe_propostas"], refetchType: "active" });
     },
   });
 }

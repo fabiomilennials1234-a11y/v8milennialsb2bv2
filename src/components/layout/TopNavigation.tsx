@@ -58,6 +58,7 @@ import { usePipelineDisplayConfig } from "@/hooks/usePipelineDisplayConfig";
 import { CreateFunilOuCampanhaModal } from "@/components/funis/CreateFunilOuCampanhaModal";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
+import { usePrefetchPipes } from "@/hooks/usePrefetchPipes";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { OrgSwitcher } from "./OrgSwitcher";
@@ -226,6 +227,7 @@ export function TopNavigation() {
   const { data: displayConfig } = usePipelineDisplayConfig();
   const { data: permanentPipelines = [] } = usePermanentCustomFunnels();
   const { data: temporaryFunnels = [] } = useActiveTemporaryFunnels();
+  const prefetchPipes = usePrefetchPipes();
 
   // Build dynamic funnel sub-items from display config
   const dynamicFunisChildren: NavItem[] = (displayConfig ?? [])
@@ -392,7 +394,7 @@ export function TopNavigation() {
     const parentActive = isFunis ? isFunisActive() : isTurbo ? isTurboActive() : false;
 
     return (
-      <Popover key={item.path}>
+      <Popover key={item.path} onOpenChange={(open) => { if (open && isFunis) prefetchPipes(); }}>
         <PopoverTrigger asChild>
           <button className={cn("topnav-item group/dd", parentActive && "topnav-item-active")}>
             <span>{item.label}</span>
