@@ -47,11 +47,17 @@ import { toast } from "sonner";
 const originLabels: Record<string, string> = {
   whatsapp: "WhatsApp",
   meta_ads: "Meta Ads",
-  outro: "Outros",
-  site: "Site",
-  remarketing: "Remarketing",
+  instagram: "Instagram",
+  tiktok: "Tiktok",
   google_ads: "Google Ads",
+  site: "Site",
+  landing_page: "Landing Page",
+  remarketing: "Remarketing",
+  indicacao: "Indicação",
+  evento: "Evento",
+  prospeccao_ativa: "Prospecção Ativa",
   cal: "Cal.com",
+  outro: "Outros",
 };
 
 interface LeadModalProps {

@@ -47,7 +47,7 @@ interface ConfirmacaoCardProps {
     meetingDate?: string;
     meetingDateTime?: Date;
     rating: number;
-    origin: "whatsapp" | "meta_ads" | "outro" | "site" | "remarketing" | "google_ads" | "cal";
+    origin: string;
     responsible?: string;
     tags: { name: string; color: string }[];
     leadId: string;
@@ -76,11 +76,17 @@ const urgencyConfig: Record<string, { label: string; color: string }> = {
 const originConfig: Record<string, { label: string; color: string; icon: string }> = {
   whatsapp: { label: "WhatsApp", color: "bg-green-500/10 text-green-500 border-green-500/30", icon: "💬" },
   meta_ads: { label: "Meta Ads", color: "bg-blue-500/10 text-blue-500 border-blue-500/30", icon: "📱" },
-  outro: { label: "Outros", color: "bg-muted text-muted-foreground border-border", icon: "📋" },
-  site: { label: "Site", color: "bg-teal-500/10 text-teal-500 border-teal-500/30", icon: "🌐" },
-  remarketing: { label: "Remarketing", color: "bg-orange-500/10 text-orange-500 border-orange-500/30", icon: "🔄" },
+  instagram: { label: "Instagram", color: "bg-pink-500/10 text-pink-500 border-pink-500/30", icon: "📸" },
+  tiktok: { label: "Tiktok", color: "bg-gray-900/10 text-gray-900 border-gray-900/30", icon: "🎵" },
   google_ads: { label: "Google Ads", color: "bg-red-500/10 text-red-500 border-red-500/30", icon: "🔍" },
+  site: { label: "Site", color: "bg-teal-500/10 text-teal-500 border-teal-500/30", icon: "🌐" },
+  landing_page: { label: "Landing Page", color: "bg-sky-500/10 text-sky-500 border-sky-500/30", icon: "📄" },
+  remarketing: { label: "Remarketing", color: "bg-orange-500/10 text-orange-500 border-orange-500/30", icon: "🔄" },
+  indicacao: { label: "Indicação", color: "bg-emerald-500/10 text-emerald-500 border-emerald-500/30", icon: "🤝" },
+  evento: { label: "Evento", color: "bg-violet-500/10 text-violet-500 border-violet-500/30", icon: "🎪" },
+  prospeccao_ativa: { label: "Prospecção Ativa", color: "bg-orange-600/10 text-orange-600 border-orange-600/30", icon: "📞" },
   cal: { label: "Cal.com", color: "bg-purple-500/10 text-purple-500 border-purple-500/30", icon: "📅" },
+  outro: { label: "Outros", color: "bg-muted text-muted-foreground border-border", icon: "📋" },
 };
 
 function getMeetingIndicator(

@@ -71,7 +71,7 @@ async function validateAuth(
 
 // Handler para process_lead (reutiliza lógica do webhook-new-lead)
 async function handleProcessLead(supabase: any, data: any, tenantId: string | null) {
-  const validOrigins = ["calendly", "whatsapp", "meta_ads", "remarketing", "base_clientes", "parceiro", "indicacao", "quiz", "site", "organico", "outro"];
+  const validOrigins = ["whatsapp", "meta_ads", "instagram", "tiktok", "google_ads", "site", "landing_page", "remarketing", "indicacao", "evento", "prospeccao_ativa", "cal", "outro", "calendly", "base_clientes", "parceiro", "quiz", "organico"];
   
   const {
     name: rawName,

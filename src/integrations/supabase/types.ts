@@ -8470,12 +8470,17 @@ channel_messages: {
       lead_origin:
         | "whatsapp"
         | "meta_ads"
-        | "outro"
-        | "site"
-        | "remarketing"
-        | "google_ads"
-        | "cal"
         | "instagram"
+        | "tiktok"
+        | "google_ads"
+        | "site"
+        | "landing_page"
+        | "remarketing"
+        | "indicacao"
+        | "evento"
+        | "prospeccao_ativa"
+        | "cal"
+        | "outro"
         | "messenger"
       org_type: "crm" | "outbound"
       product_type:
@@ -8662,12 +8667,17 @@ export const Constants = {
       lead_origin: [
         "whatsapp",
         "meta_ads",
-        "outro",
-        "site",
-        "remarketing",
-        "google_ads",
-        "cal",
         "instagram",
+        "tiktok",
+        "google_ads",
+        "site",
+        "landing_page",
+        "remarketing",
+        "indicacao",
+        "evento",
+        "prospeccao_ativa",
+        "cal",
+        "outro",
         "messenger",
       ],
       org_type: ["crm", "outbound"],

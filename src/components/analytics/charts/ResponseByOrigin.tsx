@@ -29,18 +29,18 @@ function RateBar({
 }
 
 const ORIGIN_LABELS: Record<string, string> = {
-  indicacao:        "Indicação",
-  instagram:        "Instagram",
-  facebook:         "Facebook",
-  google:           "Google",
-  site:             "Site",
-  linkedin:         "LinkedIn",
-  youtube:          "YouTube",
-  tiktok:           "TikTok",
   whatsapp:         "WhatsApp",
-  email:            "E-mail",
+  meta_ads:         "Meta Ads",
+  instagram:        "Instagram",
+  tiktok:           "Tiktok",
+  google_ads:       "Google Ads",
+  site:             "Site",
+  landing_page:     "Landing Page",
+  remarketing:      "Remarketing",
+  indicacao:        "Indicação",
   evento:           "Evento",
-  outbound:         "Outbound",
+  prospeccao_ativa: "Prospecção Ativa",
+  cal:              "Calendário",
   outro:            "Outro",
 };
 

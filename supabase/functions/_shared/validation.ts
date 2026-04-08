@@ -165,7 +165,7 @@ export function validateLeadInput(data: WebhookLeadInput): { valid: boolean; err
   }
 
   // Origin validation
-  const validOrigins = ["calendly", "whatsapp", "meta_ads", "remarketing", "base_clientes", "parceiro", "indicacao", "quiz", "site", "organico", "outro", "cal", "ambos"];
+  const validOrigins = ["whatsapp", "meta_ads", "instagram", "tiktok", "google_ads", "site", "landing_page", "remarketing", "indicacao", "evento", "prospeccao_ativa", "cal", "outro", "calendly", "base_clientes", "parceiro", "quiz", "organico", "ambos"];
   if (data.origin && !validOrigins.includes(data.origin)) {
     errors.push(`Origin inválido. Deve ser um dos: ${validOrigins.join(", ")}`);
   }

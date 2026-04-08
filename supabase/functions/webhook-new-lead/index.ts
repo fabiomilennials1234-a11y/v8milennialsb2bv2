@@ -48,7 +48,7 @@ Deno.serve(withSentry('webhook-new-lead', async (req) => {
     const body = await req.json();
     
     // Valid origin enum values
-    const validOrigins = ["whatsapp", "meta_ads", "outro", "site", "remarketing", "google_ads", "cal"];
+    const validOrigins = ["whatsapp", "meta_ads", "instagram", "tiktok", "google_ads", "site", "landing_page", "remarketing", "indicacao", "evento", "prospeccao_ativa", "cal", "outro"];
     
     // Expected fields from n8n
     const {

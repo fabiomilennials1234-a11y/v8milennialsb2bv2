@@ -35,14 +35,19 @@ import type { DraggableItem } from "@/components/kanban/DraggableKanbanBoard";
 // ─── Origin Colors (unified across all funnels) ──────────
 
 export const ORIGIN_COLORS: Record<string, { bg: string; text: string; label: string }> = {
-  whatsapp:   { bg: "#E1F5EE", text: "#0F6E56", label: "WhatsApp" },
-  meta_ads:   { bg: "#EEEDFE", text: "#534AB7", label: "Meta Ads" },
-  google_ads: { bg: "#FCEBEB", text: "#A32D2D", label: "Google Ads" },
-  site:       { bg: "#E6F1FB", text: "#185FA5", label: "Site" },
-  remarketing:{ bg: "#FFF3E0", text: "#B35C00", label: "Remarketing" },
-  cal:        { bg: "#F3E8FF", text: "#7C3AED", label: "Cal.com" },
-  indicacao:  { bg: "#EAF3DE", text: "#3B6D11", label: "Indicação" },
-  outro:      { bg: "#F1EFE8", text: "#5F5E5A", label: "Outros" },
+  whatsapp:        { bg: "#E1F5EE", text: "#0F6E56", label: "WhatsApp" },
+  meta_ads:        { bg: "#EEEDFE", text: "#534AB7", label: "Meta Ads" },
+  instagram:       { bg: "#FDEEF4", text: "#C2185B", label: "Instagram" },
+  tiktok:          { bg: "#F0F0F0", text: "#010101", label: "Tiktok" },
+  google_ads:      { bg: "#FCEBEB", text: "#A32D2D", label: "Google Ads" },
+  site:            { bg: "#E6F1FB", text: "#185FA5", label: "Site" },
+  landing_page:    { bg: "#E0F2FE", text: "#0369A1", label: "Landing Page" },
+  remarketing:     { bg: "#FFF3E0", text: "#B35C00", label: "Remarketing" },
+  indicacao:       { bg: "#EAF3DE", text: "#3B6D11", label: "Indicação" },
+  evento:          { bg: "#F3E8FF", text: "#6D28D9", label: "Evento" },
+  prospeccao_ativa:{ bg: "#FFF7ED", text: "#C2410C", label: "Prospecção Ativa" },
+  cal:             { bg: "#F3E8FF", text: "#7C3AED", label: "Cal.com" },
+  outro:           { bg: "#F1EFE8", text: "#5F5E5A", label: "Outros" },
 };
 
 // ─── Urgency Config ──────────────────────────────────────
