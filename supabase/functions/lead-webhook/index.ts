@@ -151,15 +151,24 @@ serve(withSentry('lead-webhook', async (req) => {
       ...customFields
     } = payload.fields;
 
-    // Mapear origem (valores do enum: whatsapp, meta_ads, outro, site, remarketing, google_ads, cal)
+    // Mapear origem (valores do enum lead_origin)
     const originMap: Record<string, string> = {
       "meta_ads": "meta_ads",
       "facebook": "meta_ads",
-      "instagram": "meta_ads",
+      "instagram": "instagram",
+      "tiktok": "tiktok",
       "google_ads": "google_ads",
-      "landing_page": "site",
+      "landing_page": "landing_page",
       "site": "site",
       "remarketing": "remarketing",
+      "indicacao": "indicacao",
+      "indicação": "indicacao",
+      "referral": "indicacao",
+      "evento": "evento",
+      "event": "evento",
+      "prospeccao_ativa": "prospeccao_ativa",
+      "prospeccao": "prospeccao_ativa",
+      "outbound": "prospeccao_ativa",
       "whatsapp": "whatsapp",
       "calendly": "cal",
       "cal": "cal",

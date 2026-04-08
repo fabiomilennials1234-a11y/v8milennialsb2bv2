@@ -21,7 +21,7 @@ import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
-export type OriginFilter = "all" | "whatsapp" | "meta_ads" | "outro" | "site" | "remarketing" | "google_ads" | "cal";
+export type OriginFilter = "all" | "whatsapp" | "meta_ads" | "instagram" | "tiktok" | "google_ads" | "site" | "landing_page" | "remarketing" | "indicacao" | "evento" | "prospeccao_ativa" | "cal" | "outro";
 export type TimeFilter = "all" | "today" | "tomorrow" | "week" | "overdue";
 export type UrgencyFilter = "all" | "imediato" | "1-mes" | "2-3-meses" | "6-meses";
 
@@ -53,11 +53,17 @@ const originOptions: { value: OriginFilter; label: string; icon: string }[] = [
   { value: "all", label: "Todas origens", icon: "🌐" },
   { value: "whatsapp", label: "WhatsApp", icon: "💬" },
   { value: "meta_ads", label: "Meta Ads", icon: "📱" },
-  { value: "outro", label: "Outros", icon: "📋" },
-  { value: "site", label: "Site", icon: "🌐" },
-  { value: "remarketing", label: "Remarketing", icon: "🔄" },
+  { value: "instagram", label: "Instagram", icon: "📸" },
+  { value: "tiktok", label: "Tiktok", icon: "🎵" },
   { value: "google_ads", label: "Google Ads", icon: "🔍" },
+  { value: "site", label: "Site", icon: "🌐" },
+  { value: "landing_page", label: "Landing Page", icon: "📄" },
+  { value: "remarketing", label: "Remarketing", icon: "🔄" },
+  { value: "indicacao", label: "Indicação", icon: "🤝" },
+  { value: "evento", label: "Evento", icon: "🎪" },
+  { value: "prospeccao_ativa", label: "Prospecção Ativa", icon: "📞" },
   { value: "cal", label: "Cal.com", icon: "📅" },
+  { value: "outro", label: "Outros", icon: "📋" },
 ];
 
 const timeOptions: { value: TimeFilter; label: string; shortLabel: string }[] = [

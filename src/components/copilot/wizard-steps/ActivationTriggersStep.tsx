@@ -31,11 +31,17 @@ import type { CopilotWizardData, TriggerCondition, TriggerOperator } from "@/typ
 const ORIGINS = [
   { value: "whatsapp", label: "WhatsApp" },
   { value: "meta_ads", label: "Meta Ads" },
-  { value: "outro", label: "Outros" },
-  { value: "site", label: "Site" },
-  { value: "remarketing", label: "Remarketing" },
+  { value: "instagram", label: "Instagram" },
+  { value: "tiktok", label: "Tiktok" },
   { value: "google_ads", label: "Google Ads" },
+  { value: "site", label: "Site" },
+  { value: "landing_page", label: "Landing Page" },
+  { value: "remarketing", label: "Remarketing" },
+  { value: "indicacao", label: "Indicação" },
+  { value: "evento", label: "Evento" },
+  { value: "prospeccao_ativa", label: "Prospecção Ativa" },
   { value: "cal", label: "Cal.com" },
+  { value: "outro", label: "Outros" },
 ];
 
 const OPERATORS: { value: TriggerOperator; label: string }[] = [

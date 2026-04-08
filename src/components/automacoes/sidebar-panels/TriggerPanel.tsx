@@ -101,11 +101,17 @@ export function TriggerPanel({ data, onUpdate }: TriggerPanelProps) {
               <SelectTrigger><SelectValue placeholder="Qualquer origem" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="__any__">Qualquer origem</SelectItem>
-                <SelectItem value="meta_ads">Meta Ads</SelectItem>
-                <SelectItem value="google_ads">Google Ads</SelectItem>
                 <SelectItem value="whatsapp">WhatsApp</SelectItem>
+                <SelectItem value="meta_ads">Meta Ads</SelectItem>
+                <SelectItem value="instagram">Instagram</SelectItem>
+                <SelectItem value="tiktok">Tiktok</SelectItem>
+                <SelectItem value="google_ads">Google Ads</SelectItem>
                 <SelectItem value="site">Site</SelectItem>
+                <SelectItem value="landing_page">Landing Page</SelectItem>
                 <SelectItem value="remarketing">Remarketing</SelectItem>
+                <SelectItem value="indicacao">Indicação</SelectItem>
+                <SelectItem value="evento">Evento</SelectItem>
+                <SelectItem value="prospeccao_ativa">Prospecção Ativa</SelectItem>
                 <SelectItem value="cal">Calendário (Cal)</SelectItem>
                 <SelectItem value="outro">Outro</SelectItem>
               </SelectContent>

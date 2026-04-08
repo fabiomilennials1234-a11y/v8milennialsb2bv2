@@ -37,11 +37,14 @@ import {
   Calendar,
   X,
   MoreHorizontal,
+  Sun,
+  Moon,
 } from "lucide-react";
 import torqueLogo from "@/assets/torque-logo.png";
 import torqueLogoDark from "@/assets/torque-logo-dark.png";
 import torqueIcon from "@/assets/torque-icon.png";
 import { useTheme } from "next-themes";
+import { useThemeTransition } from "@/contexts/ThemeTransitionContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserRole, useJobTitle, useFeaturePermissions, useIsAdmin } from "@/hooks/useUserRole";
 import { useMasterAuth } from "@/hooks/useMasterAuth";
@@ -219,6 +222,7 @@ export function TopNavigation() {
   const location = useLocation();
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === "dark";
+  const themeTransition = useThemeTransition();
   const { user, signOut } = useAuth();
   const { data: userRole } = useUserRole();
   const { jobTitle } = useJobTitle();
@@ -773,6 +777,17 @@ export function TopNavigation() {
                 <Camera className="w-4 h-4 opacity-60" />
                 <span>Foto de Perfil</span>
               </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={(e: Event) => e.preventDefault()}
+                className="gap-2.5 px-3 py-2 cursor-pointer rounded-lg"
+                onClick={() => {
+                  const next = isDark ? "light" : "dark";
+                  if (themeTransition) themeTransition.requestThemeChange(next);
+                }}
+              >
+                {isDark ? <Sun className="w-4 h-4 opacity-60" /> : <Moon className="w-4 h-4 opacity-60" />}
+                <span className="flex-1">{isDark ? "Tema Claro" : "Tema Escuro"}</span>
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={signOut} className="gap-2.5 px-3 py-2 cursor-pointer rounded-lg text-destructive focus:text-destructive">
                 <LogOut className="w-4 h-4 opacity-60" />
@@ -863,7 +878,17 @@ export function TopNavigation() {
                 </nav>
 
                 {/* Mobile user footer */}
-                <div className="px-5 py-4 border-t border-border/30">
+                <div className="px-5 py-4 border-t border-border/30 space-y-3">
+                  <button
+                    onClick={() => {
+                      const next = isDark ? "light" : "dark";
+                      if (themeTransition) themeTransition.requestThemeChange(next);
+                    }}
+                    className="flex items-center gap-3 w-full px-2 py-2 rounded-lg hover:bg-muted/50 transition-colors"
+                  >
+                    {isDark ? <Sun className="w-4 h-4 text-muted-foreground" /> : <Moon className="w-4 h-4 text-muted-foreground" />}
+                    <span className="text-sm font-medium">{isDark ? "Tema Claro" : "Tema Escuro"}</span>
+                  </button>
                   <div className="flex items-center gap-3">
                     <UserAvatar
                       name={getUserName()}
