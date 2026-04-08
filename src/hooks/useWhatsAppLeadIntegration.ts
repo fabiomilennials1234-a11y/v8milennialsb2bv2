@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "./useTeamMembers";
 import { DEFAULT_STAGES } from "./usePipelineStages";
+import { normalizePhone } from "@/lib/normalizePhone";
 import type { Tables, TablesInsert } from "@/integrations/supabase/types";
 
 /**
@@ -38,7 +39,7 @@ export function useLeadByPhone(phone: string | null) {
     queryFn: async () => {
       if (!phone || !organizationId) return null;
 
-      const normalizedPhone = phone.replace(/\D/g, "");
+      const normalizedPhone = normalizePhone(phone) || phone.replace(/\D/g, "");
 
       const { data, error } = await supabase
         .from("leads")
@@ -50,7 +51,7 @@ export function useLeadByPhone(phone: string | null) {
           lead_tags(tag:tags(id, name, color))
         `)
         .eq("organization_id", organizationId)
-        .or(`phone.ilike.%${normalizedPhone}%,phone.ilike.%${normalizedPhone.slice(-9)}%`)
+        .eq("normalized_phone", normalizedPhone)
         .limit(1)
         .maybeSingle();
 
@@ -128,7 +129,7 @@ export function useCreateLeadFromWhatsApp() {
         throw new Error("Usuário não está vinculado a uma organização");
       }
 
-      const normalizedPhone = phone.replace(/\D/g, "");
+      const normalizedPhone = normalizePhone(phone) || phone.replace(/\D/g, "");
       const effectiveSdrId = sdrId || teamMember.id;
       const effectiveDestination = destination || "qualificacao";
 
@@ -137,7 +138,7 @@ export function useCreateLeadFromWhatsApp() {
         .from("leads")
         .select("id, is_shadow")
         .eq("organization_id", teamMember.organization_id)
-        .or(`phone.ilike.%${normalizedPhone}%,phone.ilike.%${normalizedPhone.slice(-9)}%`)
+        .eq("normalized_phone", normalizedPhone)
         .limit(1)
         .maybeSingle();
 
@@ -341,7 +342,7 @@ export function useCreateLeadFromWhatsApp() {
       const { error: updateError } = await supabase
         .from("whatsapp_messages")
         .update({ lead_id: newLead.id })
-        .eq("phone_number", normalizedPhone)
+        .eq("normalized_phone", normalizedPhone)
         .is("lead_id", null);
 
       if (updateError) {
@@ -379,7 +380,7 @@ export function useLinkLeadToWhatsApp() {
       leadId: string;
       phone: string;
     }) => {
-      const normalizedPhone = phone.replace(/\D/g, "");
+      const normalizedPhone = normalizePhone(phone) || phone.replace(/\D/g, "");
 
       // 1. Atualizar telefone do lead se necessário
       const { error: leadError } = await supabase
@@ -420,7 +421,7 @@ export function useLinkLeadToWhatsApp() {
       const { error: updateError } = await supabase
         .from("whatsapp_messages")
         .update({ lead_id: leadId })
-        .eq("phone_number", normalizedPhone);
+        .eq("normalized_phone", normalizedPhone);
 
       if (updateError) {
         console.error("[WhatsApp Lead] Erro ao vincular mensagens:", updateError);

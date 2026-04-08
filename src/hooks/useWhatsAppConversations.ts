@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
+import { normalizePhone } from "@/lib/normalizePhone";
 import type { Tag } from "@/hooks/useTags";
 
 // ============================================
@@ -45,7 +46,9 @@ export function useWhatsAppConversationsMeta(instanceId: string | null) {
 
       const map = new Map<string, ConversationMeta>();
       for (const row of data || []) {
-        map.set(row.phone_number, row as ConversationMeta);
+        // Index by normalized phone so format differences don't break lookup
+        const key = normalizePhone(row.phone_number) || row.phone_number;
+        map.set(key, row as ConversationMeta);
       }
       return map;
     },
@@ -80,12 +83,12 @@ export function useWhatsAppConversationTags(instanceId: string | null) {
 
       if (error) throw error;
 
-      // Agrupar tags por phone_number
+      // Agrupar tags por phone normalizado
       const map = new Map<string, Tag[]>();
       for (const row of data || []) {
         const conv = row.whatsapp_conversations as unknown as { phone_number: string };
         const tag = row.tags as unknown as Tag;
-        const phone = conv.phone_number;
+        const phone = normalizePhone(conv.phone_number) || conv.phone_number;
         const existing = map.get(phone) || [];
         existing.push(tag);
         map.set(phone, existing);
