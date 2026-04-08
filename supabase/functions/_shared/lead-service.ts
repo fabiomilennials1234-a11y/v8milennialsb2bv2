@@ -140,7 +140,7 @@ export async function getOrCreateLead(
   if (normalizedPhone) {
     const { data: phoneResults, error: phoneError } = await supabase
       .from("leads")
-      .select("id, name, phone, email, organization_id, normalized_phone")
+      .select("id, name, phone, email, organization_id, normalized_phone, ai_disabled")
       .eq("organization_id", organizationId)
       .eq("normalized_phone", normalizedPhone)
       .order("created_at", { ascending: false })
@@ -162,7 +162,7 @@ export async function getOrCreateLead(
   if (normalizedEmailValue) {
     const { data: emailResults, error: emailError } = await supabase
       .from("leads")
-      .select("id, name, phone, email, organization_id, normalized_phone")
+      .select("id, name, phone, email, organization_id, normalized_phone, ai_disabled")
       .eq("organization_id", organizationId)
       .ilike("email", normalizedEmailValue)
       .order("created_at", { ascending: false })
@@ -223,7 +223,7 @@ export async function getOrCreateLead(
   const { data: newLead, error: createError } = await supabase
     .from("leads")
     .insert(insertData)
-    .select("id, name, phone, email, organization_id, normalized_phone")
+    .select("id, name, phone, email, organization_id, normalized_phone, ai_disabled")
     .single();
 
   if (createError) {
@@ -240,7 +240,7 @@ export async function getOrCreateLead(
       if (normalizedPhone) {
         const { data: retryResults } = await supabase
           .from("leads")
-          .select("id, name, phone, email, organization_id, normalized_phone")
+          .select("id, name, phone, email, organization_id, normalized_phone, ai_disabled")
           .eq("organization_id", organizationId)
           .eq("normalized_phone", normalizedPhone)
           .order("created_at", { ascending: false })
@@ -258,7 +258,7 @@ export async function getOrCreateLead(
       if (normalizedEmailValue) {
         const { data: retryEmailResults } = await supabase
           .from("leads")
-          .select("id, name, phone, email, organization_id, normalized_phone")
+          .select("id, name, phone, email, organization_id, normalized_phone, ai_disabled")
           .eq("organization_id", organizationId)
           .ilike("email", normalizedEmailValue)
           .order("created_at", { ascending: false })
@@ -325,7 +325,7 @@ export async function findLeadByPhoneOrEmail(
   if (normalizedPhone) {
     const { data: phoneResults } = await supabase
       .from("leads")
-      .select("id, name, phone, email, organization_id, normalized_phone")
+      .select("id, name, phone, email, organization_id, normalized_phone, ai_disabled")
       .eq("organization_id", organizationId)
       .eq("normalized_phone", normalizedPhone)
       .order("created_at", { ascending: false })
@@ -340,7 +340,7 @@ export async function findLeadByPhoneOrEmail(
   if (normalizedEmailValue) {
     const { data: emailResults } = await supabase
       .from("leads")
-      .select("id, name, phone, email, organization_id, normalized_phone")
+      .select("id, name, phone, email, organization_id, normalized_phone, ai_disabled")
       .eq("organization_id", organizationId)
       .ilike("email", normalizedEmailValue)
       .order("created_at", { ascending: false })

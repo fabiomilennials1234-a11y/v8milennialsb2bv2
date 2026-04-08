@@ -1020,6 +1020,16 @@ async function handleMessagesUpsert(
             continue;
           }
 
+          // Check if AI is disabled for this lead (early exit before batch wait)
+          const leadForAiCheck = await findLeadByPhoneOrEmail(supabase, instance.organization_id, phoneNumber);
+          if ((leadForAiCheck as any)?.ai_disabled === true) {
+            console.log("[Evolution Webhook] AI disabled for lead, skipping copilot:", {
+              leadId: leadForAiCheck.id,
+              phone: phoneNumber,
+            });
+            continue;
+          }
+
           // =====================================================
           // MESSAGE BATCHING: Aguardar mais mensagens do lead
           // =====================================================

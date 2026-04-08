@@ -425,6 +425,16 @@ async function handleClientMessage(
     return;
   }
 
+  // Check if AI is disabled for this lead (early exit before batch wait)
+  const leadForAiCheck = await findLeadByPhoneOrEmail(supabase, organizationId, phoneNumber);
+  if ((leadForAiCheck as any)?.ai_disabled === true) {
+    console.log("[SZ Chat Webhook] AI disabled for lead, skipping copilot:", {
+      leadId: leadForAiCheck?.id,
+      phone: phoneNumber,
+    });
+    return;
+  }
+
   // =====================================================
   // MESSAGE BATCHING: Wait for more messages from the lead
   // =====================================================
@@ -703,21 +713,6 @@ async function associateMessageToExistingLead(
   const lead = await findLeadByPhoneOrEmail(supabase, organizationId, phoneNumber);
   if (lead) {
     await associateMessagesToLead(supabase, organizationId, phoneNumber, lead.id);
-
-    // Resolve any workflow wait_response nodes waiting for this lead's reply
-    try {
-      const { data: resolvedCount } = await supabase.rpc("resolve_wait_response", {
-        p_lead_id: lead.id,
-        p_organization_id: organizationId,
-        p_channel: "whatsapp",
-      });
-      if (resolvedCount && resolvedCount > 0) {
-        console.log("[SZ Chat Webhook] Resolved wait_response for lead:", lead.id, resolvedCount);
-      }
-    } catch (err) {
-      console.warn("[SZ Chat Webhook] resolve_wait_response error:", err);
-    }
-
     console.log("[SZ Chat Webhook] Messages associated to existing lead:", lead.id);
   }
 }
