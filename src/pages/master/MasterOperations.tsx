@@ -53,6 +53,7 @@ import {
   type RuntimeLog,
   type AutomationJob,
 } from "@/hooks/useMasterOperations";
+import { ApiStatusTab } from "@/components/master/ApiStatusTab";
 
 // ─── Aba 1: Visão Geral ─────────────────────────────────
 
@@ -880,6 +881,7 @@ export default function MasterOperations() {
           <TabsTrigger value="logs">Logs de Runtime</TabsTrigger>
           <TabsTrigger value="usage">Uso por Organização</TabsTrigger>
           <TabsTrigger value="jobs">Jobs</TabsTrigger>
+          <TabsTrigger value="apis">APIs</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="mt-6">
@@ -896,6 +898,10 @@ export default function MasterOperations() {
 
         <TabsContent value="jobs" className="mt-6">
           <JobsTab />
+        </TabsContent>
+
+        <TabsContent value="apis" className="mt-6">
+          <ApiStatusTab />
         </TabsContent>
       </Tabs>
     </div>

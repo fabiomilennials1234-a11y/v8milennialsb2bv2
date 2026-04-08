@@ -784,7 +784,10 @@ export function useCopilotAgentForEdit(agentId?: string) {
         // Wizard v3 — novos campos livres (armazenados em JSONB)
         personaDescription: conversationStyle.personaDescription || "",
         skillsAndTopics: businessContext.skillsAndTopics || "",
-      };
+        // Playground structured prompt data (round-trip)
+        promptSections: conversationStyle.promptSections || undefined,
+        toolInstructions: conversationStyle.toolInstructions || undefined,
+      } as any;
 
       return { wizardData, existingDocuments: documents };
     },
@@ -834,7 +837,13 @@ export function useUpdateCopilotAgentFromWizard() {
           data.customInstructions?.donts || ""
         ),
         business_context: { ...(data.businessContext || {}), skillsAndTopics: data.skillsAndTopics || "" },
-        conversation_style: { ...(data.conversationStyle || {}), personaDescription: data.personaDescription || "" },
+        conversation_style: {
+          ...(data.conversationStyle || {}),
+          personaDescription: data.personaDescription || "",
+          // Playground structured prompt data (round-trip)
+          ...((data as any).promptSections ? { promptSections: (data as any).promptSections } : {}),
+          ...((data as any).toolInstructions ? { toolInstructions: (data as any).toolInstructions } : {}),
+        },
         qualification_rules: data.qualification || {},
         few_shot_examples: data.examples || [],
         availability: data.availability || {},

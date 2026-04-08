@@ -22,16 +22,22 @@ export interface PlaygroundToolDef {
   description: string;
   icon: string;
   parameters: ToolParameter[];
+  /** Instrução default autônoma — pre-preenche o campo instruction ao ativar */
+  defaultInstruction: string;
 }
 
 export interface PlaygroundToolState {
   enabled: boolean;
   config: Record<string, any>;
+  /** Instrução livre de quando/como o copilot deve usar esta ferramenta */
+  instruction: string;
 }
 
 // =====================================================
 // KNOWLEDGE BASE
 // =====================================================
+
+export type KnowledgeFileType = "document" | "image" | "video";
 
 export interface KnowledgeDocument {
   id: string;
@@ -42,6 +48,12 @@ export interface KnowledgeDocument {
   /** Existing doc from DB */
   existingId?: string;
   filePath?: string;
+  /** Media type classification */
+  fileType: KnowledgeFileType;
+  /** Human description of content (required for media) */
+  description?: string;
+  /** When should the copilot send this (natural language instruction) */
+  sendWhen?: string;
 }
 
 export interface KnowledgeLink {
@@ -49,6 +61,28 @@ export interface KnowledgeLink {
   alias: string;
   url: string;
 }
+
+// =====================================================
+// PROMPT SECTIONS
+// =====================================================
+
+export interface PromptSections {
+  /** Quem é o copilot — persona, tom de voz, como age */
+  personality: string;
+  /** Missão principal, critério de sucesso, limites */
+  objective: string;
+  /** Fluxo de atendimento/conversa — etapas, como conduzir */
+  flow: string;
+  /** Do's e Don'ts — regras rígidas */
+  instructions: string;
+}
+
+export const DEFAULT_PROMPT_SECTIONS: PromptSections = {
+  personality: "",
+  objective: "",
+  flow: "",
+  instructions: "",
+};
 
 // =====================================================
 // PLAYGROUND STATE
@@ -59,8 +93,8 @@ export interface PlaygroundData {
   name: string;
   templateType: AgentTemplateType | "";
 
-  // Prompt (the core)
-  prompt: string;
+  // Prompt sections (structured)
+  promptSections: PromptSections;
 
   // Settings
   llmTemperatureMode: "criativo" | "balanceado" | "preciso";
@@ -136,7 +170,7 @@ export function createDefaultPlaygroundData(): PlaygroundData {
   return {
     name: "",
     templateType: "",
-    prompt: "",
+    promptSections: { ...DEFAULT_PROMPT_SECTIONS },
     llmTemperatureMode: "balanceado",
     responseDelayMs: 1000,
     availability: { ...DEFAULT_AVAILABILITY },
@@ -162,6 +196,7 @@ export const PLAYGROUND_TOOLS: PlaygroundToolDef[] = [
     name: "Qualificar Lead",
     description: "Qualifica o lead com campos obrigatorios e opcionais",
     icon: "UserCheck",
+    defaultInstruction: "Conforme o lead compartilha informacoes durante a conversa (nome, empresa, cargo, necessidade, orcamento, timeline), registre progressivamente — nao espere coletar tudo. Quando os campos obrigatorios estiverem completos, qualifique o lead automaticamente. Se claramente nao se encaixa no perfil ideal, desqualifique com motivo.",
     parameters: [
       { key: "requiredFields", label: "Campos obrigatorios", type: "text", placeholder: "Ex: Nome, Empresa, Cargo" },
       { key: "optionalFields", label: "Campos opcionais", type: "text", placeholder: "Ex: Orcamento, Timeline" },
@@ -172,6 +207,7 @@ export const PLAYGROUND_TOOLS: PlaygroundToolDef[] = [
     name: "Agendar Reuniao",
     description: "Agenda reuniao com o lead",
     icon: "Calendar",
+    defaultInstruction: "Quando o lead demonstrar interesse claro (pedir preco, perguntar sobre implementacao, querer saber proximos passos), sugira proativamente uma reuniao. Apresente opcoes de horario quando disponiveis. Ao confirmar, agende imediatamente.",
     parameters: [
       { key: "schedulingLink", label: "Link de agendamento", type: "text", placeholder: "https://calendly.com/..." },
       { key: "instructions", label: "Instrucoes", type: "text", placeholder: "Ex: Verificar disponibilidade antes" },
@@ -182,6 +218,7 @@ export const PLAYGROUND_TOOLS: PlaygroundToolDef[] = [
     name: "Mover Card",
     description: "Move o lead para outra etapa do funil",
     icon: "ArrowRightLeft",
+    defaultInstruction: "Mova o lead entre etapas do funil automaticamente conforme a conversa progride. Lead respondeu → mover para 'Respondeu'. Lead qualificado → mover para 'Qualificado'. Lead nao responde apos follow-ups → mover para 'Esfriou'. Nao peca permissao — aja conforme o contexto da conversa.",
     parameters: [
       {
         key: "pipe",
@@ -204,6 +241,7 @@ export const PLAYGROUND_TOOLS: PlaygroundToolDef[] = [
     name: "Enviar Follow-up",
     description: "Envia mensagem de follow-up ao lead",
     icon: "MessageSquare",
+    defaultInstruction: "Envie follow-up quando o lead parar de responder. Respeite o intervalo minimo configurado. Varie a abordagem entre: valor (compartilhar conteudo relevante), curiosidade (pergunta aberta sobre cenario atual), check-in (verificacao amigavel). Na ultima tentativa, use abordagem de 'breakup'.",
     parameters: [
       { key: "minIntervalHours", label: "Intervalo minimo (horas)", type: "number", placeholder: "24" },
     ],
@@ -213,6 +251,7 @@ export const PLAYGROUND_TOOLS: PlaygroundToolDef[] = [
     name: "Transferir para Humano",
     description: "Transfere a conversa para um atendente humano",
     icon: "Headphones",
+    defaultInstruction: "Transfira para um humano apenas quando: (1) o lead pedir explicitamente, (2) a duvida for tecnica demais e nao estiver na base de conhecimento, (3) o lead demonstrar frustracao ou a conversa entrar em loop. Antes de transferir, resuma o contexto da conversa para o atendente.",
     parameters: [
       { key: "transferMessage", label: "Mensagem de transferencia", type: "text", placeholder: "Ex: Vou transferir voce..." },
       { key: "targetUser", label: "Para quem", type: "text", placeholder: "Ex: Equipe de vendas" },
@@ -223,6 +262,7 @@ export const PLAYGROUND_TOOLS: PlaygroundToolDef[] = [
     name: "Criar Lead",
     description: "Cria um novo lead no sistema",
     icon: "UserPlus",
+    defaultInstruction: "Quando um contato desconhecido iniciar conversa e fornecer nome e pelo menos um meio de contato (telefone ou email), crie o lead automaticamente. Extraia todas as informacoes disponiveis da conversa para preencher os campos iniciais.",
     parameters: [
       { key: "requiredFields", label: "Campos obrigatorios", type: "text", placeholder: "Ex: Nome, Telefone" },
     ],
@@ -230,8 +270,9 @@ export const PLAYGROUND_TOOLS: PlaygroundToolDef[] = [
   {
     id: "PREENCHER_CAMPOS",
     name: "Preencher Campos do Lead",
-    description: "Preenche campos padrao (empresa, segmento, urgencia, faturamento, rating) e campos customizados no card do lead. Informacoes sem campo dedicado vao para notas.",
+    description: "Preenche campos padrao e customizados no card do lead",
     icon: "Database",
+    defaultInstruction: "Sempre que o lead mencionar informacoes relevantes (empresa, cargo, segmento, numero de funcionarios, orcamento, ferramenta atual, etc.), preencha o campo correspondente imediatamente. Extraia dados naturalmente da conversa — nao pergunte 'posso salvar isso?'. Se nao existir campo dedicado para a informacao, registre em notas.",
     parameters: [
       { key: "standardFields", label: "Campos padrao a preencher", type: "text", placeholder: "Ex: empresa, segmento, urgencia, faturamento, rating" },
       { key: "customFields", label: "Campos custom a preencher", type: "text", placeholder: "Ex: Orcamento, Ferramenta Atual, Qtd Funcionarios" },
@@ -240,8 +281,9 @@ export const PLAYGROUND_TOOLS: PlaygroundToolDef[] = [
   {
     id: "CRIAR_CAMPO",
     name: "Criar Campo Personalizado",
-    description: "Cria um novo campo customizado no CRM quando precisa registrar informacao que nao tem campo dedicado. Pode ja preencher o valor no lead atual.",
+    description: "Cria campos customizados no CRM para registrar informacoes novas",
     icon: "FilePlus",
+    defaultInstruction: "Quando o lead fornecer informacao relevante para a qual nao existe campo (padrao ou customizado), crie um novo campo personalizado e preencha o valor. Exemplo: se mencionarem 'temos 15 lojas' e nao ha campo para isso, crie 'Numero de Lojas' como numerico e preencha com 15.",
     parameters: [
       {
         key: "defaultFieldType",
@@ -262,6 +304,7 @@ export const PLAYGROUND_TOOLS: PlaygroundToolDef[] = [
     name: "Responder FAQ",
     description: "Busca respostas na base de conhecimento",
     icon: "HelpCircle",
+    defaultInstruction: "SEMPRE consulte a base de conhecimento antes de responder qualquer pergunta sobre produto, servico, preco ou empresa. Se encontrar documento relevante, envie proativamente. Nunca invente informacoes — se nao encontrar na base, diga que vai verificar com a equipe.",
     parameters: [],
   },
 ];

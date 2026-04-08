@@ -3,7 +3,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { encode as encodeBase64 } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 import { unzipSync } from "https://esm.sh/fflate@0.8.2";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { generateEmbeddingsBatch, chunkText } from "../_shared/embeddings.ts";
+import { generateEmbedding, generateEmbeddingsBatch, generateMultimodalEmbedding, chunkText, formatEmbeddingForPg } from "../_shared/embeddings.ts";
 import { logRuntime } from "../_shared/logger.ts";
 
 const corsHeaders = {
@@ -19,6 +19,8 @@ const TEXT_EXTRACTION_MODEL = "gpt-4o-mini";
 
 // MIME types que sao imagens
 const IMAGE_MIMES = new Set(["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif"]);
+// MIME types que sao videos
+const VIDEO_MIMES = new Set(["video/mp4", "video/quicktime", "video/webm"]);
 // MIME types que sao documentos binarios (precisam de processamento especial)
 const DOCX_MIMES = new Set([
   "application/msword",
@@ -167,6 +169,14 @@ serve(withSentry('process-agent-document', async (req) => {
       );
     }
 
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+    if (!GEMINI_API_KEY) {
+      return new Response(
+        JSON.stringify({ error: "Gemini API key not configured" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -232,7 +242,82 @@ serve(withSentry('process-agent-document', async (req) => {
     const fileBytes = new Uint8Array(fileBuffer);
     console.log(`[process-agent-document] Downloaded ${doc.file_name}: ${fileBytes.length} bytes (${mime})`);
 
-    // ---------- Extracao por tipo ----------
+    // ---------- MEDIA PATH: embed directly, skip text extraction ----------
+    const fileType = (doc as any).file_type || "document";
+    const isMediaFile = fileType === "image" || fileType === "video";
+
+    if (isMediaFile) {
+      console.log(`[process-agent-document] Media file detected (${fileType}). Using multimodal embedding directly.`);
+
+      // Validate size (20MB limit for Gemini inline)
+      if (fileBytes.length > 20 * 1024 * 1024) {
+        const errMsg = `Arquivo de midia muito grande (${(fileBytes.length / 1024 / 1024).toFixed(1)}MB). Limite: 20MB.`;
+        await supabase.from("copilot_agent_documents")
+          .update({ status: "error", error_message: errMsg, updated_at: new Date().toISOString() })
+          .eq("id", documentId);
+        return new Response(JSON.stringify({ error: errMsg }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // Generate multimodal embedding directly from raw bytes
+      const embedding = await generateMultimodalEmbedding(fileBytes, mime, GEMINI_API_KEY);
+
+      // Use description as content (user-provided context about the media)
+      const description = (doc as any).description || doc.file_name;
+      const sendWhen = (doc as any).send_when || "";
+      const summary = sendWhen
+        ? `${description}\n\nQuando enviar: ${sendWhen}`
+        : description;
+
+      // Save summary and mark ready
+      await supabase.from("copilot_agent_documents")
+        .update({ summary: summary.trim(), status: "ready", error_message: null, updated_at: new Date().toISOString() })
+        .eq("id", documentId);
+
+      // Store chunks: multimodal embedding (visual) + text embedding (description-based)
+      await supabase.from("copilot_agent_document_chunks").delete().eq("document_id", documentId);
+
+      // Chunk 0: multimodal embedding from raw media bytes (visual similarity)
+      const { error: chunkError } = await supabase.from("copilot_agent_document_chunks").insert({
+        document_id: documentId,
+        agent_id: doc.agent_id,
+        organization_id: doc.organization_id,
+        chunk_index: 0,
+        content: summary,
+        embedding: formatEmbeddingForPg(embedding),
+      });
+      if (chunkError) console.error("[process-agent-document] Media visual chunk error:", chunkError.message);
+
+      // Chunk 1: text embedding from description+send_when (text-based RAG search)
+      if (summary.length > 10) {
+        try {
+          const textEmbedding = await generateEmbedding(summary, GEMINI_API_KEY);
+          await supabase.from("copilot_agent_document_chunks").insert({
+            document_id: documentId,
+            agent_id: doc.agent_id,
+            organization_id: doc.organization_id,
+            chunk_index: 1,
+            content: summary,
+            embedding: formatEmbeddingForPg(textEmbedding),
+          });
+          console.log("[process-agent-document] Media text embedding chunk stored");
+        } catch (e) {
+          console.warn("[process-agent-document] Text embedding for media failed (non-fatal):", e);
+        }
+      }
+
+      await logRuntime({
+        organizationId: doc.organization_id, module: "agent", action: "process_document",
+        status: "success", entityType: "document", entityId: documentId,
+        payloadSnapshot: { agentId: doc.agent_id, fileName: doc.file_name, mimeType: mime, fileType, mediaEmbedding: true },
+      });
+
+      return new Response(
+        JSON.stringify({ success: true, summary: summary.trim(), mediaEmbedding: true }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ---------- DOCUMENT PATH: text extraction + chunking ----------
 
     if (isPdf || isImage) {
       // PDFs e imagens: enviar via multimodal OpenAI GPT-4o
@@ -360,7 +445,7 @@ serve(withSentry('process-agent-document', async (req) => {
 
     // 8. RAG: chunks + embeddings (fire-and-forget)
     generateAndStoreChunkEmbeddings(
-      supabase, OPENAI_API_KEY, documentId, doc.agent_id, doc.organization_id,
+      supabase, GEMINI_API_KEY, documentId, doc.agent_id, doc.organization_id,
       contentToSave.substring(0, 100000)
     ).catch(e => console.warn("[process-agent-document] Chunks failed:", e));
 

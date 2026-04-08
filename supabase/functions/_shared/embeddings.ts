@@ -1,76 +1,139 @@
 /**
  * Shared Embedding Service
  *
- * Gera embeddings via OpenAI text-embedding-3-small.
+ * Gera embeddings via Google Gemini Embedding 2 (multimodal).
  * Dimensão: 1536 (compatível com pgvector vector(1536))
+ * Suporta: texto, imagens, áudio, vídeo e PDF.
  */
 
-const EMBEDDING_MODEL = "text-embedding-3-small";
-const OPENAI_API_URL = "https://api.openai.com/v1";
+const EMBEDDING_MODEL = "gemini-embedding-2-preview";
+const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta";
 const EMBEDDING_DIM = 1536;
-const MAX_TOKENS_PER_CHUNK = 512; // ~2000 chars por chunk
-const CHUNK_OVERLAP = 50; // caracteres de sobreposição
+const CHUNK_OVERLAP = 50;
 
 /**
- * Gera embedding para um texto usando OpenAI
+ * Gera embedding para um texto usando Gemini Embedding 2
  */
 export async function generateEmbedding(
   text: string,
   apiKey: string
 ): Promise<number[]> {
-  const response = await fetch(`${OPENAI_API_URL}/embeddings`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: EMBEDDING_MODEL,
-      input: text.substring(0, 8000), // limit input
-    }),
-  });
+  const response = await fetch(
+    `${GEMINI_API_URL}/models/${EMBEDDING_MODEL}:embedContent`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey,
+      },
+      body: JSON.stringify({
+        model: `models/${EMBEDDING_MODEL}`,
+        content: {
+          parts: [{ text: text.substring(0, 8000) }],
+        },
+        outputDimensionality: EMBEDDING_DIM,
+      }),
+    }
+  );
 
   if (!response.ok) {
     const err = await response.text();
-    throw new Error(`Embedding API error ${response.status}: ${err}`);
+    throw new Error(`Gemini Embedding API error ${response.status}: ${err}`);
   }
 
   const result = await response.json();
-  return result.data?.[0]?.embedding as number[];
+  return result.embedding?.values as number[];
 }
 
 /**
- * Gera embeddings para múltiplos textos em batch (máx 20 por chamada)
+ * Gera embedding multimodal (imagem, áudio, vídeo, PDF)
+ * usando Gemini Embedding 2 nativamente.
+ */
+export async function generateMultimodalEmbedding(
+  data: Uint8Array,
+  mimeType: string,
+  apiKey: string
+): Promise<number[]> {
+  // Chunked base64 encoding — btoa(String.fromCharCode(...data)) crashes on files >100KB
+  let binary = "";
+  const CHUNK = 32768;
+  for (let i = 0; i < data.length; i += CHUNK) {
+    binary += String.fromCharCode(...data.subarray(i, i + CHUNK));
+  }
+  const base64 = btoa(binary);
+
+  const response = await fetch(
+    `${GEMINI_API_URL}/models/${EMBEDDING_MODEL}:embedContent`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey,
+      },
+      body: JSON.stringify({
+        model: `models/${EMBEDDING_MODEL}`,
+        content: {
+          parts: [{
+            inline_data: {
+              mime_type: mimeType,
+              data: base64,
+            },
+          }],
+        },
+        outputDimensionality: EMBEDDING_DIM,
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`Gemini Multimodal Embedding API error ${response.status}: ${err}`);
+  }
+
+  const result = await response.json();
+  return result.embedding?.values as number[];
+}
+
+/**
+ * Gera embeddings para múltiplos textos em batch via batchEmbedContents
  */
 export async function generateEmbeddingsBatch(
   texts: string[],
   apiKey: string
 ): Promise<number[][]> {
-  const BATCH_SIZE = 20;
+  const BATCH_SIZE = 100;
   const allEmbeddings: number[][] = [];
 
   for (let i = 0; i < texts.length; i += BATCH_SIZE) {
-    const batch = texts.slice(i, i + BATCH_SIZE).map(t => t.substring(0, 8000));
+    const batch = texts.slice(i, i + BATCH_SIZE);
 
-    const response = await fetch(`${OPENAI_API_URL}/embeddings`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`,
+    const requests = batch.map(t => ({
+      model: `models/${EMBEDDING_MODEL}`,
+      content: {
+        parts: [{ text: t.substring(0, 8000) }],
       },
-      body: JSON.stringify({
-        model: EMBEDDING_MODEL,
-        input: batch,
-      }),
-    });
+      outputDimensionality: EMBEDDING_DIM,
+    }));
+
+    const response = await fetch(
+      `${GEMINI_API_URL}/models/${EMBEDDING_MODEL}:batchEmbedContents`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": apiKey,
+        },
+        body: JSON.stringify({ requests }),
+      }
+    );
 
     if (!response.ok) {
       const err = await response.text();
-      throw new Error(`Embedding batch API error ${response.status}: ${err}`);
+      throw new Error(`Gemini Embedding batch API error ${response.status}: ${err}`);
     }
 
     const result = await response.json();
-    const embeddings = result.data?.map((d: any) => d.embedding) as number[][];
+    const embeddings = result.embeddings?.map((e: any) => e.values) as number[][];
     allEmbeddings.push(...embeddings);
   }
 

@@ -1172,7 +1172,7 @@ async function executeSendDocument(
   // 1. Buscar documento e metadados
   const { data: doc, error: docError } = await supabase
     .from("copilot_agent_documents")
-    .select("id, file_name, file_path, mime_type, organization_id")
+    .select("id, file_name, file_path, mime_type, organization_id, file_type")
     .eq("id", documentId)
     .eq("organization_id", organizationId)
     .single();
@@ -1223,9 +1223,21 @@ async function executeSendDocument(
   let phone = lead.phone.replace(/\D/g, "");
   if (!phone.startsWith("55")) phone = "55" + phone;
 
+  // Detect media type based on file_type column (image/video/document)
+  const fileType = (doc as any).file_type || "document";
+  let mediatype = "document";
+  let messageType = "document";
+  if (fileType === "image" || (doc.mime_type && doc.mime_type.startsWith("image/"))) {
+    mediatype = "image";
+    messageType = "image";
+  } else if (fileType === "video" || (doc.mime_type && doc.mime_type.startsWith("video/"))) {
+    mediatype = "video";
+    messageType = "video";
+  }
+
   const sendBody: Record<string, unknown> = {
     number: phone,
-    mediatype: "document",
+    mediatype,
     media: signedUrlData.signedUrl,
     fileName: doc.file_name,
   };
@@ -1255,8 +1267,8 @@ async function executeSendDocument(
       remote_jid: `${phone}@s.whatsapp.net`,
       phone_number: phone,
       direction: "outgoing",
-      message_type: "document",
-      content: caption || `[Documento: ${doc.file_name}]`,
+      message_type: messageType,
+      content: caption || `[${messageType === "image" ? "Imagem" : messageType === "video" ? "Video" : "Documento"}: ${doc.file_name}]`,
       media_url: signedUrlData.signedUrl,
       status: "sent",
       timestamp: new Date().toISOString(),
