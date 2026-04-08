@@ -154,6 +154,7 @@ Deno.serve(withSentry('process-copilot-followups', async (req) => {
           origin,
           segment,
           pipe_whatsapp,
+          ai_disabled,
           lead_tags(tag:tags(name)),
           upsell_clients(tipo_cliente_tempo, gestao_stage),
           pipe_confirmacao(status),
@@ -186,6 +187,12 @@ Deno.serve(withSentry('process-copilot-followups', async (req) => {
       const lead = leadMap.get(c.lead_id) as any;
 
       if (!lead?.phone) {
+        totalSkipped++;
+        continue;
+      }
+
+      // Defense in depth: skip leads with copilot disabled
+      if (lead.ai_disabled === true) {
         totalSkipped++;
         continue;
       }
