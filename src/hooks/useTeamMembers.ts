@@ -189,7 +189,7 @@ export function useCurrentTeamMember() {
  */
 export function useTeamMembers() {
   const { organizationId, isReady } = useOrganization();
-  useRealtimeSubscription("team_members", ["team_members", "tv-dashboard"]);
+  useRealtimeSubscription("team_members", ["team_members"]);
 
   return useQuery({
     queryKey: ["team_members", organizationId],
