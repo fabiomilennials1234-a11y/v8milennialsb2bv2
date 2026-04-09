@@ -17,6 +17,7 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
 const BATCH_SIZE = 100;
+const CIRCUIT_BREAKER_THRESHOLD = 10;
 
 interface WebhookRow {
   id: string;
@@ -24,6 +25,7 @@ interface WebhookRow {
   secret: string | null;
   http_method: "POST" | "PUT" | "PATCH";
   custom_headers: Record<string, string>;
+  consecutive_failures: number;
 }
 
 interface DeliveryRow {
@@ -84,7 +86,7 @@ Deno.serve(withSentry('process-webhook-deliveries', async (req) => {
   for (const d of deliveries as DeliveryRow[]) {
     const { data: webhook, error: whError } = await supabase
       .from("webhooks")
-      .select("url, secret, http_method, custom_headers")
+      .select("id, url, secret, http_method, custom_headers, consecutive_failures")
       .eq("id", d.webhook_id)
       .single();
 
@@ -153,8 +155,41 @@ Deno.serve(withSentry('process-webhook-deliveries', async (req) => {
     const success = result.statusCode != null && result.statusCode >= 200 && result.statusCode < 300;
     if (success) {
       await supabase.from("webhook_deliveries").delete().eq("id", d.id);
+      // Circuit breaker: reset consecutive failures on success
+      await supabase
+        .from("webhooks")
+        .update({ consecutive_failures: 0 })
+        .eq("id", d.webhook_id);
     } else if (d.attempt >= d.max_attempts) {
+      // Move to dead letter queue instead of discarding
+      await supabase.from("webhook_dead_letters").insert({
+        webhook_id: d.webhook_id,
+        event: d.event,
+        payload: d.payload,
+        attempts: d.attempt,
+        last_status_code: result.statusCode,
+        last_error: result.errorMessage ?? null,
+        last_response_body: result.responseBody || null,
+      });
       await supabase.from("webhook_deliveries").delete().eq("id", d.id);
+
+      // Circuit breaker: increment and check threshold
+      const newFailures = (wh.consecutive_failures ?? 0) + 1;
+      if (newFailures >= CIRCUIT_BREAKER_THRESHOLD) {
+        await supabase
+          .from("webhooks")
+          .update({
+            consecutive_failures: newFailures,
+            is_active: false,
+            disabled_reason: "Circuit breaker: 10+ consecutive failures",
+          })
+          .eq("id", d.webhook_id);
+      } else {
+        await supabase
+          .from("webhooks")
+          .update({ consecutive_failures: newFailures })
+          .eq("id", d.webhook_id);
+      }
     } else {
       const delayMin = nextRetryDelayMinutes(d.attempt);
       const nextRetry = new Date(Date.now() + delayMin * 60 * 1000).toISOString();
@@ -162,6 +197,24 @@ Deno.serve(withSentry('process-webhook-deliveries', async (req) => {
         .from("webhook_deliveries")
         .update({ attempt: d.attempt + 1, next_retry_at: nextRetry })
         .eq("id", d.id);
+
+      // Circuit breaker: increment and check threshold
+      const newFailures = (wh.consecutive_failures ?? 0) + 1;
+      if (newFailures >= CIRCUIT_BREAKER_THRESHOLD) {
+        await supabase
+          .from("webhooks")
+          .update({
+            consecutive_failures: newFailures,
+            is_active: false,
+            disabled_reason: "Circuit breaker: 10+ consecutive failures",
+          })
+          .eq("id", d.webhook_id);
+      } else {
+        await supabase
+          .from("webhooks")
+          .update({ consecutive_failures: newFailures })
+          .eq("id", d.webhook_id);
+      }
     }
     processed++;
   }

@@ -153,10 +153,13 @@ export async function sendWebhook(
   }
 }
 
-/** Backoff em minutos: 1, 5, 15, 60 (attempt 1-based). */
+/** Backoff em minutos: 1, 5, 15, 60 (attempt 1-based) com +-20% jitter. */
 export function nextRetryDelayMinutes(attempt: number): number {
   const delays = [1, 5, 15, 60];
-  return delays[Math.min(attempt - 1, delays.length - 1)] ?? 60;
+  const base = delays[Math.min(attempt - 1, delays.length - 1)] ?? 60;
+  // Add +-20% jitter to prevent thundering herd
+  const jitter = base * 0.2 * (Math.random() * 2 - 1);
+  return Math.max(1, Math.round((base + jitter) * 100) / 100);
 }
 
 /**
