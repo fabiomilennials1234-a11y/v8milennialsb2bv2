@@ -145,7 +145,8 @@ INSERT INTO public.subscription_plans (
     "oraculo": false,
     "scheduled_messages": true,
     "automations": true,
-    "whatsapp_bulk": true
+    "whatsapp_bulk": true,
+    "message_templates": true
   }'::JSONB,
   '{
     "max_leads": -1,
@@ -191,7 +192,8 @@ INSERT INTO public.subscription_plans (
     "oraculo": true,
     "scheduled_messages": true,
     "automations": true,
-    "whatsapp_bulk": true
+    "whatsapp_bulk": true,
+    "message_templates": true
   }'::JSONB,
   '{
     "max_leads": -1,
