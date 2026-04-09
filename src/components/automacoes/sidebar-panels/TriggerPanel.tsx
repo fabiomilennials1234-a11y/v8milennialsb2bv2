@@ -92,48 +92,7 @@ export function TriggerPanel({ data, onUpdate }: TriggerPanelProps) {
 
       {/* ── lead_created ── */}
       {data.triggerType === "lead_created" && (
-        <>
-          <div className="space-y-2">
-            <Label>Filtrar por origem (opcional)</Label>
-            <Select
-              value={(cfg.filter_origin as string) || "__any__"}
-              onValueChange={(v) => updateConfig({ filter_origin: v === "__any__" ? "" : v })}
-            >
-              <SelectTrigger><SelectValue placeholder="Qualquer origem" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__any__">Qualquer origem</SelectItem>
-                <SelectItem value="whatsapp">WhatsApp</SelectItem>
-                <SelectItem value="meta_ads">Meta Ads</SelectItem>
-                <SelectItem value="instagram">Instagram</SelectItem>
-                <SelectItem value="tiktok">Tiktok</SelectItem>
-                <SelectItem value="google_ads">Google Ads</SelectItem>
-                <SelectItem value="site">Site</SelectItem>
-                <SelectItem value="landing_page">Landing Page</SelectItem>
-                <SelectItem value="remarketing">Remarketing</SelectItem>
-                <SelectItem value="indicacao">Indicação</SelectItem>
-                <SelectItem value="evento">Evento</SelectItem>
-                <SelectItem value="prospeccao_ativa">Prospecção Ativa</SelectItem>
-                <SelectItem value="cal">Calendário (Cal)</SelectItem>
-                <SelectItem value="outro">Outro</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label>Filtrar por pipe (opcional)</Label>
-            <Select
-              value={(cfg.filter_pipe as string) || "__any__"}
-              onValueChange={(v) => updateConfig({ filter_pipe: v === "__any__" ? "" : v })}
-            >
-              <SelectTrigger><SelectValue placeholder="Qualquer pipe" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__any__">Qualquer pipe</SelectItem>
-                <SelectItem value="pipe_whatsapp">Qualificação</SelectItem>
-                <SelectItem value="pipe_confirmacao">Confirmação</SelectItem>
-                <SelectItem value="pipe_propostas">Propostas</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </>
+        <LeadCreatedConfig cfg={cfg} updateConfig={updateConfig} />
       )}
 
       {/* ── stage_changed ── */}
@@ -413,6 +372,100 @@ export function TriggerPanel({ data, onUpdate }: TriggerPanelProps) {
         </>
       )}
     </div>
+  );
+}
+
+// ── Sub-componente para lead_created com suporte a funis custom ──
+
+function LeadCreatedConfig({
+  cfg,
+  updateConfig,
+}: {
+  cfg: Record<string, unknown>;
+  updateConfig: (updates: Record<string, unknown>) => void;
+}) {
+  const { data: customPipelines } = useCustomPipelines();
+
+  const filterPipe = (cfg.filter_pipe as string) || "";
+  const filterPipelineId = (cfg.filter_pipeline_id as string) || "";
+
+  const currentPipeValue = filterPipelineId || filterPipe || "__any__";
+
+  const handlePipeChange = (value: string) => {
+    if (value === "__any__") {
+      updateConfig({ filter_pipe: "", filter_pipeline_id: "" });
+    } else if (customPipelines?.some((p) => p.id === value)) {
+      updateConfig({ filter_pipe: "", filter_pipeline_id: value });
+    } else {
+      updateConfig({ filter_pipe: value, filter_pipeline_id: "" });
+    }
+  };
+
+  return (
+    <>
+      <div className="space-y-2">
+        <Label>Filtrar por origem (opcional)</Label>
+        <Select
+          value={(cfg.filter_origin as string) || "__any__"}
+          onValueChange={(v) => updateConfig({ filter_origin: v === "__any__" ? "" : v })}
+        >
+          <SelectTrigger><SelectValue placeholder="Qualquer origem" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__any__">Qualquer origem</SelectItem>
+            <SelectItem value="whatsapp">WhatsApp</SelectItem>
+            <SelectItem value="meta_ads">Meta Ads</SelectItem>
+            <SelectItem value="instagram">Instagram</SelectItem>
+            <SelectItem value="tiktok">Tiktok</SelectItem>
+            <SelectItem value="google_ads">Google Ads</SelectItem>
+            <SelectItem value="site">Site</SelectItem>
+            <SelectItem value="landing_page">Landing Page</SelectItem>
+            <SelectItem value="remarketing">Remarketing</SelectItem>
+            <SelectItem value="indicacao">Indicação</SelectItem>
+            <SelectItem value="evento">Evento</SelectItem>
+            <SelectItem value="prospeccao_ativa">Prospecção Ativa</SelectItem>
+            <SelectItem value="cal">Calendário (Cal)</SelectItem>
+            <SelectItem value="outro">Outro</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-2">
+        <Label>Filtrar por pipe (opcional)</Label>
+        <Select
+          value={currentPipeValue}
+          onValueChange={handlePipeChange}
+        >
+          <SelectTrigger><SelectValue placeholder="Qualquer pipe" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__any__">Qualquer pipe</SelectItem>
+            <SelectGroup>
+              <SelectLabel className="text-xs font-semibold text-muted-foreground uppercase">
+                Pipes Padrão
+              </SelectLabel>
+              <SelectItem value="pipe_whatsapp">Qualificação</SelectItem>
+              <SelectItem value="pipe_confirmacao">Confirmação</SelectItem>
+              <SelectItem value="pipe_propostas">Propostas</SelectItem>
+            </SelectGroup>
+            {customPipelines && customPipelines.length > 0 && (
+              <SelectGroup>
+                <SelectLabel className="text-xs font-semibold text-muted-foreground uppercase">
+                  Funis Custom
+                </SelectLabel>
+                {customPipelines.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.name}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            )}
+          </SelectContent>
+        </Select>
+      </div>
+      {filterPipelineId && (
+        <div className="p-3 rounded-lg bg-muted text-xs text-muted-foreground">
+          Dispara quando um lead é adicionado a este funil custom.
+        </div>
+      )}
+    </>
   );
 }
 

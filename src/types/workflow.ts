@@ -151,6 +151,7 @@ export const WEEKDAY_OPTIONS = [
 export interface TriggerConfigLeadCreated {
   filter_origin?: string;
   filter_pipe?: string;
+  filter_pipeline_id?: string;    // UUID for custom pipelines
 }
 
 export interface TriggerConfigStageChanged {

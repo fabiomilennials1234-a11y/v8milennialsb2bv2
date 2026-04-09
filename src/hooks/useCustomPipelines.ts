@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
-import { triggerStageChangedWorkflows } from "@/lib/workflowTrigger";
+import { triggerStageChangedWorkflows, triggerLeadCreatedInCustomPipeline } from "@/lib/workflowTrigger";
 import { useCanPerformActionAsync } from "@/lib/permissions";
 
 // ────────────────────────────────────────────────────────────
@@ -770,6 +770,35 @@ export function useAddLeadToCustomPipe() {
         }
         throw error;
       }
+
+      // Fire workflow triggers for lead entering custom pipeline
+      if (data) {
+        try {
+          const { data: stageData } = await supabase
+            .from("custom_pipeline_stages")
+            .select("stage_key")
+            .eq("id", data.stage_id)
+            .maybeSingle();
+
+          // Fire stage_changed so workflows triggered on pipeline entry work
+          triggerStageChangedWorkflows({
+            organizationId: data.organization_id,
+            leadId: data.lead_id,
+            pipelineId: data.pipeline_id,
+            toStage: stageData?.stage_key || data.stage_id,
+          });
+
+          // Fire lead_created scoped to this custom pipeline
+          triggerLeadCreatedInCustomPipeline({
+            organizationId: data.organization_id,
+            leadId: data.lead_id,
+            pipelineId: data.pipeline_id,
+          });
+        } catch {
+          // Non-blocking: workflow trigger failure shouldn't break the entry creation
+        }
+      }
+
       return data as CustomPipeEntry;
     },
     onSuccess: (_, variables) => {
@@ -808,23 +837,26 @@ export function useMoveLeadInCustomPipe() {
 
       if (error) throw error;
 
-      // Trigger visual workflow automations for custom pipe stage change
+      // Fetch stage data for workflow trigger and auto-transition
+      const { data: stageRow } = await supabase
+        .from("custom_pipeline_stages")
+        .select("stage_key, is_final_positive, target_pipeline_id, target_stage_id, target_pipe_type, target_stage_key")
+        .eq("id", stage_id)
+        .maybeSingle();
+
+      // Trigger workflow automations for custom pipe stage change
+      // Use stage_key (not UUID) to match trigger_config.stages saved by TriggerPanel
       if (data.lead_id && data.organization_id) {
         triggerStageChangedWorkflows({
           organizationId: data.organization_id,
           leadId: data.lead_id,
           pipelineId: pipeline_id,
-          toStage: stage_id,
+          toStage: stageRow?.stage_key || stage_id,
         });
       }
 
       // Auto-transition: check if target stage has a transition configured
       try {
-      const { data: stageRow } = await supabase
-        .from("custom_pipeline_stages")
-        .select("is_final_positive, target_pipeline_id, target_stage_id, target_pipe_type, target_stage_key")
-        .eq("id", stage_id)
-        .maybeSingle();
 
       if (stageRow?.is_final_positive && data.lead_id && data.organization_id) {
         if (stageRow.target_pipeline_id && stageRow.target_stage_id) {

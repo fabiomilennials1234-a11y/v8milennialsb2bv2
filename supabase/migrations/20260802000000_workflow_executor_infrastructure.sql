@@ -73,7 +73,11 @@ BEGIN
     jsonb_build_object(
       'trigger', 'lead_created',
       'origin', COALESCE(NEW.origin::text, 'outro'),
-      'pipe_whatsapp', COALESCE(NEW.pipe_whatsapp, '')
+      'pipe_type', CASE
+        WHEN NEW.pipe_propostas IS NOT NULL AND NEW.pipe_propostas != '' THEN 'pipe_propostas'
+        WHEN NEW.pipe_confirmacao IS NOT NULL AND NEW.pipe_confirmacao != '' THEN 'pipe_confirmacao'
+        ELSE 'pipe_whatsapp'
+      END
     )
   );
   RETURN NEW;

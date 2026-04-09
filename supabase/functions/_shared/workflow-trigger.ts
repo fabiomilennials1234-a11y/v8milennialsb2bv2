@@ -105,6 +105,13 @@ export function matchesTriggerConfig(
       // filter_pipe: e.g. "pipe_whatsapp", "pipe_confirmacao", "pipe_propostas"
       const ctxPipe = (context.pipe ?? context.pipe_type) as string | undefined;
       if (config.filter_pipe && ctxPipe && config.filter_pipe !== ctxPipe) return false;
+      // Custom pipeline filtering
+      if (config.filter_pipeline_id && context.pipeline_id) {
+        if (config.filter_pipeline_id !== context.pipeline_id) return false;
+      } else if (!config.filter_pipeline_id && context.pipeline_id) {
+        // Fired from custom pipeline entry — skip workflows without pipeline filter to avoid duplicates
+        return false;
+      }
       return true;
     }
 
