@@ -19,7 +19,7 @@ import { logRuntime } from "../_shared/logger.ts";
 import { trackEvent } from "../_shared/track.ts";
 import { startJob, finishJob, failJob } from "../_shared/job-tracker.ts";
 import { executeWorkflow } from "../_shared/workflow-executor.ts";
-import { fireTrigger, processCronTriggers } from "../_shared/workflow-trigger.ts";
+import { fireTrigger, processCronTriggers, matchesTriggerConfig } from "../_shared/workflow-trigger.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -159,10 +159,10 @@ async function processExecution(
   let jobId: string | null = null;
 
   try {
-    // Fetch workflow definition
+    // Fetch workflow definition + trigger_config for condition validation
     const { data: workflow, error: wfError } = await supabase
       .from("workflows")
-      .select("definition, loop_limit, is_active, name")
+      .select("definition, loop_limit, is_active, name, trigger_type, trigger_config")
       .eq("id", workflowId)
       .maybeSingle();
 
@@ -185,6 +185,26 @@ async function processExecution(
       }).eq("id", executionId);
       stats.failed++;
       return;
+    }
+
+    // Validate trigger_config conditions (origin, pipe, stage, etc.)
+    // The PG fire_workflow_trigger() creates executions for ALL active workflows
+    // of a trigger type without filtering — this is the gate that enforces conditions.
+    if (workflow.trigger_type && workflow.trigger_config && !currentNodeId) {
+      const triggerConfig = workflow.trigger_config as Record<string, unknown>;
+      if (!matchesTriggerConfig(workflow.trigger_type, triggerConfig, context)) {
+        console.log(
+          `[process-workflow-executions] Skipping execution ${executionId}: ` +
+          `trigger_config mismatch for ${workflow.trigger_type} (workflow: ${workflow.name})`,
+        );
+        await supabase.from("workflow_executions").update({
+          status: "completed",
+          completed_at: new Date().toISOString(),
+          error: "Skipped: trigger conditions not met",
+        }).eq("id", executionId);
+        stats.completed++;
+        return;
+      }
     }
 
     // Start job tracking

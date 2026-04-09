@@ -24,10 +24,10 @@ Deno.serve(withSentry('generate-faq-embeddings', async (req) => {
   }
 
   try {
-    const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
-    if (!OPENAI_API_KEY) {
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+    if (!GEMINI_API_KEY) {
       return new Response(
-        JSON.stringify({ error: "OpenAI API key not configured" }),
+        JSON.stringify({ error: "Gemini API key not configured" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -65,7 +65,7 @@ Deno.serve(withSentry('generate-faq-embeddings', async (req) => {
     // Combinar pergunta + resposta para embedding rico
     const texts = faqs.map(f => `Pergunta: ${f.question}\nResposta: ${f.answer}`);
 
-    const embeddings = await generateEmbeddingsBatch(texts, OPENAI_API_KEY);
+    const embeddings = await generateEmbeddingsBatch(texts, GEMINI_API_KEY);
 
     // Atualizar cada FAQ com seu embedding
     let updated = 0;

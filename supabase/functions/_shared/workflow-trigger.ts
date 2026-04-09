@@ -79,7 +79,7 @@ export async function fireTrigger(params: FireTriggerParams): Promise<number> {
 /**
  * Validates that the trigger context matches the workflow's trigger_config.
  */
-function matchesTriggerConfig(
+export function matchesTriggerConfig(
   triggerType: string,
   config: Record<string, unknown>,
   context: Record<string, unknown>,
@@ -101,6 +101,9 @@ function matchesTriggerConfig(
 
     case "lead_created": {
       if (config.filter_origin && context.origin && config.filter_origin !== context.origin) return false;
+      // filter_pipe: e.g. "pipe_whatsapp", "pipe_confirmacao", "pipe_propostas"
+      const ctxPipe = (context.pipe ?? context.pipe_type) as string | undefined;
+      if (config.filter_pipe && ctxPipe && config.filter_pipe !== ctxPipe) return false;
       return true;
     }
 
