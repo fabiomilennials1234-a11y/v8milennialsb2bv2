@@ -23,9 +23,16 @@ export function ApiEndpointHeader({ endpoint, baseUrl }: ApiEndpointHeaderProps)
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-1">
           <h2 className="text-xl font-bold text-foreground">{endpoint.name}</h2>
-          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono text-muted-foreground bg-muted/40">
-            v{endpoint.version}
-          </span>
+          <div className="flex items-center gap-2 mt-1">
+            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono text-muted-foreground bg-muted/40">
+              v{endpoint.version}
+            </span>
+            {endpoint.deprecated && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-500/15 text-amber-500 border border-amber-500/30">
+                Descontinuado
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
@@ -50,6 +57,9 @@ export function ApiEndpointHeader({ endpoint, baseUrl }: ApiEndpointHeaderProps)
       <p className="text-sm text-muted-foreground leading-relaxed">
         {endpoint.description}
       </p>
+      {endpoint.deprecation_notice && (
+        <p className="text-xs text-amber-500 mt-1">{endpoint.deprecation_notice}</p>
+      )}
     </div>
   );
 }

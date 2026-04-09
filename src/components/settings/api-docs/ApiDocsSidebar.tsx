@@ -86,10 +86,14 @@ export function ApiDocsSidebar({ categories, selectedEndpointId, onSelect }: Api
                       selectedEndpointId === endpoint.id
                         ? "bg-primary/10 text-foreground border-l-2 border-primary"
                         : "text-muted-foreground hover:text-foreground hover:bg-muted/30",
+                      endpoint.deprecated && "opacity-60",
                     )}
                   >
                     <MethodBadge method={endpoint.method} className="text-[9px] px-1.5 py-0" />
                     <span className="truncate text-left text-[13px]">{endpoint.name}</span>
+                    {endpoint.deprecated && (
+                      <span className="text-amber-500 text-[10px] ml-auto">obsoleto</span>
+                    )}
                   </button>
                 ))}
               </div>

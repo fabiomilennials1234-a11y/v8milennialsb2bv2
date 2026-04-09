@@ -11,7 +11,7 @@ export interface ApiEndpoint {
   id: string;
   name: string;
   description: string;
-  category: "webhooks" | "internal";
+  category: "webhooks" | "internal" | "leads";
   version: string;
   method: "GET" | "POST" | "PUT" | "DELETE";
   path: string;
@@ -26,6 +26,9 @@ export interface ApiEndpoint {
   responseFields: ApiParam[];
   notes?: string[];
   rateLimits?: string;
+  deprecated?: boolean;
+  deprecation_notice?: string;
+  sunset_date?: string;
 }
 
 export interface ApiCategory {
