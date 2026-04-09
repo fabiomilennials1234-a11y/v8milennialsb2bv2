@@ -175,3 +175,68 @@ export function validateLeadInput(data: WebhookLeadInput): { valid: boolean; err
     errors,
   };
 }
+
+/**
+ * Validates RFC 4122 UUID format
+ */
+export function isValidUUID(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+/**
+ * Validates ISO 8601 date string
+ * Rejects nonsensical dates like "2026-13-45" even if Date constructor doesn't throw
+ */
+export function isValidISODate(value: string): boolean {
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return false;
+
+  // Extract the date portion (YYYY-MM-DD) from the input to cross-check
+  const datePortion = value.slice(0, 10);
+  return d.toISOString().startsWith(datePortion);
+}
+
+/**
+ * Validates that an array does not exceed the maximum allowed size
+ */
+export function validateArraySize(
+  arr: unknown[],
+  maxSize: number,
+  fieldName: string,
+): { valid: boolean; error?: string } {
+  if (arr.length > maxSize) {
+    return { valid: false, error: `${fieldName}: máximo de ${maxSize} itens permitidos` };
+  }
+  return { valid: true };
+}
+
+/**
+ * Validates that a referenced ID exists in a given table scoped to the organization
+ */
+export async function validateReferencedId(
+  supabase: any,
+  table: string,
+  id: string,
+  orgId: string,
+): Promise<{ exists: boolean; error?: string }> {
+  if (!isValidUUID(id)) {
+    return { exists: false, error: `${table}: ID inválido (formato UUID esperado)` };
+  }
+
+  const { data, error } = await supabase
+    .from(table)
+    .select("id")
+    .eq("id", id)
+    .eq("organization_id", orgId)
+    .maybeSingle();
+
+  if (error) {
+    return { exists: false, error: `${table}: erro ao verificar referência` };
+  }
+
+  if (!data) {
+    return { exists: false, error: `${table}: ID não encontrado nesta organização` };
+  }
+
+  return { exists: true };
+}
