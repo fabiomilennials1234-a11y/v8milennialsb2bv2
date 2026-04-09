@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { useTheme } from "next-themes";
 import { motion } from "framer-motion";
 import { useThemeTransition } from "@/contexts/ThemeTransitionContext";
@@ -19,6 +19,7 @@ import {
   Webhook,
   HelpCircle,
   Plug,
+  Code,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -60,6 +61,12 @@ import { HelpCenter } from "@/components/settings/help/HelpCenter";
 import { MilestonesConfig } from "@/components/settings/MilestonesConfig";
 import { useOrganization } from "@/hooks/useOrganization";
 import { toast } from "sonner";
+
+const ApiDocsSettings = lazy(() =>
+  import("@/components/settings/api-docs/ApiDocsSettings").then((m) => ({
+    default: m.ApiDocsSettings,
+  }))
+);
 
 const colorOptions = [
   "#F5C518", "#22C55E", "#3B82F6", "#8B5CF6", "#EF4444", 
@@ -467,7 +474,7 @@ function GeneralSettings() {
 
 export default function Configuracoes() {
   const { orgType } = useOrganization();
-  const totalTabs = orgType === "outbound" ? 8 : 7;
+  const totalTabs = orgType === "outbound" ? 9 : 8;
 
   return (
     <div className="space-y-6">
@@ -507,6 +514,10 @@ export default function Configuracoes() {
           <TabsTrigger value="webhooks" className="gap-2">
             <Webhook className="w-4 h-4" />
             Webhooks
+          </TabsTrigger>
+          <TabsTrigger value="api" className="gap-2">
+            <Code className="w-4 h-4" />
+            API
           </TabsTrigger>
           <TabsTrigger value="general" className="gap-2">
             <Settings className="w-4 h-4" />
@@ -556,6 +567,12 @@ export default function Configuracoes() {
                 <WebhookSettings />
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="api">
+            <Suspense fallback={<div className="h-[600px] flex items-center justify-center text-muted-foreground">Carregando documentação...</div>}>
+              <ApiDocsSettings />
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="general">
