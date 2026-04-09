@@ -1,6 +1,12 @@
 # MCP config (contains API keys)
 .mcp.json
 
+# IDE and agent configs
+.agent/
+.agents/
+.windsurf/
+.superpowers/
+
 # Logs
 logs
 *.log
