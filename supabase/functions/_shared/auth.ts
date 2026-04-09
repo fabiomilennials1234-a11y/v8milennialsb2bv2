@@ -187,6 +187,46 @@ export function unauthorizedResponse(
 }
 
 /**
+ * Persistent rate limiting via Supabase RPC (check_rate_limit)
+ * Falls back to "allowed" on DB errors to avoid blocking requests.
+ */
+export async function checkRateLimitPersistent(
+  supabase: any,
+  key: string,
+  maxRequests = 100,
+  windowSeconds = 60
+): Promise<{ allowed: boolean; remaining: number; resetAt: string }> {
+  try {
+    const { data, error } = await supabase.rpc("check_rate_limit", {
+      p_key: key,
+      p_max_requests: maxRequests,
+      p_window_seconds: windowSeconds,
+    });
+
+    if (error) {
+      console.error("[AUTH] Persistent rate limit check failed:", error.message);
+      return { allowed: true, remaining: maxRequests, resetAt: "" };
+    }
+
+    // RPC returns a single row as an array or object depending on client
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row) {
+      console.warn("[AUTH] Persistent rate limit returned no data");
+      return { allowed: true, remaining: maxRequests, resetAt: "" };
+    }
+
+    return {
+      allowed: row.allowed,
+      remaining: row.remaining,
+      resetAt: row.reset_at ?? "",
+    };
+  } catch (err) {
+    console.error("[AUTH] Persistent rate limit unexpected error:", err);
+    return { allowed: true, remaining: maxRequests, resetAt: "" };
+  }
+}
+
+/**
  * Create rate limited response
  */
 export function rateLimitedResponse(
@@ -194,18 +234,120 @@ export function rateLimitedResponse(
   corsHeaders: Record<string, string>
 ): Response {
   return new Response(
-    JSON.stringify({ 
-      error: "Too Many Requests", 
+    JSON.stringify({
+      error: "Too Many Requests",
       message: "Rate limit exceeded",
       retryAfter: Math.ceil(resetIn / 1000)
     }),
-    { 
-      status: 429, 
-      headers: { 
-        ...corsHeaders, 
+    {
+      status: 429,
+      headers: {
+        ...corsHeaders,
         "Content-Type": "application/json",
         "Retry-After": String(Math.ceil(resetIn / 1000))
-      } 
+      }
     }
   );
+}
+
+/**
+ * Result of per-org API key validation
+ */
+export interface ApiKeyValidation {
+  valid: boolean;
+  organizationId?: string;
+  keyId?: string;
+  rateLimitPerMinute?: number;
+  error?: string;
+}
+
+/**
+ * Validates per-organization API keys (tq_live_*) stored as SHA-256 hashes.
+ * Falls back to legacy single WEBHOOK_API_KEY for backward compatibility.
+ *
+ * Key extraction priority:
+ *   1. X-Webhook-Key header
+ *   2. X-API-Key header
+ *   3. Authorization: Bearer tq_live_*
+ */
+export async function validateApiKey(
+  supabase: any,
+  req: Request
+): Promise<ApiKeyValidation> {
+  // --- Extract raw key from headers ---
+  const rawKey =
+    req.headers.get("x-webhook-key") ||
+    req.headers.get("x-api-key") ||
+    (() => {
+      const auth = req.headers.get("authorization") || "";
+      if (auth.startsWith("Bearer tq_live_")) return auth.slice(7); // strip "Bearer "
+      return null;
+    })();
+
+  if (!rawKey) {
+    return {
+      valid: false,
+      error: "API key obrigatória. Use o header X-API-Key ou X-Webhook-Key.",
+    };
+  }
+
+  // --- Legacy: single shared key (no org context) ---
+  if (!rawKey.startsWith("tq_live_")) {
+    const legacyKey = Deno.env.get("WEBHOOK_API_KEY");
+    if (legacyKey && rawKey === legacyKey) {
+      return { valid: true };
+    }
+    return { valid: false, error: "API key inválida ou expirada" };
+  }
+
+  // --- Per-org tq_live_* key ---
+  const prefix = rawKey.slice(0, 12);
+
+  const { data: rows, error: dbError } = await supabase
+    .from("api_keys")
+    .select("id, organization_id, key_hash, rate_limit_per_minute")
+    .eq("key_prefix", prefix)
+    .eq("is_active", true)
+    .or("expires_at.is.null,expires_at.gt.now()");
+
+  if (dbError) {
+    console.error("[AUTH] Error querying api_keys:", dbError);
+    return { valid: false, error: "Erro interno ao validar API key" };
+  }
+
+  if (!rows || rows.length === 0) {
+    return { valid: false, error: "API key inválida ou expirada" };
+  }
+
+  // Compute SHA-256 of the provided key using Web Crypto API (Deno-native)
+  const encoder = new TextEncoder();
+  const data = encoder.encode(rawKey);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  const hashHex = Array.from(new Uint8Array(hashBuffer))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+
+  // Check each candidate row (prefix collisions are theoretically possible)
+  for (const row of rows) {
+    if (hashHex === row.key_hash) {
+      // Fire-and-forget: update last_used_at
+      supabase
+        .from("api_keys")
+        .update({ last_used_at: new Date().toISOString() })
+        .eq("id", row.id)
+        .then(() => {})
+        .catch((err: unknown) =>
+          console.error("[AUTH] Failed to update last_used_at:", err)
+        );
+
+      return {
+        valid: true,
+        organizationId: row.organization_id,
+        keyId: row.id,
+        rateLimitPerMinute: row.rate_limit_per_minute,
+      };
+    }
+  }
+
+  return { valid: false, error: "API key inválida ou expirada" };
 }
