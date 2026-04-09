@@ -20,11 +20,17 @@ const PRESETS: { value: DatePreset; label: string }[] = [
 ];
 
 const ORIGINS = [
-  { value: "google_ads", label: "Google Ads" },
-  { value: "meta_ads", label: "Meta Ads" },
   { value: "whatsapp", label: "WhatsApp" },
+  { value: "meta_ads", label: "Meta Ads" },
+  { value: "instagram", label: "Instagram" },
+  { value: "tiktok", label: "Tiktok" },
+  { value: "google_ads", label: "Google Ads" },
   { value: "site", label: "Site" },
+  { value: "landing_page", label: "Landing Page" },
   { value: "remarketing", label: "Remarketing" },
+  { value: "indicacao", label: "Indicação" },
+  { value: "evento", label: "Evento" },
+  { value: "prospeccao_ativa", label: "Prospecção Ativa" },
   { value: "cal", label: "Calendário" },
   { value: "outro", label: "Outro" },
 ];

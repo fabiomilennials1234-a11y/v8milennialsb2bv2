@@ -88,6 +88,7 @@ export function matchesTriggerConfig(
     case "stage_changed": {
       if (config.pipe_type && context.pipe_type && config.pipe_type !== context.pipe_type) return false;
       if (config.pipeline_id && context.pipeline_id && config.pipeline_id !== context.pipeline_id) return false;
+      if (config.campanha_id && context.campanha_id && config.campanha_id !== context.campanha_id) return false;
       if (config.from_stage && context.from_stage && config.from_stage !== context.from_stage) return false;
       const stages = config.stages as string[] | undefined;
       const toStage = context.to_stage as string;

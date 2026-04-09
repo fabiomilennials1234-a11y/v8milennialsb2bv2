@@ -203,8 +203,9 @@ export default function Leads() {
   useEffect(() => { trackModuleVisit("leads", organizationId); }, []);
 
   const [page, setPage] = useState(0);
-  const { data: leads = [], isLoading } = useLeads(page);
-  const { data: totalLeads } = useLeadsCount();
+  const filterParams = { page, searchQuery, filterOrigin, filterRating };
+  const { data: leads = [], isLoading } = useLeads(filterParams);
+  const { data: totalLeads } = useLeadsCount({ searchQuery, filterOrigin, filterRating });
   const { data: teamMembers = [] } = useTeamMembers();
   const totalPages = Math.ceil((totalLeads ?? 0) / LEADS_PAGE_SIZE);
   const { data: currentTeamMember, isLoading: isLoadingTeamMember, isFetching: isFetchingTeamMember } = useCurrentTeamMember();
@@ -256,23 +257,10 @@ export default function Leads() {
     }
   }, [selectedPipe, stageOptions, selectedStage]);
 
-  const filteredLeads = useMemo(() => {
-    return leads.filter((lead: Lead) => {
-      const matchesSearch = 
-        lead.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        lead.company?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        lead.email?.toLowerCase().includes(searchQuery.toLowerCase());
-      
-      const matchesOrigin = filterOrigin === "all" || lead.origin === filterOrigin;
-      
-      const matchesRating = filterRating === "all" || 
-        (filterRating === "high" && (lead.rating || 0) >= 7) ||
-        (filterRating === "medium" && (lead.rating || 0) >= 4 && (lead.rating || 0) < 7) ||
-        (filterRating === "low" && (lead.rating || 0) < 4);
-      
-      return matchesSearch && matchesOrigin && matchesRating;
-    });
-  }, [leads, searchQuery, filterOrigin, filterRating]);
+  // Reset para página 0 quando filtros mudam
+  useEffect(() => {
+    setPage(0);
+  }, [searchQuery, filterOrigin, filterRating]);
 
   const stats = useMemo(() => {
     const total = totalLeads ?? leads.length;
@@ -526,14 +514,14 @@ export default function Leads() {
                   </TableCell>
                 </TableRow>
               ))
-            ) : filteredLeads.length === 0 ? (
+            ) : leads.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                   Nenhum lead encontrado
                 </TableCell>
               </TableRow>
             ) : (
-              filteredLeads.map((lead: Lead) => (
+              leads.map((lead: Lead) => (
                 <TableRow key={lead.id} className="cursor-pointer hover:bg-muted/50" onClick={() => { setSelectedLeadId(lead.id); setIsDetailDrawerOpen(true); }}>
                   <TableCell>
                     <div>

@@ -514,6 +514,7 @@ export const PIPE_STAGES: Record<string, { value: string; label: string }[]> = {
     { value: "marcar_compromisso", label: "Marcar Compromisso" },
     { value: "reativar", label: "Reativar" },
     { value: "compromisso_marcado", label: "Compromisso Marcado" },
+    { value: "proposta_enviada", label: "Proposta Enviada" },
     { value: "esfriou", label: "Esfriou" },
     { value: "futuro", label: "Futuro" },
     { value: "vendido", label: "Vendido" },

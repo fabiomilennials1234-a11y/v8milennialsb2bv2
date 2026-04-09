@@ -220,3 +220,94 @@ export function useCustomPipeWorkflowCounts(pipelineId: string | undefined) {
     staleTime: 5 * 60 * 1000,
   });
 }
+
+/**
+ * Busca workflows vinculados a uma etapa específica de uma campanha.
+ */
+export function useCampaignStageWorkflows(
+  campanhaId: string | undefined,
+  stageId: string | undefined
+) {
+  const { organizationId, isReady } = useOrganization();
+
+  return useQuery({
+    queryKey: ["stage-workflows-campaign", organizationId, campanhaId, stageId],
+    queryFn: async (): Promise<StageWorkflow[]> => {
+      if (!organizationId || !campanhaId || !stageId) return [];
+
+      const { data, error } = await supabase
+        .from("workflows")
+        .select("id, name, is_active, trigger_type, trigger_config")
+        .eq("organization_id", organizationId)
+        .eq("trigger_type", "stage_changed");
+
+      if (error) throw error;
+      if (!data) return [];
+
+      return (data as unknown as Workflow[])
+        .filter((w) => {
+          const cfg = w.trigger_config as TriggerConfigStageChanged;
+          if (!cfg || cfg.campanha_id !== campanhaId) return false;
+          if (cfg.stages && cfg.stages.length > 0) return cfg.stages.includes(stageId);
+          if (cfg.to_stage) return cfg.to_stage === stageId;
+          return true;
+        })
+        .map((w) => ({ id: w.id, name: w.name, is_active: w.is_active }));
+    },
+    enabled: isReady && !!organizationId && !!campanhaId && !!stageId,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/**
+ * Conta workflows vinculados a cada etapa de uma campanha.
+ */
+export function useCampaignWorkflowCounts(campanhaId: string | undefined) {
+  const { organizationId, isReady } = useOrganization();
+
+  return useQuery({
+    queryKey: ["stage-workflow-counts-campaign", organizationId, campanhaId],
+    queryFn: async (): Promise<Record<string, { total: number; active: number }>> => {
+      if (!organizationId || !campanhaId) return {};
+
+      const { data, error } = await supabase
+        .from("workflows")
+        .select("id, name, is_active, trigger_config")
+        .eq("organization_id", organizationId)
+        .eq("trigger_type", "stage_changed");
+
+      if (error) throw error;
+      if (!data) return {};
+
+      const counts: Record<string, { total: number; active: number }> = {};
+
+      for (const row of data as unknown as Workflow[]) {
+        const cfg = row.trigger_config as TriggerConfigStageChanged;
+        if (!cfg || cfg.campanha_id !== campanhaId) continue;
+
+        const stages = cfg.stages && cfg.stages.length > 0
+          ? cfg.stages
+          : cfg.to_stage
+          ? [cfg.to_stage]
+          : null;
+
+        if (stages) {
+          for (const s of stages) {
+            if (!counts[s]) counts[s] = { total: 0, active: 0 };
+            counts[s].total++;
+            if (row.is_active) counts[s].active++;
+          }
+        }
+        if (!stages) {
+          if (!counts["__all__"]) counts["__all__"] = { total: 0, active: 0 };
+          counts["__all__"].total++;
+          if (row.is_active) counts["__all__"].active++;
+        }
+      }
+
+      return counts;
+    },
+    enabled: isReady && !!organizationId && !!campanhaId,
+    staleTime: 5 * 60 * 1000,
+  });
+}

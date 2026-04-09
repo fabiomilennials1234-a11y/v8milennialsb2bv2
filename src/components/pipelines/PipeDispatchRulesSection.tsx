@@ -144,9 +144,10 @@ export function PipeDispatchRulesSection({ pipeType, stages }: PipeDispatchRules
         .eq("organization_id", organizationId)
         .eq("pipe_type", pipeType);
       if (error) throw error;
-      const counts = { scheduled: 0, sent: 0, failed: 0, waiting_response: 0, executed: 0 };
+      const counts = { scheduled: 0, processing: 0, sent: 0, failed: 0, waiting_response: 0, executed: 0 };
       for (const row of data || []) {
         if (row.status === "scheduled") counts.scheduled++;
+        else if (row.status === "processing") counts.processing++;
         else if (row.status === "sent") counts.sent++;
         else if (row.status === "failed") counts.failed++;
         else if (row.status === "waiting_response") counts.waiting_response++;
@@ -376,10 +377,10 @@ export function PipeDispatchRulesSection({ pipeType, stages }: PipeDispatchRules
           </div>
 
           {/* Dispatch Metrics */}
-          {dispatchMetrics && (dispatchMetrics.sent > 0 || dispatchMetrics.scheduled > 0 || dispatchMetrics.failed > 0 || dispatchMetrics.waiting_response > 0 || dispatchMetrics.executed > 0) && (
+          {dispatchMetrics && (dispatchMetrics.sent > 0 || dispatchMetrics.scheduled > 0 || dispatchMetrics.processing > 0 || dispatchMetrics.failed > 0 || dispatchMetrics.waiting_response > 0 || dispatchMetrics.executed > 0) && (
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
               <MetricCard icon={CheckCircle2} color="text-green-500" value={dispatchMetrics.sent} label="Enviadas" onClick={() => setQueueSheetStatus("sent")} />
-              <MetricCard icon={Clock} color="text-yellow-500" value={dispatchMetrics.scheduled} label="Pendentes" onClick={() => setQueueSheetStatus("scheduled")} />
+              <MetricCard icon={Clock} color="text-yellow-500" value={dispatchMetrics.scheduled + dispatchMetrics.processing} label={dispatchMetrics.processing > 0 ? `Pendentes (${dispatchMetrics.processing} em proc.)` : "Pendentes"} onClick={() => setQueueSheetStatus("scheduled")} />
               <MetricCard icon={Hourglass} color="text-blue-500" value={dispatchMetrics.waiting_response} label="Aguardando" onClick={() => setQueueSheetStatus("waiting_response")} />
               <MetricCard icon={ArrowRightLeft} color="text-purple-500" value={dispatchMetrics.executed} label="Ações" onClick={() => setQueueSheetStatus("executed")} />
               <MetricCard icon={XCircle} color="text-red-500" value={dispatchMetrics.failed} label="Falharam" onClick={() => setQueueSheetStatus("failed")} />

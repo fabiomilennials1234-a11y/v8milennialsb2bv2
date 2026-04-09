@@ -169,8 +169,14 @@ export function useWhatsAppContacts(instanceId: string | null) {
 
       if (error) throw error;
 
-      // Normalizar telefone: últimos 10 dígitos para coincidir com qualquer formato (com/sem 55)
-      const normalizePhone = (p: string) => p.replace(/\D/g, "").slice(-10) || p;
+      // Normalizar telefone: usa a mesma lógica canônica do banco (normalize_brazilian_phone)
+      const normalizePhone = (p: string) => {
+        let cleaned = p.replace(/\D/g, "");
+        if (!cleaned) return p;
+        if (cleaned.length >= 12 && cleaned.startsWith("55")) cleaned = cleaned.slice(2);
+        if (cleaned.length === 10) cleaned = cleaned.slice(0, 2) + "9" + cleaned.slice(2);
+        return cleaned;
+      };
 
       // Agrupar por telefone normalizado; priorizar nome do lead quando existir
       const contactsMap = new Map<string, ChatContact>();
@@ -290,14 +296,16 @@ export function useWhatsAppContacts(instanceId: string | null) {
       }
 
       // Enriquecer contatos com metadados de conversa e tags
+      // Index by normalized phone so format differences don't break lookup
       const convMetaMap = new Map<string, { id: string; archived_at: string | null; deleted_at: string | null }>();
       for (const row of convMeta || []) {
-        convMetaMap.set(row.phone_number, row);
+        const normKey = normalizePhone(row.phone_number);
+        convMetaMap.set(normKey, row);
       }
 
       const results: ChatContact[] = [];
       for (const contact of contactsMap.values()) {
-        const meta = convMetaMap.get(contact.phone_number);
+        const meta = convMetaMap.get(normalizePhone(contact.phone_number));
 
         // Filtrar conversas excluídas
         if (meta?.deleted_at) continue;
@@ -962,7 +970,7 @@ export function useWhatsAppMessagesRealtime(phoneNumber: string | null) {
 
           const message = (payload.new || payload.old) as WhatsAppMessage | undefined;
           const messagePhone = message?.phone_number;
-          const normalizePhone = (p: string) => p.replace(/\D/g, "").slice(-10) || p;
+          const normalizePhone = (p: string) => { let c = p.replace(/\D/g, ""); if (!c) return p; if (c.length >= 12 && c.startsWith("55")) c = c.slice(2); if (c.length === 10) c = c.slice(0, 2) + "9" + c.slice(2); return c; };
 
           // Forçar refetch imediato da lista de contatos (sidebar e inbox) para notificação e última mensagem
           queryClient.refetchQueries({ queryKey: ["whatsapp_contacts", organizationId] });

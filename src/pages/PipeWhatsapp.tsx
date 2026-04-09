@@ -52,16 +52,23 @@ import { useLeadsWithScheduledMessages } from "@/hooks/useScheduledMessages";
 const originLabels: Record<string, { label: string; color: string }> = {
   whatsapp: { label: "WhatsApp", color: "bg-green-500" },
   meta_ads: { label: "Meta Ads", color: "bg-purple-500" },
-  outro: { label: "Outros", color: "bg-gray-500" },
-  site: { label: "Site", color: "bg-teal-500" },
-  remarketing: { label: "Remarketing", color: "bg-orange-500" },
+  instagram: { label: "Instagram", color: "bg-pink-500" },
+  tiktok: { label: "Tiktok", color: "bg-gray-900" },
   google_ads: { label: "Google Ads", color: "bg-red-500" },
+  site: { label: "Site", color: "bg-teal-500" },
+  landing_page: { label: "Landing Page", color: "bg-sky-500" },
+  remarketing: { label: "Remarketing", color: "bg-orange-500" },
+  indicacao: { label: "Indicação", color: "bg-emerald-500" },
+  evento: { label: "Evento", color: "bg-violet-500" },
+  prospeccao_ativa: { label: "Prospecção Ativa", color: "bg-orange-600" },
   cal: { label: "Cal.com", color: "bg-blue-600" },
+  outro: { label: "Outros", color: "bg-gray-500" },
 };
 
 // Origens para filtro (enum lead_origin), em ordem de exibição
 const ALL_ORIGIN_OPTIONS = [
-  "whatsapp", "meta_ads", "outro", "site", "remarketing", "google_ads", "cal",
+  "whatsapp", "meta_ads", "instagram", "tiktok", "google_ads", "site", "landing_page",
+  "remarketing", "indicacao", "evento", "prospeccao_ativa", "cal", "outro",
 ];
 
 

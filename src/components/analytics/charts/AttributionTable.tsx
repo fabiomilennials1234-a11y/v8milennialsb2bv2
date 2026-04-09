@@ -9,11 +9,17 @@ interface Props {
 }
 
 const ORIGIN_LABELS: Record<string, string> = {
-  google_ads: "Google Ads",
-  meta_ads: "Meta Ads",
   whatsapp: "WhatsApp",
+  meta_ads: "Meta Ads",
+  instagram: "Instagram",
+  tiktok: "Tiktok",
+  google_ads: "Google Ads",
   site: "Site",
+  landing_page: "Landing Page",
   remarketing: "Remarketing",
+  indicacao: "Indicação",
+  evento: "Evento",
+  prospeccao_ativa: "Prospecção Ativa",
   cal: "Calendário",
   outro: "Outro",
 };

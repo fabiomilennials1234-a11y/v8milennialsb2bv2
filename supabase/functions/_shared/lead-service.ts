@@ -364,17 +364,28 @@ export async function associateMessagesToLead(
   phoneNumber: string,
   leadId: string
 ): Promise<void> {
-  const { error } = await supabase
-    .from("whatsapp_messages")
-    .update({ lead_id: leadId })
-    .eq("organization_id", organizationId)
-    .eq("phone_number", phoneNumber)
-    .is("lead_id", null);
+  const normalized = normalizePhoneForSearch(phoneNumber);
+
+  // Use normalized_phone for matching (handles +55, without 55, etc.)
+  // Falls back to raw phone_number if normalization returns null
+  const { error } = normalized
+    ? await supabase
+        .from("whatsapp_messages")
+        .update({ lead_id: leadId })
+        .eq("organization_id", organizationId)
+        .eq("normalized_phone", normalized)
+        .is("lead_id", null)
+    : await supabase
+        .from("whatsapp_messages")
+        .update({ lead_id: leadId })
+        .eq("organization_id", organizationId)
+        .eq("phone_number", phoneNumber)
+        .is("lead_id", null);
 
   if (error) {
     console.error("[lead-service] Error associating messages to lead:", error);
   } else {
-    console.log("[lead-service] Messages associated to lead:", leadId);
+    console.log("[lead-service] Messages associated to lead:", leadId, "normalized:", normalized);
   }
 }
 

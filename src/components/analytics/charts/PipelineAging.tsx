@@ -25,6 +25,7 @@ const STAGE_LABELS: Record<string, string> = {
   marcar_compromisso: "Marcar Compromisso",
   reativar: "Reativar",
   compromisso_marcado: "Compromisso Marcado",
+  proposta_enviada: "Proposta Enviada",
   esfriou: "Esfriou",
   futuro: "Futuro",
 };

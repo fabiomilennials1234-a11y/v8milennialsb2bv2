@@ -95,6 +95,7 @@ const PIPE_STAGES_REF: Record<string, { label: string; stages: { key: string; la
       { key: "marcar_compromisso", label: "Marcar Compromisso" },
       { key: "reativar", label: "Reativar" },
       { key: "compromisso_marcado", label: "Compromisso Marcado" },
+      { key: "proposta_enviada", label: "Proposta Enviada" },
       { key: "esfriou", label: "Esfriou" },
       { key: "futuro", label: "Futuro" },
       { key: "vendido", label: "Vendido" },

@@ -24,7 +24,7 @@ export interface Lead {
   phone?: string;
   meetingDate?: string;
   rating: number;
-  origin: "whatsapp" | "meta_ads" | "outro" | "site" | "remarketing" | "google_ads" | "cal";
+  origin: string;
   sdr?: string;
   sdrId?: string;
   closer?: string;
@@ -46,21 +46,33 @@ interface KanbanCardProps {
 const originColors: Record<string, string> = {
   whatsapp: "bg-success/10 text-success border-success/20",
   meta_ads: "bg-chart-5/10 text-chart-5 border-chart-5/20",
-  outro: "bg-muted text-muted-foreground border-border",
-  site: "bg-teal-500/10 text-teal-600 border-teal-500/20",
-  remarketing: "bg-orange-500/10 text-orange-600 border-orange-500/20",
+  instagram: "bg-pink-500/10 text-pink-600 border-pink-500/20",
+  tiktok: "bg-gray-900/10 text-gray-900 border-gray-900/20",
   google_ads: "bg-red-500/10 text-red-600 border-red-500/20",
+  site: "bg-teal-500/10 text-teal-600 border-teal-500/20",
+  landing_page: "bg-sky-500/10 text-sky-600 border-sky-500/20",
+  remarketing: "bg-orange-500/10 text-orange-600 border-orange-500/20",
+  indicacao: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20",
+  evento: "bg-violet-500/10 text-violet-600 border-violet-500/20",
+  prospeccao_ativa: "bg-orange-600/10 text-orange-700 border-orange-600/20",
   cal: "bg-chart-5/10 text-chart-5 border-chart-5/20",
+  outro: "bg-muted text-muted-foreground border-border",
 };
 
 const originLabels: Record<string, string> = {
   whatsapp: "WhatsApp",
   meta_ads: "Meta Ads",
-  outro: "Outros",
-  site: "Site",
-  remarketing: "Remarketing",
+  instagram: "Instagram",
+  tiktok: "Tiktok",
   google_ads: "Google Ads",
+  site: "Site",
+  landing_page: "Landing Page",
+  remarketing: "Remarketing",
+  indicacao: "Indicação",
+  evento: "Evento",
+  prospeccao_ativa: "Prospecção Ativa",
   cal: "Cal.com",
+  outro: "Outros",
 };
 
 export function KanbanCard({ lead, onClick }: KanbanCardProps) {

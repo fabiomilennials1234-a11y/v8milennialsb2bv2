@@ -85,7 +85,6 @@ export function ConfirmacaoContext({ lead, pipeData: item, onSuccess }: Confirma
   const overdueDays = useConfirmacaoOverdueDays();
   const [isEditingMeeting, setIsEditingMeeting] = useState(false);
   const [isEditingOwners, setIsEditingOwners] = useState(false);
-  const [editedNotes, setEditedNotes] = useState(item?.notes || "");
   const [editedStatus, setEditedStatus] = useState<PipeConfirmacaoStatus>(item?.status || "reuniao_marcada");
   const [editedDate, setEditedDate] = useState<Date | undefined>(item?.meeting_date ? new Date(item.meeting_date) : undefined);
   const [editedTime, setEditedTime] = useState(item?.meeting_date ? format(new Date(item.meeting_date), "HH:mm") : "10:00");
@@ -108,7 +107,6 @@ export function ConfirmacaoContext({ lead, pipeData: item, onSuccess }: Confirma
 
   useEffect(() => {
     if (item) {
-      setEditedNotes(item.notes || "");
       setEditedStatus(item.status || "reuniao_marcada");
       setEditedDate(item.meeting_date ? new Date(item.meeting_date) : undefined);
       setEditedTime(item.meeting_date ? format(new Date(item.meeting_date), "HH:mm") : "10:00");
@@ -135,7 +133,6 @@ export function ConfirmacaoContext({ lead, pipeData: item, onSuccess }: Confirma
     try {
       const updates: Record<string, unknown> = {
         id: item.id,
-        notes: editedNotes ?? null,
         status: editedStatus,
         leadId: item.lead_id,
         assignedTo: editedResponsibleId || item.responsible_id,
@@ -154,7 +151,6 @@ export function ConfirmacaoContext({ lead, pipeData: item, onSuccess }: Confirma
 
       await updatePipeConfirmacao.mutateAsync(updates);
 
-      if (editedNotes !== item.notes) logAction({ leadId: item.lead_id, action: "note_added", description: editedNotes || "Observação removida" });
       if (editedStatus !== item.status) {
         const label = statusColumns.find((s) => s.id === editedStatus)?.title;
         logAction({ leadId: item.lead_id, action: "stage_changed", description: `Status alterado para "${label}" na Confirmação` });
@@ -231,40 +227,94 @@ export function ConfirmacaoContext({ lead, pipeData: item, onSuccess }: Confirma
 
   return (
     <div className="space-y-6">
-      {/* Meeting Date Card */}
-      <div
-        className={cn(
-          "rounded-xl border p-4 text-center",
-          urgency.urgency === "overdue" && "border-destructive/50 bg-destructive/5",
-          urgency.urgency === "today" && "border-warning/50 bg-warning/5",
-          urgency.urgency === "tomorrow" && "border-orange-500/50 bg-orange-500/5",
-          urgency.urgency === "soon" && "border-yellow-500/50 bg-yellow-500/5",
-          urgency.urgency === "normal" && "border-border bg-card",
-          urgency.urgency === "none" && "border-border bg-muted/50"
-        )}
-      >
-        <CalendarIcon className={cn("w-6 h-6 mx-auto mb-2", urgency.color)} />
-        {meetingDate ? (
-          <>
-            <p className="text-2xl font-bold">{format(meetingDate, "dd")}</p>
-            <p className="text-sm text-muted-foreground">{format(meetingDate, "MMMM", { locale: ptBR })}</p>
-            <p className="text-lg font-medium mt-1">{format(meetingDate, "HH:mm")}</p>
-            <p className={cn("text-xs font-medium mt-1", urgency.color)}>{urgency.label}</p>
-          </>
-        ) : (
-          <p className="text-sm text-muted-foreground">Sem data definida</p>
-        )}
-      </div>
+      {/* Meeting Section */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold flex items-center gap-2">
+            <CalendarIcon className="w-4 h-4 text-primary" />
+            Reunião
+          </h3>
+          <Button variant="ghost" size="sm" onClick={() => setIsEditingMeeting(!isEditingMeeting)}>
+            <Edit3 className="w-3.5 h-3.5 mr-1" />
+            {isEditingMeeting ? "Cancelar" : "Editar Reunião"}
+          </Button>
+        </div>
 
-      {/* Current Status */}
-      <div className="flex items-center gap-2">
-        <span className="text-sm font-medium">Status:</span>
-        <Badge
-          variant="outline"
-          style={{ backgroundColor: `${currentStatus?.color}15`, borderColor: `${currentStatus?.color}40`, color: currentStatus?.color }}
-        >
-          {currentStatus?.title}
-        </Badge>
+        {isEditingMeeting ? (
+          <div className="space-y-3 p-4 border border-primary/20 rounded-xl bg-primary/5">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Status</Label>
+                <Select value={editedStatus} onValueChange={(v) => setEditedStatus(v as PipeConfirmacaoStatus)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>{statusColumns.map((s) => (<SelectItem key={s.id} value={s.id}>{s.title}</SelectItem>))}</SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Data da Reunião</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="w-full justify-start">
+                      <CalendarIcon className="w-4 h-4 mr-2" />
+                      {editedDate ? format(editedDate, "dd/MM/yyyy", { locale: ptBR }) : "Selecionar"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar mode="single" selected={editedDate} onSelect={setEditedDate} locale={ptBR} />
+                  </PopoverContent>
+                </Popover>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Horário</Label>
+              <Input type="time" value={editedTime} onChange={(e) => setEditedTime(e.target.value)} />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setIsEditingMeeting(false)}>Cancelar</Button>
+              <Button size="sm" onClick={handleSaveMeeting} disabled={isSavingMeeting}>
+                {isSavingMeeting ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Save className="w-3.5 h-3.5 mr-1" />}
+                Salvar
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div
+              className={cn(
+                "rounded-xl border p-4 text-center",
+                urgency.urgency === "overdue" && "border-destructive/50 bg-destructive/5",
+                urgency.urgency === "today" && "border-warning/50 bg-warning/5",
+                urgency.urgency === "tomorrow" && "border-orange-500/50 bg-orange-500/5",
+                urgency.urgency === "soon" && "border-yellow-500/50 bg-yellow-500/5",
+                urgency.urgency === "normal" && "border-border bg-card",
+                urgency.urgency === "none" && "border-border bg-muted/50"
+              )}
+            >
+              <CalendarIcon className={cn("w-6 h-6 mx-auto mb-2", urgency.color)} />
+              {meetingDate ? (
+                <>
+                  <p className="text-2xl font-bold">{format(meetingDate, "dd")}</p>
+                  <p className="text-sm text-muted-foreground">{format(meetingDate, "MMMM", { locale: ptBR })}</p>
+                  <p className="text-lg font-medium mt-1">{format(meetingDate, "HH:mm")}</p>
+                  <p className={cn("text-xs font-medium mt-1", urgency.color)}>{urgency.label}</p>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">Sem data definida</p>
+              )}
+            </div>
+
+            {/* Current Status */}
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium">Status:</span>
+              <Badge
+                variant="outline"
+                style={{ backgroundColor: `${currentStatus?.color}15`, borderColor: `${currentStatus?.color}40`, color: currentStatus?.color }}
+              >
+                {currentStatus?.title}
+              </Badge>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Quick Status Actions */}
@@ -363,73 +413,21 @@ export function ConfirmacaoContext({ lead, pipeData: item, onSuccess }: Confirma
         )}
       </div>
 
-      {/* Notes + Edit */}
+      {/* Observações da Reunião */}
       <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold flex items-center gap-2">
-            <MessageSquare className="w-4 h-4 text-primary" />
-            Observações
-          </h3>
-          <Button variant="ghost" size="sm" onClick={() => setIsEditingMeeting(!isEditingMeeting)}>
-            <Edit3 className="w-3.5 h-3.5 mr-1" />
-            {isEditingMeeting ? "Cancelar" : "Editar"}
+        <h3 className="text-sm font-semibold flex items-center gap-2">
+          <MessageSquare className="w-4 h-4 text-primary" />
+          Observações da Reunião
+        </h3>
+        <div className="p-3 rounded-lg bg-muted/50 min-h-[60px]">
+          <p className="text-sm text-muted-foreground whitespace-pre-wrap">{item.notes || "Nenhuma observação."}</p>
+        </div>
+        <div className="flex gap-2">
+          <Textarea value={newNote} onChange={(e) => setNewNote(e.target.value)} placeholder="Adicionar observação..." rows={2} className="flex-1" />
+          <Button onClick={handleAddNote} disabled={!newNote.trim() || isAddingNote} className="self-end">
+            {isAddingNote ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
           </Button>
         </div>
-
-        {isEditingMeeting ? (
-          <div className="space-y-3 p-4 border border-primary/20 rounded-xl bg-primary/5">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-xs">Status</Label>
-                <Select value={editedStatus} onValueChange={(v) => setEditedStatus(v as PipeConfirmacaoStatus)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{statusColumns.map((s) => (<SelectItem key={s.id} value={s.id}>{s.title}</SelectItem>))}</SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">Data da Reunião</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" className="w-full justify-start">
-                      <CalendarIcon className="w-4 h-4 mr-2" />
-                      {editedDate ? format(editedDate, "dd/MM/yyyy", { locale: ptBR }) : "Selecionar"}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar mode="single" selected={editedDate} onSelect={setEditedDate} locale={ptBR} />
-                  </PopoverContent>
-                </Popover>
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Horário</Label>
-              <Input type="time" value={editedTime} onChange={(e) => setEditedTime(e.target.value)} />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Observações</Label>
-              <Textarea value={editedNotes} onChange={(e) => setEditedNotes(e.target.value)} rows={3} />
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button variant="ghost" size="sm" onClick={() => setIsEditingMeeting(false)}>Cancelar</Button>
-              <Button size="sm" onClick={handleSaveMeeting} disabled={isSavingMeeting}>
-                {isSavingMeeting ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Save className="w-3.5 h-3.5 mr-1" />}
-                Salvar
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            <div className="p-3 rounded-lg bg-muted/50 min-h-[60px]">
-              <p className="text-sm text-muted-foreground whitespace-pre-wrap">{item.notes || "Nenhuma observação."}</p>
-            </div>
-            <div className="flex gap-2">
-              <Textarea value={newNote} onChange={(e) => setNewNote(e.target.value)} placeholder="Nota rápida..." rows={2} className="flex-1" />
-              <Button onClick={handleAddNote} disabled={!newNote.trim() || isAddingNote} className="self-end">
-                {isAddingNote ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-              </Button>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Danger zone */}
