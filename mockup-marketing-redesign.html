@@ -1,0 +1,1509 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Torque CRM — Marketing Redesign Mockup</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800;1,9..40,400&family=JetBrains+Mono:wght@400;600;700&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: hsl(36, 20%, 10%);
+    --bg-card: hsl(36, 18%, 14%);
+    --bg-card-hover: hsl(36, 18%, 16%);
+    --bg-muted: hsl(36, 15%, 18%);
+    --border: hsl(36, 12%, 22%);
+    --border-hover: hsl(36, 12%, 30%);
+    --fg: hsl(45, 20%, 95%);
+    --fg-muted: hsl(36, 12%, 55%);
+    --fg-subtle: hsl(36, 10%, 40%);
+    --primary: hsl(47, 100%, 50%);
+    --primary-soft: hsl(47, 100%, 50%, 0.12);
+    --primary-glow: hsl(47, 100%, 50%, 0.06);
+    --success: hsl(142, 70%, 45%);
+    --success-soft: hsl(142, 70%, 45%, 0.12);
+    --danger: hsl(0, 84%, 60%);
+    --danger-soft: hsl(0, 84%, 60%, 0.12);
+    --amber: hsl(38, 92%, 50%);
+    --amber-soft: hsl(38, 92%, 50%, 0.12);
+    --blue: hsl(210, 80%, 55%);
+    --blue-soft: hsl(210, 80%, 55%, 0.12);
+    --violet: hsl(260, 60%, 60%);
+    --violet-soft: hsl(260, 60%, 60%, 0.12);
+    --emerald: hsl(152, 60%, 45%);
+    --emerald-soft: hsl(152, 60%, 45%, 0.12);
+    --cyan: hsl(185, 60%, 50%);
+    --cyan-soft: hsl(185, 60%, 50%, 0.12);
+    --radius: 10px;
+    --radius-lg: 14px;
+    --font: 'DM Sans', -apple-system, sans-serif;
+    --mono: 'JetBrains Mono', monospace;
+
+    /* Origin colors */
+    --origin-whatsapp: hsl(142, 70%, 45%);
+    --origin-meta: hsl(210, 80%, 55%);
+    --origin-site: hsl(260, 60%, 60%);
+    --origin-remarketing: hsl(38, 92%, 50%);
+    --origin-google: hsl(0, 84%, 60%);
+    --origin-cal: hsl(185, 60%, 50%);
+    --origin-outro: hsl(36, 12%, 55%);
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* === AMBIENT BACKGROUND === */
+  .ambient {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    overflow: hidden;
+  }
+  .ambient::before {
+    content: '';
+    position: absolute;
+    top: -20%;
+    left: 30%;
+    width: 600px;
+    height: 600px;
+    background: radial-gradient(circle, hsl(47, 100%, 50%, 0.04) 0%, transparent 70%);
+    border-radius: 50%;
+    animation: float-ambient 20s ease-in-out infinite;
+  }
+  .ambient::after {
+    content: '';
+    position: absolute;
+    bottom: -10%;
+    right: 20%;
+    width: 500px;
+    height: 500px;
+    background: radial-gradient(circle, hsl(142, 70%, 45%, 0.03) 0%, transparent 70%);
+    border-radius: 50%;
+    animation: float-ambient 25s ease-in-out infinite reverse;
+  }
+  @keyframes float-ambient {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    33% { transform: translate(40px, -30px) scale(1.1); }
+    66% { transform: translate(-20px, 20px) scale(0.95); }
+  }
+
+  .page {
+    position: relative;
+    z-index: 1;
+    max-width: 1320px;
+    margin: 0 auto;
+    padding: 32px 28px 80px;
+  }
+
+  /* === WATERMARK === */
+  .watermark {
+    position: fixed;
+    bottom: 16px;
+    right: 20px;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fg-subtle);
+    opacity: 0.4;
+    z-index: 100;
+    font-weight: 600;
+  }
+
+  /* === HEADER === */
+  .header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 28px;
+    animation: slide-up 0.5s ease-out;
+  }
+  .header-left { display: flex; align-items: center; gap: 14px; }
+  .header-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: var(--primary-soft);
+    border: 1px solid hsl(47, 100%, 50%, 0.15);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .header-icon svg { width: 22px; height: 22px; color: var(--primary); }
+  .header h1 {
+    font-size: 24px;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 1.1;
+  }
+  .header-sub {
+    font-size: 13px;
+    color: var(--fg-muted);
+    margin-top: 2px;
+    font-weight: 400;
+  }
+  .header-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  .filter-pill {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border-radius: 8px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    color: var(--fg);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: var(--font);
+  }
+  .filter-pill:hover {
+    border-color: var(--border-hover);
+    background: var(--bg-card-hover);
+  }
+  .filter-pill svg { width: 14px; height: 14px; color: var(--fg-muted); }
+  .btn-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .btn-icon:hover { border-color: var(--border-hover); background: var(--bg-card-hover); }
+  .btn-icon svg { width: 16px; height: 16px; color: var(--fg-muted); }
+
+  /* === KPI CARDS === */
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+  .kpi-card {
+    position: relative;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px 18px 18px 21px;
+    overflow: hidden;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    cursor: default;
+    opacity: 0;
+    transform: translateY(16px);
+    animation: slide-up 0.4s ease-out forwards;
+  }
+  .kpi-card:nth-child(1) { animation-delay: 0.05s; }
+  .kpi-card:nth-child(2) { animation-delay: 0.1s; }
+  .kpi-card:nth-child(3) { animation-delay: 0.15s; }
+  .kpi-card:nth-child(4) { animation-delay: 0.2s; }
+  .kpi-card:nth-child(5) { animation-delay: 0.25s; }
+  .kpi-card:nth-child(6) { animation-delay: 0.3s; }
+  .kpi-card:nth-child(7) { animation-delay: 0.35s; }
+  .kpi-card:nth-child(8) { animation-delay: 0.4s; }
+
+  .kpi-card:hover {
+    transform: translateY(-2px) scale(1.015);
+    border-color: var(--border-hover);
+    box-shadow: 0 8px 30px hsl(0, 0%, 0%, 0.25);
+  }
+
+  /* Accent stripe */
+  .kpi-card::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 3px;
+    height: 100%;
+    background: var(--primary);
+    opacity: 0.5;
+    transition: opacity 0.25s;
+  }
+  .kpi-card:hover::before { opacity: 1; }
+
+  .kpi-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--fg-muted);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .kpi-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: var(--bg-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .kpi-icon svg { width: 15px; height: 15px; color: var(--fg-muted); }
+  .kpi-value-row {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin-top: 6px;
+  }
+  .kpi-value {
+    font-size: 24px;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    font-variant-numeric: tabular-nums;
+    font-family: var(--font);
+  }
+  .kpi-trend {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    font-size: 11px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .kpi-trend.up { color: var(--success); }
+  .kpi-trend.down { color: var(--danger); }
+  .kpi-trend svg { width: 12px; height: 12px; }
+
+  /* === SECTION DIVIDER === */
+  .section-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  /* === FUNNEL === */
+  .funnel-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 22px;
+    opacity: 0;
+    transform: translateY(16px);
+    animation: slide-up 0.5s ease-out 0.45s forwards;
+  }
+  .section-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--fg-muted);
+    margin-bottom: 18px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .section-label svg { width: 14px; height: 14px; color: var(--primary); opacity: 0.6; }
+
+  .funnel-steps { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .funnel-connector {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 0;
+  }
+  .funnel-connector-line {
+    width: 16px;
+    height: 1px;
+    background: var(--border);
+  }
+  .funnel-connector-rate {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--fg-subtle);
+    font-variant-numeric: tabular-nums;
+  }
+  .funnel-bar {
+    height: 44px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 14px;
+    position: relative;
+    overflow: hidden;
+    transform-origin: left;
+    animation: grow-width 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    opacity: 0;
+  }
+  .funnel-bar:nth-child(1) { animation-delay: 0.55s; }
+  .funnel-bar:nth-child(3) { animation-delay: 0.67s; }
+  .funnel-bar:nth-child(5) { animation-delay: 0.79s; }
+  .funnel-bar:nth-child(7) { animation-delay: 0.91s; }
+  .funnel-bar:nth-child(9) { animation-delay: 1.03s; }
+
+  @keyframes grow-width {
+    from { max-width: 0; opacity: 0; }
+    to { max-width: 100%; opacity: 1; }
+  }
+
+  .funnel-bar-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+    z-index: 1;
+  }
+  .funnel-bar-left svg { width: 16px; height: 16px; color: white; opacity: 0.85; }
+  .funnel-bar-left span { font-size: 12px; font-weight: 600; color: white; }
+  .funnel-bar-value {
+    font-size: 14px;
+    font-weight: 700;
+    color: white;
+    font-variant-numeric: tabular-nums;
+    z-index: 1;
+  }
+
+  .funnel-bar.s1 { background: linear-gradient(135deg, hsl(210, 80%, 50%) 0%, hsl(210, 80%, 40%) 100%); width: 100%; box-shadow: 0 4px 15px hsl(210, 80%, 50%, 0.2); }
+  .funnel-bar.s2 { background: linear-gradient(135deg, hsl(260, 55%, 55%) 0%, hsl(260, 55%, 45%) 100%); width: 65%; box-shadow: 0 4px 15px hsl(260, 55%, 55%, 0.2); }
+  .funnel-bar.s3 { background: linear-gradient(135deg, hsl(38, 90%, 50%) 0%, hsl(30, 85%, 42%) 100%); width: 48%; box-shadow: 0 4px 15px hsl(38, 90%, 50%, 0.2); }
+  .funnel-bar.s4 { background: linear-gradient(135deg, hsl(340, 65%, 50%) 0%, hsl(340, 65%, 40%) 100%); width: 30%; box-shadow: 0 4px 15px hsl(340, 65%, 50%, 0.15); }
+  .funnel-bar.s5 { background: linear-gradient(135deg, hsl(152, 60%, 42%) 0%, hsl(152, 60%, 35%) 100%); width: 18%; box-shadow: 0 4px 15px hsl(152, 60%, 42%, 0.2); }
+
+  /* === RANKING === */
+  .ranking-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 22px;
+    opacity: 0;
+    transform: translateY(16px);
+    animation: slide-up 0.5s ease-out 0.5s forwards;
+  }
+
+  .ranking-list { display: flex; flex-direction: column; gap: 6px; }
+  .ranking-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    transition: all 0.2s;
+    opacity: 0;
+    transform: translateX(-8px);
+    animation: slide-right 0.35s ease-out forwards;
+  }
+  .ranking-item:nth-child(1) { animation-delay: 0.6s; background: hsl(47, 100%, 50%, 0.06); }
+  .ranking-item:nth-child(2) { animation-delay: 0.68s; background: hsl(36, 15%, 18%, 0.5); }
+  .ranking-item:nth-child(3) { animation-delay: 0.76s; background: hsl(30, 40%, 20%, 0.4); }
+  .ranking-item:nth-child(4) { animation-delay: 0.84s; }
+  .ranking-item:nth-child(5) { animation-delay: 0.92s; }
+  .ranking-item:nth-child(6) { animation-delay: 1.0s; }
+  .ranking-item:nth-child(7) { animation-delay: 1.08s; }
+
+  @keyframes slide-right {
+    from { opacity: 0; transform: translateX(-8px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  .rank-badge {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .rank-badge.gold { background: hsl(47, 100%, 50%); color: hsl(30, 30%, 12%); }
+  .rank-badge.silver { background: hsl(220, 10%, 65%); color: hsl(220, 10%, 15%); }
+  .rank-badge.bronze { background: hsl(30, 50%, 45%); color: white; }
+  .rank-badge.num { background: var(--bg-muted); color: var(--fg-muted); font-size: 10px; }
+  .rank-badge svg { width: 14px; height: 14px; }
+
+  .rank-origin {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+  }
+  .rank-origin-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .rank-origin-name {
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .rank-metrics {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-shrink: 0;
+  }
+  .rank-metric {
+    text-align: right;
+  }
+  .rank-metric-val {
+    font-size: 13px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .rank-metric-label {
+    font-size: 9px;
+    color: var(--fg-subtle);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+  }
+
+  /* === ORIGIN BATTLE CARDS === */
+  .origins-section {
+    opacity: 0;
+    transform: translateY(16px);
+    animation: slide-up 0.5s ease-out 0.55s forwards;
+  }
+  .origins-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 14px;
+  }
+  .battle-card {
+    position: relative;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 20px 20px 20px 23px;
+    overflow: hidden;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    cursor: default;
+  }
+  .battle-card:hover {
+    transform: translateY(-3px) scale(1.01);
+    border-color: var(--border-hover);
+    box-shadow: 0 12px 40px hsl(0, 0%, 0%, 0.3);
+  }
+  .battle-card::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 3px;
+    height: 100%;
+    transition: opacity 0.3s;
+    opacity: 0.6;
+  }
+  .battle-card:hover::before { opacity: 1; }
+  .battle-card[data-origin="meta_ads"]::before { background: var(--origin-meta); }
+  .battle-card[data-origin="site"]::before { background: var(--origin-site); }
+  .battle-card[data-origin="whatsapp"]::before { background: var(--origin-whatsapp); }
+  .battle-card[data-origin="google_ads"]::before { background: var(--origin-google); }
+  .battle-card[data-origin="remarketing"]::before { background: var(--origin-remarketing); }
+  .battle-card[data-origin="cal"]::before { background: var(--origin-cal); }
+  .battle-card[data-origin="outro"]::before { background: var(--origin-outro); }
+
+  .battle-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  .battle-header-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .battle-rank {
+    width: 26px;
+    height: 26px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  .battle-rank.r1 { background: hsl(47, 100%, 50%, 0.15); color: var(--primary); }
+  .battle-rank.r2 { background: hsl(220, 10%, 55%, 0.15); color: hsl(220, 10%, 70%); }
+  .battle-rank.r3 { background: hsl(30, 50%, 45%, 0.15); color: hsl(30, 50%, 55%); }
+  .battle-rank.rn { background: var(--bg-muted); color: var(--fg-subtle); }
+  .battle-rank svg { width: 13px; height: 13px; }
+
+  .battle-name {
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .battle-investment {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 6px;
+    background: var(--primary-soft);
+    color: var(--primary);
+  }
+  .battle-roi {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+  }
+  .battle-roi.positive { background: var(--success-soft); color: var(--success); }
+  .battle-roi.negative { background: var(--danger-soft); color: var(--danger); }
+
+  .battle-main-value {
+    font-size: 28px;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+  }
+  .battle-main-label {
+    font-size: 12px;
+    color: var(--fg-muted);
+    margin-top: 2px;
+  }
+  .battle-stats {
+    display: flex;
+    gap: 2px;
+    margin-top: 14px;
+  }
+
+  /* Mini funnel bars */
+  .mini-funnel {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    margin-top: 14px;
+  }
+  .mini-funnel-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .mini-funnel-label {
+    width: 48px;
+    text-align: right;
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--fg-subtle);
+    flex-shrink: 0;
+  }
+  .mini-funnel-track {
+    flex: 1;
+    height: 6px;
+    border-radius: 3px;
+    background: var(--bg-muted);
+    overflow: hidden;
+  }
+  .mini-funnel-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .mini-funnel-val {
+    width: 28px;
+    text-align: right;
+    font-size: 11px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Battle card bottom stats */
+  .battle-bottom {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+  }
+  .battle-stat {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .battle-stat-icon {
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    background: var(--bg-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .battle-stat-icon svg { width: 12px; height: 12px; color: var(--fg-muted); }
+  .battle-stat-text {}
+  .battle-stat-val {
+    font-size: 12px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .battle-stat-label {
+    font-size: 9px;
+    color: var(--fg-subtle);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 600;
+  }
+
+  /* UTM Drill-down */
+  .utm-toggle {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-top: 12px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    background: var(--blue-soft);
+    border: none;
+    color: var(--blue);
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: var(--font);
+    width: 100%;
+    justify-content: center;
+  }
+  .utm-toggle:hover { background: hsl(210, 80%, 55%, 0.18); }
+  .utm-toggle svg { width: 13px; height: 13px; }
+
+  .utm-table {
+    margin-top: 10px;
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .utm-table th {
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--fg-subtle);
+    text-align: left;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .utm-table th:last-child,
+  .utm-table td:last-child { text-align: right; }
+  .utm-table th:nth-child(2),
+  .utm-table td:nth-child(2) { text-align: center; }
+  .utm-table th:nth-child(3),
+  .utm-table td:nth-child(3) { text-align: center; }
+  .utm-table td {
+    font-size: 11px;
+    font-weight: 500;
+    padding: 7px 8px;
+    border-bottom: 1px solid hsl(36, 12%, 22%, 0.5);
+    font-variant-numeric: tabular-nums;
+  }
+  .utm-table tr:last-child td { border-bottom: none; }
+  .utm-campaign-name {
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .utm-conv { color: var(--success); font-weight: 700; }
+
+  /* === ANIMATIONS === */
+  @keyframes slide-up {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes countup {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  /* === RESPONSIVE === */
+  @media (max-width: 900px) {
+    .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+    .section-row { grid-template-columns: 1fr; }
+    .origins-grid { grid-template-columns: 1fr 1fr; }
+    .header { flex-direction: column; }
+  }
+  @media (max-width: 600px) {
+    .page { padding: 20px 16px 60px; }
+    .kpi-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+    .origins-grid { grid-template-columns: 1fr; }
+    .kpi-value { font-size: 20px; }
+    .rank-metrics { gap: 10px; }
+  }
+
+  /* === Shimmer for top 1 === */
+  .ranking-item:nth-child(1) {
+    position: relative;
+    overflow: hidden;
+  }
+  .ranking-item:nth-child(1)::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 50%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, hsl(47, 100%, 50%, 0.04), transparent);
+    animation: shimmer 4s ease-in-out infinite;
+  }
+  @keyframes shimmer {
+    0%, 100% { left: -100%; }
+    50% { left: 200%; }
+  }
+</style>
+</head>
+<body>
+
+<div class="ambient"></div>
+<div class="watermark">MOCKUP — MARKETING REDESIGN</div>
+
+<div class="page">
+
+  <!-- ===== HEADER ===== -->
+  <div class="header">
+    <div class="header-left">
+      <div class="header-icon">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 11 18-5v12L3 13v-2z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>
+      </div>
+      <div>
+        <h1>Marketing</h1>
+        <p class="header-sub">Indicadores por origem — investimento, custo e conversão</p>
+      </div>
+    </div>
+    <div class="header-controls">
+      <button class="filter-pill">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+        Abril
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;opacity:0.5"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <button class="filter-pill">
+        2026
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;opacity:0.5"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <button class="btn-icon" title="Configurar investimentos">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- ===== KPI HERO CARDS ===== -->
+  <div class="kpi-grid">
+    <!-- Investimento -->
+    <div class="kpi-card">
+      <div class="kpi-label">
+        <span>Investimento Total</span>
+        <div class="kpi-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        </div>
+      </div>
+      <div class="kpi-value-row">
+        <span class="kpi-value">R$ 45K</span>
+        <span class="kpi-trend up">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+          12%
+        </span>
+      </div>
+    </div>
+
+    <!-- Leads -->
+    <div class="kpi-card">
+      <div class="kpi-label">
+        <span>Total de Leads</span>
+        <div class="kpi-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        </div>
+      </div>
+      <div class="kpi-value-row">
+        <span class="kpi-value">1.234</span>
+        <span class="kpi-trend up">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+          8%
+        </span>
+      </div>
+    </div>
+
+    <!-- CPL -->
+    <div class="kpi-card">
+      <div class="kpi-label">
+        <span>Custo por Lead</span>
+        <div class="kpi-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/></svg>
+        </div>
+      </div>
+      <div class="kpi-value-row">
+        <span class="kpi-value">R$ 36</span>
+        <span class="kpi-trend down">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 17 13.5 8.5 8.5 13.5 2 7"/><polyline points="16 17 22 17 22 11"/></svg>
+          5%
+        </span>
+      </div>
+    </div>
+
+    <!-- Agendamentos -->
+    <div class="kpi-card">
+      <div class="kpi-label">
+        <span>Agendamentos</span>
+        <div class="kpi-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+        </div>
+      </div>
+      <div class="kpi-value-row">
+        <span class="kpi-value">189</span>
+        <span class="kpi-trend up">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+          15%
+        </span>
+      </div>
+    </div>
+
+    <!-- Comparecimentos -->
+    <div class="kpi-card">
+      <div class="kpi-label">
+        <span>Comparecimentos</span>
+        <div class="kpi-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+        </div>
+      </div>
+      <div class="kpi-value-row">
+        <span class="kpi-value">142</span>
+        <span class="kpi-trend up">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+          3%
+        </span>
+      </div>
+    </div>
+
+    <!-- Vendas -->
+    <div class="kpi-card">
+      <div class="kpi-label">
+        <span>Vendas</span>
+        <div class="kpi-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+        </div>
+      </div>
+      <div class="kpi-value-row">
+        <span class="kpi-value">67</span>
+        <span class="kpi-trend up">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+          22%
+        </span>
+      </div>
+    </div>
+
+    <!-- CPV -->
+    <div class="kpi-card">
+      <div class="kpi-label">
+        <span>Custo por Venda</span>
+        <div class="kpi-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>
+        </div>
+      </div>
+      <div class="kpi-value-row">
+        <span class="kpi-value">R$ 671</span>
+        <span class="kpi-trend down">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 17 13.5 8.5 8.5 13.5 2 7"/><polyline points="16 17 22 17 22 11"/></svg>
+          8%
+        </span>
+      </div>
+    </div>
+
+    <!-- Conversão -->
+    <div class="kpi-card">
+      <div class="kpi-label">
+        <span>Conversão Geral</span>
+        <div class="kpi-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>
+        </div>
+      </div>
+      <div class="kpi-value-row">
+        <span class="kpi-value">5,4%</span>
+        <span class="kpi-trend up">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+          1.2pp
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== FUNNEL + RANKING ===== -->
+  <div class="section-row">
+
+    <!-- Funnel -->
+    <div class="funnel-card">
+      <div class="section-label">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+        Funil de Marketing
+      </div>
+      <div class="funnel-steps">
+        <div class="funnel-bar s1">
+          <div class="funnel-bar-left">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            <span>Leads</span>
+          </div>
+          <span class="funnel-bar-value">1.234</span>
+        </div>
+
+        <div class="funnel-connector">
+          <div class="funnel-connector-line"></div>
+          <span class="funnel-connector-rate">15,3%</span>
+          <div class="funnel-connector-line"></div>
+        </div>
+
+        <div class="funnel-bar s2">
+          <div class="funnel-bar-left">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+            <span>Agendamentos</span>
+          </div>
+          <span class="funnel-bar-value">189</span>
+        </div>
+
+        <div class="funnel-connector">
+          <div class="funnel-connector-line"></div>
+          <span class="funnel-connector-rate">75,1%</span>
+          <div class="funnel-connector-line"></div>
+        </div>
+
+        <div class="funnel-bar s3">
+          <div class="funnel-bar-left">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+            <span>Comparecimentos</span>
+          </div>
+          <span class="funnel-bar-value">142</span>
+        </div>
+
+        <div class="funnel-connector">
+          <div class="funnel-connector-line"></div>
+          <span class="funnel-connector-rate">63,4%</span>
+          <div class="funnel-connector-line"></div>
+        </div>
+
+        <div class="funnel-bar s4">
+          <div class="funnel-bar-left">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>
+            <span>Propostas</span>
+          </div>
+          <span class="funnel-bar-value">90</span>
+        </div>
+
+        <div class="funnel-connector">
+          <div class="funnel-connector-line"></div>
+          <span class="funnel-connector-rate">74,4%</span>
+          <div class="funnel-connector-line"></div>
+        </div>
+
+        <div class="funnel-bar s5">
+          <div class="funnel-bar-left">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+            <span>Vendas</span>
+          </div>
+          <span class="funnel-bar-value">67</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Ranking -->
+    <div class="ranking-card">
+      <div class="section-label">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+        Ranking de Origens
+      </div>
+
+      <div class="ranking-list">
+        <!-- #1 Meta Ads -->
+        <div class="ranking-item">
+          <div class="rank-badge gold">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m2 4 3 12h14l3-12-6 7-4-7-4 7-6-7zm3 16h14"/></svg>
+          </div>
+          <div class="rank-origin">
+            <div class="rank-origin-dot" style="background: var(--origin-meta)"></div>
+            <span class="rank-origin-name">Meta Ads</span>
+          </div>
+          <div class="rank-metrics">
+            <div class="rank-metric">
+              <div class="rank-metric-val" style="color: var(--success)">12,3%</div>
+              <div class="rank-metric-label">Conversão</div>
+            </div>
+            <div class="rank-metric">
+              <div class="rank-metric-val">456</div>
+              <div class="rank-metric-label">Leads</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- #2 Site -->
+        <div class="ranking-item">
+          <div class="rank-badge silver">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>
+          </div>
+          <div class="rank-origin">
+            <div class="rank-origin-dot" style="background: var(--origin-site)"></div>
+            <span class="rank-origin-name">Site</span>
+          </div>
+          <div class="rank-metrics">
+            <div class="rank-metric">
+              <div class="rank-metric-val" style="color: var(--success)">8,7%</div>
+              <div class="rank-metric-label">Conversão</div>
+            </div>
+            <div class="rank-metric">
+              <div class="rank-metric-val">312</div>
+              <div class="rank-metric-label">Leads</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- #3 WhatsApp -->
+        <div class="ranking-item">
+          <div class="rank-badge bronze">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>
+          </div>
+          <div class="rank-origin">
+            <div class="rank-origin-dot" style="background: var(--origin-whatsapp)"></div>
+            <span class="rank-origin-name">WhatsApp</span>
+          </div>
+          <div class="rank-metrics">
+            <div class="rank-metric">
+              <div class="rank-metric-val" style="color: var(--success)">6,2%</div>
+              <div class="rank-metric-label">Conversão</div>
+            </div>
+            <div class="rank-metric">
+              <div class="rank-metric-val">287</div>
+              <div class="rank-metric-label">Leads</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- #4 Google Ads -->
+        <div class="ranking-item">
+          <div class="rank-badge num">4</div>
+          <div class="rank-origin">
+            <div class="rank-origin-dot" style="background: var(--origin-google)"></div>
+            <span class="rank-origin-name">Google Ads</span>
+          </div>
+          <div class="rank-metrics">
+            <div class="rank-metric">
+              <div class="rank-metric-val">4,1%</div>
+              <div class="rank-metric-label">Conversão</div>
+            </div>
+            <div class="rank-metric">
+              <div class="rank-metric-val">98</div>
+              <div class="rank-metric-label">Leads</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- #5 Remarketing -->
+        <div class="ranking-item">
+          <div class="rank-badge num">5</div>
+          <div class="rank-origin">
+            <div class="rank-origin-dot" style="background: var(--origin-remarketing)"></div>
+            <span class="rank-origin-name">Remarketing</span>
+          </div>
+          <div class="rank-metrics">
+            <div class="rank-metric">
+              <div class="rank-metric-val">2,8%</div>
+              <div class="rank-metric-label">Conversão</div>
+            </div>
+            <div class="rank-metric">
+              <div class="rank-metric-val">54</div>
+              <div class="rank-metric-label">Leads</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- #6 Cal.com -->
+        <div class="ranking-item">
+          <div class="rank-badge num">6</div>
+          <div class="rank-origin">
+            <div class="rank-origin-dot" style="background: var(--origin-cal)"></div>
+            <span class="rank-origin-name">Cal.com</span>
+          </div>
+          <div class="rank-metrics">
+            <div class="rank-metric">
+              <div class="rank-metric-val">2,1%</div>
+              <div class="rank-metric-label">Conversão</div>
+            </div>
+            <div class="rank-metric">
+              <div class="rank-metric-val">19</div>
+              <div class="rank-metric-label">Leads</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- #7 Outro -->
+        <div class="ranking-item">
+          <div class="rank-badge num">7</div>
+          <div class="rank-origin">
+            <div class="rank-origin-dot" style="background: var(--origin-outro)"></div>
+            <span class="rank-origin-name">Outro</span>
+          </div>
+          <div class="rank-metrics">
+            <div class="rank-metric">
+              <div class="rank-metric-val">1,2%</div>
+              <div class="rank-metric-label">Conversão</div>
+            </div>
+            <div class="rank-metric">
+              <div class="rank-metric-val">8</div>
+              <div class="rank-metric-label">Leads</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== ORIGIN BATTLE CARDS ===== -->
+  <div class="origins-section">
+    <div class="section-label" style="margin-bottom: 14px;">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+      Desempenho por Origem
+    </div>
+
+    <div class="origins-grid">
+
+      <!-- META ADS — #1 -->
+      <div class="battle-card" data-origin="meta_ads">
+        <div class="battle-header">
+          <div class="battle-header-left">
+            <div class="battle-rank r1">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m2 4 3 12h14l3-12-6 7-4-7-4 7-6-7zm3 16h14"/></svg>
+            </div>
+            <span class="battle-name">Meta Ads</span>
+          </div>
+          <span class="battle-investment">R$ 18.500</span>
+        </div>
+
+        <div style="display: flex; align-items: baseline; gap: 12px;">
+          <div>
+            <div class="battle-main-value">456</div>
+            <div class="battle-main-label">leads captados</div>
+          </div>
+          <span class="battle-roi positive">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:11px;height:11px"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/></svg>
+            ROI +340%
+          </span>
+        </div>
+
+        <div class="mini-funnel">
+          <div class="mini-funnel-row">
+            <span class="mini-funnel-label">Leads</span>
+            <div class="mini-funnel-track"><div class="mini-funnel-fill" style="width: 100%; background: linear-gradient(90deg, hsl(210,80%,50%), hsl(210,70%,55%));"></div></div>
+            <span class="mini-funnel-val">456</span>
+          </div>
+          <div class="mini-funnel-row">
+            <span class="mini-funnel-label">Agend.</span>
+            <div class="mini-funnel-track"><div class="mini-funnel-fill" style="width: 58%; background: linear-gradient(90deg, hsl(260,55%,50%), hsl(260,50%,55%));"></div></div>
+            <span class="mini-funnel-val">78</span>
+          </div>
+          <div class="mini-funnel-row">
+            <span class="mini-funnel-label">Compar.</span>
+            <div class="mini-funnel-track"><div class="mini-funnel-fill" style="width: 44%; background: linear-gradient(90deg, hsl(38,90%,48%), hsl(38,85%,52%));"></div></div>
+            <span class="mini-funnel-val">61</span>
+          </div>
+          <div class="mini-funnel-row">
+            <span class="mini-funnel-label">Vendas</span>
+            <div class="mini-funnel-track"><div class="mini-funnel-fill" style="width: 24%; background: linear-gradient(90deg, hsl(152,60%,40%), hsl(152,55%,48%));"></div></div>
+            <span class="mini-funnel-val">56</span>
+          </div>
+        </div>
+
+        <div class="battle-bottom">
+          <div class="battle-stat">
+            <div class="battle-stat-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            </div>
+            <div class="battle-stat-text">
+              <div class="battle-stat-val">R$ 41</div>
+              <div class="battle-stat-label">Custo/Lead</div>
+            </div>
+          </div>
+          <div class="battle-stat">
+            <div class="battle-stat-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+            </div>
+            <div class="battle-stat-text">
+              <div class="battle-stat-val">R$ 330</div>
+              <div class="battle-stat-label">Custo/Venda</div>
+            </div>
+          </div>
+          <div class="battle-stat">
+            <div class="battle-stat-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+            </div>
+            <div class="battle-stat-text">
+              <div class="battle-stat-val" style="color: var(--success)">12,3%</div>
+              <div class="battle-stat-label">Conversão</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- UTM Drill-down -->
+        <button class="utm-toggle" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'none' ? 'block' : 'none'; this.querySelector('.chevron').style.transform = this.nextElementSibling.style.display === 'none' ? '' : 'rotate(180deg)'">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          Ver campanhas UTM
+          <svg class="chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;transition:transform 0.2s"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <div style="display: none;">
+          <table class="utm-table">
+            <thead>
+              <tr>
+                <th>Campanha</th>
+                <th>Leads</th>
+                <th>Vendas</th>
+                <th>Conv.</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="utm-campaign-name">Lançamento Produto X</span></td>
+                <td style="text-align:center">187</td>
+                <td style="text-align:center">28</td>
+                <td class="utm-conv" style="text-align:right">15,0%</td>
+              </tr>
+              <tr>
+                <td><span class="utm-campaign-name">Retargeting Q1 2026</span></td>
+                <td style="text-align:center">142</td>
+                <td style="text-align:center">18</td>
+                <td class="utm-conv" style="text-align:right">12,7%</td>
+              </tr>
+              <tr>
+                <td><span class="utm-campaign-name">Webinar Vendas B2B</span></td>
+                <td style="text-align:center">89</td>
+                <td style="text-align:center">7</td>
+                <td class="utm-conv" style="text-align:right">7,9%</td>
+              </tr>
+              <tr>
+                <td><span class="utm-campaign-name">Lead Magnet eBook</span></td>
+                <td style="text-align:center">38</td>
+                <td style="text-align:center">3</td>
+                <td class="utm-conv" style="text-align:right">7,9%</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- SITE — #2 -->
+      <div class="battle-card" data-origin="site">
+        <div class="battle-header">
+          <div class="battle-header-left">
+            <div class="battle-rank r2">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>
+            </div>
+            <span class="battle-name">Site</span>
+          </div>
+          <span class="battle-investment">R$ 8.200</span>
+        </div>
+
+        <div style="display: flex; align-items: baseline; gap: 12px;">
+          <div>
+            <div class="battle-main-value">312</div>
+            <div class="battle-main-label">leads captados</div>
+          </div>
+          <span class="battle-roi positive">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:11px;height:11px"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/></svg>
+            ROI +180%
+          </span>
+        </div>
+
+        <div class="mini-funnel">
+          <div class="mini-funnel-row">
+            <span class="mini-funnel-label">Leads</span>
+            <div class="mini-funnel-track"><div class="mini-funnel-fill" style="width: 100%; background: linear-gradient(90deg, hsl(260,55%,50%), hsl(260,50%,55%));"></div></div>
+            <span class="mini-funnel-val">312</span>
+          </div>
+          <div class="mini-funnel-row">
+            <span class="mini-funnel-label">Agend.</span>
+            <div class="mini-funnel-track"><div class="mini-funnel-fill" style="width: 45%; background: linear-gradient(90deg, hsl(260,55%,50%), hsl(260,50%,55%));"></div></div>
+            <span class="mini-funnel-val">52</span>
+          </div>
+          <div class="mini-funnel-row">
+            <span class="mini-funnel-label">Compar.</span>
+            <div class="mini-funnel-track"><div class="mini-funnel-fill" style="width: 35%; background: linear-gradient(90deg, hsl(260,55%,50%), hsl(260,50%,55%));"></div></div>
+            <span class="mini-funnel-val">38</span>
+          </div>
+          <div class="mini-funnel-row">
+            <span class="mini-funnel-label">Vendas</span>
+            <div class="mini-funnel-track"><div class="mini-funnel-fill" style="width: 18%; background: linear-gradient(90deg, hsl(260,55%,50%), hsl(260,50%,55%));"></div></div>
+            <span class="mini-funnel-val">27</span>
+          </div>
+        </div>
+
+        <div class="battle-bottom">
+          <div class="battle-stat">
+            <div class="battle-stat-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            </div>
+            <div class="battle-stat-text">
+              <div class="battle-stat-val">R$ 26</div>
+              <div class="battle-stat-label">Custo/Lead</div>
+            </div>
+          </div>
+          <div class="battle-stat">
+            <div class="battle-stat-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+            </div>
+            <div class="battle-stat-text">
+              <div class="battle-stat-val" style="color: var(--success)">8,7%</div>
+              <div class="battle-stat-label">Conversão</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- WHATSAPP — #3 -->
+      <div class="battle-card" data-origin="whatsapp">
+        <div class="battle-header">
+          <div class="battle-header-left">
+            <div class="battle-rank r3">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>
+            </div>
+            <span class="battle-name">WhatsApp</span>
+          </div>
+        </div>
+
+        <div style="display: flex; align-items: baseline; gap: 12px;">
+          <div>
+            <div class="battle-main-value">287</div>
+            <div class="battle-main-label">leads captados</div>
+          </div>
+        </div>
+
+        <div class="mini-funnel">
+          <div class="mini-funnel-row">
+            <span class="mini-funnel-label">Leads</span>
+            <div class="mini-funnel-track"><div class="mini-funnel-fill" style="width: 100%; background: linear-gradient(90deg, hsl(142,65%,40%), hsl(142,60%,48%));"></div></div>
+            <span class="mini-funnel-val">287</span>
+          </div>
+          <div class="mini-funnel-row">
+            <span class="mini-funnel-label">Agend.</span>
+            <div class="mini-funnel-track"><div class="mini-funnel-fill" style="width: 38%; background: linear-gradient(90deg, hsl(142,65%,40%), hsl(142,60%,48%));"></div></div>
+            <span class="mini-funnel-val">42</span>
+          </div>
+          <div class="mini-funnel-row">
+            <span class="mini-funnel-label">Compar.</span>
+            <div class="mini-funnel-track"><div class="mini-funnel-fill" style="width: 28%; background: linear-gradient(90deg, hsl(142,65%,40%), hsl(142,60%,48%));"></div></div>
+            <span class="mini-funnel-val">31</span>
+          </div>
+          <div class="mini-funnel-row">
+            <span class="mini-funnel-label">Vendas</span>
+            <div class="mini-funnel-track"><div class="mini-funnel-fill" style="width: 12%; background: linear-gradient(90deg, hsl(142,65%,40%), hsl(142,60%,48%));"></div></div>
+            <span class="mini-funnel-val">18</span>
+          </div>
+        </div>
+
+        <div class="battle-bottom" style="grid-template-columns: 1fr;">
+          <div class="battle-stat">
+            <div class="battle-stat-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+            </div>
+            <div class="battle-stat-text">
+              <div class="battle-stat-val" style="color: var(--success)">6,2%</div>
+              <div class="battle-stat-label">Conversão</div>
+            </div>
+          </div>
+        </div>
+
+        <p style="font-size: 10px; color: var(--fg-subtle); margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border);">
+          Configure o investimento para ver custos e ROI
+        </p>
+      </div>
+
+      <!-- GOOGLE ADS — #4 -->
+      <div class="battle-card" data-origin="google_ads">
+        <div class="battle-header">
+          <div class="battle-header-left">
+            <div class="battle-rank rn">4</div>
+            <span class="battle-name">Google Ads</span>
+          </div>
+          <span class="battle-investment">R$ 12.300</span>
+        </div>
+
+        <div style="display: flex; align-items: baseline; gap: 12px;">
+          <div>
+            <div class="battle-main-value">98</div>
+            <div class="battle-main-label">leads captados</div>
+          </div>
+          <span class="battle-roi negative">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:11px;height:11px"><polyline points="22 17 13.5 8.5 8.5 13.5 2 7"/></svg>
+            ROI -24%
+          </span>
+        </div>
+
+        <div class="mini-funnel">
+          <div class="mini-funnel-row">
+            <span class="mini-funnel-label">Leads</span>
+            <div class="mini-funnel-track"><div class="mini-funnel-fill" style="width: 100%; background: linear-gradient(90deg, hsl(0,75%,50%), hsl(0,70%,55%));"></div></div>
+            <span class="mini-funnel-val">98</span>
+          </div>
+          <div class="mini-funnel-row">
+            <span class="mini-funnel-label">Agend.</span>
+            <div class="mini-funnel-track"><div class="mini-funnel-fill" style="width: 30%; background: linear-gradient(90deg, hsl(0,75%,50%), hsl(0,70%,55%));"></div></div>
+            <span class="mini-funnel-val">12</span>
+          </div>
+          <div class="mini-funnel-row">
+            <span class="mini-funnel-label">Compar.</span>
+            <div class="mini-funnel-track"><div class="mini-funnel-fill" style="width: 20%; background: linear-gradient(90deg, hsl(0,75%,50%), hsl(0,70%,55%));"></div></div>
+            <span class="mini-funnel-val">8</span>
+          </div>
+          <div class="mini-funnel-row">
+            <span class="mini-funnel-label">Vendas</span>
+            <div class="mini-funnel-track"><div class="mini-funnel-fill" style="width: 8%; background: linear-gradient(90deg, hsl(0,75%,50%), hsl(0,70%,55%));"></div></div>
+            <span class="mini-funnel-val">4</span>
+          </div>
+        </div>
+
+        <div class="battle-bottom">
+          <div class="battle-stat">
+            <div class="battle-stat-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            </div>
+            <div class="battle-stat-text">
+              <div class="battle-stat-val">R$ 126</div>
+              <div class="battle-stat-label">Custo/Lead</div>
+            </div>
+          </div>
+          <div class="battle-stat">
+            <div class="battle-stat-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+            </div>
+            <div class="battle-stat-text">
+              <div class="battle-stat-val" style="color: var(--danger)">4,1%</div>
+              <div class="battle-stat-label">Conversão</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

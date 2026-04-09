@@ -6,6 +6,7 @@
 .agents/
 .windsurf/
 .superpowers/
+.claude/skills/
 
 # Logs
 logs
