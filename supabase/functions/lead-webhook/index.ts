@@ -12,6 +12,8 @@ import { getOrCreateLead } from "../_shared/lead-service.ts";
 import { enqueueWebhookDeliveries } from "../_shared/webhook-utils.ts";
 import { getCampaignLeadAssignment, getCampaignCloserAssignment } from "../_shared/campaign-distribution.ts";
 import { logRuntime } from "../_shared/logger.ts";
+import { isValidUUID, isValidISODate, validateArraySize, validateReferencedId } from "../_shared/validation.ts";
+import { successResponse, errorResponse } from "../_shared/response.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -78,10 +80,7 @@ serve(withSentry('lead-webhook', async (req) => {
     
     if (!webhookKey || webhookKey !== expectedKey) {
       console.error("[lead-webhook] Invalid or missing webhook key");
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return errorResponse(401, "Unauthorized", corsHeaders, { req });
     }
 
     // Parse payload
@@ -101,10 +100,38 @@ serve(withSentry('lead-webhook', async (req) => {
 
     // Validação básica
     if (!payload.fields || (!payload.fields.phone && !payload.fields.email)) {
-      return new Response(
-        JSON.stringify({ error: "Lead must have phone or email" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      return errorResponse(400, "Lead must have phone or email", corsHeaders, { req });
+    }
+
+    // ── Input validation ──
+    if (payload.organization_id && !isValidUUID(payload.organization_id)) {
+      return errorResponse(400, "Validation failed: organization_id não é um UUID válido", corsHeaders, { req });
+    }
+    if (payload.assigned_user_id && !isValidUUID(payload.assigned_user_id)) {
+      return errorResponse(400, "Validation failed: assigned_user_id não é um UUID válido", corsHeaders, { req });
+    }
+    if (payload.place_in_campaign?.campaign_id && !isValidUUID(payload.place_in_campaign.campaign_id)) {
+      return errorResponse(400, "Validation failed: place_in_campaign.campaign_id não é um UUID válido", corsHeaders, { req });
+    }
+    if (payload.place_in_campaign?.stage_id && !isValidUUID(payload.place_in_campaign.stage_id)) {
+      return errorResponse(400, "Validation failed: place_in_campaign.stage_id não é um UUID válido", corsHeaders, { req });
+    }
+    if (payload.tags && Array.isArray(payload.tags)) {
+      const tagsValidation = validateArraySize(payload.tags, 50, "tags");
+      if (!tagsValidation.valid) {
+        return errorResponse(400, `Validation failed: ${tagsValidation.error}`, corsHeaders, { req });
+      }
+    }
+    if (payload.fields) {
+      const customFieldKeys = Object.keys(payload.fields).filter(
+        (k) => !["name", "phone", "email", "company", "notes", "segment", "faturamento", "urgency", "rating", "utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term"].includes(k)
       );
+      if (customFieldKeys.length > 100) {
+        return errorResponse(400, "Validation failed: custom_fields excede o limite de 100 campos", corsHeaders, { req });
+      }
+    }
+    if (payload.place_in_pipe?.meeting_date && !isValidISODate(payload.place_in_pipe.meeting_date)) {
+      return errorResponse(400, "Validation failed: meeting_date não é uma data ISO 8601 válida", corsHeaders, { req });
     }
 
     // Criar cliente Supabase
@@ -124,12 +151,17 @@ serve(withSentry('lead-webhook', async (req) => {
         .single();
       
       if (!org) {
-        return new Response(
-          JSON.stringify({ error: "No organization found" }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return errorResponse(400, "No organization found", corsHeaders, { req });
       }
       organizationId = org.id;
+    }
+
+    // Referenced ID validation (warning only — don't block)
+    if (payload.assigned_user_id && organizationId) {
+      const refCheck = await validateReferencedId(supabase, "team_members", payload.assigned_user_id, organizationId);
+      if (!refCheck.exists) {
+        console.warn(`[lead-webhook] assigned_user_id not found in team_members for org ${organizationId}: ${refCheck.error}`);
+      }
     }
 
     // Usar serviço centralizado para buscar ou criar lead
@@ -192,14 +224,13 @@ serve(withSentry('lead-webhook', async (req) => {
 
       if (!result) {
         console.error("[lead-webhook] Failed to get or create lead for org:", organizationId, "phone:", phone, "email:", email);
-        return new Response(
-          JSON.stringify({
-            error: "Failed to get or create lead",
+        return errorResponse(500, "Failed to get or create lead", corsHeaders, {
+          req,
+          details: {
             hint: "Check Supabase Edge Function logs for [lead-service] errors. Common causes: missing database columns (run pending migrations), duplicate leads, or DB constraint violations.",
             context: { organization_id: organizationId, phone: phone || null, email: email || null },
-          }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+          },
+        });
       }
       console.log("[lead-webhook] update_existing_if_match: lead resolved:", result.lead.id, "created:", result.created);
     } else {
@@ -231,10 +262,7 @@ serve(withSentry('lead-webhook', async (req) => {
 
       if (createError) {
         console.error("[lead-webhook] Failed to create lead:", createError);
-        return new Response(
-          JSON.stringify({ error: "Failed to create lead", details: createError.message }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return errorResponse(500, "Failed to create lead", corsHeaders, { req, details: createError.message });
       }
 
       try {
@@ -688,10 +716,7 @@ serve(withSentry('lead-webhook', async (req) => {
     // Run background tasks without blocking response
     Promise.allSettled(backgroundTasks).catch(() => {});
 
-    return new Response(
-      JSON.stringify(responseBody),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return successResponse(responseBody, corsHeaders, { req });
 
   } catch (error) {
     console.error("[lead-webhook] Error:", error);
@@ -701,9 +726,6 @@ serve(withSentry('lead-webhook', async (req) => {
       status: "error",
       errorMessage: String(error),
     });
-    return new Response(
-      JSON.stringify({ error: "Internal server error", details: String(error) }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return errorResponse(500, "Internal server error", corsHeaders, { req, details: String(error) });
   }
 }));
