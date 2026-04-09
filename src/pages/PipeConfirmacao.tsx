@@ -33,6 +33,7 @@ import { useCreatePipeProposta } from "@/hooks/usePipePropostas";
 import { useResponsibleMembers } from "@/hooks/useTeamMembers";
 import { LeadModal } from "@/components/leads/LeadModal";
 import { AddMeetingModal } from "@/components/confirmacao/AddMeetingModal";
+import { RescheduleModal } from "@/components/confirmacao/RescheduleModal";
 import { ConfirmacaoStats } from "@/components/confirmacao/ConfirmacaoStats";
 import type { MetricsPeriod } from "@/hooks/usePipeMetrics";
 import { LeadCard, type LeadCardData } from "@/components/leads/LeadCard";
@@ -194,6 +195,10 @@ export default function PipeConfirmacao() {
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [editingLead, setEditingLead] = useState<any>(null);
   const [selectedItem, setSelectedItem] = useState<any>(null);
+
+  // Reschedule modal state
+  const [isRescheduleModalOpen, setIsRescheduleModalOpen] = useState(false);
+  const [pendingRescheduleItem, setPendingRescheduleItem] = useState<any>(null);
 
   // Compareceu modal state
   const [isCompareceuModalOpen, setIsCompareceuModalOpen] = useState(false);
@@ -388,6 +393,13 @@ export default function PipeConfirmacao() {
   const handleStatusChange = async (itemId: string, newStatus: string) => {
     const item = pipeData?.find(p => p.id === itemId);
     if (!item) return;
+
+    // Intercept: moving to "remarcar" opens reschedule modal
+    if (newStatus === "remarcar") {
+      setPendingRescheduleItem(item);
+      setIsRescheduleModalOpen(true);
+      return;
+    }
 
     const stageLabel = statusColumns.find(c => c.id === newStatus)?.title || newStatus;
 
@@ -703,6 +715,16 @@ export default function PipeConfirmacao() {
         renderFunnelContext={({ lead, pipeData, onSuccess: onCtxSuccess }) => (
           <ConfirmacaoContext lead={lead} pipeData={pipeData} onSuccess={onCtxSuccess} />
         )}
+      />
+
+      <RescheduleModal
+        open={isRescheduleModalOpen}
+        onOpenChange={setIsRescheduleModalOpen}
+        pipeItem={pendingRescheduleItem}
+        onSuccess={() => {
+          setPendingRescheduleItem(null);
+          refetch();
+        }}
       />
 
       <CompareceuModal

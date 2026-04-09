@@ -105,13 +105,8 @@ export function useCreatePipeConfirmacao() {
         organizationId: data.organization_id,
       });
 
-      // Trigger visual workflow automations
-      triggerStageChangedWorkflows({
-        organizationId: data.organization_id,
-        leadId: data.lead_id,
-        pipeType: "confirmacao",
-        toStage: data.status,
-      });
+      // stage_changed workflows are fired by the PG trigger on pipe_confirmacao
+      // (via pg_net → process-workflow-executions). No need to fire from frontend.
 
       return data;
     },

@@ -45,6 +45,7 @@ import { useLogLeadAction } from "@/hooks/useLogLeadAction";
 import { useDeleteLead } from "@/hooks/useLeads";
 import { useResponsibleMembers } from "@/hooks/useTeamMembers";
 import { CompareceuModal } from "@/components/confirmacao/CompareceuModal";
+import { RescheduleModal } from "@/components/confirmacao/RescheduleModal";
 import { cn } from "@/lib/utils";
 import { format, differenceInDays, isToday, isTomorrow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -94,6 +95,7 @@ export function ConfirmacaoContext({ lead, pipeData: item, onSuccess }: Confirma
   const [newNote, setNewNote] = useState("");
   const [isAddingNote, setIsAddingNote] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [isRescheduleModalOpen, setIsRescheduleModalOpen] = useState(false);
   const [isCompareceuModalOpen, setIsCompareceuModalOpen] = useState(false);
   const [isProcessingCompareceu, setIsProcessingCompareceu] = useState(false);
 
@@ -187,6 +189,7 @@ export function ConfirmacaoContext({ lead, pipeData: item, onSuccess }: Confirma
 
   const handleQuickStatusChange = async (newStatus: PipeConfirmacaoStatus) => {
     if (newStatus === "compareceu") { setIsCompareceuModalOpen(true); return; }
+    if (newStatus === "remarcar") { setIsRescheduleModalOpen(true); return; }
     try {
       const label = statusColumns.find((s) => s.id === newStatus)?.title;
       logAction({ leadId: item.lead_id, action: "stage_changed", description: `Status alterado para "${label}" na Confirmação` });
@@ -454,6 +457,13 @@ export function ConfirmacaoContext({ lead, pipeData: item, onSuccess }: Confirma
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <RescheduleModal
+        open={isRescheduleModalOpen}
+        onOpenChange={setIsRescheduleModalOpen}
+        pipeItem={item ? { ...item, lead } : null}
+        onSuccess={() => onSuccess?.()}
+      />
 
       <CompareceuModal
         open={isCompareceuModalOpen}
