@@ -20,7 +20,7 @@ const LEADS_PAGE_SIZE = 50;
 export function useLeads(page: number = 0) {
   const { organizationId, isReady } = useOrganization();
 
-  useRealtimeSubscription("leads", ["leads", "pipe_whatsapp", "pipe_confirmacao", "pipe_propostas", "tv-dashboard"]);
+  useRealtimeSubscription("leads", ["leads"]);
 
   return useQuery({
     queryKey: ["leads", organizationId, page],
