@@ -1,9 +1,10 @@
 import { withSentry } from '../_shared/sentry.ts';
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
-import { validateLeadInput, sanitizeString } from "../_shared/validation.ts";
+import { validateLeadInput, sanitizeString, isValidUUID, isValidISODate } from "../_shared/validation.ts";
 import { enqueueWebhookDeliveries } from "../_shared/webhook-utils.ts";
 import { logRuntime } from "../_shared/logger.ts";
+import { successResponse, errorResponse } from "../_shared/response.ts";
 
 // Helper functions (reutilizadas do webhook-new-lead)
 function normalizeEmail(email: string | null | undefined): string | null {
@@ -124,7 +125,7 @@ async function handleProcessLead(supabase: any, data: any, tenantId: string | nu
   let deduplicationMethod = null;
 
   if (normalizedEmail) {
-    const { data: leads } = await supabase.from("leads").select("*").order("created_at", { ascending: false });
+    const { data: leads } = await supabase.from("leads").select("*").eq("organization_id", tenantId).order("created_at", { ascending: false });
     if (leads) {
       existingLead = leads.find((lead: any) => normalizeEmail(lead.email) === normalizedEmail);
       if (existingLead) deduplicationMethod = "email";
@@ -137,6 +138,7 @@ async function handleProcessLead(supabase: any, data: any, tenantId: string | nu
     const { data: todayLeads } = await supabase
       .from("leads")
       .select("*")
+      .eq("organization_id", tenantId)
       .gte("created_at", start)
       .lte("created_at", end)
       .order("created_at", { ascending: false });
@@ -620,22 +622,34 @@ Deno.serve(withSentry('webhook-orchestrator', async (req) => {
 
     // Validação básica
     if (!action) {
-      return new Response(
-        JSON.stringify({ success: false, error: "Campo 'action' é obrigatório" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return errorResponse(400, "Campo 'action' é obrigatório", corsHeaders, { req });
     }
 
     // Validação de autenticação
     const apiKey = api_key || req.headers.get("X-API-Key");
     const tenantId = tenant_id || body.tenant_id;
-    
+
     const authResult = await validateAuth(supabase, apiKey, tenantId);
     if (!authResult.valid) {
-      return new Response(
-        JSON.stringify({ success: false, error: authResult.error }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return errorResponse(401, authResult.error || "Unauthorized", corsHeaders, { req });
+    }
+
+    // ── Input validation ──
+    if (tenantId && !isValidUUID(tenantId)) {
+      return errorResponse(400, "Validation failed: tenant_id não é um UUID válido", corsHeaders, { req });
+    }
+
+    const actionData = data || body;
+    if (["SCHEDULE_MEETING", "UPDATE_LEAD", "TRANSFER_HUMAN"].includes(action) && actionData?.lead_id) {
+      if (!isValidUUID(actionData.lead_id)) {
+        return errorResponse(400, "Validation failed: lead_id não é um UUID válido", corsHeaders, { req });
+      }
+    }
+
+    if (action === "SCHEDULE_MEETING" && actionData?.preferred_date) {
+      if (!isValidISODate(actionData.preferred_date)) {
+        return errorResponse(400, "Validation failed: preferred_date não é uma data ISO 8601 válida", corsHeaders, { req });
+      }
     }
 
     // Roteia para handler apropriado
@@ -652,11 +666,10 @@ Deno.serve(withSentry('webhook-orchestrator', async (req) => {
       entityId: result.lead_id || undefined,
     });
 
-    const status = result.success ? 200 : 400;
-    return new Response(
-      JSON.stringify(result),
-      { status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    if (result.success) {
+      return successResponse(result, corsHeaders, { req });
+    }
+    return errorResponse(400, result.error || "Action failed", corsHeaders, { req, details: result.details });
 
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
@@ -666,9 +679,6 @@ Deno.serve(withSentry('webhook-orchestrator', async (req) => {
       status: "error",
       errorMessage,
     });
-    return new Response(
-      JSON.stringify({ success: false, error: "Erro interno", details: errorMessage }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return errorResponse(500, "Erro interno", corsHeaders, { req, details: errorMessage });
   }
 }));

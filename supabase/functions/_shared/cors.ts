@@ -29,7 +29,7 @@ export function getCorsHeaders(origin?: string | null): Record<string, string> {
 
   return {
     "Access-Control-Allow-Origin": corsOrigin,
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-secret",
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-secret, x-webhook-key, x-api-key, x-api-version",
     "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
     "Access-Control-Max-Age": "86400",
   };

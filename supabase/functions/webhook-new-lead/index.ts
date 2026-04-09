@@ -1,10 +1,12 @@
 import { withSentry } from '../_shared/sentry.ts';
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
-import { validateLeadInput, sanitizeString } from "../_shared/validation.ts";
+import { validateApiKey } from "../_shared/auth.ts";
+import { validateLeadInput, sanitizeString, isValidUUID, isValidISODate, validateReferencedId } from "../_shared/validation.ts";
 import { normalizePhoneForSearch } from "../_shared/lead-service.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { fireTrigger } from "../_shared/workflow-trigger.ts";
+import { successResponse, errorResponse } from "../_shared/response.ts";
 
 // Helper function to normalize email (lowercase, trim)
 function normalizeEmail(email: string | null | undefined): string | null {
@@ -45,6 +47,16 @@ Deno.serve(withSentry('webhook-new-lead', async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    // --- API Key Authentication (90-day grace period) ---
+    const authResult = await validateApiKey(supabase, req);
+    if (!authResult.valid) {
+      const graceEnd = new Date("2026-07-09T00:00:00Z");
+      if (new Date() > graceEnd) {
+        return errorResponse(401, authResult.error || "API key required", corsHeaders, { req });
+      }
+      console.warn(`[DEPRECATION] Unauthenticated request to webhook-new-lead. Auth required after 2026-07-09.`);
+    }
+
     const body = await req.json();
     
     // Valid origin enum values
@@ -73,8 +85,9 @@ Deno.serve(withSentry('webhook-new-lead', async (req) => {
       organization_id: rawOrganizationId,
     } = body;
 
-    // Resolve organization_id: from payload or first active org
-    let organization_id: string | undefined = rawOrganizationId;
+    // Resolve organization_id: authenticated key org > payload > first active org
+    let organization_id: string | undefined =
+      (authResult.valid && authResult.organizationId) || rawOrganizationId;
     if (!organization_id) {
       const { data: defaultOrg } = await supabase
         .from("organizations")
@@ -84,10 +97,24 @@ Deno.serve(withSentry('webhook-new-lead', async (req) => {
       organization_id = defaultOrg?.id;
     }
     if (!organization_id) {
-      return new Response(
-        JSON.stringify({ error: "organization_id não encontrado" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return errorResponse(400, "organization_id não encontrado", corsHeaders, { req });
+    }
+
+    // ── Input validation ──
+    if (rawOrganizationId && !isValidUUID(rawOrganizationId)) {
+      return errorResponse(400, "Validation failed: organization_id não é um UUID válido", corsHeaders, { req });
+    }
+    if (sdr_id && !isValidUUID(sdr_id)) {
+      return errorResponse(400, "Validation failed: sdr_id não é um UUID válido", corsHeaders, { req });
+    }
+    if (compromisso_date && !isValidISODate(compromisso_date)) {
+      return errorResponse(400, "Validation failed: compromisso_date não é uma data ISO 8601 válida", corsHeaders, { req });
+    }
+    if (sdr_id && organization_id) {
+      const refCheck = await validateReferencedId(supabase, "team_members", sdr_id, organization_id);
+      if (!refCheck.exists) {
+        console.warn(`[webhook-new-lead] sdr_id not found in team_members for org ${organization_id}: ${refCheck.error}`);
+      }
     }
 
     // Sanitize inputs
@@ -118,10 +145,7 @@ Deno.serve(withSentry('webhook-new-lead', async (req) => {
     });
 
     if (!validation.valid) {
-      return new Response(
-        JSON.stringify({ error: "Dados inválidos", details: validation.errors }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return errorResponse(400, "Dados inválidos", corsHeaders, { req, details: validation.errors });
     }
     
     // Normalize email for comparison (case-insensitive)
@@ -141,6 +165,7 @@ Deno.serve(withSentry('webhook-new-lead', async (req) => {
       const { data: phoneResults, error: phoneSearchError } = await supabase
         .from("leads")
         .select("*")
+        .eq("organization_id", organization_id)
         .eq("normalized_phone", normalizedPhone)
         .order("created_at", { ascending: false })
         .limit(1);
@@ -157,6 +182,7 @@ Deno.serve(withSentry('webhook-new-lead', async (req) => {
       const { data: leads, error: searchError } = await supabase
         .from("leads")
         .select("*")
+        .eq("organization_id", organization_id)
         .order("created_at", { ascending: false });
 
       if (!searchError && leads) {
@@ -176,6 +202,7 @@ Deno.serve(withSentry('webhook-new-lead', async (req) => {
       const { data: todayLeads, error: searchError } = await supabase
         .from("leads")
         .select("*")
+        .eq("organization_id", organization_id)
         .gte("created_at", start)
         .lte("created_at", end)
         .order("created_at", { ascending: false });
@@ -330,79 +357,57 @@ Deno.serve(withSentry('webhook-new-lead', async (req) => {
         payloadSnapshot: { deduplicationMethod, pipe: newCompromissoDate ? "confirmacao" : "whatsapp" },
       });
 
-      return new Response(
-        JSON.stringify({
-          success: true,
-          message: "Lead existente atualizado (duplicado unificado)",
-          lead_id: existingLead.id,
-          deduplication_method: deduplicationMethod,
-          pipe: newCompromissoDate ? "confirmacao" : "whatsapp"
-        }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return successResponse({
+        message: "Lead existente atualizado (duplicado unificado)",
+        lead_id: existingLead.id,
+        deduplication_method: deduplicationMethod,
+        pipe: newCompromissoDate ? "confirmacao" : "whatsapp",
+      }, corsHeaders, { req });
     }
 
     // ============================================
     // CREATE NEW LEAD (NO DUPLICATE FOUND)
+    // Atomic lead + pipe creation via RPC (single transaction)
     // ============================================
-    const { data: lead, error: leadError } = await supabase
-      .from("leads")
-      .insert({
-        organization_id,
-        name,
-        email,
-        phone,
-        company,
-        origin,
-        segment,
-        faturamento: faturamento || null,
-        urgency,
-        notes,
-        rating: rating ? parseInt(String(rating), 10) : 0,
-        sdr_id,
-        responsible_id: sdr_id || null,
-        compromisso_date: compromisso_date || null,
-        utm_source,
-        utm_medium,
-        utm_campaign,
-        utm_term,
-        utm_content,
-      })
-      .select()
-      .single();
+    const pipeType = compromisso_date ? 'confirmacao' : 'whatsapp';
 
-    if (leadError) {
-      return new Response(
-        JSON.stringify({ error: "Erro ao criar lead", details: leadError.message }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    const { data: result, error: rpcError } = await supabase.rpc('create_lead_with_pipe', {
+      p_name: name,
+      p_email: email || null,
+      p_phone: phone || null,
+      p_company: company || null,
+      p_origin: origin,
+      p_organization_id: organization_id,
+      p_segment: segment || null,
+      p_faturamento: faturamento || null,
+      p_urgency: urgency || null,
+      p_notes: notes || null,
+      p_rating: rating ? parseInt(String(rating), 10) : 0,
+      p_sdr_id: sdr_id || null,
+      p_responsible_id: sdr_id || null,
+      p_compromisso_date: compromisso_date || null,
+      p_utm_source: utm_source || null,
+      p_utm_medium: utm_medium || null,
+      p_utm_campaign: utm_campaign || null,
+      p_utm_term: utm_term || null,
+      p_utm_content: utm_content || null,
+      p_pipe_type: pipeType,
+      p_pipe_status: pipeType === 'confirmacao' ? 'reuniao_marcada' : 'novo',
+      p_pipe_meeting_date: compromisso_date || null,
+    });
+
+    if (rpcError) {
+      return errorResponse(500, "Erro ao criar lead", corsHeaders, { req, details: rpcError.message });
     }
 
-    // Route lead based on whether compromisso_date is filled
-    if (lead.compromisso_date) {
-      // Lead has compromisso_date - create in pipe_confirmacao with reuniao_marcada
-      const { error: pipeConfirmacaoError } = await supabase
-        .from("pipe_confirmacao")
-        .insert({
-          organization_id,
-          lead_id: lead.id,
-          status: "reuniao_marcada",
-          sdr_id: sdr_id || null,
-          meeting_date: lead.compromisso_date,
-        });
+    const leadId = result.lead_id;
 
-      if (pipeConfirmacaoError) {
-        return new Response(
-          JSON.stringify({ error: "Erro ao criar entrada no pipe confirmação", details: pipeConfirmacaoError.message }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
+    if (pipeType === 'confirmacao') {
       // Create history entry for confirmacao
       await supabase.from("lead_history").insert({
-        lead_id: lead.id,
+        lead_id: leadId,
         action: "lead_created",
-        description: `Sistema: Lead ${name} adicionado automaticamente no pipe de confirmação com reunião marcada para ${lead.compromisso_date}`,
+        description: `Sistema: Lead ${name} adicionado automaticamente no pipe de confirmação com reunião marcada para ${compromisso_date}`,
         created_by: null,
       });
 
@@ -411,41 +416,21 @@ Deno.serve(withSentry('webhook-new-lead', async (req) => {
         action: "webhook_create",
         status: "success",
         entityType: "lead",
-        entityId: lead.id,
+        entityId: leadId,
         payloadSnapshot: { pipe: "confirmacao" },
       });
 
-      return new Response(
-        JSON.stringify({
-          success: true,
-          message: "Lead criado com sucesso no pipe de confirmação",
-          lead_id: lead.id,
-          pipe: "confirmacao"
-        }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return successResponse({
+        message: "Lead criado com sucesso no pipe de confirmação",
+        lead_id: leadId,
+        pipe: "confirmacao",
+      }, corsHeaders, { req });
     }
 
-    // Lead without compromisso_date - create in pipe_whatsapp with status "novo"
-    const { error: pipeError } = await supabase
-      .from("pipe_whatsapp")
-      .insert({
-        organization_id,
-        lead_id: lead.id,
-        status: "novo",
-        sdr_id,
-      });
-
-    if (pipeError) {
-      return new Response(
-        JSON.stringify({ error: "Erro ao criar entrada no pipe", details: pipeError.message }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
+    // WhatsApp pipe path
     // Create history entry
     await supabase.from("lead_history").insert({
-      lead_id: lead.id,
+      lead_id: leadId,
       action: "lead_created",
       description: `Sistema: Lead ${name} adicionado automaticamente via webhook`,
       created_by: null,
@@ -456,7 +441,7 @@ Deno.serve(withSentry('webhook-new-lead', async (req) => {
       action: "webhook_create",
       status: "success",
       entityType: "lead",
-      entityId: lead.id,
+      entityId: leadId,
       payloadSnapshot: { pipe: "whatsapp" },
     });
 
@@ -465,19 +450,15 @@ Deno.serve(withSentry('webhook-new-lead', async (req) => {
       supabase,
       organizationId: organization_id,
       triggerType: "webhook_received",
-      leadId: lead.id,
+      leadId: leadId,
       context: { trigger: "webhook_received", webhook_key: "new_lead", origin: origin || "webhook" },
     }).catch(() => {});
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        message: "Lead criado com sucesso",
-        lead_id: lead.id,
-        pipe: "whatsapp"
-      }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return successResponse({
+      message: "Lead criado com sucesso",
+      lead_id: leadId,
+      pipe: "whatsapp",
+    }, corsHeaders, { req });
 
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
@@ -487,9 +468,6 @@ Deno.serve(withSentry('webhook-new-lead', async (req) => {
       status: "error",
       errorMessage,
     });
-    return new Response(
-      JSON.stringify({ error: "Erro interno", details: errorMessage }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return errorResponse(500, "Erro interno", corsHeaders, { req, details: errorMessage });
   }
 }));
