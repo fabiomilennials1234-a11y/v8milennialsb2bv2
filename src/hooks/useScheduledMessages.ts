@@ -11,6 +11,7 @@ export interface ScheduledMessage {
   lead_id: string;
   phone_number: string;
   created_by: string;
+  assigned_to: string | null;
   whatsapp_instance_id: string | null;
   message_content: string | null;
   media_url: string | null;
@@ -114,6 +115,7 @@ export function useCreateScheduledMessage() {
           lead_id: input.leadId,
           phone_number: input.phoneNumber,
           created_by: member.id,
+          assigned_to: member.id,
           whatsapp_instance_id: input.instanceId || null,
           message_content: input.messageContent || null,
           media_url: mediaUrl,
@@ -214,9 +216,9 @@ export function useMyScheduledMessages(filters?: {
         .order("scheduled_at", { ascending: true });
 
       if (filters?.assignedTo && filters.assignedTo !== "all") {
-        query = query.eq("created_by", filters.assignedTo);
+        query = query.eq("assigned_to", filters.assignedTo);
       } else if (!filters?.assignedTo) {
-        query = query.eq("created_by", member.id);
+        query = query.eq("assigned_to", member.id);
       }
 
       if (filters?.showCompleted) {

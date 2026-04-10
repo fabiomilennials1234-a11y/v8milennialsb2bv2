@@ -1295,21 +1295,24 @@ async function handleCreateFollowup(ctx: ActionContext): Promise<ActionResult> {
   const description = await resolveVariables(ctx.supabase, ctx.leadId, ctx.nodeData.followupDescription as string || "");
   const priority = ctx.nodeData.followupPriority as string || "normal";
 
-  // Get lead's responsible as assignee (fallback to legacy sdr_id)
+  // Get lead's responsible as assignee (fallback to legacy sdr_id/closer_id)
   const { data: lead } = await ctx.supabase
     .from("leads")
-    .select("responsible_id, sdr_id")
+    .select("responsible_id, sdr_id, closer_id")
     .eq("id", ctx.leadId)
     .maybeSingle();
 
+  const assignedTo = lead?.responsible_id || lead?.sdr_id || lead?.closer_id || null;
+
   const { error } = await ctx.supabase.from("follow_ups").insert({
     lead_id: ctx.leadId,
-    assigned_to: lead?.responsible_id || lead?.sdr_id || null,
+    assigned_to: assignedTo,
     title,
     description,
     priority,
     due_date: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // +1 day
     is_automated: true,
+    organization_id: ctx.organizationId,
   });
 
   if (error) return { success: false, error: error.message };
