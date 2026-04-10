@@ -40,8 +40,8 @@ interface LeadWebhookPayload {
   campaign_id?: string;
   campaign_name?: string;
   
-  // Tags para identificar
-  tags?: string[];
+  // Tags para identificar (aceita array ou string JSON)
+  tags?: string[] | string;
   
   // Dados do lead
   fields: {
@@ -116,10 +116,23 @@ serve(withSentry('lead-webhook', async (req) => {
     if (payload.place_in_campaign?.stage_id && !isValidUUID(payload.place_in_campaign.stage_id)) {
       return errorResponse(400, "Validation failed: place_in_campaign.stage_id não é um UUID válido", corsHeaders, { req });
     }
-    if (payload.tags && Array.isArray(payload.tags)) {
-      const tagsValidation = validateArraySize(payload.tags, 50, "tags");
-      if (!tagsValidation.valid) {
-        return errorResponse(400, `Validation failed: ${tagsValidation.error}`, corsHeaders, { req });
+    // Normalizar tags: aceita string JSON '["Ouro"]', string simples "Ouro", ou array
+    if (payload.tags) {
+      if (typeof payload.tags === "string") {
+        const raw = payload.tags;
+        try {
+          const parsed = JSON.parse(raw);
+          payload.tags = Array.isArray(parsed) ? parsed as string[] : [String(parsed)];
+        } catch {
+          payload.tags = [raw];
+        }
+      }
+      if (Array.isArray(payload.tags)) {
+        payload.tags = payload.tags.map((t) => String(t).trim()).filter(Boolean);
+        const tagsValidation = validateArraySize(payload.tags, 50, "tags");
+        if (!tagsValidation.valid) {
+          return errorResponse(400, `Validation failed: ${tagsValidation.error}`, corsHeaders, { req });
+        }
       }
     }
     if (payload.fields) {

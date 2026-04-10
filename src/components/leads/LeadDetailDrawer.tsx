@@ -257,6 +257,10 @@ export const LeadDetailDrawer = memo(function LeadDetailDrawer({
         await supabase.from("lead_tags").insert({ lead_id: lead.id, tag_id: tagId });
       }
       queryClient.invalidateQueries({ queryKey: ["lead-detail"] });
+      queryClient.invalidateQueries({ queryKey: ["pipe_whatsapp"] });
+      queryClient.invalidateQueries({ queryKey: ["pipe_confirmacao"] });
+      queryClient.invalidateQueries({ queryKey: ["pipe_propostas"] });
+      queryClient.invalidateQueries({ queryKey: ["custom_pipe_entries"] });
     } catch {
       toast.error("Erro ao atualizar etiqueta");
     } finally {
