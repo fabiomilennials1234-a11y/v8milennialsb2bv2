@@ -47,7 +47,7 @@ export default function Revisao() {
 
   const { data: scheduledMessages = [], isLoading: smLoading } = useMyScheduledMessages({
     showCompleted,
-    assignedTo: assignedTo === "all" ? "all" : currentMember?.id,
+    assignedTo: assignedTo === "all" ? "all" : effectiveAssignedTo,
   });
 
   const { data: priorities, totalPending: suggestionsCount } = useDailyPriorities();
