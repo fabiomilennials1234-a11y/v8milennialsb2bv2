@@ -423,11 +423,11 @@ serve(withSentry('lead-webhook', async (req) => {
     // Adicionar tags ao lead
     if (payload.tags && payload.tags.length > 0) {
       for (const tagName of payload.tags) {
-        // Buscar ou criar tag
+        // Buscar ou criar tag (case-insensitive search)
         let { data: tag } = await supabase
           .from("tags")
           .select("id")
-          .eq("name", tagName)
+          .ilike("name", tagName)
           .maybeSingle();
 
         if (!tag) {
