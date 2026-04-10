@@ -3,7 +3,8 @@ import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCurrentTeamMember } from '@/hooks/useTeamMembers';
 import { useMasterAuth } from '@/hooks/useMasterAuth';
-import { Loader2, AlertTriangle } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
+import { TorqueLoader } from '@/components/branding/TorqueLoader';
 import { Button } from '@/components/ui/button';
 
 interface ProtectedRouteProps {
@@ -22,14 +23,7 @@ export function ProtectedRoute({ children, requireOrganization = true }: Protect
 
   // Loading state - auth ou master
   if (authLoading || masterLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-muted-foreground">Verificando autenticação...</p>
-        </div>
-      </div>
-    );
+    return <TorqueLoader variant="full" />;
   }
 
   // Not authenticated
@@ -47,14 +41,7 @@ export function ProtectedRoute({ children, requireOrganization = true }: Protect
 
   // Loading team member data (master bypass: virtual member resolve assíncrono)
   if (teamMemberLoading && requireOrganization && !isMaster) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-muted-foreground">Carregando dados do usuário...</p>
-        </div>
-      </div>
-    );
+    return <TorqueLoader variant="full" />;
   }
 
   // SECURITY: Validate organization membership (master bypassa todas as validações)

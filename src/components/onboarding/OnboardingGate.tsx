@@ -3,7 +3,7 @@ import { Navigate } from "react-router-dom";
 import { useOnboarding } from "@/hooks/useOnboarding";
 import { useMasterAuth } from "@/hooks/useMasterAuth";
 import { useIsAdmin } from "@/hooks/useUserRole";
-import { Loader2 } from "lucide-react";
+import { TorqueLoader } from "@/components/branding/TorqueLoader";
 
 interface OnboardingGateProps {
   children: ReactNode;
@@ -17,11 +17,7 @@ export function OnboardingGate({ children }: OnboardingGateProps) {
   if (isMaster) return <>{children}</>;
 
   if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="w-6 h-6 animate-spin text-primary" />
-      </div>
-    );
+    return <TorqueLoader variant="full" />;
   }
 
   if (noRecord) return <>{children}</>;
@@ -34,9 +30,7 @@ export function OnboardingGate({ children }: OnboardingGateProps) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="max-w-sm text-center p-6 space-y-4">
-          <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
-            <Loader2 className="w-6 h-6 animate-spin text-primary" />
-          </div>
+          <TorqueLoader variant="inline" />
           <h2 className="text-lg font-semibold">Configuração em andamento</h2>
           <p className="text-sm text-muted-foreground">
             O administrador está configurando o sistema. Aguarde a conclusão para acessar.
