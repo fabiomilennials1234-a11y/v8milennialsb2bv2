@@ -42,6 +42,8 @@ interface CreateOrgUserBody {
   password?: string;
   user_creation_key?: string;
   user_jwt?: string;
+  job_title?: string;
+  metric_type?: string;
 }
 
 function jsonResponse(
@@ -99,6 +101,9 @@ serve(withSentry('create-org-user', async (req) => {
     const password = typeof body.password === "string" ? body.password.trim() : "";
     const userCreationKey = typeof body.user_creation_key === "string" ? body.user_creation_key.trim() : "";
     const userJwtFromBody = typeof body.user_jwt === "string" ? body.user_jwt.trim() : "";
+    const jobTitle = typeof body.job_title === "string" ? body.job_title.trim() : "";
+    const rawMetricType = typeof body.metric_type === "string" ? body.metric_type.trim() : "";
+    const metricType = rawMetricType === "sales" ? "sales" : "meetings"; // validated: only 'meetings' | 'sales'
 
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return jsonResponse(
@@ -252,6 +257,8 @@ serve(withSentry('create-org-user', async (req) => {
       role: roleForInsert,
       email: email.toLowerCase(),
       is_active: true,
+      metric_type: metricType,
+      ...(jobTitle ? { job_title: jobTitle } : {}),
     });
     if (tmErr) {
       await supabase.auth.admin.deleteUser(newUserId);
