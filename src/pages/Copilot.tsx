@@ -53,6 +53,7 @@ import { useCopilotSubscription } from "@/hooks/useCopilotSubscription";
 import { useCanManageCopilot } from "@/hooks/useUserRole";
 import { useMasterAuth } from "@/hooks/useMasterAuth";
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
+import { useOrgQuotas } from "@/hooks/useOrgQuotas";
 import { toast } from "sonner";
 import { AgentConfigModal } from "@/components/copilot/AgentConfigModal";
 import type { CopilotAgentWithRelations } from "@/types/copilot";
@@ -72,6 +73,8 @@ export default function Copilot() {
   const [selectedAgent, setSelectedAgent] = useState<CopilotAgentWithRelations | null>(null);
   const [configModalOpen, setConfigModalOpen] = useState(false);
   const { checkLimit } = useOrgFeatures();
+  const { getQuota } = useOrgQuotas();
+  const copilotQuota = getQuota("max_copilot_agents");
 
   const handleOpenConfig = (agent: CopilotAgentWithRelations) => {
     setSelectedAgent(agent);
@@ -89,10 +92,9 @@ export default function Copilot() {
       navigate("/configuracoes");
       return;
     }
-    // Verificar limite de agentes pelo plano
-    const maxAgents = checkLimit("max_copilot_agents");
-    if (maxAgents !== -1 && (agents?.length ?? 0) >= maxAgents) {
-      toast.error(`Limite de ${maxAgents} agente(s) atingido. Faça upgrade do plano para criar mais.`);
+    // Verificar limite de agentes pelo plano (richer quota info)
+    if (!copilotQuota.can_add) {
+      toast.error(`Limite de agentes atingido (${copilotQuota.current_usage}/${copilotQuota.effective_limit}). Faça upgrade do plano para criar mais.`);
       return;
     }
     navigate("/copilot/novo");
@@ -139,6 +141,11 @@ export default function Copilot() {
         </div>
 
         <div className="flex items-center gap-2">
+          {!copilotQuota.is_unlimited && (
+            <Badge variant="outline" className="text-xs">
+              {copilotQuota.current_usage} de {copilotQuota.effective_limit} agentes
+            </Badge>
+          )}
           <Button
             variant="outline"
             onClick={() => navigate("/copilot/metricas")}
@@ -150,6 +157,7 @@ export default function Copilot() {
             <Button
               onClick={handleCreateAgent}
               className="bg-primary hover:bg-primary/90 text-primary-foreground"
+              disabled={!copilotQuota.can_add}
             >
               <Plus className="w-4 h-4 mr-2" />
               Novo Copilot

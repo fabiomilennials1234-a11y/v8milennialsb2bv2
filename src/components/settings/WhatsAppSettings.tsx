@@ -51,6 +51,7 @@ import {
 } from "@/hooks/useWhatsAppInstanceAllowedMembers";
 import { Checkbox } from "@/components/ui/checkbox";
 import { testEvolutionConnection } from "@/lib/evolutionApi";
+import { useOrgQuotas } from "@/hooks/useOrgQuotas";
 import { toast } from "sonner";
 
 function QRCodeModal({
@@ -214,6 +215,8 @@ export function WhatsAppSettings() {
   const checkStatus = useCheckConnectionStatus();
   const logout = useLogoutInstance();
   const { canManage } = useCanManageWhatsApp();
+  const { getQuota } = useOrgQuotas();
+  const whatsappQuota = getQuota("max_whatsapp_instances");
   const { data: allowedMembers = [] } = useAllowedMembersForInstance(vendedoresInstance?.id ?? null);
   const setAllowedMembers = useSetAllowedMembersForInstance();
   const [selectedVendedores, setSelectedVendedores] = useState<Set<string>>(new Set());
@@ -440,11 +443,26 @@ export function WhatsAppSettings() {
               )}
             </Badge>
           )}
+          {!whatsappQuota.is_unlimited && (
+            <Badge variant="outline" className="text-xs">
+              {whatsappQuota.current_usage} de {whatsappQuota.effective_limit} instâncias
+            </Badge>
+          )}
           {canManage && (
-            <Button onClick={() => setIsCreateDialogOpen(true)} size="sm" className="gap-2">
+            <Button
+              onClick={() => setIsCreateDialogOpen(true)}
+              size="sm"
+              className="gap-2"
+              disabled={!whatsappQuota.can_add}
+            >
               <Plus className="w-4 h-4" />
               Nova Instância
             </Button>
+          )}
+          {canManage && !whatsappQuota.can_add && (
+            <p className="text-xs text-destructive">
+              Limite atingido ({whatsappQuota.current_usage}/{whatsappQuota.effective_limit}). Entre em contato para contratar mais.
+            </p>
           )}
         </div>
       </div>
