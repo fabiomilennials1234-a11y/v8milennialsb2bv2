@@ -394,3 +394,26 @@ GitHub Actions em push para main/develop:
 2. `integration-tests` — Vitest + Supabase local
 3. `e2e-tests` — Playwright + Chromium
 4. `docker-image` — Build Docker (Node 20 + Nginx)
+
+## Segundo Cerebro (Obsidian)
+
+O vault Obsidian em `Obsidian/Segundo Cerebro/Claude Code — Torque CRM/` é a fonte de contexto do projeto. Consulte ANTES de agir.
+
+### Regras
+
+1. **Início de sessão**: Leia `00 — INDEX.md` para visão geral e o daily note mais recente em `07 — Changelog/` para contexto do que mudou.
+2. **Antes de mexer em qualquer feature**: Leia a nota da feature em `06 — Features/<domínio>/` para entender regras de negócio, como funciona, edge cases, e histórico de mudanças.
+3. **Antes de implementar**: Cheque `08 — Backlog/em-progresso/` para ver se já existe item relacionado ao que foi pedido.
+4. **Pedido novo**: Verifique se existe nota no vault antes de explorar o codebase do zero.
+5. **Pós-commit**: O hook automático atualiza o vault. Se o hook não rodar, use `/second-brain` manualmente.
+
+### Paths
+
+| O que | Onde |
+|-------|------|
+| Índice geral | `Obsidian/Segundo Cerebro/Claude Code — Torque CRM/00 — INDEX.md` |
+| Features | `06 — Features/<domínio>/<feature>.md` |
+| Changelog diário | `07 — Changelog/YYYY-MM-DD.md` |
+| Changelog detalhado | `07 — Changelog/individuais/` |
+| Backlog | `08 — Backlog/<status>/` |
+| Decisões | `04 — Decisões/` |
