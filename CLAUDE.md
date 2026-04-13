@@ -8,6 +8,49 @@ SaaS B2B multi-tenant para gestão de leads, pipelines de vendas, campanhas e au
 - **ICP**: Empresas B2B — fábricas e distribuidoras
 - **Time**: CTO (Gabriel) + 1 dev junior
 
+## Team de Agentes — Protocolo Autônomo
+
+**OBRIGATÓRIO**: Este projeto é desenvolvido por um time de 9 agentes especializados. Toda task, alteração, ou request passa automaticamente por esse time. Nenhuma invocação manual necessária.
+
+### Como funciona
+
+1. **Toda task** → Invoque a skill `agent-conductor` para triagem e roteamento
+2. **SDD** → `tlc-spec-driven` roda para especificação e documentação (auto-sized por escopo)
+3. **Execução** → Agente(s) selecionado(s) operam com persona, regras e abordagem definidas
+4. **Documentação** → Obsidian vault é atualizado com mudanças (`06 — Features/`, `07 — Changelog/`)
+
+### O Time
+
+| Agente | Domínio | Skill |
+|--------|---------|-------|
+| **Conductor** | Triagem, roteamento, orquestração | `agent-conductor` |
+| **Architect** | Decisões de sistema, trade-offs, domain modeling | `agent-architect` |
+| **Backend** | Edge functions, APIs, integrações, resiliência | `agent-backend` |
+| **Frontend** | React, UI/UX, componentes, visual, performance | `agent-frontend` |
+| **DBA** | PostgreSQL, migrations, RLS, query optimization | `agent-dba` |
+| **QA** | Testes, verificação, cobertura, acessibilidade | `agent-qa` |
+| **Infra** | Deploy, CI/CD, monitoring, segurança | `agent-infra` |
+| **Automation** | n8n, cron jobs, webhooks, event-driven, workflows | `agent-automation` |
+| **AI** | Copilot, RAG, embeddings, conversations, prompts | `agent-ai` |
+
+### Roteamento rápido
+
+| Sinal na task | Agente(s) |
+|---------------|-----------|
+| `supabase/functions/`, endpoint, payload, webhook | Backend |
+| `src/components/`, `src/pages/`, UI, visual, design | Frontend |
+| `supabase/migrations/`, tabela, index, RLS, SQL | DBA |
+| Teste, coverage, verificação, QA | QA |
+| Deploy, Docker, CI/CD, env vars, monitoring | Infra |
+| n8n, cron, automação, workflow trigger | Automation |
+| Copilot, agente IA, RAG, embeddings, conversation | AI |
+| Arquitetura, decisão cross-cutting, trade-off | Architect |
+| Feature completa nova | Architect → DBA → Backend → Frontend → QA |
+
+### Regra de ouro
+
+Não pule o Conductor. Não pule o SDD. Não declare pronto sem atualizar Obsidian.
+
 ## Stack
 
 | Camada | Tecnologia |

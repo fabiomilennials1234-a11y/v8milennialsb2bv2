@@ -6,7 +6,10 @@
 .agents/
 .windsurf/
 .superpowers/
-.claude/skills/
+
+# Obsidian app config (personal, not project docs)
+.obsidian/
+Obsidian/Segundo Cerebro/.obsidian/
 
 # Logs
 logs

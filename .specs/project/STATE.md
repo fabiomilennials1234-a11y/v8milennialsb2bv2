@@ -1,6 +1,6 @@
 # Project State
 
-**Last updated:** 2026-04-09
+**Last updated:** 2026-04-13
 
 ## Decisions
 
@@ -34,6 +34,9 @@ Feature fully specified in `.specs/features/org-quota-enforcement/`. 12 tasks ac
 
 ### D005: org-quota-enforcement implemented (2026-04-09)
 All 12 tasks executed. 9 SQL migrations (20260910000000–20260910000008), 1 new hook (useOrgQuotas), 1 new component (QuotaManagementPanel), 3 files updated (WhatsAppSettings, Copilot, BillingOverrideModal), 1 edge function updated (checkout-provision-org). Build passes. Pending: integration tests against live DB, E2E validation.
+
+### D006: Agent Team System created (2026-04-13)
+9 specialized AI agents operating autonomously via CLAUDE.md protocol. Agents: Conductor (orchestrator), Architect, Backend, Frontend, DBA, QA, Infra, Automation (new), AI (new). Every task auto-routes through Conductor → agent selection → SDD → execution → Obsidian update. Skills in `.claude/skills/agent-*/SKILL.md`. Obsidian notes in `Agentes/`. Protocol simplified to 3 phases (Triage → Execute → Document). Eliminated fragile skill path verification (Fase 3) and redundant Fixes/ documentation (Fase 5). All agents integrate `tlc-spec-driven` for mandatory SDD compliance.
 
 ## Deferred Ideas
 
