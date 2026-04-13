@@ -448,6 +448,21 @@ serve(
       });
     }
 
+    // ── 4b. Sync org_quotas from plan ────────────────────────────────────────
+    const { error: quotaSyncErr } = await supabase.rpc("sync_org_quotas_from_plan", {
+      p_org_id: organizationId,
+    });
+    if (quotaSyncErr) {
+      console.error("[checkout-provision-org] sync_org_quotas_from_plan failed:", quotaSyncErr);
+      // Non-fatal: quotas can be backfilled; enforcement still works via fallback path
+      await captureError(quotaSyncErr, {
+        functionName: "checkout-provision-org",
+        organizationId,
+        userId: user_id,
+        extra: { step: "sync_org_quotas" },
+      });
+    }
+
     // ── 5. Create team_members ────────────────────────────────────────────────
     const userFullName = String(
       userMeta.full_name ?? userMeta.name ?? user.email ?? "Admin",

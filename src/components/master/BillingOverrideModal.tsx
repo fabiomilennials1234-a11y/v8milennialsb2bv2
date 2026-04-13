@@ -28,8 +28,9 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { AlertTriangle, CreditCard, Flag, Calendar } from "lucide-react";
+import { AlertTriangle, CreditCard, Flag, Calendar, Gauge } from "lucide-react";
 import { useMasterBillingOverride } from "@/hooks/useMasterOrganizations";
+import { QuotaManagementPanel } from "./QuotaManagementPanel";
 import { toast } from "sonner";
 
 interface BillingOverrideModalProps {
@@ -222,7 +223,7 @@ export function BillingOverrideModal({
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="plan" className="flex items-center gap-2">
               <CreditCard className="w-4 h-4" />
               Plano
@@ -230,6 +231,10 @@ export function BillingOverrideModal({
             <TabsTrigger value="features" className="flex items-center gap-2">
               <Flag className="w-4 h-4" />
               Features
+            </TabsTrigger>
+            <TabsTrigger value="quotas" className="flex items-center gap-2">
+              <Gauge className="w-4 h-4" />
+              Quotas
             </TabsTrigger>
           </TabsList>
 
@@ -348,6 +353,11 @@ export function BillingOverrideModal({
                 </DialogFooter>
               </>
             )}
+          </TabsContent>
+
+          {/* Quotas Management */}
+          <TabsContent value="quotas" className="mt-4">
+            <QuotaManagementPanel organizationId={organization.id} />
           </TabsContent>
         </Tabs>
       </DialogContent>
