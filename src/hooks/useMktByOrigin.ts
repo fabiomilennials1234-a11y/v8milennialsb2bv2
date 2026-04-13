@@ -1,5 +1,8 @@
 import { useMemo } from "react";
-import { useLeads } from "./useLeads";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useOrganization } from "./useOrganization";
+import { useAnalyticsFilters } from "./useAnalyticsFilters";
 import { usePipeConfirmacao } from "./usePipeConfirmacao";
 import { usePipePropostas } from "./usePipePropostas";
 import { useMktOriginConfigs, ALL_ORIGINS, type LeadOrigin } from "./useMktOriginConfig";
@@ -31,15 +34,33 @@ export interface MktSummary {
   totalConversionRate: number;
 }
 
-/** UTC range for a given month. */
-function getMonthRangeUTC(month: number, year: number) {
-  const start = new Date(Date.UTC(year, month - 1, 1));
-  const end = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
-  return { startStr: start.toISOString(), endStr: end.toISOString() };
-}
-
+/**
+ * Origin-level marketing metrics.
+ * Uses useAnalyticsFilters for date filtering (aligned with analytics RPCs).
+ * month/year is used ONLY for investment config lookup.
+ */
 export function useMktByOrigin(month: number, year: number) {
-  const { data: leads = [], isLoading: loadingLeads } = useLeads();
+  const { organizationId, isReady } = useOrganization();
+  const { filters } = useAnalyticsFilters();
+
+  // Lightweight leads query — no pagination, no joins, minimal fields
+  const { data: leads = [], isLoading: loadingLeads } = useQuery({
+    queryKey: ["leads-metrics-lite", organizationId],
+    queryFn: async () => {
+      if (!organizationId) return [];
+      const { data, error } = await supabase
+        .from("leads")
+        .select("id, origin, created_at, metrics_period_at")
+        .eq("organization_id", organizationId)
+        .or("is_shadow.is.null,is_shadow.eq.false")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: isReady && !!organizationId,
+    staleTime: 5 * 60 * 1000,
+  });
+
   const { data: confirmacoes = [], isLoading: loadingConfirmacao } = usePipeConfirmacao();
   const { data: propostas = [], isLoading: loadingPropostas } = usePipePropostas();
   const { configMap, isLoading: loadingConfig } = useMktOriginConfigs(month, year);
@@ -47,37 +68,25 @@ export function useMktByOrigin(month: number, year: number) {
   const isLoading = loadingLeads || loadingConfirmacao || loadingPropostas || loadingConfig;
 
   const { byOrigin, summary } = useMemo(() => {
-    const isGeral = month === 0;
-
-    // When Geral (month=0): no date filtering — use all data
-    let startStr: string | null = null;
-    let endStr: string | null = null;
-    if (!isGeral) {
-      const range = getMonthRangeUTC(month, year);
-      startStr = range.startStr;
-      endStr = range.endStr;
-    }
+    const filterStart = filters.startDate;
+    const filterEnd = filters.endDate;
 
     const inRange = (s: string | null | undefined) =>
-      s != null && startStr != null && endStr != null && s >= startStr && s <= endStr;
+      s != null && s >= filterStart && s <= filterEnd;
 
-    // Filter leads by period (or use all when Geral)
-    const leadsByPeriod = isGeral
-      ? leads
-      : leads.filter(
-          (l: { metrics_period_at?: string | null; created_at?: string }) =>
-            (l.metrics_period_at != null && inRange(l.metrics_period_at)) ||
-            (l.metrics_period_at == null && inRange(l.created_at))
-        );
+    // Filter leads by analytics period
+    const leadsByPeriod = leads.filter(
+      (l: { metrics_period_at?: string | null; created_at?: string }) =>
+        (l.metrics_period_at != null && inRange(l.metrics_period_at)) ||
+        (l.metrics_period_at == null && inRange(l.created_at))
+    );
 
-    // Filter confirmacoes by period (or use all when Geral)
-    const confirmacoesByPeriod = isGeral
-      ? confirmacoes
-      : confirmacoes.filter(
-          (c: { metrics_period_at?: string | null; created_at?: string }) =>
-            (c.metrics_period_at != null && inRange(c.metrics_period_at)) ||
-            (c.metrics_period_at == null && inRange(c.created_at))
-        );
+    // Filter confirmacoes by analytics period
+    const confirmacoesByPeriod = confirmacoes.filter(
+      (c: { metrics_period_at?: string | null; created_at?: string }) =>
+        (c.metrics_period_at != null && inRange(c.metrics_period_at)) ||
+        (c.metrics_period_at == null && inRange(c.created_at))
+    );
 
     // Group leads by origin
     const leadsByOrigin: Record<string, typeof leadsByPeriod> = {};
@@ -105,18 +114,14 @@ export function useMktByOrigin(month: number, year: number) {
         leadIdsSet.has((p as { lead_id: string }).lead_id)
       );
 
-      const vendasInPeriod = isGeral
-        ? originPropostas.filter(
-            (p) => (p as { status?: string }).status === "vendido"
+      const vendasInPeriod = originPropostas.filter(
+        (p: { status?: string; metrics_period_at?: string | null; closed_at?: string | null }) =>
+          (p as { status?: string }).status === "vendido" &&
+          inRange(
+            (p as { metrics_period_at?: string | null }).metrics_period_at ??
+            (p as { closed_at?: string | null }).closed_at
           )
-        : originPropostas.filter(
-            (p: { status?: string; metrics_period_at?: string | null; closed_at?: string | null }) =>
-              (p as { status?: string }).status === "vendido" &&
-              inRange(
-                (p as { metrics_period_at?: string | null }).metrics_period_at ??
-                (p as { closed_at?: string | null }).closed_at
-              )
-          );
+      );
       const vendasCount = vendasInPeriod.length;
 
       const propostasFechadas = originPropostas.filter((p) => {
@@ -131,7 +136,6 @@ export function useMktByOrigin(month: number, year: number) {
         if (items.length > 0) {
           return sum + items.reduce((s, item) => s + (item.sale_value ?? 0), 0);
         }
-        // Fallback: product ticket
         const ticket = (p as { product?: { ticket?: number | null } }).product?.ticket ?? 0;
         return sum + ticket;
       }, 0);
@@ -183,7 +187,7 @@ export function useMktByOrigin(month: number, year: number) {
     };
 
     return { byOrigin: byOriginArr, summary: summaryData };
-  }, [leads, confirmacoes, propostas, configMap, month, year]);
+  }, [leads, confirmacoes, propostas, configMap, filters.startDate, filters.endDate]);
 
   return { byOrigin, summary, configMap, isLoading };
 }
