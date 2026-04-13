@@ -1,16 +1,8 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { usePersistedState } from "@/hooks/usePersistedState";
 import { motion } from "framer-motion";
-import { Plus, Calendar, Loader2, LayoutGrid, List, Settings2, Clock } from "lucide-react";
+import { Plus, Loader2, LayoutGrid, List, Settings2, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -35,7 +27,8 @@ import { LeadModal } from "@/components/leads/LeadModal";
 import { AddMeetingModal } from "@/components/confirmacao/AddMeetingModal";
 import { RescheduleModal } from "@/components/confirmacao/RescheduleModal";
 import { ConfirmacaoStats } from "@/components/confirmacao/ConfirmacaoStats";
-import type { MetricsPeriod } from "@/hooks/usePipeMetrics";
+import { type MetricsPeriodState, getDateRange, createInitialPeriodState } from "@/lib/metrics-period";
+import { MetricsPeriodSelector } from "@/components/pipelines/MetricsPeriodSelector";
 import { LeadCard, type LeadCardData } from "@/components/leads/LeadCard";
 import { LeadDetailDrawer } from "@/components/leads/LeadDetailDrawer";
 import { ConfirmacaoContext } from "@/components/leads/funnel-contexts/ConfirmacaoContext";
@@ -206,10 +199,7 @@ export default function PipeConfirmacao() {
   const [isProcessingCompareceu, setIsProcessingCompareceu] = useState(false);
   const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; pipeId: string; leadId: string } | null>(null);
   const [deleteAllLeadsDialogOpen, setDeleteAllLeadsDialogOpen] = useState(false);
-  const [metricsPeriod, setMetricsPeriod] = useState<MetricsPeriod>("all");
-  const now = new Date();
-  const [selectedMetricsMonth, setSelectedMetricsMonth] = useState(now.getMonth() + 1);
-  const [selectedMetricsYear, setSelectedMetricsYear] = useState(now.getFullYear());
+  const [periodState, setPeriodState] = useState<MetricsPeriodState>(createInitialPeriodState);
 
   const { organizationId } = useOrganization();
   useEffect(() => { trackModuleVisit("pipe_confirmacao", organizationId); }, []);
@@ -277,19 +267,20 @@ export default function PipeConfirmacao() {
     autoUpdateStatuses();
   }, [pipeData?.length]); // Only run when data length changes to avoid infinite loops
 
-  // Dados para ConfirmacaoStats: "Geral" = todo o pipe; "Este mês" = filtrado por período em UTC (igual à importação)
+  // Dados para ConfirmacaoStats: "Geral" = todo o pipe; outros modos = filtrado por período em UTC
+  const metricsRange = useMemo(() => getDateRange(periodState), [periodState]);
   const statsData = useMemo(() => {
     if (!pipeData) return [];
-    if (metricsPeriod === "all") return pipeData;
-    const startMs = Date.UTC(selectedMetricsYear, selectedMetricsMonth - 1, 1);
-    const endMs = new Date(Date.UTC(selectedMetricsYear, selectedMetricsMonth, 0, 23, 59, 59, 999)).getTime();
+    if (!metricsRange) return pipeData;
+    const startMs = new Date(metricsRange.startStr).getTime();
+    const endMs = new Date(metricsRange.endStr).getTime();
     return pipeData.filter((item: any) => {
       const at = item.metrics_period_at
         ? new Date(item.metrics_period_at).getTime()
         : new Date(item.created_at).getTime();
       return at >= startMs && at <= endMs;
     });
-  }, [pipeData, metricsPeriod, selectedMetricsMonth, selectedMetricsYear]);
+  }, [pipeData, metricsRange]);
 
   const transformToCard = (item: any): LeadCardData => {
     const lead = item.lead;
@@ -388,7 +379,7 @@ export default function PipeConfirmacao() {
 
       return { ...col, items: columnItems };
     });
-  }, [pipeData, searchQuery, originFilter, urgencyFilter, timeFilter, selectedStatuses, selectedResponsibleId, overdueDays, filterScheduled, leadsWithSchedule]);
+  }, [pipeData, statusColumns, searchQuery, originFilter, urgencyFilter, timeFilter, selectedStatuses, selectedResponsibleId, overdueDays, filterScheduled, leadsWithSchedule]);
 
   const handleStatusChange = async (itemId: string, newStatus: string) => {
     const item = pipeData?.find(p => p.id === itemId);
@@ -581,45 +572,8 @@ export default function PipeConfirmacao() {
         stages={pipelineStages}
       />
 
-      {/* Período das métricas: Este mês | Geral */}
-      <div className="flex flex-wrap items-center gap-3">
-        <Tabs value={metricsPeriod} onValueChange={(v) => setMetricsPeriod(v as MetricsPeriod)}>
-          <TabsList className="h-9">
-            <TabsTrigger value="all" className="gap-1.5 text-xs">Geral</TabsTrigger>
-            <TabsTrigger value="month" className="gap-1.5 text-xs">Este mês</TabsTrigger>
-          </TabsList>
-        </Tabs>
-        {metricsPeriod === "month" && (
-          <>
-            <Select value={String(selectedMetricsMonth)} onValueChange={(v) => setSelectedMetricsMonth(Number(v))}>
-              <SelectTrigger className="w-[140px] h-9">
-                <Calendar className="w-4 h-4 mr-2" />
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {[1,2,3,4,5,6,7,8,9,10,11,12].map((m) => (
-                  <SelectItem key={m} value={String(m)}>
-                    {format(new Date(selectedMetricsYear, m - 1), "MMMM", { locale: ptBR })}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={String(selectedMetricsYear)} onValueChange={(v) => setSelectedMetricsYear(Number(v))}>
-              <SelectTrigger className="w-[100px] h-9">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {[selectedMetricsYear - 2, selectedMetricsYear - 1, selectedMetricsYear, selectedMetricsYear + 1].map((y) => (
-                  <SelectItem key={y} value={String(y)}>{y}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </>
-        )}
-        <span className="text-xs text-muted-foreground">
-          {metricsPeriod === "all" ? "Métricas do pipe no geral" : `Métricas de ${format(new Date(selectedMetricsYear, selectedMetricsMonth - 1), "MMMM/yyyy", { locale: ptBR })}`}
-        </span>
-      </div>
+      {/* Período das métricas */}
+      <MetricsPeriodSelector state={periodState} onChange={setPeriodState} />
 
       {/* Stats */}
       <ConfirmacaoStats data={statsData} />

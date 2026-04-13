@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { usePersistedState } from "@/hooks/usePersistedState";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Search, Filter, Plus, Calendar, User, Building2, Star,
+  Search, Filter, Plus, Calendar as CalendarIcon, User, Building2, Star,
   DollarSign, Clock, Tag, Loader2, TrendingUp, Package,
   ArrowUpRight, Percent, BarChart3, Target, Flame, MessageCircle, Settings2,
   MoreVertical, Trash2
@@ -33,7 +33,9 @@ import { useCanPerformAction } from "@/lib/permissions";
 import { StageWorkflowsBadgeWrapper } from "@/components/kanban/StageWorkflowsBadgeWrapper";
 import { useStageWorkflowCounts } from "@/hooks/useStageWorkflows";
 import { usePipePropostas, useUpdatePipeProposta, useDeletePipeProposta, PipePropostasStatus } from "@/hooks/usePipePropostas";
-import { usePipePropostasMetrics, type MetricsPeriod } from "@/hooks/usePipeMetrics";
+import { usePipePropostasMetrics } from "@/hooks/usePipeMetrics";
+import { type MetricsPeriodState, getDateRange, createInitialPeriodState } from "@/lib/metrics-period";
+import { MetricsPeriodSelector } from "@/components/pipelines/MetricsPeriodSelector";
 import { useDeleteAllLeadsInPipe, useUpdateLead } from "@/hooks/useLeads";
 import { usePipelineStages, stagesToColumns } from "@/hooks/usePipelineStages";
 import { PipeSettingsDialog } from "@/components/pipelines/PipeSettingsDialog";
@@ -209,10 +211,7 @@ export default function PipePropostas() {
 
   const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; pipeId: string; leadId: string } | null>(null);
   const [deleteAllLeadsDialogOpen, setDeleteAllLeadsDialogOpen] = useState(false);
-  const [metricsPeriod, setMetricsPeriod] = useState<MetricsPeriod>("all");
-  const now = new Date();
-  const [selectedMetricsMonth, setSelectedMetricsMonth] = useState(now.getMonth() + 1);
-  const [selectedMetricsYear, setSelectedMetricsYear] = useState(now.getFullYear());
+  const [periodState, setPeriodState] = useState<MetricsPeriodState>(createInitialPeriodState);
 
   const { organizationId } = useOrganization();
   useEffect(() => { trackModuleVisit("pipe_propostas", organizationId); }, []);
@@ -231,19 +230,8 @@ export default function PipePropostas() {
   const logAction = useLogLeadAction();
   const createAcaoDoDia = useCreateAcaoDoDia();
   const { allowed: canDeleteCards } = useFeaturePermission("pipeline.delete_cards");
-  const { data: metricsByPeriod } = usePipePropostasMetrics(
-    metricsPeriod,
-    metricsPeriod === "month" ? selectedMetricsMonth : undefined,
-    metricsPeriod === "month" ? selectedMetricsYear : undefined
-  );
-
-  // Intervalo UTC do mês selecionado — reutilizado no filtro do kanban e na contagem
-  const periodRange = useMemo(() => {
-    if (metricsPeriod !== "month") return null;
-    const start = new Date(Date.UTC(selectedMetricsYear, selectedMetricsMonth - 1, 1));
-    const end = new Date(Date.UTC(selectedMetricsYear, selectedMetricsMonth, 0, 23, 59, 59, 999));
-    return { startStr: start.toISOString(), endStr: end.toISOString() };
-  }, [metricsPeriod, selectedMetricsMonth, selectedMetricsYear]);
+  const periodRange = useMemo(() => getDateRange(periodState), [periodState]);
+  const { data: metricsByPeriod } = usePipePropostasMetrics(periodRange);
 
   const responsibleMembers = useResponsibleMembers();
 
@@ -318,7 +306,7 @@ export default function PipePropostas() {
         .filter(item => item.status === col.id)
         // 1. Filtro temporal — aplicado antes dos demais filtros
         .filter(item => {
-          if (metricsPeriod === "month" && periodRange) {
+          if (periodRange) {
             return isPropostaInPeriod(item, periodRange.startStr, periodRange.endStr);
           }
           return true;
@@ -378,7 +366,7 @@ export default function PipePropostas() {
         items: columnItems,
       };
     });
-  }, [pipeData, searchTerm, filterResponsible, filterProductType, filterPriority, filterCalor, filterScheduled, leadsWithSchedule, metricsPeriod, periodRange]);
+  }, [pipeData, statusColumns, searchTerm, filterResponsible, filterProductType, filterPriority, filterCalor, filterScheduled, leadsWithSchedule, periodRange]);
 
   // Calculate stats (Vendas Total / Rec. Vendida / Projetos Vendidos por item quando houver items)
   const stats = useMemo(() => {
@@ -450,9 +438,9 @@ export default function PipePropostas() {
     };
   }, [pipeData]);
 
-  // Exibir métricas: "Geral" = stats do pipe; "Este mês" = hook (vendidos no mês); pipeline ativo sempre do pipe atual
+  // Exibir métricas: "Geral" = stats do pipe; outros modos = hook (vendidos no período); pipeline ativo sempre do pipe atual
   const displayStats = useMemo(() => {
-    if (metricsPeriod === "all" || !metricsByPeriod) {
+    if (!periodRange || !metricsByPeriod) {
       return stats;
     }
     return {
@@ -460,15 +448,15 @@ export default function PipePropostas() {
       inProgress: stats.inProgress,
       inProgressCount: stats.inProgressCount,
     };
-  }, [metricsPeriod, metricsByPeriod, stats]);
+  }, [periodRange, metricsByPeriod, stats]);
 
   // Total de propostas que passam pelo filtro temporal (para exibir no banner)
   const periodFilteredCount = useMemo(() => {
-    if (metricsPeriod !== "month" || !pipeData || !periodRange) return 0;
+    if (!periodRange || !pipeData) return 0;
     return pipeData.filter(item =>
       isPropostaInPeriod(item, periodRange.startStr, periodRange.endStr)
     ).length;
-  }, [pipeData, metricsPeriod, periodRange]);
+  }, [pipeData, periodRange]);
 
   // Funnel data
   const funnelData = useMemo(() => {
@@ -484,7 +472,7 @@ export default function PipePropostas() {
         color: col.color,
       };
     });
-  }, [pipeData]);
+  }, [pipeData, statusColumns]);
 
   // Calor data for analytics
   const calorData = useMemo(() => {
@@ -907,45 +895,8 @@ export default function PipePropostas() {
         stages={pipelineStages}
       />
 
-      {/* Período das métricas: Este mês | Geral */}
-      <div className="flex flex-wrap items-center gap-3">
-        <Tabs value={metricsPeriod} onValueChange={(v) => setMetricsPeriod(v as MetricsPeriod)}>
-          <TabsList className="h-9">
-            <TabsTrigger value="all" className="gap-1.5 text-xs">Geral</TabsTrigger>
-            <TabsTrigger value="month" className="gap-1.5 text-xs">Por mês</TabsTrigger>
-          </TabsList>
-        </Tabs>
-        {metricsPeriod === "month" && (
-          <>
-            <Select value={String(selectedMetricsMonth)} onValueChange={(v) => setSelectedMetricsMonth(Number(v))}>
-              <SelectTrigger className="w-[140px] h-9">
-                <Calendar className="w-4 h-4 mr-2" />
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {[1,2,3,4,5,6,7,8,9,10,11,12].map((m) => (
-                  <SelectItem key={m} value={String(m)}>
-                    {format(new Date(selectedMetricsYear, m - 1), "MMMM", { locale: ptBR })}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={String(selectedMetricsYear)} onValueChange={(v) => setSelectedMetricsYear(Number(v))}>
-              <SelectTrigger className="w-[100px] h-9">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {[selectedMetricsYear - 2, selectedMetricsYear - 1, selectedMetricsYear, selectedMetricsYear + 1].map((y) => (
-                  <SelectItem key={y} value={String(y)}>{y}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </>
-        )}
-        <span className="text-xs text-muted-foreground">
-          {metricsPeriod === "all" ? "Métricas do pipe no geral" : `Filtrando por ${format(new Date(selectedMetricsYear, selectedMetricsMonth - 1), "MMMM/yyyy", { locale: ptBR })}`}
-        </span>
-      </div>
+      {/* Período das métricas */}
+      <MetricsPeriodSelector state={periodState} onChange={setPeriodState} />
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
@@ -1028,15 +979,11 @@ export default function PipePropostas() {
             exit={{ opacity: 0, y: -20 }}
           >
             {/* Banner: kanban filtrado por período */}
-            {metricsPeriod === "month" && (
+            {periodRange && (
               <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/10 border border-primary/20 text-sm text-primary mb-4">
-                <Calendar className="w-4 h-4 shrink-0" />
+                <CalendarIcon className="w-4 h-4 shrink-0" />
                 <span>
-                  Exibindo propostas de{" "}
-                  <strong>
-                    {format(new Date(selectedMetricsYear, selectedMetricsMonth - 1), "MMMM/yyyy", { locale: ptBR })}
-                  </strong>
-                  {" "}— {periodFilteredCount} proposta{periodFilteredCount !== 1 ? "s" : ""} no período
+                  Filtrando por período — {periodFilteredCount} proposta{periodFilteredCount !== 1 ? "s" : ""}
                 </span>
               </div>
             )}
