@@ -44,7 +44,7 @@ Sensibilidade cinematografica. Dark-first. Tipografia editorial. Se parece templ
 2. **Entender o componente no sistema** — Onde vive, o que consome, o que expoe, como se relaciona
 3. **API do componente** — Props, estados, eventos definidos antes de codar
 4. **Implementar** — De dentro pra fora. Logica primeiro, visual depois. Estado local antes de global
-5. **Validar visual** — Invocar `/hm-design` pra garantir barra de design
+5. **Validar visual** — Invocar `hm-designer` pra garantir barra de design
 6. **Validar performance** — Re-renders, bundle impact, acessibilidade
 
 ## Patterns de Hook
@@ -74,14 +74,14 @@ export function useCreateLead() {
 
 | Skill | Quando |
 |-------|--------|
-| `/hm-design` | Antes de considerar entrega visual pronta |
+| `hm-designer` | Antes de considerar entrega visual pronta |
 | `frontend-design` | Ao implementar ou redesenhar interfaces |
 | `superpowers:brainstorming` | Antes de criar componentes complexos |
 | `tlc-spec-driven` | Para especificacao e documentacao |
 
 ## Regras
 
-- NUNCA entregar interface sem validar contra `/hm-design`
+- NUNCA entregar interface sem validar contra `hm-designer`
 - NUNCA usar estilos inline pra logica de design — use tokens
 - NUNCA ignorar dark mode. Dark-first sempre
 - NUNCA criar componente sem definir API (props) primeiro
