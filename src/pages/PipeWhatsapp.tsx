@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Search, Plus, Zap, Loader2, Globe, Calendar, Settings2, AlertCircle, Clock } from "lucide-react";
+import { Search, Plus, Zap, Loader2, Globe, Settings2, AlertCircle, Clock } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,7 +25,9 @@ import { useCanPerformAction } from "@/lib/permissions";
 import { StageWorkflowsBadgeWrapper } from "@/components/kanban/StageWorkflowsBadgeWrapper";
 import { useStageWorkflowCounts } from "@/hooks/useStageWorkflows";
 import { usePipeWhatsapp, useCreatePipeWhatsapp, useUpdatePipeWhatsapp, useDeletePipeWhatsapp, type PipeWhatsappStatus } from "@/hooks/usePipeWhatsapp";
-import { usePipeWhatsappMetrics, type MetricsPeriod } from "@/hooks/usePipeMetrics";
+import { usePipeWhatsappMetrics } from "@/hooks/usePipeMetrics";
+import { type MetricsPeriodState, getDateRange, createInitialPeriodState } from "@/lib/metrics-period";
+import { MetricsPeriodSelector } from "@/components/pipelines/MetricsPeriodSelector";
 import { usePipelineStages, stagesToColumns, getPipelineTypeName } from "@/hooks/usePipelineStages";
 import { PipeSettingsDialog } from "@/components/pipelines/PipeSettingsDialog";
 import { useCreatePipeProposta } from "@/hooks/usePipePropostas";
@@ -42,7 +44,6 @@ import { CreateOpportunityModal } from "@/components/kanban/CreateOpportunityMod
 import { AddMeetingModal } from "@/components/confirmacao/AddMeetingModal";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { useOrganization } from "@/hooks/useOrganization";
 import { track, trackModuleVisit } from "@/lib/analytics";
@@ -106,10 +107,7 @@ export default function PipeWhatsapp() {
     sdrId: string | null;
     closerId: string | null;
   } | null>(null);
-  const [metricsPeriod, setMetricsPeriod] = useState<MetricsPeriod>("all");
-  const now = new Date();
-  const [selectedMetricsMonth, setSelectedMetricsMonth] = useState(now.getMonth() + 1);
-  const [selectedMetricsYear, setSelectedMetricsYear] = useState(now.getFullYear());
+  const [periodState, setPeriodState] = useState<MetricsPeriodState>(createInitialPeriodState);
 
   const { organizationId } = useOrganization();
   useEffect(() => { trackModuleVisit("pipe_whatsapp", organizationId); }, []);
@@ -117,11 +115,8 @@ export default function PipeWhatsapp() {
   const { data: pipeData, isLoading, isError, refetch } = usePipeWhatsapp();
   const { data: pipelineStages = [], isLoading: loadingStages } = usePipelineStages("whatsapp");
   const { data: workflowCounts = {} } = useStageWorkflowCounts("whatsapp");
-  const { data: metricsByPeriod } = usePipeWhatsappMetrics(
-    metricsPeriod,
-    metricsPeriod === "month" ? selectedMetricsMonth : undefined,
-    metricsPeriod === "month" ? selectedMetricsYear : undefined
-  );
+  const metricsRange = useMemo(() => getDateRange(periodState), [periodState]);
+  const { data: metricsByPeriod } = usePipeWhatsappMetrics(metricsRange);
 
   const { data: userRole } = useUserRole();
   const createPipeWhatsapp = useCreatePipeWhatsapp();
@@ -214,14 +209,14 @@ export default function PipeWhatsapp() {
         items: columnItems,
       };
     });
-  }, [pipeData, pipelineStages, statusColumns, searchTerm, filterResponsible, filterOrigin]);
+  }, [pipeData, pipelineStages, statusColumns, searchTerm, filterResponsible, filterOrigin, filterScheduled, leadsWithSchedule]);
 
   // Calculate stats based on FILTERED data (excludes ghost leads)
   const stats = useMemo(() => {
     if (!pipeData) return { total: 0, abordado: 0, respondeu: 0, scheduled: 0, pending: 0 };
 
     const filteredData = pipeData.filter(filterItems);
-    
+
     const total = filteredData.length;
     const abordado = filteredData.filter(item => item.status === "abordado").length;
     const respondeu = filteredData.filter(item => item.status === "respondeu").length;
@@ -229,12 +224,12 @@ export default function PipeWhatsapp() {
     const pending = filteredData.filter(item => item.status === "novo").length;
 
     return { total, abordado, respondeu, scheduled, pending };
-  }, [pipeData, searchTerm, filterResponsible, filterOrigin]);
+  }, [pipeData, searchTerm, filterResponsible, filterOrigin, filterScheduled, leadsWithSchedule]);
 
   const displayStats = useMemo(() => {
-    if (metricsPeriod === "all" || !metricsByPeriod) return stats;
+    if (!metricsRange || !metricsByPeriod) return stats;
     return metricsByPeriod;
-  }, [metricsPeriod, metricsByPeriod, stats]);
+  }, [metricsRange, metricsByPeriod, stats]);
 
   // Handle status change from drag-and-drop
   const handleStatusChange = async (itemId: string, newStatus: string) => {
@@ -362,45 +357,8 @@ export default function PipeWhatsapp() {
         </div>
       </div>
 
-      {/* Período das métricas: Este mês | Geral */}
-      <div className="flex flex-wrap items-center gap-3">
-        <Tabs value={metricsPeriod} onValueChange={(v) => setMetricsPeriod(v as MetricsPeriod)}>
-          <TabsList className="h-9">
-            <TabsTrigger value="all" className="gap-1.5 text-xs">Geral</TabsTrigger>
-            <TabsTrigger value="month" className="gap-1.5 text-xs">Este mês</TabsTrigger>
-          </TabsList>
-        </Tabs>
-        {metricsPeriod === "month" && (
-          <>
-            <Select value={String(selectedMetricsMonth)} onValueChange={(v) => setSelectedMetricsMonth(Number(v))}>
-              <SelectTrigger className="w-[140px] h-9">
-                <Calendar className="w-4 h-4 mr-2" />
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {[1,2,3,4,5,6,7,8,9,10,11,12].map((m) => (
-                  <SelectItem key={m} value={String(m)}>
-                    {format(new Date(selectedMetricsYear, m - 1), "MMMM", { locale: ptBR })}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={String(selectedMetricsYear)} onValueChange={(v) => setSelectedMetricsYear(Number(v))}>
-              <SelectTrigger className="w-[100px] h-9">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {[selectedMetricsYear - 2, selectedMetricsYear - 1, selectedMetricsYear, selectedMetricsYear + 1].map((y) => (
-                  <SelectItem key={y} value={String(y)}>{y}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </>
-        )}
-        <span className="text-xs text-muted-foreground">
-          {metricsPeriod === "all" ? "Métricas do pipe no geral" : `Métricas de ${format(new Date(selectedMetricsYear, selectedMetricsMonth - 1), "MMMM/yyyy", { locale: ptBR })}`}
-        </span>
-      </div>
+      {/* Período das métricas */}
+      <MetricsPeriodSelector state={periodState} onChange={setPeriodState} />
 
       {/* Stats Bar - Updated based on filters and period */}
       <motion.div
