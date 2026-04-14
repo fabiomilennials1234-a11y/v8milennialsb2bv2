@@ -44,31 +44,9 @@ export class AgentEngine {
   private readonly HISTORY_COMPRESS_THRESHOLD = 25;
   private readonly HISTORY_KEEP_RECENT = 15;
 
-  // ── Opt-out / STOP keywords ───────────────────────────────────────────
-  // IMPORTANT: Only unambiguous opt-out phrases. Single common words like
-  // 'para', 'pare', 'sair', 'sai', 'fora', 'cancelar', 'remover' are
-  // REMOVED because they trigger false positives in normal sentences
-  // (e.g., "e para saber sobre preços" matches "para").
-  // Single-word opt-outs must be either VERY explicit (stop, unsubscribe,
-  // descadastrar) or the entire message must equal the keyword.
-  private readonly OPT_OUT_KEYWORDS = new Set([
-    'stop', 'unsubscribe', 'descadastrar',
-    'nao quero', 'não quero',
-    'nao me mande mais', 'não me mande mais',
-    'nao quero mais', 'não quero mais',
-    'me remova', 'me remove',
-    'nao envie mais', 'não envie mais',
-    'nao manda mais', 'não manda mais',
-    'parar de receber', 'pare de mandar', 'pare de enviar',
-  ]);
-
-  // Short-message-only single-word opt-outs — only match if the ENTIRE
-  // incoming message (after normalization) is exactly this word.
-  private readonly STRICT_OPT_OUT_KEYWORDS = new Set([
-    'para', 'parar', 'pare', 'sair', 'sai', 'fora', 'cancelar',
-    'remover', 'remove', 'chega', 'encerrar', 'bloqueie',
-    'saida', 'saída',
-  ]);
+  // Opt-out detection removed — the LLM decides via prompt when a lead
+  // explicitly wants to unsubscribe. Hard-coded keyword matching caused
+  // false positives (e.g., "para" preposition matched as opt-out).
 
   constructor(supabase: SupabaseClient, openRouter: OpenRouterClient, organizationId: string) {
     this.supabase = supabase;
@@ -83,22 +61,6 @@ export class AgentEngine {
     console.log('[AgentEngine] Processing message:', { leadId, messagePreview: userMessage.substring(0, 50) });
     this.currentLeadId = leadId;
     this.incomingMessageType = incomingMessageType || "text";
-
-    // 0. OPT-OUT CHECK — antes de qualquer chamada LLM (item #9)
-    const optOutReply = this.detectOptOut(userMessage);
-    if (optOutReply) {
-      console.log('[AgentEngine] Opt-out detectado para lead:', leadId);
-      await this.supabase
-        .from('leads')
-        .update({ ai_disabled: true, ai_disabled_at: new Date().toISOString() })
-        .eq('id', leadId);
-      return {
-        message: optOutReply,
-        messages: [optOutReply],
-        state: 'OPT_OUT',
-        action_executed: 'OPT_OUT',
-      };
-    }
 
     // 1. Load Capabilities (item #4: roteamento por etapa do lead)
     console.log('[AgentEngine] Step 1: Loading capabilities...');
@@ -3140,48 +3102,7 @@ Regras:
     return content.trim();
   }
 
-  // ── Item #9: Detecção de opt-out pré-LLM ─────────────────────────────────
-
-  /**
-   * Verifica se a mensagem é um pedido de opt-out (STOP / PARA / etc.)
-   * Retorna mensagem de confirmação em PT-BR ou null se não for opt-out.
-   */
-  private detectOptOut(message: string): string | null {
-    const normalized = message.toLowerCase().trim().replace(/[.,!?;:]/g, '');
-    const OPT_OUT_REPLY = 'Entendido! Você foi removido da nossa lista de contatos e não receberá mais mensagens nossas. Caso mude de ideia, é só nos chamar novamente. Obrigado!';
-
-    // 1. Frases compostas explícitas (ex: "não quero mais", "me remova")
-    // Estas são inequívocas — se aparecerem na mensagem, é opt-out.
-    for (const keyword of this.OPT_OUT_KEYWORDS) {
-      if (!keyword.includes(' ')) continue;
-      if (normalized.includes(keyword)) {
-        return OPT_OUT_REPLY;
-      }
-    }
-
-    // 2. Palavras únicas explícitas (stop, unsubscribe, descadastrar)
-    // Estas só dão match se aparecerem como palavra isolada.
-    for (const keyword of this.OPT_OUT_KEYWORDS) {
-      if (keyword.includes(' ')) continue;
-      if (
-        normalized === keyword ||
-        normalized.startsWith(keyword + ' ') ||
-        normalized.endsWith(' ' + keyword) ||
-        normalized.includes(' ' + keyword + ' ')
-      ) {
-        return OPT_OUT_REPLY;
-      }
-    }
-
-    // 3. Palavras ambíguas (para, parar, pare, sair, cancelar, etc.)
-    // Só match se a mensagem INTEIRA for exatamente a palavra, sem nada
-    // mais. Isso evita falsos positivos como "e para saber sobre preços".
-    if (this.STRICT_OPT_OUT_KEYWORDS.has(normalized)) {
-      return OPT_OUT_REPLY;
-    }
-
-    return null;
-  }
+  // Opt-out detection removed — LLM handles it via prompt/transfer_to_human.
 
   // ── Item #17: Análise de sentimento heurística ────────────────────────────
 
