@@ -29,11 +29,9 @@ interface MktOriginCardProps {
   config?: MktOriginConfig;
   rank: number;
   index: number;
-  leads?: Array<{ id: string; utm_campaign?: string | null; origin?: string | null }>;
-  propostas?: Array<{ lead_id: string; status?: string }>;
 }
 
-function MktOriginCardBase({ metrics, config, rank, index, leads, propostas }: MktOriginCardProps) {
+function MktOriginCardBase({ metrics, config, rank, index }: MktOriginCardProps) {
   const origin = metrics.origin as LeadOrigin;
   const label = ORIGIN_LABELS[origin] ?? origin;
   const color = ORIGIN_COLORS[origin] ?? "#64748B";
@@ -189,8 +187,8 @@ function MktOriginCardBase({ metrics, config, rank, index, leads, propostas }: M
       )}
 
       {/* UTM breakdown for meta_ads */}
-      {origin === "meta_ads" && leads && propostas && (
-        <MktUtmBreakdown leads={leads} propostas={propostas} />
+      {origin === "meta_ads" && (
+        <MktUtmBreakdown />
       )}
 
       {/* No investment hint */}
