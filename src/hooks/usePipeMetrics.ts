@@ -154,12 +154,13 @@ export function usePipePropostasMetrics(
 
         if (soldError) throw soldError;
 
-        const lostData = (allData || []).filter((r) => r.status === "perdido");
         const inProgressData = (allData || []).filter((r) => activeStatuses.includes(r.status));
         const soldRows = (soldDataWithItems || []) as SoldRow[];
         const { sold, mrr, projeto } = aggregateSoldByItem(soldRows);
-        const closedCount = soldRows.length + lostData.length;
-        const conversionRate = closedCount > 0 ? (soldRows.length / closedCount) * 100 : 0;
+        // Taxa de conversão = vendidos / total no pipe (vendidos + perdidos + em progresso).
+        // Inclui em progresso para não inflar a taxa quando ninguém marca "perdido".
+        const totalNoPipe = (allData || []).length;
+        const conversionRate = totalNoPipe > 0 ? (soldRows.length / totalNoPipe) * 100 : 0;
 
         return {
           sold,
@@ -200,25 +201,45 @@ export function usePipePropostasMetrics(
       const soldData = [...(propQ1.data || []), ...(propQ2.data || [])] as SoldRow[];
       const { sold, mrr, projeto } = aggregateSoldByItem(soldData);
 
-      const lostQ1 = await supabase
-        .from("pipe_propostas")
-        .select("id")
-        .eq("organization_id", organizationId)
-        .eq("status", "perdido")
-        .not("metrics_period_at", "is", null)
-        .gte("metrics_period_at", startStr)
-        .lte("metrics_period_at", endStr);
-      const lostQ2 = await supabase
-        .from("pipe_propostas")
-        .select("id")
-        .eq("organization_id", organizationId)
-        .eq("status", "perdido")
-        .is("metrics_period_at", null)
-        .gte("closed_at", startStr)
-        .lte("closed_at", endStr);
-      const lostCount = (lostQ1.data?.length || 0) + (lostQ2.data?.length || 0);
-      const closedCount = soldData.length + lostCount;
-      const conversionRate = closedCount > 0 ? (soldData.length / closedCount) * 100 : 0;
+      // Total com atividade no período: entraram no período OU fecharam (vendido/perdido) no período.
+      // Denominador correto para evitar taxa inflada quando não marcam "perdido".
+      const [enteredQ1, enteredQ2, lostQ1, lostQ2] = await Promise.all([
+        supabase
+          .from("pipe_propostas")
+          .select("id")
+          .eq("organization_id", organizationId)
+          .not("metrics_period_at", "is", null)
+          .gte("metrics_period_at", startStr)
+          .lte("metrics_period_at", endStr),
+        supabase
+          .from("pipe_propostas")
+          .select("id")
+          .eq("organization_id", organizationId)
+          .is("metrics_period_at", null)
+          .gte("created_at", startStr)
+          .lte("created_at", endStr),
+        supabase
+          .from("pipe_propostas")
+          .select("id")
+          .eq("organization_id", organizationId)
+          .eq("status", "perdido")
+          .not("metrics_period_at", "is", null)
+          .gte("metrics_period_at", startStr)
+          .lte("metrics_period_at", endStr),
+        supabase
+          .from("pipe_propostas")
+          .select("id")
+          .eq("organization_id", organizationId)
+          .eq("status", "perdido")
+          .is("metrics_period_at", null)
+          .gte("closed_at", startStr)
+          .lte("closed_at", endStr),
+      ]);
+      const uniqueIds = new Set<string>();
+      [enteredQ1.data, enteredQ2.data, lostQ1.data, lostQ2.data, propQ1.data, propQ2.data]
+        .forEach(list => list?.forEach((r: { id: string }) => uniqueIds.add(r.id)));
+      const totalInPeriod = uniqueIds.size;
+      const conversionRate = totalInPeriod > 0 ? (soldData.length / totalInPeriod) * 100 : 0;
       const inProgressData = activeQ.data || [];
 
       return {
