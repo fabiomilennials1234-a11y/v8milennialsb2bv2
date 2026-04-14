@@ -5,7 +5,7 @@ tags:
   - torque-crm
   - ia
 created: 2026-04-12
-last_updated: 2026-04-12
+last_updated: 2026-04-13
 status: active
 ---
 
@@ -26,15 +26,21 @@ Agentes IA conversacionais que interagem com leads via WhatsApp/SZ.Chat. Templat
 - SmartSplitMessage para chunking natural de respostas longas
 - Max FAQs e agentes por plano (quota enforcement via org_quotas)
 - Conversas em `conversations` + `conversation_messages`
-- System prompt gerado automaticamente pelo wizard (nao editado manualmente)
+- System prompt gerado automaticamente pelo Playground (nao editado manualmente)
 
-## Como o usuario usa
+## Como o usuario usa (fluxo atual)
 
 1. Copilot → Criar Agente
-2. Wizard de 20+ steps: template, personalidade, objetivo, FAQs, regras kanban, follow-up rules
-3. Ativa agente → agente responde automaticamente a leads no WhatsApp
-4. Monitora metricas em CopilotMetrics
-5. Pode testar via Playground antes de ativar
+2. **CopilotPlayground** — interface unica com:
+   - Prompt editor (personalidade, objetivo, fluxo, instrucoes)
+   - Settings colapsaveis (temperature, delay, disponibilidade)
+   - Tools panel (10 ferramentas configuraveis com instrucoes)
+   - Knowledge base (docs + links)
+   - Live chat preview (teste em tempo real)
+3. Templates funcionam como **presets** que pre-populam o playground
+4. Ativa agente → agente responde automaticamente a leads no WhatsApp
+5. Monitora metricas em CopilotMetrics
+6. Config rapida via AgentConfigModal (tabs: Geral + Funis)
 
 ## Edge cases
 
@@ -47,17 +53,27 @@ Agentes IA conversacionais que interagem com leads via WhatsApp/SZ.Chat. Templat
 
 ## Como funciona (tecnico)
 
-### Componentes
+### Componentes (ativos)
 
-- `src/pages/Copilot.tsx` — Lista de agentes
+- `src/pages/Copilot.tsx` — Lista de agentes, criar/ativar/desativar/deletar
 - `src/pages/CopilotMetrics.tsx` — Analytics de performance
-- `src/components/copilot/CopilotWizard.tsx` — Wizard multi-step (20+ steps)
-- `src/components/copilot/AgentConfigModal.tsx` — Config rapida
+- `src/components/copilot/playground/` — **Fluxo principal de criacao/edicao** (CopilotPlayground)
+- `src/components/copilot/AgentConfigModal.tsx` — Config rapida (tabs Geral + Funis)
 - `src/components/copilot/AgentFollowupRulesTab.tsx` — Regras de follow-up
 - `src/components/copilot/AgentKanbanRulesTab.tsx` — Regras por stage do kanban
 - `src/components/copilot/AgentMetricsTab.tsx` — Metricas do agente
 - `src/components/copilot/AgentTtsSettings.tsx` — Config TTS ElevenLabs
-- `src/components/copilot/playground/` — Interface de teste
+
+> [!warning] Dead Code — Wizard (deprecated)
+> Os seguintes arquivos existem no codebase mas **NAO sao usados na UI**:
+> - `src/components/copilot/CopilotWizard.tsx` — Wizard multi-step antigo (rota `/copilot/novo-wizard`, nao linkada)
+> - `src/pages/CopilotWizardTest.tsx` — Pagina de teste do wizard (marcada pra remocao)
+> - `src/lib/copilot/followupSchedule.ts` — Logica de agendamento de follow-up (importado por ninguem)
+> - `src/lib/copilot/prompt-quality.ts` — Score de qualidade do prompt (so importado pelo wizard)
+> - `src/lib/copilot/step-tips.ts` — Dicas por step do wizard (so importado pelo wizard)
+> - `src/lib/copilot/prompt-utils.ts` — Preview de prompt (so no wizard e TestConversationStep)
+> 
+> **Templates (`templates.ts`) e template-prompts (`template-prompts.ts`) continuam ATIVOS** — usados como presets no Playground.
 
 ### Hooks
 
@@ -105,7 +121,7 @@ Agentes IA conversacionais que interagem com leads via WhatsApp/SZ.Chat. Templat
 
 ### Types
 
-- `src/types/copilot.ts` — Tipos para wizard, agent config, FAQs, kanban rules, follow-up rules, TTS, objective composite
+- `src/types/copilot.ts` — Tipos para agent config, FAQs, kanban rules, follow-up rules, TTS, objective composite (inclui tipos legados do wizard que ainda sao usados pelos types)
 
 ### Fluxo de dados
 
@@ -125,6 +141,9 @@ Lead envia mensagem (WhatsApp/SZ.Chat)
 ---
 
 ## Historico de mudancas
+
+- **2026-04-13**: Documentacao atualizada — wizard deprecated, Playground e o fluxo principal. Dead code mapeado.
+- **2026-04-12**: Documentacao inicial criada.
 
 ## Links relacionados
 

@@ -1,6 +1,6 @@
 # Project State
 
-**Last updated:** 2026-04-09
+**Last updated:** 2026-04-13
 
 ## Decisions
 
@@ -34,6 +34,15 @@ Feature fully specified in `.specs/features/org-quota-enforcement/`. 12 tasks ac
 
 ### D005: org-quota-enforcement implemented (2026-04-09)
 All 12 tasks executed. 9 SQL migrations (20260910000000–20260910000008), 1 new hook (useOrgQuotas), 1 new component (QuotaManagementPanel), 3 files updated (WhatsAppSettings, Copilot, BillingOverrideModal), 1 edge function updated (checkout-provision-org). Build passes. Pending: integration tests against live DB, E2E validation.
+
+### D006: Agent Team System created (2026-04-13)
+9 specialized AI agents operating autonomously via CLAUDE.md protocol. Agents: Conductor (orchestrator), Architect, Backend, Frontend, DBA, QA, Infra, Automation (new), AI (new). Every task auto-routes through Conductor → agent selection → SDD → execution → Obsidian update. Skills in `.claude/skills/agent-*/SKILL.md`. Obsidian notes in `Agentes/`. Protocol simplified to 3 phases (Triage → Execute → Document). Eliminated fragile skill path verification (Fase 3) and redundant Fixes/ documentation (Fase 5). All agents integrate `tlc-spec-driven` for mandatory SDD compliance.
+
+### D007: Coverage 70% project started (2026-04-13)
+Full system coverage project. Baseline: 9.33% (1,058/11,331 lines). Target: 70%+. Sprint 0 complete: 706 tests, 43 test files. Created spec in `.specs/features/coverage-70/`. Infrastructure: supabase-mock, deno-mock, setup-prod (integration against prod with isolated test org `__integration_test_org__`). Coverage scope expanded to include hooks + contexts. 4 sprints planned.
+
+### D008: Copilot wizard is dead code (2026-04-13)
+CopilotWizard, step-tips, prompt-quality, followupSchedule are deprecated. Current flow uses CopilotPlayground (single-pane editor). Templates still active as presets. Obsidian Copilot.md updated with dead code callout. Tests for dead code kept but low priority.
 
 ## Deferred Ideas
 

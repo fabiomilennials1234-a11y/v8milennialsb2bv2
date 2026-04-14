@@ -6152,6 +6152,7 @@ channel_messages: {
       }
       scheduled_user_messages: {
         Row: {
+          assigned_to: string | null
           created_at: string
           created_by: string
           error_message: string | null
@@ -6170,6 +6171,7 @@ channel_messages: {
           whatsapp_instance_id: string | null
         }
         Insert: {
+          assigned_to?: string | null
           created_at?: string
           created_by: string
           error_message?: string | null
@@ -6188,6 +6190,7 @@ channel_messages: {
           whatsapp_instance_id?: string | null
         }
         Update: {
+          assigned_to?: string | null
           created_at?: string
           created_by?: string
           error_message?: string | null
@@ -6206,6 +6209,13 @@ channel_messages: {
           whatsapp_instance_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "scheduled_user_messages_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "scheduled_user_messages_created_by_fkey"
             columns: ["created_by"]
