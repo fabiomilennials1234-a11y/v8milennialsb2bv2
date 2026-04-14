@@ -45,12 +45,29 @@ export class AgentEngine {
   private readonly HISTORY_KEEP_RECENT = 15;
 
   // ── Opt-out / STOP keywords ───────────────────────────────────────────
+  // IMPORTANT: Only unambiguous opt-out phrases. Single common words like
+  // 'para', 'pare', 'sair', 'sai', 'fora', 'cancelar', 'remover' are
+  // REMOVED because they trigger false positives in normal sentences
+  // (e.g., "e para saber sobre preços" matches "para").
+  // Single-word opt-outs must be either VERY explicit (stop, unsubscribe,
+  // descadastrar) or the entire message must equal the keyword.
   private readonly OPT_OUT_KEYWORDS = new Set([
-    'para', 'parar', 'pare', 'stop', 'sair', 'cancelar',
-    'nao quero', 'não quero', 'descadastrar', 'remover', 'remove',
-    'unsubscribe', 'chega', 'encerrar', 'nao me mande mais',
-    'não me mande mais', 'sai', 'fora', 'bloqueie', 'me remova',
-    'saida', 'saída', 'nao quero mais', 'não quero mais',
+    'stop', 'unsubscribe', 'descadastrar',
+    'nao quero', 'não quero',
+    'nao me mande mais', 'não me mande mais',
+    'nao quero mais', 'não quero mais',
+    'me remova', 'me remove',
+    'nao envie mais', 'não envie mais',
+    'nao manda mais', 'não manda mais',
+    'parar de receber', 'pare de mandar', 'pare de enviar',
+  ]);
+
+  // Short-message-only single-word opt-outs — only match if the ENTIRE
+  // incoming message (after normalization) is exactly this word.
+  private readonly STRICT_OPT_OUT_KEYWORDS = new Set([
+    'para', 'parar', 'pare', 'sair', 'sai', 'fora', 'cancelar',
+    'remover', 'remove', 'chega', 'encerrar', 'bloqueie',
+    'saida', 'saída',
   ]);
 
   constructor(supabase: SupabaseClient, openRouter: OpenRouterClient, organizationId: string) {
@@ -3130,17 +3147,20 @@ Regras:
    * Retorna mensagem de confirmação em PT-BR ou null se não for opt-out.
    */
   private detectOptOut(message: string): string | null {
-    const normalized = message.toLowerCase().trim();
+    const normalized = message.toLowerCase().trim().replace(/[.,!?;:]/g, '');
+    const OPT_OUT_REPLY = 'Entendido! Você foi removido da nossa lista de contatos e não receberá mais mensagens nossas. Caso mude de ideia, é só nos chamar novamente. Obrigado!';
 
-    // Verificar frases compostas primeiro (ex: "não quero mais", "me remova")
+    // 1. Frases compostas explícitas (ex: "não quero mais", "me remova")
+    // Estas são inequívocas — se aparecerem na mensagem, é opt-out.
     for (const keyword of this.OPT_OUT_KEYWORDS) {
       if (!keyword.includes(' ')) continue;
       if (normalized.includes(keyword)) {
-        return 'Entendido! Você foi removido da nossa lista de contatos e não receberá mais mensagens nossas. Caso mude de ideia, é só nos chamar novamente. Obrigado!';
+        return OPT_OUT_REPLY;
       }
     }
 
-    // Verificar palavras únicas (correspondência exata ou início/fim da frase)
+    // 2. Palavras únicas explícitas (stop, unsubscribe, descadastrar)
+    // Estas só dão match se aparecerem como palavra isolada.
     for (const keyword of this.OPT_OUT_KEYWORDS) {
       if (keyword.includes(' ')) continue;
       if (
@@ -3149,8 +3169,15 @@ Regras:
         normalized.endsWith(' ' + keyword) ||
         normalized.includes(' ' + keyword + ' ')
       ) {
-        return 'Entendido! Você foi removido da nossa lista de contatos e não receberá mais mensagens nossas. Caso mude de ideia, é só nos chamar novamente. Obrigado!';
+        return OPT_OUT_REPLY;
       }
+    }
+
+    // 3. Palavras ambíguas (para, parar, pare, sair, cancelar, etc.)
+    // Só match se a mensagem INTEIRA for exatamente a palavra, sem nada
+    // mais. Isso evita falsos positivos como "e para saber sobre preços".
+    if (this.STRICT_OPT_OUT_KEYWORDS.has(normalized)) {
+      return OPT_OUT_REPLY;
     }
 
     return null;
