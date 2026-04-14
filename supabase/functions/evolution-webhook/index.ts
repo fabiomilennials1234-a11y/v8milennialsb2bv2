@@ -7,6 +7,7 @@ import { smartSplitMessage, type NaturalMessagingConfig } from "../_shared/natur
 import { logRuntime } from "../_shared/logger.ts";
 import { generateTtsAudio, truncateForTts } from "../_shared/tts-elevenlabs.ts";
 import { sendWhatsAppAudio } from "../_shared/audio-sender.ts";
+import { immediateTransferHuman } from "../_shared/ai-action-executor.ts";
 
 /**
  * Evolution API Webhook Receiver
@@ -813,6 +814,37 @@ async function handleQrcodeUpdated(
 }
 
 /**
+ * Quando transcrição de áudio falha, envia mensagem ao lead avisando da transferência
+ * e executa transferência para atendimento humano (ai_disabled + WAITING_HUMAN).
+ */
+async function handleAudioTranscriptionFailure(
+  supabase: ReturnType<typeof createClient>,
+  instance: { id: string; organization_id: string; instance_name: string; copilot_agent_id?: string | null; copilot_agents?: { id: string; name: string; is_active: boolean } | null },
+  phoneNumber: string
+): Promise<void> {
+  try {
+    // Enviar mensagem ao lead avisando da transferência
+    const transferMessage = "Recebi seu áudio! Vou te transferir para um dos nossos especialistas que vai poder te ajudar melhor. Um momento, por favor! 🙏";
+    await sendSingleWhatsAppMessage(instance.instance_name, phoneNumber, transferMessage);
+
+    // Encontrar o lead para executar a transferência
+    const lead = await findLeadByPhoneOrEmail(supabase, instance.organization_id, phoneNumber);
+    if (lead) {
+      const result = await immediateTransferHuman(supabase, lead.id);
+      if (result.success) {
+        console.log("[Evolution Webhook] Audio transcription failure — lead transferred to human:", { leadId: lead.id, phone: phoneNumber });
+      } else {
+        console.warn("[Evolution Webhook] Audio transcription failure — transfer failed:", result.error);
+      }
+    } else {
+      console.warn("[Evolution Webhook] Audio transcription failure — no lead found for phone:", phoneNumber);
+    }
+  } catch (error) {
+    console.error("[Evolution Webhook] Error handling audio transcription failure:", error);
+  }
+}
+
+/**
  * Processa novas mensagens recebidas
  */
 async function handleMessagesUpsert(
@@ -924,11 +956,22 @@ async function handleMessagesUpsert(
             console.log("[Evolution Webhook] Transcription result:", { hasTranscript: !!transcript, length: transcript?.length });
             if (transcript) {
               messageText = `[Áudio transcrito] ${transcript}`;
+            } else {
+              // Transcrição falhou — transferir para atendimento humano
+              console.warn("[Evolution Webhook] Audio transcription failed — transferring to human support");
+              messageText = "[Áudio recebido — transcrição indisponível]";
+              await handleAudioTranscriptionFailure(supabase, instance, phoneNumber);
             }
           }
         }
       } else if (!messageText && direction === "incoming" && !mediaUrl && (messageType === "audio" || messageType === "ptt")) {
-        console.warn("[Evolution Webhook] Audio message received but NO mediaUrl available — transcription impossible");
+        console.warn("[Evolution Webhook] Audio message received but NO mediaUrl available — transferring to human support");
+        messageText = "[Áudio recebido — sem URL de mídia disponível]";
+        // @ts-ignore - copilot_agents vem do join
+        const hasAgent = instance.copilot_agent_id && instance.copilot_agents?.is_active;
+        if (hasAgent) {
+          await handleAudioTranscriptionFailure(supabase, instance, phoneNumber);
+        }
       }
 
       // Inserir mensagem no banco

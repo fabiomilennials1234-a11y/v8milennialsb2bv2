@@ -1,0 +1,583 @@
+- generic [ref=e3]:
+  - region "Notifications (F8)":
+    - list
+  - region "Notifications alt+T"
+  - generic [ref=e4]:
+    - navigation [ref=e5]:
+      - generic [ref=e6]:
+        - link " Torque CRM" [ref=e7] [cursor=pointer]:
+          - /url: /
+          - generic [ref=e9]: 
+          - text: Torque CRM
+        - generic [ref=e10]:
+          - link "Recursos " [ref=e12] [cursor=pointer]:
+            - /url: "#"
+            - text: Recursos
+            - generic [ref=e13]: 
+          - link "Planos e Preços" [ref=e14] [cursor=pointer]:
+            - /url: "#pricing"
+          - link "FAQ" [ref=e15] [cursor=pointer]:
+            - /url: "#faq"
+        - generic [ref=e16]:
+          - link "Login" [ref=e17] [cursor=pointer]:
+            - /url: /auth
+          - link "Demonstração " [ref=e18] [cursor=pointer]:
+            - /url: /signup
+            - text: Demonstração
+            - generic [ref=e19]: 
+        - text: 
+    - generic [ref=e21]:
+      - generic [ref=e22]:
+        - text: "Plataforma de vendas #1 do Brasil"
+        - generic [ref=e24]: NOVO
+      - heading "Quem vende, usa Torque." [level=1] [ref=e25]:
+        - text: Quem vende, usa
+        - text: Torque.
+      - paragraph [ref=e26]: A plataforma de vendas feita para quem vive de bater meta. CRM, WhatsApp, IA e automações — tudo em um só lugar.
+      - generic [ref=e27]:
+        - link "Começar agora " [ref=e28] [cursor=pointer]:
+          - /url: /signup
+          - text: Começar agora
+          - generic [ref=e29]: 
+        - link "Assistir demo " [ref=e30] [cursor=pointer]:
+          - /url: "#"
+          - text: Assistir demo
+          - generic [ref=e31]: 
+      - generic [ref=e32]:
+        - generic [ref=e33]:
+          - generic [ref=e34]: 
+          - text: IA
+        - generic [ref=e35]:
+          - generic [ref=e36]: 
+          - text: Automações
+        - generic [ref=e37]:
+          - generic [ref=e38]: 
+          - text: Conversas
+        - generic [ref=e39]:
+          - generic [ref=e40]: 
+          - text: CRM
+        - generic [ref=e41]:
+          - generic [ref=e42]: 
+          - text: Indicadores
+        - generic [ref=e43]:
+          - generic [ref=e44]: 
+          - text: Funil
+        - generic [ref=e45]:
+          - generic [ref=e46]: 
+          - text: Tarefas
+        - generic [ref=e47]:
+          - generic [ref=e48]: 
+          - text: Integrações
+      - generic [ref=e50]:
+        - generic [ref=e51]: 
+        - generic [ref=e52]: Screenshot do Torque CRM
+    - generic [ref=e53]:
+      - heading "Quem já apostou na Torque" [level=3] [ref=e54]
+      - generic [ref=e55]:
+        - generic [ref=e56]:
+          - generic [ref=e57]: 
+          - text: Empresa Alpha
+        - generic [ref=e58]:
+          - generic [ref=e59]: 
+          - text: Loja Beta
+        - generic [ref=e60]:
+          - generic [ref=e61]: 
+          - text: Indústria Gama
+        - generic [ref=e62]:
+          - generic [ref=e63]: 
+          - text: Consultoria Delta
+        - generic [ref=e64]:
+          - generic [ref=e65]: 
+          - text: Clínica Epsilon
+        - generic [ref=e66]:
+          - generic [ref=e67]: 
+          - text: Escola Zeta
+        - generic [ref=e68]:
+          - generic [ref=e69]: 
+          - text: Startup Eta
+        - generic [ref=e70]:
+          - generic [ref=e71]: 
+          - text: Grupo Theta
+        - generic [ref=e72]:
+          - generic [ref=e73]: 
+          - text: Empresa Alpha
+        - generic [ref=e74]:
+          - generic [ref=e75]: 
+          - text: Loja Beta
+        - generic [ref=e76]:
+          - generic [ref=e77]: 
+          - text: Indústria Gama
+        - generic [ref=e78]:
+          - generic [ref=e79]: 
+          - text: Consultoria Delta
+        - generic [ref=e80]:
+          - generic [ref=e81]: 
+          - text: Clínica Epsilon
+        - generic [ref=e82]:
+          - generic [ref=e83]: 
+          - text: Escola Zeta
+        - generic [ref=e84]:
+          - generic [ref=e85]: 
+          - text: Startup Eta
+        - generic [ref=e86]:
+          - generic [ref=e87]: 
+          - text: Grupo Theta
+    - generic [ref=e89]:
+      - generic [ref=e90]: Plataforma integrada
+      - heading "Tudo que sua operação precisa. Em um só lugar." [level=2] [ref=e91]:
+        - text: Tudo que sua operação
+        - text: precisa. Em um só lugar.
+      - paragraph [ref=e92]: Chega de alternar entre 10 ferramentas. Torque reúne CRM, WhatsApp, automações, IA e indicadores em uma plataforma única.
+      - generic [ref=e93] [cursor=pointer]:
+        - generic [ref=e95]: 
+        - text: Assistir vídeo
+    - generic [ref=e98]:
+      - generic [ref=e99]:
+        - generic [ref=e100]: Conversas
+        - heading "WhatsApp + Instagram em um inbox." [level=2] [ref=e101]:
+          - text: WhatsApp + Instagram
+          - text: em um inbox.
+        - paragraph [ref=e102]: Todas as conversas da sua equipe em um só lugar. Distribuição automática, respostas rápidas e controle total.
+        - generic [ref=e103]:
+          - generic [ref=e104]: Multi-atendentes
+          - generic [ref=e105]: Respostas rápidas
+          - generic [ref=e106]: Distribuição automática
+      - generic [ref=e108]:
+        - generic [ref=e109]: 
+        - generic [ref=e110]: Inbox centralizado
+    - generic [ref=e113]:
+      - generic [ref=e114]:
+        - generic [ref=e115]: CRM
+        - heading "Pipeline kanban. Histórico completo." [level=2] [ref=e116]:
+          - text: Pipeline kanban.
+          - text: Histórico completo.
+        - paragraph [ref=e117]: Arraste e solte leads entre etapas. Timeline, compromissos, notas e todas as interações em tempo real.
+        - generic [ref=e118]:
+          - generic [ref=e119]: Kanban drag & drop
+          - generic [ref=e120]: Timeline do lead
+          - generic [ref=e121]: Filtros avançados
+      - generic [ref=e123]:
+        - generic [ref=e124]: 
+        - generic [ref=e125]: Pipeline Kanban
+    - generic [ref=e128]:
+      - generic [ref=e129]:
+        - generic [ref=e130]: Automações
+        - heading "Sua operação no piloto automático. 24/7." [level=2] [ref=e131]:
+          - text: Sua operação no
+          - text: piloto automático. 24/7.
+        - paragraph [ref=e132]: Follow-ups, disparos, fluxos e agentes de IA que trabalham enquanto sua equipe descansa.
+        - generic [ref=e133]:
+          - generic [ref=e134]: Fluxos visuais
+          - generic [ref=e135]: Agentes IA
+          - generic [ref=e136]: Follow-up automático
+      - generic [ref=e138]:
+        - generic [ref=e139]: 
+        - generic [ref=e140]: Workflow builder
+    - generic [ref=e143]:
+      - generic [ref=e144]:
+        - generic [ref=e145]: Inteligência Artificial
+        - heading "IA que transcreve, analisa e pontua reuniões." [level=2] [ref=e146]:
+          - text: IA que transcreve, analisa
+          - text: e pontua reuniões.
+        - paragraph [ref=e147]: Copilot de vendas que transcreve chamadas, qualifica leads e gera resumos automaticamente.
+        - generic [ref=e148]:
+          - generic [ref=e149]: Transcrição automática
+          - generic [ref=e150]: Lead scoring IA
+          - generic [ref=e151]: Resumos inteligentes
+      - generic [ref=e153]:
+        - generic [ref=e154]: 
+        - generic [ref=e155]: Copilot IA
+    - generic [ref=e158]:
+      - generic [ref=e159]:
+        - generic [ref=e160]: Campanhas
+        - heading "Dispare por WhatsApp, SMS e voz." [level=2] [ref=e161]:
+          - text: Dispare por WhatsApp,
+          - text: SMS e voz.
+        - paragraph [ref=e162]: Envio em massa com segmentação inteligente. Taxas de abertura, resposta e conversão em tempo real.
+        - generic [ref=e163]:
+          - generic [ref=e164]: Envio agendado
+          - generic [ref=e165]: Segmentação
+          - generic [ref=e166]: Métricas em tempo real
+      - generic [ref=e168]:
+        - generic [ref=e169]: 
+        - generic [ref=e170]: Campanhas
+    - generic [ref=e173]:
+      - generic [ref=e174]:
+        - generic [ref=e175]: Indicadores
+        - heading "Dashboards de performance. Em tempo real." [level=2] [ref=e176]:
+          - text: Dashboards de
+          - text: performance. Em tempo real.
+        - paragraph [ref=e177]: Metas, conversão, receita por vendedor e todos os KPIs que importam. Atualizado minuto a minuto.
+        - generic [ref=e178]:
+          - generic [ref=e179]: Relatórios customizáveis
+          - generic [ref=e180]: KPIs automáticos
+          - generic [ref=e181]: Exportação
+      - generic [ref=e183]:
+        - generic [ref=e184]: 
+        - generic [ref=e185]: Dashboard
+    - generic [ref=e187]:
+      - generic [ref=e188]:
+        - generic [ref=e189]: Segmentos
+        - heading "Cada negócio tem sua lógica. Torque acompanha a sua." [level=2] [ref=e190]:
+          - text: Cada negócio tem sua lógica.
+          - text: Torque acompanha a sua.
+      - generic [ref=e191]:
+        - generic [ref=e192]:
+          - generic [ref=e195]: 
+          - generic [ref=e196]:
+            - heading "Infoprodutores" [level=4] [ref=e197]
+            - paragraph [ref=e198]: Qualifique leads de lançamentos, gerencie follow-ups e escale vendas com automação.
+        - generic [ref=e199]:
+          - generic [ref=e202]: 
+          - generic [ref=e203]:
+            - heading "Clínicas Médicas" [level=4] [ref=e204]
+            - paragraph [ref=e205]: Agendamento, confirmação e follow-up automatizado para reduzir no-show.
+        - generic [ref=e206]:
+          - generic [ref=e209]: 
+          - generic [ref=e210]:
+            - heading "Educação" [level=4] [ref=e211]
+            - paragraph [ref=e212]: Capture, qualifique e matricule alunos com funil otimizado e comunicação personalizada.
+        - generic [ref=e213]:
+          - generic [ref=e216]: 
+          - generic [ref=e217]:
+            - heading "Agências" [level=4] [ref=e218]
+            - paragraph [ref=e219]: Gerencie múltiplas contas, acompanhe resultados e entregue relatórios automaticamente.
+    - generic [ref=e221]:
+      - generic [ref=e222]:
+        - generic [ref=e223]: Cases de sucesso
+        - heading "Não ouça a gente. Ouça eles." [level=2] [ref=e224]:
+          - text: Não ouça a gente.
+          - text: Ouça eles.
+      - generic [ref=e225]:
+        - generic [ref=e226]:
+          - generic [ref=e229] [cursor=pointer]: 
+          - generic [ref=e230]:
+            - heading "João Silva" [level=4] [ref=e231]
+            - paragraph [ref=e232]: CEO, Empresa Alpha
+        - generic [ref=e233]:
+          - generic [ref=e236] [cursor=pointer]: 
+          - generic [ref=e237]:
+            - heading "Maria Santos" [level=4] [ref=e238]
+            - paragraph [ref=e239]: Diretora Comercial, Clínica Beta
+        - generic [ref=e240]:
+          - generic [ref=e243] [cursor=pointer]: 
+          - generic [ref=e244]:
+            - heading "Carlos Oliveira" [level=4] [ref=e245]
+            - paragraph [ref=e246]: Head de Vendas, Escola Gama
+    - generic [ref=e248]:
+      - generic [ref=e249]:
+        - generic [ref=e250]: Planos e preços
+        - heading "Escolha o plano ideal para sua operação" [level=2] [ref=e251]:
+          - text: Escolha o plano ideal
+          - text: para sua operação
+      - generic [ref=e253]:
+        - button "Mensal" [ref=e254] [cursor=pointer]
+        - button "Semestral -10%" [ref=e255] [cursor=pointer]:
+          - text: Semestral
+          - generic [ref=e256]: "-10%"
+        - button "Anual -15%" [ref=e257] [cursor=pointer]:
+          - text: Anual
+          - generic [ref=e258]: "-15%"
+      - generic [ref=e259]:
+        - generic [ref=e260]:
+          - heading "Torque 1.0" [level=3] [ref=e261]
+          - paragraph [ref=e262]: Para quem quer métricas e gestão manual
+          - generic [ref=e263]:
+            - text: R$
+            - generic [ref=e264]: "297"
+            - generic [ref=e265]: /mês por usuário
+          - paragraph [ref=e266]: Cobrado mensalmente
+          - paragraph [ref=e267]: Mínimo 2 usuários
+          - list [ref=e268]:
+            - listitem [ref=e269]:
+              - generic [ref=e270]: 
+              - text: CRM completo
+            - listitem [ref=e271]:
+              - generic [ref=e272]: 
+              - text: Funis de vendas
+            - listitem [ref=e273]:
+              - generic [ref=e274]: 
+              - text: Pódio e ranking
+            - listitem [ref=e275]:
+              - generic [ref=e276]: 
+              - text: Metas e métricas
+            - listitem [ref=e277]:
+              - generic [ref=e278]: 
+              - text: Gestão de leads
+            - listitem [ref=e279]:
+              - generic [ref=e280]: 
+              - text: Produtos
+          - link "Começar agora " [ref=e281] [cursor=pointer]:
+            - /url: /signup?plan=torque-1.0
+            - text: Começar agora
+            - generic [ref=e282]: 
+        - generic [ref=e283]:
+          - generic [ref=e284]: Mais popular
+          - heading "Torque 2.0" [level=3] [ref=e285]
+          - paragraph [ref=e286]: CRM completo com chat, automações e carteira
+          - generic [ref=e287]:
+            - text: R$
+            - generic [ref=e288]: "697"
+            - generic [ref=e289]: /mês por usuário
+          - paragraph [ref=e290]: Cobrado mensalmente
+          - paragraph [ref=e291]: Mínimo 3 usuários
+          - list [ref=e292]:
+            - listitem [ref=e293]:
+              - generic [ref=e294]: 
+              - text: Tudo do 1.0 +
+            - listitem [ref=e295]:
+              - generic [ref=e296]: 
+              - text: Chat WhatsApp
+            - listitem [ref=e297]:
+              - generic [ref=e298]: 
+              - text: Gestão de carteira
+            - listitem [ref=e299]:
+              - generic [ref=e300]: 
+              - text: Mensagens agendadas
+            - listitem [ref=e301]:
+              - generic [ref=e302]: 
+              - text: Automações de fluxo
+            - listitem [ref=e303]:
+              - generic [ref=e304]: 
+              - text: Disparo em massa
+          - link "Começar agora " [ref=e305] [cursor=pointer]:
+            - /url: /signup?plan=torque-2.0
+            - text: Começar agora
+            - generic [ref=e306]: 
+        - generic [ref=e307]:
+          - heading "Torque V8" [level=3] [ref=e308]
+          - paragraph [ref=e309]: "Tudo incluso: CRM, automações, IA e Copilot"
+          - generic [ref=e310]:
+            - text: R$
+            - generic [ref=e311]: "1.997"
+            - generic [ref=e312]: /mês fixo
+          - paragraph [ref=e313]: Cobrado mensalmente
+          - paragraph [ref=e314]: 3 usuários + 1 copilot inclusos | R$120/usuário extra
+          - list [ref=e315]:
+            - listitem [ref=e316]:
+              - generic [ref=e317]: 
+              - text: Tudo do 2.0 +
+            - listitem [ref=e318]:
+              - generic [ref=e319]: 
+              - text: Copilot (agentes IA)
+            - listitem [ref=e320]:
+              - generic [ref=e321]: 
+              - text: Oráculo Comercial
+          - link "Começar agora " [ref=e322] [cursor=pointer]:
+            - /url: /signup?plan=torque-v8
+            - text: Começar agora
+            - generic [ref=e323]: 
+      - table [ref=e324]:
+        - rowgroup [ref=e325]:
+          - row "Recursos 1.0 2.0 V8" [ref=e326]:
+            - columnheader "Recursos" [ref=e327]
+            - columnheader "1.0" [ref=e328]
+            - columnheader "2.0" [ref=e329]
+            - columnheader "V8" [ref=e330]
+        - rowgroup [ref=e331]:
+          - row "Gestão e CRM" [ref=e332]:
+            - cell "Gestão e CRM" [ref=e333]
+          - row "Gestão de leads ✓ ✓ ✓" [ref=e334]:
+            - cell "Gestão de leads" [ref=e335]
+            - cell "✓" [ref=e336]
+            - cell "✓" [ref=e337]
+            - cell "✓" [ref=e338]
+          - row "Funis de vendas ✓ ✓ ✓" [ref=e339]:
+            - cell "Funis de vendas" [ref=e340]
+            - cell "✓" [ref=e341]
+            - cell "✓" [ref=e342]
+            - cell "✓" [ref=e343]
+          - row "Pódio e ranking ✓ ✓ ✓" [ref=e344]:
+            - cell "Pódio e ranking" [ref=e345]
+            - cell "✓" [ref=e346]
+            - cell "✓" [ref=e347]
+            - cell "✓" [ref=e348]
+          - row "Metas e métricas ✓ ✓ ✓" [ref=e349]:
+            - cell "Metas e métricas" [ref=e350]
+            - cell "✓" [ref=e351]
+            - cell "✓" [ref=e352]
+            - cell "✓" [ref=e353]
+          - row "Produtos ✓ ✓ ✓" [ref=e354]:
+            - cell "Produtos" [ref=e355]
+            - cell "✓" [ref=e356]
+            - cell "✓" [ref=e357]
+            - cell "✓" [ref=e358]
+          - row "Comunicação" [ref=e359]:
+            - cell "Comunicação" [ref=e360]
+          - row "Chat WhatsApp ✗ ✓ ✓" [ref=e361]:
+            - cell "Chat WhatsApp" [ref=e362]
+            - cell "✗" [ref=e363]
+            - cell "✓" [ref=e364]
+            - cell "✓" [ref=e365]
+          - row "Mensagens agendadas ✗ ✓ ✓" [ref=e366]:
+            - cell "Mensagens agendadas" [ref=e367]
+            - cell "✗" [ref=e368]
+            - cell "✓" [ref=e369]
+            - cell "✓" [ref=e370]
+          - row "Disparo em massa ✗ ✓ ✓" [ref=e371]:
+            - cell "Disparo em massa" [ref=e372]
+            - cell "✗" [ref=e373]
+            - cell "✓" [ref=e374]
+            - cell "✓" [ref=e375]
+          - row "Automação" [ref=e376]:
+            - cell "Automação" [ref=e377]
+          - row "Automações de fluxo ✗ ✓ ✓" [ref=e378]:
+            - cell "Automações de fluxo" [ref=e379]
+            - cell "✗" [ref=e380]
+            - cell "✓" [ref=e381]
+            - cell "✓" [ref=e382]
+          - row "Gestão de carteira ✗ ✓ ✓" [ref=e383]:
+            - cell "Gestão de carteira" [ref=e384]
+            - cell "✗" [ref=e385]
+            - cell "✓" [ref=e386]
+            - cell "✓" [ref=e387]
+          - row "Inteligência Artificial" [ref=e388]:
+            - cell "Inteligência Artificial" [ref=e389]
+          - row "Copilot (agentes IA) ✗ ✗ ✓" [ref=e390]:
+            - cell "Copilot (agentes IA)" [ref=e391]
+            - cell "✗" [ref=e392]
+            - cell "✗" [ref=e393]
+            - cell "✓" [ref=e394]
+          - row "Oráculo Comercial ✗ ✗ ✓" [ref=e395]:
+            - cell "Oráculo Comercial" [ref=e396]
+            - cell "✗" [ref=e397]
+            - cell "✗" [ref=e398]
+            - cell "✓" [ref=e399]
+          - row "Valor mensal R$ 297/mês/user R$ 697/mês/user R$ 1.997/mês fixo" [ref=e400]:
+            - cell "Valor mensal" [ref=e401]
+            - cell "R$ 297/mês/user" [ref=e402]
+            - cell "R$ 697/mês/user" [ref=e403]
+            - cell "R$ 1.997/mês fixo" [ref=e404]
+      - heading "Serviços adicionais" [level=3] [ref=e405]
+      - table [ref=e406]:
+        - rowgroup [ref=e407]:
+          - row "Serviço Preço" [ref=e408]:
+            - columnheader "Serviço" [ref=e409]
+            - columnheader "Preço" [ref=e410]
+        - rowgroup [ref=e411]:
+          - row "Add-on Turbo (Copilot IA) R$ 1.427/copiloto" [ref=e412]:
+            - cell "Add-on Turbo (Copilot IA)" [ref=e413]
+            - cell "R$ 1.427/copiloto" [ref=e414]
+      - paragraph [ref=e415]: "* Disponível para planos 1.0 e 2.0"
+    - generic [ref=e417]:
+      - generic [ref=e418]:
+        - generic [ref=e419]: Perguntas frequentes
+        - heading "Alguma dúvida?" [level=2] [ref=e420]
+      - generic [ref=e421]:
+        - generic [ref=e422]:
+          - button "O que é um CRM? " [ref=e423] [cursor=pointer]:
+            - text: O que é um CRM?
+            - generic [ref=e424]: 
+          - paragraph [ref=e425]: CRM (Customer Relationship Management) é uma plataforma que centraliza informações e interações com clientes e leads. Com o Torque, você gerencia pipeline, conversas no WhatsApp, automações e indicadores em um único lugar.
+        - generic [ref=e426]:
+          - button "Para que serve um CRM na minha empresa? " [ref=e427] [cursor=pointer]:
+            - text: Para que serve um CRM na minha empresa?
+            - generic [ref=e428]: 
+          - paragraph [ref=e429]: Um CRM organiza seu processo comercial, evita que leads sejam esquecidos, automatiza follow-ups e dá visibilidade total sobre a performance do seu time.
+        - generic [ref=e430]:
+          - button "A plataforma é indicada para negócios que já vendem ou só iniciantes? " [ref=e431] [cursor=pointer]:
+            - text: A plataforma é indicada para negócios que já vendem ou só iniciantes?
+            - generic [ref=e432]: 
+          - paragraph [ref=e433]: Para ambos. O Torque escala junto com sua operação. O plano 1.0 é ideal para quem está começando. O 2.0 e V8 oferecem automações avançadas e IA para equipes estruturadas.
+        - generic [ref=e434]:
+          - button "Como escolher o melhor CRM para o meu negócio? " [ref=e435] [cursor=pointer]:
+            - text: Como escolher o melhor CRM para o meu negócio?
+            - generic [ref=e436]: 
+          - paragraph [ref=e437]: "Avalie três coisas: integração com WhatsApp, automações para escalar sem contratar, e facilidade de uso para o time adotar de verdade. O Torque entrega as três."
+        - generic [ref=e438]:
+          - button "É fácil adaptar minha operação atual? " [ref=e439] [cursor=pointer]:
+            - text: É fácil adaptar minha operação atual?
+            - generic [ref=e440]: 
+          - paragraph [ref=e441]: Sim. O Torque se conecta ao seu WhatsApp, importa sua base de leads e oferece treinamento completo. A maioria dos clientes está operando em menos de 48 horas.
+      - link "Ainda ficou com dúvidas? Fale com nosso time " [ref=e443] [cursor=pointer]:
+        - /url: mailto:contato@torquecrm.com.br
+        - text: Ainda ficou com dúvidas? Fale com nosso time
+        - generic [ref=e444]: 
+    - generic [ref=e446]:
+      - heading "Está na hora de virar o jogo." [level=2] [ref=e447]:
+        - text: Está na hora de
+        - text: virar o jogo.
+      - paragraph [ref=e448]: Tudo começa com uma decisão. Agende sua demonstração gratuita agora.
+      - link "Quero virar o jogo " [ref=e449] [cursor=pointer]:
+        - /url: /signup
+        - text: Quero virar o jogo
+        - generic [ref=e450]: 
+    - contentinfo [ref=e451]:
+      - generic [ref=e452]:
+        - generic [ref=e453]:
+          - generic [ref=e454]:
+            - link " Torque CRM" [ref=e455] [cursor=pointer]:
+              - /url: /
+              - generic [ref=e457]: 
+              - text: Torque CRM
+            - paragraph [ref=e458]: A plataforma de vendas feita para quem vive de bater meta.
+            - generic [ref=e459]:
+              - link "Facebook" [ref=e460] [cursor=pointer]:
+                - /url: "#"
+                - generic [ref=e461]: 
+              - link "LinkedIn" [ref=e462] [cursor=pointer]:
+                - /url: "#"
+                - generic [ref=e463]: 
+              - link "YouTube" [ref=e464] [cursor=pointer]:
+                - /url: "#"
+                - generic [ref=e465]: 
+              - link "Instagram" [ref=e466] [cursor=pointer]:
+                - /url: "#"
+                - generic [ref=e467]: 
+          - generic [ref=e468]:
+            - heading "Recursos" [level=4] [ref=e469]
+            - link "CRM" [ref=e470] [cursor=pointer]:
+              - /url: "#"
+            - link "Conversas" [ref=e471] [cursor=pointer]:
+              - /url: "#"
+            - link "Automações" [ref=e472] [cursor=pointer]:
+              - /url: "#"
+            - link "IA" [ref=e473] [cursor=pointer]:
+              - /url: "#"
+            - link "Indicadores" [ref=e474] [cursor=pointer]:
+              - /url: "#"
+          - generic [ref=e475]:
+            - heading "Serviços" [level=4] [ref=e476]
+            - link "Implantação" [ref=e477] [cursor=pointer]:
+              - /url: "#"
+            - link "Treinamento" [ref=e478] [cursor=pointer]:
+              - /url: "#"
+            - link "Consultoria" [ref=e479] [cursor=pointer]:
+              - /url: "#"
+            - link "API" [ref=e480] [cursor=pointer]:
+              - /url: "#"
+          - generic [ref=e481]:
+            - heading "Aprenda" [level=4] [ref=e482]
+            - link "Blog" [ref=e483] [cursor=pointer]:
+              - /url: "#"
+            - link "Central de ajuda" [ref=e484] [cursor=pointer]:
+              - /url: "#"
+            - link "Webinars" [ref=e485] [cursor=pointer]:
+              - /url: "#"
+            - link "Cases" [ref=e486] [cursor=pointer]:
+              - /url: "#"
+          - generic [ref=e487]:
+            - heading "Sobre nós" [level=4] [ref=e488]
+            - link "Quem somos" [ref=e489] [cursor=pointer]:
+              - /url: "#"
+            - link "Carreiras" [ref=e490] [cursor=pointer]:
+              - /url: "#"
+            - link "Contato" [ref=e491] [cursor=pointer]:
+              - /url: "#"
+            - link "Parceiros" [ref=e492] [cursor=pointer]:
+              - /url: "#"
+        - generic [ref=e493]:
+          - generic [ref=e494]: © 2026 Torque CRM. Todos os direitos reservados.
+          - generic [ref=e495]:
+            - link "Privacidade" [ref=e496] [cursor=pointer]:
+              - /url: /privacidade
+            - link "Termos" [ref=e497] [cursor=pointer]:
+              - /url: "#"
+            - link "Cookies" [ref=e498] [cursor=pointer]:
+              - /url: "#"
+            - generic [ref=e499]:
+              - generic [ref=e500]: 
+              - text: Meta Business Partner
+    - link "Falar no WhatsApp" [ref=e501] [cursor=pointer]:
+      - /url: https://wa.me/5500000000000
+      - generic [ref=e502]: 
