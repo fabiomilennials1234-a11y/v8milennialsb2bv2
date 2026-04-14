@@ -62,40 +62,9 @@ Deno.serve(withSentry('agent-message', async (req) => {
       });
     }
 
-    // 1.6. HUMAN TAKEOVER CHECK: se um atendente humano enviou mensagem
-    // nos últimos 10 minutos, não responder com IA
-    const HUMAN_TAKEOVER_TIMEOUT_MINUTES = 10;
-    const humanTimeoutAgo = new Date(
-      Date.now() - HUMAN_TAKEOVER_TIMEOUT_MINUTES * 60 * 1000
-    ).toISOString();
-
-    const { data: recentHumanMsg } = await supabase
-      .from("whatsapp_messages")
-      .select("message_id, created_at")
-      .eq("organization_id", organizationId)
-      .eq("direction", "outgoing")
-      .not("sent_by_ai", "is", true)
-      .gte("created_at", humanTimeoutAgo)
-      .eq("phone_number", from)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (recentHumanMsg) {
-      console.log('[agent-message] Human agent active, skipping AI:', {
-        leadId: lead.id,
-        lastHumanMsgAt: recentHumanMsg.created_at,
-        timeoutMinutes: HUMAN_TAKEOVER_TIMEOUT_MINUTES,
-      });
-      return new Response(JSON.stringify({
-        skipped: true,
-        reason: "Human agent active (10min timeout)",
-        lead_id: lead.id
-      }), {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" }
-      });
-    }
+    // HUMAN TAKEOVER removed — copilot always responds unless
+    // ai_disabled=true or conversation state=WAITING_HUMAN.
+    // Human agents can disable AI via the toggle in the chat UI.
 
     // 1.7. FIRE lead_replied workflow trigger (fire-and-forget)
     fireTrigger({
