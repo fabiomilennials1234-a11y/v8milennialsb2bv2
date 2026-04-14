@@ -3,7 +3,7 @@ import { usePersistedState } from "@/hooks/usePersistedState";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search, Filter, Plus, Calendar, User, Building2, Star,
-  DollarSign, Clock, Tag, Loader2, TrendingUp, Package,
+  DollarSign, Clock, Tag, TrendingUp, Package,
   ArrowUpRight, Percent, BarChart3, Target, Flame, MessageCircle, Settings2,
   MoreVertical, Trash2
 } from "lucide-react";
@@ -29,6 +29,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { DraggableKanbanBoard, KanbanColumn } from "@/components/kanban/DraggableKanbanBoard";
+import { TorqueLoader } from "@/components/branding/TorqueLoader";
 import { useCanPerformAction } from "@/lib/permissions";
 import { StageWorkflowsBadgeWrapper } from "@/components/kanban/StageWorkflowsBadgeWrapper";
 import { useStageWorkflowCounts } from "@/hooks/useStageWorkflows";
@@ -857,11 +858,7 @@ export default function PipePropostas() {
   );
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
+    return <TorqueLoader variant="inline" />;
   }
 
   return (

@@ -19,7 +19,6 @@ import {
   Trash2,
   Star,
   Lock,
-  Loader2,
   Settings,
   GitBranch,
   BarChart3,
@@ -33,6 +32,7 @@ import {
   CardDescription,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { TorqueLoader } from "@/components/branding/TorqueLoader";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -108,11 +108,7 @@ export default function Copilot() {
   };
 
   if (subLoading || isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
+    return <TorqueLoader variant="full" />;
   }
 
   return (
