@@ -1205,7 +1205,7 @@ async function executeSendDocument(
     .from("whatsapp_instances")
     .select("instance_name")
     .eq("organization_id", organizationId)
-    .eq("status", "open")
+    .in("status", ["open", "connected"])
     .limit(1)
     .maybeSingle();
 
@@ -1261,19 +1261,24 @@ async function executeSendDocument(
     const sendResult = await response.json();
 
     // 5. Registrar mensagem de saida
-    await supabase.from("whatsapp_messages").insert({
-      organization_id: organizationId,
-      message_id: sendResult.key?.id || `doc_${Date.now()}_${Math.random().toString(36).substring(7)}`,
-      remote_jid: `${phone}@s.whatsapp.net`,
-      phone_number: phone,
-      direction: "outgoing",
-      message_type: messageType,
-      content: caption || `[${messageType === "image" ? "Imagem" : messageType === "video" ? "Video" : "Documento"}: ${doc.file_name}]`,
-      media_url: signedUrlData.signedUrl,
-      status: "sent",
-      timestamp: new Date().toISOString(),
-      sent_by_ai: true,
-    }).catch(e => console.warn("[executeSendDocument] Failed to log outgoing message:", e));
+    try {
+      const { error: insertErr } = await supabase.from("whatsapp_messages").insert({
+        organization_id: organizationId,
+        message_id: sendResult.key?.id || `doc_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+        remote_jid: `${phone}@s.whatsapp.net`,
+        phone_number: phone,
+        direction: "outgoing",
+        message_type: messageType,
+        content: caption || `[${messageType === "image" ? "Imagem" : messageType === "video" ? "Video" : "Documento"}: ${doc.file_name}]`,
+        media_url: signedUrlData.signedUrl,
+        status: "sent",
+        timestamp: new Date().toISOString(),
+        sent_by_ai: true,
+      });
+      if (insertErr) console.warn("[executeSendDocument] Failed to log outgoing message:", insertErr);
+    } catch (e) {
+      console.warn("[executeSendDocument] Failed to log outgoing message:", e);
+    }
 
     return {
       success: true,
