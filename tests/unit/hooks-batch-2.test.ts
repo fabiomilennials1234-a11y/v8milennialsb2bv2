@@ -1,0 +1,113 @@
+/**
+ * Batch test 2+3 — bulk hook coverage via initialization tests.
+ * Uses vi.hoisted() to avoid mock hoisting issues.
+ */
+import { describe, it, expect, vi } from "vitest";
+import { renderHook } from "@testing-library/react";
+import { createWrapper } from "../helpers/hook-test-utils";
+
+// Factory-only mocks (no external references)
+vi.mock("@/integrations/supabase/client", () => {
+  const chain: Record<string, any> = {};
+  const methods = ["select","eq","neq","or","in","gte","lte","lt","ilike","contains","order","limit","range","insert","update","delete","upsert"];
+  for (const m of methods) chain[m] = vi.fn().mockReturnValue(chain);
+  chain.single = vi.fn().mockResolvedValue({ data: null, error: null });
+  chain.maybeSingle = vi.fn().mockResolvedValue({ data: null, error: null });
+  chain.then = (fn: any) => Promise.resolve(fn({ data: [], error: null, count: 0 }));
+  return {
+    supabase: {
+      from: vi.fn().mockReturnValue(chain),
+      channel: vi.fn().mockReturnValue({ on: vi.fn().mockReturnThis(), subscribe: vi.fn() }),
+      removeChannel: vi.fn(),
+      rpc: vi.fn().mockResolvedValue({ data: null, error: null }),
+      functions: { invoke: vi.fn().mockResolvedValue({ data: null, error: null }) },
+      auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { id: "u1" } } }), onAuthStateChange: vi.fn().mockReturnValue({ data: { subscription: { unsubscribe: vi.fn() } } }) },
+      storage: { from: vi.fn().mockReturnValue({ upload: vi.fn(), getPublicUrl: vi.fn().mockReturnValue({ data: { publicUrl: "" } }) }) },
+    },
+  };
+});
+
+vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "u1" }, session: {} }) }));
+vi.mock("@/hooks/useOrganization", () => ({ useOrganization: () => ({ organizationId: "org-test", isReady: true }), useRequiredOrganization: () => ({ organizationId: "org-test", teamMemberId: "tm1" }) }));
+vi.mock("@/hooks/useTeamMembers", () => ({ useCurrentTeamMember: () => ({ data: { id: "tm1", organization_id: "org-test", user_id: "u1", role: "admin" } }), isVirtualTeamMember: () => false, useTeamMembers: () => ({ data: [] }) }));
+vi.mock("@/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: false }) }));
+vi.mock("@/hooks/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
+vi.mock("@/hooks/usePipelineStages", () => ({ usePipelineStages: () => ({ data: [] }), DEFAULT_STAGES: {} }));
+vi.mock("@/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
+vi.mock("@/hooks/useCopilotPromptBuilder", () => ({ generatePrompt: vi.fn(), saveCopilotSystemPrompt: vi.fn(), regenerateAndSavePrompt: vi.fn(), computePromptHash: vi.fn() }));
+vi.mock("@/hooks/useAgentFollowupRules", () => ({ followupRuleToDB: vi.fn((r: any) => r) }));
+vi.mock("@/hooks/useAutoFollowUp", () => ({ triggerFollowUpAutomation: vi.fn() }));
+vi.mock("@/lib/workflowTrigger", () => ({ triggerStageChangedWorkflows: vi.fn(), triggerLeadCreatedInCustomPipeline: vi.fn() }));
+vi.mock("@/lib/permissions", () => ({ assertIsAdmin: vi.fn(), useCanPerformActionAsync: () => vi.fn().mockResolvedValue(true) }));
+vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
+vi.mock("@/lib/copilot/custom-instructions-utils", () => ({ parseCustomInstructions: () => ({ dos: "", donts: "" }), serializeCustomInstructions: () => null }));
+vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), loading: vi.fn(), dismiss: vi.fn() } }));
+
+// ── Hook imports ──
+import { useAwards } from "@/hooks/useAwards";
+import { useBadges } from "@/hooks/useBadges";
+import { useCompetitions } from "@/hooks/useCompetitions";
+import { useProfiles } from "@/hooks/useProfiles";
+import { useCountUp } from "@/hooks/useCountUp";
+import { useLeadTimeline } from "@/hooks/useLeadTimeline";
+import { useLogger } from "@/hooks/useLogger";
+import { useMasterPlans } from "@/hooks/useMasterPlans";
+import { useMessageTemplates } from "@/hooks/useMessageTemplates";
+import { useOrgSwitcher } from "@/hooks/useOrgSwitcher";
+import { useOrganizationSettings } from "@/hooks/useOrganizationSettings";
+import { useMasterOrganizations } from "@/hooks/useMasterOrganizations";
+import { useMasterUsers } from "@/hooks/useMasterUsers";
+import { useMasterAuditLogs } from "@/hooks/useMasterAuditLogs";
+import { useAvatarMap } from "@/hooks/useAvatarMap";
+import { useAutoAdminAssignment } from "@/hooks/useAutoAdminAssignment";
+import { useDailyPriorities } from "@/hooks/useDailyPriorities";
+import { useDashboardMetrics } from "@/hooks/useDashboardMetrics";
+import { useScheduledMessages } from "@/hooks/useScheduledMessages";
+import { useOutboundMetrics } from "@/hooks/useOutboundMetrics";
+import { useWhatsAppInstances } from "@/hooks/useWhatsAppInstances";
+import { useProductRanking } from "@/hooks/useProductRanking";
+
+// ── Tests ──
+const hooks: [string, () => any][] = [
+  ["useAwards", () => useAwards()],
+  ["useBadges", () => useBadges()],
+  ["useCompetitions", () => useCompetitions()],
+  ["useProfiles", () => useProfiles()],
+  ["useLeadTimeline", () => useLeadTimeline("lead-1")],
+  ["useLogger", () => useLogger()],
+  ["useMasterPlans", () => useMasterPlans()],
+  ["useMessageTemplates", () => useMessageTemplates()],
+  ["useOrgSwitcher", () => useOrgSwitcher()],
+  ["useOrganizationSettings", () => useOrganizationSettings()],
+  ["useMasterOrganizations", () => useMasterOrganizations()],
+  ["useMasterUsers", () => useMasterUsers()],
+  ["useMasterAuditLogs", () => useMasterAuditLogs()],
+  ["useAutoAdminAssignment", () => useAutoAdminAssignment()],
+  ["useDailyPriorities", () => useDailyPriorities()],
+  ["useDashboardMetrics", () => useDashboardMetrics()],
+  // useScheduledMessages has complex side effects — tested separately
+  // ["useScheduledMessages", () => useScheduledMessages()],
+  ["useOutboundMetrics", () => useOutboundMetrics()],
+  ["useWhatsAppInstances", () => useWhatsAppInstances()],
+  ["useProductRanking", () => useProductRanking()],
+];
+
+describe.each(hooks)("%s", (_name, hookFn) => {
+  it("initializes without error", () => {
+    expect(() => renderHook(() => hookFn(), { wrapper: createWrapper() })).not.toThrow();
+  });
+});
+
+describe("useCountUp", () => {
+  it("returns a number", () => {
+    const { result } = renderHook(() => useCountUp(100, 0), { wrapper: createWrapper() });
+    expect(typeof result.current).toBe("number");
+  });
+});
+
+describe("useAvatarMap", () => {
+  it("accepts member IDs", () => {
+    const { result } = renderHook(() => useAvatarMap(["m1", "m2"]), { wrapper: createWrapper() });
+    expect(result.current).toBeDefined();
+  });
+});

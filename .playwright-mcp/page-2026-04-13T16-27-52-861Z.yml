@@ -1,0 +1,13 @@
+- generic [ref=e3]:
+  - region "Notifications (F8)":
+    - list
+  - region "Notifications alt+T"
+  - generic [ref=e5]:
+    - heading "404" [level=1] [ref=e6]
+    - paragraph [ref=e7]: Parece que você saiu da pista.
+    - paragraph [ref=e8]: A página que você procura não existe ou foi movida.
+    - link "Voltar ao pit stop" [ref=e9] [cursor=pointer]:
+      - /url: /
+      - button "Voltar ao pit stop" [ref=e10]:
+        - img
+        - text: Voltar ao pit stop
