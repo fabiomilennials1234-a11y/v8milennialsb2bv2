@@ -1142,15 +1142,13 @@ async function handleMessagesUpsert(
             // sent_by_ai=false (race condition: splits arrive before the copilot
             // saves the full AI message with sent_by_ai=true).
             //
-            // Fix: if the conversation has an active copilot agent AND a
-            // sent_by_ai=true message exists for the same phone within the last
-            // 2 minutes, the "human" message is almost certainly an AI split.
-            // Also check if there are NO channel_messages from a real human
-            // (channel_messages are created only by the human chat UI, never by
-            // the copilot).
+            // Fix: if a sent_by_ai=true message exists for the same phone within
+            // the SAME window as the human takeover check (10 min), the suspected
+            // "human" message is almost certainly an AI split — not a real human.
+            // When detected, auto-fix the record so future checks skip it.
             let isLikelyAiSplit = false;
             try {
-              const twoMinAgo = new Date(Date.now() - 120_000).toISOString();
+              // Use the same window as the human takeover check
               const { data: recentAi } = await supabase
                 .from("whatsapp_messages")
                 .select("id")
@@ -1158,12 +1156,11 @@ async function handleMessagesUpsert(
                 .eq("phone_number", phoneNumber)
                 .eq("direction", "outgoing")
                 .eq("sent_by_ai", true)
-                .gte("created_at", twoMinAgo)
+                .gte("created_at", humanTimeoutAgo)
                 .limit(1)
                 .maybeSingle();
 
               if (recentAi) {
-                // There's a recent AI message — the suspected human msg is likely a split
                 isLikelyAiSplit = true;
               }
             } catch (_e) { /* non-blocking */ }
