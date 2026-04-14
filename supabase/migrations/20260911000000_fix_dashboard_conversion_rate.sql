@@ -65,15 +65,15 @@ BEGIN
   -- Usa conversation_messages (chat-based) em vez de whatsapp_messages
   SELECT COALESCE(AVG(minutes_diff), 0) INTO v_tempo_medio_resposta
   FROM (
-    SELECT EXTRACT(EPOCH FROM (MIN(CASE WHEN role = 'assistant' THEN created_at END)
-                             - MIN(CASE WHEN role = 'user' THEN created_at END))) / 60 AS minutes_diff
+    SELECT EXTRACT(EPOCH FROM (MIN(CASE WHEN cm.role = 'assistant' THEN cm.created_at END)
+                             - MIN(CASE WHEN cm.role = 'user' THEN cm.created_at END))) / 60 AS minutes_diff
     FROM conversation_messages cm
     JOIN conversations c ON c.id = cm.conversation_id
     WHERE c.organization_id = p_org_id
       AND cm.created_at >= p_start_date AND cm.created_at <= p_end_date
     GROUP BY cm.conversation_id
-    HAVING MIN(CASE WHEN role = 'user' THEN created_at END) IS NOT NULL
-       AND MIN(CASE WHEN role = 'assistant' THEN created_at END) IS NOT NULL
+    HAVING MIN(CASE WHEN cm.role = 'user' THEN cm.created_at END) IS NOT NULL
+       AND MIN(CASE WHEN cm.role = 'assistant' THEN cm.created_at END) IS NOT NULL
   ) sub;
 
   -- 2. Reuniões marcadas, comparecidas, no-show
