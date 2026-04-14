@@ -1136,6 +1136,35 @@ async function handleMessagesUpsert(
             .maybeSingle();
 
           if (recentHumanMsg) {
+            // ── AI Split False Positive Guard ──
+            // send.message webhook may arrive before the copilot saves its
+            // sent_by_ai=true record, causing a race condition where AI splits
+            // are temporarily seen as "human" messages. To avoid this false
+            // positive, check if there's an AI message within 30s of the
+            // suspected human message. If so, it's likely an AI split.
+            const suspectedTs = new Date(recentHumanMsg.created_at).getTime();
+            const aiSplitWindowStart = new Date(suspectedTs - 30_000).toISOString();
+            const aiSplitWindowEnd = new Date(suspectedTs + 30_000).toISOString();
+            const { data: nearbyAiMsg } = await supabase
+              .from("whatsapp_messages")
+              .select("id")
+              .eq("organization_id", instance.organization_id)
+              .eq("phone_number", phoneNumber)
+              .eq("direction", "outgoing")
+              .eq("sent_by_ai", true)
+              .gte("timestamp", aiSplitWindowStart)
+              .lte("timestamp", aiSplitWindowEnd)
+              .limit(1)
+              .maybeSingle();
+
+            if (nearbyAiMsg) {
+              console.log("[Evolution Webhook] Suspected human msg is likely AI split, ignoring human takeover:", {
+                phone: phoneNumber,
+                suspectedMsgId: recentHumanMsg.message_id,
+                nearbyAiMsgId: nearbyAiMsg.id,
+              });
+              // Don't skip — let the copilot process
+            } else {
             console.log("[Evolution Webhook] Human agent active, skipping copilot:", {
               phone: phoneNumber,
               lastHumanMsgAt: recentHumanMsg.created_at,
@@ -1159,7 +1188,8 @@ async function handleMessagesUpsert(
             }
 
             continue;
-          }
+          } // end else (real human takeover)
+          } // end if (recentHumanMsg)
 
           // Esta é a mensagem mais recente! Buscar TODAS não processadas
           const { data: pendingMessages, error: fetchError } = await supabase
@@ -1492,10 +1522,40 @@ async function handleSendMessage(
     }
   }
 
+  // ─── AI Split Detection ───────────────────────────────────────────────
+  // When the copilot sends a message via smartSplitMessage, the full response
+  // is saved with sent_by_ai=true, but each split chunk arrives back as a
+  // send.message webhook event. Without this check, the split chunks get saved
+  // with sent_by_ai=false, which falsely triggers the Human Takeover check
+  // and blocks the copilot from responding to subsequent messages.
+  // Fix: if a sent_by_ai=true outgoing message exists for the same phone
+  // within the last 60 seconds, mark this message as sent_by_ai too.
+  let isSentByAi = false;
+  try {
+    const recentAiCutoff = new Date(Date.now() - 60_000).toISOString();
+    const { data: recentAiMsg } = await supabase
+      .from("whatsapp_messages")
+      .select("id")
+      .eq("organization_id", instance.organization_id)
+      .eq("phone_number", phoneNumber)
+      .eq("direction", "outgoing")
+      .eq("sent_by_ai", true)
+      .gte("timestamp", recentAiCutoff)
+      .limit(1)
+      .maybeSingle();
+    if (recentAiMsg) {
+      isSentByAi = true;
+      console.log("[Evolution Webhook] send.message detected as AI split, marking sent_by_ai=true");
+    }
+  } catch (_e) {
+    // Non-blocking: if check fails, default to false (safe fallback)
+  }
+
   console.log("[Evolution Webhook] send.message saving:", {
     phone: phoneNumber,
     type: messageType,
     messageId: key.id,
+    sentByAi: isSentByAi,
   });
 
   // Upsert: se já existe (ex: MESSAGES_UPSERT chegou primeiro), atualiza media_url
@@ -1516,6 +1576,7 @@ async function handleSendMessage(
       ? new Date(Number(msg.messageTimestamp) * 1000).toISOString()
       : new Date().toISOString(),
     raw_payload: data as unknown as Record<string, unknown>,
+    ...(isSentByAi ? { sent_by_ai: true } : {}),
   }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
 
   if (msgError) {
