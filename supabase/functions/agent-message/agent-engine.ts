@@ -44,14 +44,9 @@ export class AgentEngine {
   private readonly HISTORY_COMPRESS_THRESHOLD = 25;
   private readonly HISTORY_KEEP_RECENT = 15;
 
-  // ── Opt-out / STOP keywords ───────────────────────────────────────────
-  private readonly OPT_OUT_KEYWORDS = new Set([
-    'para', 'parar', 'pare', 'stop', 'sair', 'cancelar',
-    'nao quero', 'não quero', 'descadastrar', 'remover', 'remove',
-    'unsubscribe', 'chega', 'encerrar', 'nao me mande mais',
-    'não me mande mais', 'sai', 'fora', 'bloqueie', 'me remova',
-    'saida', 'saída', 'nao quero mais', 'não quero mais',
-  ]);
+  // Opt-out detection removed — the LLM decides via prompt when a lead
+  // explicitly wants to unsubscribe. Hard-coded keyword matching caused
+  // false positives (e.g., "para" preposition matched as opt-out).
 
   constructor(supabase: SupabaseClient, openRouter: OpenRouterClient, organizationId: string) {
     this.supabase = supabase;
@@ -66,22 +61,6 @@ export class AgentEngine {
     console.log('[AgentEngine] Processing message:', { leadId, messagePreview: userMessage.substring(0, 50) });
     this.currentLeadId = leadId;
     this.incomingMessageType = incomingMessageType || "text";
-
-    // 0. OPT-OUT CHECK — antes de qualquer chamada LLM (item #9)
-    const optOutReply = this.detectOptOut(userMessage);
-    if (optOutReply) {
-      console.log('[AgentEngine] Opt-out detectado para lead:', leadId);
-      await this.supabase
-        .from('leads')
-        .update({ ai_disabled: true, ai_disabled_at: new Date().toISOString() })
-        .eq('id', leadId);
-      return {
-        message: optOutReply,
-        messages: [optOutReply],
-        state: 'OPT_OUT',
-        action_executed: 'OPT_OUT',
-      };
-    }
 
     // 1. Load Capabilities (item #4: roteamento por etapa do lead)
     console.log('[AgentEngine] Step 1: Loading capabilities...');
@@ -3123,38 +3102,7 @@ Regras:
     return content.trim();
   }
 
-  // ── Item #9: Detecção de opt-out pré-LLM ─────────────────────────────────
-
-  /**
-   * Verifica se a mensagem é um pedido de opt-out (STOP / PARA / etc.)
-   * Retorna mensagem de confirmação em PT-BR ou null se não for opt-out.
-   */
-  private detectOptOut(message: string): string | null {
-    const normalized = message.toLowerCase().trim();
-
-    // Verificar frases compostas primeiro (ex: "não quero mais", "me remova")
-    for (const keyword of this.OPT_OUT_KEYWORDS) {
-      if (!keyword.includes(' ')) continue;
-      if (normalized.includes(keyword)) {
-        return 'Entendido! Você foi removido da nossa lista de contatos e não receberá mais mensagens nossas. Caso mude de ideia, é só nos chamar novamente. Obrigado!';
-      }
-    }
-
-    // Verificar palavras únicas (correspondência exata ou início/fim da frase)
-    for (const keyword of this.OPT_OUT_KEYWORDS) {
-      if (keyword.includes(' ')) continue;
-      if (
-        normalized === keyword ||
-        normalized.startsWith(keyword + ' ') ||
-        normalized.endsWith(' ' + keyword) ||
-        normalized.includes(' ' + keyword + ' ')
-      ) {
-        return 'Entendido! Você foi removido da nossa lista de contatos e não receberá mais mensagens nossas. Caso mude de ideia, é só nos chamar novamente. Obrigado!';
-      }
-    }
-
-    return null;
-  }
+  // Opt-out detection removed — LLM handles it via prompt/transfer_to_human.
 
   // ── Item #17: Análise de sentimento heurística ────────────────────────────
 

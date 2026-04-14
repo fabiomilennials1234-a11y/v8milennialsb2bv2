@@ -4964,6 +4964,8 @@ channel_messages: {
           created_by: string | null
           email: string
           id: string
+          job_title: string | null
+          metric_type: string | null
           organization_id: string
           role: string
         }
@@ -4972,6 +4974,8 @@ channel_messages: {
           created_by?: string | null
           email: string
           id?: string
+          job_title?: string | null
+          metric_type?: string | null
           organization_id: string
           role?: string
         }
@@ -4980,6 +4984,8 @@ channel_messages: {
           created_by?: string | null
           email?: string
           id?: string
+          job_title?: string | null
+          metric_type?: string | null
           organization_id?: string
           role?: string
         }

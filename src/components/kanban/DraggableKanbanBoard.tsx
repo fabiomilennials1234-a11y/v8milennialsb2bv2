@@ -49,7 +49,7 @@ interface DraggableKanbanBoardProps<T extends DraggableItem> {
   /** Renders extra content in the column header (e.g. workflow badge) */
   renderColumnExtra?: (column: KanbanColumn<T>) => React.ReactNode;
   /** When provided, the column header three-dots menu shows "Excluir todos os leads desta etapa" */
-  onDeleteAllLeads?: () => void;
+  onDeleteAllLeads?: (stageId: string, stageTitle: string) => void;
   /** When true, drag-and-drop is disabled (permission denied) */
   disabled?: boolean;
 }
@@ -67,7 +67,7 @@ function DroppableColumn<T extends DraggableItem>({
   className?: string;
   renderColumnFooter?: (column: KanbanColumn<T>) => React.ReactNode;
   renderColumnExtra?: (column: KanbanColumn<T>) => React.ReactNode;
-  onDeleteAllLeads?: () => void;
+  onDeleteAllLeads?: (stageId: string, stageTitle: string) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({
     id: column.id,
@@ -113,7 +113,7 @@ function DroppableColumn<T extends DraggableItem>({
                   className="text-destructive focus:text-destructive"
                   onClick={(e) => {
                     e.stopPropagation();
-                    onDeleteAllLeads();
+                    onDeleteAllLeads(column.id, column.title);
                   }}
                 >
                   <Trash2 className="w-4 h-4 mr-2" />

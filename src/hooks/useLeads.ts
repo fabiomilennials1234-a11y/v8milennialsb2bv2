@@ -349,21 +349,27 @@ const PIPE_TABLES = {
 export type PipeTypeForDelete = keyof typeof PIPE_TABLES;
 
 /**
- * Fetch all lead_ids that are in a given pipe (funnel/stage) for the organization.
+ * Fetch all lead_ids that are in a given pipe for the organization.
+ * When stageId is provided, only returns leads in that specific stage (status).
  * SECURITY: Only returns ids for the given organization_id; uses pagination.
  */
 async function fetchAllLeadIdsInPipe(
   organizationId: string,
-  pipeType: PipeTypeForDelete
+  pipeType: PipeTypeForDelete,
+  stageId?: string
 ): Promise<string[]> {
   const table = PIPE_TABLES[pipeType];
   const idSet = new Set<string>();
   let offset = 0;
   while (true) {
-    const { data, error } = await supabase
+    let query = supabase
       .from(table)
       .select("lead_id")
-      .eq("organization_id", organizationId)
+      .eq("organization_id", organizationId);
+    if (stageId) {
+      query = query.eq("status", stageId);
+    }
+    const { data, error } = await query
       .order("lead_id", { ascending: true })
       .range(offset, offset + FETCH_PAGE_SIZE - 1);
     if (error) throw error;
@@ -410,17 +416,22 @@ function deleteLeadsAndRelated(ids: string[]): Promise<void> {
 }
 
 /**
- * Delete ALL leads that are in THIS pipe (funnel/stage) only — not the whole organization.
- * SECURITY: Only deletes leads for current organization_id; uses pagination so all rows in the pipe are considered.
+ * Delete leads that are in a specific stage of this pipe.
+ * When stageId is provided, only leads in that stage are deleted.
+ * SECURITY: Only deletes leads for current organization_id; permission check enforced.
  */
 export function useDeleteAllLeadsInPipe(pipeType: PipeTypeForDelete) {
   const queryClient = useQueryClient();
   const { organizationId } = useOrganization();
 
   return useMutation({
-    mutationFn: async () => {
+    mutationFn: async ({ stageId }: { stageId: string }) => {
       if (!organizationId) {
         throw new Error("Cannot delete leads: No organization context");
+      }
+
+      if (!stageId) {
+        throw new Error("Cannot delete leads: No stage specified");
       }
 
       // PERMISSION: Verificar can_delete_leads
@@ -431,7 +442,7 @@ export function useDeleteAllLeadsInPipe(pipeType: PipeTypeForDelete) {
         throw new Error("Você não tem permissão para excluir leads");
       }
 
-      const ids = await fetchAllLeadIdsInPipe(organizationId, pipeType);
+      const ids = await fetchAllLeadIdsInPipe(organizationId, pipeType, stageId);
       if (ids.length === 0) return { deleted: 0 };
 
       await deleteLeadsAndRelated(ids);

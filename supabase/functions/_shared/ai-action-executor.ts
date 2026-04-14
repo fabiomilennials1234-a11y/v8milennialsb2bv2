@@ -179,7 +179,7 @@ export async function executeAiAction(
   supabase: SupabaseClient,
   action: ActionRecord,
 ): Promise<ActionResult> {
-  const { action_type, payload, organization_id, lead_id } = action;
+  const { action_type, payload, organization_id, lead_id, conversation_id } = action;
 
   let result: ActionResult;
 
@@ -228,7 +228,7 @@ export async function executeAiAction(
       result = await executeTransferSzChat(supabase, lead_id, organization_id, payload);
       break;
     case "send_document":
-      result = await executeSendDocument(supabase, payload, organization_id, lead_id);
+      result = await executeSendDocument(supabase, payload, organization_id, lead_id, conversation_id);
       break;
     default:
       return { success: false, error: `Tipo de ação desconhecido: ${action_type}` };
@@ -1158,6 +1158,7 @@ async function executeSendDocument(
   payload: Record<string, unknown>,
   organizationId: string,
   leadId: string | null,
+  conversationId: string | null = null,
 ): Promise<ActionResult> {
   const documentId = payload.document_id as string;
   const caption = payload.caption as string | undefined;
@@ -1201,15 +1202,43 @@ async function executeSendDocument(
     return { success: false, error: "Lead has no phone number" };
   }
 
-  const { data: instance } = await supabase
-    .from("whatsapp_instances")
-    .select("instance_name")
-    .eq("organization_id", organizationId)
-    .eq("status", "open")
-    .limit(1)
-    .maybeSingle();
+  // Find the correct instance: use the one linked to the conversation's agent.
+  // Fallback: any active instance in the org (last resort for legacy conversations).
+  let instanceName: string | null = null;
 
-  if (!instance?.instance_name) {
+  if (conversationId) {
+    const { data: conv } = await supabase
+      .from("conversations")
+      .select("agent_id")
+      .eq("id", conversationId)
+      .maybeSingle();
+
+    if (conv?.agent_id) {
+      const { data: linkedInst } = await supabase
+        .from("whatsapp_instances")
+        .select("instance_name, status")
+        .eq("copilot_agent_id", conv.agent_id)
+        .eq("organization_id", organizationId)
+        .in("status", ["open", "connected"])
+        .limit(1)
+        .maybeSingle();
+      if (linkedInst?.instance_name) instanceName = linkedInst.instance_name;
+    }
+  }
+
+  // Fallback: any active instance in the org
+  if (!instanceName) {
+    const { data: instance } = await supabase
+      .from("whatsapp_instances")
+      .select("instance_name")
+      .eq("organization_id", organizationId)
+      .in("status", ["open", "connected"])
+      .limit(1)
+      .maybeSingle();
+    instanceName = instance?.instance_name ?? null;
+  }
+
+  if (!instanceName) {
     return { success: false, error: "No active WhatsApp instance found" };
   }
 
@@ -1245,7 +1274,7 @@ async function executeSendDocument(
 
   try {
     const response = await fetch(
-      `${EVOLUTION_API_URL}/message/sendMedia/${instance.instance_name}`,
+      `${EVOLUTION_API_URL}/message/sendMedia/${instanceName}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json", apikey: EVOLUTION_API_KEY },
@@ -1261,19 +1290,24 @@ async function executeSendDocument(
     const sendResult = await response.json();
 
     // 5. Registrar mensagem de saida
-    await supabase.from("whatsapp_messages").insert({
-      organization_id: organizationId,
-      message_id: sendResult.key?.id || `doc_${Date.now()}_${Math.random().toString(36).substring(7)}`,
-      remote_jid: `${phone}@s.whatsapp.net`,
-      phone_number: phone,
-      direction: "outgoing",
-      message_type: messageType,
-      content: caption || `[${messageType === "image" ? "Imagem" : messageType === "video" ? "Video" : "Documento"}: ${doc.file_name}]`,
-      media_url: signedUrlData.signedUrl,
-      status: "sent",
-      timestamp: new Date().toISOString(),
-      sent_by_ai: true,
-    }).catch(e => console.warn("[executeSendDocument] Failed to log outgoing message:", e));
+    try {
+      const { error: insertErr } = await supabase.from("whatsapp_messages").insert({
+        organization_id: organizationId,
+        message_id: sendResult.key?.id || `doc_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+        remote_jid: `${phone}@s.whatsapp.net`,
+        phone_number: phone,
+        direction: "outgoing",
+        message_type: messageType,
+        content: caption || `[${messageType === "image" ? "Imagem" : messageType === "video" ? "Video" : "Documento"}: ${doc.file_name}]`,
+        media_url: signedUrlData.signedUrl,
+        status: "sent",
+        timestamp: new Date().toISOString(),
+        sent_by_ai: true,
+      });
+      if (insertErr) console.warn("[executeSendDocument] Failed to log outgoing message:", insertErr);
+    } catch (e) {
+      console.warn("[executeSendDocument] Failed to log outgoing message:", e);
+    }
 
     return {
       success: true,

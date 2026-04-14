@@ -210,8 +210,16 @@ export default function PipePropostas() {
   } | null>(null);
 
   const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; pipeId: string; leadId: string } | null>(null);
+<<<<<<< feature-calendario-funil
   const [deleteAllLeadsDialogOpen, setDeleteAllLeadsDialogOpen] = useState(false);
   const [periodState, setPeriodState] = useState<MetricsPeriodState>(createInitialPeriodState);
+=======
+  const [stageToDelete, setStageToDelete] = useState<{ id: string; title: string } | null>(null);
+  const [metricsPeriod, setMetricsPeriod] = useState<MetricsPeriod>("all");
+  const now = new Date();
+  const [selectedMetricsMonth, setSelectedMetricsMonth] = useState(now.getMonth() + 1);
+  const [selectedMetricsYear, setSelectedMetricsYear] = useState(now.getFullYear());
+>>>>>>> main
 
   const { organizationId } = useOrganization();
   useEffect(() => { trackModuleVisit("pipe_propostas", organizationId); }, []);
@@ -1087,7 +1095,7 @@ export default function PipePropostas() {
               columns={columns}
               onStatusChange={handleStatusChange}
               disabled={!canMovePipe}
-              onDeleteAllLeads={() => setDeleteAllLeadsDialogOpen(true)}
+              onDeleteAllLeads={(stageId, stageTitle) => setStageToDelete({ id: stageId, title: stageTitle })}
               renderColumnExtra={(col) => {
                 const allCounts = workflowCounts["__all__"] || { total: 0, active: 0 };
                 const stageCounts = workflowCounts[col.id] || { total: 0, active: 0 };
@@ -1403,31 +1411,32 @@ export default function PipePropostas() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Delete ALL leads from THIS stage (Propostas) confirmation */}
-      <AlertDialog open={deleteAllLeadsDialogOpen} onOpenChange={setDeleteAllLeadsDialogOpen}>
+      {/* Delete leads from a specific stage (Propostas) confirmation */}
+      <AlertDialog open={!!stageToDelete} onOpenChange={(open) => { if (!open) setStageToDelete(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Excluir todos os leads desta etapa</AlertDialogTitle>
+            <AlertDialogTitle>Excluir leads da etapa "{stageToDelete?.title}"</AlertDialogTitle>
             <AlertDialogDescription>
-              Esta ação irá excluir todos os leads que estão no funil de Propostas e na base de dados (histórico, tags, etc.). Não afeta outros funis nem outras organizações. Não é possível desfazer.
+              Esta ação irá excluir todos os leads que estão na etapa "{stageToDelete?.title}" do funil de Propostas e na base de dados (histórico, tags, etc.). Leads em outras etapas não serão afetados. Não é possível desfazer.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction
               onClick={async () => {
+                if (!stageToDelete) return;
                 try {
-                  const result = await deleteAllLeadsInPipe.mutateAsync();
-                  setDeleteAllLeadsDialogOpen(false);
+                  const result = await deleteAllLeadsInPipe.mutateAsync({ stageId: stageToDelete.id });
+                  setStageToDelete(null);
                   refetch();
-                  toast.success(result?.deleted ? `${result.deleted} leads excluídos desta etapa.` : "Todos os leads desta etapa foram excluídos.");
+                  toast.success(result?.deleted ? `${result.deleted} leads excluídos da etapa "${stageToDelete.title}".` : "Leads da etapa excluídos.");
                 } catch (e) {
                   toast.error("Erro ao excluir leads.");
                 }
               }}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {deleteAllLeadsInPipe.isPending ? "Excluindo..." : "Excluir todos os leads desta etapa"}
+              {deleteAllLeadsInPipe.isPending ? "Excluindo..." : "Excluir leads desta etapa"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

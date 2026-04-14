@@ -7,6 +7,7 @@ import { smartSplitMessage, type NaturalMessagingConfig } from "../_shared/natur
 import { logRuntime } from "../_shared/logger.ts";
 import { generateTtsAudio, truncateForTts } from "../_shared/tts-elevenlabs.ts";
 import { sendWhatsAppAudio } from "../_shared/audio-sender.ts";
+import { immediateTransferHuman } from "../_shared/ai-action-executor.ts";
 
 /**
  * Evolution API Webhook Receiver
@@ -31,7 +32,7 @@ const MAX_RESPONSE_DELAY_SECONDS = 10;
 const DEFAULT_BATCH_WAIT_SECONDS = 8;
 const MAX_MESSAGE_LENGTH = 350; // Máximo de caracteres por mensagem
 const DELAY_BETWEEN_MESSAGES_MS = 1500; // Delay entre mensagens (1.5s)
-const HUMAN_TAKEOVER_TIMEOUT_MINUTES = 10; // Copilot pausa 10min após atendente humano enviar msg
+// HUMAN_TAKEOVER removed — AI always responds unless ai_disabled or WAITING_HUMAN
 
 interface EvolutionWebhookPayload {
   event: string;
@@ -813,6 +814,37 @@ async function handleQrcodeUpdated(
 }
 
 /**
+ * Quando transcrição de áudio falha, envia mensagem ao lead avisando da transferência
+ * e executa transferência para atendimento humano (ai_disabled + WAITING_HUMAN).
+ */
+async function handleAudioTranscriptionFailure(
+  supabase: ReturnType<typeof createClient>,
+  instance: { id: string; organization_id: string; instance_name: string; copilot_agent_id?: string | null; copilot_agents?: { id: string; name: string; is_active: boolean } | null },
+  phoneNumber: string
+): Promise<void> {
+  try {
+    // Enviar mensagem ao lead avisando da transferência
+    const transferMessage = "Recebi seu áudio! Vou te transferir para um dos nossos especialistas que vai poder te ajudar melhor. Um momento, por favor! 🙏";
+    await sendSingleWhatsAppMessage(instance.instance_name, phoneNumber, transferMessage);
+
+    // Encontrar o lead para executar a transferência
+    const lead = await findLeadByPhoneOrEmail(supabase, instance.organization_id, phoneNumber);
+    if (lead) {
+      const result = await immediateTransferHuman(supabase, lead.id);
+      if (result.success) {
+        console.log("[Evolution Webhook] Audio transcription failure — lead transferred to human:", { leadId: lead.id, phone: phoneNumber });
+      } else {
+        console.warn("[Evolution Webhook] Audio transcription failure — transfer failed:", result.error);
+      }
+    } else {
+      console.warn("[Evolution Webhook] Audio transcription failure — no lead found for phone:", phoneNumber);
+    }
+  } catch (error) {
+    console.error("[Evolution Webhook] Error handling audio transcription failure:", error);
+  }
+}
+
+/**
  * Processa novas mensagens recebidas
  */
 async function handleMessagesUpsert(
@@ -924,11 +956,22 @@ async function handleMessagesUpsert(
             console.log("[Evolution Webhook] Transcription result:", { hasTranscript: !!transcript, length: transcript?.length });
             if (transcript) {
               messageText = `[Áudio transcrito] ${transcript}`;
+            } else {
+              // Transcrição falhou — transferir para atendimento humano
+              console.warn("[Evolution Webhook] Audio transcription failed — transferring to human support");
+              messageText = "[Áudio recebido — transcrição indisponível]";
+              await handleAudioTranscriptionFailure(supabase, instance, phoneNumber);
             }
           }
         }
       } else if (!messageText && direction === "incoming" && !mediaUrl && (messageType === "audio" || messageType === "ptt")) {
-        console.warn("[Evolution Webhook] Audio message received but NO mediaUrl available — transcription impossible");
+        console.warn("[Evolution Webhook] Audio message received but NO mediaUrl available — transferring to human support");
+        messageText = "[Áudio recebido — sem URL de mídia disponível]";
+        // @ts-ignore - copilot_agents vem do join
+        const hasAgent = instance.copilot_agent_id && instance.copilot_agents?.is_active;
+        if (hasAgent) {
+          await handleAudioTranscriptionFailure(supabase, instance, phoneNumber);
+        }
       }
 
       // Inserir mensagem no banco
@@ -1072,51 +1115,9 @@ async function handleMessagesUpsert(
             continue;
           }
 
-          // =====================================================
-          // HUMAN TAKEOVER: Se um atendente humano enviou mensagem
-          // nos últimos 10 min, pausar copilot para não interferir
-          // =====================================================
-          const humanTimeoutAgo = new Date(
-            Date.now() - HUMAN_TAKEOVER_TIMEOUT_MINUTES * 60 * 1000
-          ).toISOString();
-
-          const { data: recentHumanMsg } = await supabase
-            .from("whatsapp_messages")
-            .select("message_id, created_at")
-            .eq("organization_id", instance.organization_id)
-            .eq("phone_number", phoneNumber)
-            .eq("direction", "outgoing")
-            .not("sent_by_ai", "is", true)
-            .gte("created_at", humanTimeoutAgo)
-            .order("created_at", { ascending: false })
-            .limit(1)
-            .maybeSingle();
-
-          if (recentHumanMsg) {
-            console.log("[Evolution Webhook] Human agent active, skipping copilot:", {
-              phone: phoneNumber,
-              lastHumanMsgAt: recentHumanMsg.created_at,
-              timeoutMinutes: HUMAN_TAKEOVER_TIMEOUT_MINUTES,
-            });
-
-            // Marcar mensagens incoming como processadas para não reprocessar
-            const { data: pendingToMark } = await supabase
-              .from("whatsapp_messages")
-              .select("message_id")
-              .eq("organization_id", instance.organization_id)
-              .eq("phone_number", phoneNumber)
-              .eq("direction", "incoming")
-              .is("processed_by_agent_at", null);
-
-            if (pendingToMark && pendingToMark.length > 0) {
-              await supabase
-                .from("whatsapp_messages")
-                .update({ processed_by_agent_at: new Date().toISOString() })
-                .in("message_id", pendingToMark.map((m: { message_id: string }) => m.message_id));
-            }
-
-            continue;
-          }
+          // HUMAN TAKEOVER removed — copilot always responds unless
+          // ai_disabled=true or conversation state=WAITING_HUMAN.
+          // Human agents can disable AI via the toggle in the chat UI.
 
           // Esta é a mensagem mais recente! Buscar TODAS não processadas
           const { data: pendingMessages, error: fetchError } = await supabase
