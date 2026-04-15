@@ -116,8 +116,7 @@ describe('ProtectedRoute', () => {
       </ProtectedRoute>,
     );
 
-    expect(screen.getByText('Verificando autenticação...')).toBeInTheDocument();
-    expect(screen.getByTestId('loader2')).toBeInTheDocument();
+    expect(screen.getByAltText('Torque')).toBeInTheDocument();
     expect(screen.queryByText('protected')).not.toBeInTheDocument();
   });
 
@@ -131,7 +130,7 @@ describe('ProtectedRoute', () => {
       </ProtectedRoute>,
     );
 
-    expect(screen.getByText('Verificando autenticação...')).toBeInTheDocument();
+    expect(screen.getByAltText('Torque')).toBeInTheDocument();
     expect(screen.queryByText('protected')).not.toBeInTheDocument();
   });
 
@@ -220,8 +219,7 @@ describe('ProtectedRoute', () => {
       </ProtectedRoute>,
     );
 
-    expect(screen.getByText('Carregando dados do usuário...')).toBeInTheDocument();
-    expect(screen.getByTestId('loader2')).toBeInTheDocument();
+    expect(screen.getByAltText('Torque')).toBeInTheDocument();
     expect(screen.queryByText('protected')).not.toBeInTheDocument();
   });
 
