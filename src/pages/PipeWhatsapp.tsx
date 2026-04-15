@@ -99,7 +99,7 @@ export default function PipeWhatsapp() {
   const [isDetailDrawerOpen, setIsDetailDrawerOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; pipeId: string; leadId: string } | null>(null);
-  const [deleteAllLeadsDialogOpen, setDeleteAllLeadsDialogOpen] = useState(false);
+  const [stageToDelete, setStageToDelete] = useState<{ id: string; title: string } | null>(null);
   const [meetingModal, setMeetingModal] = useState<{
     open: boolean;
     leadId: string;
@@ -482,7 +482,7 @@ export default function PipeWhatsapp() {
         columns={columns}
         onStatusChange={handleStatusChange}
         disabled={!canMovePipe}
-        onDeleteAllLeads={() => setDeleteAllLeadsDialogOpen(true)}
+        onDeleteAllLeads={(stageId, stageTitle) => setStageToDelete({ id: stageId, title: stageTitle })}
         renderColumnExtra={(col) => {
           const allCounts = workflowCounts["__all__"] || { total: 0, active: 0 };
           const stageCounts = workflowCounts[col.id] || { total: 0, active: 0 };
@@ -578,31 +578,32 @@ export default function PipeWhatsapp() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Delete ALL leads from THIS stage (Qualificação) confirmation */}
-      <AlertDialog open={deleteAllLeadsDialogOpen} onOpenChange={setDeleteAllLeadsDialogOpen}>
+      {/* Delete leads from a specific stage (Qualificação) confirmation */}
+      <AlertDialog open={!!stageToDelete} onOpenChange={(open) => { if (!open) setStageToDelete(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Excluir todos os leads desta etapa</AlertDialogTitle>
+            <AlertDialogTitle>Excluir leads da etapa "{stageToDelete?.title}"</AlertDialogTitle>
             <AlertDialogDescription>
-              Esta ação irá excluir todos os leads que estão no funil de Qualificação (WhatsApp) e na base de dados (histórico, tags, etc.). Não afeta outros funis nem outras organizações. Não é possível desfazer.
+              Esta ação irá excluir todos os leads que estão na etapa "{stageToDelete?.title}" do funil de Qualificação (WhatsApp) e na base de dados (histórico, tags, etc.). Leads em outras etapas não serão afetados. Não é possível desfazer.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction
               onClick={async () => {
+                if (!stageToDelete) return;
                 try {
-                  const result = await deleteAllLeadsInPipe.mutateAsync();
-                  setDeleteAllLeadsDialogOpen(false);
+                  const result = await deleteAllLeadsInPipe.mutateAsync({ stageId: stageToDelete.id });
+                  setStageToDelete(null);
                   refetch();
-                  toast.success(result?.deleted ? `${result.deleted} leads excluídos desta etapa.` : "Todos os leads desta etapa foram excluídos.");
+                  toast.success(result?.deleted ? `${result.deleted} leads excluídos da etapa "${stageToDelete.title}".` : "Leads da etapa excluídos.");
                 } catch (e) {
                   toast.error("Erro ao excluir leads.");
                 }
               }}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {deleteAllLeadsInPipe.isPending ? "Excluindo..." : "Excluir todos os leads desta etapa"}
+              {deleteAllLeadsInPipe.isPending ? "Excluindo..." : "Excluir leads desta etapa"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
