@@ -228,6 +228,15 @@ describe("useWhatsAppInstanceAllowedMembers", () => {
 import { useCalendarSharing, useShareCalendar, useRevokeCalendarShare } from "@/hooks/useGoogleCalendarSharing";
 
 describe("useGoogleCalendarSharing", () => {
+  beforeEach(() => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ outgoing: [], incoming: [], available_members: [] }),
+      }),
+    );
+  });
   it("useCalendarSharing fetches", async () => {
     const { result } = renderHook(() => useCalendarSharing(), { wrapper: w() });
     await waitFor(() => expect(result.current.isSuccess || result.current.isError).toBe(true));

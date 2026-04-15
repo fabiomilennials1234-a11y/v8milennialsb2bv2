@@ -29,6 +29,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { DraggableKanbanBoard, KanbanColumn } from "@/components/kanban/DraggableKanbanBoard";
+import { TorqueLoader } from "@/components/branding/TorqueLoader";
 import { useCanPerformAction } from "@/lib/permissions";
 import { StageWorkflowsBadgeWrapper } from "@/components/kanban/StageWorkflowsBadgeWrapper";
 import { useStageWorkflowCounts } from "@/hooks/useStageWorkflows";
@@ -210,16 +211,9 @@ export default function PipePropostas() {
   } | null>(null);
 
   const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; pipeId: string; leadId: string } | null>(null);
-<<<<<<< feature-calendario-funil
   const [deleteAllLeadsDialogOpen, setDeleteAllLeadsDialogOpen] = useState(false);
   const [periodState, setPeriodState] = useState<MetricsPeriodState>(createInitialPeriodState);
-=======
   const [stageToDelete, setStageToDelete] = useState<{ id: string; title: string } | null>(null);
-  const [metricsPeriod, setMetricsPeriod] = useState<MetricsPeriod>("all");
-  const now = new Date();
-  const [selectedMetricsMonth, setSelectedMetricsMonth] = useState(now.getMonth() + 1);
-  const [selectedMetricsYear, setSelectedMetricsYear] = useState(now.getFullYear());
->>>>>>> main
 
   const { organizationId } = useOrganization();
   useEffect(() => { trackModuleVisit("pipe_propostas", organizationId); }, []);
@@ -853,11 +847,7 @@ export default function PipePropostas() {
   );
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
+    return <TorqueLoader variant="inline" />;
   }
 
   return (

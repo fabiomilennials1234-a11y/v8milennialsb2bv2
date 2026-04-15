@@ -220,7 +220,7 @@ describe("useDeleteAllLeadsInPipe", () => {
     const { result } = renderHook(() => useDeleteAllLeadsInPipe("whatsapp"), { wrapper: createWrapper() });
     await act(async () => {
       try {
-        await result.current.mutateAsync();
+        await result.current.mutateAsync({ stageId: "stage-1" });
       } catch {}
     });
     expect(mockRpc).toHaveBeenCalled();

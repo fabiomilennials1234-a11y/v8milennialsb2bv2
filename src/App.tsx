@@ -15,7 +15,7 @@ import { useAutoAdminAssignment } from "@/hooks/useAutoAdminAssignment";
 import { SubscriptionProtectedRoute } from "@/components/SubscriptionProtectedRoute";
 import { GlobalErrorBoundary } from "@/components/GlobalErrorBoundary";
 import { OnboardingGate } from "@/components/onboarding/OnboardingGate";
-import { Loader2 } from "lucide-react";
+import { TorqueLoader } from "@/components/branding/TorqueLoader";
 
 // Retry helper para chunks que falham ao carregar (comum após deploy)
 function lazyRetry<T extends { default: any }>(
@@ -174,11 +174,7 @@ function AuthRoute() {
 }
 
 function PageLoader() {
-  return (
-    <div className="flex items-center justify-center min-h-[60vh]">
-      <Loader2 className="w-8 h-8 animate-spin text-primary" />
-    </div>
-  );
+  return <TorqueLoader variant="inline" />;
 }
 
 function AppRoutes() {

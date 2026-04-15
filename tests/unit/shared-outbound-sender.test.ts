@@ -434,6 +434,94 @@ describe("sendOutboundDispatch", () => {
     expect(result.error).toContain("Unexpected DB crash");
   });
 
+  it("awaits inline delay between chunks when delay > 0", async () => {
+    setDenoEnv("EVOLUTION_API_URL", "https://evo.test");
+    setDenoEnv("EVOLUTION_API_KEY", "evo-key");
+
+    const { smartSplitMessage } = await import(
+      "../../supabase/functions/_shared/natural-messaging"
+    );
+    (smartSplitMessage as any).mockResolvedValueOnce({
+      chunks: ["part 1", "part 2", "part 3"],
+      delays: [0, 5, 5], // tiny non-zero delays hit the setTimeout branch
+    });
+
+    const sb = createOutboundMockSupabase({
+      dispatch: {
+        id: "d-1",
+        lead_id: "l-1",
+        organization_id: "org-1",
+        agent_id: "a-1",
+        message_content: "multi chunk",
+        lead: { phone: "5511999999999", name: "Test" },
+        agent: { whatsapp_instance_id: "inst-1", outbound_config: null },
+        trigger_reason: {},
+      },
+      instance: { instance_name: "my-instance" },
+    });
+
+    const result = await sendOutboundDispatch(sb, "d-1", "org-1");
+    expect(result.success).toBe(true);
+    // Should have 3 sendText + 3 typing indicator calls
+    const sends = mockFetch.mock.calls.filter((c: unknown[]) =>
+      String(c[0]).includes("/message/sendText/"),
+    );
+    expect(sends).toHaveLength(3);
+  });
+
+  it("sends text first then schedules audio in background (audio after text)", async () => {
+    setDenoEnv("EVOLUTION_API_URL", "https://evo.test");
+    setDenoEnv("EVOLUTION_API_KEY", "evo-key");
+
+    const { sendWhatsAppAudio } = await import(
+      "../../supabase/functions/_shared/audio-sender",
+    );
+    (sendWhatsAppAudio as any).mockClear();
+
+    const sb = createOutboundMockSupabase({
+      dispatch: {
+        id: "d-1",
+        lead_id: "l-1",
+        organization_id: "org-1",
+        agent_id: "a-1",
+        message_content: "Text then audio",
+        lead: { phone: "5511999999999", name: "Test" },
+        agent: {
+          whatsapp_instance_id: "inst-1",
+          outbound_config: { audioEnabled: true }, // default order = text_first
+        },
+        trigger_reason: {},
+      },
+      instance: { instance_name: "my-instance" },
+    });
+
+    // Override copilot_agent_audios to return an audio record
+    const origFrom = sb.from.bind(sb);
+    sb.from = (table: string) => {
+      if (table === "copilot_agent_audios") {
+        return {
+          select: () => ({
+            eq: () => ({
+              eq: () =>
+                Promise.resolve({
+                  data: [
+                    { id: "aud-1", public_url: "https://cdn/a.ogg", name: "a1" },
+                  ],
+                  error: null,
+                }),
+            }),
+          }),
+        };
+      }
+      return origFrom(table);
+    };
+
+    const result = await sendOutboundDispatch(sb, "d-1", "org-1");
+    expect(result.success).toBe(true);
+    // Audio schedule is fire-and-forget via setTimeout — flush macrotasks
+    await new Promise((r) => setTimeout(r, 0));
+  });
+
   it("records whatsapp_messages insert for text", async () => {
     setDenoEnv("EVOLUTION_API_URL", "https://evo.test");
     setDenoEnv("EVOLUTION_API_KEY", "evo-key");

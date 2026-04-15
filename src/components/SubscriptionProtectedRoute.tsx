@@ -17,7 +17,7 @@ import {
 } from "@/lib/subscription";
 import { useUserRole, useCanManageCopilot } from "@/hooks/useUserRole";
 import { useMasterAuth } from "@/hooks/useMasterAuth";
-import { Loader2 } from "lucide-react";
+import { TorqueLoader } from "@/components/branding/TorqueLoader";
 import { OverdueBanner } from "@/components/subscription/OverdueBanner";
 import { SubscriptionBlockedPage } from "@/components/subscription/SubscriptionBlockedPage";
 
@@ -59,14 +59,7 @@ export function SubscriptionProtectedRoute({
   }, [user, authLoading, isMaster, masterLoading]);
 
   if (authLoading || loading || roleLoading || masterLoading || copilotLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-muted-foreground">Verificando subscription...</p>
-        </div>
-      </div>
-    );
+    return <TorqueLoader variant="full" />;
   }
 
   // Master bypasses everything

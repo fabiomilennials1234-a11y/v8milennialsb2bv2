@@ -1,6 +1,6 @@
 import { useState, lazy, Suspense } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Loader2 } from "lucide-react";
+import { TorqueLoader } from "@/components/branding/TorqueLoader";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import { TabVisaoGeral } from "@/components/dashboard/TabVisaoGeral";
@@ -105,7 +105,7 @@ export default function Dashboard() {
 
         {showAnalytics && (
           <TabsContent value="analytics" className="mt-6">
-            <Suspense fallback={<div className="flex items-center justify-center py-16"><Loader2 className="w-7 h-7 animate-spin text-primary" /></div>}>
+            <Suspense fallback={<TorqueLoader variant="inline" />}>
               <motion.div
                 key="analytics"
                 initial={{ opacity: 0, y: 10 }}

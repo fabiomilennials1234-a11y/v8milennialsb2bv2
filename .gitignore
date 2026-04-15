@@ -62,3 +62,7 @@ SOLUCAO_DEFINITIVA_RLS.sql
 test-results/
 playwright-report/
 coverage/
+
+# Deno edge-function coverage artifacts
+supabase/functions/.coverage/
+supabase/functions/coverage.lcov

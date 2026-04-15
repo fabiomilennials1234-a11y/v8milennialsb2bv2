@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { usePersistedState } from "@/hooks/usePersistedState";
 import { motion } from "framer-motion";
-import { Plus, Loader2, LayoutGrid, List, Settings2, Clock } from "lucide-react";
+import { Plus, Calendar, Loader2, LayoutGrid, List, Settings2, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -14,6 +14,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { DraggableKanbanBoard, DraggableItem, KanbanColumn } from "@/components/kanban/DraggableKanbanBoard";
+import { TorqueLoader } from "@/components/branding/TorqueLoader";
 import { useCanPerformAction } from "@/lib/permissions";
 import { StageWorkflowsBadgeWrapper } from "@/components/kanban/StageWorkflowsBadgeWrapper";
 import { useStageWorkflowCounts } from "@/hooks/useStageWorkflows";
@@ -198,16 +199,9 @@ export default function PipeConfirmacao() {
   const [pendingCompareceuItem, setPendingCompareceuItem] = useState<any>(null);
   const [isProcessingCompareceu, setIsProcessingCompareceu] = useState(false);
   const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; pipeId: string; leadId: string } | null>(null);
-<<<<<<< feature-calendario-funil
   const [deleteAllLeadsDialogOpen, setDeleteAllLeadsDialogOpen] = useState(false);
   const [periodState, setPeriodState] = useState<MetricsPeriodState>(createInitialPeriodState);
-=======
   const [stageToDelete, setStageToDelete] = useState<{ id: string; title: string } | null>(null);
-  const [metricsPeriod, setMetricsPeriod] = useState<MetricsPeriod>("all");
-  const now = new Date();
-  const [selectedMetricsMonth, setSelectedMetricsMonth] = useState(now.getMonth() + 1);
-  const [selectedMetricsYear, setSelectedMetricsYear] = useState(now.getFullYear());
->>>>>>> main
 
   const { organizationId } = useOrganization();
   useEffect(() => { trackModuleVisit("pipe_confirmacao", organizationId); }, []);
@@ -521,11 +515,7 @@ export default function PipeConfirmacao() {
   };
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
+    return <TorqueLoader variant="inline" />;
   }
 
   return (
