@@ -2,18 +2,7 @@ import { memo, useState, useMemo } from "react";
 import { Link2, ChevronDown } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
-
-interface MktUtmBreakdownProps {
-  leads: Array<{
-    id: string;
-    utm_campaign?: string | null;
-    origin?: string | null;
-  }>;
-  propostas: Array<{
-    lead_id: string;
-    status?: string;
-  }>;
-}
+import { useAnalyticsUtms } from "@/hooks/useAnalyticsUtms";
 
 interface CampaignRow {
   campaign: string;
@@ -22,41 +11,23 @@ interface CampaignRow {
   conversion: number;
 }
 
-function MktUtmBreakdownBase({ leads, propostas }: MktUtmBreakdownProps) {
+function MktUtmBreakdownBase() {
   const [open, setOpen] = useState(false);
+  const { data } = useAnalyticsUtms("campaign");
 
   const campaigns = useMemo(() => {
-    const metaLeads = leads.filter(
-      (l) => l.origin === "meta_ads" && l.utm_campaign
-    );
-    if (metaLeads.length === 0) return [];
+    if (!data?.items?.length) return [];
 
-    const grouped: Record<string, string[]> = {};
-    metaLeads.forEach((l) => {
-      const key = l.utm_campaign!;
-      (grouped[key] ??= []).push(l.id);
-    });
-
-    const vendidoByLead = new Set(
-      propostas
-        .filter((p) => p.status === "vendido")
-        .map((p) => p.lead_id)
-    );
-
-    const rows: CampaignRow[] = Object.entries(grouped).map(
-      ([campaign, ids]) => {
-        const vendas = ids.filter((id) => vendidoByLead.has(id)).length;
-        return {
-          campaign,
-          leads: ids.length,
-          vendas,
-          conversion: ids.length > 0 ? (vendas / ids.length) * 100 : 0,
-        };
-      }
-    );
-
-    return rows.sort((a, b) => b.leads - a.leads);
-  }, [leads, propostas]);
+    return data.items
+      .filter((item) => item.totalLeads > 0)
+      .map((item): CampaignRow => ({
+        campaign: item.name,
+        leads: item.totalLeads,
+        vendas: item.converted,
+        conversion: item.conversionRate,
+      }))
+      .sort((a, b) => b.leads - a.leads);
+  }, [data]);
 
   if (campaigns.length === 0) return null;
 

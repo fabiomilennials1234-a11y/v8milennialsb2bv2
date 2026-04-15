@@ -15,8 +15,6 @@ import { useAnalyticsComercial } from "@/hooks/useAnalyticsComercial";
 import { useMktByOrigin } from "@/hooks/useMktByOrigin";
 import { useMktOriginConfigs } from "@/hooks/useMktOriginConfig";
 import { useIsAdmin } from "@/hooks/useUserRole";
-import { useLeads } from "@/hooks/useLeads";
-import { usePipePropostas } from "@/hooks/usePipePropostas";
 
 interface Props {
   month: number;
@@ -32,8 +30,6 @@ export function AquisicaoSection({ month, year }: Props) {
   const { data: comercialData } = useAnalyticsComercial();
   const { byOrigin, summary } = useMktByOrigin(month, year);
   const { configMap } = useMktOriginConfigs(month, year);
-  const { data: allLeads = [] } = useLeads();
-  const { data: allPropostas = [] } = usePipePropostas();
 
   const sortedOrigins = useMemo(
     () => [...byOrigin].sort((a, b) => b.conversionRate - a.conversionRate),
@@ -93,8 +89,6 @@ export function AquisicaoSection({ month, year }: Props) {
                 config={configMap[metrics.origin]}
                 rank={rankMap[metrics.origin]}
                 index={i}
-                leads={allLeads as any[]}
-                propostas={allPropostas as any[]}
               />
             ))}
           </div>
