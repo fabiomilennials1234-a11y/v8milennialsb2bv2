@@ -52,7 +52,8 @@ export function TorqueLoader({ message, variant = "full" }: TorqueLoaderProps) {
           />
           <motion.img
             src={torqueLogo}
-            alt="Torque"
+            alt=""
+            aria-hidden="true"
             animate={{ opacity: [0.6, 1, 0.6] }}
             transition={{
               duration: 2,

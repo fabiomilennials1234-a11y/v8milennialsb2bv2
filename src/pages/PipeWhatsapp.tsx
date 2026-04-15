@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Search, Plus, Zap, Loader2, Globe, Calendar, Settings2, AlertCircle, Clock } from "lucide-react";
+import { Search, Plus, Zap, Globe, Calendar, Settings2, AlertCircle, Clock } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,6 +21,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { DraggableKanbanBoard, KanbanColumn } from "@/components/kanban/DraggableKanbanBoard";
+import { TorqueLoader } from "@/components/branding/TorqueLoader";
 import { useCanPerformAction } from "@/lib/permissions";
 import { StageWorkflowsBadgeWrapper } from "@/components/kanban/StageWorkflowsBadgeWrapper";
 import { useStageWorkflowCounts } from "@/hooks/useStageWorkflows";
@@ -307,11 +308,7 @@ export default function PipeWhatsapp() {
   };
 
   if (isLoading && !pipeData) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
+    return <TorqueLoader variant="inline" />;
   }
 
   if (isError && !pipeData) {

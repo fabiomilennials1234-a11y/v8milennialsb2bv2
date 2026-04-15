@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { usePersistedState } from "@/hooks/usePersistedState";
 import { motion } from "framer-motion";
-import { Plus, Calendar, Loader2, LayoutGrid, List, Settings2, Clock } from "lucide-react";
+import { Plus, Calendar, LayoutGrid, List, Settings2, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -22,6 +22,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { DraggableKanbanBoard, DraggableItem, KanbanColumn } from "@/components/kanban/DraggableKanbanBoard";
+import { TorqueLoader } from "@/components/branding/TorqueLoader";
 import { useCanPerformAction } from "@/lib/permissions";
 import { StageWorkflowsBadgeWrapper } from "@/components/kanban/StageWorkflowsBadgeWrapper";
 import { useStageWorkflowCounts } from "@/hooks/useStageWorkflows";
@@ -522,11 +523,7 @@ export default function PipeConfirmacao() {
   };
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
+    return <TorqueLoader variant="inline" />;
   }
 
   return (
