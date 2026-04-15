@@ -1,19 +1,15 @@
 /**
- * Hooks para métricas dos pipes com suporte a período: "Este mês" ou "Geral".
- * Permite visualizar métricas mais precisas por mês ou totais históricos do pipe.
+ * Hooks para métricas dos pipes com suporte a período arbitrário via DateRange.
+ * O chamador usa getDateRange() de @/lib/metrics-period para calcular o range;
+ * o hook recebe DateRange | null (null = sem filtro = "Geral").
  */
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "./useOrganization";
+import type { DateRange } from "@/lib/metrics-period";
 
-/** Intervalo do mês em UTC — igual ao usado na importação (metrics_period_at = 1º do mês 00:00 UTC). */
-function getMonthRangeUTC(month: number, year: number) {
-  const start = new Date(Date.UTC(year, month - 1, 1));
-  const end = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
-  return { startStr: start.toISOString(), endStr: end.toISOString() };
-}
-
-export type MetricsPeriod = "month" | "all";
+// Re-export para compatibilidade de imports existentes
+export type { MetricsPeriod, DateRange, MetricsPeriodState } from "@/lib/metrics-period";
 
 export interface PipePropostasMetrics {
   sold: number;
@@ -45,14 +41,9 @@ export interface PipeWhatsappMetrics {
   pending: number;
 }
 
-function getMonthRange(month: number, year: number) {
-  return getMonthRangeUTC(month, year);
-}
-
 type SoldRow = {
   sale_value: number | null;
   product_type: string | null;
-  /** Duração do contrato em meses. Usado para calcular Venda Total em contratos de Recorrência. */
   contract_duration?: number | null;
   items?: Array<{ sale_value: number | null; product?: { type: string } | null }> | null;
 };
@@ -70,7 +61,6 @@ function aggregateSoldByItem(rows: SoldRow[]): { sold: number; mrr: number; proj
   let mrr = 0;
   let projeto = 0;
   for (const r of rows) {
-    // Duração mínima de 1 para não anular o valor quando contract_duration é nulo
     const duration = Math.max(1, Number(r.contract_duration) || 1);
     const items = r.items?.filter((i) => i != null) ?? [];
     if (items.length > 0) {
@@ -78,13 +68,13 @@ function aggregateSoldByItem(rows: SoldRow[]): { sold: number; mrr: number; proj
         const val = Number(item.sale_value) || 0;
         const t = item.product?.type;
         if (t === "mrr") {
-          mrr += val;             // Rec. Vendida = valor mensal recorrente
-          sold += val * duration; // Venda Total = mensal × duração do contrato
+          mrr += val;
+          sold += val * duration;
         } else if (t === "projeto") {
           projeto += val;
-          sold += val;            // Projeto: valor pontual (sem multiplicar)
+          sold += val;
         } else {
-          sold += val;            // Unitário: valor pontual
+          sold += val;
         }
       }
     } else {
@@ -104,54 +94,36 @@ function aggregateSoldByItem(rows: SoldRow[]): { sold: number; mrr: number; proj
 }
 
 /**
- * Métricas do pipe de Propostas: vendido, Recorrência, projeto, pipeline ativo, taxa de conversão.
- * Agregação por item: Rec./Projeto por product.type do item; unitário só em Vendas Total.
- * period "month" = apenas itens cujo período de métrica (ou closed_at) está no mês.
- * period "all" = totais históricos do pipe.
+ * Métricas do pipe de Propostas.
+ * range === null → totais históricos ("Geral").
+ * range !== null → filtra por intervalo (mês, semana ou custom).
  */
-export function usePipePropostasMetrics(
-  period: MetricsPeriod,
-  month?: number,
-  year?: number
-) {
+export function usePipePropostasMetrics(range: DateRange | null) {
   const { organizationId, isReady } = useOrganization();
-  const now = new Date();
-  const selectedMonth = month ?? now.getMonth() + 1;
-  const selectedYear = year ?? now.getFullYear();
-  const { startStr, endStr } = getMonthRange(selectedMonth, selectedYear);
 
   return useQuery({
-    queryKey: ["pipe-propostas-metrics", period, selectedMonth, selectedYear, organizationId],
+    queryKey: ["pipe-propostas-metrics", range?.startStr ?? "all", range?.endStr ?? "all", organizationId],
     queryFn: async (): Promise<PipePropostasMetrics> => {
       if (!organizationId) {
-        return {
-          sold: 0,
-          soldCount: 0,
-          mrr: 0,
-          projeto: 0,
-          inProgress: 0,
-          inProgressCount: 0,
-          conversionRate: 0,
-        };
+        return { sold: 0, soldCount: 0, mrr: 0, projeto: 0, inProgress: 0, inProgressCount: 0, conversionRate: 0 };
       }
 
       const activeStatuses = ["marcar_compromisso", "compromisso_marcado", "proposta_enviada", "esfriou", "futuro"];
       const soldSelect = `id, status, sale_value, product_type, contract_duration, items:pipe_proposta_items(sale_value, product:products(type))`;
 
-      if (period === "all") {
+      if (!range) {
+        // "Geral" — sem filtro temporal
         const { data: allData, error: allError } = await supabase
           .from("pipe_propostas")
           .select("status, sale_value, product_type")
           .eq("organization_id", organizationId);
-
         if (allError) throw allError;
 
         const { data: soldDataWithItems, error: soldError } = await supabase
           .from("pipe_propostas")
-          .select(soldSelect) // inclui contract_duration
+          .select(soldSelect)
           .eq("organization_id", organizationId)
           .eq("status", "vendido");
-
         if (soldError) throw soldError;
 
         const inProgressData = (allData || []).filter((r) => activeStatuses.includes(r.status));
@@ -173,7 +145,8 @@ export function usePipePropostasMetrics(
         };
       }
 
-      // period === "month": vendidos no mês (COALESCE metrics_period_at, closed_at), com items
+      // Filtra por range: vendidos no período (COALESCE metrics_period_at, closed_at), com items
+      const { startStr, endStr } = range;
       const [propQ1, propQ2, activeQ] = await Promise.all([
         supabase
           .from("pipe_propostas")
@@ -258,38 +231,20 @@ export function usePipePropostasMetrics(
 }
 
 /**
- * Métricas do pipe de Confirmação para um período (mês ou geral).
- * Usado para exibir stats filtradas por período na página PipeConfirmacao.
+ * Métricas do pipe de Confirmação.
+ * range === null → totais históricos ("Geral").
+ * range !== null → filtra por intervalo.
  */
-export function usePipeConfirmacaoMetrics(
-  period: MetricsPeriod,
-  month?: number,
-  year?: number
-) {
+export function usePipeConfirmacaoMetrics(range: DateRange | null) {
   const { organizationId, isReady } = useOrganization();
-  const now = new Date();
-  const selectedMonth = month ?? now.getMonth() + 1;
-  const selectedYear = year ?? now.getFullYear();
-  const { startStr, endStr } = getMonthRange(selectedMonth, selectedYear);
 
   return useQuery({
-    queryKey: ["pipe-confirmacao-metrics", period, selectedMonth, selectedYear, organizationId],
+    queryKey: ["pipe-confirmacao-metrics", range?.startStr ?? "all", range?.endStr ?? "all", organizationId],
     queryFn: async (): Promise<PipeConfirmacaoMetrics> => {
       if (!organizationId) {
-        return {
-          total: 0,
-          today: 0,
-          tomorrow: 0,
-          overdue: 0,
-          compareceu: 0,
-          perdido: 0,
-          remarcar: 0,
-          noShowRate: 0,
-          showRate: 0,
-        };
+        return { total: 0, today: 0, tomorrow: 0, overdue: 0, compareceu: 0, perdido: 0, remarcar: 0, noShowRate: 0, showRate: 0 };
       }
 
-      // Dias sem interação para considerar atrasado (configurável por organização)
       const { data: orgRow } = await supabase
         .from("organizations")
         .select("confirmacao_overdue_days")
@@ -304,60 +259,17 @@ export function usePipeConfirmacaoMetrics(
         r.updated_at &&
         new Date(r.updated_at) <= overdueLimit;
 
-      if (period === "all") {
+      if (!range) {
         const { data, error } = await supabase
           .from("pipe_confirmacao")
           .select("status, meeting_date, updated_at")
           .eq("organization_id", organizationId);
-
         if (error) throw error;
         const list = data || [];
-        const today = new Date();
-        const todayStr = today.toISOString().slice(0, 10);
-        const tomorrow = new Date(today);
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        const tomorrowStr = tomorrow.toISOString().slice(0, 10);
-
-        const compareceu = list.filter((r) => r.status === "compareceu").length;
-        const perdido = list.filter((r) => r.status === "perdido").length;
-        const remarcar = list.filter((r) => r.status === "remarcar").length;
-
-        // Taxa de no-show: apenas reuniões cuja data já passou (não inclui agendadas futuras)
-        const comDataPassada = list.filter(
-          (r) => r.meeting_date && new Date(r.meeting_date) <= today
-        );
-        const finalizadosDataPassada = comDataPassada.filter((r) =>
-          ["compareceu", "perdido", "remarcar"].includes(r.status)
-        );
-        const noShowCountDataPassada = finalizadosDataPassada.filter(
-          (r) => r.status === "perdido" || r.status === "remarcar"
-        ).length;
-        const noShowRate =
-          finalizadosDataPassada.length > 0
-            ? Math.round((noShowCountDataPassada / finalizadosDataPassada.length) * 100)
-            : 0;
-        const showRate =
-          finalizadosDataPassada.length > 0
-            ? Math.round(
-                (finalizadosDataPassada.filter((r) => r.status === "compareceu").length /
-                  finalizadosDataPassada.length) *
-                  100
-              )
-            : 0;
-
-        return {
-          total: list.length,
-          today: list.filter((r) => r.meeting_date?.slice(0, 10) === todayStr).length,
-          tomorrow: list.filter((r) => r.meeting_date?.slice(0, 10) === tomorrowStr).length,
-          overdue: list.filter((r) => isOverdue(r)).length,
-          compareceu,
-          perdido,
-          remarcar,
-          noShowRate,
-          showRate,
-        };
+        return computeConfirmacaoStats(list, isOverdue);
       }
 
+      const { startStr, endStr } = range;
       const [conf1, conf2] = await Promise.all([
         supabase
           .from("pipe_confirmacao")
@@ -376,105 +288,90 @@ export function usePipeConfirmacaoMetrics(
       ]);
 
       const list = [...(conf1.data || []), ...(conf2.data || [])];
-      const today = new Date();
-      const todayStr = today.toISOString().slice(0, 10);
-      const tomorrow = new Date(today);
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      const tomorrowStr = tomorrow.toISOString().slice(0, 10);
-
-      const compareceu = list.filter((r) => r.status === "compareceu").length;
-      const perdido = list.filter((r) => r.status === "perdido").length;
-      const remarcar = list.filter((r) => r.status === "remarcar").length;
-
-      // Taxa de no-show: apenas reuniões cuja data já passou (não inclui agendadas futuras)
-      const comDataPassada = list.filter(
-        (r) => r.meeting_date && new Date(r.meeting_date) <= today
-      );
-      const finalizadosDataPassada = comDataPassada.filter((r) =>
-        ["compareceu", "perdido", "remarcar"].includes(r.status)
-      );
-      const noShowCountDataPassada = finalizadosDataPassada.filter(
-        (r) => r.status === "perdido" || r.status === "remarcar"
-      ).length;
-      const noShowRate =
-        finalizadosDataPassada.length > 0
-          ? Math.round((noShowCountDataPassada / finalizadosDataPassada.length) * 100)
-          : 0;
-      const showRate =
-        finalizadosDataPassada.length > 0
-          ? Math.round(
-              (finalizadosDataPassada.filter((r) => r.status === "compareceu").length /
-                finalizadosDataPassada.length) *
-                100
-            )
-          : 0;
-
-      return {
-        total: list.length,
-        today: list.filter((r) => r.meeting_date?.slice(0, 10) === todayStr).length,
-        tomorrow: list.filter((r) => r.meeting_date?.slice(0, 10) === tomorrowStr).length,
-        overdue: list.filter((r) => isOverdue(r)).length,
-        compareceu,
-        perdido,
-        remarcar,
-        noShowRate,
-        showRate,
-      };
+      return computeConfirmacaoStats(list, isOverdue);
     },
     enabled: isReady && !!organizationId,
     staleTime: 60000,
   });
 }
 
+function computeConfirmacaoStats(
+  list: Array<{ status: string; meeting_date?: string | null; updated_at?: string | null }>,
+  isOverdue: (r: { status: string; updated_at?: string | null }) => boolean,
+): PipeConfirmacaoMetrics {
+  const today = new Date();
+  const todayStr = today.toISOString().slice(0, 10);
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowStr = tomorrow.toISOString().slice(0, 10);
+
+  const compareceu = list.filter((r) => r.status === "compareceu").length;
+  const perdido = list.filter((r) => r.status === "perdido").length;
+  const remarcar = list.filter((r) => r.status === "remarcar").length;
+
+  const comDataPassada = list.filter(
+    (r) => r.meeting_date && new Date(r.meeting_date) <= today,
+  );
+  const finalizadosDataPassada = comDataPassada.filter((r) =>
+    ["compareceu", "perdido", "remarcar"].includes(r.status),
+  );
+  const noShowCountDataPassada = finalizadosDataPassada.filter(
+    (r) => r.status === "perdido" || r.status === "remarcar",
+  ).length;
+  const noShowRate =
+    finalizadosDataPassada.length > 0
+      ? Math.round((noShowCountDataPassada / finalizadosDataPassada.length) * 100)
+      : 0;
+  const showRate =
+    finalizadosDataPassada.length > 0
+      ? Math.round(
+          (finalizadosDataPassada.filter((r) => r.status === "compareceu").length /
+            finalizadosDataPassada.length) *
+            100,
+        )
+      : 0;
+
+  return {
+    total: list.length,
+    today: list.filter((r) => r.meeting_date?.slice(0, 10) === todayStr).length,
+    tomorrow: list.filter((r) => r.meeting_date?.slice(0, 10) === tomorrowStr).length,
+    overdue: list.filter((r) => isOverdue(r)).length,
+    compareceu,
+    perdido,
+    remarcar,
+    noShowRate,
+    showRate,
+  };
+}
+
 /**
- * Métricas do pipe WhatsApp: total, abordado, respondeu, agendado.
- * period "month" = itens criados no mês (created_at).
- * period "all" = totais do pipe.
+ * Métricas do pipe WhatsApp.
+ * range === null → totais do pipe ("Geral").
+ * range !== null → filtra por created_at no intervalo.
  */
-export function usePipeWhatsappMetrics(
-  period: MetricsPeriod,
-  month?: number,
-  year?: number
-) {
+export function usePipeWhatsappMetrics(range: DateRange | null) {
   const { organizationId, isReady } = useOrganization();
-  const now = new Date();
-  const selectedMonth = month ?? now.getMonth() + 1;
-  const selectedYear = year ?? now.getFullYear();
-  const { startStr, endStr } = getMonthRange(selectedMonth, selectedYear);
 
   return useQuery({
-    queryKey: ["pipe-whatsapp-metrics", period, selectedMonth, selectedYear, organizationId],
+    queryKey: ["pipe-whatsapp-metrics", range?.startStr ?? "all", range?.endStr ?? "all", organizationId],
     queryFn: async (): Promise<PipeWhatsappMetrics> => {
       if (!organizationId) {
         return { total: 0, abordado: 0, respondeu: 0, scheduled: 0, pending: 0 };
       }
 
-      if (period === "all") {
-        const { data, error } = await supabase
-          .from("pipe_whatsapp")
-          .select("status")
-          .eq("organization_id", organizationId);
-
-        if (error) throw error;
-        const list = data || [];
-        return {
-          total: list.length,
-          abordado: list.filter((r) => r.status === "abordado").length,
-          respondeu: list.filter((r) => r.status === "respondeu").length,
-          scheduled: list.filter((r) => r.status === "agendado").length,
-          pending: list.filter((r) => r.status === "novo").length,
-        };
-      }
-
-      const { data, error } = await supabase
+      let query = supabase
         .from("pipe_whatsapp")
         .select("status")
-        .eq("organization_id", organizationId)
-        .gte("created_at", startStr)
-        .lte("created_at", endStr);
+        .eq("organization_id", organizationId);
 
+      if (range) {
+        query = query.gte("created_at", range.startStr).lte("created_at", range.endStr);
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
       const list = data || [];
+
       return {
         total: list.length,
         abordado: list.filter((r) => r.status === "abordado").length,
