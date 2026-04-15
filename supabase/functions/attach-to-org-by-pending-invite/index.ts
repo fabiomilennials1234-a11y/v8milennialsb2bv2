@@ -94,7 +94,7 @@ serve(withSentry('attach-to-org-by-pending-invite', async (req) => {
     const emailLower = user.email.trim().toLowerCase();
     const { data: pending, error: pendingError } = await supabase
       .from("pending_org_invites")
-      .select("id, organization_id, role")
+      .select("id, organization_id, role, metric_type, job_title")
       .eq("email", emailLower)
       .maybeSingle();
 
@@ -115,9 +115,10 @@ serve(withSentry('attach-to-org-by-pending-invite', async (req) => {
       );
     }
 
-    const { organization_id: orgId, role } = pending;
+    const { organization_id: orgId, role, metric_type, job_title } = pending;
     const roleForInsert = role === "member" ? "sdr" : role;
     const name = user.email.split("@")[0];
+    const metricType = metric_type === "sales" ? "sales" : "meetings";
 
     // Idempotente: já está na org?
     const { data: existing } = await supabase
@@ -148,6 +149,8 @@ serve(withSentry('attach-to-org-by-pending-invite', async (req) => {
       role: roleForInsert,
       email: user.email,
       is_active: true,
+      metric_type: metricType,
+      ...(job_title ? { job_title } : {}),
     });
 
     if (tmError) {

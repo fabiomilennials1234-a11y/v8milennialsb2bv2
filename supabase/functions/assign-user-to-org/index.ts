@@ -43,6 +43,8 @@ interface AssignBody {
   role?: string;
   email?: string;
   full_name?: string;
+  job_title?: string;
+  metric_type?: string;
 }
 
 serve(withSentry('assign-user-to-org', async (req) => {
@@ -120,6 +122,9 @@ serve(withSentry('assign-user-to-org', async (req) => {
     const role = typeof body.role === "string" ? body.role.trim() : "member";
     const emailFromBody = typeof body.email === "string" ? body.email.trim() : "";
     const fullNameFromBody = typeof body.full_name === "string" ? body.full_name.trim() : null;
+    const jobTitle = typeof body.job_title === "string" ? body.job_title.trim() : "";
+    const rawMetricType = typeof body.metric_type === "string" ? body.metric_type.trim() : "";
+    const metricType = rawMetricType === "sales" ? "sales" : "meetings";
 
     if (!userId || !organizationId) {
       return jsonResponse(
@@ -172,6 +177,8 @@ serve(withSentry('assign-user-to-org', async (req) => {
       role: roleForInsert,
       email: email || undefined,
       is_active: true,
+      metric_type: metricType,
+      ...(jobTitle ? { job_title: jobTitle } : {}),
     });
     if (tmErr) {
       console.error("[assign-user-to-org] team_members insert:", tmErr);
