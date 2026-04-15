@@ -1,0 +1,19 @@
+name: Docs
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  docs-check:
+    name: Docs Sync Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      - name: Verify Obsidian vault is in sync with code
+        run: node scripts/docs-sync.mjs --check

@@ -15,7 +15,9 @@
     "test:integration": "vitest run tests/integration/ --reporter=verbose",
     "test:e2e": "playwright test",
     "test:coverage": "vitest run tests/unit/ --coverage",
-    "test:all": "npm run test:unit && npm run test:integration && npm run test:e2e"
+    "test:all": "npm run test:unit && npm run test:integration && npm run test:e2e",
+    "docs:sync": "node scripts/docs-sync.mjs",
+    "docs:check": "node scripts/docs-sync.mjs --check"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
