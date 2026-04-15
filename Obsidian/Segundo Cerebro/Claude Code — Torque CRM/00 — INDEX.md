@@ -4,7 +4,7 @@ tags:
   - index
   - torque-crm
 created: 2026-04-12
-last_updated: 2026-04-12
+last_updated: 2026-04-14
 status: active
 ---
 
@@ -77,9 +77,11 @@ SaaS B2B multi-tenant para gestao de leads, pipelines de vendas, campanhas e aut
 - [[Scripts e Comandos]] — Todos os comandos uteis com exemplos
 - [[Fluxos de Trabalho]] — Como executar tarefas comuns
 - [[Limitacoes]] — Gotchas, bugs conhecidos, areas frageis
+- [[Coverage Roadmap]] — Onde paramos no projeto de coverage + como retomar
 
 ### 04 — Decisoes
 - [[ADR-2026-04-12-arquitetura-inicial]] — Snapshot das decisoes arquiteturais encontradas
+- [[ADR-2026-04-14-coverage-roadmap]] — Roadmap de cobertura de testes (4 fases)
 
 ### 05 — Log de Contexto
 - [[2026-04-12—sessao-inicial]] — Varredura completa do projeto
