@@ -43,9 +43,10 @@ export function useMktByOrigin(month: number, year: number) {
   const { organizationId, isReady } = useOrganization();
   const { filters } = useAnalyticsFilters();
 
-  // Lightweight leads query — no pagination, no joins, minimal fields
+  // Lightweight leads query — scoped by analytics date range on the server
+  // to avoid the PostgREST 1000-row default cap hiding older real leads.
   const { data: leads = [], isLoading: loadingLeads } = useQuery({
-    queryKey: ["leads-metrics-lite", organizationId],
+    queryKey: ["leads-metrics-lite", organizationId, filters.startDate, filters.endDate],
     queryFn: async () => {
       if (!organizationId) return [];
       const { data, error } = await supabase
@@ -53,7 +54,11 @@ export function useMktByOrigin(month: number, year: number) {
         .select("id, origin, created_at, metrics_period_at")
         .eq("organization_id", organizationId)
         .or("is_shadow.is.null,is_shadow.eq.false")
-        .order("created_at", { ascending: false });
+        .or(
+          `and(metrics_period_at.gte.${filters.startDate},metrics_period_at.lte.${filters.endDate}),and(metrics_period_at.is.null,created_at.gte.${filters.startDate},created_at.lte.${filters.endDate})`
+        )
+        .order("created_at", { ascending: false })
+        .range(0, 49999);
       if (error) throw error;
       return data ?? [];
     },
