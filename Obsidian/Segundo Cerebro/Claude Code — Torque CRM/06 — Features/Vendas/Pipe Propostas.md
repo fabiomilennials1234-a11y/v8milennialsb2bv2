@@ -17,7 +17,9 @@ Kanban de propostas comerciais com produtos, calor (deal temperature 1-5), e com
 
 ## Regras de negocio
 
-- Proposta tem line items (`pipe_proposta_items`) com produto e valor de venda
+- Proposta tem line items (`pipe_proposta_items`) com produto, quantidade, preco unitario e valor total da linha
+- Selecao de produto via combobox com busca por nome/SKU (Popover + Command)
+- Quantidade padrao = 1 ao selecionar produto; preco unitario preenchido pelo ticket do produto
 - Calor slider (1-5) indica probabilidade de fechamento
 - Vendido auto-sync para TinyERP via `tinyerp-push-order`
 - Metricas por periodo (mensal, trimestral)
@@ -47,6 +49,7 @@ Kanban de propostas comerciais com produtos, calor (deal temperature 1-5), e com
 
 - `src/pages/PipePropostas.tsx` — Pagina principal
 - `src/components/proposals/CreateProposalModal.tsx` — Criar proposta
+- `src/components/proposals/ProductCombobox.tsx` — Combobox de produto com busca por nome/SKU
 - `src/components/proposals/CalorSlider.tsx` — Slider de temperatura do deal
 - `src/components/proposals/CommitmentDateModal.tsx` — Definir data de compromisso
 - `src/components/proposals/TinyErpConfirmOrderDialog.tsx` — Confirmar sync ERP
@@ -69,7 +72,7 @@ Kanban de propostas comerciais com produtos, calor (deal temperature 1-5), e com
 ### Tabelas
 
 - `pipe_propostas` — status, calor, commitment_date, lead_id, organization_id
-- `pipe_proposta_items` — pipe_proposta_id, product_id, sale_value
+- `pipe_proposta_items` — pipe_proposta_id, product_id, quantity, unit_price, sale_value (sale_value = qty * unit_price)
 - `products` — Catalogo (type: mrr/projeto/unitario, ticket, ticket_minimo)
 - `commissions` — Geradas ao mover para vendido
 
@@ -87,6 +90,18 @@ Lead compareceu no pipe_confirmacao
 ---
 
 ## Historico de mudancas
+
+### 2026-04-16 — Busca digitavel de produto + quantidade por item
+- Seletor de produto trocado de Select simples para Combobox com busca por nome e SKU
+- Adicionado campo de quantidade por item de proposta (default 1)
+- Adicionado campo de preco unitario (preenchido automaticamente pelo ticket do produto)
+- Total da linha calculado como `quantity * unit_price`
+- `sale_value` mantido como total da linha para backward compatibility com dashboards e RPCs
+- Migration: `quantity INT NOT NULL DEFAULT 1` e `unit_price NUMERIC` em `pipe_proposta_items`
+- Backfill: items antigos recebem `quantity=1, unit_price=sale_value`
+- TinyERP: `tinyerp-push-order` agora envia quantidade e valor unitario reais
+- Componentes atualizados: CreateProposalModal, ProposalDetailModal, PropostasContext
+- Novo componente: ProductCombobox (Popover + Command do shadcn/ui)
 
 ## Links relacionados
 

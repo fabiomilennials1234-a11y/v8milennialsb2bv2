@@ -1696,6 +1696,51 @@ channel_messages: {
           },
         ]
       }
+      conversation_notes: {
+        Row: {
+          author_id: string
+          content: string
+          created_at: string
+          id: string
+          lead_id: string
+          organization_id: string
+          updated_at: string
+        }
+        Insert: {
+          author_id: string
+          content: string
+          created_at?: string
+          id?: string
+          lead_id: string
+          organization_id: string
+          updated_at?: string
+        }
+        Update: {
+          author_id?: string
+          content?: string
+          created_at?: string
+          id?: string
+          lead_id?: string
+          organization_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversation_notes_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversation_notes_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       conversation_summaries: {
         Row: {
           coaching_tips: Json | null
@@ -5331,21 +5376,27 @@ channel_messages: {
           id: string
           pipe_proposta_id: string
           product_id: string | null
+          quantity: number
           sale_value: number | null
+          unit_price: number | null
         }
         Insert: {
           created_at?: string
           id?: string
           pipe_proposta_id: string
           product_id?: string | null
+          quantity?: number
           sale_value?: number | null
+          unit_price?: number | null
         }
         Update: {
           created_at?: string
           id?: string
           pipe_proposta_id?: string
           product_id?: string | null
+          quantity?: number
           sale_value?: number | null
+          unit_price?: number | null
         }
         Relationships: [
           {

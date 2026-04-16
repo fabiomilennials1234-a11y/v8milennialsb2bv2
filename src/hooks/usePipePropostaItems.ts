@@ -5,6 +5,8 @@ export interface PipePropostaItem {
   id: string;
   pipe_proposta_id: string;
   product_id: string | null;
+  quantity: number;
+  unit_price: number | null;
   sale_value: number | null;
   created_at: string;
   product?: {
@@ -13,12 +15,15 @@ export interface PipePropostaItem {
     type: "mrr" | "projeto";
     ticket: number | null;
     ticket_minimo: number | null;
+    sku: string | null;
   };
 }
 
 export interface PipePropostaItemInsert {
   pipe_proposta_id: string;
   product_id: string | null;
+  quantity?: number;
+  unit_price?: number | null;
   sale_value: number | null;
 }
 
@@ -32,7 +37,7 @@ export function usePipePropostaItems(propostaId: string | null | undefined) {
         .from("pipe_proposta_items")
         .select(`
           *,
-          product:products(id, name, type, ticket, ticket_minimo)
+          product:products(id, name, type, ticket, ticket_minimo, sku)
         `)
         .eq("pipe_proposta_id", propostaId)
         .order("created_at", { ascending: true });
@@ -54,7 +59,7 @@ export function useCreatePipePropostaItem() {
         .insert(item)
         .select(`
           *,
-          product:products(id, name, type, ticket, ticket_minimo)
+          product:products(id, name, type, ticket, ticket_minimo, sku)
         `)
         .single();
       
@@ -80,7 +85,7 @@ export function useCreateManyPipePropostaItems() {
         .insert(items)
         .select(`
           *,
-          product:products(id, name, type, ticket, ticket_minimo)
+          product:products(id, name, type, ticket, ticket_minimo, sku)
         `);
       
       if (error) throw error;
@@ -99,14 +104,14 @@ export function useUpdatePipePropostaItem() {
   const queryClient = useQueryClient();
   
   return useMutation({
-    mutationFn: async ({ id, ...updates }: { id: string; product_id?: string | null; sale_value?: number | null }) => {
+    mutationFn: async ({ id, ...updates }: { id: string; product_id?: string | null; quantity?: number; unit_price?: number | null; sale_value?: number | null }) => {
       const { data, error } = await supabase
         .from("pipe_proposta_items")
         .update(updates)
         .eq("id", id)
         .select(`
           *,
-          product:products(id, name, type, ticket, ticket_minimo)
+          product:products(id, name, type, ticket, ticket_minimo, sku)
         `)
         .single();
       
