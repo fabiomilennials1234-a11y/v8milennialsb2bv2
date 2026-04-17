@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Edit2, Trash2, Package, FileText, Link as LinkIcon, FileSpreadsheet, Layers, Barcode, Bot } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Plus, Edit2, Trash2, Package, FileText, Link as LinkIcon, FileSpreadsheet, Layers, Barcode, Bot, Search, X } from "lucide-react";
+import type { ProductType } from "@/hooks/useProducts";
 import { useProductsWithVariants, useDeleteProduct, Product } from "@/hooks/useProducts";
 import { useProductMaterialCounts } from "@/hooks/useProductMaterials";
 import { CreateProductModal } from "@/components/products/CreateProductModal";
@@ -28,9 +30,25 @@ export default function Produtos() {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [deletingProductId, setDeletingProductId] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [typeFilter, setTypeFilter] = useState<ProductType | "all">("all");
   const { allowed: canCreateProduct } = useFeaturePermission("products.create");
   const { allowed: canEditProduct } = useFeaturePermission("products.edit");
   const { allowed: canDeleteProduct } = useFeaturePermission("products.delete");
+
+  const filteredProducts = useMemo(() => {
+    if (!products) return [];
+    return products.filter((p) => {
+      if (typeFilter !== "all" && p.type !== typeFilter) return false;
+      if (!searchTerm) return true;
+      const q = searchTerm.toLowerCase();
+      return (
+        p.name.toLowerCase().includes(q) ||
+        p.sku?.toLowerCase().includes(q) ||
+        p.description?.toLowerCase().includes(q)
+      );
+    });
+  }, [products, searchTerm, typeFilter]);
 
   const formatCurrency = (value: number | null) => {
     if (!value) return "—";
@@ -77,6 +95,45 @@ export default function Produtos() {
           </div>
         </div>
 
+        {/* Search & Filters */}
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Buscar por nome, SKU ou descrição..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-9 pr-9"
+            />
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-1.5">
+            {([
+              { value: "all" as const, label: "Todos" },
+              { value: "mrr" as const, label: "Recorrência" },
+              { value: "projeto" as const, label: "Projeto" },
+              { value: "unitario" as const, label: "Unitário" },
+            ]).map((opt) => (
+              <Button
+                key={opt.value}
+                variant={typeFilter === opt.value ? "default" : "outline"}
+                size="sm"
+                onClick={() => setTypeFilter(opt.value)}
+                className="text-xs"
+              >
+                {opt.label}
+              </Button>
+            ))}
+          </div>
+        </div>
+
         {/* Products Grid */}
         {isLoading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -89,7 +146,7 @@ export default function Produtos() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {products?.map((product) => (
+            {filteredProducts.map((product) => (
               <Card
                 key={product.id}
                 role="button"
@@ -268,7 +325,7 @@ export default function Produtos() {
           </div>
         )}
 
-        {/* Empty State */}
+        {/* Empty State — no products at all */}
         {!isLoading && products?.length === 0 && (
           <Card className="p-12 text-center">
             <Package className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
@@ -286,6 +343,23 @@ export default function Produtos() {
                 Novo Produto
               </Button>
             </div>
+          </Card>
+        )}
+
+        {/* Empty State — search/filter returned nothing */}
+        {!isLoading && (products?.length ?? 0) > 0 && filteredProducts.length === 0 && (
+          <Card className="p-12 text-center">
+            <Search className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+            <h3 className="text-lg font-semibold mb-2">Nenhum produto encontrado</h3>
+            <p className="text-muted-foreground mb-4">
+              Tente ajustar a busca ou os filtros
+            </p>
+            <Button
+              variant="outline"
+              onClick={() => { setSearchTerm(""); setTypeFilter("all"); }}
+            >
+              Limpar filtros
+            </Button>
           </Card>
         )}
       </div>

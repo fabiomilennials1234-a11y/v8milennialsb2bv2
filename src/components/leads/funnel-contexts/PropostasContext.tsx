@@ -40,6 +40,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ProductCombobox } from "@/components/proposals/ProductCombobox";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -102,7 +103,7 @@ export function PropostasContext({ lead, pipeData: proposta, onSuccess }: Propos
   const [tinyConfirmOpen, setTinyConfirmOpen] = useState(false);
   const [cadastroExternoOpen, setCadastroExternoOpen] = useState(false);
 
-  const [localItems, setLocalItems] = useState<Array<{ id: string; product_id: string; sale_value: string; isNew?: boolean }>>([]);
+  const [localItems, setLocalItems] = useState<Array<{ id: string; product_id: string; quantity: number; unit_price: string; isNew?: boolean }>>([]);
   const [itemsInitialized, setItemsInitialized] = useState(false);
 
   // Reset on proposta change
@@ -123,13 +124,13 @@ export function PropostasContext({ lead, pipeData: proposta, onSuccess }: Propos
   useEffect(() => {
     if (itemsInitialized || itemsLoading) return;
     if (itemsData.length > 0) {
-      setLocalItems(itemsData.map((item) => ({ id: item.id, product_id: item.product_id || "", sale_value: item.sale_value?.toString() || "" })));
+      setLocalItems(itemsData.map((item) => ({ id: item.id, product_id: item.product_id || "", quantity: item.quantity ?? 1, unit_price: item.unit_price?.toString() || item.sale_value?.toString() || "" })));
     } else if (proposta?.product_id) {
-      setLocalItems([{ id: "legacy", product_id: proposta.product_id || "", sale_value: proposta.sale_value?.toString() || "" }]);
+      setLocalItems([{ id: "legacy", product_id: proposta.product_id || "", quantity: 1, unit_price: proposta.sale_value?.toString() || "" }]);
     } else {
       setLocalItems([
-        { id: crypto.randomUUID(), product_id: "", sale_value: "", isNew: true },
-        { id: crypto.randomUUID(), product_id: "", sale_value: "", isNew: true },
+        { id: crypto.randomUUID(), product_id: "", quantity: 1, unit_price: "", isNew: true },
+        { id: crypto.randomUUID(), product_id: "", quantity: 1, unit_price: "", isNew: true },
       ]);
     }
     setItemsInitialized(true);
@@ -138,7 +139,7 @@ export function PropostasContext({ lead, pipeData: proposta, onSuccess }: Propos
   if (!proposta) return <p className="text-sm text-muted-foreground text-center py-8">Nenhuma proposta selecionada.</p>;
 
   const handleAddItem = () => {
-    setLocalItems([...localItems, { id: crypto.randomUUID(), product_id: "", sale_value: "", isNew: true }]);
+    setLocalItems([...localItems, { id: crypto.randomUUID(), product_id: "", quantity: 1, unit_price: "", isNew: true }]);
   };
 
   const handleRemoveItem = async (id: string, isNew?: boolean) => {
@@ -154,20 +155,30 @@ export function PropostasContext({ lead, pipeData: proposta, onSuccess }: Propos
     setLocalItems(localItems.filter((i) => i.id !== id));
   };
 
-  const handleItemChange = (id: string, field: "product_id" | "sale_value", value: string) => {
+  const handleProductSelect = (itemId: string, productId: string) => {
     setLocalItems(
       localItems.map((item) => {
-        if (item.id !== id) return item;
-        if (field === "product_id") {
-          const sp = products.find((p) => p.id === value);
-          return { ...item, product_id: value, sale_value: sp?.ticket?.toString() || item.sale_value };
-        }
-        return { ...item, [field]: value };
+        if (item.id !== itemId) return item;
+        const sp = products.find((p) => p.id === productId);
+        return { ...item, product_id: productId, unit_price: sp?.ticket?.toString() || item.unit_price };
       })
     );
   };
 
-  const totalValue = localItems.reduce((sum, i) => sum + (Number(i.sale_value) || 0), 0);
+  const handleItemFieldChange = (itemId: string, field: "quantity" | "unit_price", value: string) => {
+    setLocalItems(
+      localItems.map((item) => {
+        if (item.id !== itemId) return item;
+        if (field === "quantity") {
+          const qty = Math.max(1, parseInt(value) || 1);
+          return { ...item, quantity: qty };
+        }
+        return { ...item, unit_price: value };
+      })
+    );
+  };
+
+  const totalValue = localItems.reduce((sum, i) => sum + (i.quantity * (Number(i.unit_price) || 0)), 0);
 
   const formatCurrency = (v: number) =>
     new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 0 }).format(v);
@@ -179,10 +190,10 @@ export function PropostasContext({ lead, pipeData: proposta, onSuccess }: Propos
 
   const handleSubmit = async () => {
     if (!formData.responsible_id) { toast.error("Responsável é obrigatório"); return; }
-    const itemsProductNoValue = localItems.filter((i) => i.product_id && !i.sale_value);
+    const itemsProductNoValue = localItems.filter((i) => i.product_id && !i.unit_price);
     if (itemsProductNoValue.length > 0) { toast.error("Informe o valor para todos os produtos selecionados"); return; }
-    const itemsWithProduct = localItems.filter((i) => i.product_id && i.sale_value);
-    const itemsValueOnly = localItems.filter((i) => !i.product_id && i.sale_value);
+    const itemsWithProduct = localItems.filter((i) => i.product_id && i.unit_price);
+    const itemsValueOnly = localItems.filter((i) => !i.product_id && i.unit_price);
     const allValuedItems = [...itemsWithProduct, ...itemsValueOnly];
     if (allValuedItems.length === 0) { toast.error("Informe o valor da proposta"); return; }
 
@@ -193,7 +204,7 @@ export function PropostasContext({ lead, pipeData: proposta, onSuccess }: Propos
       }
       if (formData.notes !== proposta.notes && formData.notes) logAction({ leadId: proposta.lead_id, action: "note_added", description: formData.notes });
 
-      const tv = allValuedItems.reduce((sum, i) => sum + Number(i.sale_value), 0);
+      const tv = allValuedItems.reduce((sum, i) => sum + (i.quantity * Number(i.unit_price)), 0);
       const productTypes = itemsWithProduct.map((i) => products.find((p) => p.id === i.product_id)?.type).filter(Boolean);
       const hasOnlyMrr = productTypes.length > 0 && productTypes.every((t) => t === "mrr");
       const hasOnlyProjeto = productTypes.length > 0 && productTypes.every((t) => t === "projeto");
@@ -203,9 +214,9 @@ export function PropostasContext({ lead, pipeData: proposta, onSuccess }: Propos
         if (item.isNew || item.id === "legacy") {
           const productName = products.find((p) => p.id === item.product_id)?.name || "Produto";
           logAction({ leadId: proposta.lead_id, action: "product_linked", description: `Produto "${productName}" vinculado` });
-          await createItem.mutateAsync({ pipe_proposta_id: proposta.id, product_id: item.product_id, sale_value: Number(item.sale_value) });
+          await createItem.mutateAsync({ pipe_proposta_id: proposta.id, product_id: item.product_id, quantity: item.quantity, unit_price: Number(item.unit_price), sale_value: item.quantity * Number(item.unit_price) });
         } else {
-          await updateItem.mutateAsync({ id: item.id, product_id: item.product_id, sale_value: Number(item.sale_value) });
+          await updateItem.mutateAsync({ id: item.id, product_id: item.product_id, quantity: item.quantity, unit_price: Number(item.unit_price), sale_value: item.quantity * Number(item.unit_price) });
         }
       }
 
@@ -273,10 +284,12 @@ export function PropostasContext({ lead, pipeData: proposta, onSuccess }: Propos
 
   // Prepare items for TinyERP dialog
   const tinyItems = localItems
-    .filter((i) => i.product_id && i.sale_value)
+    .filter((i) => i.product_id && i.unit_price)
     .map((i) => ({
       product_name: products.find((p) => p.id === i.product_id)?.name || "Produto",
-      sale_value: Number(i.sale_value),
+      sale_value: i.quantity * (Number(i.unit_price) || 0),
+      quantity: i.quantity,
+      unit_price: Number(i.unit_price) || 0,
     }));
 
   return (
@@ -295,40 +308,47 @@ export function PropostasContext({ lead, pipeData: proposta, onSuccess }: Propos
           <div className="flex items-center justify-center py-4"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
         ) : (
           <div className="space-y-2">
-            {localItems.map((item) => (
-              <motion.div key={item.id} initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="flex gap-3 items-start p-3 border rounded-lg bg-muted/30">
-                <div className="flex-1 grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">Produto (opcional)</Label>
-                    <Select value={item.product_id} onValueChange={(v) => handleItemChange(item.id, "product_id", v)}>
-                      <SelectTrigger><SelectValue placeholder="Selecionar" /></SelectTrigger>
-                      <SelectContent>
-                        {products.map((p) => (
-                          <SelectItem key={p.id} value={p.id}>
-                            <div className="flex items-center gap-2">
-                              <Badge variant={p.type === "mrr" ? "default" : "secondary"} className="text-xs">{p.type === "mrr" ? "Rec." : "Projeto"}</Badge>
-                              {p.name}
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+            {localItems.map((item) => {
+              const lineTotal = item.quantity * (Number(item.unit_price) || 0);
+              return (
+                <motion.div key={item.id} initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="p-3 border rounded-lg bg-muted/30 space-y-3">
+                  <div className="flex gap-3 items-start">
+                    <div className="flex-1 space-y-1">
+                      <Label className="text-xs text-muted-foreground">Produto (opcional)</Label>
+                      <ProductCombobox
+                        products={products}
+                        value={item.product_id}
+                        onSelect={(v) => handleProductSelect(item.id, v)}
+                      />
+                    </div>
+                    {localItems.length > 1 && (
+                      <Button variant="ghost" size="icon" className="h-9 w-9 text-destructive hover:text-destructive hover:bg-destructive/10 mt-5" onClick={() => handleRemoveItem(item.id, item.isNew)}>
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    )}
                   </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">Valor (R$)</Label>
-                    <div className="relative">
-                      <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                      <Input type="number" value={item.sale_value} onChange={(e) => handleItemChange(item.id, "sale_value", e.target.value)} placeholder="10000" className="pl-9" />
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Qtd.</Label>
+                      <Input type="number" min={1} value={item.quantity} onChange={(e) => handleItemFieldChange(item.id, "quantity", e.target.value)} className="text-center" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Preço unit. (R$)</Label>
+                      <div className="relative">
+                        <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <Input type="number" min={0} step="0.01" value={item.unit_price} onChange={(e) => handleItemFieldChange(item.id, "unit_price", e.target.value)} placeholder="0" className="pl-9" />
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Total</Label>
+                      <div className="h-10 flex items-center px-3 rounded-md border bg-muted/50 text-sm font-medium">
+                        {lineTotal > 0 ? formatCurrency(lineTotal) : "—"}
+                      </div>
                     </div>
                   </div>
-                </div>
-                {localItems.length > 1 && (
-                  <Button variant="ghost" size="icon" className="h-9 w-9 text-destructive hover:text-destructive hover:bg-destructive/10 mt-5" onClick={() => handleRemoveItem(item.id, item.isNew)}>
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                )}
-              </motion.div>
-            ))}
+                </motion.div>
+              );
+            })}
           </div>
         )}
 
@@ -340,7 +360,7 @@ export function PropostasContext({ lead, pipeData: proposta, onSuccess }: Propos
                 <span className="text-2xl font-bold text-success">{formatCurrency(totalValue)}</span>
               </div>
               <div className="text-right text-sm text-muted-foreground">
-                {localItems.filter((i) => i.sale_value).length} item(ns)
+                {localItems.filter((i) => i.unit_price).length} item(ns)
               </div>
             </div>
           </div>
