@@ -66,7 +66,8 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useOrganization } from "@/hooks/useOrganization";
 import { track, trackModuleVisit } from "@/lib/analytics";
-import { useFeaturePermission } from "@/hooks/useUserRole";
+import { useFeaturePermission, useIsAdmin } from "@/hooks/useUserRole";
+import { useMasterAuth } from "@/hooks/useMasterAuth";
 
 // ─── Helper: temporal filter para o kanban no modo "Este mês" ────────────────
 const CLOSED_STATUSES_PROPOSTAS = ["vendido", "perdido"];
@@ -118,6 +119,9 @@ type PropostasFilterState = {
   filterPriority: string;
   filterCalor: string;
   viewMode: "kanban" | "analytics";
+  // Marca se já aplicamos o default "me" para membros (one-shot por usuário).
+  // Depois de true, respeitamos a escolha manual do usuário.
+  membroDefaultApplied?: boolean;
 };
 
 const DEFAULT_PROPOSTAS_FILTERS: PropostasFilterState = {
@@ -127,6 +131,7 @@ const DEFAULT_PROPOSTAS_FILTERS: PropostasFilterState = {
   filterPriority: "all",
   filterCalor: "all",
   viewMode: "kanban",
+  membroDefaultApplied: false,
 };
 
 export default function PipePropostas() {
@@ -163,6 +168,24 @@ export default function PipePropostas() {
   );
   const { data: leadsWithSchedule } = useLeadsWithScheduledMessages();
   const [filterScheduled, setFilterScheduled] = useState(false);
+
+  // ─── Filtro defensivo: para role "member" (ex-membro), pré-seleciona o próprio
+  // teamMemberId na primeira visita. Cria camada extra de proteção client-side
+  // além da RLS. Membros ainda podem trocar manualmente; a flag membroDefaultApplied
+  // garante que o default só aplica uma vez por usuário.
+  const { teamMemberId } = useOrganization();
+  const { isAdmin } = useIsAdmin();
+  const { isMaster } = useMasterAuth();
+  useEffect(() => {
+    if (filterState.membroDefaultApplied) return;
+    if (!teamMemberId || isAdmin || isMaster) return;
+    // Usuário sem privilégio (membro): aplicar teamMemberId como default
+    setFilterState((f) => ({
+      ...f,
+      filterResponsible: f.filterResponsible === "all" ? teamMemberId : f.filterResponsible,
+      membroDefaultApplied: true,
+    }));
+  }, [teamMemberId, isAdmin, isMaster, filterState.membroDefaultApplied, setFilterState]);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);

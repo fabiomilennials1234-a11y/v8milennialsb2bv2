@@ -45,7 +45,8 @@ import { toast } from "sonner";
 import { useOrganization } from "@/hooks/useOrganization";
 import { useLeadsWithScheduledMessages } from "@/hooks/useScheduledMessages";
 import { track, trackModuleVisit } from "@/lib/analytics";
-import { useFeaturePermission } from "@/hooks/useUserRole";
+import { useFeaturePermission, useIsAdmin } from "@/hooks/useUserRole";
+import { useMasterAuth } from "@/hooks/useMasterAuth";
 
 // ConfirmacaoCardData is now LeadCardData from the unified LeadCard component
 
@@ -124,6 +125,8 @@ type ConfirmacaoFilterState = {
   selectedStatuses: string[];
   selectedResponsibleId: string;
   viewMode: "kanban" | "timeline";
+  // One-shot: aplica teamMemberId como default para membros na primeira visita.
+  membroDefaultApplied?: boolean;
 };
 
 const DEFAULT_CONFIRMACAO_FILTERS: ConfirmacaoFilterState = {
@@ -134,6 +137,7 @@ const DEFAULT_CONFIRMACAO_FILTERS: ConfirmacaoFilterState = {
   selectedStatuses: [],
   selectedResponsibleId: "all",
   viewMode: "kanban",
+  membroDefaultApplied: false,
 };
 
 export default function PipeConfirmacao() {
@@ -182,6 +186,20 @@ export default function PipeConfirmacao() {
   );
   const { data: leadsWithSchedule } = useLeadsWithScheduledMessages();
   const [filterScheduled, setFilterScheduled] = useState(false);
+
+  // Filtro defensivo: membros começam vendo só os próprios leads. Admin/Master veem tudo.
+  const { teamMemberId } = useOrganization();
+  const { isAdmin } = useIsAdmin();
+  const { isMaster } = useMasterAuth();
+  useEffect(() => {
+    if (filterState.membroDefaultApplied) return;
+    if (!teamMemberId || isAdmin || isMaster) return;
+    setFilterState((f) => ({
+      ...f,
+      selectedResponsibleId: f.selectedResponsibleId === "all" ? teamMemberId : f.selectedResponsibleId,
+      membroDefaultApplied: true,
+    }));
+  }, [teamMemberId, isAdmin, isMaster, filterState.membroDefaultApplied, setFilterState]);
 
   const [isLeadModalOpen, setIsLeadModalOpen] = useState(false);
   const [isMeetingModalOpen, setIsMeetingModalOpen] = useState(false);
