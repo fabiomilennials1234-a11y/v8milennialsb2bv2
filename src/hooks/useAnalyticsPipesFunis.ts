@@ -96,7 +96,7 @@ export function useAnalyticsPipesFunis(pipelineType: PipelineSelectorType = null
 
       if (error) {
         console.error("❌ [useAnalyticsPipesFunis] RPC error:", error.message);
-        return EMPTY;
+        throw new Error(`Analytics pipes/funis failed: ${error.message}`);
       }
 
       const raw = Array.isArray(data) && data.length > 0 ? data[0] : data;

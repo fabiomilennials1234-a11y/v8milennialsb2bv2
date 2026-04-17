@@ -3,8 +3,6 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "./useOrganization";
 import { useAnalyticsFilters } from "./useAnalyticsFilters";
-import { usePipeConfirmacao } from "./usePipeConfirmacao";
-import { usePipePropostas } from "./usePipePropostas";
 import { useMktOriginConfigs, ALL_ORIGINS, type LeadOrigin } from "./useMktOriginConfig";
 
 export interface OriginMetrics {
@@ -34,123 +32,111 @@ export interface MktSummary {
   totalConversionRate: number;
 }
 
+interface RpcOriginRow {
+  origin: string;
+  leads_count: number;
+  agendamentos_count: number;
+  comparecimentos_count: number;
+  propostas_abertas: number;
+  propostas_fechadas: number;
+  vendas_count: number;
+  receita: number;
+}
+
+interface RpcResult {
+  origins: RpcOriginRow[];
+}
+
 /**
- * Origin-level marketing metrics.
- * Uses useAnalyticsFilters for date filtering (aligned with analytics RPCs).
- * month/year is used ONLY for investment config lookup.
+ * Origin-level marketing metrics — SERVER-SIDE via get_mkt_origin_metrics RPC.
+ * Replaces the previous client-side aggregation (which fetched all leads/pipes
+ * and reduced in the browser, diverging from other analytics RPCs).
+ * month/year is used ONLY for investment config lookup (mkt_origin_config table).
  */
 export function useMktByOrigin(month: number, year: number) {
   const { organizationId, isReady } = useOrganization();
-  const { filters } = useAnalyticsFilters();
+  const { filters, startStr, endStr } = useAnalyticsFilters();
 
-  // Lightweight leads query — scoped by analytics date range on the server
-  // to avoid the PostgREST 1000-row default cap hiding older real leads.
-  const { data: leads = [], isLoading: loadingLeads } = useQuery({
-    queryKey: ["leads-metrics-lite", organizationId, filters.startDate, filters.endDate],
-    queryFn: async () => {
-      if (!organizationId) return [];
-      const { data, error } = await supabase
-        .from("leads")
-        .select("id, origin, created_at, metrics_period_at")
-        .eq("organization_id", organizationId)
-        .or("is_shadow.is.null,is_shadow.eq.false")
-        .or(
-          `and(metrics_period_at.gte.${filters.startDate},metrics_period_at.lte.${filters.endDate}),and(metrics_period_at.is.null,created_at.gte.${filters.startDate},created_at.lte.${filters.endDate})`
-        )
-        .order("created_at", { ascending: false })
-        .range(0, 49999);
-      if (error) throw error;
-      return data ?? [];
+  const {
+    data: rpcData,
+    isLoading: loadingRpc,
+    isError,
+    error,
+  } = useQuery({
+    queryKey: [
+      "mkt-by-origin",
+      organizationId,
+      startStr,
+      endStr,
+      filters.memberId,
+    ],
+    queryFn: async (): Promise<RpcResult> => {
+      const { data, error } = await (supabase.rpc as any)(
+        "get_mkt_origin_metrics",
+        {
+          p_org_id: organizationId,
+          p_start_date: startStr,
+          p_end_date: endStr,
+          p_member_id: filters.memberId,
+        },
+      );
+
+      if (error) {
+        console.error("❌ [useMktByOrigin] RPC error:", error.message);
+        throw new Error(`Mkt origin metrics failed: ${error.message}`);
+      }
+
+      const raw = Array.isArray(data) && data.length > 0 ? data[0] : data;
+      return (raw as RpcResult) ?? { origins: [] };
     },
     enabled: isReady && !!organizationId,
     staleTime: 5 * 60 * 1000,
   });
 
-  const { data: confirmacoes = [], isLoading: loadingConfirmacao } = usePipeConfirmacao();
-  const { data: propostas = [], isLoading: loadingPropostas } = usePipePropostas();
   const { configMap, isLoading: loadingConfig } = useMktOriginConfigs(month, year);
-
-  const isLoading = loadingLeads || loadingConfirmacao || loadingPropostas || loadingConfig;
+  const isLoading = loadingRpc || loadingConfig;
 
   const { byOrigin, summary } = useMemo(() => {
-    const filterStart = filters.startDate;
-    const filterEnd = filters.endDate;
+    const originRows = rpcData?.origins ?? [];
 
-    const inRange = (s: string | null | undefined) =>
-      s != null && s >= filterStart && s <= filterEnd;
+    // Index RPC results by origin for lookup
+    const rowByOrigin: Record<string, RpcOriginRow> = {};
+    for (const row of originRows) {
+      const key = ALL_ORIGINS.includes(row.origin as LeadOrigin) ? row.origin : "outro";
+      // If two RPC rows map to "outro" (e.g. unknown origin + null), merge them
+      if (rowByOrigin[key]) {
+        rowByOrigin[key] = {
+          origin: key,
+          leads_count: rowByOrigin[key].leads_count + row.leads_count,
+          agendamentos_count: rowByOrigin[key].agendamentos_count + row.agendamentos_count,
+          comparecimentos_count: rowByOrigin[key].comparecimentos_count + row.comparecimentos_count,
+          propostas_abertas: rowByOrigin[key].propostas_abertas + row.propostas_abertas,
+          propostas_fechadas: rowByOrigin[key].propostas_fechadas + row.propostas_fechadas,
+          vendas_count: rowByOrigin[key].vendas_count + row.vendas_count,
+          receita: rowByOrigin[key].receita + row.receita,
+        };
+      } else {
+        rowByOrigin[key] = { ...row, origin: key };
+      }
+    }
 
-    // Filter leads by analytics period
-    const leadsByPeriod = leads.filter(
-      (l: { metrics_period_at?: string | null; created_at?: string }) =>
-        (l.metrics_period_at != null && inRange(l.metrics_period_at)) ||
-        (l.metrics_period_at == null && inRange(l.created_at))
-    );
-
-    // Filter confirmacoes by analytics period
-    const confirmacoesByPeriod = confirmacoes.filter(
-      (c: { metrics_period_at?: string | null; created_at?: string }) =>
-        (c.metrics_period_at != null && inRange(c.metrics_period_at)) ||
-        (c.metrics_period_at == null && inRange(c.created_at))
-    );
-
-    // Group leads by origin
-    const leadsByOrigin: Record<string, typeof leadsByPeriod> = {};
-    ALL_ORIGINS.forEach((o) => (leadsByOrigin[o] = []));
-    leadsByPeriod.forEach((l) => {
-      const origin = (l as { origin?: string | null }).origin ?? "outro";
-      const bucket = ALL_ORIGINS.includes(origin as LeadOrigin) ? origin : "outro";
-      leadsByOrigin[bucket].push(l);
-    });
-
-    // Build per-origin metrics
+    // Build per-origin metrics for every canonical origin (zero-fill missing)
     const byOriginArr: OriginMetrics[] = ALL_ORIGINS.map((origin) => {
-      const originLeads = leadsByOrigin[origin] ?? [];
-      const leadIdsSet = new Set(originLeads.map((l) => l.id));
-
-      const originConfirmacoes = confirmacoesByPeriod.filter((c) =>
-        leadIdsSet.has((c as { lead_id: string }).lead_id)
-      );
-      const agendamentosCount = originConfirmacoes.length;
-      const comparecimentosCount = originConfirmacoes.filter(
-        (c) => (c as { status?: string }).status === "compareceu"
-      ).length;
-
-      const originPropostas = propostas.filter((p) =>
-        leadIdsSet.has((p as { lead_id: string }).lead_id)
-      );
-
-      const vendasInPeriod = originPropostas.filter(
-        (p: { status?: string; metrics_period_at?: string | null; closed_at?: string | null }) =>
-          (p as { status?: string }).status === "vendido" &&
-          inRange(
-            (p as { metrics_period_at?: string | null }).metrics_period_at ??
-            (p as { closed_at?: string | null }).closed_at
-          )
-      );
-      const vendasCount = vendasInPeriod.length;
-
-      const propostasFechadas = originPropostas.filter((p) => {
-        const s = (p as { status?: string }).status;
-        return s === "vendido" || s === "perdido";
-      }).length;
-      const propostasAbertas = originPropostas.length - propostasFechadas;
-
-      // Revenue from sales
-      const receitaCents = vendasInPeriod.reduce((sum, p) => {
-        const items = (p as { items?: Array<{ sale_value?: number | null }> }).items ?? [];
-        if (items.length > 0) {
-          return sum + items.reduce((s, item) => s + (item.sale_value ?? 0), 0);
-        }
-        const ticket = (p as { product?: { ticket?: number | null } }).product?.ticket ?? 0;
-        return sum + ticket;
-      }, 0);
-      const receitaReais = receitaCents / 100;
+      const row = rowByOrigin[origin];
+      const leadsCount = row?.leads_count ?? 0;
+      const agendamentosCount = row?.agendamentos_count ?? 0;
+      const comparecimentosCount = row?.comparecimentos_count ?? 0;
+      const propostasAbertas = row?.propostas_abertas ?? 0;
+      const propostasFechadas = row?.propostas_fechadas ?? 0;
+      const vendasCount = row?.vendas_count ?? 0;
+      // receita comes in reais (sale_value is DECIMAL(12,2) storing reais directly)
+      const receitaReais = row?.receita ?? 0;
 
       const config = configMap[origin];
+      // investimento_cents is explicitly in cents (schema + hook pattern)
       const investimentoCents = config?.investimento_cents ?? 0;
       const investimentoReais = investimentoCents / 100;
 
-      const leadsCount = originLeads.length;
       const custoPorLead = leadsCount > 0 ? investimentoReais / leadsCount : 0;
       const custoPorVenda = vendasCount > 0 ? investimentoReais / vendasCount : 0;
       const conversionRate = leadsCount > 0 ? (vendasCount / leadsCount) * 100 : 0;
@@ -173,7 +159,6 @@ export function useMktByOrigin(month: number, year: number) {
       };
     });
 
-    // Summary
     const totalLeads = byOriginArr.reduce((s, o) => s + o.leadsCount, 0);
     const totalInvestimentoReais = byOriginArr.reduce((s, o) => s + o.investimentoReais, 0);
     const totalAgendamentos = byOriginArr.reduce((s, o) => s + o.agendamentosCount, 0);
@@ -192,7 +177,7 @@ export function useMktByOrigin(month: number, year: number) {
     };
 
     return { byOrigin: byOriginArr, summary: summaryData };
-  }, [leads, confirmacoes, propostas, configMap, filters.startDate, filters.endDate]);
+  }, [rpcData, configMap]);
 
-  return { byOrigin, summary, configMap, isLoading };
+  return { byOrigin, summary, configMap, isLoading, isError, error };
 }

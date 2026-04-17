@@ -74,7 +74,7 @@ export function useAnalyticsComercial() {
 
       if (error) {
         console.error("❌ [useAnalyticsComercial] RPC error:", error.message);
-        return EMPTY;
+        throw new Error(`Analytics comercial failed: ${error.message}`);
       }
 
       const raw = Array.isArray(data) && data.length > 0 ? data[0] : data;
