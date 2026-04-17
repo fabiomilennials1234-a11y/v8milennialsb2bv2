@@ -4,7 +4,7 @@ tags:
   - index
   - torque-crm
 created: 2026-04-12
-last_updated: 2026-04-14
+last_updated: 2026-04-15
 status: active
 ---
 
@@ -82,6 +82,7 @@ SaaS B2B multi-tenant para gestao de leads, pipelines de vendas, campanhas e aut
 ### 04 — Decisoes
 - [[ADR-2026-04-12-arquitetura-inicial]] — Snapshot das decisoes arquiteturais encontradas
 - [[ADR-2026-04-14-coverage-roadmap]] — Roadmap de cobertura de testes (4 fases)
+- [[ADR-2026-04-15-agente-security]] — Adicao do agente Security ao time (9 → 10)
 
 ### 05 — Log de Contexto
 - [[2026-04-12—sessao-inicial]] — Varredura completa do projeto
@@ -146,8 +147,13 @@ SaaS B2B multi-tenant para gestao de leads, pipelines de vendas, campanhas e aut
 - [[Webhooks]] — Webhooks outgoing com retry e dead letter
 - [[Master Admin]] — Super-panel administrativo (master only)
 
+#### Seguranca
+- [[Overview]] — Dominio de seguranca — threat model, superficie critica, owner (agent-security)
+
 ### 07 — Changelog
 - [[2026-04-12]] — Daily note (primeiro dia)
+- [[2026-04-14]] — Coverage project fase 0 + 1
+- [[2026-04-15]] — Adicao do agente Security ao time
 - `individuais/` — Notas detalhadas por mudanca significativa
 
 ### 08 — Backlog

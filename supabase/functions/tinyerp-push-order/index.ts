@@ -95,13 +95,13 @@ Deno.serve(withSentry('tinyerp-push-order', async (req) => {
 
     // Load proposta with lead and items
     // Tables/columns: pipe_propostas(sale_value, notes), leads(name, company, email, phone, faturamento, segment),
-    // pipe_proposta_items(sale_value, product_id), products(name, sku)
+    // pipe_proposta_items(quantity, unit_price, sale_value, product_id), products(name, sku)
     const { data: proposta, error: propostaError } = await supabaseAdmin
       .from("pipe_propostas")
       .select(`
         id, sale_value, notes,
         lead:leads(id, name, company, email, phone, faturamento, segment),
-        items:pipe_proposta_items(id, sale_value, product_id, product:products(id, name, sku))
+        items:pipe_proposta_items(id, quantity, unit_price, sale_value, product_id, product:products(id, name, sku))
       `)
       .eq("id", pipe_proposta_id)
       .single();
@@ -127,16 +127,20 @@ Deno.serve(withSentry('tinyerp-push-order', async (req) => {
     console.log("[TinyERP Push] Pushing order for proposta:", pipe_proposta_id, "items:", items.length);
 
     // Build TinyERP order payload
-    // pipe_proposta_items has sale_value (total per item), no separate quantity/unit_price
-    const tinyItems = items.map((item, idx) => ({
-      item: {
-        descricao: (item.product as Record<string, unknown>)?.name || `Item ${idx + 1}`,
-        codigo: (item.product as Record<string, unknown>)?.sku || "",
-        unidade: "UN",
-        quantidade: 1,
-        valor_unitario: Number(item.sale_value) || 0,
-      },
-    }));
+    // pipe_proposta_items has quantity, unit_price (per unit), and sale_value (line total = qty * unit_price)
+    const tinyItems = items.map((item, idx) => {
+      const qty = Number(item.quantity) || 1;
+      const unitPrice = Number(item.unit_price) || Number(item.sale_value) || 0;
+      return {
+        item: {
+          descricao: (item.product as Record<string, unknown>)?.name || `Item ${idx + 1}`,
+          codigo: (item.product as Record<string, unknown>)?.sku || "",
+          unidade: "UN",
+          quantidade: qty,
+          valor_unitario: unitPrice,
+        },
+      };
+    });
 
     // Use client_override (from confirmation modal) if provided, otherwise use lead data
     const co = client_override as Record<string, string> | undefined;

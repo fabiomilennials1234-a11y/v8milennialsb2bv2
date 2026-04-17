@@ -22,9 +22,10 @@ Leia a task e identifique qual(is) dominio(s) ela toca:
 | React, UI, componentes, visual, UX | Frontend | `agent-frontend` | `src/components/`, `src/pages/`, CSS, animacoes, design |
 | PostgreSQL, migrations, RLS, schema, queries | DBA | `agent-dba` | `supabase/migrations/`, tabelas, indexes, policies, SQL |
 | Testes, verificacao, cobertura, QA | QA | `agent-qa` | "testar", "verificar", "cobrir", flaky tests, coverage |
-| Deploy, CI/CD, infra, monitoring, config | Infra | `agent-infra` | GitHub Actions, Docker, env vars, secrets, SSL, CORS |
+| Deploy, CI/CD, infra, monitoring, config | Infra | `agent-infra` | GitHub Actions, Docker, env vars, SSL |
 | n8n, workflows, cron, automacoes, event-driven | Automation | `agent-automation` | `n8n`, `pg_cron`, `workflow_executions`, triggers, jobs |
 | Copilot IA, RAG, embeddings, conversations | AI | `agent-ai` | `copilot_agents`, `conversations`, Gemini, pgvector, prompts |
+| Seguranca, auth, RLS review, secrets, webhook signature, LGPD, threat model | Security | `agent-security` | `auth`, `permission`, `rls`, `policy`, `token`, `secret`, `cors`, `webhook`, `payment`, `oauth`, `pii`, `lgpd`, `master`, `service_role`, `csp`, `xss`, `injection` |
 
 ### 2. Selecione agente(s)
 
@@ -36,6 +37,11 @@ Ordem padrao para features completas:
 Architect → DBA → Backend → Frontend → QA
 ```
 
+Ordem para features sensiveis (auth, pagamento, PII, cross-tenant, webhook publico, OAuth):
+```
+Architect → Security (threat model) → DBA → Backend → Security (RLS + auth review) → Frontend → QA → Security (final gate) → Infra
+```
+
 Para automacoes:
 ```
 Architect (se decisao necessaria) → Automation → Backend → QA
@@ -43,8 +49,18 @@ Architect (se decisao necessaria) → Automation → Backend → QA
 
 Para mudancas de IA:
 ```
-AI → Backend → Frontend (se UI) → QA
+AI → Security (se toca Copilot cross-org ou prompt handling) → Backend → Frontend (se UI) → QA
 ```
+
+### Security — poder de veto
+
+O agente Security pode bloquear merge/deploy em:
+- SAST, SCA ou secrets scan falhando
+- RLS policy nova sem teste pgTAP
+- Edge function publica sem `validateAuth()` testado
+- Mudanca em pagamento/auth/master sem threat model
+
+Invoque Security SEMPRE que a task tocar: auth, permissoes, RLS, policies, secrets, CORS, webhook, pagamento (Asaas), OAuth, PII, LGPD, master_users, service_role, `supabase/config.toml`, `.github/workflows/`, Dockerfile.
 
 ### 3. Determine o escopo (SDD)
 

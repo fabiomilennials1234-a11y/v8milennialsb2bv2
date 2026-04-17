@@ -16,14 +16,14 @@ source: .specs/features/agent-team-system/spec.md
 
 ## Summary
 
-Create a team of 9 specialized AI agents that operate autonomously on every task. No manual invocation - the Conductor protocol in CLAUDE.md auto-routes every request through the right agent(s), ensures SDD compliance, and keeps Obsidian documentation updated.
+Create a team of 10 specialized AI agents that operate autonomously on every task. No manual invocation - the Conductor protocol in CLAUDE.md auto-routes every request through the right agent(s), ensures SDD compliance, and keeps Obsidian documentation updated.
 
 ## Requirements
 
 ### REQ-1: Autonomous operation
 Every task, change, or request automatically goes through the agent team. The user never invokes agents manually. CLAUDE.md embeds the Conductor routing logic so it fires on every interaction.
 
-### REQ-2: 9 specialized agents as skills
+### REQ-2: 10 specialized agents as skills
 Each agent is a Claude Code skill with full persona, domain expertise, approach, rules, and context loading instructions. Agents: Conductor, Architect, Backend, Frontend, DBA, QA, Infra, Automation, AI.
 
 ### REQ-3: SDD integration
