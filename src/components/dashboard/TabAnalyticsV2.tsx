@@ -26,6 +26,7 @@ import { AnalyticsFilters } from "@/components/analytics/AnalyticsFilters";
 import { useOrganization } from "@/hooks/useOrganization";
 import { useAnalyticsOverview } from "@/hooks/useAnalyticsOverview";
 import { useAnalyticsEngajamento } from "@/hooks/useAnalyticsEngajamento";
+import { useAnalyticsPipesFunis } from "@/hooks/useAnalyticsPipesFunis";
 import { useMktByOrigin } from "@/hooks/useMktByOrigin";
 
 // Lazy-load deep-dive sections
@@ -84,8 +85,9 @@ export function TabAnalyticsV2({ month, year }: TabAnalyticsV2Props) {
   const [activeSection, setActiveSection] = useState("aquisicao");
   const { organizationId } = useOrganization();
 
-  const { data: overviewData } = useAnalyticsOverview();
-  const { data: engajamentoData } = useAnalyticsEngajamento();
+  const { data: overviewData, isError: overviewError, error: overviewErr } = useAnalyticsOverview();
+  const { data: engajamentoData, isError: engajamentoError } = useAnalyticsEngajamento();
+  const { data: pipesFunisData } = useAnalyticsPipesFunis(null);
   const { summary } = useMktByOrigin(month, year);
 
   // ─── Hero KPIs ───────────────────────────────────────────────────────────────
@@ -144,21 +146,32 @@ export function TabAnalyticsV2({ month, year }: TabAnalyticsV2Props) {
     return overviewData.insights.slice(0, 3);
   }, [overviewData]);
 
-  // ─── Funnel (compact, from marketing summary) ───────────────────────────────
-  const funnelSteps = useMemo(
-    () => [
-      { label: "Leads", value: summary.totalLeads, color: "#6366f1" },
-      { label: "Agendamentos", value: summary.totalAgendamentos, color: "#3b82f6" },
-      { label: "Comparecimentos", value: summary.totalComparecimentos, color: "#f59e0b" },
-      { label: "Vendas", value: summary.totalVendas, color: "#22c55e" },
-    ],
-    [summary]
-  );
+  // ─── Funnel (compact, server-side from get_analytics_pipeline_metrics)
+  // Same source as PipelineSection to guarantee numbers match across widgets
+  const funnelSteps = useMemo(() => {
+    const stages = pipesFunisData?.funnel_stages ?? [];
+    const FUNNEL_COLORS = ["#6366f1", "#3b82f6", "#f59e0b", "#22c55e"];
+    return stages.map((s, i) => ({
+      label: s.stage_name,
+      value: s.count,
+      color: FUNNEL_COLORS[i % FUNNEL_COLORS.length],
+    }));
+  }, [pipesFunisData]);
 
   return (
     <div className="space-y-5">
       {/* Sticky filter bar */}
       <AnalyticsFilters />
+
+      {/* Error banner */}
+      {(overviewError || engajamentoError) && (
+        <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
+          <p className="font-medium">Erro ao carregar métricas</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            {overviewErr?.message || "Verifique a conexão e tente novamente."}
+          </p>
+        </div>
+      )}
 
       {/* ─── HERO SECTION ─────────────────────────────────────────────────────── */}
 
@@ -236,7 +249,7 @@ export function TabAnalyticsV2({ month, year }: TabAnalyticsV2Props) {
       </div>
 
       {/* Unified Funnel — compact */}
-      {funnelSteps[0].value > 0 && (
+      {funnelSteps.length > 0 && funnelSteps[0].value > 0 && (
         <UnifiedFunnel
           title="Funil de Conversão"
           variant="compact"

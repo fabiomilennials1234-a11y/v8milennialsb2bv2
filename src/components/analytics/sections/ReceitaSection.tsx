@@ -12,8 +12,8 @@ import { UnitEconomicsCards } from "../charts/UnitEconomicsCards";
 import { CohortHeatmap } from "../charts/CohortHeatmap";
 
 export function ReceitaSection() {
-  const { data: finData, isLoading: finLoading } = useAnalyticsFinanceiro();
-  const { data: overviewData } = useAnalyticsOverview();
+  const { data: finData, isLoading: finLoading, isError: finError, error: finErr } = useAnalyticsFinanceiro();
+  const { data: overviewData, isError: overviewError } = useAnalyticsOverview();
 
   if (finLoading) {
     return (
@@ -25,6 +25,18 @@ export function ReceitaSection() {
         />
         <div className="flex items-center justify-center py-16">
           <Loader2 className="h-7 w-7 animate-spin text-primary" />
+        </div>
+      </div>
+    );
+  }
+
+  if (finError) {
+    return (
+      <div>
+        <AnalyticsSectionHeader icon={DollarSign} title="Receita" description="Quanto está faturando e pra onde vai?" />
+        <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
+          <p className="font-medium">Erro ao carregar receita</p>
+          <p className="text-xs text-muted-foreground mt-1">{finErr?.message}</p>
         </div>
       </div>
     );
