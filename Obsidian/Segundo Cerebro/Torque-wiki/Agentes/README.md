@@ -6,12 +6,12 @@ tags:
   - agente
   - referencia
   - roteamento
-updated_at: 2026-04-13
+updated_at: 2026-04-15
 ---
 
 # Time de Agentes
 
-9 agentes especializados que operam autonomamente em toda task. O [[Protocolo]] define o fluxo. O Conductor faz a triagem.
+10 agentes especializados que operam autonomamente em toda task. O [[Protocolo]] define o fluxo. O Conductor faz a triagem.
 
 ## Roster
 
@@ -26,6 +26,7 @@ updated_at: 2026-04-13
 | [[Infra]] | Senior Infra | Automação é respirar. Observabilidade é viver | `agent-infra` |
 | [[Automation]] | Automation Engineer | n8n, cron, webhooks, event-driven | `agent-automation` |
 | [[AI]] | AI/ML Engineer | Copilot, RAG, embeddings, conversations | `agent-ai` |
+| [[Security]] | Senior Security Engineer | Threat model, RLS review, SAST/SCA, LGPD. Poder de veto | `agent-security` |
 
 ## Tabela de Roteamento
 
@@ -39,12 +40,14 @@ updated_at: 2026-04-13
 | n8n, cron, automação, workflow trigger, pg_cron, jobs | Automation |
 | Copilot, agente IA, RAG, embeddings, conversation, prompt | AI |
 | Arquitetura, decisão cross-cutting, trade-off, boundaries | Architect |
+| Auth, permissões, RLS review, secrets, CORS, webhook signature, pagamento, PII, LGPD, OAuth, CSP, XSS, injection | Security |
 
 ## Combinaçoes comuns
 
 | Tipo de task | Sequência |
 |--------------|-----------|
 | Feature completa nova | Architect → DBA → Backend → Frontend → QA |
+| Feature sensível (auth/pagamento/PII/cross-tenant) | Architect → Security → DBA → Backend → Security → Frontend → QA → Security → Infra |
 | Automação nova | Architect (se decisão) → Automation → Backend → QA |
 | Mudança de IA | AI → Backend → Frontend (se UI) → QA |
 | Bug de UI | Frontend → QA |
