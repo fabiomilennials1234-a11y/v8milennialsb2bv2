@@ -125,7 +125,7 @@ export function useAnalyticsUtms(
 
       if (rpcError) {
         console.error("❌ [useAnalyticsUtms] RPC error:", rpcError.message);
-        return EMPTY;
+        throw new Error(`Analytics UTMs failed: ${rpcError.message}`);
       }
 
       const rpcResult = Array.isArray(rpcData) && rpcData.length > 0

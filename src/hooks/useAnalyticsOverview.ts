@@ -115,7 +115,7 @@ export function useAnalyticsOverview() {
 
       if (error) {
         console.error("❌ [useAnalyticsOverview] RPC error:", error.message);
-        return EMPTY;
+        throw new Error(`Analytics overview failed: ${error.message}`);
       }
 
       const raw = Array.isArray(data) && data.length > 0 ? data[0] : data;

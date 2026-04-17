@@ -17,8 +17,8 @@ import { ResponseByOrigin } from "../charts/ResponseByOrigin";
 import { ConversionMatrix } from "../charts/ConversionMatrix";
 
 export function EquipeSection() {
-  const { data: engData, isLoading: engLoading } = useAnalyticsEngajamento();
-  const { data: comData, isLoading: comLoading } = useAnalyticsComercial();
+  const { data: engData, isLoading: engLoading, isError: engError, error: engErr } = useAnalyticsEngajamento();
+  const { data: comData, isLoading: comLoading, isError: comError, error: comErr } = useAnalyticsComercial();
 
   const isLoading = engLoading || comLoading;
 
@@ -29,6 +29,13 @@ export function EquipeSection() {
         title="Equipe"
         description="Como está a performance do seu time?"
       />
+
+      {(engError || comError) && (
+        <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive mb-4">
+          <p className="font-medium">Erro ao carregar dados da equipe</p>
+          <p className="text-xs text-muted-foreground mt-1">{engErr?.message || comErr?.message}</p>
+        </div>
+      )}
 
       {isLoading ? (
         <div className="flex items-center justify-center py-16">

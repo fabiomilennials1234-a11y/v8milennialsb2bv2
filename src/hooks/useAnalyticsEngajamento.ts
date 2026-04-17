@@ -120,7 +120,7 @@ export function useAnalyticsEngajamento() {
 
       if (error) {
         console.error("❌ [useAnalyticsEngajamento] RPC error:", error.message);
-        return EMPTY;
+        throw new Error(`Analytics engajamento failed: ${error.message}`);
       }
 
       const raw = Array.isArray(data) && data.length > 0 ? data[0] : data;
