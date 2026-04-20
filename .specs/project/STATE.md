@@ -1,6 +1,6 @@
 # Project State
 
-**Last updated:** 2026-04-14
+**Last updated:** 2026-04-17
 
 ## Decisions
 
@@ -224,6 +224,22 @@ Fase 0 delivered:
 3. Stood up Deno test pipeline for edge functions: `supabase/functions/deno.json`, seed test `_shared/response.test.ts` (94.9 line cov), npm scripts `test:edge` + `test:edge:coverage`.
 4. Hardened CI (`.github/workflows/test.yml`): removed `continue-on-error` on coverage, bumped Node 18 → 20, added `edge-function-tests` job, coverage artifacts uploaded.
 Target roadmap: 85% lines global, 90% branches on fragile areas (permissions, copilot, webhooks), mutation testing on critical modules, contract tests on public webhooks, RLS isolation tests. Not "100% coverage" — correctness + gates, not numbers.
+
+### D032: Fix "receita do mês" / MRR contract duration inflation (2026-04-17)
+A RPC `get_dashboard_metrics` (latest: `20260911000000_fix_dashboard_conversion_rate.sql`) multiplicava `sale_value × contract_duration` para produtos MRR em `v_venda_total`, `v_venda_base_ativa` e `v_venda_primeiro_pedido`, resultando em "Faturamento do Mês" exibindo o valor TOTAL CONTRATADO ao longo do contrato (LTV-like) em vez das vendas que efetivamente entraram no mês. Ex.: MRR R$1.000 × 12 meses mostrava R$12.000 como receita do mês.
+
+**Histórico**: `20260708000004` adicionou a multiplicação intencionalmente (confundiu semântica), `20260829400000` removeu, `20260911000000` regrediu ao reescrever a RPC para fix de `taxaConversao`.
+
+**Fix**: migration `20260417100000_fix_receita_mes_mrr_contract_duration.sql` recria a RPC sem a multiplicação em `v_venda_total/base_ativa/primeiro_pedido`. `vendaMRR` e `vendaProjeto` já estavam corretos e permanecem intactos. `ticketMedio` deixa de ser inflado.
+
+**Invariante**: `vendaTotal` = Σ sale_value das vendas do período, nunca × contract_duration. Se algum consumidor precisar de "valor total contratado" (LTV-like), deve ser campo separado explicitamente nomeado.
+
+**Evidência**: `tests/sql/validate_receita_mes_mrr.sql` — fixtures MRR(1000, dur=12) + Projeto(5000) → `vendaTotal=6000` (não 17000), `vendaMRR=1000`, `ticketMedio=3000`. Roda em transação com ROLLBACK.
+
+**Pendente**: aplicar migration no dev (`bcfadphgsibjzivtbjvc`) via SQL Editor, CLI bloqueada por Device Guard.
+
+### L002: Duas semânticas de receita ("mês" vs "LTV contratado") são fáceis de confundir (2026-04-17)
+A multiplicação `sale_value × contract_duration` para MRR faz sentido em contextos de LTV/forecast ("valor total contratado"), mas NUNCA no card "Receita do Mês" do dashboard. Já houve 3 migrations flipando a regra (`20260708` adicionou, `20260829` removeu, `20260911` regrediu). Regra operacional: se aparecer PR que mude agregação de receita, validar explicitamente qual semântica está sendo atingida antes de aprovar. Preferir campos separados e nomeados (ex: `valorTotalContratado` vs `vendaTotal`) em vez de reusar o mesmo campo com semântica diferente.
 
 ### D033: Fix pipe closer_id/sdr_id sync from leads → pipes (2026-04-17)
 Trigger `trg_sync_responsible_from_lead_to_pipes` (definido em 20260826100000) sincronizava apenas `responsible_id` de `leads` para os pipes. Quando o closer de um lead era transferido via `leads.closer_id`, o `pipe_propostas.closer_id` ficava obsoleto. A RLS SELECT de pipe_propostas lê `closer_id` do próprio pipe — resultado: closer antigo continuava vendo o card, dois closers atendiam o mesmo lead, métricas individuais ficavam infladas.
