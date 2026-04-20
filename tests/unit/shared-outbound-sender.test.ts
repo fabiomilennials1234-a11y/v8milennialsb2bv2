@@ -50,6 +50,7 @@ function createOutboundMockSupabase(overrides: {
 } = {}) {
   const updateCalls: Array<{ table: string; data: any; id: string }> = [];
   const insertCalls: Array<{ table: string; data: any }> = [];
+  const upsertCalls: Array<{ table: string; data: any; options?: any }> = [];
 
   const sb: any = {
     from: (table: string) => {
@@ -106,11 +107,22 @@ function createOutboundMockSupabase(overrides: {
             Promise.resolve({ data: null, error: null }).catch(onRejected);
           return insertChain;
         },
+        upsert: (data: any, options?: any) => {
+          upsertCalls.push({ table, data, options });
+          const upsertChain: any = {};
+          upsertChain[Symbol.toStringTag] = "Promise";
+          upsertChain.then = (onFulfilled?: any, onRejected?: any) =>
+            Promise.resolve({ data: null, error: null }).then(onFulfilled, onRejected);
+          upsertChain.catch = (onRejected?: any) =>
+            Promise.resolve({ data: null, error: null }).catch(onRejected);
+          return upsertChain;
+        },
       };
       return chain;
     },
     _updateCalls: updateCalls,
     _insertCalls: insertCalls,
+    _upsertCalls: upsertCalls,
   };
   return sb;
 }
@@ -541,11 +553,14 @@ describe("sendOutboundDispatch", () => {
     });
 
     await sendOutboundDispatch(sb, "d-1", "org-1");
-    const msgInsert = sb._insertCalls.find(
+    const msgUpsert = sb._upsertCalls.find(
       (c: any) => c.table === "whatsapp_messages" && c.data.message_type === "conversation"
     );
-    expect(msgInsert).toBeDefined();
-    expect(msgInsert.data.from_me).toBe(true);
-    expect(msgInsert.data.content).toContain("[humanized]");
+    expect(msgUpsert).toBeDefined();
+    expect(msgUpsert.data.sent_by_ai).toBe(true);
+    expect(msgUpsert.data.direction).toBe("outgoing");
+    expect(msgUpsert.data.message_id).toBe("msg-123");
+    expect(msgUpsert.data.content).toContain("[humanized]");
+    expect(msgUpsert.options?.onConflict).toBe("message_id,instance_id");
   });
 });
