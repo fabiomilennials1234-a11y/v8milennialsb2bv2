@@ -55,12 +55,21 @@ RUN printf '%s\n' \
   '    add_header X-Content-Type-Options "nosniff" always;' \
   '    try_files $uri =404;' \
   '  }' \
+  '  location = / {' \
+  '    add_header Cache-Control "no-store, must-revalidate" always;' \
+  '    add_header X-Content-Type-Options "nosniff" always;' \
+  '    add_header X-Frame-Options "DENY" always;' \
+  '    try_files /index.html =404;' \
+  '  }' \
   '  location = /index.html {' \
   '    add_header Cache-Control "no-store, must-revalidate" always;' \
   '    add_header X-Content-Type-Options "nosniff" always;' \
   '    add_header X-Frame-Options "DENY" always;' \
   '  }' \
-  '  location / { try_files $uri $uri/ /index.html; }' \
+  '  location / {' \
+  '    add_header Cache-Control "no-store, must-revalidate" always;' \
+  '    try_files $uri $uri/ /index.html;' \
+  '  }' \
   '}' > /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
