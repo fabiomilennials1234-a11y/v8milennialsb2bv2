@@ -225,6 +225,22 @@ Fase 0 delivered:
 4. Hardened CI (`.github/workflows/test.yml`): removed `continue-on-error` on coverage, bumped Node 18 → 20, added `edge-function-tests` job, coverage artifacts uploaded.
 Target roadmap: 85% lines global, 90% branches on fragile areas (permissions, copilot, webhooks), mutation testing on critical modules, contract tests on public webhooks, RLS isolation tests. Not "100% coverage" — correctness + gates, not numbers.
 
+### D033: Fix pipe closer_id/sdr_id sync from leads → pipes (2026-04-17)
+Trigger `trg_sync_responsible_from_lead_to_pipes` (definido em 20260826100000) sincronizava apenas `responsible_id` de `leads` para os pipes. Quando o closer de um lead era transferido via `leads.closer_id`, o `pipe_propostas.closer_id` ficava obsoleto. A RLS SELECT de pipe_propostas lê `closer_id` do próprio pipe — resultado: closer antigo continuava vendo o card, dois closers atendiam o mesmo lead, métricas individuais ficavam infladas.
+
+**Fix**: migration `20260417110000_fix_pipe_closer_sdr_sync.sql` estende a função e o trigger para propagar `responsible_id`, `closer_id` e `sdr_id` de `leads` para todos os pipes aplicáveis. Backfill histórico corrige drift existente. Bloco de validação falha se drift > 0 após backfill.
+
+**Frontend defensivo**: `PipePropostas.tsx` e `PipeConfirmacao.tsx` aplicam `filterResponsible = teamMemberId` como default one-shot para role `member` (flag `membroDefaultApplied` persiste a decisão). Admin/Master começam com "all".
+
+**Evidência**: `tests/sql/validate_pipe_closer_sync.sql` (sync) + `tests/sql/validate_pipe_closer_rls.sql` (RLS end-to-end com impersonation via `request.jwt.claims`). Ambos rodados contra dev `bcfadphgsibjzivtbjvc` e passaram. Build ok, 2543 tests pass, zero regressões.
+
+**Invariante**: `pipe_propostas.closer_id ≡ leads.closer_id`, `pipe_confirmacao.{sdr_id, closer_id} ≡ leads.{sdr_id, closer_id}`, `pipe_whatsapp.sdr_id ≡ leads.sdr_id`. Manutenção via trigger após esta fix.
+
+**Produção (`jsjsmuncfkbsbzqzqhfq`) NÃO foi tocada** — migration pronta para aplicar quando CTO autorizar.
+
+### L003: RLS em pipes precisa espelhar leads ou usar subquery (2026-04-17)
+Se a RLS usa colunas DO PIPE (ex: `pipe_propostas.closer_id`) e o pipe não está sincronizado com `leads`, nascem vazamentos de visibilidade. Duas opções: (a) garantir sync via trigger (escolhida — menor impacto em performance), (b) fazer a RLS ler de `leads` via subquery (adiciona custo por linha). Se aparecer PR mudando `closer_id`/`sdr_id`/`responsible_id` em tabelas de pipe, verificar se o trigger cobre o caminho ou se é necessária nova policy.
+
 ## Deferred Ideas
 
 - S1+S3 security fixes -- deferred until T2+T5 test suite is in place
