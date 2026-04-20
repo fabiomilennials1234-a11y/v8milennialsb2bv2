@@ -20,6 +20,7 @@ interface ChainResult {
 export function createMockSupabase() {
   const tables: Record<string, MockData> = {};
   const insertedRows: Record<string, MockData> = {};
+  const upsertOpts: Record<string, unknown[]> = {};
   const rpcResults: Record<string, unknown> = {};
 
   function mockTable(name: string, data: MockData) {
@@ -32,6 +33,10 @@ export function createMockSupabase() {
 
   function getInserted(table: string): MockData {
     return insertedRows[table] || [];
+  }
+
+  function getUpsertOpts(table: string): unknown[] {
+    return upsertOpts[table] || [];
   }
 
   function createChain(tableName: string): any {
@@ -104,11 +109,13 @@ export function createMockSupabase() {
         updateData = vals;
         return chain;
       },
-      upsert: (rows: unknown, _opts?: unknown) => {
+      upsert: (rows: unknown, opts?: unknown) => {
         isInsert = true;
         insertData = rows;
         const arr = Array.isArray(rows) ? rows : [rows];
         if (!insertedRows[tableName]) insertedRows[tableName] = [];
+        if (!upsertOpts[tableName]) upsertOpts[tableName] = [];
+        upsertOpts[tableName].push(opts);
         const withIds = arr.map((r: any) => ({ id: crypto.randomUUID(), ...r }));
         insertedRows[tableName].push(...withIds);
         data = withIds;
@@ -179,5 +186,5 @@ export function createMockSupabase() {
     },
   };
 
-  return { sb: sb as any, mockTable, mockRpc, getInserted };
+  return { sb: sb as any, mockTable, mockRpc, getInserted, getUpsertOpts };
 }

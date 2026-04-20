@@ -87,7 +87,7 @@ export async function sendFollowupMessage(
 
   const messageId = `followup-${crypto.randomUUID()}`;
 
-  await supabase.from("whatsapp_messages").insert({
+  await supabase.from("whatsapp_messages").upsert({
     organization_id: organizationId,
     instance_id: instanceId,
     message_id: messageId,
@@ -100,7 +100,7 @@ export async function sendFollowupMessage(
     lead_id: leadId,
     timestamp: new Date().toISOString(),
     sent_by_ai: true,
-  });
+  }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
 
   await supabase.from("copilot_followup_execution_log").insert({
     lead_id: leadId,

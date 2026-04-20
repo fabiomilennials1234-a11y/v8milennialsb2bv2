@@ -39,6 +39,29 @@ Interface unificada de chat multi-canal (WhatsApp via Evolution API, Messenger e
 - CORS de audio no Supabase Storage precisa config separada (ver docs/STORAGE_CORS.md)
 - onUpdate do realtime recebe apenas campos alterados, nao row completo com joins
 
+## Invariante — Idempotência `whatsapp_messages` (2026-04-20)
+
+**Toda** escrita em `whatsapp_messages` em `supabase/functions/**` usa `upsert` com `onConflict: "message_id,instance_id"`. Zero `.insert()` brutos. UNIQUE `(message_id, instance_id)` existe desde `20260127000000_add_whatsapp_messages.sql:37`.
+
+Por que: outbound-sender / workflow-action-handler / dispatchers gravam a linha ANTES do echo do Evolution chegar (com o mesmo `key.id`). Sem upsert idempotente, o echo criava duplicata ou precisava ser silenciado via `msgError.message.includes("duplicate")` (frágil, mascarava falhas reais).
+
+**Política de `ignoreDuplicates`**:
+
+| Contexto | Valor | Razão |
+|---|---|---|
+| Webhook echo handler (`evolution-webhook`, `sz-chat-webhook`) | `true` | Outbound/dispatcher é fonte de verdade para `content` humanizado + `sent_by_ai`. Echo não deve sobrescrever. |
+| Dispatcher/sender (`outbound-sender`, `workflow-action-handler`, `followup-sender`, `ai-action-executor`, `campaign-rule-dispatch`, `pipe-rule-dispatch`, `process-scheduled-user-messages`) | `false` | Dispatcher escreve o state final — se alguma linha pré-existir, sobrescreve com o dado autoritativo. |
+| **Exceção única**: `evolution-webhook` `send.message` handler (`SEND_MESSAGE_MEDIA_REFRESH` marker) | `false` | Precisa refrescar `media_url` com URL Storage-backed quando `MESSAGES_UPSERT` chegou antes com URL null/CDN expirada. |
+
+**Contract test em CI**: `tests/unit/whatsapp-messages-idempotency-contract.test.ts` — 5 asserts AST-grep sobre `supabase/functions/**`:
+1. Zero `.insert(` em `whatsapp_messages`.
+2. Todo `.upsert(` tem `onConflict: "message_id,instance_id"`.
+3. Webhook files = `ignoreDuplicates: true` (exceto `SEND_MESSAGE_MEDIA_REFRESH`).
+4. Dispatcher files = `ignoreDuplicates: false`.
+5. Nenhum arquivo que escreve `whatsapp_messages` swallows erro via `.includes("duplicate")`.
+
+Qualquer PR que violar cai no CI.
+
 ---
 
 ## Como funciona (tecnico)
@@ -86,32 +109,6 @@ Webhook externo (Evolution/Meta/SZ.Chat)
 
 ## Historico de mudancas
 
-### 2026-04-20 — Fix layout "chat cortando" (vertical + horizontal)
-
-Chat sofria corte vertical (composer empurrado fora da dobra) e horizontal (conteudo clipado na direita). 3 defeitos simultaneos:
-
-1. **Vertical (primario)** — [WhatsAppChat.tsx:2327](../../../../src/components/chat/WhatsAppChat.tsx) usava `h-[calc(100vh-4rem)] max-h-[calc(100vh-4rem)]`. TopNav e `h-14` (3.5rem = 56px, nao 4rem). Alem disso, ignorava `py-6 lg:py-8` do [MainLayout.tsx:13](../../../../src/components/layout/MainLayout.tsx) (48-64px). Chat ficava 56-72px mais alto que o container, overflow do `<main>` era acionado e o composer sumia abaixo da dobra.
-
-2. **Horizontal (secundario)** — [WhatsAppChat.tsx:2367](../../../../src/components/chat/WhatsAppChat.tsx) (Chat Window flex child) nao tinha `min-w-0`. `min-width: auto` default deixava filhos com `min-w-[200px]` (composer) ou texto sem quebra forcarem largura maior que a fatia flex. Como o container pai (2327) tem `overflow-hidden`, a sobra era clipada.
-
-3. **Causa habilitadora** — `MainLayout` nao propagava altura pela cadeia flex. Wrapper interno era bloco sem flex/min-h-0, por isso o chat recorreu a math de viewport hardcoded (sintoma, nao solucao).
-
-**Correcao** (3 arquivos, 6 linhas):
-
-- `MainLayout.tsx`: `min-h-screen` → `h-screen`; `main` ganha `min-h-0` (permite flex-1 encolher abaixo do conteudo intrinseco); wrapper interno ganha `min-h-full flex flex-col` (propaga altura, short pages ainda preenchem, long pages rolam via main.overflow-auto).
-- `WhatsAppChat.tsx:2327`: remove `h-[calc(100vh-4rem)] max-h-[calc(100vh-4rem)]`. Altura agora vem do chain flex (h-screen → main → flex-col wrapper → flex-1 page → flex-1 chat).
-- `WhatsAppChat.tsx:2367`: adiciona `min-w-0` ao Chat Window.
-
-**Robustez**: zero math de viewport no chat. Altura e largura seguem o layout pai — se TopNav ou padding mudarem, chat se ajusta automaticamente. `100dvh` implicito via `h-screen` herdado.
-
-**Risco residual**: MainLayout agora bounded (h-screen). Antes a janela inteira rolava em paginas longas; agora o `<main>` rola, TopNav pinado. Comportamento visual quase identico (TopNav ja era `sticky top-0`). Verificado: `window.scroll` listener so no `LandingNavbar` (fora do MainLayout).
-
-**Followups (mesmo bug em outras paginas)**:
-- [CopilotPlayground.tsx:435](../../../../src/components/copilot/playground/CopilotPlayground.tsx) `h-[calc(100vh-4rem)]`
-- [Agenda.tsx:1069](../../../../src/pages/Agenda.tsx) `h-[calc(100vh-4rem)]`
-- [AutomacoesEditor.tsx:299](../../../../src/pages/AutomacoesEditor.tsx) `h-[calc(100vh-64px)] -m-6` (com hack para neutralizar padding do MainLayout)
-
-Essas paginas beneficiam automaticamente da nova cadeia flex do MainLayout, mas ainda carregam hardcodes — trocar por `flex-1 min-h-0 h-full` quando tocar nelas.
 
 ## Links relacionados
 

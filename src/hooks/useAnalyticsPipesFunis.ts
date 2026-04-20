@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "./useOrganization";
 import { useAnalyticsFilters } from "./useAnalyticsFilters";
+import { isMissingSchemaError } from "@/lib/rpc-errors";
 
 export type PipelineSelectorType = "whatsapp" | "confirmacao" | "propostas" | null;
 
@@ -95,6 +96,10 @@ export function useAnalyticsPipesFunis(pipelineType: PipelineSelectorType = null
       );
 
       if (error) {
+        if (isMissingSchemaError(error)) {
+          console.warn("⚠️ [useAnalyticsPipesFunis] RPC ausente (migration pendente?):", error.message);
+          return EMPTY;
+        }
         console.error("❌ [useAnalyticsPipesFunis] RPC error:", error.message);
         throw new Error(`Analytics pipes/funis failed: ${error.message}`);
       }

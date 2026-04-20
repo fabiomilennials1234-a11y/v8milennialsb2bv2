@@ -72,23 +72,26 @@ export async function sendOutboundDispatch(
     }
 
     let instanceName: string | null = null;
+    let instanceId: string | null = null;
     if (row.agent?.whatsapp_instance_id) {
       const { data: instance } = await supabase
         .from("whatsapp_instances")
-        .select("instance_name")
+        .select("id, instance_name")
         .eq("id", row.agent.whatsapp_instance_id)
         .single();
       instanceName = instance?.instance_name ?? null;
+      instanceId = instance?.id ?? null;
     }
     if (!instanceName) {
       const { data: instance } = await supabase
         .from("whatsapp_instances")
-        .select("instance_name")
+        .select("id, instance_name")
         .eq("organization_id", organizationId)
         .eq("status", "open")
         .limit(1)
         .maybeSingle();
       instanceName = instance?.instance_name ?? null;
+      instanceId = instance?.id ?? null;
     }
     if (!instanceName) {
       console.error("[outbound-sender] No WhatsApp instance found");
@@ -268,31 +271,44 @@ export async function sendOutboundDispatch(
       });
     }
 
-    // Registrar mensagem de texto no histórico
-    await supabase.from("whatsapp_messages").insert({
+    // Registrar mensagem de texto no histórico.
+    // message_id = ID real retornado pela Evolution API — garante que o webhook
+    // echo (send.message) faça UPSERT nesta linha ao invés de criar uma nova.
+    // sent_by_ai:true sinaliza Copilot no chat (badge).
+    const outboundTextMessageId = textResult.messageId
+      || `cp_${crypto.randomUUID()}`;
+    await supabase.from("whatsapp_messages").upsert({
       organization_id: organizationId,
-      instance_name: instanceName,
+      instance_id: instanceId,
+      message_id: outboundTextMessageId,
       remote_jid: phone + "@s.whatsapp.net",
-      from_me: true,
+      phone_number: phone,
+      direction: "outgoing",
       message_type: "conversation",
       content: humanizedContent,
       timestamp: new Date().toISOString(),
       status: "sent",
-    });
+      sent_by_ai: true,
+    }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
 
     // Registrar áudio no histórico (se enviado com sucesso)
     if (chosenAudio && audioResult?.ok) {
-      await supabase.from("whatsapp_messages").insert({
+      const outboundAudioMessageId = audioResult.messageId
+        || `cp_${crypto.randomUUID()}`;
+      await supabase.from("whatsapp_messages").upsert({
         organization_id: organizationId,
-        instance_name: instanceName,
+        instance_id: instanceId,
+        message_id: outboundAudioMessageId,
         remote_jid: phone + "@s.whatsapp.net",
-        from_me: true,
+        phone_number: phone,
+        direction: "outgoing",
         message_type: "audio",
         content: "[Áudio]",
         media_url: chosenAudio.public_url,
         timestamp: new Date().toISOString(),
         status: "sent",
-      });
+        sent_by_ai: true,
+      }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
       console.log(`[outbound-sender] Audio sent: ${chosenAudio.name} (${chosenAudio.id})`);
     }
 

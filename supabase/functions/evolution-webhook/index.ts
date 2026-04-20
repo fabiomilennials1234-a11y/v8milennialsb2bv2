@@ -974,8 +974,10 @@ async function handleMessagesUpsert(
         }
       }
 
-      // Inserir mensagem no banco
-      const { error: msgError } = await supabase.from("whatsapp_messages").insert({
+      // Upsert idempotente: se o outbound-sender ou o workflow-action-handler já
+      // persistiu essa linha pelo mesmo (message_id, instance_id), mantemos o registro
+      // original (content humanizado + sent_by_ai). Echo do servidor não sobrescreve.
+      const { error: msgError } = await supabase.from("whatsapp_messages").upsert({
         organization_id: instance.organization_id,
         instance_id: instance.id,
         message_id: msg.key.id,
@@ -991,13 +993,10 @@ async function handleMessagesUpsert(
           ? new Date(Number(msg.messageTimestamp) * 1000).toISOString()
           : new Date().toISOString(),
         raw_payload: msg as unknown as Record<string, unknown>,
-      });
+      }, { onConflict: "message_id,instance_id", ignoreDuplicates: true });
 
       if (msgError) {
-        // Pode ser duplicado, ignorar
-        if (!msgError.message?.includes("duplicate")) {
-          console.error("[Evolution Webhook] Error saving message:", msgError);
-        }
+        console.error("[Evolution Webhook] Error saving message:", msgError);
       } else {
         console.log("[Evolution Webhook] Message saved:", {
           direction,
@@ -1248,7 +1247,7 @@ async function handleMessagesUpsert(
                       console.log("[Evolution Webhook] TTS audio sent successfully");
 
                       // Save outgoing message as ptt with text content for chat display
-                      const { error: outMsgError } = await supabase.from("whatsapp_messages").insert({
+                      const { error: outMsgError } = await supabase.from("whatsapp_messages").upsert({
                         organization_id: instance.organization_id,
                         instance_id: instance.id,
                         message_id: audioResult.messageId || `agent_tts_${Date.now()}_${Math.random().toString(36).substring(7)}`,
@@ -1261,7 +1260,7 @@ async function handleMessagesUpsert(
                         status: "sent",
                         timestamp: new Date().toISOString(),
                         sent_by_ai: true,
-                      });
+                      }, { onConflict: "message_id,instance_id", ignoreDuplicates: true });
 
                       if (outMsgError) {
                         console.error("[Evolution Webhook] Error saving TTS outgoing message:", outMsgError);
@@ -1297,7 +1296,7 @@ async function handleMessagesUpsert(
               );
 
               if (sent) {
-                const { error: outMsgError } = await supabase.from("whatsapp_messages").insert({
+                const { error: outMsgError } = await supabase.from("whatsapp_messages").upsert({
                   organization_id: instance.organization_id,
                   instance_id: instance.id,
                   message_id: `agent_${Date.now()}_${Math.random().toString(36).substring(7)}`,
@@ -1309,7 +1308,7 @@ async function handleMessagesUpsert(
                   status: "sent",
                   timestamp: new Date().toISOString(),
                   sent_by_ai: true,
-                });
+                }, { onConflict: "message_id,instance_id", ignoreDuplicates: true });
 
                 if (outMsgError) {
                   console.error("[Evolution Webhook] Error saving outgoing message:", outMsgError);
@@ -1456,8 +1455,10 @@ async function handleSendMessage(
     messageId: key.id,
   });
 
-  // Upsert: se já existe (ex: MESSAGES_UPSERT chegou primeiro), atualiza media_url
-  // para garantir que a URL correta do Storage sobrescreva null ou CDN URL expirada.
+  // SEND_MESSAGE_MEDIA_REFRESH — intentional exception to the global
+  // ignoreDuplicates:true policy for webhook echoes. This handler runs after
+  // MESSAGES_UPSERT may have landed first with a null or expired CDN URL.
+  // We must overwrite with the Storage-backed media_url, so ignoreDuplicates:false.
   const { error: msgError } = await supabase.from("whatsapp_messages").upsert({
     organization_id: instance.organization_id,
     instance_id: instance.id,
