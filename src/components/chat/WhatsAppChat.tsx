@@ -2324,7 +2324,7 @@ export function WhatsAppChat() {
 
   return (
     <>
-      <div className="flex flex-1 min-h-0 h-[calc(100vh-4rem)] max-h-[calc(100vh-4rem)] rounded-lg border bg-background overflow-hidden">
+      <div className="flex flex-1 min-h-0 rounded-lg border bg-background overflow-hidden">
         {/* Contact List - altura limitada com scroll interno */}
         <div
           className={cn(
@@ -2363,8 +2363,8 @@ export function WhatsAppChat() {
           />
         </div>
 
-        {/* Chat Window - min-h-0 para scroll interno na área de mensagens */}
-        <div className={cn("flex-1 min-h-0 overflow-hidden flex flex-col", !selectedPhone && "hidden md:flex")}>
+        {/* Chat Window - min-w-0 evita clipping horizontal; min-h-0 para scroll interno na área de mensagens */}
+        <div className={cn("flex-1 min-w-0 min-h-0 overflow-hidden flex flex-col", !selectedPhone && "hidden md:flex")}>
           {selectedPhone && selectedInstance ? (
             <ChatWindow
               phoneNumber={selectedPhone}
