@@ -181,6 +181,9 @@ Added `tests/unit/shared-action-handler-branches.test.ts` with 29 targeted tests
 - **handleGenerateAiMessage**: missing OPENROUTER_API_KEY, HTTP 500 response, empty content, thrown fetch error, custom aiOutputVariable stored in executionContext.
 Coverage: 81.61 → **92.99 stmts**, 71.01 → **82.1 branches**, 83.3 → **95.82 lines**. Threshold ratchet: 95/92/100/82.
 
+### D014: Security agent added to team (2026-04-15)
+Team expanded from 9 to 10 agents. New `agent-security` — Senior Security Engineer with veto power over merges/deploys touching sensitive surface. Domain: SAST/SCA/secrets scanning, RLS review, auth hardening, multi-tenant isolation, LGPD, threat modeling (STRIDE), LLM security (Copilot prompt injection), supply chain. Skill in `.claude/skills/agent-security/SKILL.md`. Threat model in `.specs/codebase/SECURITY.md`. Conductor updated with triggers and sensitive-feature pipeline: Architect → Security (threat model) → DBA → Backend → Security (RLS + auth review) → Frontend → QA → Security (final gate) → Infra. Obsidian notes in `Agentes/Security.md`, ADR-2026-04-15, feature note `06 — Features/Seguranca/`. CLAUDE.md tabela e roteamento atualizados.
+
 ### D013: Fase 1 — workflow-trigger.ts covered (2026-04-14)
 Added `tests/unit/workflow-trigger-branches.test.ts` with 16 tests for previously untested exports:
 - `fireStageChangedTrigger` — delegates to fireTrigger with optional fields.
@@ -237,6 +240,22 @@ A RPC `get_dashboard_metrics` (latest: `20260911000000_fix_dashboard_conversion_
 
 ### L002: Duas semânticas de receita ("mês" vs "LTV contratado") são fáceis de confundir (2026-04-17)
 A multiplicação `sale_value × contract_duration` para MRR faz sentido em contextos de LTV/forecast ("valor total contratado"), mas NUNCA no card "Receita do Mês" do dashboard. Já houve 3 migrations flipando a regra (`20260708` adicionou, `20260829` removeu, `20260911` regrediu). Regra operacional: se aparecer PR que mude agregação de receita, validar explicitamente qual semântica está sendo atingida antes de aprovar. Preferir campos separados e nomeados (ex: `valorTotalContratado` vs `vendaTotal`) em vez de reusar o mesmo campo com semântica diferente.
+
+### D033: Fix pipe closer_id/sdr_id sync from leads → pipes (2026-04-17)
+Trigger `trg_sync_responsible_from_lead_to_pipes` (definido em 20260826100000) sincronizava apenas `responsible_id` de `leads` para os pipes. Quando o closer de um lead era transferido via `leads.closer_id`, o `pipe_propostas.closer_id` ficava obsoleto. A RLS SELECT de pipe_propostas lê `closer_id` do próprio pipe — resultado: closer antigo continuava vendo o card, dois closers atendiam o mesmo lead, métricas individuais ficavam infladas.
+
+**Fix**: migration `20260417110000_fix_pipe_closer_sdr_sync.sql` estende a função e o trigger para propagar `responsible_id`, `closer_id` e `sdr_id` de `leads` para todos os pipes aplicáveis. Backfill histórico corrige drift existente. Bloco de validação falha se drift > 0 após backfill.
+
+**Frontend defensivo**: `PipePropostas.tsx` e `PipeConfirmacao.tsx` aplicam `filterResponsible = teamMemberId` como default one-shot para role `member` (flag `membroDefaultApplied` persiste a decisão). Admin/Master começam com "all".
+
+**Evidência**: `tests/sql/validate_pipe_closer_sync.sql` (sync) + `tests/sql/validate_pipe_closer_rls.sql` (RLS end-to-end com impersonation via `request.jwt.claims`). Ambos rodados contra dev `bcfadphgsibjzivtbjvc` e passaram. Build ok, 2543 tests pass, zero regressões.
+
+**Invariante**: `pipe_propostas.closer_id ≡ leads.closer_id`, `pipe_confirmacao.{sdr_id, closer_id} ≡ leads.{sdr_id, closer_id}`, `pipe_whatsapp.sdr_id ≡ leads.sdr_id`. Manutenção via trigger após esta fix.
+
+**Produção (`jsjsmuncfkbsbzqzqhfq`) NÃO foi tocada** — migration pronta para aplicar quando CTO autorizar.
+
+### L003: RLS em pipes precisa espelhar leads ou usar subquery (2026-04-17)
+Se a RLS usa colunas DO PIPE (ex: `pipe_propostas.closer_id`) e o pipe não está sincronizado com `leads`, nascem vazamentos de visibilidade. Duas opções: (a) garantir sync via trigger (escolhida — menor impacto em performance), (b) fazer a RLS ler de `leads` via subquery (adiciona custo por linha). Se aparecer PR mudando `closer_id`/`sdr_id`/`responsible_id` em tabelas de pipe, verificar se o trigger cobre o caminho ou se é necessária nova policy.
 
 ## Deferred Ideas
 

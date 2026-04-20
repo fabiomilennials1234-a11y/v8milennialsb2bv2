@@ -63,6 +63,7 @@ import { TinyErpConfirmOrderDialog } from "./TinyErpConfirmOrderDialog";
 import { useTinyErpStatus } from "@/hooks/useTinyErp";
 import { useCadastroExternoEnabled } from "@/hooks/useCadastroExterno";
 import { CadastroExternoConfirmDialog } from "./CadastroExternoConfirmDialog";
+import { ProductCombobox } from "./ProductCombobox";
 
 const statusLabels: Record<PipePropostasStatus, string> = {
   marcar_compromisso: "Marcar Compromisso",
@@ -134,7 +135,8 @@ export function ProposalDetailModal({
   const [localItems, setLocalItems] = useState<Array<{
     id: string;
     product_id: string;
-    sale_value: string;
+    quantity: number;
+    unit_price: string;
     isNew?: boolean;
   }>>([]);
 
@@ -170,26 +172,28 @@ export function ProposalDetailModal({
       setLocalItems(itemsData.map(item => ({
         id: item.id,
         product_id: item.product_id || "",
-        sale_value: item.sale_value?.toString() || "",
+        quantity: item.quantity ?? 1,
+        unit_price: item.unit_price?.toString() || item.sale_value?.toString() || "",
       })));
     } else if (proposta?.product_id) {
       // Fallback for old proposals without items
       setLocalItems([{
         id: "legacy",
         product_id: proposta.product_id || "",
-        sale_value: proposta.sale_value?.toString() || "",
+        quantity: 1,
+        unit_price: proposta.sale_value?.toString() || "",
       }]);
     } else {
       setLocalItems([
-        { id: crypto.randomUUID(), product_id: "", sale_value: "", isNew: true },
-        { id: crypto.randomUUID(), product_id: "", sale_value: "", isNew: true },
+        { id: crypto.randomUUID(), product_id: "", quantity: 1, unit_price: "", isNew: true },
+        { id: crypto.randomUUID(), product_id: "", quantity: 1, unit_price: "", isNew: true },
       ]);
     }
     setItemsInitialized(true);
   }, [open, proposta?.id, itemsData, itemsLoading, itemsInitialized]);
 
   const handleAddItem = () => {
-    setLocalItems([...localItems, { id: crypto.randomUUID(), product_id: "", sale_value: "", isNew: true }]);
+    setLocalItems([...localItems, { id: crypto.randomUUID(), product_id: "", quantity: 1, unit_price: "", isNew: true }]);
   };
 
   const handleRemoveItem = async (id: string, isNew?: boolean) => {
@@ -208,21 +212,26 @@ export function ProposalDetailModal({
     setLocalItems(localItems.filter(item => item.id !== id));
   };
 
-  const handleItemChange = (id: string, field: "product_id" | "sale_value", value: string) => {
+  const handleProductSelect = (itemId: string, productId: string) => {
     setLocalItems(localItems.map(item => {
-      if (item.id !== id) return item;
-      
-      // Auto-fill value when product is selected
-      if (field === "product_id") {
-        const selectedProduct = products.find(p => p.id === value);
-        return {
-          ...item,
-          product_id: value,
-          sale_value: selectedProduct?.ticket?.toString() || item.sale_value,
-        };
+      if (item.id !== itemId) return item;
+      const selectedProduct = products.find(p => p.id === productId);
+      return {
+        ...item,
+        product_id: productId,
+        unit_price: selectedProduct?.ticket?.toString() || item.unit_price,
+      };
+    }));
+  };
+
+  const handleItemFieldChange = (itemId: string, field: "quantity" | "unit_price", value: string) => {
+    setLocalItems(localItems.map(item => {
+      if (item.id !== itemId) return item;
+      if (field === "quantity") {
+        const qty = Math.max(1, parseInt(value) || 1);
+        return { ...item, quantity: qty };
       }
-      
-      return { ...item, [field]: value };
+      return { ...item, unit_price: value };
     }));
   };
 
@@ -232,7 +241,7 @@ export function ProposalDetailModal({
       return;
     }
 
-    const validItems = localItems.filter(item => item.product_id && item.sale_value);
+    const validItems = localItems.filter(item => item.product_id && item.unit_price);
     if (validItems.length === 0) {
       toast.error("Adicione pelo menos um produto com valor");
       return;
@@ -250,7 +259,7 @@ export function ProposalDetailModal({
       }
 
       // Calculate total value and determine product type
-      const totalValue = validItems.reduce((sum, item) => sum + Number(item.sale_value), 0);
+      const totalValue = validItems.reduce((sum, item) => sum + (item.quantity * Number(item.unit_price)), 0);
       const productTypes = validItems.map(item => {
         const product = products.find(p => p.id === item.product_id);
         return product?.type;
@@ -268,13 +277,17 @@ export function ProposalDetailModal({
           await createItem.mutateAsync({
             pipe_proposta_id: proposta.id,
             product_id: item.product_id,
-            sale_value: Number(item.sale_value),
+            quantity: item.quantity,
+            unit_price: Number(item.unit_price),
+            sale_value: item.quantity * Number(item.unit_price),
           });
         } else {
           await updateItem.mutateAsync({
             id: item.id,
             product_id: item.product_id,
-            sale_value: Number(item.sale_value),
+            quantity: item.quantity,
+            unit_price: Number(item.unit_price),
+            sale_value: item.quantity * Number(item.unit_price),
           });
         }
       }
@@ -395,7 +408,7 @@ export function ProposalDetailModal({
     return col?.color || "#888";
   };
 
-  const totalValue = localItems.reduce((sum, item) => sum + (Number(item.sale_value) || 0), 0);
+  const totalValue = localItems.reduce((sum, item) => sum + (item.quantity * (Number(item.unit_price) || 0)), 0);
 
   return (
     <>
@@ -468,67 +481,69 @@ export function ProposalDetailModal({
                 ) : (
                   <div className="space-y-2">
                     {localItems.map((item) => {
-                      const selectedProduct = products.find(p => p.id === item.product_id);
+                      const lineTotal = item.quantity * (Number(item.unit_price) || 0);
                       return (
                         <motion.div
                           key={item.id}
                           initial={{ opacity: 0, y: -10 }}
                           animate={{ opacity: 1, y: 0 }}
-                          className="flex gap-3 items-start p-3 border rounded-lg bg-muted/30"
+                          className="p-3 border rounded-lg bg-muted/30 space-y-3"
                         >
-                          <div className="flex-1 grid grid-cols-2 gap-3">
-                            <div className="space-y-1">
+                          <div className="flex gap-3 items-start">
+                            <div className="flex-1 space-y-1">
                               <Label className="text-xs text-muted-foreground">Produto</Label>
-                              <Select
+                              <ProductCombobox
+                                products={products}
                                 value={item.product_id}
-                                onValueChange={(v) => handleItemChange(item.id, "product_id", v)}
+                                onSelect={(v) => handleProductSelect(item.id, v)}
+                              />
+                            </div>
+                            {localItems.length > 1 && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-9 w-9 text-destructive hover:text-destructive hover:bg-destructive/10 mt-5"
+                                onClick={() => handleRemoveItem(item.id, item.isNew)}
+                                disabled={deleteItem.isPending}
                               >
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Selecionar produto" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {products.map(p => (
-                                    <SelectItem key={p.id} value={p.id}>
-                                      <div className="flex items-center gap-2">
-                                        <Badge 
-                                          variant={p.type === "mrr" ? "default" : "secondary"} 
-                                          className="text-xs"
-                                        >
-                                          {p.type === "mrr" ? "Rec." : "Projeto"}
-                                        </Badge>
-                                        {p.name}
-                                      </div>
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            )}
+                          </div>
+                          <div className="grid grid-cols-3 gap-3">
+                            <div className="space-y-1">
+                              <Label className="text-xs text-muted-foreground">Qtd.</Label>
+                              <Input
+                                type="number"
+                                min={1}
+                                value={item.quantity}
+                                onChange={(e) => handleItemFieldChange(item.id, "quantity", e.target.value)}
+                                className="text-center"
+                              />
                             </div>
                             <div className="space-y-1">
-                              <Label className="text-xs text-muted-foreground">Valor (R$)</Label>
+                              <Label className="text-xs text-muted-foreground">Preço unit. (R$)</Label>
                               <div className="relative">
                                 <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                                 <Input
                                   type="number"
-                                  value={item.sale_value}
-                                  onChange={(e) => handleItemChange(item.id, "sale_value", e.target.value)}
-                                  placeholder="10000"
+                                  min={0}
+                                  step="0.01"
+                                  value={item.unit_price}
+                                  onChange={(e) => handleItemFieldChange(item.id, "unit_price", e.target.value)}
+                                  placeholder="0"
                                   className="pl-9"
                                 />
                               </div>
                             </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs text-muted-foreground">Total</Label>
+                              <div className="h-10 flex items-center px-3 rounded-md border bg-muted/50 text-sm font-medium">
+                                {lineTotal > 0 ? formatCurrency(lineTotal) : "—"}
+                              </div>
+                            </div>
                           </div>
-                          {localItems.length > 1 && (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="h-9 w-9 text-destructive hover:text-destructive hover:bg-destructive/10 mt-5"
-                              onClick={() => handleRemoveItem(item.id, item.isNew)}
-                              disabled={deleteItem.isPending}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          )}
                         </motion.div>
                       );
                     })}
@@ -550,7 +565,7 @@ export function ProposalDetailModal({
                         </span>
                       </div>
                       <div className="text-right text-sm text-muted-foreground">
-                        {localItems.filter(i => i.product_id && i.sale_value).length} produto(s)
+                        {localItems.filter(i => i.product_id && i.unit_price).length} produto(s)
                       </div>
                     </div>
                   </motion.div>
@@ -1034,14 +1049,16 @@ export function ProposalDetailModal({
           faturamento: proposta.lead.faturamento,
         } : null}
         items={localItems
-          .filter(item => item.product_id && item.sale_value)
+          .filter(item => item.product_id && item.unit_price)
           .map(item => ({
             product_name: products.find(p => p.id === item.product_id)?.name || "Produto",
-            sale_value: Number(item.sale_value) || 0,
+            sale_value: item.quantity * (Number(item.unit_price) || 0),
+            quantity: item.quantity,
+            unit_price: Number(item.unit_price) || 0,
           }))}
         totalValue={localItems
-          .filter(item => item.product_id && item.sale_value)
-          .reduce((sum, item) => sum + Number(item.sale_value), 0)}
+          .filter(item => item.product_id && item.unit_price)
+          .reduce((sum, item) => sum + (item.quantity * (Number(item.unit_price) || 0)), 0)}
         onSuccess={() => {
           setTinyConfirmOpen(false);
           onOpenChange(false);
@@ -1070,14 +1087,16 @@ export function ProposalDetailModal({
           segment: proposta.lead.segment,
         } : null}
         items={localItems
-          .filter(item => item.product_id && item.sale_value)
+          .filter(item => item.product_id && item.unit_price)
           .map(item => ({
             product_name: products.find(p => p.id === item.product_id)?.name || "Produto",
-            sale_value: Number(item.sale_value) || 0,
+            sale_value: item.quantity * (Number(item.unit_price) || 0),
+            quantity: item.quantity,
+            unit_price: Number(item.unit_price) || 0,
           }))}
         totalValue={localItems
-          .filter(item => item.product_id && item.sale_value)
-          .reduce((sum, item) => sum + Number(item.sale_value), 0)}
+          .filter(item => item.product_id && item.unit_price)
+          .reduce((sum, item) => sum + (item.quantity * (Number(item.unit_price) || 0)), 0)}
         contractDuration={formData.contract_duration ? Number(formData.contract_duration) : null}
         proposalNotes={formData.notes || null}
         onSuccess={() => {

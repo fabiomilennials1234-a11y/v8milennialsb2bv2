@@ -73,6 +73,15 @@ const ALL_ORIGIN_OPTIONS = [
   "remarketing", "indicacao", "evento", "prospeccao_ativa", "cal", "outro",
 ];
 
+const MONTHS_PT = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+function formatPeriodLabel(range: { startStr: string; endStr: string }): string {
+  const [sy, sm, sd] = range.startStr.slice(0, 10).split("-").map(Number);
+  const [ey, em, ed] = range.endStr.slice(0, 10).split("-").map(Number);
+  if (sy === ey && sm === em) return `${sd}–${ed} ${MONTHS_PT[em - 1]} ${ey}`;
+  if (sy === ey) return `${sd} ${MONTHS_PT[sm - 1]} – ${ed} ${MONTHS_PT[em - 1]} ${ey}`;
+  return `${sd} ${MONTHS_PT[sm - 1]} ${sy} – ${ed} ${MONTHS_PT[em - 1]} ${ey}`;
+}
+
 
 // ---------------------------------------------------------------------------
 // Persisted filter state — scoped per org + user, TTL 24 h
@@ -164,6 +173,12 @@ export default function PipeWhatsapp() {
     // Hide ghost leads (RLS blocked the lead data for this user)
     if (!lead) return false;
 
+    // Date range filter (only when a period is selected)
+    if (metricsRange) {
+      if (!item.created_at) return false;
+      if (item.created_at < metricsRange.startStr || item.created_at > metricsRange.endStr) return false;
+    }
+
     // Search filter
     const matchesSearch = searchTerm === "" ||
       lead?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -210,7 +225,7 @@ export default function PipeWhatsapp() {
         items: columnItems,
       };
     });
-  }, [pipeData, pipelineStages, statusColumns, searchTerm, filterResponsible, filterOrigin, filterScheduled, leadsWithSchedule]);
+  }, [pipeData, pipelineStages, statusColumns, searchTerm, filterResponsible, filterOrigin, filterScheduled, leadsWithSchedule, metricsRange]);
 
   // Calculate stats based on FILTERED data (excludes ghost leads)
   const stats = useMemo(() => {
@@ -225,7 +240,7 @@ export default function PipeWhatsapp() {
     const pending = filteredData.filter(item => item.status === "novo").length;
 
     return { total, abordado, respondeu, scheduled, pending };
-  }, [pipeData, searchTerm, filterResponsible, filterOrigin, filterScheduled, leadsWithSchedule]);
+  }, [pipeData, searchTerm, filterResponsible, filterOrigin, filterScheduled, leadsWithSchedule, metricsRange]);
 
   const displayStats = useMemo(() => {
     if (!metricsRange || !metricsByPeriod) return stats;
@@ -431,6 +446,25 @@ export default function PipeWhatsapp() {
           Agendados
         </Button>
       </div>
+
+      {/* Period filter indicator — aparece quando um período está selecionado */}
+      {metricsRange && (
+        <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-card border border-border text-sm text-muted-foreground">
+          <Calendar className="w-4 h-4 shrink-0" />
+          <span className="flex-1">
+            Exibindo cards criados em{" "}
+            <span className="text-foreground font-medium">{formatPeriodLabel(metricsRange)}</span>
+          </span>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs"
+            onClick={() => setPeriodState(createInitialPeriodState())}
+          >
+            Ver todos
+          </Button>
+        </div>
+      )}
 
       {/* Kanban Board with Drag-and-Drop */}
       <DraggableKanbanBoard

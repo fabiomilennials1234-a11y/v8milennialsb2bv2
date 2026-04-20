@@ -38,17 +38,30 @@ FROM nginx:alpine
 
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# SPA + headers de segurança (prioridade conforme regras do projeto)
-RUN echo 'server { \
-  listen 80; \
-  root /usr/share/nginx/html; \
-  index index.html; \
-  add_header X-Content-Type-Options "nosniff" always; \
-  add_header X-Frame-Options "DENY" always; \
-  add_header X-XSS-Protection "1; mode=block" always; \
-  add_header Referrer-Policy "strict-origin-when-cross-origin" always; \
-  location / { try_files $uri $uri/ /index.html; } \
-}' > /etc/nginx/conf.d/default.conf
+# SPA + headers de segurança + cache estratégico.
+# Assets hashados (Vite gera /assets/xxx-HASH.{js,css}) ficam 1 ano immutable.
+# index.html NUNCA é cacheado — garante que deploy novo invalide chunks antigos.
+RUN printf '%s\n' \
+  'server {' \
+  '  listen 80;' \
+  '  root /usr/share/nginx/html;' \
+  '  index index.html;' \
+  '  add_header X-Content-Type-Options "nosniff" always;' \
+  '  add_header X-Frame-Options "DENY" always;' \
+  '  add_header X-XSS-Protection "1; mode=block" always;' \
+  '  add_header Referrer-Policy "strict-origin-when-cross-origin" always;' \
+  '  location ~* ^/assets/.*\.(js|css|woff2?|ttf|eot|svg|png|jpg|jpeg|gif|webp|ico|map)$ {' \
+  '    add_header Cache-Control "public, max-age=31536000, immutable" always;' \
+  '    add_header X-Content-Type-Options "nosniff" always;' \
+  '    try_files $uri =404;' \
+  '  }' \
+  '  location = /index.html {' \
+  '    add_header Cache-Control "no-store, must-revalidate" always;' \
+  '    add_header X-Content-Type-Options "nosniff" always;' \
+  '    add_header X-Frame-Options "DENY" always;' \
+  '  }' \
+  '  location / { try_files $uri $uri/ /index.html; }' \
+  '}' > /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
 
