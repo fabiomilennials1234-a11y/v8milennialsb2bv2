@@ -112,7 +112,7 @@ export default function Dashboard() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.3 }}
               >
-                <TabAnalyticsV2 month={selectedMonth} year={selectedYear} />
+                <TabAnalyticsV2 />
               </motion.div>
             </Suspense>
           </TabsContent>
