@@ -370,7 +370,7 @@ async function processCampaignQueue(
           // Sync with chat
           try {
             const phone = lead.phone!.replace(/\D/g, "").replace(/^(?!55)/, "55");
-            const { error: chatErr } = await supabase.from("whatsapp_messages").insert({
+            const { error: chatErr } = await supabase.from("whatsapp_messages").upsert({
               organization_id: campanha.organization_id,
               instance_id: instance.id,
               message_id: sendResult.messageId || `campaign_${row.id}_${Date.now()}`,
@@ -384,9 +384,9 @@ async function processCampaignQueue(
               lead_id: lead.id,
               timestamp: new Date().toISOString(),
               sent_by_ai: true,
-            });
-            if (chatErr && !chatErr.message?.includes("duplicate")) {
-              console.warn("[campaign-rule-dispatch] whatsapp_messages insert failed:", chatErr);
+            }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
+            if (chatErr) {
+              console.warn("[campaign-rule-dispatch] whatsapp_messages upsert failed:", chatErr);
             }
           } catch (chatSyncErr) {
             console.warn("[campaign-rule-dispatch] chat sync error:", chatSyncErr);
@@ -713,7 +713,7 @@ async function processExpiredTimeouts(
               // Sync with chat
               try {
                 const phone = lead.phone!.replace(/\D/g, "").replace(/^(?!55)/, "55");
-                await supabase.from("whatsapp_messages").insert({
+                await supabase.from("whatsapp_messages").upsert({
                   organization_id: campanha.organization_id,
                   instance_id: instance.id,
                   message_id: result.messageId || `timeout_${row.id}_${Date.now()}`,
@@ -727,7 +727,7 @@ async function processExpiredTimeouts(
                   lead_id: lead.id,
                   timestamp: new Date().toISOString(),
                   sent_by_ai: true,
-                });
+                }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
               } catch (_) { /* ignore */ }
             }
             console.log(`[campaign-rule-dispatch][${campanhaId}] Timeout: sent template to lead ${lead.name}`);

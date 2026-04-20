@@ -562,5 +562,58 @@ describe("sendOutboundDispatch", () => {
     expect(msgUpsert.data.message_id).toBe("msg-123");
     expect(msgUpsert.data.content).toContain("[humanized]");
     expect(msgUpsert.options?.onConflict).toBe("message_id,instance_id");
+    // Outbound-sender is the source of truth for sent_by_ai + humanized content,
+    // but if something else persisted first we still want to rewrite — hence false.
+    expect(msgUpsert.options?.ignoreDuplicates).toBe(false);
+  });
+
+  it("whatsapp_messages upsert for audio also uses idempotent onConflict key", async () => {
+    setDenoEnv("EVOLUTION_API_URL", "https://evo.test");
+    setDenoEnv("EVOLUTION_API_KEY", "test-key");
+
+    const sb = createOutboundMockSupabase({
+      dispatch: {
+        id: "d-audio",
+        lead_id: "l-1",
+        organization_id: "org-1",
+        agent_id: "a-1",
+        message_content: "Oi",
+        lead: { phone: "5511999999999", name: "Test" },
+        agent: {
+          whatsapp_instance_id: "inst-1",
+          outbound_config: { audioEnabled: true, audioSendOrder: "audio_first" },
+        },
+        trigger_reason: {},
+      },
+      instance: { instance_name: "my-instance" },
+      audios: [{ id: "aud-1", public_url: "https://storage.test/a.ogg", name: "greeting" }],
+    });
+
+    // Inject audios into the mock's select flow
+    const originalFrom = sb.from.bind(sb);
+    sb.from = (table: string) => {
+      if (table === "copilot_agent_audios") {
+        const chain: any = {
+          select: () => chain,
+          eq: () => chain,
+          then: (resolve: any) =>
+            Promise.resolve({
+              data: [{ id: "aud-1", public_url: "https://storage.test/a.ogg", name: "greeting" }],
+              error: null,
+            }).then(resolve),
+        };
+        return chain;
+      }
+      return originalFrom(table);
+    };
+
+    await sendOutboundDispatch(sb, "d-audio", "org-1");
+
+    const audioUpsert = sb._upsertCalls.find(
+      (c: any) => c.table === "whatsapp_messages" && c.data.message_type === "audio",
+    );
+    expect(audioUpsert).toBeDefined();
+    expect(audioUpsert.options?.onConflict).toBe("message_id,instance_id");
+    expect(audioUpsert.options?.ignoreDuplicates).toBe(false);
   });
 });
