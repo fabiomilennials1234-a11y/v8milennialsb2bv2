@@ -17,7 +17,9 @@ Kanban de propostas comerciais com produtos, calor (deal temperature 1-5), e com
 
 ## Regras de negocio
 
-- Proposta tem line items (`pipe_proposta_items`) com produto e valor de venda
+- Proposta tem line items (`pipe_proposta_items`) com produto, quantidade, preco unitario e valor total da linha
+- Selecao de produto via combobox com busca por nome/SKU (Popover + Command)
+- Quantidade padrao = 1 ao selecionar produto; preco unitario preenchido pelo ticket do produto
 - Calor slider (1-5) indica probabilidade de fechamento
 - Vendido auto-sync para TinyERP via `tinyerp-push-order`
 - Metricas por periodo (mensal, trimestral)
@@ -70,6 +72,7 @@ OR public.can_see_lead_by_permissions(leads.sdr_id, pipe_propostas.closer_id)
 
 - `src/pages/PipePropostas.tsx` — Pagina principal
 - `src/components/proposals/CreateProposalModal.tsx` — Criar proposta
+- `src/components/proposals/ProductCombobox.tsx` — Combobox de produto com busca por nome/SKU
 - `src/components/proposals/CalorSlider.tsx` — Slider de temperatura do deal
 - `src/components/proposals/CommitmentDateModal.tsx` — Definir data de compromisso
 - `src/components/proposals/TinyErpConfirmOrderDialog.tsx` — Confirmar sync ERP
@@ -92,7 +95,7 @@ OR public.can_see_lead_by_permissions(leads.sdr_id, pipe_propostas.closer_id)
 ### Tabelas
 
 - `pipe_propostas` — status, calor, commitment_date, lead_id, organization_id
-- `pipe_proposta_items` — pipe_proposta_id, product_id, sale_value
+- `pipe_proposta_items` — pipe_proposta_id, product_id, quantity, unit_price, sale_value (sale_value = qty * unit_price)
 - `products` — Catalogo (type: mrr/projeto/unitario, ticket, ticket_minimo)
 - `commissions` — Geradas ao mover para vendido
 
@@ -111,7 +114,6 @@ Lead compareceu no pipe_confirmacao
 
 ## Historico de mudancas
 
-- **2026-04-17** — Fix bug "closer antigo continua vendo card após transferência": migration `20260417110000_fix_pipe_closer_sdr_sync` estende trigger para sincronizar `closer_id` e `sdr_id` (além de `responsible_id`) de `leads` → pipes; backfill corrige drift histórico; frontend aplica filtro defensivo para `member`. Validação RLS ponta-a-ponta em dev. Ver [[../../07 — Changelog/2026-04-17-pipe-closer-sync]].
 
 ## Links relacionados
 

@@ -196,6 +196,15 @@ serve(withSentry('lead-webhook', async (req) => {
       ...customFields
     } = payload.fields;
 
+    // UTM resolution: fields.utm_* (inside fields object) take precedence,
+    // then top-level payload.utm_* (how n8n body fields sends them),
+    // then legacy payload.campaign_name/campaign_id for campaign only.
+    const utmSource = fieldsUtmSource || payload.utm_source || null;
+    const utmMedium = fieldsUtmMedium || payload.utm_medium || null;
+    const utmCampaign = fieldsUtmCampaign || payload.utm_campaign || payload.campaign_name || payload.campaign_id || null;
+    const utmContent = fieldsUtmContent || payload.utm_content || null;
+    const utmTerm = fieldsUtmTerm || payload.utm_term || null;
+
     // Mapear origem (valores do enum lead_origin)
     const originMap: Record<string, string> = {
       "meta_ads": "meta_ads",
@@ -256,11 +265,11 @@ serve(withSentry('lead-webhook', async (req) => {
         origin,
         organization_id: organizationId,
         pipe_whatsapp: "novo",
-        utm_source: fieldsUtmSource || null,
-        utm_medium: fieldsUtmMedium || null,
-        utm_campaign: fieldsUtmCampaign || payload.campaign_name || payload.campaign_id || null,
-        utm_content: fieldsUtmContent || null,
-        utm_term: fieldsUtmTerm || null,
+        utm_source: utmSource,
+        utm_medium: utmMedium,
+        utm_campaign: utmCampaign,
+        utm_content: utmContent,
+        utm_term: utmTerm,
       };
       if (payload.assigned_user_id) {
         insertData.sdr_id = payload.assigned_user_id;
@@ -306,14 +315,12 @@ serve(withSentry('lead-webhook', async (req) => {
     const updateData: Record<string, unknown> = {};
     if (name) updateData.name = name;
     if (company !== undefined) updateData.company = company || null;
-    // UTM fields: fields.utm_* take precedence, fall back to campaign_name/campaign_id
-    if (fieldsUtmCampaign || payload.campaign_name || payload.campaign_id) {
-      updateData.utm_campaign = fieldsUtmCampaign || payload.campaign_name || payload.campaign_id;
-    }
-    if (fieldsUtmSource) updateData.utm_source = fieldsUtmSource;
-    if (fieldsUtmMedium) updateData.utm_medium = fieldsUtmMedium;
-    if (fieldsUtmContent) updateData.utm_content = fieldsUtmContent;
-    if (fieldsUtmTerm) updateData.utm_term = fieldsUtmTerm;
+    // UTM fields: resolved earlier (fields.utm_* → payload.utm_* → campaign_name/id)
+    if (utmCampaign) updateData.utm_campaign = utmCampaign;
+    if (utmSource) updateData.utm_source = utmSource;
+    if (utmMedium) updateData.utm_medium = utmMedium;
+    if (utmContent) updateData.utm_content = utmContent;
+    if (utmTerm) updateData.utm_term = utmTerm;
     if (fieldsNotes !== undefined && fieldsNotes !== "") {
       updateData.notes = fieldsNotes;
     } else if (isNewLead) {

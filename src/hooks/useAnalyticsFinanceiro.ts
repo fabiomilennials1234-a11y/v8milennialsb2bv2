@@ -89,7 +89,7 @@ export function useAnalyticsFinanceiro() {
 
       if (error) {
         console.error("❌ [useAnalyticsFinanceiro] RPC error:", error.message);
-        return EMPTY;
+        throw new Error(`Analytics financeiro failed: ${error.message}`);
       }
 
       const raw = Array.isArray(data) && data.length > 0 ? data[0] : data;

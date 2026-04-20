@@ -181,6 +181,9 @@ Added `tests/unit/shared-action-handler-branches.test.ts` with 29 targeted tests
 - **handleGenerateAiMessage**: missing OPENROUTER_API_KEY, HTTP 500 response, empty content, thrown fetch error, custom aiOutputVariable stored in executionContext.
 Coverage: 81.61 → **92.99 stmts**, 71.01 → **82.1 branches**, 83.3 → **95.82 lines**. Threshold ratchet: 95/92/100/82.
 
+### D014: Security agent added to team (2026-04-15)
+Team expanded from 9 to 10 agents. New `agent-security` — Senior Security Engineer with veto power over merges/deploys touching sensitive surface. Domain: SAST/SCA/secrets scanning, RLS review, auth hardening, multi-tenant isolation, LGPD, threat modeling (STRIDE), LLM security (Copilot prompt injection), supply chain. Skill in `.claude/skills/agent-security/SKILL.md`. Threat model in `.specs/codebase/SECURITY.md`. Conductor updated with triggers and sensitive-feature pipeline: Architect → Security (threat model) → DBA → Backend → Security (RLS + auth review) → Frontend → QA → Security (final gate) → Infra. Obsidian notes in `Agentes/Security.md`, ADR-2026-04-15, feature note `06 — Features/Seguranca/`. CLAUDE.md tabela e roteamento atualizados.
+
 ### D013: Fase 1 — workflow-trigger.ts covered (2026-04-14)
 Added `tests/unit/workflow-trigger-branches.test.ts` with 16 tests for previously untested exports:
 - `fireStageChangedTrigger` — delegates to fireTrigger with optional fields.

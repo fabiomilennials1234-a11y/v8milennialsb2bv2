@@ -21,7 +21,7 @@ status: active
 | [[MOC - Arquitetura]] | Stack, decisoes, specs, infraestrutura, seguranca |
 | [[MOC - Features]] | Features organizadas por dominio |
 | [[MOC - Operacional]] | Setup, troubleshooting, scripts, fluxos de trabalho |
-| [[MOC - Agentes]] | Time de 9 agentes especializados e protocolo |
+| [[MOC - Agentes]] | Time de 10 agentes especializados e protocolo |
 | [[MOC - Diretivas]] | Regras de negocio (camada 1 da arquitetura) |
 | [[Glossario]] | Termos, siglas, conceitos-chave |
 | [[MOC - Plans]] | Planos de implementacao cronologicos |

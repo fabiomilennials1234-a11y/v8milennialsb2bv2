@@ -10,7 +10,7 @@ SaaS B2B multi-tenant para gestão de leads, pipelines de vendas, campanhas e au
 
 ## Team de Agentes — Protocolo Autônomo
 
-**OBRIGATÓRIO**: Este projeto é desenvolvido por um time de 9 agentes especializados. Toda task, alteração, ou request passa automaticamente por esse time. Nenhuma invocação manual necessária.
+**OBRIGATÓRIO**: Este projeto é desenvolvido por um time de 10 agentes especializados. Toda task, alteração, ou request passa automaticamente por esse time. Nenhuma invocação manual necessária.
 
 ### Como funciona
 
@@ -29,9 +29,10 @@ SaaS B2B multi-tenant para gestão de leads, pipelines de vendas, campanhas e au
 | **Frontend** | React, UI/UX, componentes, visual, performance | `agent-frontend` |
 | **DBA** | PostgreSQL, migrations, RLS, query optimization | `agent-dba` |
 | **QA** | Testes, verificação, cobertura, acessibilidade | `agent-qa` |
-| **Infra** | Deploy, CI/CD, monitoring, segurança | `agent-infra` |
+| **Infra** | Deploy, CI/CD, monitoring, plataforma | `agent-infra` |
 | **Automation** | n8n, cron jobs, webhooks, event-driven, workflows | `agent-automation` |
 | **AI** | Copilot, RAG, embeddings, conversations, prompts | `agent-ai` |
+| **Security** | Threat modeling, RLS review, SAST/SCA/secrets, auth hardening, LGPD. Poder de veto | `agent-security` |
 
 ### Roteamento rápido
 
@@ -45,7 +46,9 @@ SaaS B2B multi-tenant para gestão de leads, pipelines de vendas, campanhas e au
 | n8n, cron, automação, workflow trigger | Automation |
 | Copilot, agente IA, RAG, embeddings, conversation | AI |
 | Arquitetura, decisão cross-cutting, trade-off | Architect |
+| Auth, permissões, RLS, secrets, CORS, webhook signature, pagamento, PII, LGPD, OAuth, CSP, injection, XSS | Security |
 | Feature completa nova | Architect → DBA → Backend → Frontend → QA |
+| Feature sensível (toca auth, pagamento, PII, cross-tenant) | Architect → Security → DBA → Backend → Security → Frontend → QA → Security → Infra |
 
 ### Regra de ouro
 

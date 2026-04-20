@@ -176,6 +176,124 @@ describe('toggle_lead_ai RPC', () => {
     expect(parsedAfter.ai_disabled).toBe(false);
   });
 
+  // ==========================================================================
+  // REGRESSION: incidente REALSC (2026-04-15)
+  // Lead Eneas com 2 registros (mesmo normalized_phone) na mesma org.
+  // Atendente desativou IA no lead antigo; webhook resolvia pelo recente
+  // (ai_disabled=false) e Copilot continuou respondendo.
+  // Fix (P0): toggle_lead_ai aplica em TODOS os leads com mesmo
+  // normalized_phone na mesma org.
+  // ==========================================================================
+  it('should sync ai_disabled across duplicate leads sharing normalized_phone', async () => {
+    const SHARED_PHONE = '+5511999990555';
+
+    const { data: dupOld } = await admin.from('leads').insert({
+      name: 'Eneas (antigo)',
+      phone: SHARED_PHONE,
+      organization_id: testOrgId,
+      origin: 'whatsapp',
+      ai_disabled: false,
+    }).select('id, normalized_phone').single();
+
+    const { data: dupNew } = await admin.from('leads').insert({
+      name: 'Eneas (recente)',
+      phone: SHARED_PHONE,
+      organization_id: testOrgId,
+      origin: 'whatsapp',
+      ai_disabled: false,
+    }).select('id, normalized_phone').single();
+
+    expect(dupOld!.normalized_phone).toBe(dupNew!.normalized_phone);
+
+    try {
+      // Atendente desativa no lead antigo (como no incidente REALSC)
+      const { error: toggleErr } = await userClient.rpc('toggle_lead_ai', {
+        p_lead_id: dupOld!.id,
+        p_disabled: true,
+      });
+      expect(toggleErr).toBeNull();
+
+      // Ambos os leads devem estar ai_disabled=true
+      const { data: both } = await admin.from('leads')
+        .select('id, ai_disabled, ai_disabled_at, ai_disabled_by')
+        .in('id', [dupOld!.id, dupNew!.id]);
+
+      expect(both).toHaveLength(2);
+      for (const l of both!) {
+        expect(l.ai_disabled).toBe(true);
+        expect(l.ai_disabled_at).toBeTruthy();
+        expect(l.ai_disabled_by).toBe(testUserId);
+      }
+
+      // Reativar no lead antigo: ambos voltam a ai_disabled=false
+      await userClient.rpc('toggle_lead_ai', {
+        p_lead_id: dupOld!.id,
+        p_disabled: false,
+      });
+
+      const { data: bothAfter } = await admin.from('leads')
+        .select('id, ai_disabled, ai_disabled_at, ai_disabled_by')
+        .in('id', [dupOld!.id, dupNew!.id]);
+
+      for (const l of bothAfter!) {
+        expect(l.ai_disabled).toBe(false);
+        expect(l.ai_disabled_at).toBeNull();
+        expect(l.ai_disabled_by).toBeNull();
+      }
+    } finally {
+      await admin.from('leads').delete().in('id', [dupOld!.id, dupNew!.id]);
+    }
+  });
+
+  it('should NOT sync ai_disabled across duplicate leads in different organizations', async () => {
+    const { data: otherOrg } = await admin.from('organizations')
+      .select('id')
+      .neq('id', testOrgId)
+      .limit(1)
+      .maybeSingle();
+
+    if (!otherOrg) {
+      console.log('[TEST] Skipping cross-org sync test: only one org exists');
+      return;
+    }
+
+    const SHARED_PHONE = '+5511999990777';
+
+    const { data: sameOrgLead } = await admin.from('leads').insert({
+      name: 'Same org duplicate',
+      phone: SHARED_PHONE,
+      organization_id: testOrgId,
+      origin: 'whatsapp',
+      ai_disabled: false,
+    }).select('id').single();
+
+    const { data: foreignLead } = await admin.from('leads').insert({
+      name: 'Foreign org same phone',
+      phone: SHARED_PHONE,
+      organization_id: otherOrg.id,
+      origin: 'whatsapp',
+      ai_disabled: false,
+    }).select('id').single();
+
+    try {
+      await userClient.rpc('toggle_lead_ai', {
+        p_lead_id: sameOrgLead!.id,
+        p_disabled: true,
+      });
+
+      const { data: same } = await admin.from('leads')
+        .select('ai_disabled').eq('id', sameOrgLead!.id).single();
+      expect(same!.ai_disabled).toBe(true);
+
+      // Lead em outra org NÃO deve ser afetado (isolamento multi-tenant)
+      const { data: foreign } = await admin.from('leads')
+        .select('ai_disabled').eq('id', foreignLead!.id).single();
+      expect(foreign!.ai_disabled).toBe(false);
+    } finally {
+      await admin.from('leads').delete().in('id', [sameOrgLead!.id, foreignLead!.id]);
+    }
+  });
+
   it('should reject lead from another organization', async () => {
     // Create lead in a different org (skip if org doesn't exist)
     const { data: otherOrg } = await admin.from('organizations')
