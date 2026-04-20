@@ -141,7 +141,7 @@ Deno.serve(async (req) => {
           .eq("id", msg.id);
 
         const messageId = `sched_${msg.id}_${Date.now()}`;
-        await supabase.from("whatsapp_messages").insert({
+        await supabase.from("whatsapp_messages").upsert({
           organization_id: msg.organization_id,
           instance_id: msg.whatsapp_instance_id,
           message_id: messageId,
@@ -154,7 +154,7 @@ Deno.serve(async (req) => {
           status: "sent",
           lead_id: msg.lead_id,
           timestamp: new Date().toISOString(),
-        });
+        }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
 
         const { data: member } = await supabase
           .from("team_members")

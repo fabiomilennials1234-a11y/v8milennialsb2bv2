@@ -1347,10 +1347,6 @@ channel_messages: {
           },
         ]
       }
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       client_sidebar_permissions: {
         Row: {
           created_at: string

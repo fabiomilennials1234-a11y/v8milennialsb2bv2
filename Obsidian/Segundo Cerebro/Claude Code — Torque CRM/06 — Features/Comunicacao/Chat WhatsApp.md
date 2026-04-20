@@ -5,7 +5,7 @@ tags:
   - torque-crm
   - comunicacao
 created: 2026-04-12
-last_updated: 2026-04-12
+last_updated: 2026-04-20
 status: active
 ---
 
@@ -38,6 +38,29 @@ Interface unificada de chat multi-canal (WhatsApp via Evolution API, Messenger e
 - Audio cross-browser precisa conversao OGG/WebM → MP3 (ver docs/AUDIO_CONVERSION_WEBHOOK.md)
 - CORS de audio no Supabase Storage precisa config separada (ver docs/STORAGE_CORS.md)
 - onUpdate do realtime recebe apenas campos alterados, nao row completo com joins
+
+## Invariante — Idempotência `whatsapp_messages` (2026-04-20)
+
+**Toda** escrita em `whatsapp_messages` em `supabase/functions/**` usa `upsert` com `onConflict: "message_id,instance_id"`. Zero `.insert()` brutos. UNIQUE `(message_id, instance_id)` existe desde `20260127000000_add_whatsapp_messages.sql:37`.
+
+Por que: outbound-sender / workflow-action-handler / dispatchers gravam a linha ANTES do echo do Evolution chegar (com o mesmo `key.id`). Sem upsert idempotente, o echo criava duplicata ou precisava ser silenciado via `msgError.message.includes("duplicate")` (frágil, mascarava falhas reais).
+
+**Política de `ignoreDuplicates`**:
+
+| Contexto | Valor | Razão |
+|---|---|---|
+| Webhook echo handler (`evolution-webhook`, `sz-chat-webhook`) | `true` | Outbound/dispatcher é fonte de verdade para `content` humanizado + `sent_by_ai`. Echo não deve sobrescrever. |
+| Dispatcher/sender (`outbound-sender`, `workflow-action-handler`, `followup-sender`, `ai-action-executor`, `campaign-rule-dispatch`, `pipe-rule-dispatch`, `process-scheduled-user-messages`) | `false` | Dispatcher escreve o state final — se alguma linha pré-existir, sobrescreve com o dado autoritativo. |
+| **Exceção única**: `evolution-webhook` `send.message` handler (`SEND_MESSAGE_MEDIA_REFRESH` marker) | `false` | Precisa refrescar `media_url` com URL Storage-backed quando `MESSAGES_UPSERT` chegou antes com URL null/CDN expirada. |
+
+**Contract test em CI**: `tests/unit/whatsapp-messages-idempotency-contract.test.ts` — 5 asserts AST-grep sobre `supabase/functions/**`:
+1. Zero `.insert(` em `whatsapp_messages`.
+2. Todo `.upsert(` tem `onConflict: "message_id,instance_id"`.
+3. Webhook files = `ignoreDuplicates: true` (exceto `SEND_MESSAGE_MEDIA_REFRESH`).
+4. Dispatcher files = `ignoreDuplicates: false`.
+5. Nenhum arquivo que escreve `whatsapp_messages` swallows erro via `.includes("duplicate")`.
+
+Qualquer PR que violar cai no CI.
 
 ---
 
@@ -85,6 +108,8 @@ Webhook externo (Evolution/Meta/SZ.Chat)
 ---
 
 ## Historico de mudancas
+
+- **2026-04-20** (Tasks #1–#4): Invariante global de idempotência `whatsapp_messages` consolidada. 12 pontos em 8 edge functions usando `upsert` por `(message_id, instance_id)`. Outbound-sender, workflow-action-handler, followup-sender, ai-action-executor, evolution-webhook (3 paths), sz-chat-webhook (2), campaign-rule-dispatch (2), pipe-rule-dispatch (2), process-scheduled-user-messages. Contract test em CI. Deploy em prod.
 
 ## Links relacionados
 

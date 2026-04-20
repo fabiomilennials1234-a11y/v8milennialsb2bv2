@@ -1777,7 +1777,7 @@ describe("executeAiAction", () => {
         text: () => Promise.resolve(""),
       });
 
-      const { sb, mockTable } = createMockSupabase();
+      const { sb, mockTable, getInserted, getUpsertOpts } = createMockSupabase();
       mockTable("copilot_agent_documents", [
         {
           id: "doc-1",
@@ -1805,6 +1805,26 @@ describe("executeAiAction", () => {
       expect(result.success).toBe(true);
       expect(result.data?.file_name).toBe("catalog.pdf");
       expect(result.data?.message_id).toBe("msg-123");
+
+      // Idempotency contract: outbound dispatcher writes with Evolution's real
+      // message_id so the webhook echo cannot duplicate the row. Source of
+      // truth for content+sent_by_ai → ignoreDuplicates:false.
+      const inserted = getInserted("whatsapp_messages");
+      expect(inserted.length).toBe(1);
+      const row = inserted[0] as Record<string, unknown>;
+      expect(row.message_id).toBe("msg-123");
+      expect(row.direction).toBe("outgoing");
+      expect(row.sent_by_ai).toBe(true);
+      expect(row.message_type).toBe("document");
+      expect(row.content).toBe("Here is the catalog");
+
+      const opts = getUpsertOpts("whatsapp_messages") as Array<{
+        onConflict?: string;
+        ignoreDuplicates?: boolean;
+      }>;
+      expect(opts.length).toBe(1);
+      expect(opts[0]?.onConflict).toBe("message_id,instance_id");
+      expect(opts[0]?.ignoreDuplicates).toBe(false);
     });
 
     it("detects image file type and sends as image", async () => {

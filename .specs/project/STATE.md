@@ -1,6 +1,6 @@
 # Project State
 
-**Last updated:** 2026-04-17
+**Last updated:** 2026-04-20
 
 ## Decisions
 
@@ -256,6 +256,27 @@ Trigger `trg_sync_responsible_from_lead_to_pipes` (definido em 20260826100000) s
 
 ### L003: RLS em pipes precisa espelhar leads ou usar subquery (2026-04-17)
 Se a RLS usa colunas DO PIPE (ex: `pipe_propostas.closer_id`) e o pipe não está sincronizado com `leads`, nascem vazamentos de visibilidade. Duas opções: (a) garantir sync via trigger (escolhida — menor impacto em performance), (b) fazer a RLS ler de `leads` via subquery (adiciona custo por linha). Se aparecer PR mudando `closer_id`/`sdr_id`/`responsible_id` em tabelas de pipe, verificar se o trigger cobre o caminho ou se é necessária nova policy.
+
+### D034: Outbound idempotência — Task #3 shipped (2026-04-20)
+Ciclo de idempotência `whatsapp_messages` fechado. Tasks #1/#2 (sessão anterior) fizeram `outbound-sender.ts` e `workflow-action-handler.ts` persistirem com `message_id = key.id` da Evolution e `onConflict: "message_id,instance_id"`. Task #3 converteu os 3 `insert`s restantes em `evolution-webhook/index.ts` (`:978` messages.upsert, `:1251` agent TTS, `:1300` agent text) para `upsert` com `ignoreDuplicates: true` (política conservadora — outbound/copilot é fonte de verdade para `content` humanizado + `sent_by_ai`). Mantido `:1461` (send.message) com `ignoreDuplicates: false` por precisar atualizar `media_url` pós-MESSAGES_UPSERT. Removido swallow string-match `.includes("duplicate")` — dead code.
+
+**Invariante**: toda escrita em `whatsapp_messages` (qualquer edge function) usa `upsert` com `onConflict: "message_id,instance_id"`. UNIQUE constraint existe desde `20260127000000_add_whatsapp_messages.sql:37`.
+
+**Evidência**: `tests/unit/evolution-webhook-idempotency.test.ts` — 4 contract asserts via grep no source (nenhum `.insert(`, todo upsert tem onConflict correto, 3 paths usam ignoreDuplicates:true, zero swallow por string-match). `npm run test:unit` = 2548 passed, zero regressão. `tsc --noEmit` = 0 erros.
+
+**Pendente**: deploy `evolution-webhook` em prod após review (`supabase functions deploy evolution-webhook --project-ref jsjsmuncfkbsbzqzqhfq`).
+
+### D035: Outbound idempotência — Task #4 shipped (2026-04-20)
+Invariante global fechada. 9 pontos em 5 edge functions convertidos de `.insert()` para `.upsert()` com `onConflict: "message_id,instance_id"`:
+- `_shared/followup-sender.ts:90` (false), `_shared/ai-action-executor.ts:1294` (false).
+- `sz-chat-webhook:359` (true, inbound), `:558` (true, agent reply).
+- `process-scheduled-user-messages:144` (false), `campaign-rule-dispatch:373` (false), `:716` (false), `pipe-rule-dispatch:419` (false), `:764` (false).
+
+Política consolidada: webhook echo handlers = `ignoreDuplicates:true`; dispatcher/sender = `false`. Exceção única anchorada por marker `SEND_MESSAGE_MEDIA_REFRESH` no `evolution-webhook` send.message handler (refresh de media_url).
+
+Contract test global em `tests/unit/whatsapp-messages-idempotency-contract.test.ts` (5 asserts AST-grep) garante invariante em CI para qualquer PR futuro. Deploy 8 funções em prod.
+
+**Evidência**: `npm run test:unit` = 2554 passed (+5 vs. baseline Task #3), `tsc --noEmit` = 0, 9 pontos com grep zero de `.insert(` em `whatsapp_messages` no projeto.
 
 ## Deferred Ideas
 

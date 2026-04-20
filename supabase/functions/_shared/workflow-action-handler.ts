@@ -477,11 +477,15 @@ async function handleSendWhatsApp(ctx: ActionContext): Promise<ActionResult> {
     return { success: false, error: `WhatsApp send failed: ${err}` };
   }
 
-  // Record in whatsapp_messages
-  await ctx.supabase.from("whatsapp_messages").insert({
+  // Use Evolution's real message ID so the send.message webhook echo UPSERTs
+  // this same row instead of creating a duplicate. Preserves sent_by_ai: true.
+  const sendResult = await res.json().catch(() => null) as { key?: { id?: string } } | null;
+  const messageId = sendResult?.key?.id || `wf_${crypto.randomUUID()}`;
+
+  await ctx.supabase.from("whatsapp_messages").upsert({
     organization_id: ctx.organizationId,
     instance_id: wa.instanceId,
-    message_id: `wf_${crypto.randomUUID()}`,
+    message_id: messageId,
     remote_jid: phone + "@s.whatsapp.net",
     phone_number: phone,
     direction: "outgoing",
@@ -490,7 +494,7 @@ async function handleSendWhatsApp(ctx: ActionContext): Promise<ActionResult> {
     timestamp: new Date().toISOString(),
     status: "sent",
     sent_by_ai: true,
-  });
+  }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
 
   return { success: true, message: "WhatsApp text sent" };
 }
@@ -508,11 +512,12 @@ async function handleSendWhatsAppAudio(ctx: ActionContext): Promise<ActionResult
   const result = await sendWhatsAppAudio(wa.instanceName, phone, audioUrl);
   if (!result.success) return { success: false, error: result.error || "Audio send failed" };
 
-  // Record in whatsapp_messages so it appears in chat
-  await ctx.supabase.from("whatsapp_messages").insert({
+  const messageId = result.messageId || `wf_${crypto.randomUUID()}`;
+
+  await ctx.supabase.from("whatsapp_messages").upsert({
     organization_id: ctx.organizationId,
     instance_id: wa.instanceId,
-    message_id: `wf_${crypto.randomUUID()}`,
+    message_id: messageId,
     remote_jid: phone + "@s.whatsapp.net",
     phone_number: phone,
     direction: "outgoing",
@@ -522,7 +527,7 @@ async function handleSendWhatsAppAudio(ctx: ActionContext): Promise<ActionResult
     timestamp: new Date().toISOString(),
     status: "sent",
     sent_by_ai: true,
-  });
+  }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
 
   return { success: true, message: "WhatsApp audio sent" };
 }
@@ -1044,11 +1049,13 @@ async function handleSendCampaignMessage(ctx: ActionContext): Promise<ActionResu
 
   if (!res.ok) return { success: false, error: `Campaign message send failed: ${await res.text()}` };
 
-  // Record in whatsapp_messages
-  await ctx.supabase.from("whatsapp_messages").insert({
+  const sendResult = await res.json().catch(() => null) as { key?: { id?: string } } | null;
+  const messageId = sendResult?.key?.id || `wf_camp_${crypto.randomUUID()}`;
+
+  await ctx.supabase.from("whatsapp_messages").upsert({
     organization_id: ctx.organizationId,
     instance_id: wa.instanceId,
-    message_id: `wf_camp_${crypto.randomUUID()}`,
+    message_id: messageId,
     remote_jid: phone + "@s.whatsapp.net",
     phone_number: phone,
     direction: "outgoing",
@@ -1058,7 +1065,7 @@ async function handleSendCampaignMessage(ctx: ActionContext): Promise<ActionResu
     timestamp: new Date().toISOString(),
     status: "sent",
     sent_by_ai: true,
-  });
+  }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
 
   return { success: true, message: `Campaign message sent` };
 }

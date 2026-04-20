@@ -1291,7 +1291,7 @@ async function executeSendDocument(
 
     // 5. Registrar mensagem de saida
     try {
-      const { error: insertErr } = await supabase.from("whatsapp_messages").insert({
+      const { error: insertErr } = await supabase.from("whatsapp_messages").upsert({
         organization_id: organizationId,
         message_id: sendResult.key?.id || `doc_${Date.now()}_${Math.random().toString(36).substring(7)}`,
         remote_jid: `${phone}@s.whatsapp.net`,
@@ -1303,7 +1303,7 @@ async function executeSendDocument(
         status: "sent",
         timestamp: new Date().toISOString(),
         sent_by_ai: true,
-      });
+      }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
       if (insertErr) console.warn("[executeSendDocument] Failed to log outgoing message:", insertErr);
     } catch (e) {
       console.warn("[executeSendDocument] Failed to log outgoing message:", e);

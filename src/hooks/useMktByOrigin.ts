@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "./useOrganization";
 import { useAnalyticsFilters } from "./useAnalyticsFilters";
 import { useMktOriginConfigs, ALL_ORIGINS, type LeadOrigin } from "./useMktOriginConfig";
+import { isMissingSchemaError } from "@/lib/rpc-errors";
 
 export interface OriginMetrics {
   origin: LeadOrigin;
@@ -82,6 +83,10 @@ export function useMktByOrigin(month: number, year: number) {
       );
 
       if (error) {
+        if (isMissingSchemaError(error)) {
+          console.warn("⚠️ [useMktByOrigin] RPC ausente (migration pendente?):", error.message);
+          return { origins: [] };
+        }
         console.error("❌ [useMktByOrigin] RPC error:", error.message);
         throw new Error(`Mkt origin metrics failed: ${error.message}`);
       }
