@@ -28,6 +28,7 @@ import { useAnalyticsOverview } from "@/hooks/useAnalyticsOverview";
 import { useAnalyticsEngajamento } from "@/hooks/useAnalyticsEngajamento";
 import { useAnalyticsPipesFunis } from "@/hooks/useAnalyticsPipesFunis";
 import { useMktByOrigin } from "@/hooks/useMktByOrigin";
+import { useAnalyticsFilters } from "@/hooks/useAnalyticsFilters";
 
 // Lazy-load deep-dive sections
 const AquisicaoSection = lazy(() =>
@@ -76,19 +77,22 @@ function SectionLoader() {
   );
 }
 
-interface TabAnalyticsV2Props {
-  month: number;
-  year: number;
-}
-
-export function TabAnalyticsV2({ month, year }: TabAnalyticsV2Props) {
+// Analytics é self-contained: toda filtragem vem de useAnalyticsFilters.
+// month/year globais do Dashboard NÃO são mais propagados para cá.
+export function TabAnalyticsV2() {
   const [activeSection, setActiveSection] = useState("aquisicao");
   const { organizationId } = useOrganization();
+  const { filters } = useAnalyticsFilters();
+
+  // mkt_origin_config é mensal. Derivamos o mês/ano do fim do período selecionado
+  // para que o investimento exibido acompanhe a janela do filtro de Analytics.
+  const configMonth = useMemo(() => new Date(filters.endDate).getMonth() + 1, [filters.endDate]);
+  const configYear = useMemo(() => new Date(filters.endDate).getFullYear(), [filters.endDate]);
 
   const { data: overviewData, isError: overviewError, error: overviewErr } = useAnalyticsOverview();
   const { data: engajamentoData, isError: engajamentoError } = useAnalyticsEngajamento();
   const { data: pipesFunisData } = useAnalyticsPipesFunis(null);
-  const { summary } = useMktByOrigin(month, year);
+  const { summary } = useMktByOrigin(configMonth, configYear);
 
   // ─── Hero KPIs ───────────────────────────────────────────────────────────────
   const kpis = useMemo(() => {
@@ -282,7 +286,7 @@ export function TabAnalyticsV2({ month, year }: TabAnalyticsV2Props) {
           >
             <TabsContent value="aquisicao" className="mt-0">
               <Suspense fallback={<SectionLoader />}>
-                <AquisicaoSection month={month} year={year} />
+                <AquisicaoSection month={configMonth} year={configYear} />
               </Suspense>
             </TabsContent>
             <TabsContent value="pipeline" className="mt-0">

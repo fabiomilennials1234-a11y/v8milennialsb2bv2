@@ -5,7 +5,7 @@ tags:
   - torque-crm
   - analytics
 created: 2026-04-12
-last_updated: 2026-04-17
+last_updated: 2026-04-20
 status: active
 ---
 
@@ -60,7 +60,7 @@ Componentes DEVEM ler `isError`/`error` de `useQuery` e mostrar banner de erro. 
 
 - Visível apenas para master admins (tab Analytics do dashboard)
 - Filtros persistem em `localStorage` via `useAnalyticsFilters`
-- Presets: hoje, 7d, 30d, 90d, custom
+- Presets: hoje, 7d, 14d, 30d, 90d, custom
 - Compare com período anterior (toggle)
 
 ## Métricas principais → Fonte SQL
@@ -149,6 +149,7 @@ Componentes DEVEM ler `isError`/`error` de `useQuery` e mostrar banner de erro. 
 
 ## Histórico de mudanças
 
+- **2026-04-20** — Fix: `TabAnalyticsV2` não recebia mais `month/year` coerente com o filtro. `Dashboard.tsx` parou de passar `month/year` para `TabAnalyticsV2`; `TabAnalyticsV2` agora deriva `configMonth`/`configYear` do `filters.endDate` e passa para `useMktByOrigin` e `AquisicaoSection`. Isso garante que `mkt_origin_config` (investimento manual) acompanhe a janela do filtro — antes CAC/CPL/Investimento ficavam travados no mês global do Dashboard enquanto os demais números variavam. Preset `14d` adicionado em `useAnalyticsFilters` (`getPresetDates`) e no array `PRESETS` da `AnalyticsFilters`. `getPresetDates` passou a ser exportada para testabilidade; 8 testes unitários em `tests/unit/analytics-filters-presets.test.ts` cobrindo hoje/7d/14d/30d/90d + fallback.
 - **2026-04-17** — Fix completa: migration `20260417000000_fix_analytics_consistency` padroniza temporal field (`COALESCE(metrics_period_at, ...)`) em 6 RPCs, adiciona `taxaConversao` no dashboard, cria `get_mkt_origin_metrics` para eliminar agregação client-side; hooks agora fazem `throw` em erro RPC; componentes mostram error banner; funil compacto do `TabAnalyticsV2` trocado para usar a mesma RPC do `PipelineSection`; fix de JS truthiness em `useConversionRates`. Ver [[../../07 — Changelog/2026-04-17]].
 - **2026-04-12** — Criação da nota.
 
