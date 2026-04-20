@@ -19,6 +19,9 @@ None currently.
 ### L001: Sub-agents need Write permissions
 When dispatching sub-agents for brownfield mapping, they couldn't write files due to permission restrictions. The orchestrating agent must handle file writes itself after receiving research results.
 
+### L002: Never hardcode viewport math for full-height panels (2026-04-20)
+Chat page used `h-[calc(100vh-4rem)]` — wrong (TopNav is 3.5rem, not 4rem) and brittle (ignored MainLayout's `py-6 lg:py-8`). Root fix was propagating height through the flex chain in MainLayout (`h-screen` on outer, `min-h-0` on main, `min-h-full flex flex-col` on inner wrapper), then letting children use `flex-1 min-h-0` with no viewport math. Rule: if a panel needs full height, the layout chain should give it to them — hardcoded calcs are an anti-pattern. Also: flex items that contain wide content (composer, fixed-min-width children) need `min-w-0` to prevent horizontal clip when the parent has `overflow-hidden`.
+
 ## Todos
 
 - [ ] Address CONCERN-S1 (Critical): Remove `VITE_SUPABASE_SERVICE_ROLE_KEY` from `.env.development`
