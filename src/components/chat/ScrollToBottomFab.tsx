@@ -27,7 +27,7 @@ export function ScrollToBottomFab({ visible, count, onClick }: ScrollToBottomFab
             "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none",
             "hover:brightness-105 transition-[filter]"
           )}
-          aria-label={count > 0 ? `${count} nova${count > 1 ? "s" : ""} mensagem${count > 1 ? "s" : ""}` : "Ir para o final"}
+          aria-label={count > 0 ? `${count} ${count > 1 ? "novas mensagens" : "nova mensagem"}` : "Ir para o final"}
         >
           <ArrowDown className="w-3.5 h-3.5" />
           {count > 0 && (
