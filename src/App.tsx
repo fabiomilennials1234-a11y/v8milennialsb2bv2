@@ -84,6 +84,7 @@ const MasterFeatures = lazy(() => lazyRetry(() => import("./pages/master/MasterF
 const MasterAuditLogs = lazy(() => lazyRetry(() => import("./pages/master/MasterAuditLogs")));
 const MasterOperations = lazy(() => lazyRetry(() => import("./pages/master/MasterOperations")));
 const MockupChat = lazy(() => lazyRetry(() => import("./pages/MockupChat")));
+const MockupChatV2 = lazy(() => lazyRetry(() => import("./pages/MockupChatV2")));
 
 // Master route/layout — carregam sob demanda quando acessar /master
 import { MasterRoute } from "@/components/master/MasterRoute";
@@ -189,6 +190,7 @@ function AppRoutes() {
       <Route path="/privacidade" element={<Privacidade />} />
       <Route path="/docs" element={<ApiDocs />} />
       <Route path="/_mockup/chat" element={<MockupChat />} />
+      <Route path="/_mockup/chat-v2" element={<MockupChatV2 />} />
       <Route
         path="/checkout"
         element={
