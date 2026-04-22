@@ -18,8 +18,10 @@ export { AudioRecorder } from "./WhatsAppChat";
 export { ImagePreviewModal } from "./WhatsAppChat";
 export { MessagesAreaErrorBoundary } from "./WhatsAppChat";
 
+// Media primitives (C2+)
+export { AudioPlayer, getAudioPlaybackUrl } from "./media/AudioPlayer";
+
 // Helpers (consumed by EmbeddedChatWindow and external code)
-export { getAudioPlaybackUrl } from "./WhatsAppChat";
 export { formatMessageTime } from "./WhatsAppChat";
 export { MessageStatusIcon } from "./WhatsAppChat";
 
