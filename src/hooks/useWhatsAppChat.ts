@@ -39,6 +39,22 @@ export interface WhatsAppMessage {
   sent_by_ai: boolean | null;
 }
 
+/** Mensagem que falhou ao ser enviada — armazenada em cache paralelo para retry. */
+export interface FailedMessage {
+  id: string;
+  phoneNumber: string;
+  instanceId: string | null;
+  instanceName: string;
+  message: string | null;
+  mediaUrl: string | null;
+  mediaType: string | null;
+  error: string;
+  timestamp: string;
+  direction: "outgoing";
+  status: "failed";
+  sent_by_ai: false;
+}
+
 export interface ChatContactTag {
   id: string;
   name: string;
@@ -551,7 +567,7 @@ export function useSendWhatsAppMessage() {
 
       return { previousMessages };
     },
-    onError: (_err, variables, context) => {
+    onError: (err, variables, context) => {
       // Reverter optimistic update em caso de erro
       if (context?.previousMessages) {
         queryClient.setQueryData(
@@ -559,6 +575,25 @@ export function useSendWhatsAppMessage() {
           context.previousMessages
         );
       }
+      // Adicionar ao cache paralelo de mensagens falhas para retry
+      const failedKey = ["whatsapp_failed_messages", teamMember?.organization_id, variables.phoneNumber, variables.instanceId];
+      queryClient.setQueryData<FailedMessage[]>(failedKey, (prev = []) => [
+        ...prev,
+        {
+          id: `failed-${Date.now()}-${Math.random()}`,
+          phoneNumber: variables.phoneNumber,
+          instanceId: variables.instanceId ?? null,
+          instanceName: variables.instanceName,
+          message: variables.message,
+          mediaUrl: null,
+          mediaType: null,
+          error: err instanceof Error ? err.message : "Falha ao enviar",
+          timestamp: new Date().toISOString(),
+          direction: "outgoing",
+          status: "failed",
+          sent_by_ai: false,
+        },
+      ]);
     },
     onSuccess: () => {
       if (teamMember?.organization_id) track({ event: "message_sent", organizationId: teamMember.organization_id, entityType: "conversation" });
@@ -794,13 +829,32 @@ export function useSendWhatsAppMedia() {
 
       return { previousMessages };
     },
-    onError: (_err, variables, context) => {
+    onError: (err, variables, context) => {
       if (context?.previousMessages) {
         queryClient.setQueryData(
           ["whatsapp_messages", teamMember?.organization_id, variables.phoneNumber, variables.instanceId],
           context.previousMessages
         );
       }
+      // Adicionar ao cache paralelo de mensagens falhas para retry
+      const failedKey = ["whatsapp_failed_messages", teamMember?.organization_id, variables.phoneNumber, variables.instanceId];
+      queryClient.setQueryData<FailedMessage[]>(failedKey, (prev = []) => [
+        ...prev,
+        {
+          id: `failed-${Date.now()}-${Math.random()}`,
+          phoneNumber: variables.phoneNumber,
+          instanceId: variables.instanceId ?? null,
+          instanceName: variables.instanceName,
+          message: variables.caption ?? null,
+          mediaUrl: null,
+          mediaType: variables.mediaType,
+          error: err instanceof Error ? err.message : "Falha ao enviar mídia",
+          timestamp: new Date().toISOString(),
+          direction: "outgoing",
+          status: "failed",
+          sent_by_ai: false,
+        },
+      ]);
     },
     onSettled: (_, __, variables) => {
       queryClient.invalidateQueries({
@@ -1096,4 +1150,53 @@ export function useActiveWhatsAppInstance() {
     },
     enabled: !!organizationId,
   });
+}
+
+/**
+ * Hook para ler mensagens com falha de envio (cache paralelo, não persiste no banco).
+ */
+export function useFailedMessages(phoneNumber: string, instanceId: string | null) {
+  const queryClient = useQueryClient();
+  const { data: teamMember } = useCurrentTeamMember();
+  const organizationId = teamMember?.organization_id;
+
+  const key = ["whatsapp_failed_messages", organizationId, phoneNumber, instanceId];
+  return queryClient.getQueryData<FailedMessage[]>(key) ?? [];
+}
+
+/**
+ * Hook para reenviar uma mensagem que falhou.
+ * Remove do cache paralelo e chama o mutation original.
+ */
+export function useRetryMessage() {
+  const queryClient = useQueryClient();
+  const { data: teamMember } = useCurrentTeamMember();
+  const organizationId = teamMember?.organization_id;
+  const sendMessage = useSendWhatsAppMessage();
+  const sendMedia = useSendWhatsAppMedia();
+
+  return async (failed: FailedMessage) => {
+    // Remove do cache paralelo imediatamente
+    const key = ["whatsapp_failed_messages", organizationId, failed.phoneNumber, failed.instanceId];
+    queryClient.setQueryData<FailedMessage[]>(key, (prev = []) => prev.filter((m) => m.id !== failed.id));
+
+    // Reenviar
+    if (failed.mediaType && failed.mediaUrl) {
+      await sendMedia.mutateAsync({
+        phoneNumber: failed.phoneNumber,
+        instanceName: failed.instanceName,
+        instanceId: failed.instanceId,
+        mediaType: failed.mediaType as "image" | "audio" | "document" | "video",
+        media: failed.mediaUrl,
+        caption: failed.message ?? undefined,
+      });
+    } else if (failed.message) {
+      await sendMessage.mutateAsync({
+        phoneNumber: failed.phoneNumber,
+        message: failed.message,
+        instanceName: failed.instanceName,
+        instanceId: failed.instanceId,
+      });
+    }
+  };
 }

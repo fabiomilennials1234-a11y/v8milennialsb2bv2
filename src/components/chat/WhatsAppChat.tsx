@@ -37,6 +37,7 @@ import {
   Settings,
   UserPlus,
   ArrowRightLeft,
+  RotateCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -56,9 +57,12 @@ import {
   useWhatsAppInstancesForUser,
   useTransferToSzChatDepartment,
   useActiveSzChatSession,
+  useFailedMessages,
+  useRetryMessage,
   type WhatsAppInstanceForUser,
   ChatContact,
   WhatsAppMessage,
+  type FailedMessage,
 } from "@/hooks/useWhatsAppChat";
 import { convertAudioBlobToMp3, preloadLamejs } from "@/lib/audioToMp3";
 import { useCanReplyOnInstanceByName } from "@/hooks/useWhatsAppInstanceAllowedMembers";
@@ -212,6 +216,8 @@ export function MessageStatusIcon({ status }: { status: string }) {
       return <CheckCheck className="w-2.5 h-2.5 text-muted-foreground/40" />;
     case "read":
       return <CheckCheck className="w-2.5 h-2.5 text-blue-500/70" />;
+    case "failed":
+      return <AlertCircle className="w-3 h-3 text-destructive" title="Falha no envio" />;
     default:
       return null;
   }
@@ -1074,19 +1080,25 @@ export function MessageBubble({
   isFirstInGroup = true,
   isLastInGroup = true,
   mountTime,
+  onRetry,
 }: {
-  message: WhatsAppMessage;
+  message: WhatsAppMessage | import("@/hooks/useWhatsAppChat").FailedMessage;
   onImagePreview: (url: string) => void;
   isFirstInGroup?: boolean;
   isLastInGroup?: boolean;
   mountTime?: number;
+  onRetry?: (message: import("@/hooks/useWhatsAppChat").FailedMessage) => void;
 }) {
   const isOutgoing = message.direction === "outgoing";
-  const isAudio = message.message_type === "audio" || message.message_type === "ptt";
-  const isImage = message.message_type === "image";
-  const isVideo = message.message_type === "video";
-  const isDocument = message.message_type === "document";
-  const isSticker = message.message_type === "sticker";
+  const isFailed = message.status === "failed";
+  const isWhatsAppMsg = "message_type" in message;
+  const mediaUrl = isWhatsAppMsg ? (message as WhatsAppMessage).media_url : null;
+  const messageType = isWhatsAppMsg ? (message as WhatsAppMessage).message_type : null;
+  const isAudio = messageType === "audio" || messageType === "ptt";
+  const isImage = messageType === "image";
+  const isVideo = messageType === "video";
+  const isDocument = messageType === "document";
+  const isSticker = messageType === "sticker";
   const hasMedia = isAudio || isImage || isVideo || isDocument || isSticker;
 
   const radiusClass = isOutgoing
@@ -1126,7 +1138,8 @@ export function MessageBubble({
           radiusClass,
           isOutgoing
             ? "bg-muted/80 border border-border/60"
-            : "bg-card border border-border/40"
+            : "bg-card border border-border/40",
+          isFailed && "border-destructive/40"
         )}
       >
         {/* Sender label for AI messages — only on first in group */}
@@ -1148,37 +1161,37 @@ export function MessageBubble({
         )}
 
         {/* Áudio */}
-        {isAudio && message.media_url && (
+        {isAudio && mediaUrl && (
           <div>
-            <AudioPlayer src={getAudioPlaybackUrl(message.media_url) ?? message.media_url} isOutgoing={isOutgoing} />
+            <AudioPlayer src={getAudioPlaybackUrl(mediaUrl) ?? mediaUrl} isOutgoing={isOutgoing} />
           </div>
         )}
 
         {/* Imagem */}
-        {isImage && message.media_url && (
+        {isImage && mediaUrl && (
           <MessageImage
-            src={message.media_url}
-            onPreview={() => onImagePreview(message.media_url!)}
+            src={mediaUrl}
+            onPreview={() => onImagePreview(mediaUrl)}
           />
         )}
 
         {/* Vídeo */}
-        {isVideo && message.media_url && (
-          <MessageVideo src={message.media_url} />
+        {isVideo && mediaUrl && (
+          <MessageVideo src={mediaUrl} />
         )}
 
         {/* Documento */}
-        {isDocument && message.media_url && (
+        {isDocument && mediaUrl && (
           <MessageDocument
-            src={message.media_url}
+            src={mediaUrl}
             isOutgoing={isOutgoing}
           />
         )}
 
         {/* Sticker */}
-        {isSticker && message.media_url && (
+        {isSticker && mediaUrl && (
           <img
-            src={message.media_url}
+            src={mediaUrl}
             alt="Sticker"
             className="w-32 h-32 object-contain"
           />
@@ -1189,6 +1202,18 @@ export function MessageBubble({
           <p className="text-sm italic text-muted-foreground">
             [Mensagem não suportada]
           </p>
+        )}
+
+        {/* Retry button for failed messages */}
+        {isFailed && onRetry && (
+          <button
+            type="button"
+            onClick={() => onRetry(message as import("@/hooks/useWhatsAppChat").FailedMessage)}
+            className="text-[11px] text-destructive hover:text-destructive/80 mt-1 font-medium flex items-center gap-1 focus-visible:outline-none focus-visible:underline"
+          >
+            <RotateCw className="w-3 h-3" />
+            Tentar novamente
+          </button>
         )}
 
         {/* Linha: data/hora e status — only on last in group */}
@@ -1510,6 +1535,8 @@ function ChatWindow({
   const sendMessage = useSendWhatsAppMessage();
   const sendMedia = useSendWhatsAppMedia();
   const { canReply: canReplyOnThisNumber } = useCanReplyOnInstanceByName(instanceName);
+  const failedMessages = useFailedMessages(phoneNumber, instanceId);
+  const retryMessage = useRetryMessage();
 
   // SZ.chat transfer-back: check if this contact has an active SZ.chat session
   const { data: teamMemberCW } = useCurrentTeamMember();
@@ -1932,10 +1959,11 @@ function ChatWindow({
             ) : (
               <div className="space-y-1 pb-4">
                 {(() => {
-                  // Merge messages + transfer events, sorted by timestamp
+                  // Merge messages + transfer events + failed messages, sorted by timestamp
                   const timeline = [
                     ...messages.map(m => ({ ...m, _type: 'message' as const })),
                     ...transferEvents.map(e => ({ ...e, _type: 'transfer' as const })),
+                    ...failedMessages.map(f => ({ ...f, _type: 'message' as const, message_type: 'text', content: f.message, media_url: f.mediaUrl })),
                   ].sort((a, b) => {
                     const timeA = new Date(a.timestamp).getTime();
                     const timeB = new Date(b.timestamp).getTime();
@@ -2025,6 +2053,7 @@ function ChatWindow({
                           isFirstInGroup={isFirstInGroup}
                           isLastInGroup={isLastInGroup}
                           mountTime={mountTimeRef.current}
+                          onRetry={message.status === 'failed' ? retryMessage : undefined}
                         />
                       </div>
                     );
