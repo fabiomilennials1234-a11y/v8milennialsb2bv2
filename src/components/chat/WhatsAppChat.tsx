@@ -84,6 +84,7 @@ import { resolveVariables } from "@/lib/template-variables";
 import type { LeadContext, AttendantContext } from "@/lib/template-variables";
 import type { MessageTemplate } from "@/hooks/useMessageTemplates";
 import { useConversationDraft } from "@/hooks/useConversationDraft";
+import { ChatEmptyState } from "@/components/chat/ChatEmptyState";
 import { ScheduledMessagesBanner } from "./ScheduledMessagesBanner";
 import ConversationNotes from "@/components/chat/ConversationNotes";
 import { WhatsAppSettings } from "@/components/settings/WhatsAppSettings";
@@ -1400,6 +1401,7 @@ function ChatWindow({
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
 
   // Pré-carregar lamejs para conversão WebM→MP3 na gravação (evita enviar áudio em formato que Safari não reproduz)
@@ -1822,12 +1824,15 @@ function ChatWindow({
                 <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
               </div>
             ) : messages.length === 0 ? (
-              <div className="flex flex-col items-center justify-center min-h-[200px] text-center">
-                <MessageSquare className="w-10 h-10 text-muted-foreground/30 mb-3" />
-                <p className="text-sm font-medium text-muted-foreground/60">
-                  Nenhuma mensagem ainda
-                </p>
-              </div>
+              <ChatEmptyState
+                contactName={contactName}
+                instanceName={instanceName}
+                onOpenTemplates={() => {
+                  setNewMessage("/");
+                  setShowSlashPopover(true);
+                  inputRef.current?.focus();
+                }}
+              />
             ) : (
               <div className="space-y-1 pb-4">
                 {(() => {
@@ -1993,6 +1998,7 @@ function ChatWindow({
 
             {/* Input de texto */}
             <Input
+              ref={inputRef}
               placeholder={`Mensagem para ${contactName}...`}
               value={newMessage}
               onChange={(e) => {
