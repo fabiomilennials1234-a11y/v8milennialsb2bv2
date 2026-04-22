@@ -509,9 +509,9 @@ function ContactList({
                             </span>
                           )}
                         </span>
-                        <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0">
+                        <time dateTime={contact.last_message_time || ""} className="text-xs text-muted-foreground whitespace-nowrap shrink-0 tabular-nums">
                           {formatContactTime(contact.last_message_time)}
-                        </span>
+                        </time>
                       </div>
                       <div className="flex items-center justify-between gap-2 mt-0.5">
                         <p className="text-[12px] text-muted-foreground/60 truncate flex-1 min-w-0 flex items-center gap-1">
@@ -1154,7 +1154,7 @@ export function MessageBubble({
 
         {/* Linha: data/hora e status */}
         <div className="flex items-center justify-end gap-1.5 mt-1.5">
-          <span className="text-[10px] text-muted-foreground/50">{formatMessageTime(message.timestamp)}</span>
+          <time dateTime={message.timestamp} className="text-[10px] text-muted-foreground/50 tabular-nums">{formatMessageTime(message.timestamp)}</time>
           {isOutgoing && <MessageStatusIcon status={message.status} />}
         </div>
       </div>
@@ -1290,7 +1290,7 @@ export function AudioRecorder({
       
       <div className="flex-1 flex items-center gap-2">
         <div className="w-3 h-3 rounded-full bg-red-500 animate-pulse" />
-        <span className="text-sm font-medium">{formatTime(recordingTime)}</span>
+        <span className="text-sm font-medium tabular-nums">{formatTime(recordingTime)}</span>
         <span className="text-sm text-muted-foreground">Gravando...</span>
       </div>
 
@@ -1848,9 +1848,9 @@ function ChatWindow({
                             {item.reason && (
                               <p className="text-xs text-amber-700 dark:text-amber-300">{item.reason}</p>
                             )}
-                            <p className="text-xs text-amber-500 mt-0.5">
+                            <time dateTime={item.timestamp} className="text-xs text-amber-500 mt-0.5 tabular-nums">
                               {new Date(item.timestamp).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                            </p>
+                            </time>
                           </div>
                         </div>
                       );
@@ -1876,9 +1876,9 @@ function ChatWindow({
                       <div key={safeKey}>
                         {showDateSeparator && (
                           <div className="flex justify-center py-3">
-                            <span className="text-[11px] font-medium tracking-wider uppercase text-muted-foreground/40 bg-muted/30 px-3 py-1 rounded-full">
+                            <time dateTime={validDate ? format(date, "yyyy-MM-dd") : ""} className="text-[11px] font-medium tracking-wider uppercase text-muted-foreground/40 bg-muted/30 px-3 py-1 rounded-full">
                               {dateLabel}
-                            </span>
+                            </time>
                           </div>
                         )}
                         <MessageBubble

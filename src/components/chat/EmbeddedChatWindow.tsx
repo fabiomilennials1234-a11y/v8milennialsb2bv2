@@ -299,9 +299,9 @@ function EmbeddedChatContent({
                         <div key={safeKey}>
                           {showDateSeparator && (
                             <div className="flex justify-center py-2">
-                              <span className="text-[10px] font-medium tracking-wider uppercase text-muted-foreground/40 bg-muted/30 px-2.5 py-0.5 rounded-full">
+                              <time dateTime={validDate ? format(date, "yyyy-MM-dd") : ""} className="text-[10px] font-medium tracking-wider uppercase text-muted-foreground/40 bg-muted/30 px-2.5 py-0.5 rounded-full">
                                 {dateLabel}
-                              </span>
+                              </time>
                             </div>
                           )}
                           <MessageBubble message={message} onImagePreview={setPreviewImageUrl} />
