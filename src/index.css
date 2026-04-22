@@ -59,6 +59,34 @@
     --input: 40 15% 88%;
     --ring: 47 100% 50%;
 
+    /* ─── Bubble tokens ───────────────────────────────────────── */
+    --bubble-outgoing:            220 30% 88%;
+    --bubble-outgoing-foreground: 220 25% 18%;
+    --bubble-outgoing-border:     220 22% 75%;
+
+    --bubble-incoming:            42 18% 97%;
+    --bubble-incoming-foreground: 30 18% 16%;
+    --bubble-incoming-border:     40 15% 84%;
+
+    --bubble-ai:                  47 35% 90%;
+    --bubble-ai-foreground:       36 20% 18%;
+    --bubble-ai-border:           47 100% 50%;
+
+    --bubble-system:              42 15% 92%;
+    --bubble-system-foreground:   30 12% 33%;
+    --bubble-system-border:       40 12% 80%;
+
+    /* ─── Chat layout density (default: comfortable) ──────────── */
+    --chat-bubble-padding-x:    14px;
+    --chat-bubble-padding-y:    10px;
+    --chat-bubble-radius-lg:    16px;
+    --chat-bubble-radius-sm:    4px;
+    --chat-msg-gap-same-author: 4px;
+    --chat-msg-gap-different:   12px;
+    --chat-avatar-size:         40px;
+    --chat-composer-min-h:      44px;
+    --chat-list-row-height:     72px;
+
     --radius: 0.75rem;
 
     /* Sidebar - Dark Theme */
@@ -126,6 +154,25 @@
     --input: 36 15% 25%;
     --ring: 47 100% 50%;
 
+    /* ─── Bubble tokens (dark) ────────────────────────────────── */
+    --bubble-outgoing:            217 19% 27%;
+    --bubble-outgoing-foreground: 210 20% 94%;
+    --bubble-outgoing-border:     217 20% 38%;
+
+    --bubble-incoming:            36 18% 20%;
+    --bubble-incoming-foreground: 45 15% 88%;
+    --bubble-incoming-border:     38 14% 30%;
+
+    --bubble-ai:                  38 22% 24%;
+    --bubble-ai-foreground:       47 40% 90%;
+    --bubble-ai-border:           47 100% 50%;
+
+    --bubble-system:              36 15% 15%;
+    --bubble-system-foreground:   40 12% 56%;
+    --bubble-system-border:       38 12% 22%;
+
+    /* density vars não variam por tema — definidas só em :root */
+
     --sidebar-background: 36 20% 10%;
     --sidebar-foreground: 45 20% 90%;
   }
@@ -139,6 +186,8 @@
   body {
     @apply bg-background text-foreground font-sans antialiased;
     font-family: 'Inter', system-ui, sans-serif;
+    /* cv11: alterna numeral "1" com serif (legível em timestamps 11:11); ss01: "a" alternativo */
+    font-feature-settings: "cv11", "ss01";
     min-height: 100vh;
   }
 

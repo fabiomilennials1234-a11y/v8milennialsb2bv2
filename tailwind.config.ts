@@ -75,6 +75,28 @@ export default {
           "4": "hsl(var(--chart-4))",
           "5": "hsl(var(--chart-5))",
         },
+        bubble: {
+          outgoing: {
+            DEFAULT: "hsl(var(--bubble-outgoing))",
+            foreground: "hsl(var(--bubble-outgoing-foreground))",
+            border: "hsl(var(--bubble-outgoing-border))",
+          },
+          incoming: {
+            DEFAULT: "hsl(var(--bubble-incoming))",
+            foreground: "hsl(var(--bubble-incoming-foreground))",
+            border: "hsl(var(--bubble-incoming-border))",
+          },
+          ai: {
+            DEFAULT: "hsl(var(--bubble-ai))",
+            foreground: "hsl(var(--bubble-ai-foreground))",
+            border: "hsl(var(--bubble-ai-border))",
+          },
+          system: {
+            DEFAULT: "hsl(var(--bubble-system))",
+            foreground: "hsl(var(--bubble-system-foreground))",
+            border: "hsl(var(--bubble-system-border))",
+          },
+        },
       },
       borderRadius: {
         lg: "var(--radius)",

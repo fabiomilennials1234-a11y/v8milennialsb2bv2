@@ -184,6 +184,7 @@ export function MessageBubble({
 }) {
   const isOutgoing = message.direction === "outgoing";
   const isFailed = message.status === "failed";
+  const isAi = isOutgoing && !!message.sent_by_ai;
   const isWhatsAppMsg = "message_type" in message;
   const mediaUrl = isWhatsAppMsg ? (message as WhatsAppMessage).media_url : null;
   const messageType = isWhatsAppMsg ? (message as WhatsAppMessage).message_type : null;
@@ -210,6 +211,13 @@ export function MessageBubble({
             ? "rounded-b-2xl rounded-br-2xl rounded-bl-sm"
             : "rounded-r-2xl rounded-l-md");
 
+  // Bubble color tokens — C9
+  const bubbleColorClass = isAi
+    ? "bg-bubble-ai text-bubble-ai-foreground border border-bubble-ai-border/30 border-l-[3px] border-l-bubble-ai-border"
+    : isOutgoing
+      ? "bg-bubble-outgoing text-bubble-outgoing-foreground border border-bubble-outgoing-border"
+      : "bg-bubble-incoming text-bubble-incoming-foreground border border-bubble-incoming-border";
+
   const shouldAnimate = mountTime !== undefined && new Date(message.timestamp).getTime() > mountTime;
   const prefersReduced = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const animInitial = shouldAnimate && !prefersReduced ? { opacity: 0, y: 8 } : false as const;
@@ -219,6 +227,7 @@ export function MessageBubble({
     <motion.div
       initial={animInitial}
       animate={animAnimate}
+      transition={shouldAnimate && !prefersReduced ? { duration: 0.18, ease: "easeOut" } : undefined}
       className={cn(
         "flex gap-2",
         isOutgoing ? "justify-end" : "justify-start",
@@ -229,17 +238,15 @@ export function MessageBubble({
         className={cn(
           "max-w-[75%] px-4 py-2.5",
           radiusClass,
-          isOutgoing
-            ? "bg-muted/80 border border-border/60"
-            : "bg-card border border-border/40",
+          bubbleColorClass,
           isFailed && "border-destructive/40"
         )}
       >
         {/* Sender label for AI messages — only on first in group */}
-        {isFirstInGroup && isOutgoing && message.sent_by_ai && (
+        {isFirstInGroup && isAi && (
           <div className="flex items-center gap-1 mb-1">
-            <Bot className="h-3 w-3 text-primary/60" />
-            <span className="text-[10px] text-primary/60 font-medium">Copilot</span>
+            <Bot className="h-3 w-3 text-bubble-ai-foreground/60" />
+            <span className="text-[10px] text-bubble-ai-foreground/70 font-medium">Copilot</span>
           </div>
         )}
 
