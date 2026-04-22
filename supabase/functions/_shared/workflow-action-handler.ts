@@ -231,38 +231,35 @@ async function getWhatsAppInstance(
   supabase: SupabaseClient,
   organizationId: string,
   instanceId?: string,
-): Promise<{ instanceId: string; instanceName: string; evolutionUrl: string; evolutionKey: string } | null> {
-  const evolutionUrl = Deno.env.get("EVOLUTION_API_URL");
-  const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
-  if (!evolutionUrl || !evolutionKey) return null;
-
-  let resolvedId: string | null = null;
-  let instanceName: string | null = null;
+): Promise<{ instanceId: string; instanceName: string; instance: any } | null> {
+  let resolved: any = null;
 
   if (instanceId) {
     const { data } = await supabase
       .from("whatsapp_instances")
-      .select("id, instance_name")
+      .select("*")
       .eq("id", instanceId)
       .maybeSingle();
-    resolvedId = data?.id ?? null;
-    instanceName = data?.instance_name ?? null;
+    resolved = data;
   }
 
-  if (!instanceName) {
+  if (!resolved) {
     const { data } = await supabase
       .from("whatsapp_instances")
-      .select("id, instance_name")
+      .select("*")
       .eq("organization_id", organizationId)
-      .eq("status", "open")
+      .in("status", ["open", "connected"])
       .limit(1)
       .maybeSingle();
-    resolvedId = data?.id ?? null;
-    instanceName = data?.instance_name ?? null;
+    resolved = data;
   }
 
-  if (!instanceName || !resolvedId) return null;
-  return { instanceId: resolvedId, instanceName, evolutionUrl, evolutionKey };
+  if (!resolved) return null;
+  return {
+    instanceId: resolved.id,
+    instanceName: resolved.instance_name,
+    instance: resolved,
+  };
 }
 
 async function getLeadPhone(supabase: SupabaseClient, leadId: string): Promise<string | null> {
@@ -466,15 +463,14 @@ async function handleSendWhatsApp(ctx: ActionContext): Promise<ActionResult> {
   const message = await resolveVariables(ctx.supabase, ctx.leadId, template, ctx.executionContext);
   if (!message) return { success: false, error: "Empty message template" };
 
-  const res = await fetch(`${wa.evolutionUrl}/message/sendText/${wa.instanceName}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", apikey: wa.evolutionKey },
-    body: JSON.stringify({ number: phone, text: message }),
+  const { sendTextViaInstance } = await import("./whatsapp-dispatch.ts");
+  const sendResult = await sendTextViaInstance(ctx.supabase, wa.instance, phone, message, {
+    trackSource: "workflow-action",
+    trackId: ctx.executionId,
   });
 
-  if (!res.ok) {
-    const err = await res.text();
-    return { success: false, error: `WhatsApp send failed: ${err}` };
+  if (!sendResult.success) {
+    return { success: false, error: `WhatsApp send failed: ${sendResult.error}` };
   }
 
   // Use Evolution's real message ID so the send.message webhook echo UPSERTs
@@ -545,13 +541,16 @@ async function handleSendWhatsAppImage(ctx: ActionContext): Promise<ActionResult
   const caption = ctx.nodeData.imageCaption as string || "";
   const resolvedCaption = await resolveVariables(ctx.supabase, ctx.leadId, caption, ctx.executionContext);
 
-  const res = await fetch(`${wa.evolutionUrl}/message/sendMedia/${wa.instanceName}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", apikey: wa.evolutionKey },
-    body: JSON.stringify({ number: phone, mediatype: "image", media: imageUrl, caption: resolvedCaption }),
-  });
+  const { sendMediaViaInstance } = await import("./whatsapp-dispatch.ts");
+  const sendResult = await sendMediaViaInstance(
+    ctx.supabase,
+    wa.instance,
+    phone,
+    { type: "image", file: imageUrl, caption: resolvedCaption },
+    { trackSource: "workflow-action", trackId: ctx.executionId }
+  );
 
-  if (!res.ok) return { success: false, error: `Image send failed: ${await res.text()}` };
+  if (!sendResult.success) return { success: false, error: `Image send failed: ${sendResult.error}` };
   return { success: true, message: "WhatsApp image sent" };
 }
 
@@ -576,13 +575,13 @@ async function handleSendWhatsAppTemplate(ctx: ActionContext): Promise<ActionRes
 
   const message = await resolveVariables(ctx.supabase, ctx.leadId, tpl.content || "", ctx.executionContext);
 
-  const res = await fetch(`${wa.evolutionUrl}/message/sendText/${wa.instanceName}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", apikey: wa.evolutionKey },
-    body: JSON.stringify({ number: phone, text: message }),
+  const { sendTextViaInstance } = await import("./whatsapp-dispatch.ts");
+  const sendResult = await sendTextViaInstance(ctx.supabase, wa.instance, phone, message, {
+    trackSource: "workflow-action-template",
+    trackId: ctx.executionId,
   });
 
-  if (!res.ok) return { success: false, error: `Template send failed: ${await res.text()}` };
+  if (!sendResult.success) return { success: false, error: `Template send failed: ${sendResult.error}` };
   return { success: true, message: `Template "${tpl.name}" sent` };
 }
 
@@ -1032,25 +1031,20 @@ async function handleSendCampaignMessage(ctx: ActionContext): Promise<ActionResu
 
   const isAudio = template.message_type === "audio" && template.audio_url;
 
-  let res: Response;
-  if (isAudio) {
-    res = await fetch(`${wa.evolutionUrl}/message/sendWhatsAppAudio/${wa.instanceName}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", apikey: wa.evolutionKey },
-      body: JSON.stringify({ number: phone, audio: template.audio_url }),
-    });
-  } else {
-    res = await fetch(`${wa.evolutionUrl}/message/sendText/${wa.instanceName}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", apikey: wa.evolutionKey },
-      body: JSON.stringify({ number: phone, text: message }),
-    });
-  }
+  const { sendTextViaInstance, sendAudioViaInstance } = await import("./whatsapp-dispatch.ts");
+  const sendResult = isAudio
+    ? await sendAudioViaInstance(ctx.supabase, wa.instance, phone, template.audio_url, {
+        trackSource: "workflow-campaign-message",
+        trackId: ctx.executionId,
+      })
+    : await sendTextViaInstance(ctx.supabase, wa.instance, phone, message, {
+        trackSource: "workflow-campaign-message",
+        trackId: ctx.executionId,
+      });
 
-  if (!res.ok) return { success: false, error: `Campaign message send failed: ${await res.text()}` };
+  if (!sendResult.success) return { success: false, error: `Campaign message send failed: ${sendResult.error}` };
 
-  const sendResult = await res.json().catch(() => null) as { key?: { id?: string } } | null;
-  const messageId = sendResult?.key?.id || `wf_camp_${crypto.randomUUID()}`;
+  const messageId = sendResult.messageId || `wf_camp_${crypto.randomUUID()}`;
 
   await ctx.supabase.from("whatsapp_messages").upsert({
     organization_id: ctx.organizationId,
