@@ -1,6 +1,8 @@
 /**
  * useWhatsAppContacts — lista de contatos/conversas do WhatsApp de uma instância.
  * Extraído de src/hooks/useWhatsAppChat.ts (C12).
+ *
+ * C21: remove refetchInterval — patches incrementais via useWhatsAppMessagesRealtime.
  */
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -213,8 +215,7 @@ export function useWhatsAppContacts(instanceId: string | null) {
       return results;
     },
     enabled: !!organizationId && !!instanceId,
-    // Polling de fallback: atualiza lista (e badge da sidebar) a cada 20s quando a aba está em foco
-    refetchInterval: instanceId ? 20_000 : false,
-    refetchIntervalInBackground: false,
+    // C21: sem refetchInterval — realtime via useWhatsAppMessagesRealtime
+    // aplica patches incrementais em last_message / unread_count sem refetch total.
   });
 }
