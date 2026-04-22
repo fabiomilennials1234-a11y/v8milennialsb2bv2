@@ -132,6 +132,8 @@ import { format, isToday, isYesterday } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
 import { AudioPlayer, getAudioPlaybackUrl } from "./media/AudioPlayer";
+import { AudioRecorder as AudioRecorderMedia } from "./media/AudioRecorder";
+import { ImagePreviewModal as ImagePreviewModalMedia } from "./media/ImagePreviewModal";
 
 /**
  * Re-export para backwards-compat — movido para media/AudioPlayer.tsx (C2).
@@ -977,181 +979,11 @@ export function MessageBubble({
 }
 
 // Componente de gravação de áudio
-export function AudioRecorder({
-  onRecorded,
-  onCancel,
-}: {
-  onRecorded: (audioBlob: Blob) => void;
-  onCancel: () => void;
-}) {
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordingTime, setRecordingTime] = useState(0);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const cancelledRef = useRef(false);
-
-  const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      
-      // Tentar usar formato compatível com WhatsApp
-      let mimeType = "audio/webm;codecs=opus";
-      if (!MediaRecorder.isTypeSupported(mimeType)) {
-        mimeType = "audio/webm";
-        if (!MediaRecorder.isTypeSupported(mimeType)) {
-          mimeType = "audio/ogg;codecs=opus";
-          if (!MediaRecorder.isTypeSupported(mimeType)) {
-            mimeType = ""; // Usar padrão do browser
-          }
-        }
-      }
-      
-      console.log("[AudioRecorder] Using mimeType:", mimeType || "default");
-      
-      const mediaRecorder = mimeType 
-        ? new MediaRecorder(stream, { mimeType })
-        : new MediaRecorder(stream);
-      
-      mediaRecorderRef.current = mediaRecorder;
-      chunksRef.current = [];
-      cancelledRef.current = false;
-
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
-          chunksRef.current.push(e.data);
-        }
-      };
-
-      mediaRecorder.onstop = () => {
-        stream.getTracks().forEach((track) => track.stop());
-
-        if (cancelledRef.current) {
-          console.log("[AudioRecorder] Recording cancelled, discarding audio.");
-          chunksRef.current = [];
-          return;
-        }
-
-        const audioBlob = new Blob(chunksRef.current, {
-          type: mediaRecorder.mimeType || "audio/webm"
-        });
-        console.log("[AudioRecorder] Recording finished:", {
-          chunks: chunksRef.current.length,
-          blobSize: audioBlob.size,
-          mimeType: audioBlob.type,
-        });
-        onRecorded(audioBlob);
-      };
-
-      mediaRecorder.start(100); // Coletar dados a cada 100ms
-      setIsRecording(true);
-      
-      timerRef.current = setInterval(() => {
-        setRecordingTime((prev) => prev + 1);
-      }, 1000);
-    } catch (error) {
-      console.error("[AudioRecorder] Error:", error);
-      toast.error("Não foi possível acessar o microfone");
-      onCancel();
-    }
-  };
-
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-      }
-    }
-  };
-
-  const cancelRecording = () => {
-    cancelledRef.current = true;
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
-    }
-    chunksRef.current = [];
-    setIsRecording(false);
-    setRecordingTime(0);
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-    onCancel();
-  };
-
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, "0")}`;
-  };
-
-  useEffect(() => {
-    startRecording();
-    return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-      }
-    };
-  }, []);
-
-  return (
-    <div className="flex items-center gap-3 w-full bg-red-50 dark:bg-red-950/30 p-3 rounded-lg">
-      <Button variant="ghost" size="icon" onClick={cancelRecording}>
-        <X className="w-5 h-5 text-red-500" />
-      </Button>
-      
-      <div className="flex-1 flex items-center gap-2">
-        <div className="w-3 h-3 rounded-full bg-red-500 animate-pulse" />
-        <span className="text-sm font-medium tabular-nums">{formatTime(recordingTime)}</span>
-        <span className="text-sm text-muted-foreground">Gravando...</span>
-      </div>
-
-      <Button
-        variant="default"
-        size="icon"
-        onClick={stopRecording}
-        className="bg-green-500 hover:bg-green-600"
-      >
-        <Send className="w-4 h-4" />
-      </Button>
-    </div>
-  );
-}
-
-// Modal de preview de imagem
-export function ImagePreviewModal({
-  imageUrl,
-  isOpen,
-  onClose,
-}: {
-  imageUrl: string | null;
-  isOpen: boolean;
-  onClose: () => void;
-}) {
-  if (!isOpen || !imageUrl) return null;
-
-  return (
-    <div
-      className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
-      onClick={onClose}
-    >
-      <button
-        className="absolute top-4 right-4 text-white hover:text-gray-300"
-        onClick={onClose}
-      >
-        <X className="w-8 h-8" />
-      </button>
-      <img
-        src={imageUrl}
-        alt="Preview"
-        className="max-w-full max-h-full object-contain"
-        onClick={(e) => e.stopPropagation()}
-      />
-    </div>
-  );
-}
+// AudioRecorder e ImagePreviewModal extraídos para media/ (C3).
+// Re-exportados via barrel src/components/chat/index.ts.
+// Aliases locais para uso interno neste arquivo.
+const AudioRecorder = AudioRecorderMedia;
+const ImagePreviewModal = ImagePreviewModalMedia;
 
 function ChatWindow({
   phoneNumber,

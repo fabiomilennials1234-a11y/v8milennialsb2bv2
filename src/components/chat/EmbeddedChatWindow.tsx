@@ -41,7 +41,7 @@ import {
   AudioRecorder,
   ImagePreviewModal,
   MessagesAreaErrorBoundary,
-} from "./WhatsAppChat";
+} from "@/components/chat";
 import { ScheduleMessageModal } from "./ScheduleMessageModal";
 
 interface EmbeddedChatWindowProps {

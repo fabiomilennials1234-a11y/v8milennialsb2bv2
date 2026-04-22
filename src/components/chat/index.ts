@@ -12,16 +12,16 @@
 // Page / shell
 export { WhatsAppChat } from "./WhatsAppChat";
 
-// Message primitives (consumed by EmbeddedChatWindow + future reuse)
+// Message primitives (public contract — consumed by EmbeddedChatWindow)
 export { MessageBubble } from "./WhatsAppChat";
-export { AudioRecorder } from "./WhatsAppChat";
-export { ImagePreviewModal } from "./WhatsAppChat";
 export { MessagesAreaErrorBoundary } from "./WhatsAppChat";
 
-// Media primitives (C2+)
+// Media primitives — sourced from dedicated files after C2/C3
 export { AudioPlayer, getAudioPlaybackUrl } from "./media/AudioPlayer";
+export { AudioRecorder } from "./media/AudioRecorder";
+export { ImagePreviewModal } from "./media/ImagePreviewModal";
 
-// Helpers (consumed by EmbeddedChatWindow and external code)
+// Helpers
 export { formatMessageTime } from "./WhatsAppChat";
 export { MessageStatusIcon } from "./WhatsAppChat";
 
