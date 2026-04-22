@@ -88,14 +88,27 @@ export class UazapiProvider implements WhatsAppProvider {
   // =========================================================================
 
   async createInstance(input: CreateInstanceInput): Promise<CreateInstanceResult> {
+    // Webhook auth: Uazapi has no HMAC / customHeaders. Secret is embedded
+    // as a path segment; edge function validates with timingSafeEqual.
+    if (!input.webhook_secret) {
+      throw new Error("UazapiProvider.createInstance: webhook_secret required");
+    }
+    const webhookUrl = `${input.webhook_url.replace(/\/$/, "")}/${input.webhook_secret}`;
+
     const resp = await this.client.initInstance({
       name: input.instance_name,
       adminField01: input.organization_id,
       adminField02: input.instance_id,
-      webhookUrl: input.webhook_url,
-      webhookEvents: ["messages", "messages_update", "connection", "presence"],
+      webhookUrl,
+      // Fase 2 scope: messages + messages_update + connection. Other events
+      // (presence, history, call, groups) remain off to reduce ingress volume.
+      webhookEvents: ["messages", "messages_update", "connection"],
+      // Echo elimination at source (Uazapi server-side). Defense in depth:
+      // UPSERT idempotent preserved in whatsapp-webhook (contract from 3066b5e).
       webhookExcludeMessages: ["wasSentByApi"],
-      webhookAddUrlTypesMessages: true,
+      // Append /<event> to webhook URL — future routing to split workers.
+      webhookAddUrlEvents: true,
+      webhookAddUrlTypesMessages: false,
     });
 
     // Persist token via RPC — service_role only
