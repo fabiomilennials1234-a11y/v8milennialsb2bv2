@@ -138,3 +138,104 @@ export async function resolveDispatchContext(
 
   return { provider, instance, normalizedPhone };
 }
+
+// ============================================================================
+// Convenience send helpers — consumed by legacy dispatchers
+// (pipe-rule-dispatch, campaign-rule-dispatch, semi-automatic-dispatch)
+// Wrap provider calls and normalize phone so call sites don't duplicate.
+// ============================================================================
+
+export type SendResultSimple = {
+  success: boolean;
+  messageId?: string;
+  error?: string;
+};
+
+export async function sendTextViaInstance(
+  supabaseAdmin: any,
+  instance: WhatsAppInstance,
+  phoneNumber: string,
+  text: string,
+  opts: { trackSource?: string; trackId?: string; delay?: number; replyId?: string } = {}
+): Promise<SendResultSimple> {
+  const phone = normalizeBrazilianPhone(phoneNumber);
+  if (!phone) return { success: false, error: "Invalid phone" };
+  try {
+    const provider = await getWhatsAppProvider(instance, supabaseAdmin);
+    const res = await provider.sendText({
+      number: phone,
+      text,
+      trackSource: opts.trackSource,
+      trackId: opts.trackId,
+      delay: opts.delay,
+      replyid: opts.replyId,
+    });
+    return { success: true, messageId: res.message_id };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+export async function sendAudioViaInstance(
+  supabaseAdmin: any,
+  instance: WhatsAppInstance,
+  phoneNumber: string,
+  audioUrl: string,
+  opts: { trackSource?: string; trackId?: string } = {}
+): Promise<SendResultSimple> {
+  const phone = normalizeBrazilianPhone(phoneNumber);
+  if (!phone) return { success: false, error: "Invalid phone" };
+  try {
+    const provider = await getWhatsAppProvider(instance, supabaseAdmin);
+    const res = await provider.sendMedia({
+      number: phone,
+      type: "ptt",
+      file: audioUrl,
+      trackSource: opts.trackSource,
+      trackId: opts.trackId,
+    });
+    return { success: true, messageId: res.message_id };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+export async function sendMediaViaInstance(
+  supabaseAdmin: any,
+  instance: WhatsAppInstance,
+  phoneNumber: string,
+  media: {
+    type: "image" | "video" | "document" | "audio";
+    file: string;
+    filename?: string;
+    caption?: string;
+  },
+  opts: { trackSource?: string; trackId?: string } = {}
+): Promise<SendResultSimple> {
+  const phone = normalizeBrazilianPhone(phoneNumber);
+  if (!phone) return { success: false, error: "Invalid phone" };
+  try {
+    const provider = await getWhatsAppProvider(instance, supabaseAdmin);
+    const res = await provider.sendMedia({
+      number: phone,
+      type: media.type,
+      file: media.file,
+      filename: media.filename,
+      caption: media.caption,
+      trackSource: opts.trackSource,
+      trackId: opts.trackId,
+    });
+    return { success: true, messageId: res.message_id };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
