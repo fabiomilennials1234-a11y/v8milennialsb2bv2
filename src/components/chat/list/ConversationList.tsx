@@ -2,7 +2,13 @@
  * ConversationList — coluna esquerda do chat: seletor de instance, busca, filtros, tabs e lista.
  *
  * Extraído de WhatsAppChat.tsx ContactList (C5).
+ *
+ * C23: virtualização para >50 contatos via @tanstack/react-virtual.
+ * Lista plana (sem grouping) → estimateSize via CSS var --chat-list-row-height.
+ * Mobile fallback: render plain sempre.
  */
+import { useRef, useCallback } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { Loader2, Search, Filter, UserPlus, MessageSquare, Archive, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +23,23 @@ import {
 import { cn } from "@/lib/utils";
 import type { ChatContact, WhatsAppInstanceForUser } from "@/hooks/useWhatsAppChat";
 import { ConversationListItem, contactDisplayName } from "./ConversationListItem";
+import type { DensityMode } from "@/hooks/chat/useChatDensity";
+
+// ─── Config ───────────────────────────────────────────────────────────────────
+
+const VIRTUALIZE_THRESHOLD = 50;
+const MOBILE_BREAKPOINT = 780;
+
+/** Altura estimada por item baseada em density CSS vars de useChatDensity. */
+function estimateItemHeight(density: DensityMode): number {
+  switch (density) {
+    case "compact": return 56;
+    case "spacious": return 88;
+    default: return 72;
+  }
+}
+
+// ─── Props ────────────────────────────────────────────────────────────────────
 
 interface ConversationListProps {
   contacts: ChatContact[];
@@ -46,7 +69,11 @@ interface ConversationListProps {
   onAddTag: (phone: string, tagId: string) => void;
   onRemoveTag: (conversationId: string, tagId: string) => void;
   onOpenInstances?: () => void;
+  /** Modo de densidade para altura estimada dos itens. */
+  density?: DensityMode;
 }
+
+// ─── Componente ───────────────────────────────────────────────────────────────
 
 export function ConversationList({
   contacts,
@@ -76,7 +103,10 @@ export function ConversationList({
   onAddTag,
   onRemoveTag,
   onOpenInstances,
+  density = "comfortable",
 }: ConversationListProps) {
+  const scrollAreaRef = useRef<HTMLDivElement | null>(null);
+
   const filteredContacts = contacts.filter((c) => {
     if (showOnlyWithLead && !c.lead_id) return false;
     if (showOnlyWaitingHuman && !(c.lead_id && waitingHumanLeadIds?.has(c.lead_id))) return false;
@@ -92,8 +122,25 @@ export function ConversationList({
   const activeCount = contacts.filter((c) => !c.archived_at).length;
   const archivedCount = contacts.filter((c) => !!c.archived_at).length;
 
+  const isMobile = typeof window !== "undefined" && window.innerWidth < MOBILE_BREAKPOINT;
+  const shouldVirtualize = !isMobile && filteredContacts.length > VIRTUALIZE_THRESHOLD;
+
+  const getScrollElement = useCallback(() => {
+    return scrollAreaRef.current?.querySelector<HTMLElement>(
+      "[data-radix-scroll-area-viewport]"
+    ) ?? null;
+  }, []);
+
+  const virtualizer = useVirtualizer({
+    count: shouldVirtualize ? filteredContacts.length : 0,
+    getScrollElement,
+    estimateSize: () => estimateItemHeight(density),
+    overscan: 3,
+  });
+
   return (
     <div className="flex flex-col h-full min-h-0 border-r border-border/60 bg-muted/20">
+      {/* ─── Cabeçalho ─────────────────────────────────────────────────────── */}
       <div className="p-3 border-b bg-background shrink-0">
         {instances && instances.length > 0 && onSelectInstance && (
           <div className="mb-3">
@@ -225,7 +272,8 @@ export function ConversationList({
         </div>
       </div>
 
-      <ScrollArea className="flex-1 min-h-0">
+      {/* ─── Lista ──────────────────────────────────────────────────────────── */}
+      <ScrollArea ref={scrollAreaRef} className="flex-1 min-h-0">
         {isLoading ? (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
@@ -246,7 +294,49 @@ export function ConversationList({
               </>
             )}
           </div>
+        ) : shouldVirtualize ? (
+          // ── Modo virtualizado ──────────────────────────────────────────────
+          <div
+            style={{ height: virtualizer.getTotalSize(), position: "relative" }}
+            className="divide-y divide-border/60"
+          >
+            {virtualizer.getVirtualItems().map((virtualItem) => {
+              const contact = filteredContacts[virtualItem.index];
+              return (
+                <div
+                  key={virtualItem.key}
+                  data-index={virtualItem.index}
+                  ref={virtualizer.measureElement}
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    width: "100%",
+                    transform: `translateY(${virtualItem.start}px)`,
+                  }}
+                >
+                  <ConversationListItem
+                    contact={contact}
+                    isSelected={selectedPhone === contact.phone_number}
+                    onSelect={onSelectContact}
+                    waitingHumanLeadIds={waitingHumanLeadIds}
+                    activeTab={activeTab}
+                    isAdmin={isAdmin}
+                    instanceId={instanceId}
+                    organizationId={organizationId}
+                    allTags={allTags}
+                    onArchive={onArchive}
+                    onUnarchive={onUnarchive}
+                    onDelete={onDelete}
+                    onAddTag={onAddTag}
+                    onRemoveTag={onRemoveTag}
+                  />
+                </div>
+              );
+            })}
+          </div>
         ) : (
+          // ── Modo plain (≤50 contatos ou mobile) ───────────────────────────
           <div className="divide-y divide-border/60">
             {filteredContacts.map((contact) => (
               <ConversationListItem
