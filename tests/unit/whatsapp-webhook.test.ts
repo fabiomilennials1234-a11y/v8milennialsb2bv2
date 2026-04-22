@@ -6,8 +6,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 const envStub: Record<string, string> = {
   SUPABASE_URL: "https://local.supabase.test",
   SUPABASE_SERVICE_ROLE_KEY: "test-service-key",
-  UAZAPI_WEBHOOK_SECRET:
-    "1144305c99f0e846c6eb2d1cf7b0c7f8d5e6abfadf0789493cd882ceab9fcd5b",
+  UAZAPI_WEBHOOK_SECRET: "test-secret-never-used-in-prod",
 };
 
 vi.stubGlobal("Deno", {
