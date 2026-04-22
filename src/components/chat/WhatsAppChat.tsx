@@ -5,32 +5,22 @@ import { motion } from "framer-motion";
 import {
   MessageSquare,
   Send,
-  Phone,
   Check,
   CheckCheck,
   Clock,
   Loader2,
-  ArrowLeft,
   AlertCircle,
-  UserCircle,
   Image as ImageIcon,
   Mic,
-  MicOff,
   X,
   Bot,
-  Plus,
-  Users,
-  Settings,
   UserPlus,
-  ArrowRightLeft,
+  Settings,
   RotateCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { useToggleLeadAI, useToggleConversationAI, useLeadAiStatus } from "@/hooks/useLeads";
@@ -65,7 +55,7 @@ import {
 import { useTags } from "@/hooks/useTags";
 import { useIsAdmin } from "@/hooks/useUserRole";
 import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
-import { ChannelBadge, type ChannelType } from "./ChannelBadge";
+// ChannelBadge movido para view/ChatHeader.tsx (C6).
 import { LeadDetailContent } from "./LeadDetailContent";
 import { ScheduleMessageModal } from "./ScheduleMessageModal";
 import { SlashCommandPopover } from "@/components/chat/SlashCommandPopover";
@@ -89,20 +79,8 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 // AlertDialog extraído para list/ConversationListItem.tsx (C5).
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-// DropdownMenuSeparator/Sub/SubContent/SubTrigger extraídos para list/ConversationListItem.tsx (C5).
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+// DropdownMenu para SZ.chat transfer movido para view/ChatHeader.tsx (C6).
+// Select extraído para list/ConversationList.tsx (C5).
 import { format, isToday, isYesterday } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
@@ -112,6 +90,8 @@ import { ImagePreviewModal as ImagePreviewModalMedia } from "./media/ImagePrevie
 import { MessageImage, MessageVideo, MessageDocument } from "./media/MessageMedia";
 import { ConversationList } from "./list/ConversationList";
 import { contactDisplayName } from "./list/ConversationListItem";
+import { ChatHeader } from "./view/ChatHeader";
+import type { SzChatSession } from "./view/ChatHeader";
 
 /**
  * Re-export para backwards-compat — movido para media/AudioPlayer.tsx (C2).
@@ -685,187 +665,61 @@ function ChatWindow({
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      {/* Header - Clicável para abrir painel do lead */}
-      <div className="flex items-center gap-3 p-3 border-b border-border/60 bg-background shrink-0">
-        <Button variant="ghost" size="icon" onClick={onBack} className="md:hidden shrink-0">
-          <ArrowLeft className="w-5 h-5" />
-        </Button>
-        
-        {/* Área clicável do contato */}
-        <div
-          role="button"
-          tabIndex={0}
-          className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer hover:bg-muted/50 -m-2 p-2 rounded-lg transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          onClick={(e) => { e.preventDefault(); e.stopPropagation(); onOpenLeadModal(); }}
-          onPointerDown={(e) => { e.stopPropagation(); onOpenLeadModal(); }}
-          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpenLeadModal(); } }}
-        >
-          <div className="relative shrink-0">
-            <Avatar className="w-10 h-10 border-2 border-background shadow-sm">
-              <AvatarFallback className={cn(
-                "font-medium text-primary",
-                hasLead ? "bg-primary/15 text-primary" : "bg-primary/10"
-              )}>
-                {(contactName.charAt(0) || "?").toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
-            <ChannelBadge channel="whatsapp" size={16} overlay />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="font-semibold truncate text-foreground">{contactName}</h3>
-              {!hasLead && (
-                <Badge variant="secondary" className="text-xs shrink-0 text-amber-700 bg-amber-100 dark:text-amber-300 dark:bg-amber-900/40 border-0">
-                  Sem lead
-                </Badge>
-              )}
-            </div>
-            <p className="text-sm text-muted-foreground flex items-center gap-1 truncate">
-              <Phone className="w-3 h-3 shrink-0" />
-              {phoneNumber}
-            </p>
-          </div>
-        </div>
-
-        {/* Botão para ver ou criar lead */}
-        <Button
-          type="button"
-          variant={hasLead ? "ghost" : "outline"}
-          size="sm"
-          className={cn("shrink-0", !hasLead && "border-primary text-primary hover:bg-primary/10")}
-          onClick={(e) => { e.stopPropagation(); onOpenLeadModal(); }}
-          onPointerDown={(e) => e.stopPropagation()}
-          title={hasLead ? "Ver dados do lead e pipeline" : "Criar lead para este contato"}
-        >
-          {hasLead ? (
-            <>
-              <UserCircle className="w-4 h-4 mr-1.5" />
-              Ver lead
-            </>
-          ) : (
-            <>
-              <Plus className="w-4 h-4 mr-1.5" />
-              Criar Lead
-            </>
-          )}
-        </Button>
-
-        {/* AI Toggle */}
-        <div
-          className={cn(
-            "flex items-center gap-1.5 px-2 py-1 rounded-full border border-border/40 shrink-0",
-            currentAiDisabled ? "bg-muted/30" : "bg-primary/8"
-          )}
-          onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
-          onPointerDown={(e) => e.stopPropagation()}
-        >
-          <Bot className={cn("w-3.5 h-3.5", currentAiDisabled ? "text-muted-foreground/50" : "text-primary/70")} />
-          <span className="text-[11px] text-muted-foreground/70 hidden sm:inline">IA</span>
-          <div onClick={(e) => e.stopPropagation()}>
-              <Switch
-                checked={!currentAiDisabled}
-                onCheckedChange={(checked) => {
-                  if (leadId) {
-                    toggleAIMutation.mutate(
-                      { leadId, disabled: !checked },
-                      {
-                        onSuccess: () => {
-                          toast.success(checked ? "IA ativada" : "IA desativada");
-                        },
-                        onError: (err: any) => {
-                          const msg = err?.message || "Erro desconhecido";
-                          toast.error(`Erro ao alterar Copilot: ${msg}`);
-                          console.error("[toggleAI] Error:", err);
-                        },
-                      }
-                    );
-                  } else {
-                    toggleConversationAIMutation.mutate(
-                      { phone: phoneNumber, disabled: !checked },
-                      {
-                        onSuccess: () => {
-                          toast.success(checked ? "IA ativada" : "IA desativada");
-                        },
-                        onError: (err: any) => {
-                          const msg = err?.message || "Erro desconhecido";
-                          toast.error(`Erro ao alterar Copilot: ${msg}`);
-                          console.error("[toggleAI] Error:", err);
-                        },
-                      }
-                    );
-                  }
-                }}
-                disabled={toggleAIMutation.isPending || toggleConversationAIMutation.isPending}
-              />
-          </div>
-        </div>
-
-        {/* Transfer / AI state badge */}
-        {hasLead && leadId && isWaitingHuman && (
-          <Badge variant="outline" className="border-amber-400 text-amber-600 gap-1.5 text-xs">
-            <UserPlus className="h-3 w-3" />
-            Aguardando humano
-          </Badge>
-        )}
-        {currentAiDisabled && !isWaitingHuman && (
-          <Badge variant="outline" className="text-muted-foreground gap-1.5 text-xs">
-            IA desativada
-          </Badge>
-        )}
-
-        {/* SZ.chat transfer-back button: only visible when there is an active SZ.chat session */}
-        {szChatSession && Object.keys(szChatSession.team_mappings).length > 0 && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                className="shrink-0 gap-1.5 text-xs"
-                disabled={transferToSzChat.isPending}
-              >
-                {transferToSzChat.isPending ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <ArrowRightLeft className="w-3.5 h-3.5" />
-                )}
-                Transferir setor
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              {Object.entries(szChatSession.team_mappings).map(([teamName, teamId]) => (
-                <DropdownMenuItem
-                  key={teamId}
-                  onClick={() => {
-                    if (!organizationIdCW) return;
-                    transferToSzChat.mutate(
-                      {
-                        organizationId: organizationIdCW,
-                        sessionId: szChatSession.sz_chat_session_id,
-                        targetTeamName: teamName,
-                        targetTeamId: teamId,
-                      },
-                      {
-                        onSuccess: () => {
-                          toast.success(`Conversa transferida para ${teamName}`);
-                        },
-                        onError: (err) => {
-                          toast.error(
-                            err instanceof Error
-                              ? err.message
-                              : "Erro ao transferir conversa"
-                          );
-                        },
-                      }
-                    );
-                  }}
-                >
-                  {teamName}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-      </div>
+      {/* Header — extraído para view/ChatHeader.tsx (C6) */}
+      <ChatHeader
+        phoneNumber={phoneNumber}
+        contactName={contactName}
+        hasLead={hasLead}
+        leadId={leadId}
+        aiDisabled={currentAiDisabled}
+        isWaitingHuman={isWaitingHuman}
+        szChatSession={szChatSession as SzChatSession | null}
+        organizationId={organizationIdCW}
+        onBack={onBack}
+        onOpenLeadModal={onOpenLeadModal}
+        onToggleAi={(checked) => {
+          if (leadId) {
+            toggleAIMutation.mutate(
+              { leadId, disabled: !checked },
+              {
+                onSuccess: () => toast.success(checked ? "IA ativada" : "IA desativada"),
+                onError: (err: unknown) => {
+                  const msg = err instanceof Error ? err.message : "Erro desconhecido";
+                  toast.error(`Erro ao alterar Copilot: ${msg}`);
+                },
+              }
+            );
+          } else {
+            toggleConversationAIMutation.mutate(
+              { phone: phoneNumber, disabled: !checked },
+              {
+                onSuccess: () => toast.success(checked ? "IA ativada" : "IA desativada"),
+                onError: (err: unknown) => {
+                  const msg = err instanceof Error ? err.message : "Erro desconhecido";
+                  toast.error(`Erro ao alterar Copilot: ${msg}`);
+                },
+              }
+            );
+          }
+        }}
+        onTransferToSzChatTeam={(teamName, teamId) => {
+          if (!organizationIdCW || !szChatSession) return;
+          transferToSzChat.mutate(
+            {
+              organizationId: organizationIdCW,
+              sessionId: szChatSession.sz_chat_session_id,
+              targetTeamName: teamName,
+              targetTeamId: teamId,
+            },
+            {
+              onSuccess: () => toast.success(`Conversa transferida para ${teamName}`),
+              onError: (err) => toast.error(err instanceof Error ? err.message : "Erro ao transferir conversa"),
+            }
+          );
+        }}
+        toggleAiPending={toggleAIMutation.isPending || toggleConversationAIMutation.isPending}
+        transferPending={transferToSzChat.isPending}
+      />
 
       {/* Banner de mensagens agendadas */}
       {selectedContact && selectedContact.lead_id && (
