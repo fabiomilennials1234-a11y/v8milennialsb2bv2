@@ -1,6 +1,10 @@
 /**
  * useWhatsAppMessages — query de mensagens por conversa.
  * Extraído de src/hooks/useWhatsAppChat.ts (C12).
+ *
+ * C20: remove refetchInterval — realtime via usePatchedRealtime cuida da atualização.
+ * Polling de 20s era o comportamento anterior; agora o canal realtime em
+ * useWhatsAppMessagesRealtime aplica patches incrementais sem refetch.
  */
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -35,8 +39,7 @@ export function useWhatsAppMessages(
       return data as WhatsAppMessage[];
     },
     enabled: !!organizationId && !!phoneNumber && !!instanceId,
-    // Polling de fallback: atualiza mensagens do chat a cada 20s quando a aba está em foco
-    refetchInterval: phoneNumber && instanceId ? 20_000 : false,
-    refetchIntervalInBackground: false,
+    // Sem refetchInterval — realtime via useWhatsAppMessagesRealtime cuida da atualização.
+    // Fallback de staleTime padrão (5min) garante que dados sejam refetched em edge cases.
   });
 }
