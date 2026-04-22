@@ -1069,9 +1069,15 @@ function MessageDocument({
 export function MessageBubble({
   message,
   onImagePreview,
+  isFirstInGroup = true,
+  isLastInGroup = true,
+  mountTime,
 }: {
   message: WhatsAppMessage;
   onImagePreview: (url: string) => void;
+  isFirstInGroup?: boolean;
+  isLastInGroup?: boolean;
+  mountTime?: number;
 }) {
   const isOutgoing = message.direction === "outgoing";
   const isAudio = message.message_type === "audio" || message.message_type === "ptt";
@@ -1081,22 +1087,48 @@ export function MessageBubble({
   const isSticker = message.message_type === "sticker";
   const hasMedia = isAudio || isImage || isVideo || isDocument || isSticker;
 
+  const radiusClass = isOutgoing
+    ? (isFirstInGroup && isLastInGroup
+        ? "rounded-2xl rounded-br-sm"
+        : isFirstInGroup
+          ? "rounded-t-2xl rounded-bl-2xl rounded-br-md rounded-tr-2xl"
+          : isLastInGroup
+            ? "rounded-b-2xl rounded-bl-2xl rounded-br-sm rounded-tr-md"
+            : "rounded-l-2xl rounded-r-md")
+    : (isFirstInGroup && isLastInGroup
+        ? "rounded-2xl rounded-bl-sm"
+        : isFirstInGroup
+          ? "rounded-t-2xl rounded-br-2xl rounded-bl-md"
+          : isLastInGroup
+            ? "rounded-b-2xl rounded-br-2xl rounded-bl-sm"
+            : "rounded-r-2xl rounded-l-md");
+
+  const shouldAnimate = mountTime !== undefined && new Date(message.timestamp).getTime() > mountTime;
+  const prefersReduced = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const animInitial = shouldAnimate && !prefersReduced ? { opacity: 0, y: 8 } : false as const;
+  const animAnimate = shouldAnimate && !prefersReduced ? { opacity: 1, y: 0 } : false as const;
+
   return (
     <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      className={cn("flex gap-2", isOutgoing ? "justify-end" : "justify-start")}
+      initial={animInitial}
+      animate={animAnimate}
+      className={cn(
+        "flex gap-2",
+        isOutgoing ? "justify-end" : "justify-start",
+        isFirstInGroup ? "mt-3" : "mt-0.5"
+      )}
     >
       <div
         className={cn(
-          "max-w-[75%] rounded-2xl px-4 py-2.5",
+          "max-w-[75%] px-4 py-2.5",
+          radiusClass,
           isOutgoing
-            ? "bg-primary/12 border border-primary/20 rounded-br-sm"
-            : "bg-muted/60 border border-border/30 rounded-bl-sm"
+            ? "bg-muted border border-border/50"
+            : "bg-card border border-border/40"
         )}
       >
-        {/* Sender label for AI messages */}
-        {isOutgoing && message.sent_by_ai && (
+        {/* Sender label for AI messages — only on first in group */}
+        {isFirstInGroup && isOutgoing && message.sent_by_ai && (
           <div className="flex items-center gap-1 mb-1">
             <Bot className="h-3 w-3 text-primary/60" />
             <span className="text-[10px] text-primary/60 font-medium">Copilot</span>
@@ -1157,11 +1189,13 @@ export function MessageBubble({
           </p>
         )}
 
-        {/* Linha: data/hora e status */}
-        <div className="flex items-center justify-end gap-1.5 mt-1.5">
-          <time dateTime={message.timestamp} className="text-[10px] text-muted-foreground/50 tabular-nums">{formatMessageTime(message.timestamp)}</time>
-          {isOutgoing && <MessageStatusIcon status={message.status} />}
-        </div>
+        {/* Linha: data/hora e status — only on last in group */}
+        {isLastInGroup && (
+          <div className="flex items-center justify-end gap-1.5 mt-1.5">
+            <time dateTime={message.timestamp} className="text-[10px] text-muted-foreground/50 tabular-nums">{formatMessageTime(message.timestamp)}</time>
+            {isOutgoing && <MessageStatusIcon status={message.status} />}
+          </div>
+        )}
       </div>
     </motion.div>
   );
@@ -1402,6 +1436,7 @@ function ChatWindow({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const mountTimeRef = useRef<number>(Date.now());
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
 
   // Pré-carregar lamejs para conversão WebM→MP3 na gravação (evita enviar áudio em formato que Safari não reproduz)
@@ -1882,6 +1917,19 @@ function ChatWindow({
                           : format(date, "dd/MM/yyyy", { locale: ptBR })
                       : "";
                     const safeKey = message?.id || `msg-${index}-${ts || index}`;
+
+                    // Grouping: compare with adjacent message-type items
+                    const prevItem = index > 0 ? timeline[index - 1] : null;
+                    const nextItem = index < timeline.length - 1 ? timeline[index + 1] : null;
+                    const prevMsg = prevItem && prevItem._type === 'message' ? prevItem : null;
+                    const nextMsg = nextItem && nextItem._type === 'message' ? nextItem : null;
+                    const sameAuthorPrev = prevMsg && prevMsg.direction === message.direction && prevMsg.sent_by_ai === message.sent_by_ai;
+                    const sameAuthorNext = nextMsg && nextMsg.direction === message.direction && nextMsg.sent_by_ai === message.sent_by_ai;
+                    const deltaPrev = prevMsg ? Math.abs(new Date(message.timestamp).getTime() - new Date(prevMsg.timestamp).getTime()) : Infinity;
+                    const deltaNext = nextMsg ? Math.abs(new Date(nextMsg.timestamp).getTime() - new Date(message.timestamp).getTime()) : Infinity;
+                    const isFirstInGroup = !(sameAuthorPrev && deltaPrev < 120_000);
+                    const isLastInGroup = !(sameAuthorNext && deltaNext < 120_000);
+
                     return (
                       <div key={safeKey}>
                         {showDateSeparator && (
@@ -1894,6 +1942,9 @@ function ChatWindow({
                         <MessageBubble
                           message={message}
                           onImagePreview={setPreviewImageUrl}
+                          isFirstInGroup={isFirstInGroup}
+                          isLastInGroup={isLastInGroup}
+                          mountTime={mountTimeRef.current}
                         />
                       </div>
                     );
