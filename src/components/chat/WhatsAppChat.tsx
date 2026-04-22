@@ -85,6 +85,7 @@ import type { LeadContext, AttendantContext } from "@/lib/template-variables";
 import type { MessageTemplate } from "@/hooks/useMessageTemplates";
 import { useConversationDraft } from "@/hooks/useConversationDraft";
 import { ChatEmptyState } from "@/components/chat/ChatEmptyState";
+import { UnreadDivider } from "@/components/chat/UnreadDivider";
 import { ScheduledMessagesBanner } from "./ScheduledMessagesBanner";
 import ConversationNotes from "@/components/chat/ConversationNotes";
 import { WhatsAppSettings } from "@/components/settings/WhatsAppSettings";
@@ -1437,6 +1438,20 @@ function ChatWindow({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const mountTimeRef = useRef<number>(Date.now());
+
+  // Snapshot last-seen timestamp for unread divider (read before the conversation marks as seen)
+  const lastReadAtRef = useRef<number>(0);
+  useEffect(() => {
+    try {
+      let cleaned = phoneNumber.replace(/\D/g, "");
+      if (cleaned.length >= 12 && cleaned.startsWith("55")) cleaned = cleaned.slice(2);
+      if (cleaned.length === 10) cleaned = cleaned.slice(0, 2) + "9" + cleaned.slice(2);
+      const stored = localStorage.getItem("whatsapp_last_seen_" + cleaned);
+      lastReadAtRef.current = stored ? new Date(stored).getTime() : 0;
+    } catch {
+      lastReadAtRef.current = 0;
+    }
+  }, [phoneNumber]);
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
 
   // Pré-carregar lamejs para conversão WebM→MP3 na gravação (evita enviar áudio em formato que Safari não reproduz)
@@ -1881,6 +1896,22 @@ function ChatWindow({
                     return timeA - timeB;
                   });
 
+                  // Compute unread divider position
+                  let firstUnreadIndex = -1;
+                  let unreadCount = 0;
+                  const lastReadAt = lastReadAtRef.current;
+                  if (lastReadAt > 0) {
+                    timeline.forEach((item, idx) => {
+                      if (item._type === 'message' && item.direction === 'incoming') {
+                        const msgTime = new Date(item.timestamp).getTime();
+                        if (msgTime > lastReadAt) {
+                          unreadCount++;
+                          if (firstUnreadIndex === -1) firstUnreadIndex = idx;
+                        }
+                      }
+                    });
+                  }
+
                   let lastDate = "";
                   return timeline.map((item, index) => {
                     // Transfer event card
@@ -1938,6 +1969,9 @@ function ChatWindow({
                               {dateLabel}
                             </time>
                           </div>
+                        )}
+                        {index === firstUnreadIndex && unreadCount > 0 && (
+                          <UnreadDivider count={unreadCount} />
                         )}
                         <MessageBubble
                           message={message}
