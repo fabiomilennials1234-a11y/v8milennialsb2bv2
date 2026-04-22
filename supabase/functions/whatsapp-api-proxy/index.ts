@@ -189,7 +189,7 @@ Deno.serve(
           instance_id: instance.id,
           organization_id: callerOrgId,
           instance_name: instanceName,
-          webhook_url: `${webhookBaseUrl}/functions/v1/evolution-webhook`,
+          webhook_url: `${webhookBaseUrl}/functions/v1/whatsapp-webhook`,
           webhook_secret: webhookSecret,
         });
 

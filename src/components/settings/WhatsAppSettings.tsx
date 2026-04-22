@@ -74,9 +74,9 @@ function QRCodeModal({
 
   // Auto-refresh QR when modal opens and instance has no valid QR
   useEffect(() => {
-    if (!isOpen || !instance?.instance_name) return;
+    if (!isOpen || !instance?.id) return;
     if (!instance.qr_code && instance.status !== "connected") {
-      refreshQR.mutateAsync(instance.instance_name).catch((error) => {
+      refreshQR.mutateAsync({ instance_id: instance.id }).catch((error) => {
         console.error("Erro ao gerar QR Code:", error);
         toast.error(error.message || "Erro ao gerar QR Code");
       });
@@ -88,10 +88,10 @@ function QRCodeModal({
     if (!isOpen || !instance || instance.status === "connected") return;
 
     const interval = setInterval(async () => {
-      if (instance.instance_name) {
+      if (instance.id) {
         setIsChecking(true);
         try {
-          await checkStatus.mutateAsync(instance.instance_name);
+          await checkStatus.mutateAsync({ instance_id: instance.id });
         } catch (error) {
           console.error("Erro ao verificar status:", error);
         } finally {
@@ -104,9 +104,9 @@ function QRCodeModal({
   }, [isOpen, instance?.id, instance?.status]);
 
   const handleRefreshQR = async () => {
-    if (!instance?.instance_name) return;
+    if (!instance?.id) return;
     try {
-      await refreshQR.mutateAsync(instance.instance_name);
+      await refreshQR.mutateAsync({ instance_id: instance.id });
       toast.success("QR Code atualizado!");
     } catch (error: any) {
       const errorMessage = error.message || "Erro ao atualizar QR Code";
@@ -341,9 +341,9 @@ export function WhatsAppSettings() {
     }
   };
 
-  const handleCheckStatus = async (instanceName: string) => {
+  const handleCheckStatus = async (instanceId: string) => {
     try {
-      await checkStatus.mutateAsync(instanceName);
+      await checkStatus.mutateAsync({ instance_id: instanceId });
       toast.success("Status atualizado!");
     } catch (error: any) {
       const errorMessage = error.message || "Erro ao verificar status";
@@ -352,9 +352,9 @@ export function WhatsAppSettings() {
     }
   };
 
-  const handleLogout = async (instanceName: string) => {
+  const handleLogout = async (instanceId: string) => {
     try {
-      await logout.mutateAsync(instanceName);
+      await logout.mutateAsync({ instance_id: instanceId });
       toast.success("Logout realizado!");
     } catch (error: any) {
       const errorMessage = error.message || "Erro ao fazer logout";
@@ -563,7 +563,7 @@ export function WhatsAppSettings() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => handleCheckStatus(instance.instance_name)}
+                    onClick={() => handleCheckStatus(instance.id)}
                     disabled={checkStatus.isPending}
                   >
                     <RefreshCw className="w-4 h-4" />
@@ -572,7 +572,7 @@ export function WhatsAppSettings() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => handleLogout(instance.instance_name)}
+                      onClick={() => handleLogout(instance.id)}
                       disabled={logout.isPending}
                     >
                       <LogOut className="w-4 h-4" />
@@ -657,7 +657,7 @@ export function WhatsAppSettings() {
           const closingInstance = instances.find((i) => i.id === qrCodeInstanceId);
           setQrCodeInstanceId(null);
           if (closingInstance?.instance_name) {
-            handleCheckStatus(closingInstance.instance_name);
+            handleCheckStatus(closingInstance.id);
           }
         }}
       />
