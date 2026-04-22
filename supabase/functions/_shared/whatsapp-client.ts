@@ -83,18 +83,26 @@ export type SendResult = {
 
 export type SendMenuOptions = {
   number: string;
-  type: "button" | "list" | "poll";
+  type: "button" | "list" | "poll" | "carousel";
   text: string;
   choices: string[];
+  footer?: string;
+  selectableCount?: number;
+  delay?: number;
+  trackSource?: string;
+  trackId?: string;
 };
 
 export type SendPixButtonOptions = {
   number: string;
   pixkey: string;
-  pixkeyType: string;
+  pixkeyType: "cpf" | "cnpj" | "email" | "phone" | "random";
   amount: number;
   merchantName: string;
   text?: string;
+  delay?: number;
+  trackSource?: string;
+  trackId?: string;
 };
 
 // ---------------------------------------------------------------------------

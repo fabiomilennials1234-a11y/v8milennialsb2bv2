@@ -206,6 +206,92 @@ export async function sendAudioViaInstance(
   }
 }
 
+export async function sendMenuViaInstance(
+  supabaseAdmin: any,
+  instance: WhatsAppInstance,
+  phoneNumber: string,
+  menu: {
+    type: "button" | "list" | "poll" | "carousel";
+    text: string;
+    choices: string[];
+    footer?: string;
+    selectableCount?: number;
+  },
+  opts: { trackSource?: string; trackId?: string; delay?: number } = {}
+): Promise<SendResultSimple> {
+  const phone = normalizeBrazilianPhone(phoneNumber);
+  if (!phone) return { success: false, error: "Invalid phone" };
+  try {
+    const provider = await getWhatsAppProvider(instance, supabaseAdmin);
+    if (!provider.sendMenu) {
+      return {
+        success: false,
+        error: `${provider.provider} does not support interactive menus`,
+      };
+    }
+    const res = await provider.sendMenu({
+      number: phone,
+      type: menu.type,
+      text: menu.text,
+      choices: menu.choices,
+      footer: menu.footer,
+      selectableCount: menu.selectableCount,
+      delay: opts.delay,
+      trackSource: opts.trackSource,
+      trackId: opts.trackId,
+    });
+    return { success: true, messageId: res.message_id };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+export async function sendPixButtonViaInstance(
+  supabaseAdmin: any,
+  instance: WhatsAppInstance,
+  phoneNumber: string,
+  pix: {
+    pixkey: string;
+    pixkeyType: "cpf" | "cnpj" | "email" | "phone" | "random";
+    amount: number;
+    merchantName: string;
+    text?: string;
+  },
+  opts: { trackSource?: string; trackId?: string; delay?: number } = {}
+): Promise<SendResultSimple> {
+  const phone = normalizeBrazilianPhone(phoneNumber);
+  if (!phone) return { success: false, error: "Invalid phone" };
+  try {
+    const provider = await getWhatsAppProvider(instance, supabaseAdmin);
+    if (!provider.sendPixButton) {
+      return {
+        success: false,
+        error: `${provider.provider} does not support PIX button`,
+      };
+    }
+    const res = await provider.sendPixButton({
+      number: phone,
+      pixkey: pix.pixkey,
+      pixkeyType: pix.pixkeyType,
+      amount: pix.amount,
+      merchantName: pix.merchantName,
+      text: pix.text,
+      delay: opts.delay,
+      trackSource: opts.trackSource,
+      trackId: opts.trackId,
+    });
+    return { success: true, messageId: res.message_id };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 export async function sendMediaViaInstance(
   supabaseAdmin: any,
   instance: WhatsAppInstance,

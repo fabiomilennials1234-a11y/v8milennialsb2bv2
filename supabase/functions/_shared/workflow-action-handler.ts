@@ -323,6 +323,14 @@ export async function executeWorkflowAction(ctx: ActionContext): Promise<ActionR
       result = await handleSendSemiAutomatic(ctx);
       break;
 
+    // ── Uazapi-only interactive messages ──
+    case "send_whatsapp_menu":
+      result = await handleSendWhatsAppMenu(ctx);
+      break;
+    case "send_whatsapp_pix_button":
+      result = await handleSendWhatsAppPixButton(ctx);
+      break;
+
     // ── Lead Management ──
     case "move_stage":
       result = await handleMoveStage(ctx);
@@ -583,6 +591,132 @@ async function handleSendWhatsAppTemplate(ctx: ActionContext): Promise<ActionRes
 
   if (!sendResult.success) return { success: false, error: `Template send failed: ${sendResult.error}` };
   return { success: true, message: `Template "${tpl.name}" sent` };
+}
+
+// ─── Uazapi-only interactive messages ──────────────────────────────────────
+
+async function handleSendWhatsAppMenu(ctx: ActionContext): Promise<ActionResult> {
+  const wa = await getWhatsAppInstance(ctx.supabase, ctx.organizationId, ctx.nodeData.whatsappInstanceId as string);
+  if (!wa) return { success: false, error: "WhatsApp instance not available" };
+
+  const phone = await getLeadPhone(ctx.supabase, ctx.leadId);
+  if (!phone) return { success: false, error: "Lead has no phone" };
+
+  const menuType = (ctx.nodeData.menuType as string) || "button";
+  if (!["button", "list", "poll", "carousel"].includes(menuType)) {
+    return { success: false, error: `Invalid menuType: ${menuType}` };
+  }
+
+  const rawText = (ctx.nodeData.menuText as string) || "";
+  const text = await resolveVariables(ctx.supabase, ctx.leadId, rawText, ctx.executionContext);
+  if (!text) return { success: false, error: "Empty menu text" };
+
+  const rawChoices = ctx.nodeData.menuChoices as string[] | undefined;
+  if (!Array.isArray(rawChoices) || rawChoices.length === 0) {
+    return { success: false, error: "Menu requires at least one choice" };
+  }
+  const choices = await Promise.all(
+    rawChoices.map((c) => resolveVariables(ctx.supabase, ctx.leadId, c, ctx.executionContext))
+  );
+
+  const footer = ctx.nodeData.menuFooter
+    ? await resolveVariables(ctx.supabase, ctx.leadId, ctx.nodeData.menuFooter as string, ctx.executionContext)
+    : undefined;
+
+  const { sendMenuViaInstance } = await import("./whatsapp-dispatch.ts");
+  const sendResult = await sendMenuViaInstance(
+    ctx.supabase,
+    wa.instance,
+    phone,
+    {
+      type: menuType as "button" | "list" | "poll" | "carousel",
+      text,
+      choices,
+      footer,
+      selectableCount: ctx.nodeData.menuSelectableCount as number | undefined,
+    },
+    { trackSource: "workflow-action-menu", trackId: ctx.executionId }
+  );
+
+  if (!sendResult.success) return { success: false, error: `Menu send failed: ${sendResult.error}` };
+
+  const messageId = sendResult.messageId || `wf_menu_${crypto.randomUUID()}`;
+  await ctx.supabase.from("whatsapp_messages").upsert({
+    organization_id: ctx.organizationId,
+    instance_id: wa.instanceId,
+    message_id: messageId,
+    remote_jid: `${phone}@s.whatsapp.net`,
+    phone_number: phone,
+    direction: "outgoing",
+    message_type: menuType,
+    content: text,
+    status: "sent",
+    lead_id: ctx.leadId,
+    timestamp: new Date().toISOString(),
+    sent_by_ai: true,
+  }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
+
+  return { success: true, message: `WhatsApp ${menuType} menu sent` };
+}
+
+async function handleSendWhatsAppPixButton(ctx: ActionContext): Promise<ActionResult> {
+  const wa = await getWhatsAppInstance(ctx.supabase, ctx.organizationId, ctx.nodeData.whatsappInstanceId as string);
+  if (!wa) return { success: false, error: "WhatsApp instance not available" };
+
+  const phone = await getLeadPhone(ctx.supabase, ctx.leadId);
+  if (!phone) return { success: false, error: "Lead has no phone" };
+
+  const pixkey = ctx.nodeData.pixkey as string;
+  const pixkeyType = ctx.nodeData.pixkeyType as string;
+  const amount = Number(ctx.nodeData.pixAmount ?? 0);
+  const merchantName = ctx.nodeData.pixMerchantName as string;
+
+  if (!pixkey || !pixkeyType || !merchantName || !(amount > 0)) {
+    return { success: false, error: "Missing PIX config (pixkey/pixkeyType/pixAmount/merchantName)" };
+  }
+  if (!["cpf", "cnpj", "email", "phone", "random"].includes(pixkeyType)) {
+    return { success: false, error: `Invalid pixkeyType: ${pixkeyType}` };
+  }
+
+  const rawText = (ctx.nodeData.pixText as string) || "";
+  const text = rawText
+    ? await resolveVariables(ctx.supabase, ctx.leadId, rawText, ctx.executionContext)
+    : undefined;
+
+  const { sendPixButtonViaInstance } = await import("./whatsapp-dispatch.ts");
+  const sendResult = await sendPixButtonViaInstance(
+    ctx.supabase,
+    wa.instance,
+    phone,
+    {
+      pixkey,
+      pixkeyType: pixkeyType as "cpf" | "cnpj" | "email" | "phone" | "random",
+      amount,
+      merchantName,
+      text,
+    },
+    { trackSource: "workflow-action-pix", trackId: ctx.executionId }
+  );
+
+  if (!sendResult.success) return { success: false, error: `PIX button failed: ${sendResult.error}` };
+
+  const messageId = sendResult.messageId || `wf_pix_${crypto.randomUUID()}`;
+  await ctx.supabase.from("whatsapp_messages").upsert({
+    organization_id: ctx.organizationId,
+    instance_id: wa.instanceId,
+    message_id: messageId,
+    remote_jid: `${phone}@s.whatsapp.net`,
+    phone_number: phone,
+    direction: "outgoing",
+    message_type: "pix_button",
+    content: text || `[PIX R$ ${amount.toFixed(2)}]`,
+    status: "sent",
+    lead_id: ctx.leadId,
+    timestamp: new Date().toISOString(),
+    sent_by_ai: true,
+  }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
+
+  return { success: true, message: "PIX button sent" };
 }
 
 async function handleSendMetaMessage(ctx: ActionContext): Promise<ActionResult> {
