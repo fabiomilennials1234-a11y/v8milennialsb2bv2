@@ -179,3 +179,7 @@ verify_jwt = false
 # sz-chat-send: chamado internamente pelo webhook com service_role key; sem JWT externo
 [functions.sz-chat-send]
 verify_jwt = false
+
+# whatsapp-api-proxy: frontend envia JWT válido; proxy valida e impõe tenant boundary
+[functions.whatsapp-api-proxy]
+verify_jwt = true
