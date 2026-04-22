@@ -2,13 +2,21 @@
  * ChatHeader — topo do painel de chat: avatar, nome, badges, AI toggle, SZ.chat transfer.
  *
  * Extraído de WhatsAppChat.tsx ChatWindow header (C6).
+ * C11: adiciona DensityToggle (3 botões ghost: compact/comfortable/spacious).
  * Props: callbacks puros — sem hooks de mutation aqui, recebe handlers do pai.
  */
-import { ArrowLeft, Phone, UserCircle, Plus, Bot, UserPlus, ArrowRightLeft, Loader2 } from "lucide-react";
+import React from "react";
+import { ArrowLeft, Phone, UserCircle, Plus, Bot, UserPlus, ArrowRightLeft, Loader2, AlignJustify, List, LayoutList } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import type { DensityMode } from "@/components/chat/layout/ChatShell";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -38,6 +46,59 @@ export interface ChatHeaderProps {
   onTransferToSzChatTeam: (teamName: string, teamId: string) => void;
   toggleAiPending: boolean;
   transferPending: boolean;
+  /** Densidade atual — usado para highlight do botão ativo no toggle (C11) */
+  density?: DensityMode;
+  /** Callback para alterar a densidade (C11) */
+  onDensityChange?: (d: DensityMode) => void;
+}
+
+// ─── Toggle de densidade ──────────────────────────────────────────────────────
+
+const DENSITY_OPTIONS: Array<{
+  mode: DensityMode;
+  icon: React.ElementType;
+  label: string;
+}> = [
+  { mode: "compact",     icon: AlignJustify, label: "Compacto" },
+  { mode: "comfortable", icon: List,         label: "Padrão" },
+  { mode: "spacious",    icon: LayoutList,   label: "Espaçoso" },
+];
+
+function DensityToggle({
+  density = "comfortable",
+  onDensityChange,
+}: {
+  density: DensityMode;
+  onDensityChange: (d: DensityMode) => void;
+}) {
+  return (
+    <div className="flex items-center gap-0.5 shrink-0" role="group" aria-label="Modo de densidade das mensagens">
+      {DENSITY_OPTIONS.map(({ mode, icon: Icon, label }) => (
+        <Tooltip key={mode}>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              className={cn(
+                "h-7 w-7 p-0",
+                density === mode
+                  ? "ring-2 ring-ring ring-offset-1 ring-offset-background bg-muted/60"
+                  : "opacity-50 hover:opacity-100",
+              )}
+              onClick={() => onDensityChange(mode)}
+              aria-pressed={density === mode}
+              aria-label={label}
+            >
+              <Icon className="w-3.5 h-3.5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" className="text-xs">
+            {label}
+          </TooltipContent>
+        </Tooltip>
+      ))}
+    </div>
+  );
 }
 
 export function ChatHeader({
@@ -55,6 +116,8 @@ export function ChatHeader({
   onTransferToSzChatTeam,
   toggleAiPending,
   transferPending,
+  density,
+  onDensityChange,
 }: ChatHeaderProps) {
   return (
     <div className="flex items-center gap-3 p-3 border-b border-border/60 bg-background shrink-0">
@@ -155,6 +218,11 @@ export function ChatHeader({
         <Badge variant="outline" className="text-muted-foreground gap-1.5 text-xs">
           IA desativada
         </Badge>
+      )}
+
+      {/* Density toggle — 3 botões ghost: compact / comfortable / spacious */}
+      {onDensityChange && (
+        <DensityToggle density={density ?? "comfortable"} onDensityChange={onDensityChange} />
       )}
 
       {/* SZ.chat transfer dropdown */}

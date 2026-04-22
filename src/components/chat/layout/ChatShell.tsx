@@ -17,7 +17,7 @@
  * WhatsAppChat.tsx continua usando seu layout próprio.
  * ChatShell é consumido pelo mockup v2 (C16) e ativado em Onda 2b.
  */
-import { useCallback, useEffect, useRef, type ReactNode } from "react";
+import React, { useCallback, useEffect, useRef, type ReactNode } from "react";
 import {
   ResizablePanelGroup,
   ResizablePanel,
@@ -30,6 +30,9 @@ import { useAuth } from "@/contexts/AuthContext";
 /** Modo de densidade das mensagens — controlado externamente via useChatDensity (C11). */
 export type DensityMode = "compact" | "comfortable" | "spacious";
 
+/** CSS vars injetadas pelo useChatDensity para sobrescrever os defaults :root */
+export type DensityCssVars = Record<string, string>;
+
 export interface ChatShellProps {
   /** Coluna esquerda: ConversationList */
   list: ReactNode;
@@ -41,11 +44,14 @@ export interface ChatShellProps {
   selectedPhone: string | null;
   /** Callback ao fechar a conversa ativa (voltar para lista) */
   onBack: () => void;
-  /**
-   * Modo de densidade para injeção de CSS vars (C11).
-   * Nesta onda (C10), não usado internamente — placeholder para C11.
-   */
+  /** Modo de densidade — usado apenas para leitura/display externo (opcional). */
   density?: DensityMode;
+  /**
+   * CSS vars do preset de densidade para injeção no root do shell.
+   * Gerado por useChatDensity(userId).cssVars — spread em style inline.
+   * Sobrescreve os defaults de :root sem afetar outros elementos da página.
+   */
+  densityCssVars?: DensityCssVars;
 }
 
 // ─── Persistência de tamanhos ─────────────────────────────────────────────────
@@ -98,6 +104,7 @@ export function ChatShell({
   context,
   selectedPhone,
   density: _density,
+  densityCssVars,
 }: ChatShellProps) {
   const { user } = useAuth();
   const userId = user?.id;
@@ -134,6 +141,7 @@ export function ChatShell({
       onLayout={handleLayout}
       className="flex h-full w-full overflow-hidden rounded-lg border bg-background"
       aria-label="Layout do chat"
+      style={densityCssVars as React.CSSProperties}
     >
       {/* ── Painel esquerdo: lista de conversas ──────────────────────────── */}
       <ResizablePanel
