@@ -83,6 +83,7 @@ import { useMessageTemplates } from "@/hooks/useMessageTemplates";
 import { resolveVariables } from "@/lib/template-variables";
 import type { LeadContext, AttendantContext } from "@/lib/template-variables";
 import type { MessageTemplate } from "@/hooks/useMessageTemplates";
+import { useConversationDraft } from "@/hooks/useConversationDraft";
 import { ScheduledMessagesBanner } from "./ScheduledMessagesBanner";
 import ConversationNotes from "@/components/chat/ConversationNotes";
 import { WhatsAppSettings } from "@/components/settings/WhatsAppSettings";
@@ -1365,7 +1366,8 @@ function ChatWindow({
   selectedContact: ChatContact | undefined;
   selectedLeadName?: string | null;
 }) {
-  const [newMessage, setNewMessage] = useState("");
+  const conversationKey = `${instanceId}:${phoneNumber}`;
+  const { draft: newMessage, setDraft: setNewMessage } = useConversationDraft(conversationKey);
   const [showSlashPopover, setShowSlashPopover] = useState(false);
   const { data: templates } = useMessageTemplates();
 
