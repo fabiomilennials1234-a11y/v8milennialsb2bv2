@@ -5,7 +5,6 @@ import { motion } from "framer-motion";
 import {
   MessageSquare,
   Send,
-  Search,
   Phone,
   Check,
   CheckCheck,
@@ -21,12 +20,6 @@ import {
   Bot,
   Plus,
   Users,
-  Filter,
-  MoreVertical,
-  Archive,
-  ArchiveRestore,
-  Trash2,
-  Tag,
   Settings,
   UserPlus,
   ArrowRightLeft,
@@ -95,27 +88,14 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
+// AlertDialog extraído para list/ConversationListItem.tsx (C5).
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+// DropdownMenuSeparator/Sub/SubContent/SubTrigger extraídos para list/ConversationListItem.tsx (C5).
 import {
   Select,
   SelectContent,
@@ -130,6 +110,8 @@ import { AudioPlayer, getAudioPlaybackUrl } from "./media/AudioPlayer";
 import { AudioRecorder as AudioRecorderMedia } from "./media/AudioRecorder";
 import { ImagePreviewModal as ImagePreviewModalMedia } from "./media/ImagePreviewModal";
 import { MessageImage, MessageVideo, MessageDocument } from "./media/MessageMedia";
+import { ConversationList } from "./list/ConversationList";
+import { contactDisplayName } from "./list/ConversationListItem";
 
 /**
  * Re-export para backwards-compat — movido para media/AudioPlayer.tsx (C2).
@@ -178,18 +160,7 @@ export function formatMessageTime(timestamp: string): string {
   return format(date, "dd/MM HH:mm");
 }
 
-function formatContactTime(timestamp: string): string {
-  if (!timestamp) return "";
-  const date = new Date(timestamp);
-  if (Number.isNaN(date.getTime())) return "";
-  if (isToday(date)) {
-    return format(date, "HH:mm");
-  }
-  if (isYesterday(date)) {
-    return "Ontem";
-  }
-  return format(date, "dd/MM", { locale: ptBR });
-}
+// formatContactTime extraído para list/ConversationListItem.tsx (C5).
 
 export function MessageStatusIcon({ status }: { status: string }) {
   switch (status) {
@@ -208,489 +179,14 @@ export function MessageStatusIcon({ status }: { status: string }) {
   }
 }
 
-/** Nome de exibição do contato: prioriza push_name incoming (nome real do WhatsApp) sobre lead_name
- *  pois leads antigos podem ter sido criados com o nome do SDR por bug anterior */
-function contactDisplayName(c: ChatContact): string {
-  return (c.push_name || c.lead_name || c.phone_number || "").trim() || "Contato";
-}
+// contactDisplayName extraído para list/ConversationListItem.tsx (C5), importado acima.
+// ContactList extraído para list/ConversationList.tsx (C5).
 
-function ContactList({
-  contacts,
-  selectedPhone,
-  onSelectContact,
-  searchQuery,
-  onSearchChange,
-  isLoading,
-  instances,
-  selectedInstanceId,
-  onSelectInstance,
-  showOnlyWithLead,
-  onToggleShowOnlyWithLead,
-  showOnlyWaitingHuman,
-  onToggleShowOnlyWaitingHuman,
-  waitingHumanCount,
-  waitingHumanLeadIds,
-  activeTab,
-  onTabChange,
-  onArchive,
-  onUnarchive,
-  onDelete,
-  isAdmin,
-  instanceId,
-  organizationId,
-  allTags,
-  onAddTag,
-  onRemoveTag,
-  onOpenInstances,
-}: {
-  contacts: ChatContact[];
-  selectedPhone: string | null;
-  onSelectContact: (phone: string) => void;
-  searchQuery: string;
-  onSearchChange: (query: string) => void;
-  isLoading: boolean;
-  instances?: WhatsAppInstanceForUser[];
-  selectedInstanceId?: string | null;
-  onSelectInstance?: (instanceId: string) => void;
-  showOnlyWithLead: boolean;
-  onToggleShowOnlyWithLead: () => void;
-  showOnlyWaitingHuman: boolean;
-  onToggleShowOnlyWaitingHuman: () => void;
-  waitingHumanCount: number;
-  waitingHumanLeadIds?: Set<string>;
-  activeTab: "active" | "archived";
-  onTabChange: (tab: "active" | "archived") => void;
-  onArchive: (phone: string) => void;
-  onUnarchive: (conversationId: string) => void;
-  onDelete: (phone: string) => void;
-  isAdmin: boolean;
-  instanceId: string | null;
-  organizationId: string | null;
-  allTags: { id: string; name: string; color: string }[];
-  onAddTag: (phone: string, tagId: string) => void;
-  onRemoveTag: (conversationId: string, tagId: string) => void;
-  onOpenInstances?: () => void;
-}) {
-  const filteredContacts = contacts.filter((c) => {
-    if (showOnlyWithLead && !c.lead_id) return false;
-    if (showOnlyWaitingHuman && !(c.lead_id && waitingHumanLeadIds?.has(c.lead_id))) return false;
-    // Filtrar por tab
-    if (activeTab === "active" && c.archived_at) return false;
-    if (activeTab === "archived" && !c.archived_at) return false;
-    return (
-      c.phone_number.includes(searchQuery) ||
-      c.push_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.lead_name?.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-  });
+// Alias local para garantir uso interno sem quebrar referências na ChatWindow
+const ContactList = ConversationList;
 
-  const activeCount = contacts.filter((c) => !c.archived_at).length;
-  const archivedCount = contacts.filter((c) => !!c.archived_at).length;
-
-  return (
-    <div className="flex flex-col h-full min-h-0 border-r border-border/60 bg-muted/20">
-      <div className="p-3 border-b bg-background shrink-0">
-        {instances && instances.length > 0 && onSelectInstance && (
-          <div className="mb-3">
-            <div className="flex items-center justify-between mb-1.5">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Número / Inbox
-              </p>
-              {isAdmin && onOpenInstances && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={onOpenInstances}
-                  className="h-6 gap-1 text-xs text-muted-foreground hover:text-foreground px-2"
-                  title="Gerenciar instâncias WhatsApp"
-                >
-                  <Settings className="w-3.5 h-3.5" />
-                  Instâncias
-                </Button>
-              )}
-            </div>
-            <Select value={selectedInstanceId || ""} onValueChange={onSelectInstance}>
-              <SelectTrigger className="h-9 w-full bg-background">
-                <SelectValue placeholder="Escolha o número..." />
-              </SelectTrigger>
-              <SelectContent>
-                {instances.map((inst) => (
-                  <SelectItem key={inst.id} value={inst.id}>
-                    <span className="flex items-center gap-2">
-                      <span
-                        className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                          inst.status === "connected"
-                            ? "bg-emerald-500"
-                            : inst.status === "connecting"
-                            ? "bg-amber-500"
-                            : "bg-muted-foreground/40"
-                        }`}
-                      />
-                      {inst.instance_name}
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
-          Inbox
-        </p>
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Buscar conversa..."
-            value={searchQuery}
-            onChange={(e) => onSearchChange(e.target.value)}
-            className="pl-9 h-9 bg-background"
-          />
-        </div>
-        <div className="flex items-center justify-between mt-2">
-          <p className="text-xs text-muted-foreground">
-            Total: {filteredContacts.length}
-          </p>
-          <button
-            type="button"
-            onClick={onToggleShowOnlyWithLead}
-            className={cn(
-              "flex items-center gap-1.5 text-xs px-2 py-1 rounded-md transition-colors",
-              showOnlyWithLead
-                ? "bg-primary/15 text-primary font-medium"
-                : "text-muted-foreground hover:bg-muted"
-            )}
-            title={showOnlyWithLead ? "Mostrando apenas com lead" : "Clique para filtrar só com lead"}
-          >
-            <Filter className="w-3 h-3" />
-            {showOnlyWithLead ? "Com lead" : "Todos"}
-          </button>
-          <button
-            type="button"
-            onClick={onToggleShowOnlyWaitingHuman}
-            className={cn(
-              "flex items-center gap-1.5 text-xs px-2 py-1 rounded-md transition-colors",
-              showOnlyWaitingHuman
-                ? "bg-amber-500/15 text-amber-600 font-medium"
-                : "text-muted-foreground hover:bg-muted"
-            )}
-            title={showOnlyWaitingHuman ? "Mostrando apenas aguardando humano" : "Filtrar aguardando humano"}
-          >
-            <UserPlus className="w-3 h-3" />
-            Humano
-            {waitingHumanCount > 0 && (
-              <span className="bg-amber-500 text-white text-[10px] rounded-full min-w-[16px] h-4 flex items-center justify-center px-1">
-                {waitingHumanCount}
-              </span>
-            )}
-          </button>
-        </div>
-
-        {/* Tabs: Ativas / Arquivadas */}
-        <div className="flex mt-2 bg-muted rounded-md p-0.5">
-          <button
-            type="button"
-            onClick={() => onTabChange("active")}
-            className={cn(
-              "flex-1 text-xs py-1.5 rounded-sm transition-colors font-medium",
-              activeTab === "active"
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            Ativas ({activeCount})
-          </button>
-          <button
-            type="button"
-            onClick={() => onTabChange("archived")}
-            className={cn(
-              "flex-1 text-xs py-1.5 rounded-sm transition-colors font-medium",
-              activeTab === "archived"
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            Arquivadas ({archivedCount})
-          </button>
-        </div>
-      </div>
-
-      <ScrollArea className="flex-1 min-h-0">
-        {isLoading ? (
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-          </div>
-        ) : filteredContacts.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
-            {activeTab === "archived" ? (
-              <>
-                <Archive className="w-12 h-12 text-muted-foreground/50 mb-4" />
-                <p className="text-sm text-muted-foreground">Nenhuma conversa arquivada</p>
-              </>
-            ) : (
-              <>
-                <MessageSquare className="w-12 h-12 text-muted-foreground/50 mb-4" />
-                <p className="text-sm text-muted-foreground">
-                  {searchQuery ? "Nenhuma conversa encontrada" : "Nenhuma conversa ainda"}
-                </p>
-              </>
-            )}
-          </div>
-        ) : (
-          <div className="divide-y divide-border/60">
-            {filteredContacts.map((contact) => {
-              const displayName = contactDisplayName(contact);
-              const isSelected = selectedPhone === contact.phone_number;
-              return (
-                <motion.div
-                  key={contact.phone_number}
-                  tabIndex={0}
-              role="button"
-              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelectContact(contact.phone_number); } }}
-              className={cn(
-                    "w-full px-3 py-3 text-left transition-colors rounded-none border-l-2 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:z-10 focus-visible:relative",
-                    isSelected
-                      ? "bg-primary/15 border-l-primary"
-                      : contact.unread_count > 0
-                        ? "bg-amber-50 dark:bg-amber-950/30 border-l-amber-500 hover:bg-amber-100 dark:hover:bg-amber-950/50"
-                        : "hover:bg-muted/50 border-l-transparent"
-                  )}
-                  whileTap={{ scale: 0.99 }}
-                  onClick={() => onSelectContact(contact.phone_number)}
-                >
-                  <div className="flex items-start gap-3">
-                    <div className="relative shrink-0">
-                      <Avatar className="w-11 h-11 rounded-full border-2 border-background shadow-sm">
-                        <AvatarFallback className="bg-primary/10 text-primary font-medium text-sm">
-                          {(displayName.charAt(0) || "?").toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
-                      <ChannelBadge channel="whatsapp" size={18} overlay />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-1">
-                        <span className="font-semibold text-foreground truncate text-sm flex items-center gap-1">
-                          <span className="truncate">{displayName}</span>
-                          {/* Menu "..." ao lado do nome */}
-                          <ContactContextMenu
-                            contact={contact}
-                            activeTab={activeTab}
-                            isAdmin={isAdmin}
-                            instanceId={instanceId}
-                            organizationId={organizationId}
-                            allTags={allTags}
-                            onArchive={onArchive}
-                            onUnarchive={onUnarchive}
-                            onDelete={onDelete}
-                            onAddTag={onAddTag}
-                            onRemoveTag={onRemoveTag}
-                          />
-                          {!contact.lead_id && (
-                            <span className="w-2 h-2 rounded-full bg-primary/60 shrink-0" title="Novo" />
-                          )}
-                          {/* Tag pills */}
-                          {contact.tags.slice(0, 2).map((tag) => (
-                            <span
-                              key={tag.id}
-                              className="text-[10px] px-1.5 py-0.5 rounded-full leading-none shrink-0 whitespace-nowrap"
-                              style={{
-                                backgroundColor: `${tag.color}20`,
-                                color: tag.color,
-                                border: `1px solid ${tag.color}40`,
-                              }}
-                            >
-                              {tag.name}
-                            </span>
-                          ))}
-                          {contact.tags.length > 2 && (
-                            <span className="text-[10px] text-muted-foreground shrink-0">
-                              +{contact.tags.length - 2}
-                            </span>
-                          )}
-                        </span>
-                        <time dateTime={contact.last_message_time || ""} className="text-xs text-muted-foreground whitespace-nowrap shrink-0 tabular-nums">
-                          {formatContactTime(contact.last_message_time)}
-                        </time>
-                      </div>
-                      <div className="flex items-center justify-between gap-2 mt-0.5">
-                        <p className="text-[12px] text-muted-foreground/60 truncate flex-1 min-w-0 flex items-center gap-1">
-                          {contact.last_message_direction === "outgoing" && (
-                            <span className="text-foreground/50 shrink-0" title="Você enviou">Você:</span>
-                          )}
-                          <span className="truncate min-w-0">{contact.last_message || "Sem mensagens"}</span>
-                        </p>
-                        {contact.unread_count > 0 && !isSelected && (
-                          <Badge
-                            className="h-5 min-w-5 px-1.5 shrink-0 text-xs bg-amber-500 text-white border-0 hover:bg-amber-600"
-                            title="Mensagens não lidas"
-                          >
-                            {contact.unread_count > 99 ? "99+" : contact.unread_count}
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </motion.div>
-              );
-            })}
-          </div>
-        )}
-      </ScrollArea>
-    </div>
-  );
-}
-
-/** Menu de contexto "..." para cada conversa */
-function ContactContextMenu({
-  contact,
-  activeTab,
-  isAdmin,
-  instanceId,
-  organizationId,
-  allTags,
-  onArchive,
-  onUnarchive,
-  onDelete,
-  onAddTag,
-  onRemoveTag,
-}: {
-  contact: ChatContact;
-  activeTab: "active" | "archived";
-  isAdmin: boolean;
-  instanceId: string | null;
-  organizationId: string | null;
-  allTags: { id: string; name: string; color: string }[];
-  onArchive: (phone: string) => void;
-  onUnarchive: (conversationId: string) => void;
-  onDelete: (phone: string) => void;
-  onAddTag: (phone: string, tagId: string) => void;
-  onRemoveTag: (conversationId: string, tagId: string) => void;
-}) {
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const contactTagIds = new Set(contact.tags.map((t) => t.id));
-
-  return (
-    <>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <button
-            type="button"
-            onClick={(e) => e.stopPropagation()}
-            className="p-1 rounded-md hover:bg-muted/80 transition-colors"
-          >
-            <MoreVertical className="w-3.5 h-3.5 text-muted-foreground" />
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-48" onClick={(e) => e.stopPropagation()}>
-          {/* Submenu de tags */}
-          <DropdownMenuSub>
-            <DropdownMenuSubTrigger>
-              <Tag className="w-4 h-4 mr-2" />
-              Gerenciar tags
-            </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent className="w-52 p-1" onClick={(e) => e.stopPropagation()}>
-              {allTags.length === 0 ? (
-                <p className="text-xs text-muted-foreground px-2 py-2">Nenhuma tag criada</p>
-              ) : (
-                <div className="space-y-0.5 max-h-48 overflow-y-auto">
-                  {allTags.map((tag) => {
-                    const isActive = contactTagIds.has(tag.id);
-                    return (
-                      <DropdownMenuItem
-                        key={tag.id}
-                        className={cn(
-                          "flex items-center gap-2 cursor-pointer",
-                          isActive && "bg-primary/10"
-                        )}
-                        onSelect={(e) => {
-                          e.preventDefault();
-                          if (isActive && contact.conversation_id) {
-                            onRemoveTag(contact.conversation_id, tag.id);
-                          } else {
-                            onAddTag(contact.phone_number, tag.id);
-                          }
-                        }}
-                      >
-                        <span
-                          className="w-3 h-3 rounded-full shrink-0 border"
-                          style={{
-                            backgroundColor: isActive ? tag.color : "transparent",
-                            borderColor: tag.color,
-                          }}
-                        />
-                        <span className="truncate">{tag.name}</span>
-                        {isActive && <Check className="w-3 h-3 ml-auto shrink-0 text-primary" />}
-                      </DropdownMenuItem>
-                    );
-                  })}
-                </div>
-              )}
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
-
-          {activeTab === "active" ? (
-            <DropdownMenuItem onClick={() => onArchive(contact.phone_number)}>
-              <Archive className="w-4 h-4 mr-2" />
-              Arquivar conversa
-            </DropdownMenuItem>
-          ) : (
-            contact.conversation_id && (
-              <DropdownMenuItem onClick={() => onUnarchive(contact.conversation_id!)}>
-                <ArchiveRestore className="w-4 h-4 mr-2" />
-                Desarquivar conversa
-              </DropdownMenuItem>
-            )
-          )}
-
-          {isAdmin && activeTab === "active" && (
-            <>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                className="text-destructive focus:text-destructive"
-                onClick={() => setShowDeleteConfirm(true)}
-              >
-                <Trash2 className="w-4 h-4 mr-2" />
-                Excluir conversa
-              </DropdownMenuItem>
-            </>
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
-
-      {/* Dialog de confirmação de exclusão */}
-      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
-        <AlertDialogContent onClick={(e) => e.stopPropagation()}>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Excluir conversa</AlertDialogTitle>
-            <AlertDialogDescription>
-              Essa conversa será removida da lista para todos os membros da organização.
-              As mensagens serão permanentemente apagadas após 30 dias.
-              Essa ação não pode ser desfeita.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => {
-                onDelete(contact.phone_number);
-                setShowDeleteConfirm(false);
-              }}
-            >
-              Excluir
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
-  );
-}
-
-// AudioPlayer foi extraído para media/AudioPlayer.tsx (C2).
-// Re-importado no topo deste arquivo.
-
-// Componente para exibir imagem na mensagem
-// MessageImage, MessageVideo, MessageDocument extraídos para media/MessageMedia.tsx (C4).
-// Importados no topo deste arquivo.
+// ContactList e ContactContextMenu extraídos para list/ (C5).
+// ContactList importado como ConversationList, alias ContactList criado acima.
 
 export function MessageBubble({
   message,
