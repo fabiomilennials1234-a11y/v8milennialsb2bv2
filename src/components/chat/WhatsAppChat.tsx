@@ -18,11 +18,6 @@ import {
   Mic,
   MicOff,
   X,
-  FileImage,
-  FileText,
-  FileVideo,
-  Download,
-  File,
   Bot,
   Plus,
   Users,
@@ -134,6 +129,7 @@ import { toast } from "sonner";
 import { AudioPlayer, getAudioPlaybackUrl } from "./media/AudioPlayer";
 import { AudioRecorder as AudioRecorderMedia } from "./media/AudioRecorder";
 import { ImagePreviewModal as ImagePreviewModalMedia } from "./media/ImagePreviewModal";
+import { MessageImage, MessageVideo, MessageDocument } from "./media/MessageMedia";
 
 /**
  * Re-export para backwards-compat — movido para media/AudioPlayer.tsx (C2).
@@ -693,136 +689,8 @@ function ContactContextMenu({
 // Re-importado no topo deste arquivo.
 
 // Componente para exibir imagem na mensagem
-function MessageImage({
-  src,
-  onPreview,
-}: {
-  src: string;
-  onPreview: () => void;
-}) {
-  const [loaded, setLoaded] = useState(false);
-  const [error, setError] = useState(false);
-
-  if (error) {
-    return (
-      <div className="w-48 h-32 bg-muted/50 rounded flex items-center justify-center">
-        <FileImage className="w-8 h-8 text-muted-foreground" />
-      </div>
-    );
-  }
-
-  return (
-    <div className="relative cursor-pointer" onClick={onPreview}>
-      {!loaded && (
-        <div className="w-48 h-32 bg-muted/50 rounded flex items-center justify-center">
-          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-        </div>
-      )}
-      <img
-        src={src}
-        alt="Imagem"
-        className={cn(
-          "max-w-[240px] max-h-[300px] rounded object-cover",
-          !loaded && "hidden"
-        )}
-        onLoad={() => setLoaded(true)}
-        onError={() => setError(true)}
-      />
-    </div>
-  );
-}
-
-// Componente para exibir vídeo na mensagem
-function MessageVideo({ src }: { src: string }) {
-  const [error, setError] = useState(false);
-
-  if (error) {
-    return (
-      <div className="w-48 h-32 bg-muted/50 rounded flex flex-col items-center justify-center gap-2">
-        <FileVideo className="w-8 h-8 text-muted-foreground" />
-        <a
-          href={src}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-xs text-primary hover:underline flex items-center gap-1"
-        >
-          <Download className="w-3 h-3" />
-          Baixar vídeo
-        </a>
-      </div>
-    );
-  }
-
-  return (
-    <video
-      src={src}
-      controls
-      className="max-w-[240px] max-h-[300px] rounded"
-      onError={() => setError(true)}
-    >
-      Seu navegador não suporta vídeos.
-    </video>
-  );
-}
-
-// Componente para exibir documento na mensagem
-function MessageDocument({
-  src,
-  fileName,
-  isOutgoing,
-}: {
-  src: string;
-  fileName?: string;
-  isOutgoing: boolean;
-}) {
-  // Tentar extrair nome do arquivo da URL se não fornecido
-  const displayName = fileName || src.split("/").pop() || "Documento";
-  
-  // Detectar tipo de arquivo pelo nome
-  const getFileIcon = () => {
-    const ext = displayName.split(".").pop()?.toLowerCase();
-    switch (ext) {
-      case "pdf":
-        return <FileText className="w-8 h-8" />;
-      case "doc":
-      case "docx":
-        return <FileText className="w-8 h-8" />;
-      case "xls":
-      case "xlsx":
-        return <FileText className="w-8 h-8" />;
-      default:
-        return <File className="w-8 h-8" />;
-    }
-  };
-
-  return (
-    <a
-      href={src}
-      target="_blank"
-      rel="noopener noreferrer"
-      className={cn(
-        "flex items-center gap-3 p-3 rounded-lg transition-colors min-w-[200px]",
-        isOutgoing
-          ? "bg-primary-foreground/10 hover:bg-primary-foreground/20"
-          : "bg-primary/10 hover:bg-primary/20"
-      )}
-    >
-      <div className={cn(
-        "p-2 rounded",
-        isOutgoing ? "bg-primary-foreground/20" : "bg-primary/20"
-      )}>
-        {getFileIcon()}
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium truncate">{displayName}</p>
-        <p className="text-xs text-muted-foreground flex items-center gap-1">
-          <Download className="w-3 h-3" />
-          Clique para baixar
-        </p>
-      </div>
-    </a>
-  );
-}
+// MessageImage, MessageVideo, MessageDocument extraídos para media/MessageMedia.tsx (C4).
+// Importados no topo deste arquivo.
 
 export function MessageBubble({
   message,

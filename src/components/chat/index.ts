@@ -20,6 +20,7 @@ export { MessagesAreaErrorBoundary } from "./WhatsAppChat";
 export { AudioPlayer, getAudioPlaybackUrl } from "./media/AudioPlayer";
 export { AudioRecorder } from "./media/AudioRecorder";
 export { ImagePreviewModal } from "./media/ImagePreviewModal";
+export { MessageImage, MessageVideo, MessageDocument } from "./media/MessageMedia";
 
 // Helpers
 export { formatMessageTime } from "./WhatsAppChat";
