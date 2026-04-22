@@ -208,6 +208,7 @@ export async function getWhatsAppProvider(
     });
   }
 
-  const { EvolutionProvider } = await import("./whatsapp-providers/evolution-provider.ts");
-  return new EvolutionProvider(instance);
+  throw new Error(
+    `Unknown whatsapp_instances.provider="${instance.provider}" — only "uazapi" is supported after Fase 7 cleanup`
+  );
 }

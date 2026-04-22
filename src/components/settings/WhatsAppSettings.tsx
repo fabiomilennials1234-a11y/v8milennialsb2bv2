@@ -50,7 +50,7 @@ import {
   useSetAllowedMembersForInstance,
 } from "@/hooks/useWhatsAppInstanceAllowedMembers";
 import { Checkbox } from "@/components/ui/checkbox";
-import { testEvolutionConnection } from "@/lib/evolutionApi";
+import { supabase } from "@/integrations/supabase/client";
 import { useOrgQuotas } from "@/hooks/useOrgQuotas";
 import { toast } from "sonner";
 
@@ -344,14 +344,17 @@ export function WhatsAppSettings() {
     setIsTestingConnection(true);
     setErrorDetails(null);
     try {
-      const result = await testEvolutionConnection();
-      if (result.working) {
+      const { data, error } = await supabase.functions.invoke<{ results: Array<{ service: string; status: string; error?: string }> }>("check-api-health");
+      if (error) throw new Error(error.message);
+      const uazapi = data?.results?.find((r) => r.service === "Uazapi");
+      if (uazapi?.status === "connected") {
         setApiStatus("connected");
-        toast.success(`Conexão bem-sucedida! ${result.message || ""}`);
+        toast.success("Conexão Uazapi bem-sucedida!");
       } else {
         setApiStatus("error");
-        setErrorDetails(result.message);
-        toast.error(`Falha na conexão: ${result.message}`);
+        const msg = uazapi?.error || uazapi?.status || "Serviço indisponível";
+        setErrorDetails(msg);
+        toast.error(`Falha Uazapi: ${msg}`);
       }
     } catch (error: any) {
       setApiStatus("error");
