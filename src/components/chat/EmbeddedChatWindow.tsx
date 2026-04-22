@@ -155,6 +155,7 @@ function EmbeddedChatContent({
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const mountTimeRef = useRef<number>(Date.now());
 
   useEffect(() => { preloadLamejs(); }, []);
 
@@ -304,7 +305,7 @@ function EmbeddedChatContent({
                               </time>
                             </div>
                           )}
-                          <MessageBubble message={message} onImagePreview={setPreviewImageUrl} />
+                          <MessageBubble message={message} onImagePreview={setPreviewImageUrl} mountTime={mountTimeRef.current} />
                         </div>
                       );
                     });
