@@ -49,6 +49,29 @@ async function checkEvolutionApi(): Promise<ApiHealthResult> {
   }
 }
 
+async function checkUazapi(): Promise<ApiHealthResult> {
+  const url = Deno.env.get("UAZAPI_BASE_URL");
+  const adminToken = Deno.env.get("UAZAPI_ADMIN_TOKEN");
+  if (!url || !adminToken) return { service: "Uazapi", status: "not_configured", latency_ms: 0, checked_at: new Date().toISOString() };
+
+  const start = Date.now();
+  try {
+    // Any admin endpoint works as a liveness probe — list instances with limit=0
+    const res = await withTimeout(
+      fetch(`${url.replace(/\/$/, "")}/instance/all`, {
+        method: "GET",
+        headers: { admintoken: adminToken },
+      }),
+      TIMEOUT_MS
+    );
+    const latency = Date.now() - start;
+    if (res.ok) return { service: "Uazapi", status: "connected", latency_ms: latency, checked_at: new Date().toISOString() };
+    return { service: "Uazapi", status: "error", latency_ms: latency, error: `HTTP ${res.status}`, checked_at: new Date().toISOString() };
+  } catch (e) {
+    return { service: "Uazapi", status: "error", latency_ms: Date.now() - start, error: e instanceof Error ? e.message : String(e), checked_at: new Date().toISOString() };
+  }
+}
+
 async function checkOpenRouter(): Promise<ApiHealthResult> {
   const key = Deno.env.get("OPENROUTER_API_KEY");
   if (!key) return { service: "OpenRouter", status: "not_configured", latency_ms: 0, checked_at: new Date().toISOString() };
@@ -168,6 +191,7 @@ serve(async (req) => {
     // Run all health checks in parallel
     const results = await Promise.allSettled([
       checkEvolutionApi(),
+      checkUazapi(),
       checkOpenRouter(),
       checkGemini(),
       checkOpenAI(),
