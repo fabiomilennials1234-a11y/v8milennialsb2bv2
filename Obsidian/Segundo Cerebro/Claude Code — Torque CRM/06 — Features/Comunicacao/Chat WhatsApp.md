@@ -5,7 +5,7 @@ tags:
   - torque-crm
   - comunicacao
 created: 2026-04-12
-last_updated: 2026-04-12
+last_updated: 2026-04-22
 status: active
 ---
 
@@ -84,7 +84,31 @@ Webhook externo (Evolution/Meta/SZ.Chat)
 
 ---
 
+## Toggle de IA (ai_disabled)
+
+O estado "IA ligada/desligada" para cada contato tem fonte única em `phone_ai_preferences(organization_id, normalized_phone, ai_disabled, set_by, set_at)` desde 2026-04-22 (ver [[ADR-2026-04-22-phone-ai-preferences]]). `leads.ai_disabled` é denormalização.
+
+### Regras
+- Toggle em **contato sem lead**: grava só em `phone_ai_preferences`. Não cria shadow lead.
+- Toggle em **contato com lead**: RPC sincroniza `phone_ai_preferences` + todos os leads com mesmo `normalized_phone` + reseta `conversations.state` de WAITING_HUMAN → QUALIFYING se reativando.
+- **Herança na 1ª mensagem**: `getOrCreateLead` consulta `phone_ai_preferences` antes do INSERT. Lead novo nasce com `ai_disabled=true` se o vendedor havia desligado a IA antes.
+- **Duplicatas**: múltiplos leads com mesmo `normalized_phone` na mesma org ficam sempre em estado consistente (a RPC atualiza todos).
+
+### RPCs
+- `toggle_phone_ai(p_phone, p_disabled)` — usado quando o chat não tem lead focado.
+- `toggle_lead_ai(p_lead_id, p_disabled)` — usado no detalhe do lead; também faz UPSERT em preferences.
+- `get_phone_ai_status(p_phone)` — leitura por telefone (fallback: preference → lead mais recente → default false).
+- `get_lead_ai_status(p_lead_id)` — leitura por lead existente.
+
+### Hooks
+- `usePhoneAiStatus(phone)` — Switch do chat quando não há `leadId`.
+- `useLeadAiStatus(leadId)` — Switch do chat quando há `leadId`.
+- `useToggleConversationAI()` — toggle por telefone. Optimistic + rollback.
+- `useToggleLeadAI()` — toggle por lead_id. Optimistic + rollback (inclui `lead_ai_status`).
+
 ## Historico de mudancas
+
+- **2026-04-22**: `phone_ai_preferences` como fonte única do toggle de IA. `toggle_conversation_ai` removida do banco. Frontend com optimistic/rollback consistentes. Ver [[ADR-2026-04-22-phone-ai-preferences]].
 
 ## Links relacionados
 

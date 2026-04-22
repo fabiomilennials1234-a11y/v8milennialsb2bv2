@@ -5,7 +5,7 @@ tags:
   - torque-crm
   - ia
 created: 2026-04-12
-last_updated: 2026-04-13
+last_updated: 2026-04-22
 status: active
 ---
 
@@ -140,8 +140,18 @@ Lead envia mensagem (WhatsApp/SZ.Chat)
 
 ---
 
+## Fonte de verdade do ai_disabled
+
+Desde 2026-04-22, a fonte de verdade para "IA ligada/desligada" por contato é a tabela `phone_ai_preferences(organization_id, normalized_phone, ai_disabled, ...)`. `leads.ai_disabled` continua existindo como denormalização. Consumidores (agent-message, evolution-webhook, get_lead_ai_status) **não mudaram** — leem de `leads.ai_disabled` como sempre, que é mantido em sincronia pelas RPCs `toggle_phone_ai` e `toggle_lead_ai`.
+
+Ver detalhes em [[Chat WhatsApp#Toggle de IA (ai_disabled)]] e [[ADR-2026-04-22-phone-ai-preferences]].
+
+> [!warning] Gap de envio — task pendente
+> Existe uma janela de 15–36s entre o copilot **gerar** a resposta (via OpenRouter LLM em `agent-message`) e o **envio** pelo Evolution API. Durante essa janela, `ai_disabled` **não** é re-checada. Resultado: se o vendedor desliga a IA no meio dessa janela, a mensagem da IA ainda é enviada. Task separada — resolver via re-check em `agent-message` imediatamente antes do send. A task atual fechou as inconsistências de estado; essa fecha o gap temporal.
+
 ## Historico de mudancas
 
+- **2026-04-22**: Fonte única do ai_disabled migrada para `phone_ai_preferences`. Gap temporal de envio mapeado como débito.
 - **2026-04-13**: Documentacao atualizada — wizard deprecated, Playground e o fluxo principal. Dead code mapeado.
 - **2026-04-12**: Documentacao inicial criada.
 
