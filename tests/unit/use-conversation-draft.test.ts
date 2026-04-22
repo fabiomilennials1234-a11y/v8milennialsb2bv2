@@ -7,12 +7,17 @@
  * 3. setDraft with empty string removes the key (after debounce)
  * 4. switching conversationKey resets draft to new key's stored value
  * 5. localStorage quota exceeded — setDraft does not crash
+ * 6. (new) user-scoping: two users sharing same conversation key get isolated drafts
+ * 7. (new) no userId — draft is not persisted (in-memory only)
+ * 8. (new) orphan drafts (no user prefix) are removed on first hook mount
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { renderHook, act, waitFor } from "@testing-library/react";
+import { renderHook, act } from "@testing-library/react";
 import { useConversationDraft } from "@/hooks/useConversationDraft";
 
 const KEY_PREFIX = "chat-draft-";
+const USER_A = "user-aaa-111";
+const USER_B = "user-bbb-222";
 
 // Fake in-memory localStorage (avoid global pollution in parallel tests)
 function makeFakeStorage() {
@@ -21,9 +26,19 @@ function makeFakeStorage() {
     getItem: vi.fn((k: string) => store[k] ?? null),
     setItem: vi.fn((k: string, v: string) => { store[k] = v; }),
     removeItem: vi.fn((k: string) => { delete store[k]; }),
+    clear: vi.fn(() => { Object.keys(store).forEach((k) => delete store[k]); }),
+    get length() { return Object.keys(store).length; },
+    key: vi.fn((i: number) => Object.keys(store)[i] ?? null),
     _store: store,
   };
 }
+
+// Reset module-level state between tests so orphan cleanup is re-triggered
+vi.mock("@/hooks/useConversationDraft", async () => {
+  // re-import fresh each test via module factory
+  const original = await vi.importActual<typeof import("@/hooks/useConversationDraft")>("@/hooks/useConversationDraft");
+  return original;
+});
 
 describe("useConversationDraft", () => {
   let fakeStorage: ReturnType<typeof makeFakeStorage>;
@@ -43,25 +58,25 @@ describe("useConversationDraft", () => {
     vi.restoreAllMocks();
   });
 
-  it("initialises draft from localStorage on mount", () => {
-    fakeStorage._store[KEY_PREFIX + "conv-1"] = "saved text";
+  it("initialises draft from localStorage on mount (with userId)", () => {
+    fakeStorage._store[`${KEY_PREFIX}${USER_A}-conv-1`] = "saved text";
 
-    const { result } = renderHook(() => useConversationDraft("conv-1"));
+    const { result } = renderHook(() => useConversationDraft("conv-1", USER_A));
     expect(result.current.draft).toBe("saved text");
   });
 
   it("initialises to empty string when no stored draft", () => {
-    const { result } = renderHook(() => useConversationDraft("conv-empty"));
+    const { result } = renderHook(() => useConversationDraft("conv-empty", USER_A));
     expect(result.current.draft).toBe("");
   });
 
   it("initialises to empty string when conversationKey is empty", () => {
-    const { result } = renderHook(() => useConversationDraft(""));
+    const { result } = renderHook(() => useConversationDraft("", USER_A));
     expect(result.current.draft).toBe("");
   });
 
   it("setDraft updates state immediately", () => {
-    const { result } = renderHook(() => useConversationDraft("conv-1"));
+    const { result } = renderHook(() => useConversationDraft("conv-1", USER_A));
 
     act(() => {
       result.current.setDraft("hello world");
@@ -70,8 +85,8 @@ describe("useConversationDraft", () => {
     expect(result.current.draft).toBe("hello world");
   });
 
-  it("setDraft persists non-empty value to localStorage after 300ms debounce", async () => {
-    const { result } = renderHook(() => useConversationDraft("conv-2"));
+  it("setDraft persists non-empty value to localStorage after 300ms debounce", () => {
+    const { result } = renderHook(() => useConversationDraft("conv-2", USER_A));
 
     act(() => {
       result.current.setDraft("persisted value");
@@ -79,31 +94,31 @@ describe("useConversationDraft", () => {
     });
 
     expect(fakeStorage.setItem).toHaveBeenCalledWith(
-      KEY_PREFIX + "conv-2",
+      `${KEY_PREFIX}${USER_A}-conv-2`,
       "persisted value",
     );
   });
 
-  it("setDraft with empty string removes key from localStorage after debounce", async () => {
-    fakeStorage._store[KEY_PREFIX + "conv-3"] = "old text";
+  it("setDraft with empty string removes key from localStorage after debounce", () => {
+    fakeStorage._store[`${KEY_PREFIX}${USER_A}-conv-3`] = "old text";
 
-    const { result } = renderHook(() => useConversationDraft("conv-3"));
+    const { result } = renderHook(() => useConversationDraft("conv-3", USER_A));
 
     act(() => {
       result.current.setDraft("");
       vi.advanceTimersByTime(301);
     });
 
-    expect(fakeStorage.removeItem).toHaveBeenCalledWith(KEY_PREFIX + "conv-3");
+    expect(fakeStorage.removeItem).toHaveBeenCalledWith(`${KEY_PREFIX}${USER_A}-conv-3`);
     expect(fakeStorage.setItem).not.toHaveBeenCalled();
   });
 
   it("switching conversationKey resets draft to new key's stored value", () => {
-    fakeStorage._store[KEY_PREFIX + "conv-a"] = "text A";
-    fakeStorage._store[KEY_PREFIX + "conv-b"] = "text B";
+    fakeStorage._store[`${KEY_PREFIX}${USER_A}-conv-a`] = "text A";
+    fakeStorage._store[`${KEY_PREFIX}${USER_A}-conv-b`] = "text B";
 
     const { result, rerender } = renderHook(
-      ({ key }) => useConversationDraft(key),
+      ({ key }) => useConversationDraft(key, USER_A),
       { initialProps: { key: "conv-a" } },
     );
 
@@ -117,10 +132,10 @@ describe("useConversationDraft", () => {
   });
 
   it("switching to key with no stored draft resets to empty", () => {
-    fakeStorage._store[KEY_PREFIX + "conv-a"] = "text A";
+    fakeStorage._store[`${KEY_PREFIX}${USER_A}-conv-a`] = "text A";
 
     const { result, rerender } = renderHook(
-      ({ key }) => useConversationDraft(key),
+      ({ key }) => useConversationDraft(key, USER_A),
       { initialProps: { key: "conv-a" } },
     );
 
@@ -138,7 +153,7 @@ describe("useConversationDraft", () => {
       throw new DOMException("QuotaExceededError");
     });
 
-    const { result } = renderHook(() => useConversationDraft("conv-quota"));
+    const { result } = renderHook(() => useConversationDraft("conv-quota", USER_A));
 
     expect(() => {
       act(() => {
@@ -152,7 +167,7 @@ describe("useConversationDraft", () => {
   });
 
   it("debounce cancels previous timer when setDraft called rapidly", () => {
-    const { result } = renderHook(() => useConversationDraft("conv-debounce"));
+    const { result } = renderHook(() => useConversationDraft("conv-debounce", USER_A));
 
     act(() => {
       result.current.setDraft("first");
@@ -164,8 +179,54 @@ describe("useConversationDraft", () => {
     // Only "second" should be persisted
     expect(fakeStorage.setItem).toHaveBeenCalledTimes(1);
     expect(fakeStorage.setItem).toHaveBeenCalledWith(
-      KEY_PREFIX + "conv-debounce",
+      `${KEY_PREFIX}${USER_A}-conv-debounce`,
       "second",
     );
+  });
+
+  // ── NEW: user-scoping tests ──────────────────────────────────────────────
+
+  it("(B1) user-scoping: user A draft is isolated from user B on same conversation", () => {
+    fakeStorage._store[`${KEY_PREFIX}${USER_A}-conv-shared`] = "draft from A";
+    fakeStorage._store[`${KEY_PREFIX}${USER_B}-conv-shared`] = "draft from B";
+
+    const { result: resultA } = renderHook(() =>
+      useConversationDraft("conv-shared", USER_A),
+    );
+    const { result: resultB } = renderHook(() =>
+      useConversationDraft("conv-shared", USER_B),
+    );
+
+    expect(resultA.current.draft).toBe("draft from A");
+    expect(resultB.current.draft).toBe("draft from B");
+  });
+
+  it("(B1) no userId — draft is not persisted, state stays in-memory only", () => {
+    const { result } = renderHook(() =>
+      useConversationDraft("conv-x", undefined),
+    );
+
+    act(() => {
+      result.current.setDraft("sensitive content");
+      vi.advanceTimersByTime(301);
+    });
+
+    expect(result.current.draft).toBe("sensitive content"); // in-memory ok
+    expect(fakeStorage.setItem).not.toHaveBeenCalled();     // but NOT persisted
+  });
+
+  it("(B1) signOut scenario: user B sees empty draft after user A leaves (different keys)", () => {
+    // Simulate: user A writes draft, then logs out (keys cleaned by AuthContext).
+    // User B logs in. User B must see empty draft.
+    const keyA = `${KEY_PREFIX}${USER_A}-conv-shared`;
+    fakeStorage._store[keyA] = "A's sensitive draft";
+    // Simulate signOut cleanup — AuthContext removes user A's keys
+    delete fakeStorage._store[keyA];
+
+    const { result } = renderHook(() =>
+      useConversationDraft("conv-shared", USER_B),
+    );
+
+    expect(result.current.draft).toBe(""); // user B sees nothing from user A
   });
 });

@@ -98,6 +98,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
+    // Clean up user-scoped localStorage keys before session is cleared.
+    // This prevents PII leakage (draft content) to the next user on the same device.
+    if (user?.id) {
+      const userId = user.id;
+      const prefixes = [
+        `chat-draft-${userId}-`,
+        `chat-density-${userId}`,
+        `chat-panels-${userId}`,
+        `chat-layout-sizes-${userId}`,
+        `chat-last-read:${userId}:`,
+      ];
+      try {
+        const keysToRemove: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && prefixes.some((p) => key.startsWith(p))) {
+            keysToRemove.push(key);
+          }
+        }
+        keysToRemove.forEach((k) => localStorage.removeItem(k));
+      } catch {
+        // localStorage may be unavailable
+      }
+    }
     await supabase.auth.signOut();
   };
 

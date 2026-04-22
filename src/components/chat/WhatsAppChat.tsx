@@ -88,6 +88,7 @@ import { resolveVariables } from "@/lib/template-variables";
 import type { LeadContext, AttendantContext } from "@/lib/template-variables";
 import type { MessageTemplate } from "@/hooks/useMessageTemplates";
 import { useConversationDraft } from "@/hooks/useConversationDraft";
+import { useAuth } from "@/contexts/AuthContext";
 import { ChatEmptyState } from "@/components/chat/ChatEmptyState";
 import { UnreadDivider } from "@/components/chat/UnreadDivider";
 import { ScrollToBottomFab } from "@/components/chat/ScrollToBottomFab";
@@ -1429,7 +1430,8 @@ function ChatWindow({
   selectedLeadName?: string | null;
 }) {
   const conversationKey = `${instanceId}:${phoneNumber}`;
-  const { draft: newMessage, setDraft: setNewMessage } = useConversationDraft(conversationKey);
+  const { user } = useAuth();
+  const { draft: newMessage, setDraft: setNewMessage } = useConversationDraft(conversationKey, user?.id);
   const [showSlashPopover, setShowSlashPopover] = useState(false);
   const { data: templates } = useMessageTemplates();
 
