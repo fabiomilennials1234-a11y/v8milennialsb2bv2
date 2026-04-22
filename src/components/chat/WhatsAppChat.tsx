@@ -86,6 +86,7 @@ import type { MessageTemplate } from "@/hooks/useMessageTemplates";
 import { useConversationDraft } from "@/hooks/useConversationDraft";
 import { ChatEmptyState } from "@/components/chat/ChatEmptyState";
 import { UnreadDivider } from "@/components/chat/UnreadDivider";
+import { ScrollToBottomFab } from "@/components/chat/ScrollToBottomFab";
 import { ScheduledMessagesBanner } from "./ScheduledMessagesBanner";
 import ConversationNotes from "@/components/chat/ConversationNotes";
 import { WhatsAppSettings } from "@/components/settings/WhatsAppSettings";
@@ -1438,6 +1439,9 @@ function ChatWindow({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const mountTimeRef = useRef<number>(Date.now());
+  const scrollAreaRef = useRef<HTMLDivElement | null>(null);
+  const [isAtBottom, setIsAtBottom] = useState(true);
+  const [newMessagesCount, setNewMessagesCount] = useState(0);
 
   // Snapshot last-seen timestamp for unread divider (read before the conversation marks as seen)
   const lastReadAtRef = useRef<number>(0);
@@ -1516,9 +1520,51 @@ function ChatWindow({
   // Ativar realtime
   useWhatsAppMessagesRealtime(phoneNumber);
 
-  // Auto-scroll para última mensagem
+  // Scroll listener for FAB visibility
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const viewport = scrollAreaRef.current?.querySelector<HTMLElement>("[data-radix-scroll-area-viewport]");
+    if (!viewport) return;
+    const handler = () => {
+      const distance = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
+      const atBottom = distance < 80;
+      setIsAtBottom(atBottom);
+      if (atBottom) setNewMessagesCount(0);
+    };
+    viewport.addEventListener("scroll", handler, { passive: true });
+    handler();
+    return () => viewport.removeEventListener("scroll", handler);
+  }, [phoneNumber]);
+
+  // Reset FAB state on conversation change
+  useEffect(() => {
+    setIsAtBottom(true);
+    setNewMessagesCount(0);
+  }, [phoneNumber]);
+
+  // Smart auto-scroll: always scroll on own messages, only scroll if at bottom for incoming
+  useEffect(() => {
+    if (messages.length === 0) return;
+    const lastMsg = messages[messages.length - 1];
+    const viewport = scrollAreaRef.current?.querySelector<HTMLElement>("[data-radix-scroll-area-viewport]");
+    if (lastMsg?.direction === "outgoing") {
+      // Own message: always scroll to bottom
+      if (viewport) {
+        viewport.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" });
+      } else {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      }
+    } else if (isAtBottom) {
+      // Incoming: only scroll if already at bottom
+      if (viewport) {
+        viewport.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" });
+      } else {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      }
+    } else {
+      // Incoming while scrolled up: increment counter
+      setNewMessagesCount((n) => n + 1);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages]);
 
   const handleSend = async () => {
@@ -1865,8 +1911,8 @@ function ChatWindow({
       )}
 
       {/* Área de mensagens: altura limitada com scroll interno; boundary evita "fewer hooks" ao isolar erros */}
-      <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-        <ScrollArea className="flex-1 h-full">
+      <div className="flex-1 min-h-0 overflow-hidden flex flex-col relative">
+        <ScrollArea ref={scrollAreaRef} className="flex-1 h-full">
           <div className="p-4 min-h-full">
             <MessagesAreaErrorBoundary>
             {isLoading ? (
@@ -1990,6 +2036,19 @@ function ChatWindow({
             </MessagesAreaErrorBoundary>
           </div>
         </ScrollArea>
+        <ScrollToBottomFab
+          visible={!isAtBottom}
+          count={newMessagesCount}
+          onClick={() => {
+            const viewport = scrollAreaRef.current?.querySelector<HTMLElement>("[data-radix-scroll-area-viewport]");
+            if (viewport) {
+              viewport.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" });
+            } else {
+              messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+            }
+            setNewMessagesCount(0);
+          }}
+        />
       </div>
 
       {/* Image Preview (para envio) - fixo acima do input */}
