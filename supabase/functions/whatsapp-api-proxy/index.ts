@@ -296,6 +296,94 @@ Deno.serve(
           break;
         }
 
+        // -------------------------------------------------------------------
+        // Message actions — Uazapi-only. Evolution returns NotSupportedError
+        // bubbled up as 500 by the outer try/catch.
+        // -------------------------------------------------------------------
+        case "react": {
+          if (!provider.react) throw new Error("Provider does not support react");
+          const { message_id, number, emoji } = payload as {
+            message_id?: string;
+            number?: string;
+            emoji?: string;
+          };
+          if (!message_id || !number || !emoji) {
+            return jsonResponse(400, { error: "Missing message_id/number/emoji" }, corsHeaders);
+          }
+          await provider.react(message_id, number, emoji);
+          result = { ok: true };
+          break;
+        }
+
+        case "editMessage": {
+          if (!provider.edit) throw new Error("Provider does not support edit");
+          const { message_id, number, text } = payload as {
+            message_id?: string;
+            number?: string;
+            text?: string;
+          };
+          if (!message_id || !number || !text) {
+            return jsonResponse(400, { error: "Missing message_id/number/text" }, corsHeaders);
+          }
+          await provider.edit(message_id, number, text);
+          // Reflect locally
+          await supabaseAdmin
+            .from("whatsapp_messages")
+            .update({ content: text })
+            .eq("message_id", message_id)
+            .eq("instance_id", instanceId);
+          result = { ok: true };
+          break;
+        }
+
+        case "pinMessage": {
+          if (!provider.pin) throw new Error("Provider does not support pin");
+          const { message_id, number } = payload as {
+            message_id?: string;
+            number?: string;
+          };
+          if (!message_id || !number) {
+            return jsonResponse(400, { error: "Missing message_id/number" }, corsHeaders);
+          }
+          await provider.pin(message_id, number);
+          result = { ok: true };
+          break;
+        }
+
+        case "deleteMessage": {
+          if (!provider.deleteForAll) throw new Error("Provider does not support deleteForAll");
+          const { message_id, number } = payload as {
+            message_id?: string;
+            number?: string;
+          };
+          if (!message_id || !number) {
+            return jsonResponse(400, { error: "Missing message_id/number" }, corsHeaders);
+          }
+          await provider.deleteForAll(message_id, number);
+          // Reflect locally
+          await supabaseAdmin
+            .from("whatsapp_messages")
+            .update({ status: "deleted" })
+            .eq("message_id", message_id)
+            .eq("instance_id", instanceId);
+          result = { ok: true };
+          break;
+        }
+
+        case "markRead": {
+          if (!provider.markRead) throw new Error("Provider does not support markRead");
+          const { message_id, number } = payload as {
+            message_id?: string;
+            number?: string;
+          };
+          if (!message_id || !number) {
+            return jsonResponse(400, { error: "Missing message_id/number" }, corsHeaders);
+          }
+          await provider.markRead(message_id, number);
+          result = { ok: true };
+          break;
+        }
+
         default:
           return jsonResponse(
             400,

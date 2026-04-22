@@ -85,3 +85,65 @@ export async function deleteWhatsAppInstance(instanceId: string): Promise<void> 
 export async function logoutWhatsAppInstance(instanceId: string): Promise<void> {
   await callProxy("logoutInstance", { instance_id: instanceId });
 }
+
+// ============================================================================
+// Message actions — Uazapi-only. Evolution instances return a provider error
+// which the caller should surface as a feature-unavailable toast.
+// ============================================================================
+
+export async function reactToMessage(
+  instanceId: string,
+  messageId: string,
+  number: string,
+  emoji: string
+): Promise<void> {
+  await callProxy("react", {
+    instance_id: instanceId,
+    payload: { message_id: messageId, number, emoji },
+  });
+}
+
+export async function editMessage(
+  instanceId: string,
+  messageId: string,
+  number: string,
+  text: string
+): Promise<void> {
+  await callProxy("editMessage", {
+    instance_id: instanceId,
+    payload: { message_id: messageId, number, text },
+  });
+}
+
+export async function pinMessage(
+  instanceId: string,
+  messageId: string,
+  number: string
+): Promise<void> {
+  await callProxy("pinMessage", {
+    instance_id: instanceId,
+    payload: { message_id: messageId, number },
+  });
+}
+
+export async function deleteMessage(
+  instanceId: string,
+  messageId: string,
+  number: string
+): Promise<void> {
+  await callProxy("deleteMessage", {
+    instance_id: instanceId,
+    payload: { message_id: messageId, number },
+  });
+}
+
+export async function markMessageRead(
+  instanceId: string,
+  messageId: string,
+  number: string
+): Promise<void> {
+  await callProxy("markRead", {
+    instance_id: instanceId,
+    payload: { message_id: messageId, number },
+  });
+}
