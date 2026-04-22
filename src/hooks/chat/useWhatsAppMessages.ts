@@ -1,0 +1,42 @@
+/**
+ * useWhatsAppMessages — query de mensagens por conversa.
+ * Extraído de src/hooks/useWhatsAppChat.ts (C12).
+ */
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
+import type { WhatsAppMessage } from "./types";
+
+/**
+ * Hook para buscar mensagens de um contato específico em uma instância (inbox).
+ * Filtra por instanceId para mostrar só a conversa daquele número.
+ */
+export function useWhatsAppMessages(
+  phoneNumber: string | null,
+  instanceId: string | null
+) {
+  const { data: teamMember } = useCurrentTeamMember();
+  const organizationId = teamMember?.organization_id;
+
+  return useQuery({
+    queryKey: ["whatsapp_messages", organizationId, phoneNumber, instanceId],
+    queryFn: async () => {
+      if (!organizationId || !phoneNumber || !instanceId) return [];
+
+      const { data, error } = await supabase
+        .from("whatsapp_messages")
+        .select("id, organization_id, instance_id, message_id, remote_jid, phone_number, direction, message_type, content, media_url, push_name, status, lead_id, timestamp, created_at, sent_by_ai")
+        .eq("organization_id", organizationId)
+        .eq("instance_id", instanceId)
+        .eq("phone_number", phoneNumber)
+        .order("timestamp", { ascending: true });
+
+      if (error) throw error;
+      return data as WhatsAppMessage[];
+    },
+    enabled: !!organizationId && !!phoneNumber && !!instanceId,
+    // Polling de fallback: atualiza mensagens do chat a cada 20s quando a aba está em foco
+    refetchInterval: phoneNumber && instanceId ? 20_000 : false,
+    refetchIntervalInBackground: false,
+  });
+}
