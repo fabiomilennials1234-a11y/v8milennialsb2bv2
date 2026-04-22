@@ -14,7 +14,6 @@ import {
   Mic,
   X,
   Bot,
-  UserPlus,
   Settings,
   RotateCw,
 } from "lucide-react";
@@ -65,9 +64,7 @@ import type { LeadContext, AttendantContext } from "@/lib/template-variables";
 import type { MessageTemplate } from "@/hooks/useMessageTemplates";
 import { useConversationDraft } from "@/hooks/useConversationDraft";
 import { useAuth } from "@/contexts/AuthContext";
-import { ChatEmptyState } from "@/components/chat/ChatEmptyState";
-import { UnreadDivider } from "@/components/chat/UnreadDivider";
-import { ScrollToBottomFab } from "@/components/chat/ScrollToBottomFab";
+// ChatEmptyState, UnreadDivider, ScrollToBottomFab usados em view/MessageList.tsx (C7).
 import { ScheduledMessagesBanner } from "./ScheduledMessagesBanner";
 import ConversationNotes from "@/components/chat/ConversationNotes";
 import { WhatsAppSettings } from "@/components/settings/WhatsAppSettings";
@@ -82,7 +79,7 @@ import {
 // DropdownMenu para SZ.chat transfer movido para view/ChatHeader.tsx (C6).
 // Select extraído para list/ConversationList.tsx (C5).
 import { format, isToday, isYesterday } from "date-fns";
-import { ptBR } from "date-fns/locale";
+// ptBR movido para view/MessageList.tsx (C7).
 import { toast } from "sonner";
 import { AudioPlayer, getAudioPlaybackUrl } from "./media/AudioPlayer";
 import { AudioRecorder as AudioRecorderMedia } from "./media/AudioRecorder";
@@ -92,6 +89,8 @@ import { ConversationList } from "./list/ConversationList";
 import { contactDisplayName } from "./list/ConversationListItem";
 import { ChatHeader } from "./view/ChatHeader";
 import type { SzChatSession } from "./view/ChatHeader";
+import { MessageList } from "./view/MessageList";
+import type { TransferEvent } from "./view/MessageList";
 
 /**
  * Re-export para backwards-compat — movido para media/AudioPlayer.tsx (C2).
@@ -385,13 +384,9 @@ function ChatWindow({
   const { data: aiStatus } = useLeadAiStatus(leadId);
   const currentAiDisabled = aiStatus?.ai_disabled ?? false;
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const mountTimeRef = useRef<number>(Date.now());
-  const scrollAreaRef = useRef<HTMLDivElement | null>(null);
-  const [isAtBottom, setIsAtBottom] = useState(true);
-  const [newMessagesCount, setNewMessagesCount] = useState(0);
 
   // Snapshot last-seen timestamp for unread divider (read before the conversation marks as seen)
   const lastReadAtRef = useRef<number>(0);
@@ -471,53 +466,6 @@ function ChatWindow({
 
   // Ativar realtime
   useWhatsAppMessagesRealtime(phoneNumber);
-
-  // Scroll listener for FAB visibility
-  useEffect(() => {
-    const viewport = scrollAreaRef.current?.querySelector<HTMLElement>("[data-radix-scroll-area-viewport]");
-    if (!viewport) return;
-    const handler = () => {
-      const distance = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
-      const atBottom = distance < 80;
-      setIsAtBottom(atBottom);
-      if (atBottom) setNewMessagesCount(0);
-    };
-    viewport.addEventListener("scroll", handler, { passive: true });
-    handler();
-    return () => viewport.removeEventListener("scroll", handler);
-  }, [phoneNumber]);
-
-  // Reset FAB state on conversation change
-  useEffect(() => {
-    setIsAtBottom(true);
-    setNewMessagesCount(0);
-  }, [phoneNumber]);
-
-  // Smart auto-scroll: always scroll on own messages, only scroll if at bottom for incoming
-  useEffect(() => {
-    if (messages.length === 0) return;
-    const lastMsg = messages[messages.length - 1];
-    const viewport = scrollAreaRef.current?.querySelector<HTMLElement>("[data-radix-scroll-area-viewport]");
-    if (lastMsg?.direction === "outgoing") {
-      // Own message: always scroll to bottom
-      if (viewport) {
-        viewport.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" });
-      } else {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-      }
-    } else if (isAtBottom) {
-      // Incoming: only scroll if already at bottom
-      if (viewport) {
-        viewport.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" });
-      } else {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-      }
-    } else {
-      // Incoming while scrolled up: increment counter
-      setNewMessagesCount((n) => n + 1);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messages]);
 
   const handleSend = async () => {
     if (!newMessage.trim() || !instanceName) return;
@@ -736,148 +684,24 @@ function ChatWindow({
         <ConversationNotes leadId={leadId} />
       )}
 
-      {/* Área de mensagens: altura limitada com scroll interno; boundary evita "fewer hooks" ao isolar erros */}
-      <div className="flex-1 min-h-0 overflow-hidden flex flex-col relative">
-        <ScrollArea ref={scrollAreaRef} className="flex-1 h-full">
-          <div className="p-4 min-h-full">
-            <MessagesAreaErrorBoundary>
-            {isLoading ? (
-              <div className="flex items-center justify-center min-h-[200px]">
-                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-              </div>
-            ) : messages.length === 0 ? (
-              <ChatEmptyState
-                contactName={contactName}
-                instanceName={instanceName}
-                onOpenTemplates={() => {
-                  setNewMessage("/");
-                  setShowSlashPopover(true);
-                  inputRef.current?.focus();
-                }}
-              />
-            ) : (
-              <div className="space-y-1 pb-4">
-                {(() => {
-                  // Merge messages + transfer events + failed messages, sorted by timestamp
-                  const timeline = [
-                    ...messages.map(m => ({ ...m, _type: 'message' as const })),
-                    ...transferEvents.map(e => ({ ...e, _type: 'transfer' as const })),
-                    ...failedMessages.map(f => ({ ...f, _type: 'message' as const, message_type: 'text', content: f.message, media_url: f.mediaUrl })),
-                  ].sort((a, b) => {
-                    const timeA = new Date(a.timestamp).getTime();
-                    const timeB = new Date(b.timestamp).getTime();
-                    return timeA - timeB;
-                  });
-
-                  // Compute unread divider position
-                  let firstUnreadIndex = -1;
-                  let unreadCount = 0;
-                  const lastReadAt = lastReadAtRef.current;
-                  if (lastReadAt > 0) {
-                    timeline.forEach((item, idx) => {
-                      if (item._type === 'message' && item.direction === 'incoming') {
-                        const msgTime = new Date(item.timestamp).getTime();
-                        if (msgTime > lastReadAt) {
-                          unreadCount++;
-                          if (firstUnreadIndex === -1) firstUnreadIndex = idx;
-                        }
-                      }
-                    });
-                  }
-
-                  let lastDate = "";
-                  return timeline.map((item, index) => {
-                    // Transfer event card
-                    if (item._type === 'transfer') {
-                      return (
-                        <div key={`transfer-${item.id}`} className="flex items-start gap-2 px-4 py-2 bg-amber-50 dark:bg-amber-950/20 border-l-2 border-amber-400 mx-4 my-2 rounded-r">
-                          <UserPlus className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
-                          <div>
-                            <p className="text-xs font-medium text-amber-800 dark:text-amber-200">Transferido para humano</p>
-                            {item.reason && (
-                              <p className="text-xs text-amber-700 dark:text-amber-300">{item.reason}</p>
-                            )}
-                            <time dateTime={item.timestamp} className="text-xs text-amber-500 mt-0.5 tabular-nums">
-                              {new Date(item.timestamp).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                            </time>
-                          </div>
-                        </div>
-                      );
-                    }
-
-                    // Normal message (preserve existing date separator + MessageBubble logic)
-                    const message = item;
-                    const ts = message?.timestamp;
-                    const date = ts ? new Date(ts) : new Date();
-                    const validDate = !Number.isNaN(date.getTime());
-                    const msgDate = validDate ? format(date, "dd/MM/yyyy", { locale: ptBR }) : "";
-                    const showDateSeparator = msgDate !== lastDate;
-                    if (showDateSeparator) lastDate = msgDate;
-                    const dateLabel = validDate
-                      ? isToday(date)
-                        ? "Hoje"
-                        : isYesterday(date)
-                          ? "Ontem"
-                          : format(date, "dd/MM/yyyy", { locale: ptBR })
-                      : "";
-                    const safeKey = message?.id || `msg-${index}-${ts || index}`;
-
-                    // Grouping: compare with adjacent message-type items
-                    const prevItem = index > 0 ? timeline[index - 1] : null;
-                    const nextItem = index < timeline.length - 1 ? timeline[index + 1] : null;
-                    const prevMsg = prevItem && prevItem._type === 'message' ? prevItem : null;
-                    const nextMsg = nextItem && nextItem._type === 'message' ? nextItem : null;
-                    const sameAuthorPrev = prevMsg && prevMsg.direction === message.direction && prevMsg.sent_by_ai === message.sent_by_ai;
-                    const sameAuthorNext = nextMsg && nextMsg.direction === message.direction && nextMsg.sent_by_ai === message.sent_by_ai;
-                    const deltaPrev = prevMsg ? Math.abs(new Date(message.timestamp).getTime() - new Date(prevMsg.timestamp).getTime()) : Infinity;
-                    const deltaNext = nextMsg ? Math.abs(new Date(nextMsg.timestamp).getTime() - new Date(message.timestamp).getTime()) : Infinity;
-                    const isFirstInGroup = !(sameAuthorPrev && deltaPrev < 120_000);
-                    const isLastInGroup = !(sameAuthorNext && deltaNext < 120_000);
-
-                    return (
-                      <div key={safeKey}>
-                        {showDateSeparator && (
-                          <div className="flex justify-center py-3">
-                            <time dateTime={validDate ? format(date, "yyyy-MM-dd") : ""} className="text-[11px] font-medium tracking-wider uppercase text-muted-foreground/40 bg-muted/30 px-3 py-1 rounded-full">
-                              {dateLabel}
-                            </time>
-                          </div>
-                        )}
-                        {index === firstUnreadIndex && unreadCount > 0 && (
-                          <UnreadDivider count={unreadCount} />
-                        )}
-                        <MessageBubble
-                          message={message}
-                          onImagePreview={setPreviewImageUrl}
-                          isFirstInGroup={isFirstInGroup}
-                          isLastInGroup={isLastInGroup}
-                          mountTime={mountTimeRef.current}
-                          onRetry={message.status === 'failed' ? retryMessage : undefined}
-                        />
-                      </div>
-                    );
-                  });
-                })()}
-                <div ref={messagesEndRef} />
-              </div>
-            )}
-            </MessagesAreaErrorBoundary>
-          </div>
-        </ScrollArea>
-        <ScrollToBottomFab
-          visible={!isAtBottom}
-          count={newMessagesCount}
-          onClick={() => {
-            const viewport = scrollAreaRef.current?.querySelector<HTMLElement>("[data-radix-scroll-area-viewport]");
-            if (viewport) {
-              viewport.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" });
-            } else {
-              messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-            }
-            setNewMessagesCount(0);
-          }}
-        />
-      </div>
+      {/* Área de mensagens — extraída para view/MessageList.tsx (C7) */}
+      <MessageList
+        messages={messages}
+        transferEvents={transferEvents as TransferEvent[]}
+        failedMessages={failedMessages}
+        isLoading={isLoading}
+        contactName={contactName}
+        instanceName={instanceName}
+        lastReadAt={lastReadAtRef.current}
+        mountTime={mountTimeRef.current}
+        onImagePreview={setPreviewImageUrl}
+        onRetry={retryMessage}
+        onOpenTemplates={() => {
+          setNewMessage("/");
+          setShowSlashPopover(true);
+          inputRef.current?.focus();
+        }}
+      />
 
       {/* Image Preview (para envio) - fixo acima do input */}
       {selectedImage && imagePreview && (
