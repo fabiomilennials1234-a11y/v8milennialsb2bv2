@@ -471,12 +471,12 @@ export function useSendWhatsAppMessage() {
         data = result.data;
         error = result.error;
       } else {
-        // Route through Evolution API (default for all other orgs)
-        const result = await supabase.functions.invoke("evolution-api-proxy", {
+        // Route through whatsapp-api-proxy (Uazapi provider)
+        const result = await supabase.functions.invoke("whatsapp-api-proxy", {
           body: {
-            endpoint: `/message/sendText/${instanceName}`,
-            method: "POST",
-            body: {
+            action: "sendText",
+            instance_id: instanceId,
+            payload: {
               number: formattedNumber,
               text: message,
             },
@@ -489,8 +489,8 @@ export function useSendWhatsAppMessage() {
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
 
-      // Salvar mensagem no banco localmente (upsert: trata corrida com webhook send.message silenciosamente)
-      const messageId = data?.key?.id || `local_${Date.now()}`;
+      // Salvar mensagem no banco localmente (upsert: trata corrida com webhook silenciosamente)
+      const messageId = data?.result?.message_id || data?.key?.id || `local_${Date.now()}`;
       const timestamp = new Date().toISOString();
       const { error: insertError } = await supabase.from("whatsapp_messages").upsert({
         organization_id: teamMember.organization_id,
@@ -670,46 +670,23 @@ export function useSendWhatsAppMedia() {
           throw new Error(data.error);
         }
       } else {
-        // Route through Evolution API (default for all other orgs)
-        let endpoint: string;
-        let body: Record<string, unknown>;
-
-        if (mediaType === "audio") {
-          // Endpoint para áudio PTT (push-to-talk)
-          endpoint = `/message/sendWhatsAppAudio/${instanceName}`;
-          body = {
-            number: formattedNumber,
-            audio: mediaUrl,
-          };
-        } else {
-          // Endpoint para imagem, documento, vídeo
-          endpoint = `/message/sendMedia/${instanceName}`;
-          body = {
-            number: formattedNumber,
-            mediatype: mediaType,
-            mimetype: mimetype || getMimeType(mediaType),
-            caption: caption || "",
-            media: mediaUrl,
-            fileName: fileName || `file_${Date.now()}`,
-          };
+        // Route through whatsapp-api-proxy (Uazapi provider)
+        const mediaPayload: Record<string, unknown> = {
+          number: formattedNumber,
+          type: mediaType === "audio" ? "ptt" : mediaType,
+          file: mediaUrl,
+        };
+        if (mediaType !== "audio") {
+          mediaPayload.caption = caption || undefined;
+          mediaPayload.filename = fileName || `file_${Date.now()}`;
         }
 
-        const requestPayload = {
-          endpoint,
-          method: "POST",
-          body,
-        };
-
-        console.log("[WhatsApp Media] ====== REQUEST DETAILS ======");
-        console.log("[WhatsApp Media] Endpoint:", endpoint);
-        console.log("[WhatsApp Media] To:", formattedNumber);
-        console.log("[WhatsApp Media] Media URL:", mediaUrl);
-        console.log("[WhatsApp Media] Full Body:", JSON.stringify(body, null, 2));
-        console.log("[WhatsApp Media] Request Payload:", JSON.stringify(requestPayload, null, 2));
-        console.log("[WhatsApp Media] ==============================");
-
-        const result = await supabase.functions.invoke("evolution-api-proxy", {
-          body: requestPayload,
+        const result = await supabase.functions.invoke("whatsapp-api-proxy", {
+          body: {
+            action: mediaType === "audio" ? "sendAudio" : "sendMedia",
+            instance_id: instanceId,
+            payload: mediaPayload,
+          },
         });
         data = result.data;
         error = result.error;

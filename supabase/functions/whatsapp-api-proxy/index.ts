@@ -297,8 +297,73 @@ Deno.serve(
         }
 
         // -------------------------------------------------------------------
-        // Message actions — Uazapi-only. Evolution returns NotSupportedError
-        // bubbled up as 500 by the outer try/catch.
+        // Direct send actions — routed through adapter
+        // -------------------------------------------------------------------
+        case "sendText": {
+          const { number, text, delay, replyid } = payload as {
+            number?: string;
+            text?: string;
+            delay?: number;
+            replyid?: string;
+          };
+          if (!number || !text) {
+            return jsonResponse(400, { error: "Missing number/text" }, corsHeaders);
+          }
+          result = await provider.sendText({
+            number,
+            text,
+            delay,
+            replyid,
+            trackSource: "whatsapp-api-proxy",
+          });
+          break;
+        }
+
+        case "sendMedia": {
+          const { number, type, file, filename, caption, delay } = payload as {
+            number?: string;
+            type?: "image" | "video" | "document" | "audio" | "ptt" | "sticker";
+            file?: string;
+            filename?: string;
+            caption?: string;
+            delay?: number;
+          };
+          if (!number || !type || !file) {
+            return jsonResponse(400, { error: "Missing number/type/file" }, corsHeaders);
+          }
+          result = await provider.sendMedia({
+            number,
+            type,
+            file,
+            filename,
+            caption,
+            delay,
+            trackSource: "whatsapp-api-proxy",
+          });
+          break;
+        }
+
+        case "sendAudio": {
+          const { number, file, delay } = payload as {
+            number?: string;
+            file?: string;
+            delay?: number;
+          };
+          if (!number || !file) {
+            return jsonResponse(400, { error: "Missing number/file" }, corsHeaders);
+          }
+          result = await provider.sendMedia({
+            number,
+            type: "ptt",
+            file,
+            delay,
+            trackSource: "whatsapp-api-proxy",
+          });
+          break;
+        }
+
+        // -------------------------------------------------------------------
+        // Message actions — Uazapi-only.
         // -------------------------------------------------------------------
         case "react": {
           if (!provider.react) throw new Error("Provider does not support react");

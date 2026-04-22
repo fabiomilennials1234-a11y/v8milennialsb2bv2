@@ -64,7 +64,7 @@ Não pule o Conductor. Não pule o SDD. Não declare pronto sem atualizar Obsidi
 | Forms | React Hook Form + Zod |
 | Backend | Supabase (Postgres + Auth + Edge Functions + Realtime + Storage) |
 | AI | Google Gemini (embeddings 1536d) + pgvector (RAG) |
-| Integrações | Evolution API (WhatsApp), Meta, Google Calendar, TinyERP, Asaas, n8n, SZ.Chat, ElevenLabs |
+| Integrações | Uazapi (WhatsApp provider), Meta, Google Calendar, TinyERP, Asaas, n8n, SZ.Chat, ElevenLabs |
 | Testes | Vitest (unit/integration) + Playwright (E2E) |
 | Monitoring | Sentry |
 
