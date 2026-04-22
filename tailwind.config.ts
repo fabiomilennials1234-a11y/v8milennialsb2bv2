@@ -138,5 +138,53 @@ export default {
       },
     },
   },
-  plugins: [require("tailwindcss-animate")],
+  plugins: [
+    require("tailwindcss-animate"),
+    // ─── Chat bubble utilities (C15) ─────────────────────────────────────────
+    // Consomem CSS vars injetadas por useChatDensity + index.css bubble tokens.
+    // Transition de padding/margin para density toggle animado (120ms ease-out).
+    // prefers-reduced-motion: transition none via CSS em index.css.
+    function({ addUtilities }: { addUtilities: (utilities: Record<string, Record<string, string>>) => void }) {
+      addUtilities({
+        ".chat-bubble": {
+          paddingLeft: "var(--chat-bubble-padding-x)",
+          paddingRight: "var(--chat-bubble-padding-x)",
+          paddingTop: "var(--chat-bubble-padding-y)",
+          paddingBottom: "var(--chat-bubble-padding-y)",
+          transition: "padding 120ms ease-out",
+        },
+        ".chat-bubble-outgoing": {
+          backgroundColor: "hsl(var(--bubble-outgoing))",
+          borderColor: "hsl(var(--bubble-outgoing-border))",
+          color: "hsl(var(--bubble-outgoing-foreground))",
+        },
+        ".chat-bubble-incoming": {
+          backgroundColor: "hsl(var(--bubble-incoming))",
+          borderColor: "hsl(var(--bubble-incoming-border))",
+          color: "hsl(var(--bubble-incoming-foreground))",
+        },
+        ".chat-bubble-ai": {
+          backgroundColor: "hsl(var(--bubble-ai))",
+          color: "hsl(var(--bubble-ai-foreground))",
+          borderRight: "1px solid hsl(var(--bubble-ai-border) / 0.3)",
+          borderTop: "1px solid hsl(var(--bubble-ai-border) / 0.3)",
+          borderBottom: "1px solid hsl(var(--bubble-ai-border) / 0.3)",
+          borderLeft: "3px solid hsl(var(--bubble-ai-border))",
+        },
+        ".chat-bubble-system": {
+          backgroundColor: "hsl(var(--bubble-system))",
+          borderColor: "hsl(var(--bubble-system-border))",
+          color: "hsl(var(--bubble-system-foreground))",
+        },
+        ".chat-gap-same": {
+          marginTop: "var(--chat-msg-gap-same-author)",
+          transition: "margin-top 120ms ease-out",
+        },
+        ".chat-gap-diff": {
+          marginTop: "var(--chat-msg-gap-different)",
+          transition: "margin-top 120ms ease-out",
+        },
+      });
+    },
+  ],
 } satisfies Config;
