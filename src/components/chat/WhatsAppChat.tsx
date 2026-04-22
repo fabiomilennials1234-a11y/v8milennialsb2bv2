@@ -1123,7 +1123,7 @@ export function MessageBubble({
           "max-w-[75%] px-4 py-2.5",
           radiusClass,
           isOutgoing
-            ? "bg-muted border border-border/50"
+            ? "bg-muted/80 border border-border/60"
             : "bg-card border border-border/40"
         )}
       >
