@@ -362,7 +362,7 @@ function EmbeddedChatContent({
               onChange={(e) => setNewMessage(e.target.value)}
               onKeyDown={handleKeyDown}
               disabled={sendMessage.isPending || sendMedia.isPending}
-              className="flex-1 h-8 text-sm rounded-full border border-border/60 bg-background focus:ring-1 focus:ring-primary/30"
+              className="flex-1 h-8 text-sm rounded-full border border-border/60 bg-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
             />
             <Button variant="ghost" size="icon" className="h-8 w-8 opacity-50 hover:opacity-100 hover:text-primary" onClick={() => setScheduleModalOpen(true)} title="Agendar mensagem">
               <Clock className="w-3.5 h-3.5" />

@@ -448,8 +448,11 @@ function ContactList({
               return (
                 <motion.div
                   key={contact.phone_number}
-                  className={cn(
-                    "w-full px-3 py-3 text-left transition-colors rounded-none border-l-2 cursor-pointer",
+                  tabIndex={0}
+              role="button"
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelectContact(contact.phone_number); } }}
+              className={cn(
+                    "w-full px-3 py-3 text-left transition-colors rounded-none border-l-2 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:z-10 focus-visible:relative",
                     isSelected
                       ? "bg-primary/15 border-l-primary"
                       : contact.unread_count > 0
@@ -1997,7 +2000,7 @@ function ChatWindow({
               }}
               onKeyDown={handleKeyDown}
               disabled={sendMessage.isPending || sendMedia.isPending}
-              className="flex-1 rounded-full border border-border/60 bg-background focus:ring-1 focus:ring-primary/30"
+              className="flex-1 rounded-full border border-border/60 bg-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
             />
 
             {/* Botão de agendar — sempre visível */}
