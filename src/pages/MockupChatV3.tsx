@@ -12,7 +12,7 @@
 
 import { useState, useCallback, useRef, Component, type ReactNode, type ErrorInfo } from "react";
 import { Link } from "react-router-dom";
-import { Moon, Sun, ExternalLink, CheckCircle2, XCircle, ChevronRight, GitBranch, Hash, Layers, Zap, Eye, Palette, Sparkles } from "lucide-react";
+import { Moon, Sun, ExternalLink, CheckCircle2, XCircle, ChevronRight, GitBranch, Hash, Layers, Zap, Eye, Palette, Sparkles, Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -57,7 +57,7 @@ const MOCK_LEAD = {
   id: "demo-lead-1",
   name: "Rodrigo Ferreira",
   company: "Distribuidora Souza",
-  phone: "11987654321",
+  phone: "(11) 98765-4321",
   email: "rodrigo@souza.com.br",
   source: "meta_ads",
   qualification_score: 78,
@@ -209,42 +209,72 @@ function LeadCurrentStageStub() {
   );
 }
 
-function LeadCustomFieldsStub() {
-  const MOCK_FIELDS = [
-    { id: "f1", label: "Segmento", type: "select", value: "Distribuidora" },
-    { id: "f2", label: "Orçamento", type: "number", value: "150000" },
-    { id: "f3", label: "Website", type: "url", value: "https://souza.com.br" },
+// LeadFieldGridStub — grid unificada padrão + personalizados (C27/C28/C29 showcase)
+function LeadFieldGridStub() {
+  const MOCK_STANDARD = [
+    { id: "s1", label: "Nome",      Icon: null,      value: MOCK_LEAD.name,    custom: false },
+    { id: "s2", label: "Empresa",   Icon: null,      value: MOCK_LEAD.company, custom: false },
+    { id: "s3", label: "Email",     Icon: null,      value: MOCK_LEAD.email,   custom: false },
+    { id: "s4", label: "Telefone",  Icon: null,      value: MOCK_LEAD.phone,   custom: false },
+    { id: "s5", label: "Segmento",  Icon: null,      value: "Distribuidora",   custom: false },
+    { id: "s6", label: "Interesse", Icon: null,      value: "Plano Pro",       custom: false },
   ] as const;
 
+  const MOCK_CUSTOM = [
+    { id: "c1", label: "Orçamento",   value: "R$ 150.000",           custom: true },
+    { id: "c2", label: "Website",     value: "https://souza.com.br", custom: true, url: true },
+    { id: "c3", label: "Funcionários",value: "42",                   custom: true },
+  ] as const;
+
+  const ALL = [...MOCK_STANDARD, ...MOCK_CUSTOM];
+
   return (
-    <div className="space-y-3">
-      {MOCK_FIELDS.map((f) => (
-        <div key={f.id} className="space-y-1">
-          <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Sparkles className="w-3 h-3" />
-            {f.label}
-          </label>
-          <div
-            className="h-8 w-full rounded-md border border-transparent px-2 flex items-center text-sm
-              hover:border-border hover:bg-muted/40 transition-colors cursor-pointer"
-          >
-            {f.type === "number" ? (
-              <span className="tabular-nums">
-                {Number(f.value).toLocaleString("pt-BR")}
-              </span>
-            ) : f.type === "url" ? (
-              <span className="text-primary underline underline-offset-2 flex items-center gap-1">
-                {f.value}
-                <ExternalLink className="w-3 h-3" />
-              </span>
-            ) : (
-              <span>{f.value}</span>
-            )}
+    <div className="space-y-2">
+      <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+        {ALL.map((f) => (
+          <div key={f.id} className="space-y-1">
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              {f.custom && (
+                <Sparkles className="w-2.5 h-2.5 shrink-0 text-muted-foreground/60" aria-label="Campo personalizado" />
+              )}
+              {f.label}
+            </label>
+            <div
+              className="h-8 w-full rounded-md border border-transparent px-2 flex items-center text-sm
+                hover:border-border hover:bg-muted/40 transition-colors cursor-pointer"
+            >
+              {"url" in f && f.url ? (
+                <span className="text-primary underline underline-offset-2 flex items-center gap-1">
+                  {f.value}
+                  <ExternalLink className="w-3 h-3" />
+                </span>
+              ) : (
+                <span className={f.custom ? "tabular-nums" : ""}>{f.value}</span>
+              )}
+            </div>
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
+
+      {/* Adicionar campo — stub do AddCustomFieldPopover */}
+      <button
+        type="button"
+        className="w-full flex items-center gap-1.5 text-xs text-muted-foreground
+          hover:text-foreground hover:bg-muted/40 h-8 px-2 rounded-md transition-colors mt-1"
+        disabled
+        aria-disabled="true"
+        title="No mockup — real component uses AddCustomFieldPopover"
+      >
+        <Plus className="w-3.5 h-3.5 shrink-0" />
+        Adicionar campo
+      </button>
     </div>
   );
+}
+
+/** @deprecated Use LeadFieldGridStub — kept for reference */
+function LeadCustomFieldsStub() {
+  return <LeadFieldGridStub />;
 }
 
 // ─── Seção 2 — Rate limit demo ────────────────────────────────────────────────
@@ -579,9 +609,7 @@ export default function MockupChatV3() {
                   ))}
                 </div>
 
-                {/* Tab content mock */}
-                <LeadContactInfoStub />
-
+                {/* Tab content mock — grid unificada (C27) */}
                 <SectionErrorBoundary label="LeadResponsibles">
                   <LeadResponsiblesStub />
                 </SectionErrorBoundary>
@@ -589,6 +617,11 @@ export default function MockupChatV3() {
                 <SectionErrorBoundary label="LeadQualification">
                   <LeadQualificationStub />
                 </SectionErrorBoundary>
+
+                <div className="border-t border-border/40 pt-3 mt-1">
+                  <p className="text-[10px] font-mono text-muted-foreground/60 mb-2">LeadFieldGrid — padrão + personalizados</p>
+                  <LeadFieldGridStub />
+                </div>
               </CardContent>
             </Card>
 
@@ -637,11 +670,33 @@ export default function MockupChatV3() {
                 </ModuleCard>
 
                 <ModuleCard
-                  label="LeadCustomFields"
-                  path="src/components/lead/info/LeadCustomFields.tsx"
-                  description="Campos personalizados da org. Props: leadId. Inline edit por tipo (text, number, date, select, boolean)."
+                  label="LeadFieldGrid"
+                  path="src/components/lead/info/LeadFieldGrid.tsx"
+                  description="Grid unificada: campos padrão + personalizados. Badge Sparkles sutil nos campos custom. Inline edit por tipo."
                 >
-                  <LeadCustomFieldsStub />
+                  <LeadFieldGridStub />
+                </ModuleCard>
+
+                <ModuleCard
+                  label="AddCustomFieldPopover"
+                  path="src/components/lead/info/AddCustomFieldPopover.tsx"
+                  description="Cria campo personalizado inline: nome, tipo, opções (se select), obrigatório. useCreateCustomField."
+                >
+                  <div className="flex flex-col gap-2">
+                    <p className="text-xs text-muted-foreground">Botão trigger no fim do LeadFieldGrid:</p>
+                    <button
+                      type="button"
+                      disabled
+                      className="w-full flex items-center gap-1.5 text-xs text-muted-foreground
+                        bg-muted/20 border border-dashed border-border h-8 px-2 rounded-md cursor-default"
+                    >
+                      <Plus className="w-3.5 h-3.5 shrink-0" />
+                      Adicionar campo
+                    </button>
+                    <p className="text-[10px] text-muted-foreground/50">
+                      Abre Popover com mini form. Submit → useCreateCustomField → toast → grid atualiza.
+                    </p>
+                  </div>
                 </ModuleCard>
               </CardContent>
             </Card>
