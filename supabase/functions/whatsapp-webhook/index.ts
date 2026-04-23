@@ -193,6 +193,80 @@ async function handleMessagesEvent(
   }
 }
 
+async function handlePaymentResponseEvent(
+  supabase: ReturnType<typeof createClient>,
+  instance: ResolvedInstance,
+  data: any
+) {
+  // Uazapi payload: { pixkey, amount, status: 'paid'|'pending'|'failed',
+  //                   track_id, chatid, messageid }
+  const status = String(data.status ?? "").toLowerCase();
+  if (status !== "paid" && status !== "completed" && status !== "failed") {
+    return;
+  }
+
+  const leadId = data.track_id ?? null;
+  const remoteJid = data.chatid ?? data.remoteJid ?? null;
+
+  // Reflect payment status into the related message row
+  const messageId = data.messageid ?? data.id;
+  if (messageId) {
+    await supabase
+      .from("whatsapp_messages")
+      .update({ status: status === "failed" ? "failed" : "paid" })
+      .eq("message_id", messageId)
+      .eq("instance_id", instance.id);
+  }
+
+  // Move the proposal lead stage to "pago" on successful payment
+  if (status === "paid" || status === "completed") {
+    const targetLeadId = leadId
+      ? leadId
+      : remoteJid
+      ? await (async () => {
+          const { data: msg } = await supabase
+            .from("whatsapp_messages")
+            .select("lead_id")
+            .eq("instance_id", instance.id)
+            .eq("remote_jid", remoteJid)
+            .not("lead_id", "is", null)
+            .order("timestamp", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          return (msg as any)?.lead_id ?? null;
+        })()
+      : null;
+
+    if (targetLeadId) {
+      await supabase
+        .from("pipe_propostas")
+        .update({ status: "pago", paid_at: new Date().toISOString() })
+        .eq("lead_id", targetLeadId);
+
+      await supabase.from("lead_history").insert({
+        organization_id: instance.organization_id,
+        lead_id: targetLeadId,
+        action: "payment_confirmed",
+        description: `PIX confirmado via Uazapi (R$ ${data.amount ?? "?"})`,
+        source: "webhook",
+        metadata: data as Record<string, unknown>,
+      });
+    }
+  }
+
+  await logRuntime({
+    organizationId: instance.organization_id,
+    module: "webhook",
+    action: "uazapi_payment_response",
+    status: status === "paid" || status === "completed" ? "success" : "error",
+    payloadSnapshot: {
+      instance_id: instance.id,
+      lead_id: leadId,
+      pix_status: status,
+    },
+  });
+}
+
 async function handleMessagesUpdateEvent(
   supabase: ReturnType<typeof createClient>,
   instance: ResolvedInstance,
@@ -425,6 +499,14 @@ Deno.serve(
               break;
             case "connection":
               await handleConnectionEvent(
+                supabase,
+                instance,
+                payload.data ?? payload
+              );
+              break;
+            case "payment":
+            case "payment_response":
+              await handlePaymentResponseEvent(
                 supabase,
                 instance,
                 payload.data ?? payload
