@@ -1,20 +1,27 @@
 /**
  * LeadTabInfo — tab de informações do lead.
  *
- * Orquestra: LeadContactInfo + LeadQualification + LeadNotes + LeadSource + LeadResponsibles.
- * Extraído de LeadDetailContent (Onda 3.1, C8).
+ * Onda 3.1, C29 (refactor).
+ *
+ * Usa LeadFieldGrid para unificar campos padrão + personalizados em grid única.
+ * LeadResponsibles, LeadQualification e LeadSource mantidos como sections
+ * separadas no topo (são semânticas — papéis, score/rating, origem).
+ * AddCustomFieldPopover integrado no final da grid.
+ *
+ * Props backwards-compat: formData + onChange para campos padrão.
+ * onLeadUpdate: callback chamado quando campo inline é salvo (para parent persistir).
  */
 
-import { Loader2, Check, ExternalLink, Tag, Sparkles } from "lucide-react";
+import { Loader2, Check, ExternalLink, Tag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
-import { LeadContactInfo } from "@/components/lead/info/LeadContactInfo";
 import { LeadQualification } from "@/components/lead/info/LeadQualification";
 import { LeadResponsibles } from "@/components/lead/info/LeadResponsibles";
 import { LeadSource } from "@/components/lead/info/LeadSource";
-import { LeadCustomFields } from "@/components/lead/info/LeadCustomFields";
 import { LeadNotes } from "@/components/lead/notes/LeadNotes";
+import { LeadFieldGrid, type LeadStandardData } from "@/components/lead/info/LeadFieldGrid";
+import { AddCustomFieldPopover } from "@/components/lead/info/AddCustomFieldPopover";
 import type { LeadContactFormData } from "@/components/lead/info/LeadContactInfo";
 
 interface LeadTag {
@@ -43,6 +50,8 @@ interface LeadTabInfoProps {
   responsible?: LeadResponsibleRef | null;
   sdr?: LeadResponsibleRef | null;
   closer?: LeadResponsibleRef | null;
+  /** Called when grid inline-edits a standard field. Parent should persist to DB. */
+  onLeadFieldUpdate?: (field: keyof LeadStandardData, value: string) => void;
 }
 
 export function LeadTabInfo({
@@ -58,21 +67,26 @@ export function LeadTabInfo({
   responsible,
   sdr,
   closer,
+  onLeadFieldUpdate,
 }: LeadTabInfoProps) {
+  // Build LeadStandardData from formData (backwards-compat bridge)
+  const leadData: LeadStandardData = {
+    name:    formData.name,
+    company: formData.company,
+    email:   formData.email,
+  };
+
   return (
     <div className="space-y-4">
-      {/* Contact fields: nome, empresa, email */}
-      <LeadContactInfo formData={formData} onChange={onChange} />
-
-      {/* Rating + score IA */}
+      {/* Rating + score IA — semântico, fica separado no topo */}
       <LeadQualification
         formData={formData}
         onChange={onChange}
         qualificationScore={qualificationScore}
       />
 
-      {/* Notas */}
-      <LeadNotes formData={formData} onChange={onChange} />
+      {/* Responsáveis — SDR/Closer/Responsible, semântico */}
+      <LeadResponsibles responsible={responsible} sdr={sdr} closer={closer} />
 
       {/* Tags (read-only) */}
       {leadTags.length > 0 && (
@@ -85,8 +99,8 @@ export function LeadTabInfo({
                 variant="outline"
                 style={{
                   backgroundColor: `${lt.tag.color}20`,
-                  borderColor: `${lt.tag.color}40`,
-                  color: lt.tag.color,
+                  borderColor:     `${lt.tag.color}40`,
+                  color:           lt.tag.color,
                 }}
               >
                 <Tag className="w-3 h-3 mr-1" />
@@ -100,21 +114,21 @@ export function LeadTabInfo({
       {/* Origem */}
       <LeadSource origin={origin} originDetail={originDetail} />
 
-      {/* Responsáveis */}
-      <LeadResponsibles responsible={responsible} sdr={sdr} closer={closer} />
+      {/* Notas */}
+      <LeadNotes formData={formData} onChange={onChange} />
 
-      {/* Campos personalizados */}
-      <div className="border-t border-border/40 pt-4 mt-4 space-y-3">
-        <div className="flex items-center gap-1.5">
-          <Sparkles className="w-3.5 h-3.5 text-muted-foreground" />
-          <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-            Campos personalizados
-          </Label>
-        </div>
-        <LeadCustomFields leadId={leadId} />
+      {/* Grid unificada — campos padrão + personalizados juntos */}
+      <div className="border-t border-border/40 pt-4 mt-4 space-y-1">
+        <LeadFieldGrid
+          leadId={leadId}
+          lead={leadData}
+          onLeadUpdate={onLeadFieldUpdate}
+        />
+        {/* Adicionar campo personalizado inline */}
+        <AddCustomFieldPopover />
       </div>
 
-      {/* Ações */}
+      {/* Ações de save do formData principal (rating, notas, etc.) */}
       <div className="flex gap-2 pt-2">
         <Button
           variant="outline"
