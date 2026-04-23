@@ -5,7 +5,7 @@ tags:
   - torque-crm
   - comunicacao
 created: 2026-04-12
-last_updated: 2026-04-20
+last_updated: 2026-04-23
 status: active
 ---
 
@@ -109,6 +109,20 @@ Webhook externo (Evolution/Meta/SZ.Chat)
 
 ## Historico de mudancas
 
+### 2026-04-23 — Onda 6 final (Dark LOW pages closure)
+
+- `src/pages/Privacidade.tsx` — full dark-ification (14 ocorrencias gray-* → semantic tokens)
+- `src/pages/master/MasterFeatures.tsx` + `MasterAuditLogs.tsx` — badge fallback `bg-gray-500` → `bg-muted text-muted-foreground`
+- `src/pages/master/MasterOperations.tsx` — skipped + engine badge fallback semantico
+- `src/pages/AutomacoesExecucoes.tsx` — skipped status `text-gray-400` → `text-muted-foreground` (2 ocorrencias)
+- `src/pages/PipeWhatsapp.tsx` — TikTok badge `bg-gray-900` → `bg-foreground text-background` (brand compliant), "Outros" fallback semantico
+- `src/pages/CampanhaDetail.tsx` — manual campaign badge simplificado para semantic puro
+
+Dark LOW pages: **100% limpo** (grep `gray-[0-9]+` em `src/pages/` → 0 matches).
+
+Diferido para Onda 6.1: 13 componentes em `src/components/**` com 22 ocorrencias residuais. Ver `.specs/features/chat-onda-6/tasks.md` para lista exata.
+
+Branch: `feat/chat-onda-6-final` (nao mergeada — PR manual pelo CTO).
 
 ## Links relacionados
 
