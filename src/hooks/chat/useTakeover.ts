@@ -22,6 +22,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import type { TablesUpdate } from "@/integrations/supabase/types";
 import type { AiTakeoverState, AiStateResumeMode, AiStatePayload } from "@/lib/chat-types";
 
 // ─── Defaults ─────────────────────────────────────────────────────────────────
@@ -83,9 +84,9 @@ export function useTakeover(conversationId: string | null | undefined): UseTakeo
       if (!row) return null;
 
       return {
-        ai_state: (row as Record<string, unknown>).ai_state as AiTakeoverState ?? DEFAULT_STATE,
-        ai_state_resume_mode: (row as Record<string, unknown>).ai_state_resume_mode as AiStateResumeMode | null ?? null,
-        ai_state_updated_at: (row as Record<string, unknown>).ai_state_updated_at as string | null ?? null,
+        ai_state: (row.ai_state ?? DEFAULT_STATE) as AiTakeoverState,
+        ai_state_resume_mode: (row.ai_state_resume_mode ?? null) as AiStateResumeMode | null,
+        ai_state_updated_at: row.ai_state_updated_at ?? null,
       };
     },
     enabled: !!conversationId && !!user,
@@ -98,13 +99,13 @@ export function useTakeover(conversationId: string | null | undefined): UseTakeo
       if (!conversationId) throw new Error("conversationId ausente");
       if (!user) throw new Error("Usuário não autenticado");
 
-      const updatePayload: Record<string, unknown> = {
+      const updatePayload: TablesUpdate<"conversations"> = {
         ai_state: payload.ai_state,
         ai_state_updated_by: payload.ai_state_updated_by,
+        ...(payload.ai_state_resume_mode !== undefined && {
+          ai_state_resume_mode: payload.ai_state_resume_mode,
+        }),
       };
-      if (payload.ai_state_resume_mode !== undefined) {
-        updatePayload.ai_state_resume_mode = payload.ai_state_resume_mode;
-      }
 
       const { error } = await supabase
         .from("conversations")
