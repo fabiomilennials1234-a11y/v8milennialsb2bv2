@@ -290,6 +290,60 @@ describe("requireAuth — happy paths", () => {
   });
 });
 
+// ─── requireOrganization (modo estrito multi-tenant) ──────────────────────
+
+describe("requireAuth — requireOrganization", () => {
+  it("throws 400 when requireOrganization=true and no orgId provided (non-master)", async () => {
+    mockState.user = { id: "u-multi" };
+    // user tem team_member em DUAS orgs — fallback iria pegar a errada
+    mockState.tables.team_members = [
+      { id: "tm-A", user_id: "u-multi", organization_id: "org-A", role: "admin", is_active: true, job_title: null, metric_type: null },
+      { id: "tm-B", user_id: "u-multi", organization_id: "org-B", role: "membro", is_active: true, job_title: null, metric_type: null },
+    ];
+    const req = new Request("https://x", { headers: { Authorization: "Bearer v" } });
+    await expect(
+      requireAuth(req, { requireOrganization: true }),
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
+  it("resolves against the exact org when organization_id is in body (multi-org user)", async () => {
+    mockState.user = { id: "u-multi" };
+    mockState.tables.team_members = [
+      { id: "tm-A", user_id: "u-multi", organization_id: "org-A", role: "admin", is_active: true, job_title: null, metric_type: null },
+      { id: "tm-B", user_id: "u-multi", organization_id: "org-B", role: "membro", is_active: true, job_title: null, metric_type: null },
+    ];
+    const req = new Request("https://x", { headers: { Authorization: "Bearer v" } });
+    const ctx = await requireAuth(req, {
+      body: { organization_id: "org-B" },
+      requireOrganization: true,
+    });
+    expect(ctx.organizationId).toBe("org-B");
+    expect(ctx.teamMemberId).toBe("tm-B");
+    expect(ctx.role).toBe("membro");
+    expect(ctx.isAdmin).toBe(false);
+  });
+
+  it("master user bypasses requireOrganization (master is global)", async () => {
+    mockState.user = { id: "u-master" };
+    mockState.tables.master_users = [{ id: "m1", user_id: "u-master", is_active: true }];
+    const req = new Request("https://x", { headers: { Authorization: "Bearer v" } });
+    const ctx = await requireAuth(req, { requireOrganization: true });
+    expect(ctx.isMaster).toBe(true);
+    expect(ctx.isAdmin).toBe(true);
+  });
+
+  it("rejects when body.organization_id is an org the user does not belong to", async () => {
+    mockState.user = { id: "u1" };
+    mockState.tables.team_members = [
+      { id: "tm1", user_id: "u1", organization_id: "org-mine", role: "admin", is_active: true, job_title: null, metric_type: null },
+    ];
+    const req = new Request("https://x", { headers: { Authorization: "Bearer v" } });
+    await expect(
+      requireAuth(req, { body: { organization_id: "org-other" }, requireOrganization: true }),
+    ).rejects.toMatchObject({ status: 403 });
+  });
+});
+
 // ─── Internal API key path ────────────────────────────────────────────────
 
 describe("requireAuth — internal API key", () => {
