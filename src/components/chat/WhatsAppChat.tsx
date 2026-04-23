@@ -814,6 +814,8 @@ function ChatWindow({
           setShowSlashPopover(true);
           inputRef.current?.focus();
         }}
+        instanceId={instanceId}
+        enableActions={true}
       />
 
       {/* Image Preview (para envio) - fixo acima do input */}

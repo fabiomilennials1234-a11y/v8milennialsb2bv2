@@ -55,6 +55,16 @@ export interface MessageListProps {
   onOpenTemplates: () => void;
   /** Modo de densidade para estimativa de tamanho do virtualizer. */
   density?: DensityMode;
+  /**
+   * ID da instância uazapi. Quando fornecido junto com enableActions=true,
+   * ativa o action bar (react/edit/pin/delete/markRead) em cada MessageBubble.
+   */
+  instanceId?: string;
+  /**
+   * Habilita as bubble actions uazapi. Default false para preservar
+   * comportamento em mockups e contextos sem instância real.
+   */
+  enableActions?: boolean;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -119,6 +129,8 @@ export function MessageList({
   onRetry,
   onOpenTemplates,
   density = "comfortable",
+  instanceId,
+  enableActions = false,
 }: MessageListProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement | null>(null);
@@ -321,10 +333,12 @@ export function MessageList({
           isLastInGroup={isLastInGroup}
           mountTime={mountTime}
           onRetry={message.status === "failed" ? onRetry : undefined}
+          instanceId={instanceId}
+          enableActions={enableActions}
         />
       </div>
     );
-  }, [timeline, firstUnreadIndex, unreadCount, mountTime, onImagePreview, onRetry]);
+  }, [timeline, firstUnreadIndex, unreadCount, mountTime, onImagePreview, onRetry, instanceId, enableActions]);
 
   return (
     <div className="flex-1 min-h-0 overflow-hidden flex flex-col relative">
