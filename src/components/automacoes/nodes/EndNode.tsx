@@ -11,7 +11,7 @@ function EndNodeComponent({ id, data, selected }: NodeProps) {
     <BaseNode
       nodeId={id}
       nodeType="end"
-      icon={<CircleStop className="w-5 h-5 text-gray-400" />}
+      icon={<CircleStop className="w-5 h-5 text-muted-foreground" />}
       title={nodeData.label || "Fim"}
       subtitle="Encerra o workflow"
       selected={selected}
