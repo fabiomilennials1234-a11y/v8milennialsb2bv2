@@ -363,16 +363,16 @@ export function useSendChannelMessage() {
       if (!teamMember?.organization_id) throw new Error("Organizacao nao encontrada");
 
       if (channel === "whatsapp") {
-        // Enviar via Evolution API (mesmo fluxo existente)
-        if (!instanceName) throw new Error("instanceName obrigatorio para WhatsApp");
+        // Enviar via whatsapp-api-proxy (Uazapi provider)
+        if (!instanceId) throw new Error("instanceId obrigatorio para WhatsApp");
 
         const formattedNumber = formatPhoneForWhatsApp(contactId);
         if (!formattedNumber) throw new Error("Número de telefone inválido");
-        const { data, error } = await supabase.functions.invoke("evolution-api-proxy", {
+        const { data, error } = await supabase.functions.invoke("whatsapp-api-proxy", {
           body: {
-            endpoint: `/message/sendText/${instanceName}`,
-            method: "POST",
-            body: { number: formattedNumber, text: message },
+            action: "sendText",
+            instance_id: instanceId,
+            payload: { number: formattedNumber, text: message },
           },
         });
 
@@ -380,7 +380,7 @@ export function useSendChannelMessage() {
         if (data?.error) throw new Error(data.error);
 
         // Salvar em channel_messages
-        const messageId = data?.key?.id || `local_${Date.now()}`;
+        const messageId = data?.result?.message_id || data?.key?.id || `local_${Date.now()}`;
         await supabase.from("channel_messages").insert({
           organization_id: teamMember.organization_id,
           channel: "whatsapp",

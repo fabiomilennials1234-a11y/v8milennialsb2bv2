@@ -7,10 +7,10 @@ interface MainLayoutProps {
 
 export function MainLayout({ children }: MainLayoutProps) {
   return (
-    <div className="flex flex-col min-h-screen bg-background" data-layout="main">
+    <div className="flex flex-col h-screen bg-background" data-layout="main">
       <TopNavigation />
-      <main className="flex-1 overflow-auto">
-        <div className="px-6 lg:px-10 xl:px-12 py-6 lg:py-8 max-w-[1600px] mx-auto w-full">
+      <main className="flex-1 min-h-0 overflow-auto">
+        <div className="px-6 lg:px-10 xl:px-12 py-6 lg:py-8 max-w-[1600px] mx-auto w-full min-h-full flex flex-col">
           {children}
         </div>
       </main>

@@ -12,31 +12,6 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.1"
   }
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
   public: {
     Tables: {
       _lead_duplicates_audit: {
@@ -630,6 +605,13 @@ export type Database = {
             foreignKeyName: "campanha_allowed_viewers_team_member_id_fkey"
             columns: ["team_member_id"]
             isOneToOne: false
+            referencedRelation: "org_visible_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campanha_allowed_viewers_team_member_id_fkey"
+            columns: ["team_member_id"]
+            isOneToOne: false
             referencedRelation: "team_members"
             referencedColumns: ["id"]
           },
@@ -813,6 +795,13 @@ export type Database = {
             foreignKeyName: "campanha_leads_closer_id_fkey"
             columns: ["closer_id"]
             isOneToOne: false
+            referencedRelation: "org_visible_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campanha_leads_closer_id_fkey"
+            columns: ["closer_id"]
+            isOneToOne: false
             referencedRelation: "team_members"
             referencedColumns: ["id"]
           },
@@ -827,7 +816,21 @@ export type Database = {
             foreignKeyName: "campanha_leads_responsible_id_fkey"
             columns: ["responsible_id"]
             isOneToOne: false
+            referencedRelation: "org_visible_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campanha_leads_responsible_id_fkey"
+            columns: ["responsible_id"]
+            isOneToOne: false
             referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campanha_leads_sdr_id_fkey"
+            columns: ["sdr_id"]
+            isOneToOne: false
+            referencedRelation: "org_visible_members"
             referencedColumns: ["id"]
           },
           {
@@ -880,6 +883,13 @@ export type Database = {
             columns: ["campanha_id"]
             isOneToOne: false
             referencedRelation: "campanhas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campanha_members_team_member_id_fkey"
+            columns: ["team_member_id"]
+            isOneToOne: false
+            referencedRelation: "org_visible_members"
             referencedColumns: ["id"]
           },
           {
@@ -1131,7 +1141,21 @@ export type Database = {
             foreignKeyName: "campanhas_closer_assigned_to_fkey"
             columns: ["closer_assigned_to"]
             isOneToOne: false
+            referencedRelation: "org_visible_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campanhas_closer_assigned_to_fkey"
+            columns: ["closer_assigned_to"]
+            isOneToOne: false
             referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campanhas_lead_assigned_to_fkey"
+            columns: ["lead_assigned_to"]
+            isOneToOne: false
+            referencedRelation: "org_visible_members"
             referencedColumns: ["id"]
           },
           {
@@ -1157,7 +1181,7 @@ export type Database = {
           },
         ]
       }
-channel_messages: {
+      channel_messages: {
         Row: {
           channel: Database["public"]["Enums"]["channel_type"]
           content: string | null
@@ -1244,105 +1268,6 @@ channel_messages: {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      checklist_items: {
-        Row: {
-          id: string
-          checklist_id: string
-          title: string
-          is_completed: boolean
-          position: number
-          completed_at: string | null
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          checklist_id: string
-          title: string
-          is_completed?: boolean
-          position?: number
-          completed_at?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          checklist_id?: string
-          title?: string
-          is_completed?: boolean
-          position?: number
-          completed_at?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "checklist_items_checklist_id_fkey"
-            columns: ["checklist_id"]
-            isOneToOne: false
-            referencedRelation: "checklists"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      checklists: {
-        Row: {
-          id: string
-          organization_id: string
-          created_by: string
-          title: string
-          description: string | null
-          lead_id: string | null
-          is_completed: boolean
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          organization_id: string
-          created_by: string
-          title: string
-          description?: string | null
-          lead_id?: string | null
-          is_completed?: boolean
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          organization_id?: string
-          created_by?: string
-          title?: string
-          description?: string | null
-          lead_id?: string | null
-          is_completed?: boolean
-          created_at?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "checklists_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "checklists_created_by_fkey"
-            columns: ["created_by"]
-            isOneToOne: false
-            referencedRelation: "team_members"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "checklists_lead_id_fkey"
-            columns: ["lead_id"]
-            isOneToOne: false
-            referencedRelation: "leads"
             referencedColumns: ["id"]
           },
         ]
@@ -1435,6 +1360,13 @@ channel_messages: {
             foreignKeyName: "commissions_team_member_id_fkey"
             columns: ["team_member_id"]
             isOneToOne: false
+            referencedRelation: "org_visible_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "commissions_team_member_id_fkey"
+            columns: ["team_member_id"]
+            isOneToOne: false
             referencedRelation: "team_members"
             referencedColumns: ["id"]
           },
@@ -1465,6 +1397,13 @@ channel_messages: {
             columns: ["competition_id"]
             isOneToOne: false
             referencedRelation: "competitions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "competition_participants_team_member_id_fkey"
+            columns: ["team_member_id"]
+            isOneToOne: false
+            referencedRelation: "org_visible_members"
             referencedColumns: ["id"]
           },
           {
@@ -1688,51 +1627,6 @@ channel_messages: {
             columns: ["conversation_id"]
             isOneToOne: false
             referencedRelation: "conversations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      conversation_notes: {
-        Row: {
-          author_id: string
-          content: string
-          created_at: string
-          id: string
-          lead_id: string
-          organization_id: string
-          updated_at: string
-        }
-        Insert: {
-          author_id: string
-          content: string
-          created_at?: string
-          id?: string
-          lead_id: string
-          organization_id: string
-          updated_at?: string
-        }
-        Update: {
-          author_id?: string
-          content?: string
-          created_at?: string
-          id?: string
-          lead_id?: string
-          organization_id?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "conversation_notes_lead_id_fkey"
-            columns: ["lead_id"]
-            isOneToOne: false
-            referencedRelation: "leads"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "conversation_notes_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -1998,34 +1892,40 @@ channel_messages: {
       }
       copilot_agent_document_chunks: {
         Row: {
-          agent_id: string
+          agent_id: string | null
           chunk_index: number
           content: string
           created_at: string | null
           document_id: string
           embedding: string | null
           id: string
-          organization_id: string
+          metadata: Json | null
+          organization_id: string | null
+          token_count: number | null
         }
         Insert: {
-          agent_id: string
-          chunk_index?: number
+          agent_id?: string | null
+          chunk_index: number
           content: string
           created_at?: string | null
           document_id: string
           embedding?: string | null
           id?: string
-          organization_id: string
+          metadata?: Json | null
+          organization_id?: string | null
+          token_count?: number | null
         }
         Update: {
-          agent_id?: string
+          agent_id?: string | null
           chunk_index?: number
           content?: string
           created_at?: string | null
           document_id?: string
           embedding?: string | null
           id?: string
-          organization_id?: string
+          metadata?: Json | null
+          organization_id?: string | null
+          token_count?: number | null
         }
         Relationships: [
           {
@@ -2033,13 +1933,6 @@ channel_messages: {
             columns: ["agent_id"]
             isOneToOne: false
             referencedRelation: "copilot_agents"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "copilot_agent_document_chunks_document_id_fkey"
-            columns: ["document_id"]
-            isOneToOne: false
-            referencedRelation: "copilot_agent_documents"
             referencedColumns: ["id"]
           },
           {
@@ -2056,13 +1949,16 @@ channel_messages: {
           agent_id: string
           content: string | null
           created_at: string | null
+          description: string | null
           error_message: string | null
           file_name: string
           file_path: string
           file_size: number | null
+          file_type: string
           id: string
           mime_type: string | null
           organization_id: string
+          send_when: string | null
           status: string | null
           summary: string | null
           updated_at: string | null
@@ -2071,13 +1967,16 @@ channel_messages: {
           agent_id: string
           content?: string | null
           created_at?: string | null
+          description?: string | null
           error_message?: string | null
           file_name: string
           file_path: string
           file_size?: number | null
+          file_type?: string
           id?: string
           mime_type?: string | null
           organization_id: string
+          send_when?: string | null
           status?: string | null
           summary?: string | null
           updated_at?: string | null
@@ -2086,13 +1985,16 @@ channel_messages: {
           agent_id?: string
           content?: string | null
           created_at?: string | null
+          description?: string | null
           error_message?: string | null
           file_name?: string
           file_path?: string
           file_size?: number | null
+          file_type?: string
           id?: string
           mime_type?: string | null
           organization_id?: string
+          send_when?: string | null
           status?: string | null
           summary?: string | null
           updated_at?: string | null
@@ -2118,42 +2020,37 @@ channel_messages: {
         Row: {
           agent_id: string
           answer: string
-          created_at: string
+          category: string | null
+          created_at: string | null
           embedding: string | null
           id: string
-          position: number | null
+          is_active: boolean | null
           question: string
-          updated_at: string
+          updated_at: string | null
         }
         Insert: {
           agent_id: string
           answer: string
-          created_at?: string
+          category?: string | null
+          created_at?: string | null
           embedding?: string | null
           id?: string
-          position?: number | null
+          is_active?: boolean | null
           question: string
-          updated_at?: string
+          updated_at?: string | null
         }
         Update: {
           agent_id?: string
           answer?: string
-          created_at?: string
+          category?: string | null
+          created_at?: string | null
           embedding?: string | null
           id?: string
-          position?: number | null
+          is_active?: boolean | null
           question?: string
-          updated_at?: string
+          updated_at?: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "copilot_agent_faqs_agent_id_fkey"
-            columns: ["agent_id"]
-            isOneToOne: false
-            referencedRelation: "copilot_agents"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       copilot_agent_followup_rules: {
         Row: {
@@ -2745,6 +2642,48 @@ channel_messages: {
           },
         ]
       }
+      coupons: {
+        Row: {
+          applies_to: string[]
+          code: string
+          created_at: string
+          created_by: string | null
+          current_uses: number
+          discount_pct: number
+          id: string
+          is_active: boolean
+          max_uses: number | null
+          valid_from: string | null
+          valid_until: string | null
+        }
+        Insert: {
+          applies_to?: string[]
+          code: string
+          created_at?: string
+          created_by?: string | null
+          current_uses?: number
+          discount_pct: number
+          id?: string
+          is_active?: boolean
+          max_uses?: number | null
+          valid_from?: string | null
+          valid_until?: string | null
+        }
+        Update: {
+          applies_to?: string[]
+          code?: string
+          created_at?: string
+          created_by?: string | null
+          current_uses?: number
+          discount_pct?: number
+          id?: string
+          is_active?: boolean
+          max_uses?: number | null
+          valid_from?: string | null
+          valid_until?: string | null
+        }
+        Relationships: []
+      }
       cron_config: {
         Row: {
           key: string
@@ -2915,6 +2854,71 @@ channel_messages: {
             columns: ["target_stage_id"]
             isOneToOne: false
             referencedRelation: "custom_pipeline_stages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      custom_pipeline_members: {
+        Row: {
+          achieved_count: number | null
+          bonus_earned: boolean | null
+          created_at: string | null
+          goal_count: number | null
+          id: string
+          organization_id: string
+          pipeline_id: string
+          role: string
+          team_member_id: string
+        }
+        Insert: {
+          achieved_count?: number | null
+          bonus_earned?: boolean | null
+          created_at?: string | null
+          goal_count?: number | null
+          id?: string
+          organization_id: string
+          pipeline_id: string
+          role?: string
+          team_member_id: string
+        }
+        Update: {
+          achieved_count?: number | null
+          bonus_earned?: boolean | null
+          created_at?: string | null
+          goal_count?: number | null
+          id?: string
+          organization_id?: string
+          pipeline_id?: string
+          role?: string
+          team_member_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "custom_pipeline_members_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "custom_pipeline_members_pipeline_id_fkey"
+            columns: ["pipeline_id"]
+            isOneToOne: false
+            referencedRelation: "custom_pipelines"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "custom_pipeline_members_team_member_id_fkey"
+            columns: ["team_member_id"]
+            isOneToOne: false
+            referencedRelation: "org_visible_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "custom_pipeline_members_team_member_id_fkey"
+            columns: ["team_member_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
             referencedColumns: ["id"]
           },
         ]
@@ -3310,6 +3314,13 @@ channel_messages: {
             foreignKeyName: "follow_ups_assigned_to_fkey"
             columns: ["assigned_to"]
             isOneToOne: false
+            referencedRelation: "org_visible_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "follow_ups_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
             referencedRelation: "team_members"
             referencedColumns: ["id"]
           },
@@ -3441,6 +3452,13 @@ channel_messages: {
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "goals_team_member_id_fkey"
+            columns: ["team_member_id"]
+            isOneToOne: false
+            referencedRelation: "org_visible_members"
             referencedColumns: ["id"]
           },
           {
@@ -3834,6 +3852,78 @@ channel_messages: {
           },
         ]
       }
+      history_sync_jobs: {
+        Row: {
+          chat_jid: string | null
+          completed_at: string | null
+          created_at: string
+          cursor: string | null
+          error: string | null
+          id: string
+          instance_id: string
+          max_chats: number
+          max_days: number
+          max_messages_per_chat: number
+          organization_id: string
+          scope: string
+          started_at: string | null
+          status: string
+          total_fetched: number
+          updated_at: string
+        }
+        Insert: {
+          chat_jid?: string | null
+          completed_at?: string | null
+          created_at?: string
+          cursor?: string | null
+          error?: string | null
+          id?: string
+          instance_id: string
+          max_chats?: number
+          max_days?: number
+          max_messages_per_chat?: number
+          organization_id: string
+          scope?: string
+          started_at?: string | null
+          status?: string
+          total_fetched?: number
+          updated_at?: string
+        }
+        Update: {
+          chat_jid?: string | null
+          completed_at?: string | null
+          created_at?: string
+          cursor?: string | null
+          error?: string | null
+          id?: string
+          instance_id?: string
+          max_chats?: number
+          max_days?: number
+          max_messages_per_chat?: number
+          organization_id?: string
+          scope?: string
+          started_at?: string | null
+          status?: string
+          total_fetched?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "history_sync_jobs_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_instances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "history_sync_jobs_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       impersonation_sessions: {
         Row: {
           ended_at: string | null
@@ -4031,11 +4121,11 @@ channel_messages: {
           embedding: string | null
           id: string
           importance: number | null
-          last_accessed: string | null
           lead_id: string
           memory_type: string
+          metadata: Json | null
           organization_id: string
-          turn_count: number | null
+          updated_at: string | null
         }
         Insert: {
           agent_id?: string | null
@@ -4045,11 +4135,11 @@ channel_messages: {
           embedding?: string | null
           id?: string
           importance?: number | null
-          last_accessed?: string | null
           lead_id: string
-          memory_type?: string
+          memory_type: string
+          metadata?: Json | null
           organization_id: string
-          turn_count?: number | null
+          updated_at?: string | null
         }
         Update: {
           agent_id?: string | null
@@ -4059,42 +4149,13 @@ channel_messages: {
           embedding?: string | null
           id?: string
           importance?: number | null
-          last_accessed?: string | null
           lead_id?: string
           memory_type?: string
+          metadata?: Json | null
           organization_id?: string
-          turn_count?: number | null
+          updated_at?: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "lead_memories_agent_id_fkey"
-            columns: ["agent_id"]
-            isOneToOne: false
-            referencedRelation: "copilot_agents"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "lead_memories_conversation_id_fkey"
-            columns: ["conversation_id"]
-            isOneToOne: false
-            referencedRelation: "conversations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "lead_memories_lead_id_fkey"
-            columns: ["lead_id"]
-            isOneToOne: false
-            referencedRelation: "leads"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "lead_memories_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       lead_scores: {
         Row: {
@@ -4290,6 +4351,13 @@ channel_messages: {
             foreignKeyName: "leads_closer_id_fkey"
             columns: ["closer_id"]
             isOneToOne: false
+            referencedRelation: "org_visible_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leads_closer_id_fkey"
+            columns: ["closer_id"]
+            isOneToOne: false
             referencedRelation: "team_members"
             referencedColumns: ["id"]
           },
@@ -4304,7 +4372,21 @@ channel_messages: {
             foreignKeyName: "leads_responsible_id_fkey"
             columns: ["responsible_id"]
             isOneToOne: false
+            referencedRelation: "org_visible_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leads_responsible_id_fkey"
+            columns: ["responsible_id"]
+            isOneToOne: false
             referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leads_sdr_id_fkey"
+            columns: ["sdr_id"]
+            isOneToOne: false
+            referencedRelation: "org_visible_members"
             referencedColumns: ["id"]
           },
           {
@@ -4481,7 +4563,55 @@ channel_messages: {
             foreignKeyName: "member_feature_permissions_team_member_id_fkey"
             columns: ["team_member_id"]
             isOneToOne: false
+            referencedRelation: "org_visible_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "member_feature_permissions_team_member_id_fkey"
+            columns: ["team_member_id"]
+            isOneToOne: false
             referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      message_templates: {
+        Row: {
+          body: string
+          command: string
+          created_at: string
+          created_by: string
+          display_name: string
+          id: string
+          organization_id: string
+          updated_at: string
+        }
+        Insert: {
+          body: string
+          command: string
+          created_at?: string
+          created_by: string
+          display_name: string
+          id?: string
+          organization_id: string
+          updated_at?: string
+        }
+        Update: {
+          body?: string
+          command?: string
+          created_at?: string
+          created_by?: string
+          display_name?: string
+          id?: string
+          organization_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "message_templates_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -4543,7 +4673,6 @@ channel_messages: {
           assign_to_stage: string | null
           auto_tag: string[] | null
           created_at: string | null
-          field_mappings: Json | null
           form_id: string | null
           form_name: string | null
           id: string
@@ -4559,7 +4688,6 @@ channel_messages: {
           assign_to_stage?: string | null
           auto_tag?: string[] | null
           created_at?: string | null
-          field_mappings?: Json | null
           form_id?: string | null
           form_name?: string | null
           id?: string
@@ -4575,7 +4703,6 @@ channel_messages: {
           assign_to_stage?: string | null
           auto_tag?: string[] | null
           created_at?: string | null
-          field_mappings?: Json | null
           form_id?: string | null
           form_name?: string | null
           id?: string
@@ -4779,6 +4906,173 @@ channel_messages: {
           },
         ]
       }
+      org_onboarding: {
+        Row: {
+          answers: Json
+          applied_at: string | null
+          completed_at: string | null
+          completed_by: string | null
+          created_at: string
+          current_step: number
+          id: string
+          organization_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          answers?: Json
+          applied_at?: string | null
+          completed_at?: string | null
+          completed_by?: string | null
+          created_at?: string
+          current_step?: number
+          id?: string
+          organization_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          answers?: Json
+          applied_at?: string | null
+          completed_at?: string | null
+          completed_by?: string | null
+          created_at?: string
+          current_step?: number
+          id?: string
+          organization_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_onboarding_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: true
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      org_quotas: {
+        Row: {
+          admin_adjustment: number
+          created_at: string
+          effective_limit: number | null
+          id: string
+          organization_id: string
+          plan_base: number
+          purchased_addons: number
+          resource_key: string
+          updated_at: string
+        }
+        Insert: {
+          admin_adjustment?: number
+          created_at?: string
+          effective_limit?: number | null
+          id?: string
+          organization_id: string
+          plan_base?: number
+          purchased_addons?: number
+          resource_key: string
+          updated_at?: string
+        }
+        Update: {
+          admin_adjustment?: number
+          created_at?: string
+          effective_limit?: number | null
+          id?: string
+          organization_id?: string
+          plan_base?: number
+          purchased_addons?: number
+          resource_key?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_quotas_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      org_subscriptions: {
+        Row: {
+          addon_turbo_count: number
+          base_amount: number
+          billing_cycle: string
+          cancelled_at: string | null
+          coupon_id: string | null
+          created_at: string
+          discount_amount: number
+          final_amount: number
+          id: string
+          organization_id: string
+          plan_id: string
+          renews_at: string | null
+          started_at: string
+          updated_at: string
+          user_count: number
+        }
+        Insert: {
+          addon_turbo_count?: number
+          base_amount: number
+          billing_cycle: string
+          cancelled_at?: string | null
+          coupon_id?: string | null
+          created_at?: string
+          discount_amount?: number
+          final_amount: number
+          id?: string
+          organization_id: string
+          plan_id: string
+          renews_at?: string | null
+          started_at?: string
+          updated_at?: string
+          user_count?: number
+        }
+        Update: {
+          addon_turbo_count?: number
+          base_amount?: number
+          billing_cycle?: string
+          cancelled_at?: string | null
+          coupon_id?: string | null
+          created_at?: string
+          discount_amount?: number
+          final_amount?: number
+          id?: string
+          organization_id?: string
+          plan_id?: string
+          renews_at?: string | null
+          started_at?: string
+          updated_at?: string
+          user_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_subscriptions_coupon_id_fkey"
+            columns: ["coupon_id"]
+            isOneToOne: false
+            referencedRelation: "coupons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "org_subscriptions_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: true
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "org_subscriptions_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "subscription_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       organization_features: {
         Row: {
           created_at: string | null
@@ -4890,6 +5184,9 @@ channel_messages: {
           subscription_status: string
           updated_at: string | null
           user_creation_key: string | null
+          whatsapp_migration_completed_at: string | null
+          whatsapp_migration_status: string
+          whatsapp_provider_override: string | null
           whatsapp_rate_limit: Json | null
         }
         Insert: {
@@ -4913,6 +5210,9 @@ channel_messages: {
           subscription_status?: string
           updated_at?: string | null
           user_creation_key?: string | null
+          whatsapp_migration_completed_at?: string | null
+          whatsapp_migration_status?: string
+          whatsapp_provider_override?: string | null
           whatsapp_rate_limit?: Json | null
         }
         Update: {
@@ -4936,6 +5236,9 @@ channel_messages: {
           subscription_status?: string
           updated_at?: string | null
           user_creation_key?: string | null
+          whatsapp_migration_completed_at?: string | null
+          whatsapp_migration_status?: string
+          whatsapp_provider_override?: string | null
           whatsapp_rate_limit?: Json | null
         }
         Relationships: [
@@ -4944,6 +5247,63 @@ channel_messages: {
             columns: ["plan_id"]
             isOneToOne: false
             referencedRelation: "subscription_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payment_history: {
+        Row: {
+          amount: number
+          asaas_payment_id: string | null
+          asaas_subscription_id: string | null
+          billing_cycle: string
+          coupon_id: string | null
+          created_at: string
+          discount_applied: number
+          id: string
+          organization_id: string
+          paid_at: string | null
+          status: string
+        }
+        Insert: {
+          amount: number
+          asaas_payment_id?: string | null
+          asaas_subscription_id?: string | null
+          billing_cycle: string
+          coupon_id?: string | null
+          created_at?: string
+          discount_applied?: number
+          id?: string
+          organization_id: string
+          paid_at?: string | null
+          status: string
+        }
+        Update: {
+          amount?: number
+          asaas_payment_id?: string | null
+          asaas_subscription_id?: string | null
+          billing_cycle?: string
+          coupon_id?: string | null
+          created_at?: string
+          discount_applied?: number
+          id?: string
+          organization_id?: string
+          paid_at?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_history_coupon_id_fkey"
+            columns: ["coupon_id"]
+            isOneToOne: false
+            referencedRelation: "coupons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_history_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -5040,6 +5400,44 @@ channel_messages: {
           },
         ]
       }
+      phone_ai_preferences: {
+        Row: {
+          ai_disabled: boolean
+          created_at: string
+          normalized_phone: string
+          organization_id: string
+          set_at: string
+          set_by: string | null
+          updated_at: string
+        }
+        Insert: {
+          ai_disabled?: boolean
+          created_at?: string
+          normalized_phone: string
+          organization_id: string
+          set_at?: string
+          set_by?: string | null
+          updated_at?: string
+        }
+        Update: {
+          ai_disabled?: boolean
+          created_at?: string
+          normalized_phone?: string
+          organization_id?: string
+          set_at?: string
+          set_by?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "phone_ai_preferences_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pipe_confirmacao: {
         Row: {
           closer_id: string | null
@@ -5094,6 +5492,13 @@ channel_messages: {
             foreignKeyName: "pipe_confirmacao_closer_id_fkey"
             columns: ["closer_id"]
             isOneToOne: false
+            referencedRelation: "org_visible_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pipe_confirmacao_closer_id_fkey"
+            columns: ["closer_id"]
+            isOneToOne: false
             referencedRelation: "team_members"
             referencedColumns: ["id"]
           },
@@ -5115,7 +5520,21 @@ channel_messages: {
             foreignKeyName: "pipe_confirmacao_responsible_id_fkey"
             columns: ["responsible_id"]
             isOneToOne: false
+            referencedRelation: "org_visible_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pipe_confirmacao_responsible_id_fkey"
+            columns: ["responsible_id"]
+            isOneToOne: false
             referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pipe_confirmacao_sdr_id_fkey"
+            columns: ["sdr_id"]
+            isOneToOne: false
+            referencedRelation: "org_visible_members"
             referencedColumns: ["id"]
           },
           {
@@ -5303,6 +5722,13 @@ channel_messages: {
             foreignKeyName: "pipe_distribution_members_team_member_id_fkey"
             columns: ["team_member_id"]
             isOneToOne: false
+            referencedRelation: "org_visible_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pipe_distribution_members_team_member_id_fkey"
+            columns: ["team_member_id"]
+            isOneToOne: false
             referencedRelation: "team_members"
             referencedColumns: ["id"]
           },
@@ -5347,6 +5773,13 @@ channel_messages: {
             foreignKeyName: "pipe_distribution_rules_closer_assigned_to_fkey"
             columns: ["closer_assigned_to"]
             isOneToOne: false
+            referencedRelation: "org_visible_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pipe_distribution_rules_closer_assigned_to_fkey"
+            columns: ["closer_assigned_to"]
+            isOneToOne: false
             referencedRelation: "team_members"
             referencedColumns: ["id"]
           },
@@ -5355,6 +5788,13 @@ channel_messages: {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pipe_distribution_rules_sdr_assigned_to_fkey"
+            columns: ["sdr_assigned_to"]
+            isOneToOne: false
+            referencedRelation: "org_visible_members"
             referencedColumns: ["id"]
           },
           {
@@ -5477,6 +5917,13 @@ channel_messages: {
             foreignKeyName: "pipe_propostas_closer_id_fkey"
             columns: ["closer_id"]
             isOneToOne: false
+            referencedRelation: "org_visible_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pipe_propostas_closer_id_fkey"
+            columns: ["closer_id"]
+            isOneToOne: false
             referencedRelation: "team_members"
             referencedColumns: ["id"]
           },
@@ -5499,6 +5946,13 @@ channel_messages: {
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pipe_propostas_responsible_id_fkey"
+            columns: ["responsible_id"]
+            isOneToOne: false
+            referencedRelation: "org_visible_members"
             referencedColumns: ["id"]
           },
           {
@@ -5566,6 +6020,13 @@ channel_messages: {
             foreignKeyName: "pipe_whatsapp_responsible_id_fkey"
             columns: ["responsible_id"]
             isOneToOne: false
+            referencedRelation: "org_visible_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pipe_whatsapp_responsible_id_fkey"
+            columns: ["responsible_id"]
+            isOneToOne: false
             referencedRelation: "team_members"
             referencedColumns: ["id"]
           },
@@ -5573,7 +6034,55 @@ channel_messages: {
             foreignKeyName: "pipe_whatsapp_sdr_id_fkey"
             columns: ["sdr_id"]
             isOneToOne: false
+            referencedRelation: "org_visible_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pipe_whatsapp_sdr_id_fkey"
+            columns: ["sdr_id"]
+            isOneToOne: false
             referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pipeline_display_config: {
+        Row: {
+          created_at: string
+          display_name: string
+          id: string
+          is_visible: boolean
+          organization_id: string
+          pipe_type: string
+          position: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          display_name: string
+          id?: string
+          is_visible?: boolean
+          organization_id: string
+          pipe_type: string
+          position?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          display_name?: string
+          id?: string
+          is_visible?: boolean
+          organization_id?: string
+          pipe_type?: string
+          position?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pipeline_display_config_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -5643,68 +6152,41 @@ channel_messages: {
           },
         ]
       }
-      product_materials: {
+      plan_addons: {
         Row: {
-          created_at: string | null
-          description: string | null
-          file_name: string
-          file_path: string
-          file_size: number | null
+          applicable_plans: string[]
+          created_at: string
+          display_name: string
+          features_unlocked: string[]
           id: string
-          is_active: boolean | null
-          material_type: string
-          mime_type: string
-          organization_id: string
-          product_id: string
-          summary: string | null
-          updated_at: string | null
+          is_active: boolean
+          price_monthly: number
+          slug: string
+          unit_label: string
         }
         Insert: {
-          created_at?: string | null
-          description?: string | null
-          file_name: string
-          file_path: string
-          file_size?: number | null
+          applicable_plans?: string[]
+          created_at?: string
+          display_name: string
+          features_unlocked?: string[]
           id?: string
-          is_active?: boolean | null
-          material_type?: string
-          mime_type: string
-          organization_id: string
-          product_id: string
-          summary?: string | null
-          updated_at?: string | null
+          is_active?: boolean
+          price_monthly: number
+          slug: string
+          unit_label?: string
         }
         Update: {
-          created_at?: string | null
-          description?: string | null
-          file_name?: string
-          file_path?: string
-          file_size?: number | null
+          applicable_plans?: string[]
+          created_at?: string
+          display_name?: string
+          features_unlocked?: string[]
           id?: string
-          is_active?: boolean | null
-          material_type?: string
-          mime_type?: string
-          organization_id?: string
-          product_id?: string
-          summary?: string | null
-          updated_at?: string | null
+          is_active?: boolean
+          price_monthly?: number
+          slug?: string
+          unit_label?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "product_materials_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "product_materials_product_id_fkey"
-            columns: ["product_id"]
-            isOneToOne: false
-            referencedRelation: "products"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       product_variants: {
         Row: {
@@ -5878,6 +6360,50 @@ channel_messages: {
           updated_at?: string
         }
         Relationships: []
+      }
+      quota_audit_log: {
+        Row: {
+          change_reason: string
+          changed_by: string | null
+          created_at: string
+          field_changed: string
+          id: string
+          new_value: number
+          old_value: number
+          organization_id: string
+          resource_key: string
+        }
+        Insert: {
+          change_reason: string
+          changed_by?: string | null
+          created_at?: string
+          field_changed: string
+          id?: string
+          new_value: number
+          old_value: number
+          organization_id: string
+          resource_key: string
+        }
+        Update: {
+          change_reason?: string
+          changed_by?: string | null
+          created_at?: string
+          field_changed?: string
+          id?: string
+          new_value?: number
+          old_value?: number
+          organization_id?: string
+          resource_key?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quota_audit_log_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       runtime_logs: {
         Row: {
@@ -6203,145 +6729,79 @@ channel_messages: {
           },
         ]
       }
-      scheduled_user_messages: {
-        Row: {
-          assigned_to: string | null
-          created_at: string
-          created_by: string
-          error_message: string | null
-          id: string
-          lead_id: string
-          media_filename: string | null
-          media_type: string | null
-          media_url: string | null
-          message_content: string | null
-          organization_id: string
-          phone_number: string
-          retry_count: number
-          scheduled_at: string
-          sent_at: string | null
-          status: string
-          whatsapp_instance_id: string | null
-        }
-        Insert: {
-          assigned_to?: string | null
-          created_at?: string
-          created_by: string
-          error_message?: string | null
-          id?: string
-          lead_id: string
-          media_filename?: string | null
-          media_type?: string | null
-          media_url?: string | null
-          message_content?: string | null
-          organization_id: string
-          phone_number: string
-          retry_count?: number
-          scheduled_at: string
-          sent_at?: string | null
-          status?: string
-          whatsapp_instance_id?: string | null
-        }
-        Update: {
-          assigned_to?: string | null
-          created_at?: string
-          created_by?: string
-          error_message?: string | null
-          id?: string
-          lead_id?: string
-          media_filename?: string | null
-          media_type?: string | null
-          media_url?: string | null
-          message_content?: string | null
-          organization_id?: string
-          phone_number?: string
-          retry_count?: number
-          scheduled_at?: string
-          sent_at?: string | null
-          status?: string
-          whatsapp_instance_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "scheduled_user_messages_assigned_to_fkey"
-            columns: ["assigned_to"]
-            isOneToOne: false
-            referencedRelation: "team_members"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "scheduled_user_messages_created_by_fkey"
-            columns: ["created_by"]
-            isOneToOne: false
-            referencedRelation: "team_members"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "scheduled_user_messages_lead_id_fkey"
-            columns: ["lead_id"]
-            isOneToOne: false
-            referencedRelation: "leads"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "scheduled_user_messages_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "scheduled_user_messages_whatsapp_instance_id_fkey"
-            columns: ["whatsapp_instance_id"]
-            isOneToOne: false
-            referencedRelation: "whatsapp_instances"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       subscription_plans: {
         Row: {
+          base_price_monthly: number | null
           created_at: string | null
           description: string | null
+          discount_annual_pct: number | null
+          discount_semester_pct: number | null
+          discount_volume_min: number | null
+          discount_volume_pct: number | null
           display_name: string
+          extra_user_price: number | null
           features: Json
           id: string
+          included_copilots: number | null
+          included_users: number | null
           is_active: boolean | null
           is_default: boolean | null
           limits: Json
+          min_users: number | null
           name: string
           position: number | null
           price_monthly: number | null
+          price_per_user_monthly: number | null
           price_yearly: number | null
           updated_at: string | null
         }
         Insert: {
+          base_price_monthly?: number | null
           created_at?: string | null
           description?: string | null
+          discount_annual_pct?: number | null
+          discount_semester_pct?: number | null
+          discount_volume_min?: number | null
+          discount_volume_pct?: number | null
           display_name: string
+          extra_user_price?: number | null
           features?: Json
           id?: string
+          included_copilots?: number | null
+          included_users?: number | null
           is_active?: boolean | null
           is_default?: boolean | null
           limits?: Json
+          min_users?: number | null
           name: string
           position?: number | null
           price_monthly?: number | null
+          price_per_user_monthly?: number | null
           price_yearly?: number | null
           updated_at?: string | null
         }
         Update: {
+          base_price_monthly?: number | null
           created_at?: string | null
           description?: string | null
+          discount_annual_pct?: number | null
+          discount_semester_pct?: number | null
+          discount_volume_min?: number | null
+          discount_volume_pct?: number | null
           display_name?: string
+          extra_user_price?: number | null
           features?: Json
           id?: string
+          included_copilots?: number | null
+          included_users?: number | null
           is_active?: boolean | null
           is_default?: boolean | null
           limits?: Json
+          min_users?: number | null
           name?: string
           position?: number | null
           price_monthly?: number | null
+          price_per_user_monthly?: number | null
           price_yearly?: number | null
           updated_at?: string | null
         }
@@ -6529,6 +6989,13 @@ channel_messages: {
             foreignKeyName: "team_member_org_permissions_team_member_id_fkey"
             columns: ["team_member_id"]
             isOneToOne: false
+            referencedRelation: "org_visible_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "team_member_org_permissions_team_member_id_fkey"
+            columns: ["team_member_id"]
+            isOneToOne: false
             referencedRelation: "team_members"
             referencedColumns: ["id"]
           },
@@ -6566,6 +7033,13 @@ channel_messages: {
           value_scopes?: Json | null
         }
         Relationships: [
+          {
+            foreignKeyName: "team_member_permissions_team_member_id_fkey"
+            columns: ["team_member_id"]
+            isOneToOne: false
+            referencedRelation: "org_visible_members"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "team_member_permissions_team_member_id_fkey"
             columns: ["team_member_id"]
@@ -6891,6 +7365,86 @@ channel_messages: {
           },
         ]
       }
+      uazapi_sender_jobs: {
+        Row: {
+          campaign_id: string | null
+          created_at: string
+          failed: number
+          id: string
+          instance_id: string
+          organization_id: string
+          payload: Json
+          sent: number
+          status: string
+          total_messages: number
+          triggered_by_user_id: string | null
+          triggered_via: string
+          uazapi_sender_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          campaign_id?: string | null
+          created_at?: string
+          failed?: number
+          id?: string
+          instance_id: string
+          organization_id: string
+          payload?: Json
+          sent?: number
+          status?: string
+          total_messages?: number
+          triggered_by_user_id?: string | null
+          triggered_via?: string
+          uazapi_sender_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          campaign_id?: string | null
+          created_at?: string
+          failed?: number
+          id?: string
+          instance_id?: string
+          organization_id?: string
+          payload?: Json
+          sent?: number
+          status?: string
+          total_messages?: number
+          triggered_by_user_id?: string | null
+          triggered_via?: string
+          uazapi_sender_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "uazapi_sender_jobs_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campanhas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "uazapi_sender_jobs_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_instances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "uazapi_sender_jobs_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "uazapi_sender_jobs_triggered_by_user_id_fkey"
+            columns: ["triggered_by_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       upsell_campanhas: {
         Row: {
           client_id: string
@@ -6949,6 +7503,13 @@ channel_messages: {
             foreignKeyName: "upsell_campanhas_closer_id_fkey"
             columns: ["closer_id"]
             isOneToOne: false
+            referencedRelation: "org_visible_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "upsell_campanhas_closer_id_fkey"
+            columns: ["closer_id"]
+            isOneToOne: false
             referencedRelation: "team_members"
             referencedColumns: ["id"]
           },
@@ -6957,6 +7518,13 @@ channel_messages: {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "upsell_campanhas_responsible_id_fkey"
+            columns: ["responsible_id"]
+            isOneToOne: false
+            referencedRelation: "org_visible_members"
             referencedColumns: ["id"]
           },
           {
@@ -7094,6 +7662,13 @@ channel_messages: {
             foreignKeyName: "upsell_clients_closer_id_fkey"
             columns: ["closer_id"]
             isOneToOne: false
+            referencedRelation: "org_visible_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "upsell_clients_closer_id_fkey"
+            columns: ["closer_id"]
+            isOneToOne: false
             referencedRelation: "team_members"
             referencedColumns: ["id"]
           },
@@ -7109,6 +7684,13 @@ channel_messages: {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "upsell_clients_responsible_id_fkey"
+            columns: ["responsible_id"]
+            isOneToOne: false
+            referencedRelation: "org_visible_members"
             referencedColumns: ["id"]
           },
           {
@@ -7235,6 +7817,13 @@ channel_messages: {
             foreignKeyName: "upsell_orders_closer_id_fkey"
             columns: ["closer_id"]
             isOneToOne: false
+            referencedRelation: "org_visible_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "upsell_orders_closer_id_fkey"
+            columns: ["closer_id"]
+            isOneToOne: false
             referencedRelation: "team_members"
             referencedColumns: ["id"]
           },
@@ -7257,6 +7846,13 @@ channel_messages: {
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "upsell_orders_responsible_id_fkey"
+            columns: ["responsible_id"]
+            isOneToOne: false
+            referencedRelation: "org_visible_members"
             referencedColumns: ["id"]
           },
           {
@@ -7334,6 +7930,13 @@ channel_messages: {
             columns: ["badge_id"]
             isOneToOne: false
             referencedRelation: "badges"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_badges_team_member_id_fkey"
+            columns: ["team_member_id"]
+            isOneToOne: false
+            referencedRelation: "org_visible_members"
             referencedColumns: ["id"]
           },
           {
@@ -7606,6 +8209,13 @@ channel_messages: {
             foreignKeyName: "whatsapp_instance_allowed_members_team_member_id_fkey"
             columns: ["team_member_id"]
             isOneToOne: false
+            referencedRelation: "org_visible_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_instance_allowed_members_team_member_id_fkey"
+            columns: ["team_member_id"]
+            isOneToOne: false
             referencedRelation: "team_members"
             referencedColumns: ["id"]
           },
@@ -7614,6 +8224,51 @@ channel_messages: {
             columns: ["whatsapp_instance_id"]
             isOneToOne: false
             referencedRelation: "whatsapp_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_instance_secrets: {
+        Row: {
+          created_at: string
+          instance_id: string
+          organization_id: string
+          uazapi_instance_id: string | null
+          uazapi_token: string
+          updated_at: string
+          webhook_secret: string | null
+        }
+        Insert: {
+          created_at?: string
+          instance_id: string
+          organization_id: string
+          uazapi_instance_id?: string | null
+          uazapi_token: string
+          updated_at?: string
+          webhook_secret?: string | null
+        }
+        Update: {
+          created_at?: string
+          instance_id?: string
+          organization_id?: string
+          uazapi_instance_id?: string | null
+          uazapi_token?: string
+          updated_at?: string
+          webhook_secret?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_instance_secrets_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: true
+            referencedRelation: "whatsapp_instances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_instance_secrets_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -7629,6 +8284,8 @@ channel_messages: {
           metadata: Json | null
           organization_id: string
           phone_number: string | null
+          provider: string
+          provider_config: Json
           qr_code: string | null
           qr_code_expires_at: string | null
           status: string
@@ -7644,6 +8301,8 @@ channel_messages: {
           metadata?: Json | null
           organization_id: string
           phone_number?: string | null
+          provider?: string
+          provider_config?: Json
           qr_code?: string | null
           qr_code_expires_at?: string | null
           status?: string
@@ -7659,6 +8318,8 @@ channel_messages: {
           metadata?: Json | null
           organization_id?: string
           phone_number?: string | null
+          provider?: string
+          provider_config?: Json
           qr_code?: string | null
           qr_code_expires_at?: string | null
           status?: string
@@ -7686,7 +8347,9 @@ channel_messages: {
           assigned_to: string | null
           content: string | null
           created_at: string | null
+          deleted_at: string | null
           direction: string
+          edited: boolean
           id: string
           instance_id: string | null
           lead_id: string | null
@@ -7695,9 +8358,11 @@ channel_messages: {
           message_type: string
           organization_id: string
           phone_number: string
+          pinned_at: string | null
           processed_by_agent_at: string | null
           push_name: string | null
           raw_payload: Json | null
+          reactions: Json
           remote_jid: string
           sent_by_ai: boolean | null
           status: string | null
@@ -7707,7 +8372,9 @@ channel_messages: {
           assigned_to?: string | null
           content?: string | null
           created_at?: string | null
+          deleted_at?: string | null
           direction: string
+          edited?: boolean
           id?: string
           instance_id?: string | null
           lead_id?: string | null
@@ -7716,9 +8383,11 @@ channel_messages: {
           message_type?: string
           organization_id: string
           phone_number: string
+          pinned_at?: string | null
           processed_by_agent_at?: string | null
           push_name?: string | null
           raw_payload?: Json | null
+          reactions?: Json
           remote_jid: string
           sent_by_ai?: boolean | null
           status?: string | null
@@ -7728,7 +8397,9 @@ channel_messages: {
           assigned_to?: string | null
           content?: string | null
           created_at?: string | null
+          deleted_at?: string | null
           direction?: string
+          edited?: boolean
           id?: string
           instance_id?: string | null
           lead_id?: string | null
@@ -7737,9 +8408,11 @@ channel_messages: {
           message_type?: string
           organization_id?: string
           phone_number?: string
+          pinned_at?: string | null
           processed_by_agent_at?: string | null
           push_name?: string | null
           raw_payload?: Json | null
+          reactions?: Json
           remote_jid?: string
           sent_by_ai?: boolean | null
           status?: string | null
@@ -7995,9 +8668,93 @@ channel_messages: {
       }
     }
     Views: {
-      [_ in never]: never
+      org_visible_members: {
+        Row: {
+          commission_mrr_percent: number | null
+          commission_projeto_percent: number | null
+          created_at: string | null
+          email: string | null
+          id: string | null
+          is_active: boolean | null
+          job_title: string | null
+          metric_type: string | null
+          name: string | null
+          organization_id: string | null
+          ote_base: number | null
+          ote_bonus: number | null
+          role: Database["public"]["Enums"]["app_role"] | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          commission_mrr_percent?: number | null
+          commission_projeto_percent?: number | null
+          created_at?: string | null
+          email?: string | null
+          id?: string | null
+          is_active?: boolean | null
+          job_title?: string | null
+          metric_type?: string | null
+          name?: string | null
+          organization_id?: string | null
+          ote_base?: number | null
+          ote_bonus?: number | null
+          role?: Database["public"]["Enums"]["app_role"] | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          commission_mrr_percent?: number | null
+          commission_projeto_percent?: number | null
+          created_at?: string | null
+          email?: string | null
+          id?: string | null
+          is_active?: boolean | null
+          job_title?: string | null
+          metric_type?: string | null
+          name?: string | null
+          organization_id?: string | null
+          ote_base?: number | null
+          ote_bonus?: number | null
+          role?: Database["public"]["Enums"]["app_role"] | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_members_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
+      _resolve_plan_base_for_resource: {
+        Args: { p_org_id: string; p_resource_key: string }
+        Returns: number
+      }
+      admin_get_org_quota_summary: { Args: { p_org_id: string }; Returns: Json }
+      admin_set_purchased_addons: {
+        Args: {
+          p_org_id: string
+          p_purchased: number
+          p_reason: string
+          p_resource_key: string
+        }
+        Returns: Json
+      }
+      admin_set_quota_adjustment: {
+        Args: {
+          p_admin_adjustment: number
+          p_org_id: string
+          p_reason: string
+          p_resource_key: string
+        }
+        Returns: Json
+      }
       can_delete_lead: { Args: never; Returns: boolean }
       can_manage_copilot: { Args: never; Returns: boolean }
       can_manage_whatsapp_instances: { Args: never; Returns: boolean }
@@ -8094,6 +8851,10 @@ channel_messages: {
       }
       enqueue_webhook_deliveries_for_org: {
         Args: { p_event: string; p_organization_id: string; p_payload: Json }
+        Returns: undefined
+      }
+      ensure_pipeline_display_config: {
+        Args: { p_org_id: string }
         Returns: undefined
       }
       find_leads_no_reply: {
@@ -8247,6 +9008,15 @@ channel_messages: {
           phone_number: string
         }[]
       }
+      get_mkt_origin_metrics: {
+        Args: {
+          p_end_date: string
+          p_member_id?: string
+          p_org_id: string
+          p_start_date: string
+        }
+        Returns: Json
+      }
       get_my_org_ids: { Args: never; Returns: string[] }
       get_next_campaign_closer: {
         Args: { p_campaign_id: string }
@@ -8268,17 +9038,20 @@ channel_messages: {
         Args: { interval_param?: string }
         Returns: Json
       }
-      get_product_ranking: {
-        Args: { p_end_date: string; p_org_id: string; p_start_date: string }
-        Returns: Json
-      }
+      get_phone_ai_status: { Args: { p_phone: string }; Returns: Json }
       get_ranking_data: {
         Args: { p_month: number; p_organization_id?: string; p_year: number }
         Returns: Json
       }
-      get_seller_activity_scores: {
-        Args: { p_end_date: string; p_org_id: string; p_start_date: string }
-        Returns: Json
+      get_segment_benchmark: { Args: { p_org_id: string }; Returns: Json }
+      get_uazapi_credentials: {
+        Args: { p_instance_id: string }
+        Returns: {
+          organization_id: string
+          uazapi_instance_id: string
+          uazapi_token: string
+          webhook_secret: string
+        }[]
       }
       get_usage_by_org: {
         Args: { interval_param?: string }
@@ -8321,16 +9094,13 @@ channel_messages: {
         Args: { column_name: string; row_id: string; table_name: string }
         Returns: undefined
       }
+      increment_coupon_uses: { Args: { p_coupon_id: string }; Returns: boolean }
       invoke_campaign_rule_dispatch: { Args: never; Returns: undefined }
       invoke_pipe_rule_dispatch: { Args: never; Returns: undefined }
       invoke_process_ai_actions: { Args: never; Returns: undefined }
       invoke_process_copilot_followups: { Args: never; Returns: undefined }
       invoke_process_followup_automations: { Args: never; Returns: undefined }
       invoke_process_outbound_dispatches: { Args: never; Returns: undefined }
-      invoke_process_scheduled_user_messages: {
-        Args: never
-        Returns: undefined
-      }
       invoke_process_webhook_deliveries: { Args: never; Returns: undefined }
       invoke_process_workflow_executions: { Args: never; Returns: undefined }
       invoke_refresh_meta_tokens: { Args: never; Returns: undefined }
@@ -8443,6 +9213,22 @@ channel_messages: {
         Returns: number
       }
       org_get_features_and_limits: { Args: { p_org_id: string }; Returns: Json }
+      org_get_seat_usage: { Args: { p_org_id: string }; Returns: Json }
+      org_get_subscription_status: { Args: { p_org_id: string }; Returns: Json }
+      org_resolve_all_quotas: { Args: { p_org_id: string }; Returns: Json }
+      org_resolve_quota: {
+        Args: { p_org_id: string; p_resource_key: string }
+        Returns: Json
+      }
+      process_overdue_subscriptions: {
+        Args: { p_grace_days?: number }
+        Returns: {
+          days_overdue: number
+          new_status: string
+          org_name: string
+          organization_id: string
+        }[]
+      }
       save_document_content: {
         Args: { p_content: string; p_doc_id: string }
         Returns: undefined
@@ -8474,6 +9260,16 @@ channel_messages: {
         }
         Returns: boolean
       }
+      set_uazapi_credentials: {
+        Args: {
+          p_instance_id: string
+          p_organization_id: string
+          p_uazapi_instance_id?: string
+          p_uazapi_token: string
+          p_webhook_secret?: string
+        }
+        Returns: undefined
+      }
       soft_delete_whatsapp_conversation: {
         Args: {
           p_instance_id: string
@@ -8482,14 +9278,19 @@ channel_messages: {
         }
         Returns: string
       }
-      toggle_conversation_ai: {
-        Args: { p_disabled: boolean; p_phone: string }
-        Returns: Json
+      sync_org_quotas_from_plan: {
+        Args: { p_org_id: string }
+        Returns: undefined
       }
       toggle_lead_ai: {
         Args: { p_disabled: boolean; p_lead_id: string }
         Returns: Json
       }
+      toggle_phone_ai: {
+        Args: { p_disabled: boolean; p_phone: string }
+        Returns: Json
+      }
+      try_provision_lock: { Args: { p_user_id: string }; Returns: boolean }
       unlink_agent_from_instance: {
         Args: { p_agent_id: string }
         Returns: undefined
@@ -8497,6 +9298,10 @@ channel_messages: {
       user_has_org_permission: {
         Args: { p_permission_key: string }
         Returns: boolean
+      }
+      validate_coupon: {
+        Args: { p_code: string; p_plan_slug: string }
+        Returns: Json
       }
     }
     Enums: {
@@ -8533,17 +9338,12 @@ channel_messages: {
       lead_origin:
         | "whatsapp"
         | "meta_ads"
-        | "instagram"
-        | "tiktok"
-        | "google_ads"
-        | "site"
-        | "landing_page"
-        | "remarketing"
-        | "indicacao"
-        | "evento"
-        | "prospeccao_ativa"
-        | "cal"
         | "outro"
+        | "site"
+        | "remarketing"
+        | "google_ads"
+        | "cal"
+        | "instagram"
         | "messenger"
       org_type: "crm" | "outbound"
       product_type:
@@ -8688,9 +9488,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {
       agent_energy: ["baixa", "moderada", "alta", "muito_alta"],
@@ -8730,17 +9527,12 @@ export const Constants = {
       lead_origin: [
         "whatsapp",
         "meta_ads",
-        "instagram",
-        "tiktok",
-        "google_ads",
-        "site",
-        "landing_page",
-        "remarketing",
-        "indicacao",
-        "evento",
-        "prospeccao_ativa",
-        "cal",
         "outro",
+        "site",
+        "remarketing",
+        "google_ads",
+        "cal",
+        "instagram",
         "messenger",
       ],
       org_type: ["crm", "outbound"],
