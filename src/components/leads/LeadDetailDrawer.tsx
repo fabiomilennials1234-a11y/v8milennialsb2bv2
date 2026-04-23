@@ -1,14 +1,12 @@
 /**
  * LeadDetailDrawer — unified detail modal for all funnels
  *
- * 5 tabs:
- *   1. Dados       — two-column layout (form + sidebar with quick-note, tags, etc.)
- *   2. Histórico   — advanced timeline (useLeadTimeline + filters)
- *   3. Contexto    — variant-specific funnel actions (meeting, products, orders…)
- *   4. Chat        — ConversationHistoryTab
- *   5. Pipeline    — journey across all pipes
+ * 3 tabs:
+ *   1. Dados       — two-column layout (form + sidebar with funnel context, responsible, tags, quick-note, AI toggle)
+ *   2. Histórico   — advanced timeline (useLeadTimeline + filters by source/period)
+ *   3. Pipeline    — journey across all pipes (whatsapp/confirmacao/propostas/custom/follow-ups)
  *
- * Layout: Dialog central, max-w-[900px], max-h-[90vh]
+ * Layout: Dialog central, max-w-[980px], max-h-[92vh]
  */
 
 import { useState, useEffect, useMemo, memo, type ReactNode } from "react";
@@ -86,7 +84,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { ConversationHistoryTab } from "./ConversationHistoryTab";
 import { TimelineItem } from "./TimelineItem";
 import { ScheduleFollowUpButton } from "@/components/followups/ScheduleFollowUpButton";
 import { ScheduleMessageModal } from "@/components/chat/ScheduleMessageModal";
@@ -209,7 +206,7 @@ export const LeadDetailDrawer = memo(function LeadDetailDrawer({
     enabled: !!leadId && open,
   });
 
-  // ─── Pipeline query ─────────────────────────────────────
+  // ─── Pipeline query — lazy load only when the Pipeline tab is active ─────
   const { data: pipelineData } = useQuery({
     queryKey: ["lead-pipes", leadId],
     queryFn: async () => {
@@ -231,7 +228,7 @@ export const LeadDetailDrawer = memo(function LeadDetailDrawer({
         followUps: followUps.data || [],
       };
     },
-    enabled: !!leadId && open,
+    enabled: !!leadId && open && activeTab === "pipeline",
   });
 
   // ─── Timeline ───────────────────────────────────────────
@@ -528,7 +525,7 @@ export const LeadDetailDrawer = memo(function LeadDetailDrawer({
   return (
     <>
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[900px] max-h-[90vh] p-0 overflow-hidden flex flex-col">
+      <DialogContent className="sm:max-w-[980px] max-h-[92vh] p-0 overflow-hidden flex flex-col border-border/70 shadow-[0_40px_80px_-20px_hsl(0_0%_0%/0.4)]">
         {isLoading ? (
           <div className="p-6 space-y-4">
             <Skeleton className="h-8 w-48" />
@@ -538,56 +535,76 @@ export const LeadDetailDrawer = memo(function LeadDetailDrawer({
         ) : lead ? (
           <>
             {/* ─── Header ─────────────────────────────── */}
-            <div className="p-6 pb-4 border-b border-border bg-gradient-to-r from-primary/5 to-transparent shrink-0">
-              <div className="flex items-start justify-between gap-4">
+            <div className="relative p-6 pb-5 border-b border-border shrink-0 overflow-hidden">
+              {/* Subtle gold halo */}
+              <div
+                aria-hidden
+                className="absolute pointer-events-none"
+                style={{
+                  top: "-40%", right: "-10%",
+                  width: "380px", height: "380px",
+                  borderRadius: "50%",
+                  background: "hsl(var(--primary))",
+                  opacity: 0.06,
+                  filter: "blur(60px)",
+                }}
+              />
+
+              <div className="relative flex items-start justify-between gap-4">
                 <div className="flex items-center gap-4 min-w-0">
-                  <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                    <span className="text-xl font-bold text-primary">{initials(lead.name)}</span>
+                  {/* Avatar with gradient gold ring */}
+                  <div
+                    className="w-[60px] h-[60px] rounded-full flex items-center justify-center shrink-0"
+                    style={{
+                      background: "linear-gradient(135deg, hsl(var(--primary) / 0.28), hsl(var(--primary) / 0.08))",
+                      boxShadow: "0 0 0 1.5px hsl(var(--primary) / 0.4), 0 0 24px -4px hsl(var(--primary) / 0.3)",
+                    }}
+                  >
+                    <span className="text-[20px] font-bold text-primary tracking-[-0.03em]">{initials(lead.name)}</span>
                   </div>
                   <div className="min-w-0">
-                    <h2 className="text-xl font-bold truncate">{lead.name}</h2>
+                    <h2 className="font-display text-[22px] font-extrabold tracking-[-0.03em] leading-tight truncate">
+                      {lead.name}
+                    </h2>
                     {lead.company && (
-                      <p className="text-muted-foreground flex items-center gap-1 mt-0.5 text-sm">
-                        <Building2 className="w-4 h-4 shrink-0" />
+                      <p className="text-muted-foreground flex items-center gap-1.5 mt-1 text-[13px]">
+                        <Building2 className="w-3.5 h-3.5 shrink-0 opacity-70" />
                         <span className="truncate">{lead.company}</span>
                       </p>
                     )}
-                    <div className="flex items-center gap-2 mt-2 flex-wrap">
-                      {/* Origin badge */}
+                    <div className="flex items-center gap-1.5 mt-2.5 flex-wrap">
+                      {/* Funnel badge (context pill) */}
+                      <span className="tag-pill !text-primary !border-[hsl(var(--primary)/0.35)] !bg-[hsl(var(--primary)/0.08)]">
+                        {VARIANT_LABELS[variant]}
+                      </span>
+                      {/* Origin pill */}
                       {(() => {
                         const oc = ORIGIN_COLORS[lead.origin] || ORIGIN_COLORS.outro;
                         return (
-                          <Badge
-                            variant="outline"
-                            className="text-xs"
-                            style={{ backgroundColor: oc.bg, color: oc.text, borderColor: `${oc.text}30` }}
-                          >
+                          <span className="origin-pill">
+                            <span className="origin-dot" style={{ color: oc.dot, background: oc.dot }} />
                             {oc.label}
-                          </Badge>
+                          </span>
                         );
                       })()}
-                      {/* Urgency badge */}
+                      {/* Urgency */}
                       {lead.urgency && (
-                        <Badge variant="outline" className="text-xs bg-orange-500/10 text-orange-600 border-orange-500/20">
+                        <span className="tag-pill !text-[hsl(30_96%_58%)] !border-[hsl(30_96%_58%/0.3)] !bg-[hsl(30_96%_58%/0.08)]">
                           {lead.urgency}
-                        </Badge>
+                        </span>
                       )}
-                      {/* Funnel badge */}
-                      <Badge variant="outline" className="text-xs">
-                        {VARIANT_LABELS[variant]}
-                      </Badge>
-                      {/* Calor */}
+                      {/* Calor chip */}
                       {lead.rating != null && lead.rating > 0 && (() => {
-                        const info = lead.rating >= 8
-                          ? { color: "text-red-500", bg: "bg-red-500/10 border-red-500/30" }
+                        const chipClass = lead.rating >= 8
+                          ? "heat-chip heat-chip-hot"
                           : lead.rating >= 4
-                          ? { color: "text-amber-500", bg: "bg-amber-500/10 border-amber-500/30" }
-                          : { color: "text-blue-500", bg: "bg-blue-500/10 border-blue-500/30" };
+                          ? "heat-chip heat-chip-warm"
+                          : "heat-chip heat-chip-cold";
                         return (
-                          <Badge variant="outline" className={cn("text-xs gap-1", info.bg)}>
-                            <Flame className={cn("w-3 h-3", info.color)} />
-                            <span className={info.color}>{lead.rating}</span>
-                          </Badge>
+                          <span className={chipClass}>
+                            <Flame className="w-3 h-3" />
+                            {lead.rating}
+                          </span>
                         );
                       })()}
                     </div>
@@ -635,7 +652,7 @@ export const LeadDetailDrawer = memo(function LeadDetailDrawer({
                   {/* Menu */}
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="outline" size="icon" className="h-8 w-8">
+                      <Button variant="outline" size="icon" className="h-8 w-8" aria-label="Mais opções">
                         <MoreVertical className="w-4 h-4" />
                       </Button>
                     </DropdownMenuTrigger>
@@ -674,16 +691,29 @@ export const LeadDetailDrawer = memo(function LeadDetailDrawer({
 
             {/* ─── Tabs ───────────────────────────────── */}
             <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
-              <div className="px-6 pt-2 shrink-0">
-                <TabsList className="grid w-full grid-cols-5">
-                  <TabsTrigger value="dados">Dados</TabsTrigger>
-                  <TabsTrigger value="historico">Histórico</TabsTrigger>
-                  <TabsTrigger value="contexto">Contexto do funil</TabsTrigger>
-                  <TabsTrigger value="ai" className="flex items-center gap-1">
-                    <MessageSquare className="w-3.5 h-3.5" />
-                    Chat
+              <div className="px-6 pt-3 shrink-0 border-b border-border/50">
+                <TabsList className="h-10 bg-transparent p-0 gap-1 justify-start w-full">
+                  <TabsTrigger
+                    value="dados"
+                    className="h-10 px-3 text-[13px] font-medium data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none rounded-none border-b-2 border-transparent data-[state=active]:border-primary text-muted-foreground gap-1.5"
+                  >
+                    <User className="w-3.5 h-3.5" />
+                    Dados
                   </TabsTrigger>
-                  <TabsTrigger value="pipeline">Pipeline</TabsTrigger>
+                  <TabsTrigger
+                    value="historico"
+                    className="h-10 px-3 text-[13px] font-medium data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none rounded-none border-b-2 border-transparent data-[state=active]:border-primary text-muted-foreground gap-1.5"
+                  >
+                    <History className="w-3.5 h-3.5" />
+                    Histórico
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="pipeline"
+                    className="h-10 px-3 text-[13px] font-medium data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none rounded-none border-b-2 border-transparent data-[state=active]:border-primary text-muted-foreground gap-1.5"
+                  >
+                    <BarChart3 className="w-3.5 h-3.5" />
+                    Pipeline
+                  </TabsTrigger>
                 </TabsList>
               </div>
 
@@ -748,44 +778,38 @@ export const LeadDetailDrawer = memo(function LeadDetailDrawer({
                         />
                       </div>
 
-                      {/* HISTÓRICO RECENTE — last 3 events */}
-                      <div>
-                        <h3 className="text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-3">
-                          Histórico recente
-                        </h3>
-                        {timeline.isLoading ? (
-                          <div className="flex items-center justify-center py-4">
-                            <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
-                          </div>
-                        ) : timeline.data && timeline.data.events.length > 0 ? (
-                          <div className="space-y-0">
-                            {timeline.data.events.slice(0, 3).map((event, index) => (
-                              <TimelineItem
-                                key={event.id}
-                                event={event}
-                                isLast={index === Math.min(2, timeline.data!.events.length - 1)}
-                              />
-                            ))}
-                            {timeline.data.events.length > 3 && (
-                              <button
-                                onClick={() => setActiveTab("historico")}
-                                className="w-full text-left text-sm text-primary hover:underline py-2 flex items-center gap-1"
-                              >
-                                Ver histórico completo
-                                <ArrowRight className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-                          </div>
-                        ) : (
-                          <p className="text-sm text-muted-foreground py-2">
-                            Nenhum histórico registrado.
-                          </p>
-                        )}
-                      </div>
                     </div>
 
                     {/* ─── Right Sidebar ─── */}
-                    <div className="w-[240px] shrink-0 space-y-5">
+                    <div className="w-[260px] shrink-0 space-y-5">
+                      {/* CONTEXTO DO FUNIL — variant-specific actions on top */}
+                      <div>
+                        <h3 className="text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-2 flex items-center gap-1.5">
+                          <Target className="w-3 h-3" />
+                          Contexto do funil
+                        </h3>
+                        {renderFunnelContext ? (
+                          <div className="rounded-lg border border-border bg-card/50 p-3">
+                            {renderFunnelContext({ lead, pipeData, onSuccess })}
+                          </div>
+                        ) : (
+                          <div className="rounded-lg border border-dashed border-border bg-card/30 p-4 text-center">
+                            <BarChart3 className="w-5 h-5 text-muted-foreground/40 mx-auto mb-1.5" />
+                            <p className="text-[12px] font-medium leading-tight">Sem ações contextuais</p>
+                            <p className="text-[11px] text-muted-foreground mt-1 leading-snug mb-2.5">
+                              Este lead não está em nenhum funil com ações específicas.
+                            </p>
+                            <button
+                              onClick={() => setActiveTab("pipeline")}
+                              className="text-[11.5px] font-medium text-primary hover:underline inline-flex items-center gap-1"
+                            >
+                              Ver pipeline completo
+                              <ArrowRight className="w-3 h-3" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
                       {/* RESPONSÁVEL */}
                       <div>
                         <h3 className="text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-2">Responsável</h3>
@@ -1224,26 +1248,7 @@ export const LeadDetailDrawer = memo(function LeadDetailDrawer({
                   )}
                 </TabsContent>
 
-                {/* ─── Tab 3: Contexto do funil ────────── */}
-                <TabsContent value="contexto" className="p-6 pt-4 m-0">
-                  {renderFunnelContext ? (
-                    renderFunnelContext({ lead, pipeData, onSuccess })
-                  ) : (
-                    <div className="text-center py-12">
-                      <History className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
-                      <p className="text-sm text-muted-foreground">
-                        Nenhuma ação específica para este funil.
-                      </p>
-                    </div>
-                  )}
-                </TabsContent>
-
-                {/* ─── Tab 4: Chat ────────────────────── */}
-                <TabsContent value="ai" className="m-0 flex-1 flex flex-col min-h-0 h-[500px]">
-                  <ConversationHistoryTab leadId={lead.id} leadName={lead.name} leadPhone={lead.phone} />
-                </TabsContent>
-
-                {/* ─── Tab 5: Pipeline ────────────────── */}
+                {/* ─── Tab: Pipeline ────────────────── */}
                 <TabsContent value="pipeline" className="p-6 pt-4 space-y-6 m-0">
                   {/* Stats */}
                   <div className="grid grid-cols-4 gap-3">
@@ -1402,30 +1407,44 @@ export const LeadDetailDrawer = memo(function LeadDetailDrawer({
             </Tabs>
 
             {/* ─── Footer ─────────────────────────────── */}
-            <div className="p-4 border-t border-border bg-muted/30 flex items-center justify-between shrink-0">
-              <p className="text-xs text-muted-foreground">
-                {createdAgo && `Criado ${createdAgo}`}
-                {createdAgo && lastActivity && " · "}
-                {lastActivity && `Última atividade ${lastActivity}`}
-              </p>
+            <div className="px-5 py-3 border-t border-border/60 bg-card/50 flex items-center justify-between shrink-0 backdrop-blur">
+              <div className="flex items-center gap-2 text-[11.5px] text-muted-foreground">
+                <Clock className="w-3 h-3 opacity-60" />
+                <span className="font-mono-num">
+                  {createdAgo && `Criado ${createdAgo}`}
+                  {createdAgo && lastActivity && " · "}
+                  {lastActivity && `Atividade ${lastActivity}`}
+                </span>
+              </div>
               <div className="flex items-center gap-2">
+                {isDirty && (
+                  <span className="text-[11px] text-[hsl(30_96%_58%)] font-medium flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[hsl(30_96%_58%)] animate-pulse" />
+                    Alterações não salvas
+                  </span>
+                )}
                 <Button
-                  variant="outline"
+                  variant="ghost"
                   size="sm"
-                  className="text-destructive hover:text-destructive"
+                  className="text-destructive hover:text-destructive hover:bg-destructive/10 h-8"
                   onClick={handleDeleteLead}
                   disabled={deleteLead.isPending}
                 >
                   {deleteLead.isPending ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Trash2 className="w-3 h-3 mr-1" />}
-                  Excluir lead
+                  Excluir
                 </Button>
                 <Button
                   size="sm"
+                  className={cn(
+                    "h-8 gradient-gold font-semibold transition-shadow",
+                    !isDirty && "opacity-50",
+                    isDirty && !isSaving && "btn-dirty-glow",
+                  )}
                   onClick={handleSave}
                   disabled={isSaving || !isDirty}
                 >
                   {isSaving ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : null}
-                  Salvar
+                  Salvar alterações
                 </Button>
               </div>
             </div>
