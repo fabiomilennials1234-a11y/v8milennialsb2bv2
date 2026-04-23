@@ -1631,6 +1631,44 @@ export type Database = {
           },
         ]
       }
+      conversation_read_state: {
+        Row: {
+          conversation_key: string
+          created_at: string
+          id: string
+          last_read_at: string
+          organization_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          conversation_key: string
+          created_at?: string
+          id?: string
+          last_read_at?: string
+          organization_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          conversation_key?: string
+          created_at?: string
+          id?: string
+          last_read_at?: string
+          organization_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversation_read_state_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       conversation_summaries: {
         Row: {
           coaching_tips: Json | null
@@ -1710,6 +1748,10 @@ export type Database = {
       conversations: {
         Row: {
           agent_id: string
+          ai_state: Database["public"]["Enums"]["ai_takeover_state_enum"]
+          ai_state_resume_mode: string | null
+          ai_state_updated_at: string | null
+          ai_state_updated_by: string | null
           assigned_to: string | null
           context: Json | null
           created_at: string | null
@@ -1725,6 +1767,10 @@ export type Database = {
         }
         Insert: {
           agent_id: string
+          ai_state?: Database["public"]["Enums"]["ai_takeover_state_enum"]
+          ai_state_resume_mode?: string | null
+          ai_state_updated_at?: string | null
+          ai_state_updated_by?: string | null
           assigned_to?: string | null
           context?: Json | null
           created_at?: string | null
@@ -1740,6 +1786,10 @@ export type Database = {
         }
         Update: {
           agent_id?: string
+          ai_state?: Database["public"]["Enums"]["ai_takeover_state_enum"]
+          ai_state_resume_mode?: string | null
+          ai_state_updated_at?: string | null
+          ai_state_updated_by?: string | null
           assigned_to?: string | null
           context?: Json | null
           created_at?: string | null
@@ -8364,6 +8414,7 @@ export type Database = {
           raw_payload: Json | null
           reactions: Json
           remote_jid: string
+          search_tsv: unknown
           sent_by_ai: boolean | null
           status: string | null
           timestamp: string
@@ -8389,6 +8440,7 @@ export type Database = {
           raw_payload?: Json | null
           reactions?: Json
           remote_jid: string
+          search_tsv?: unknown
           sent_by_ai?: boolean | null
           status?: string | null
           timestamp?: string
@@ -8414,6 +8466,7 @@ export type Database = {
           raw_payload?: Json | null
           reactions?: Json
           remote_jid?: string
+          search_tsv?: unknown
           sent_by_ai?: boolean | null
           status?: string | null
           timestamp?: string
@@ -9260,6 +9313,25 @@ export type Database = {
         }
         Returns: boolean
       }
+      search_messages: {
+        Args: {
+          p_limit?: number
+          p_offset?: number
+          p_org_id: string
+          p_query: string
+        }
+        Returns: {
+          content: string
+          direction: string
+          headline: string
+          id: string
+          instance_id: string
+          lead_id: string
+          phone_number: string
+          rank: number
+          timestamp: string
+        }[]
+      }
       set_uazapi_credentials: {
         Args: {
           p_instance_id: string
@@ -9326,6 +9398,12 @@ export type Database = {
         | "amigavel"
         | "energetico"
         | "consultivo"
+      ai_takeover_state_enum:
+        | "AI_ACTIVE"
+        | "AI_PAUSED_MANUAL"
+        | "WAITING_HUMAN"
+        | "HUMAN_ACTIVE"
+        | "HANDOFF_BACK"
       app_role:
         | "admin"
         | "sdr"
@@ -9513,6 +9591,13 @@ export const Constants = {
         "amigavel",
         "energetico",
         "consultivo",
+      ],
+      ai_takeover_state_enum: [
+        "AI_ACTIVE",
+        "AI_PAUSED_MANUAL",
+        "WAITING_HUMAN",
+        "HUMAN_ACTIVE",
+        "HANDOFF_BACK",
       ],
       app_role: [
         "admin",

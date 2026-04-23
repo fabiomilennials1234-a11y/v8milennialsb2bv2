@@ -802,8 +802,17 @@ export default function MockupChatV3() {
         </section>
 
         {/* Footer */}
-        <footer className="border-t border-border pt-6 pb-2 flex items-center justify-between text-[11px] text-muted-foreground/60">
-          <span>Onda 3.1 · branch <code className="font-mono">feat/chat-ux-ui-redesign</code></span>
+        <footer className="border-t border-border pt-6 pb-2 flex flex-wrap items-center justify-between gap-3 text-[11px] text-muted-foreground/60">
+          <div className="flex items-center gap-3 flex-wrap">
+            <span>Onda 3.1 · branch <code className="font-mono">feat/chat-ux-ui-redesign</code></span>
+            <Badge
+              variant="outline"
+              className="font-mono text-[10px] border-primary/40 text-primary/70 gap-1 select-all"
+              title="Adicione ao seu .env para ativar o ChatShell 3-col em /chat"
+            >
+              VITE_CHAT_ONDA_2B=true
+            </Badge>
+          </div>
           <div className="flex items-center gap-4">
             <Link to="/_mockup/chat" className="hover:text-foreground transition-colors">v1</Link>
             <Link to="/_mockup/chat-v2" className="hover:text-foreground transition-colors">v2</Link>
