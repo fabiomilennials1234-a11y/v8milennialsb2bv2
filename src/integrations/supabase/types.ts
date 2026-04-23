@@ -5184,6 +5184,9 @@ export type Database = {
           subscription_status: string
           updated_at: string | null
           user_creation_key: string | null
+          whatsapp_migration_completed_at: string | null
+          whatsapp_migration_status: string
+          whatsapp_provider_override: string | null
           whatsapp_rate_limit: Json | null
         }
         Insert: {
@@ -5207,6 +5210,9 @@ export type Database = {
           subscription_status?: string
           updated_at?: string | null
           user_creation_key?: string | null
+          whatsapp_migration_completed_at?: string | null
+          whatsapp_migration_status?: string
+          whatsapp_provider_override?: string | null
           whatsapp_rate_limit?: Json | null
         }
         Update: {
@@ -5230,6 +5236,9 @@ export type Database = {
           subscription_status?: string
           updated_at?: string | null
           user_creation_key?: string | null
+          whatsapp_migration_completed_at?: string | null
+          whatsapp_migration_status?: string
+          whatsapp_provider_override?: string | null
           whatsapp_rate_limit?: Json | null
         }
         Relationships: [

@@ -171,7 +171,36 @@ export async function getWhatsAppProvider(
   instance: WhatsAppInstance,
   supabaseAdmin: SupabaseClient
 ): Promise<WhatsAppProvider> {
-  if (instance.provider === "uazapi") {
+  // Sprint 3 S3.2 — kill-switch: organizations.whatsapp_provider_override
+  // takes precedence over instance.provider. Used as panic button during
+  // migration rollout if Uazapi has a platform-wide incident.
+  let effectiveProvider: "uazapi" | "evolution" = instance.provider;
+  try {
+    const { data: org } = await supabaseAdmin
+      .from("organizations")
+      .select("whatsapp_provider_override")
+      .eq("id", instance.organization_id)
+      .maybeSingle();
+    const override = (org as any)?.whatsapp_provider_override as
+      | "uazapi"
+      | "evolution"
+      | null
+      | undefined;
+    if (override === "uazapi" || override === "evolution") {
+      effectiveProvider = override;
+    }
+  } catch {
+    // Never block on override lookup — fall back to instance.provider
+  }
+
+  if (effectiveProvider === "evolution") {
+    const { EvolutionProvider } = await import(
+      "./whatsapp-providers/evolution-provider.ts"
+    );
+    return new EvolutionProvider(instance);
+  }
+
+  if (effectiveProvider === "uazapi") {
     const baseUrl = (Deno as any).env.get("UAZAPI_BASE_URL");
     const adminToken = (Deno as any).env.get("UAZAPI_ADMIN_TOKEN");
     if (!baseUrl || !adminToken) {
@@ -209,6 +238,6 @@ export async function getWhatsAppProvider(
   }
 
   throw new Error(
-    `Unknown whatsapp_instances.provider="${instance.provider}" — only "uazapi" is supported after Fase 7 cleanup`
+    `Unknown provider resolved="${effectiveProvider}" for instance ${instance.id}`
   );
 }
