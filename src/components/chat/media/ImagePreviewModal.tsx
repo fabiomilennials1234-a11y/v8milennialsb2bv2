@@ -25,7 +25,7 @@ export function ImagePreviewModal({ imageUrl, isOpen, onClose }: ImagePreviewMod
       onClick={onClose}
     >
       <button
-        className="absolute top-4 right-4 text-white hover:text-gray-300"
+        className="absolute top-4 right-4 text-white hover:text-white/70"
         onClick={onClose}
         aria-label="Fechar preview"
       >
