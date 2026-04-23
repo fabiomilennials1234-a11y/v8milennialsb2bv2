@@ -34,6 +34,7 @@ import {
   useDismissOnboarding,
   type OnboardingProgress,
 } from "@/hooks/onboarding/useOnboardingChecklist";
+import { usePrimeOnboardingProgress } from "@/hooks/onboarding/usePrimeOnboardingProgress";
 
 // ─── Config dos steps ─────────────────────────────────────────────────────────
 
@@ -229,6 +230,9 @@ export function OnboardingChecklist() {
   const { data: progress, isLoading } = useOnboardingChecklist();
   const dismiss = useDismissOnboarding();
   const [expanded, setExpanded] = useState(false);
+
+  // Backfill client-side para orgs existentes (uma vez por sessão)
+  usePrimeOnboardingProgress();
 
   const handleDismiss = useCallback(() => {
     dismiss.mutate();
