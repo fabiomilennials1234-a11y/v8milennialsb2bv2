@@ -8,12 +8,15 @@
  *   Lead meta: source chip + score + responsible
  *   AITimeline: seção expansível no bottom
  */
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { useLeadByPhone } from "@/hooks/useWhatsAppLeadIntegration";
 import { AITimeline } from "@/components/chat/takeover/AITimeline";
+import { supabase } from "@/integrations/supabase/client";
 import { Loader2 } from "lucide-react";
 
 // ─── Props ─────────────────────────────────────────────────────────────────────
@@ -36,10 +39,51 @@ const SOURCE_LABELS: Record<string, string> = {
   outro:       "Outro",
 };
 
+// ─── Hook: atualiza campo do lead inline (C4 — Onda 5) ───────────────────────
+
+function useUpdateLeadField(leadId: string | null | undefined, phoneNumber: string | null | undefined) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ field, value }: { field: string; value: string }) => {
+      if (!leadId) throw new Error("leadId ausente");
+      const { error } = await supabase
+        .from("leads")
+        .update({ [field]: value })
+        .eq("id", leadId);
+      if (error) throw error;
+    },
+    onMutate: async ({ field, value }) => {
+      // Optimistic update
+      const key = ["lead_by_phone", phoneNumber, undefined as unknown];
+      await qc.cancelQueries({ queryKey: ["lead_by_phone"] });
+      const prev = qc.getQueryData(key);
+      qc.setQueriesData({ queryKey: ["lead_by_phone"] }, (old: unknown) => {
+        if (!old || typeof old !== "object") return old;
+        return { ...(old as Record<string, unknown>), [field]: value };
+      });
+      return { prev };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.prev !== undefined) {
+        qc.setQueriesData({ queryKey: ["lead_by_phone"] }, () => ctx.prev);
+      }
+      toast.error("Falha ao atualizar campo do lead");
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["lead_by_phone"] });
+      qc.invalidateQueries({ queryKey: ["leads"] });
+      toast.success("Lead atualizado");
+    },
+  });
+}
+
 // ─── Componente ────────────────────────────────────────────────────────────────
 
 export function ContextPanelInfo({ leadId, phoneNumber, pushName }: ContextPanelInfoProps) {
   const { data: lead, isLoading } = useLeadByPhone(phoneNumber ?? null);
+  // C4 — mutation real para atualizar campos do lead inline.
+  // Handler disponível para quando campos editáveis forem adicionados neste panel.
+  const { mutate: updateLeadField } = useUpdateLeadField(lead?.id ?? leadId, phoneNumber);
 
   // Se não tem phone, não tem como buscar o lead
   if (!phoneNumber) {
