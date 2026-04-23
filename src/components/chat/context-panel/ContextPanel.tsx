@@ -59,15 +59,15 @@ export function ContextPanel({
           </TabsContent>
 
           <TabsContent value="pipe" className="h-full mt-0">
-            <ContextPanelPipe />
+            <ContextPanelPipe phoneNumber={phoneNumber} />
           </TabsContent>
 
           <TabsContent value="tags" className="h-full mt-0">
-            <ContextPanelTags />
+            <ContextPanelTags phoneNumber={phoneNumber} />
           </TabsContent>
 
           <TabsContent value="history" className="h-full mt-0">
-            <ContextPanelHistory />
+            <ContextPanelHistory phoneNumber={phoneNumber} />
           </TabsContent>
         </div>
       </Tabs>
