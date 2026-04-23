@@ -121,12 +121,11 @@ describe("getWhatsAppProvider — factory", () => {
     });
   });
 
-  it("throws when provider is not uazapi (Evolution removed in Fase 7)", async () => {
+  it("returns EvolutionProvider for evolution instance (kill-switch path restored in Sprint 3)", async () => {
     const rpcMock = vi.fn();
     const admin = makeAdminMock({ rpc: rpcMock });
-    await expect(
-      getWhatsAppProvider(EVOLUTION_INSTANCE, admin)
-    ).rejects.toThrow(/only "uazapi" is supported/);
+    const provider = await getWhatsAppProvider(EVOLUTION_INSTANCE, admin);
+    expect(provider.provider).toBe("evolution");
     expect(rpcMock).not.toHaveBeenCalled();
   });
 
