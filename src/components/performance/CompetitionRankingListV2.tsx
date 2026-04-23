@@ -162,7 +162,7 @@ function RankingRow({ user, index, metricType, change }: RankingRowProps) {
       </span>
 
       {/* Progress bar */}
-      <div className="flex-1 h-1 rounded-full overflow-hidden bg-white/5">
+      <div className="flex-1 h-1 rounded-full overflow-hidden bg-muted/50">
         <motion.div
           initial={{ width: 0 }}
           animate={controls}
