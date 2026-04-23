@@ -24,7 +24,7 @@
 
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2, WifiOff } from "lucide-react";
+import { Loader2, WifiOff, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { ChatShell } from "@/components/chat/layout/ChatShell";
 import { ConversationList } from "@/components/chat/list/ConversationList";
@@ -33,12 +33,14 @@ import { MessageList } from "@/components/chat/view/MessageList";
 import { ChatComposer } from "@/components/chat/composer/ChatComposer";
 import { ContextPanel } from "@/components/chat/context-panel/ContextPanel";
 import { LeadContactModal } from "@/components/chat/LeadContactModal";
+import { ImagePreviewModal } from "@/components/chat/media/ImagePreviewModal";
 import { useWhatsAppInstancesForUser } from "@/hooks/chat/useWhatsAppInstances";
 import { useWhatsAppContacts } from "@/hooks/chat/useWhatsAppContacts";
 import { useWhatsAppMessages } from "@/hooks/chat/useWhatsAppMessages";
 import { useWhatsAppMessagesRealtime } from "@/hooks/chat/useWhatsAppRealtime";
-import { useFailedMessages } from "@/hooks/chat/useWhatsAppSend";
+import { useFailedMessages, useRetryMessage } from "@/hooks/chat/useWhatsAppSend";
 import { useChatDensity } from "@/hooks/chat/useChatDensity";
+import { useTakeover } from "@/hooks/chat/useTakeover";
 import { useIsAdmin } from "@/hooks/useUserRole";
 import { useTags } from "@/hooks/useTags";
 import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
@@ -51,7 +53,7 @@ import {
   useRemoveConversationTag,
 } from "@/hooks/useWhatsAppConversations";
 import { supabase } from "@/integrations/supabase/client";
-import type { ChatContact } from "@/hooks/chat/types";
+import type { ChatContact, FailedMessage } from "@/hooks/chat/types";
 import type { DensityMode } from "@/hooks/chat/useChatDensity";
 
 // ─── Tipos internos ──────────────────────────────────────────────────────────
@@ -66,7 +68,6 @@ interface ChatViewProps {
   instanceName: string;
   organizationId: string | null;
   mountTime: number;
-  isWaitingHuman: boolean;
   onBack: () => void;
   onOpenLeadModal: () => void;
   density: DensityMode;
@@ -79,13 +80,13 @@ function ChatView({
   instanceName,
   organizationId,
   mountTime,
-  isWaitingHuman,
   onBack,
   onOpenLeadModal,
   density,
   onDensityChange,
 }: ChatViewProps) {
   const phoneNumber = selectedContact?.phone_number ?? null;
+  const conversationId = selectedContact?.conversation_id ?? null;
 
   const { data: messages = [], isLoading: messagesLoading } = useWhatsAppMessages(
     phoneNumber,
@@ -93,6 +94,20 @@ function ChatView({
   );
 
   const failedMessages = useFailedMessages(phoneNumber, instanceId);
+  const retryFn = useRetryMessage();
+
+  // ── C1: useTakeover real — FSM ia_state da conversa ──────────────────────
+  const {
+    state: takeoverState,
+    isMutating: takeoverMutating,
+    markHumanActive,
+  } = useTakeover(conversationId);
+
+  const isWaitingHuman = takeoverState === "WAITING_HUMAN";
+  const isHumanActive  = takeoverState === "HUMAN_ACTIVE";
+
+  // Image preview state (C6)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   // AI toggle — lê estado atual do lead, grava via update direto
   const { data: aiStatus } = useQuery({
@@ -127,6 +142,13 @@ function ChatView({
     onError: () => toast.error("Falha ao alterar IA"),
   });
 
+  const handleRetry = useCallback(
+    (msg: FailedMessage) => {
+      void retryFn(msg);
+    },
+    [retryFn],
+  );
+
   if (!selectedContact || !instanceId) {
     return (
       <div className="flex flex-col h-full items-center justify-center gap-3 text-muted-foreground bg-muted/10">
@@ -143,23 +165,47 @@ function ChatView({
 
   return (
     <div className="flex flex-col h-full min-h-0">
+      {/* C1 — Banner WAITING_HUMAN */}
+      {isWaitingHuman && (
+        <div
+          role="alert"
+          className="flex items-center justify-between gap-3 px-4 py-2 bg-amber-500/15 border-b border-amber-500/30 text-amber-700 dark:text-amber-300 shrink-0"
+        >
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <UserPlus className="w-4 h-4 shrink-0" aria-hidden />
+            IA pediu ajuda. Assuma a conversa.
+          </div>
+          <button
+            type="button"
+            className="text-xs font-semibold underline underline-offset-2 hover:no-underline shrink-0 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 rounded"
+            onClick={() => { void markHumanActive(); }}
+            disabled={takeoverMutating}
+          >
+            {takeoverMutating ? "..." : "Assumir"}
+          </button>
+        </div>
+      )}
+
       <ChatHeader
         phoneNumber={selectedContact.phone_number}
         contactName={contactName}
         hasLead={!!selectedContact.lead_id}
         leadId={selectedContact.lead_id ?? undefined}
-        conversationId={selectedContact.conversation_id ?? null}
-        aiDisabled={aiDisabled}
+        conversationId={conversationId}
+        aiDisabled={aiDisabled || isHumanActive}
         isWaitingHuman={isWaitingHuman}
         szChatSession={null}
         organizationId={organizationId}
         onBack={onBack}
         onOpenLeadModal={onOpenLeadModal}
-        onToggleAi={(checked) => toggleAiMutation.mutate(checked)}
-        onTransferToSzChatTeam={() => {
-          // SZ.chat transfer — Onda 5
+        onToggleAi={(checked) => {
+          if (isHumanActive) return;
+          toggleAiMutation.mutate(checked);
         }}
-        toggleAiPending={toggleAiMutation.isPending}
+        onTransferToSzChatTeam={() => {
+          // SZ.chat transfer — Onda 6
+        }}
+        toggleAiPending={toggleAiMutation.isPending || isHumanActive}
         transferPending={false}
         density={density}
         onDensityChange={onDensityChange}
@@ -180,12 +226,8 @@ function ChatView({
             instanceName={instanceName}
             lastReadAt={0}
             mountTime={mountTime}
-            onImagePreview={() => {
-              // Image preview — Onda 5
-            }}
-            onRetry={() => {
-              // Retry failed message — Onda 5
-            }}
+            onImagePreview={(url) => setPreviewUrl(url)}
+            onRetry={handleRetry}
             onOpenTemplates={() => {
               // Templates abertos via slash command no composer
             }}
@@ -211,6 +253,13 @@ function ChatView({
           phone_number: selectedContact.phone_number,
           lead_id: selectedContact.lead_id ?? null,
         }}
+      />
+
+      {/* C6 — Image preview inline */}
+      <ImagePreviewModal
+        isOpen={!!previewUrl}
+        imageUrl={previewUrl}
+        onClose={() => setPreviewUrl(null)}
       />
     </div>
   );
@@ -416,7 +465,6 @@ export function ChatShellWithContext() {
             instanceName={selectedInstance?.instance_name ?? ""}
             organizationId={organizationId}
             mountTime={mountTimeRef.current}
-            isWaitingHuman={isSelectedContactWaitingHuman}
             onBack={handleBack}
             onOpenLeadModal={handleOpenLeadModal}
             density={density}
