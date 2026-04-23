@@ -113,7 +113,27 @@ function normalizeMessage(data: any, instance: ResolvedInstance) {
     data.messageType ??
     (data.text ? "text" : data.media ? "media" : "unknown");
 
-  const content = data.text ?? data.caption ?? data.body ?? null;
+  // Interactive menu responses — extract selected choice to the content
+  // column so downstream (agent-message) sees the choice as if it were
+  // a plain text reply from the lead.
+  const isButtonResponse =
+    messageType === "buttonResponse" ||
+    messageType === "buttonResponseMessage";
+  const isListResponse =
+    messageType === "listResponse" || messageType === "listResponseMessage";
+
+  let content = data.text ?? data.caption ?? data.body ?? null;
+  if ((isButtonResponse || isListResponse) && !content) {
+    content =
+      data.selected ??
+      data.selectedDisplayText ??
+      data.selectedButtonId ??
+      data.selectedRowId ??
+      data.buttonResponse?.selectedDisplayText ??
+      data.listResponse?.title ??
+      null;
+  }
+
   const mediaUrl = data.mediaUrl ?? data.media?.url ?? null;
 
   const tsSeconds =
