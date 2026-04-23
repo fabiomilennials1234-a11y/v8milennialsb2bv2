@@ -16,8 +16,8 @@ function bandColor(seconds: number): {
   label: string;
 } {
   if (seconds <= 0) return { bar: "bg-muted", badge: "text-muted-foreground", label: "sem dados" };
-  if (seconds <= 240) return { bar: "bg-green-500", badge: "text-green-600 dark:text-green-400", label: "excelente" };
-  if (seconds <= 420) return { bar: "bg-yellow-500", badge: "text-yellow-600 dark:text-yellow-400", label: "atenção" };
+  if (seconds <= 240) return { bar: "bg-success", badge: "text-success", label: "excelente" };
+  if (seconds <= 420) return { bar: "bg-warning", badge: "text-warning", label: "atenção" };
   return { bar: "bg-destructive", badge: "text-destructive", label: "lento" };
 }
 

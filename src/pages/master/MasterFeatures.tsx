@@ -252,7 +252,7 @@ export default function MasterFeatures() {
                     <TableCell>{getCategoryBadge(feature.category)}</TableCell>
                     <TableCell>
                       {feature.default_enabled ? (
-                        <Badge className="bg-green-500">Ativo</Badge>
+                        <Badge className="bg-success text-success-foreground">Ativo</Badge>
                       ) : (
                         <Badge variant="secondary">Inativo</Badge>
                       )}
