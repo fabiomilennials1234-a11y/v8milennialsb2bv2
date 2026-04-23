@@ -2,14 +2,10 @@ import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { usePersistedState } from "@/hooks/usePersistedState";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Search, Filter, Plus, Calendar as CalendarIcon, User, Building2, Star,
-  DollarSign, Clock, Tag, Loader2, TrendingUp, Package,
-  ArrowUpRight, Percent, BarChart3, Target, Flame, MessageCircle, Settings2,
-  MoreVertical, Trash2
+  User, Star, Clock, Tag, TrendingUp, Package, Plus, Calendar as CalendarIcon,
+  ArrowUpRight, Percent, BarChart3, Target, Flame,
 } from "lucide-react";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -17,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -36,9 +32,13 @@ import { useStageWorkflowCounts } from "@/hooks/useStageWorkflows";
 import { usePipePropostas, useUpdatePipeProposta, useDeletePipeProposta, PipePropostasStatus } from "@/hooks/usePipePropostas";
 import { usePipePropostasMetrics } from "@/hooks/usePipeMetrics";
 import { type MetricsPeriodState, getDateRange, createInitialPeriodState } from "@/lib/metrics-period";
-import { MetricsPeriodSelector } from "@/components/pipelines/MetricsPeriodSelector";
+import { PipeHeader } from "@/components/pipelines/PipeHeader";
+import { PipeStatsRow, type PipeStat } from "@/components/pipelines/PipeStatsRow";
+import { PipeFilterBar, type FilterChip } from "@/components/pipelines/PipeFilterBar";
+import { PipePeriodChip } from "@/components/pipelines/PipePeriodChip";
+import { DeletePipeCardDialog, DeleteStageLeadsDialog } from "@/components/pipelines/DeletePipeCardDialog";
 import { useDeleteAllLeadsInPipe, useUpdateLead } from "@/hooks/useLeads";
-import { usePipelineStages, stagesToColumns } from "@/hooks/usePipelineStages";
+import { usePipelineStages, stagesToColumns, getPipelineTypeName } from "@/hooks/usePipelineStages";
 import { PipeSettingsDialog } from "@/components/pipelines/PipeSettingsDialog";
 import { useTeamMembers, useResponsibleMembers } from "@/hooks/useTeamMembers";
 import { CreateProposalModal } from "@/components/proposals/CreateProposalModal";
@@ -68,15 +68,6 @@ import { useOrganization } from "@/hooks/useOrganization";
 import { track, trackModuleVisit } from "@/lib/analytics";
 import { useFeaturePermission, useIsAdmin } from "@/hooks/useUserRole";
 import { useMasterAuth } from "@/hooks/useMasterAuth";
-
-const MONTHS_PT = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
-function formatPeriodLabel(range: { startStr: string; endStr: string }): string {
-  const [sy, sm, sd] = range.startStr.slice(0, 10).split("-").map(Number);
-  const [ey, em, ed] = range.endStr.slice(0, 10).split("-").map(Number);
-  if (sy === ey && sm === em) return `${sd}–${ed} ${MONTHS_PT[em - 1]} ${ey}`;
-  if (sy === ey) return `${sd} ${MONTHS_PT[sm - 1]} – ${ed} ${MONTHS_PT[em - 1]} ${ey}`;
-  return `${sd} ${MONTHS_PT[sm - 1]} ${sy} – ${ed} ${MONTHS_PT[em - 1]} ${ey}`;
-}
 
 // ─── Helper: temporal filter para o kanban no modo "Este mês" ────────────────
 const CLOSED_STATUSES_PROPOSTAS = ["vendido", "perdido"];
@@ -243,7 +234,6 @@ export default function PipePropostas() {
   } | null>(null);
 
   const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; pipeId: string; leadId: string } | null>(null);
-  const [deleteAllLeadsDialogOpen, setDeleteAllLeadsDialogOpen] = useState(false);
   const [periodState, setPeriodState] = useState<MetricsPeriodState>(createInitialPeriodState);
   const [stageToDelete, setStageToDelete] = useState<{ id: string; title: string } | null>(null);
 
@@ -604,7 +594,6 @@ export default function PipePropostas() {
 
   // Handle status change from drag-and-drop
   const handleStatusChange = async (itemId: string, newStatus: string) => {
-    console.log("[PipePropostas] handleStatusChange called:", { itemId, newStatus, tinyConnected: tinyStatus?.connected });
     const item = pipeData?.find(p => p.id === itemId);
     if (!item) {
       console.warn("[PipePropostas] Item not found in pipeData:", itemId);
@@ -640,8 +629,6 @@ export default function PipePropostas() {
           // Ignore — proceed without TinyERP modal
         }
       }
-
-      console.log("[PipePropostas] Vendido intercept:", { isTinyConnected, tinyStatusCached: tinyStatus?.connected });
 
       if (isTinyConnected) {
         const itemsList = (item.items || []).map((it: any) => ({
@@ -882,41 +869,194 @@ export default function PipePropostas() {
     return <TorqueLoader variant="inline" />;
   }
 
+  const activeFiltersCount =
+    (filterProductType !== "all" ? 1 : 0) +
+    (filterCalor !== "all" ? 1 : 0) +
+    (filterPriority !== "all" ? 1 : 0) +
+    (filterResponsible !== "all" ? 1 : 0) +
+    (filterScheduled ? 1 : 0);
+
+  const clearAllFilters = () => {
+    setFilterProductType("all");
+    setFilterCalor("all");
+    setFilterPriority("all");
+    setFilterResponsible("all");
+    setFilterScheduled(false);
+  };
+
+  const primaryFilters: FilterChip[] = [
+    {
+      id: "responsible",
+      icon: User,
+      label: "Responsável",
+      activeLabel: filterResponsible !== "all" ? responsibleMembers.find((m) => m.id === filterResponsible)?.name : null,
+      onClear: () => setFilterResponsible("all"),
+      renderControl: () => (
+        <Select value={filterResponsible} onValueChange={setFilterResponsible}>
+          <SelectTrigger className="border-0 bg-transparent h-7 px-1 text-xs focus:ring-0 focus:ring-offset-0 shadow-none gap-1">
+            <User className="w-3 h-3 mr-1 opacity-70" />
+            <SelectValue placeholder="Responsável" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos responsáveis</SelectItem>
+            {responsibleMembers.map((m) => (
+              <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      ),
+    },
+    {
+      id: "calor",
+      icon: Flame,
+      label: "Calor",
+      activeLabel: filterCalor !== "all" ? (filterCalor === "hot" ? "Quente" : filterCalor === "warm" ? "Morno" : "Frio") : null,
+      onClear: () => setFilterCalor("all"),
+      renderControl: () => (
+        <Select value={filterCalor} onValueChange={setFilterCalor}>
+          <SelectTrigger className="border-0 bg-transparent h-7 px-1 text-xs focus:ring-0 focus:ring-offset-0 shadow-none gap-1">
+            <Flame className="w-3 h-3 mr-1 opacity-70" />
+            <SelectValue placeholder="Calor" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos</SelectItem>
+            <SelectItem value="hot">🔥 Quente (7-10)</SelectItem>
+            <SelectItem value="warm">🌤 Morno (4-6)</SelectItem>
+            <SelectItem value="cold">❄ Frio (0-3)</SelectItem>
+          </SelectContent>
+        </Select>
+      ),
+    },
+  ];
+
+  const secondaryFilters: FilterChip[] = [
+    {
+      id: "producttype",
+      icon: Tag,
+      label: "Tipo de produto",
+      activeLabel: filterProductType !== "all" ? (filterProductType === "mrr" ? "Recorrência" : "Projeto") : null,
+      onClear: () => setFilterProductType("all"),
+      renderControl: () => (
+        <Select value={filterProductType} onValueChange={setFilterProductType}>
+          <SelectTrigger><SelectValue placeholder="Tipo" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos tipos</SelectItem>
+            <SelectItem value="mrr">Recorrência</SelectItem>
+            <SelectItem value="projeto">Projeto</SelectItem>
+          </SelectContent>
+        </Select>
+      ),
+    },
+    {
+      id: "priority",
+      icon: Star,
+      label: "Prioridade",
+      activeLabel: filterPriority !== "all" ? (filterPriority === "high" ? "Alta" : filterPriority === "medium" ? "Média" : "Baixa") : null,
+      onClear: () => setFilterPriority("all"),
+      renderControl: () => (
+        <Select value={filterPriority} onValueChange={setFilterPriority}>
+          <SelectTrigger><SelectValue placeholder="Prioridade" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todas prioridades</SelectItem>
+            <SelectItem value="high">Alta (8-10)</SelectItem>
+            <SelectItem value="medium">Média (5-7)</SelectItem>
+            <SelectItem value="low">Baixa (0-4)</SelectItem>
+          </SelectContent>
+        </Select>
+      ),
+    },
+  ];
+
+  const extraActions = (
+    <Button
+      variant={filterScheduled ? "default" : "outline"}
+      size="sm"
+      onClick={() => setFilterScheduled(!filterScheduled)}
+      className="h-9 gap-1.5"
+    >
+      <Clock className="w-3.5 h-3.5" />
+      Agendados
+    </Button>
+  );
+
+  const viewModeToggle = (
+    <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as any)}>
+      <TabsList className="h-9">
+        <TabsTrigger value="kanban" className="gap-1.5 text-xs">
+          <BarChart3 className="w-3.5 h-3.5" />
+          Kanban
+        </TabsTrigger>
+        <TabsTrigger value="analytics" className="gap-1.5 text-xs">
+          <TrendingUp className="w-3.5 h-3.5" />
+          Analytics
+        </TabsTrigger>
+      </TabsList>
+    </Tabs>
+  );
+
+  const statsRow: PipeStat[] = [
+    {
+      id: "pipeline",
+      label: "Pipeline ativo",
+      value: formatCurrency(displayStats.inProgress),
+      sublabel: `${displayStats.inProgressCount} propostas`,
+      hero: true,
+      tone: "primary",
+      icon: Target,
+    },
+    {
+      id: "vendas",
+      label: "Vendas total",
+      value: formatCurrency(displayStats.sold),
+      sublabel: `${displayStats.soldCount} vendas`,
+      tone: "success",
+      icon: TrendingUp,
+    },
+    {
+      id: "mrr",
+      label: "Rec. vendida",
+      value: formatCurrency(displayStats.mrr),
+      sublabel: "valor mensal",
+      tone: "chart-5",
+      icon: ArrowUpRight,
+    },
+    {
+      id: "projetos",
+      label: "Projetos vendidos",
+      value: formatCurrency(displayStats.projeto),
+      sublabel: "valor pontual",
+      tone: "primary",
+      icon: Package,
+    },
+    {
+      id: "conversao",
+      label: "Conversão",
+      value: `${displayStats.conversionRate.toFixed(1)}%`,
+      sublabel: "vendas / total",
+      tone: "chart-4",
+      icon: Percent,
+    },
+  ];
+
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">
-            Gestão de Propostas
-          </h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            {pipeData?.length || 0} propostas • Arraste para alterar status
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as any)}>
-            <TabsList>
-              <TabsTrigger value="kanban" className="gap-1.5">
-                <BarChart3 className="w-4 h-4" />
-                Kanban
-              </TabsTrigger>
-              <TabsTrigger value="analytics" className="gap-1.5">
-                <TrendingUp className="w-4 h-4" />
-                Analytics
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-          <Button variant="outline" className="gap-2" onClick={() => setIsSettingsOpen(true)}>
-            <Settings2 className="w-4 h-4" />
-            Configurações
-          </Button>
-          <Button className="gap-2" onClick={() => setIsCreateModalOpen(true)}>
-            <Plus className="w-4 h-4" />
-            Nova Proposta
-          </Button>
-        </div>
-      </div>
+    <div className="space-y-5">
+      <PipeHeader
+        title="Gestão de Propostas"
+        subtitle="Arraste para alterar status"
+        count={pipeData?.length || 0}
+        countLabel="propostas"
+        onOpenSettings={() => setIsSettingsOpen(true)}
+        rightSlot={viewModeToggle}
+        primaryActions={[
+          {
+            id: "proposta",
+            label: "Nova proposta",
+            description: "Criar proposta vinculada a um lead",
+            icon: Plus,
+            onClick: () => setIsCreateModalOpen(true),
+          },
+        ]}
+      />
 
       <PipeSettingsDialog
         open={isSettingsOpen}
@@ -925,80 +1065,7 @@ export default function PipePropostas() {
         stages={pipelineStages}
       />
 
-      {/* Período das métricas */}
-      <MetricsPeriodSelector state={periodState} onChange={setPeriodState} />
-
-      {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="stat-card"
-        >
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs text-muted-foreground">Pipeline Ativo</p>
-            <Target className="w-4 h-4 text-primary" />
-          </div>
-          <p className="text-xl font-bold">{formatCurrency(displayStats.inProgress)}</p>
-          <p className="text-xs text-muted-foreground">{displayStats.inProgressCount} propostas</p>
-        </motion.div>
-        
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.05 }}
-          className="stat-card"
-        >
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs text-muted-foreground">Vendas Total</p>
-            <TrendingUp className="w-4 h-4 text-success" />
-          </div>
-          <p className="text-xl font-bold text-success">{formatCurrency(displayStats.sold)}</p>
-          <p className="text-xs text-muted-foreground">{displayStats.soldCount} vendas</p>
-        </motion.div>
-        
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="stat-card"
-        >
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs text-muted-foreground">Rec. Vendida</p>
-            <ArrowUpRight className="w-4 h-4 text-chart-5" />
-          </div>
-          <p className="text-xl font-bold text-chart-5">{formatCurrency(displayStats.mrr)}</p>
-          <p className="text-xs text-muted-foreground">valor vendido /mês</p>
-        </motion.div>
-        
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.15 }}
-          className="stat-card"
-        >
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs text-muted-foreground">Projetos Vendidos</p>
-            <Package className="w-4 h-4 text-primary" />
-          </div>
-          <p className="text-xl font-bold text-primary">{formatCurrency(displayStats.projeto)}</p>
-          <p className="text-xs text-muted-foreground">valor vendido</p>
-        </motion.div>
-        
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="stat-card"
-        >
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs text-muted-foreground">Taxa de Conversão</p>
-            <Percent className="w-4 h-4 text-chart-3" />
-          </div>
-          <p className="text-xl font-bold">{displayStats.conversionRate.toFixed(1)}%</p>
-          <p className="text-xs text-muted-foreground">vendas / total no pipe</p>
-        </motion.div>
-      </div>
+      <PipeStatsRow stats={statsRow} showDeltaPlaceholder={false} />
 
       <AnimatePresence mode="wait">
         {viewMode === "kanban" ? (
@@ -1008,119 +1075,28 @@ export default function PipePropostas() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
           >
-            {/* Banner: kanban filtrado por período */}
+            <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-2 justify-between mb-5">
+              <PipeFilterBar
+                searchValue={searchTerm}
+                onSearchChange={setSearchTerm}
+                searchPlaceholder="Buscar proposta..."
+                primaryFilters={primaryFilters}
+                secondaryFilters={secondaryFilters}
+                extraActions={extraActions}
+                activeFiltersCount={activeFiltersCount}
+                onClearAll={clearAllFilters}
+              />
+              <PipePeriodChip state={periodState} onChange={setPeriodState} activeRange={periodRange} />
+            </div>
+
             {periodRange && (
-              <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-card border border-border text-sm text-muted-foreground mb-4">
-                <CalendarIcon className="w-4 h-4 shrink-0" />
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/5 border border-primary/20 text-xs text-muted-foreground mb-4">
+                <CalendarIcon className="w-3.5 h-3.5 shrink-0 text-primary" />
                 <span className="flex-1">
-                  Exibindo cards criados em{" "}
-                  <span className="text-foreground font-medium">{formatPeriodLabel(periodRange)}</span>
-                  {" "}• {periodFilteredCount} proposta{periodFilteredCount !== 1 ? "s" : ""}
+                  <span className="text-foreground font-medium">{periodFilteredCount} proposta{periodFilteredCount !== 1 ? "s" : ""}</span> no período selecionado
                 </span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 text-xs"
-                  onClick={() => setPeriodState(createInitialPeriodState())}
-                >
-                  Ver todos
-                </Button>
               </div>
             )}
-
-            {/* Filters */}
-            <div className="flex flex-wrap gap-3 mb-6">
-              <div className="relative flex-1 min-w-[200px] max-w-sm">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  placeholder="Buscar proposta..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-9"
-                />
-              </div>
-              <Select value={filterResponsible} onValueChange={setFilterResponsible}>
-                <SelectTrigger className="w-[160px]">
-                  <User className="w-4 h-4 mr-2" />
-                  <SelectValue placeholder="Responsável" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos os responsáveis</SelectItem>
-                  {responsibleMembers.map(member => (
-                    <SelectItem key={member.id} value={member.id}>{member.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={filterProductType} onValueChange={setFilterProductType}>
-                <SelectTrigger className="w-[140px]">
-                  <Tag className="w-4 h-4 mr-2" />
-                  <SelectValue placeholder="Tipo" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos Tipos</SelectItem>
-                  <SelectItem value="mrr">Recorrência</SelectItem>
-                  <SelectItem value="projeto">Projeto</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={filterCalor} onValueChange={setFilterCalor}>
-                <SelectTrigger className="w-[140px]">
-                  <Flame className="w-4 h-4 mr-2" />
-                  <SelectValue placeholder="Calor" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  <SelectItem value="hot">
-                    <div className="flex items-center gap-2">
-                      <Flame className="w-3 h-3 text-destructive" />
-                      Quente (7-10)
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="warm">
-                    <div className="flex items-center gap-2">
-                      <Flame className="w-3 h-3 text-chart-5" />
-                      Morno (4-6)
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="cold">
-                    <div className="flex items-center gap-2">
-                      <Flame className="w-3 h-3 text-muted-foreground" />
-                      Frio (0-3)
-                    </div>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={filterPriority} onValueChange={setFilterPriority}>
-                <SelectTrigger className="w-[160px]">
-                  <Star className="w-4 h-4 mr-2" />
-                  <SelectValue placeholder="Prioridade" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas Prioridades</SelectItem>
-                  <SelectItem value="high">
-                    <div className="flex items-center gap-2">
-                      <span className="text-chart-5">★★★</span>
-                      Alta (8-10)
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="medium">
-                    <div className="flex items-center gap-2">
-                      <span className="text-chart-5">★★</span>
-                      Média (5-7)
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="low">
-                    <div className="flex items-center gap-2">
-                      <span className="text-muted-foreground">★</span>
-                      Baixa (0-4)
-                    </div>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-              <Button variant={filterScheduled ? "default" : "outline"} size="sm" onClick={() => setFilterScheduled(!filterScheduled)} className="gap-1.5">
-                <Clock className="w-4 h-4" />
-                Agendados
-              </Button>
-            </div>
 
             {/* Kanban Board with Drag-and-Drop */}
             <DraggableKanbanBoard
@@ -1422,57 +1398,29 @@ export default function PipePropostas() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Delete single lead from pipe */}
-      <AlertDialog open={deleteDialog?.open} onOpenChange={(open) => !open && setDeleteDialog(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
-            <AlertDialogDescription>
-              Você irá remover esta proposta do funil. O lead será mantido no sistema.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDeleteFromPipe}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              Remover do Funil
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <DeletePipeCardDialog
+        open={!!deleteDialog?.open}
+        onOpenChange={(open) => !open && setDeleteDialog(null)}
+        onConfirm={handleDeleteFromPipe}
+        entityName="proposta"
+      />
 
-      {/* Delete leads from a specific stage (Propostas) confirmation */}
-      <AlertDialog open={!!stageToDelete} onOpenChange={(open) => { if (!open) setStageToDelete(null); }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Excluir leads da etapa "{stageToDelete?.title}"</AlertDialogTitle>
-            <AlertDialogDescription>
-              Esta ação irá excluir todos os leads que estão na etapa "{stageToDelete?.title}" do funil de Propostas e na base de dados (histórico, tags, etc.). Leads em outras etapas não serão afetados. Não é possível desfazer.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={async () => {
-                if (!stageToDelete) return;
-                try {
-                  const result = await deleteAllLeadsInPipe.mutateAsync({ stageId: stageToDelete.id });
-                  setStageToDelete(null);
-                  refetch();
-                  toast.success(result?.deleted ? `${result.deleted} leads excluídos da etapa "${stageToDelete.title}".` : "Leads da etapa excluídos.");
-                } catch (e) {
-                  toast.error("Erro ao excluir leads.");
-                }
-              }}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {deleteAllLeadsInPipe.isPending ? "Excluindo..." : "Excluir leads desta etapa"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <DeleteStageLeadsDialog
+        stageToDelete={stageToDelete}
+        onOpenChange={(open) => { if (!open) setStageToDelete(null); }}
+        funnelName="Propostas"
+        isPending={deleteAllLeadsInPipe.isPending}
+        onConfirm={async (stageId, stageTitle) => {
+          try {
+            const result = await deleteAllLeadsInPipe.mutateAsync({ stageId });
+            setStageToDelete(null);
+            refetch();
+            toast.success(result?.deleted ? `${result.deleted} leads excluídos da etapa "${stageTitle}".` : "Leads da etapa excluídos.");
+          } catch (e) {
+            toast.error("Erro ao excluir leads.");
+          }
+        }}
+      />
     </div>
   );
 }

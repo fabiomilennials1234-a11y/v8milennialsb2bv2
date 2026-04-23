@@ -8,12 +8,10 @@ import {
   AlertTriangle,
   Calendar,
   CheckCircle2,
-  Filter,
   Search,
   User,
   ListTodo,
   CalendarDays,
-  ArrowUpRight,
   Archive,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -28,7 +26,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FollowUpCard } from "@/components/followups/FollowUpCard";
 import { ScheduleFollowUpModal } from "@/components/followups/ScheduleFollowUpModal";
 import { LeadDetailDrawer } from "@/components/leads/LeadDetailDrawer";
@@ -254,18 +251,21 @@ export default function PipeFollowUps() {
     setDeleteDialog(null);
   };
 
+  const totalCount = (allFollowUps?.length) || 0;
+
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-5">
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <ListTodo className="w-7 h-7 text-primary" />
+          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+            <ListTodo className="w-6 h-6 text-primary" />
             Follow Ups
           </h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            Gerencie suas tarefas e pontos de contato com leads
-          </p>
+          <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
+            <span className="tabular-nums font-medium text-foreground/80">{totalCount.toLocaleString("pt-BR")} tarefas</span>
+            <span className="text-muted-foreground/40">•</span>
+            <span>suas tarefas e pontos de contato com leads</span>
+          </div>
         </div>
 
         <div className="flex items-center gap-2">

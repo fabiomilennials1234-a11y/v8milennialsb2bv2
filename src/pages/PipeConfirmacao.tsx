@@ -1,18 +1,8 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { usePersistedState } from "@/hooks/usePersistedState";
 import { motion } from "framer-motion";
-import { Plus, Calendar, Loader2, LayoutGrid, List, Settings2, Clock } from "lucide-react";
+import { Plus, LayoutGrid, List, Clock, CalendarCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { DraggableKanbanBoard, DraggableItem, KanbanColumn } from "@/components/kanban/DraggableKanbanBoard";
 import { TorqueLoader } from "@/components/branding/TorqueLoader";
 import { useCanPerformAction } from "@/lib/permissions";
@@ -21,6 +11,9 @@ import { useStageWorkflowCounts } from "@/hooks/useStageWorkflows";
 import { usePipeConfirmacao, useUpdatePipeConfirmacao, useCreatePipeConfirmacao, useDeletePipeConfirmacao, PipeConfirmacaoStatus } from "@/hooks/usePipeConfirmacao";
 import { usePipelineStages, stagesToColumns, getPipelineTypeName } from "@/hooks/usePipelineStages";
 import { PipeSettingsDialog } from "@/components/pipelines/PipeSettingsDialog";
+import { PipeHeader } from "@/components/pipelines/PipeHeader";
+import { PipePeriodChip } from "@/components/pipelines/PipePeriodChip";
+import { DeletePipeCardDialog, DeleteStageLeadsDialog } from "@/components/pipelines/DeletePipeCardDialog";
 import { useDeleteAllLeadsInPipe, useUpdateLead } from "@/hooks/useLeads";
 import { useCreatePipeProposta } from "@/hooks/usePipePropostas";
 import { useResponsibleMembers } from "@/hooks/useTeamMembers";
@@ -29,7 +22,6 @@ import { AddMeetingModal } from "@/components/confirmacao/AddMeetingModal";
 import { RescheduleModal } from "@/components/confirmacao/RescheduleModal";
 import { ConfirmacaoStats } from "@/components/confirmacao/ConfirmacaoStats";
 import { type MetricsPeriodState, getDateRange, createInitialPeriodState } from "@/lib/metrics-period";
-import { MetricsPeriodSelector } from "@/components/pipelines/MetricsPeriodSelector";
 import { LeadCard, type LeadCardData } from "@/components/leads/LeadCard";
 import { LeadDetailDrawer } from "@/components/leads/LeadDetailDrawer";
 import { ConfirmacaoContext } from "@/components/leads/funnel-contexts/ConfirmacaoContext";
@@ -49,15 +41,6 @@ import { useFeaturePermission, useIsAdmin } from "@/hooks/useUserRole";
 import { useMasterAuth } from "@/hooks/useMasterAuth";
 
 // ConfirmacaoCardData is now LeadCardData from the unified LeadCard component
-
-const MONTHS_PT = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
-function formatPeriodLabel(range: { startStr: string; endStr: string }): string {
-  const [sy, sm, sd] = range.startStr.slice(0, 10).split("-").map(Number);
-  const [ey, em, ed] = range.endStr.slice(0, 10).split("-").map(Number);
-  if (sy === ey && sm === em) return `${sd}–${ed} ${MONTHS_PT[em - 1]} ${ey}`;
-  if (sy === ey) return `${sd} ${MONTHS_PT[sm - 1]} – ${ed} ${MONTHS_PT[em - 1]} ${ey}`;
-  return `${sd} ${MONTHS_PT[sm - 1]} ${sy} – ${ed} ${MONTHS_PT[em - 1]} ${ey}`;
-}
 
 // Calculate correct status based on meeting date using CALENDAR DAYS (not hours)
 // Note: pre_confirmada and confirmada_no_dia are NOT used as statuses anymore
@@ -226,7 +209,6 @@ export default function PipeConfirmacao() {
   const [pendingCompareceuItem, setPendingCompareceuItem] = useState<any>(null);
   const [isProcessingCompareceu, setIsProcessingCompareceu] = useState(false);
   const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; pipeId: string; leadId: string } | null>(null);
-  const [deleteAllLeadsDialogOpen, setDeleteAllLeadsDialogOpen] = useState(false);
   const [periodState, setPeriodState] = useState<MetricsPeriodState>(createInitialPeriodState);
   const [stageToDelete, setStageToDelete] = useState<{ id: string; title: string } | null>(null);
 
@@ -551,50 +533,48 @@ export default function PipeConfirmacao() {
     return <TorqueLoader variant="inline" />;
   }
 
-  return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <motion.h1
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="text-2xl font-bold"
-          >
-            Confirmação de Reunião
-          </motion.h1>
-          <p className="text-muted-foreground mt-1">
-            Arraste os cards para alterar o status • Compareceu → move para Propostas
-          </p>
-        </div>
+  const viewModeToggle = (
+    <div className="flex items-center border border-border/60 rounded-lg p-0.5 h-9">
+      <Button
+        variant={viewMode === "kanban" ? "secondary" : "ghost"}
+        size="sm"
+        className="h-7 px-2"
+        onClick={() => setViewMode("kanban")}
+        aria-label="Visualização kanban"
+      >
+        <LayoutGrid className="w-3.5 h-3.5" />
+      </Button>
+      <Button
+        variant={viewMode === "timeline" ? "secondary" : "ghost"}
+        size="sm"
+        className="h-7 px-2"
+        onClick={() => setViewMode("timeline")}
+        aria-label="Visualização linha do tempo"
+      >
+        <List className="w-3.5 h-3.5" />
+      </Button>
+    </div>
+  );
 
-        <div className="flex items-center gap-3">
-          <div className="flex items-center border rounded-lg p-1">
-            <Button 
-              variant={viewMode === "kanban" ? "secondary" : "ghost"} 
-              size="sm"
-              onClick={() => setViewMode("kanban")}
-            >
-              <LayoutGrid className="w-4 h-4" />
-            </Button>
-            <Button 
-              variant={viewMode === "timeline" ? "secondary" : "ghost"} 
-              size="sm"
-              onClick={() => setViewMode("timeline")}
-            >
-              <List className="w-4 h-4" />
-            </Button>
-          </div>
-          <Button size="sm" variant="outline" onClick={() => setIsSettingsOpen(true)}>
-            <Settings2 className="w-4 h-4 mr-2" />
-            Configurações
-          </Button>
-          <Button size="sm" className="gradient-gold" onClick={() => setIsMeetingModalOpen(true)}>
-            <Plus className="w-4 h-4 mr-2" />
-            Nova Reunião
-          </Button>
-        </div>
-      </div>
+  return (
+    <div className="space-y-5">
+      <PipeHeader
+        title="Confirmação de Reunião"
+        subtitle="Arraste para alterar status"
+        count={pipeData?.length || 0}
+        countLabel="reuniões"
+        onOpenSettings={() => setIsSettingsOpen(true)}
+        rightSlot={viewModeToggle}
+        primaryActions={[
+          {
+            id: "reuniao",
+            label: "Nova reunião",
+            description: "Agendar reunião com lead",
+            icon: CalendarCheck,
+            onClick: () => setIsMeetingModalOpen(true),
+          },
+        ]}
+      />
 
       <PipeSettingsDialog
         open={isSettingsOpen}
@@ -603,54 +583,33 @@ export default function PipeConfirmacao() {
         stages={pipelineStages}
       />
 
-      {/* Período das métricas */}
-      <MetricsPeriodSelector state={periodState} onChange={setPeriodState} />
-
-      {/* Stats */}
       <ConfirmacaoStats data={statsData} />
 
-      {/* Filters */}
-      <div className="flex flex-wrap items-center gap-2">
-        <ConfirmacaoFilters
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
-          originFilter={originFilter}
-          onOriginFilterChange={setOriginFilter}
-          timeFilter={timeFilter}
-          onTimeFilterChange={setTimeFilter}
-          urgencyFilter={urgencyFilter}
-          onUrgencyFilterChange={setUrgencyFilter}
-          selectedStatuses={selectedStatuses}
-          onStatusesChange={setSelectedStatuses}
-          statusOptions={statusColumns}
-          teamMembers={teamMemberOptions}
-          selectedResponsibleId={selectedResponsibleId}
-          onResponsibleFilterChange={setSelectedResponsibleId}
-        />
-        <Button variant={filterScheduled ? "default" : "outline"} size="sm" onClick={() => setFilterScheduled(!filterScheduled)} className="gap-1.5">
-          <Clock className="w-4 h-4" />
-          Agendados
-        </Button>
-      </div>
-
-      {/* Period filter indicator — aparece quando um período está selecionado (apenas no kanban) */}
-      {viewMode === "kanban" && metricsRange && (
-        <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-card border border-border text-sm text-muted-foreground">
-          <Calendar className="w-4 h-4 shrink-0" />
-          <span className="flex-1">
-            Exibindo cards criados em{" "}
-            <span className="text-foreground font-medium">{formatPeriodLabel(metricsRange)}</span>
-          </span>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 text-xs"
-            onClick={() => setPeriodState(createInitialPeriodState())}
-          >
-            Ver todos
+      <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-2 justify-between">
+        <div className="flex flex-wrap items-center gap-2 flex-1">
+          <ConfirmacaoFilters
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            originFilter={originFilter}
+            onOriginFilterChange={setOriginFilter}
+            timeFilter={timeFilter}
+            onTimeFilterChange={setTimeFilter}
+            urgencyFilter={urgencyFilter}
+            onUrgencyFilterChange={setUrgencyFilter}
+            selectedStatuses={selectedStatuses}
+            onStatusesChange={setSelectedStatuses}
+            statusOptions={statusColumns}
+            teamMembers={teamMemberOptions}
+            selectedResponsibleId={selectedResponsibleId}
+            onResponsibleFilterChange={setSelectedResponsibleId}
+          />
+          <Button variant={filterScheduled ? "default" : "outline"} size="sm" onClick={() => setFilterScheduled(!filterScheduled)} className="gap-1.5 h-9">
+            <Clock className="w-3.5 h-3.5" />
+            Agendados
           </Button>
         </div>
-      )}
+        <PipePeriodChip state={periodState} onChange={setPeriodState} activeRange={metricsRange} />
+      </div>
 
       {/* Content */}
       {viewMode === "kanban" ? (
@@ -740,57 +699,28 @@ export default function PipeConfirmacao() {
         isLoading={isProcessingCompareceu}
       />
 
-      {/* Delete single lead from pipe */}
-      <AlertDialog open={deleteDialog?.open} onOpenChange={(open) => !open && setDeleteDialog(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
-            <AlertDialogDescription>
-              Você irá remover esta oportunidade do funil. O lead será mantido no sistema.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDeleteFromPipe}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              Remover do Funil
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <DeletePipeCardDialog
+        open={!!deleteDialog?.open}
+        onOpenChange={(open) => !open && setDeleteDialog(null)}
+        onConfirm={handleDeleteFromPipe}
+      />
 
-      {/* Delete leads from a specific stage (Confirmação) confirmation */}
-      <AlertDialog open={!!stageToDelete} onOpenChange={(open) => { if (!open) setStageToDelete(null); }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Excluir leads da etapa "{stageToDelete?.title}"</AlertDialogTitle>
-            <AlertDialogDescription>
-              Esta ação irá excluir todos os leads que estão na etapa "{stageToDelete?.title}" do funil de Confirmação e na base de dados (histórico, tags, etc.). Leads em outras etapas não serão afetados. Não é possível desfazer.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={async () => {
-                if (!stageToDelete) return;
-                try {
-                  const result = await deleteAllLeadsInPipe.mutateAsync({ stageId: stageToDelete.id });
-                  setStageToDelete(null);
-                  refetch();
-                  toast.success(result?.deleted ? `${result.deleted} leads excluídos da etapa "${stageToDelete.title}".` : "Leads da etapa excluídos.");
-                } catch (e) {
-                  toast.error("Erro ao excluir leads.");
-                }
-              }}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {deleteAllLeadsInPipe.isPending ? "Excluindo..." : "Excluir leads desta etapa"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <DeleteStageLeadsDialog
+        stageToDelete={stageToDelete}
+        onOpenChange={(open) => { if (!open) setStageToDelete(null); }}
+        funnelName="Confirmação"
+        isPending={deleteAllLeadsInPipe.isPending}
+        onConfirm={async (stageId, stageTitle) => {
+          try {
+            const result = await deleteAllLeadsInPipe.mutateAsync({ stageId });
+            setStageToDelete(null);
+            refetch();
+            toast.success(result?.deleted ? `${result.deleted} leads excluídos da etapa "${stageTitle}".` : "Leads da etapa excluídos.");
+          } catch (e) {
+            toast.error("Erro ao excluir leads.");
+          }
+        }}
+      />
     </div>
   );
 }

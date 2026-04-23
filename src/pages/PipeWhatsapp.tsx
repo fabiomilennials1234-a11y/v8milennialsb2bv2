@@ -1,8 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { motion } from "framer-motion";
-import { Search, Plus, Zap, Loader2, Globe, Calendar, Settings2, AlertCircle, Clock } from "lucide-react";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
+import { AlertCircle, Clock, Globe, User, Users, Target } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -10,16 +7,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
 import { DraggableKanbanBoard, KanbanColumn } from "@/components/kanban/DraggableKanbanBoard";
 import { TorqueLoader } from "@/components/branding/TorqueLoader";
 import { useCanPerformAction } from "@/lib/permissions";
@@ -28,13 +16,17 @@ import { useStageWorkflowCounts } from "@/hooks/useStageWorkflows";
 import { usePipeWhatsapp, useCreatePipeWhatsapp, useUpdatePipeWhatsapp, useDeletePipeWhatsapp, type PipeWhatsappStatus } from "@/hooks/usePipeWhatsapp";
 import { usePipeWhatsappMetrics } from "@/hooks/usePipeMetrics";
 import { type MetricsPeriodState, getDateRange, createInitialPeriodState } from "@/lib/metrics-period";
-import { MetricsPeriodSelector } from "@/components/pipelines/MetricsPeriodSelector";
+import { PipeHeader } from "@/components/pipelines/PipeHeader";
+import { PipeStatsRow, type PipeStat } from "@/components/pipelines/PipeStatsRow";
+import { PipeFilterBar, type FilterChip } from "@/components/pipelines/PipeFilterBar";
+import { PipePeriodChip } from "@/components/pipelines/PipePeriodChip";
+import { DeletePipeCardDialog, DeleteStageLeadsDialog } from "@/components/pipelines/DeletePipeCardDialog";
 import { usePipelineStages, stagesToColumns, getPipelineTypeName } from "@/hooks/usePipelineStages";
 import { PipeSettingsDialog } from "@/components/pipelines/PipeSettingsDialog";
 import { useCreatePipeProposta } from "@/hooks/usePipePropostas";
 import { useResponsibleMembers } from "@/hooks/useTeamMembers";
 import { useDeleteAllLeadsInPipe, useUpdateLead } from "@/hooks/useLeads";
-import { useUserRole, useFeaturePermission } from "@/hooks/useUserRole";
+import { useFeaturePermission } from "@/hooks/useUserRole";
 import { useLogLeadAction } from "@/hooks/useLogLeadAction";
 import { useCreateAcaoDoDia } from "@/hooks/useAcoesDoDia";
 import { LeadCard, type LeadCardData } from "@/components/leads/LeadCard";
@@ -50,53 +42,26 @@ import { useOrganization } from "@/hooks/useOrganization";
 import { track, trackModuleVisit } from "@/lib/analytics";
 import { useLeadsWithScheduledMessages } from "@/hooks/useScheduledMessages";
 
-// Origin labels and colors mapping (origens do enum lead_origin)
-const originLabels: Record<string, { label: string; color: string }> = {
-  whatsapp: { label: "WhatsApp", color: "bg-green-500" },
-  meta_ads: { label: "Meta Ads", color: "bg-purple-500" },
-  instagram: { label: "Instagram", color: "bg-pink-500" },
-  tiktok: { label: "Tiktok", color: "bg-foreground/15" },
-  google_ads: { label: "Google Ads", color: "bg-red-500" },
-  site: { label: "Site", color: "bg-teal-500" },
-  landing_page: { label: "Landing Page", color: "bg-sky-500" },
-  remarketing: { label: "Remarketing", color: "bg-orange-500" },
-  indicacao: { label: "Indicação", color: "bg-emerald-500" },
-  evento: { label: "Evento", color: "bg-violet-500" },
-  prospeccao_ativa: { label: "Prospecção Ativa", color: "bg-orange-600" },
-  cal: { label: "Cal.com", color: "bg-blue-600" },
-  outro: { label: "Outros", color: "bg-muted-foreground/15" },
+const originLabels: Record<string, { label: string }> = {
+  whatsapp: { label: "WhatsApp" },
+  meta_ads: { label: "Meta Ads" },
+  instagram: { label: "Instagram" },
+  tiktok: { label: "Tiktok" },
+  google_ads: { label: "Google Ads" },
+  site: { label: "Site" },
+  landing_page: { label: "Landing Page" },
+  remarketing: { label: "Remarketing" },
+  indicacao: { label: "Indicação" },
+  evento: { label: "Evento" },
+  prospeccao_ativa: { label: "Prospecção Ativa" },
+  cal: { label: "Cal.com" },
+  outro: { label: "Outros" },
 };
 
-// Origens para filtro (enum lead_origin), em ordem de exibição
 const ALL_ORIGIN_OPTIONS = [
   "whatsapp", "meta_ads", "instagram", "tiktok", "google_ads", "site", "landing_page",
   "remarketing", "indicacao", "evento", "prospeccao_ativa", "cal", "outro",
 ];
-
-const MONTHS_PT = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
-function formatPeriodLabel(range: { startStr: string; endStr: string }): string {
-  const [sy, sm, sd] = range.startStr.slice(0, 10).split("-").map(Number);
-  const [ey, em, ed] = range.endStr.slice(0, 10).split("-").map(Number);
-  if (sy === ey && sm === em) return `${sd}–${ed} ${MONTHS_PT[em - 1]} ${ey}`;
-  if (sy === ey) return `${sd} ${MONTHS_PT[sm - 1]} – ${ed} ${MONTHS_PT[em - 1]} ${ey}`;
-  return `${sd} ${MONTHS_PT[sm - 1]} ${sy} – ${ed} ${MONTHS_PT[em - 1]} ${ey}`;
-}
-
-
-// ---------------------------------------------------------------------------
-// Persisted filter state — scoped per org + user, TTL 24 h
-// ---------------------------------------------------------------------------
-type WhatsappFilterState = {
-  searchTerm: string;
-  filterResponsible: string;
-  filterOrigin: string;
-};
-
-const DEFAULT_WHATSAPP_FILTERS: WhatsappFilterState = {
-  searchTerm: "",
-  filterResponsible: "all",
-  filterOrigin: "all",
-};
 
 export default function PipeWhatsapp() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -123,13 +88,12 @@ export default function PipeWhatsapp() {
   useEffect(() => { trackModuleVisit("pipe_whatsapp", organizationId); }, []);
 
   const { data: pipeData, isLoading, isError, refetch } = usePipeWhatsapp();
-  const { data: pipelineStages = [], isLoading: loadingStages } = usePipelineStages("whatsapp");
+  const { data: pipelineStages = [] } = usePipelineStages("whatsapp");
   const { data: workflowCounts = {} } = useStageWorkflowCounts("whatsapp");
   const metricsRange = useMemo(() => getDateRange(periodState), [periodState]);
   const { data: metricsByPeriod } = usePipeWhatsappMetrics(metricsRange);
 
-  const { data: userRole } = useUserRole();
-  const createPipeWhatsapp = useCreatePipeWhatsapp();
+  useCreatePipeWhatsapp();
   const updatePipeWhatsapp = useUpdatePipeWhatsapp();
   const { allowed: canMovePipe } = useCanPerformAction("move_pipe_record");
   const deletePipeWhatsapp = useDeletePipeWhatsapp();
@@ -138,12 +102,79 @@ export default function PipeWhatsapp() {
   const logAction = useLogLeadAction();
   const createAcaoDoDia = useCreateAcaoDoDia();
   const updateLead = useUpdateLead();
-
   const { allowed: canDeleteCards } = useFeaturePermission("pipeline.delete_cards");
 
   const responsibleMembers = useResponsibleMembers();
 
-  // Transform pipe data to LeadCardData format
+  // ─── Filters state for filter bar chips ────────────────────────
+  const activeFiltersCount =
+    (filterOrigin !== "all" ? 1 : 0) +
+    (filterResponsible !== "all" ? 1 : 0) +
+    (filterScheduled ? 1 : 0);
+
+  const clearAllFilters = () => {
+    setFilterOrigin("all");
+    setFilterResponsible("all");
+    setFilterScheduled(false);
+  };
+
+  const primaryFilters: FilterChip[] = [
+    {
+      id: "origin",
+      icon: Globe,
+      label: "Origem",
+      activeLabel: filterOrigin !== "all" ? originLabels[filterOrigin]?.label || filterOrigin : null,
+      onClear: () => setFilterOrigin("all"),
+      renderControl: () => (
+        <Select value={filterOrigin} onValueChange={setFilterOrigin}>
+          <SelectTrigger className="border-0 bg-transparent h-7 px-1 text-xs focus:ring-0 focus:ring-offset-0 shadow-none gap-1">
+            <Globe className="w-3 h-3 mr-1 opacity-70" />
+            <SelectValue placeholder="Origem" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todas origens</SelectItem>
+            {ALL_ORIGIN_OPTIONS.map((o) => (
+              <SelectItem key={o} value={o}>{originLabels[o]?.label || o}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      ),
+    },
+    {
+      id: "responsible",
+      icon: User,
+      label: "Responsável",
+      activeLabel: filterResponsible !== "all" ? responsibleMembers.find((m) => m.id === filterResponsible)?.name : null,
+      onClear: () => setFilterResponsible("all"),
+      renderControl: () => (
+        <Select value={filterResponsible} onValueChange={setFilterResponsible}>
+          <SelectTrigger className="border-0 bg-transparent h-7 px-1 text-xs focus:ring-0 focus:ring-offset-0 shadow-none gap-1">
+            <User className="w-3 h-3 mr-1 opacity-70" />
+            <SelectValue placeholder="Responsável" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos os responsáveis</SelectItem>
+            {responsibleMembers.map((m) => (
+              <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      ),
+    },
+  ];
+
+  const extraActions = (
+    <Button
+      variant={filterScheduled ? "default" : "outline"}
+      size="sm"
+      onClick={() => setFilterScheduled(!filterScheduled)}
+      className="h-9 gap-1.5"
+    >
+      <Clock className="w-3.5 h-3.5" />
+      Agendados
+    </Button>
+  );
+
   const transformToCard = (item: any): LeadCardData => {
     const lead = item.lead;
     return {
@@ -165,40 +196,28 @@ export default function PipeWhatsapp() {
     };
   };
 
-  // Filter function for items
-  // Filters out "ghost leads" where RLS blocks the lead data (lead relation is null)
   const filterItems = (item: any) => {
     const lead = item.lead;
-
-    // Hide ghost leads (RLS blocked the lead data for this user)
     if (!lead) return false;
 
-    // Date range filter (only when a period is selected)
     if (metricsRange) {
       if (!item.created_at) return false;
       if (item.created_at < metricsRange.startStr || item.created_at > metricsRange.endStr) return false;
     }
 
-    // Search filter
     const matchesSearch = searchTerm === "" ||
       lead?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       lead?.company?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       lead?.phone?.includes(searchTerm);
 
-    // Responsible filter
     const matchesResponsible = filterResponsible === "all" || item.responsible_id === filterResponsible || item.lead?.responsible_id === filterResponsible;
-
-    // Origin filter
     const matchesOrigin = filterOrigin === "all" || lead?.origin === filterOrigin;
-
     const matchesScheduled = !filterScheduled || (leadsWithSchedule?.has(item.lead_id) ?? false);
     return matchesSearch && matchesResponsible && matchesOrigin && matchesScheduled;
   };
 
-  // Converte etapas do banco para o formato do Kanban (com fallback)
   const statusColumns = useMemo(() => {
     if (pipelineStages.length === 0) {
-      // Fallback para etapas padrão enquanto carrega
       return [
         { id: "novo", title: "Novo", color: "#6366f1" },
         { id: "abordado", title: "Abordado", color: "#f59e0b" },
@@ -210,7 +229,6 @@ export default function PipeWhatsapp() {
     return stagesToColumns(pipelineStages);
   }, [pipelineStages]);
 
-  // Organize data by status columns
   const columns = useMemo((): KanbanColumn<LeadCardData>[] => {
     if (!pipeData) return statusColumns.map(col => ({ ...col, items: [] }));
 
@@ -220,14 +238,10 @@ export default function PipeWhatsapp() {
         .filter(filterItems)
         .map(transformToCard);
 
-      return {
-        ...col,
-        items: columnItems,
-      };
+      return { ...col, items: columnItems };
     });
   }, [pipeData, pipelineStages, statusColumns, searchTerm, filterResponsible, filterOrigin, filterScheduled, leadsWithSchedule, metricsRange]);
 
-  // Calculate stats based on FILTERED data (excludes ghost leads)
   const stats = useMemo(() => {
     if (!pipeData) return { total: 0, abordado: 0, respondeu: 0, scheduled: 0, pending: 0 };
 
@@ -247,7 +261,38 @@ export default function PipeWhatsapp() {
     return metricsByPeriod;
   }, [metricsRange, metricsByPeriod, stats]);
 
-  // Handle status change from drag-and-drop
+  const statsRow: PipeStat[] = [
+    {
+      id: "total",
+      label: "Total",
+      value: displayStats.total,
+      sublabel: "leads no funil",
+      hero: true,
+      tone: "primary",
+    },
+    {
+      id: "abordado",
+      label: "Abordados",
+      value: displayStats.abordado,
+      sublabel: "contato iniciado",
+      tone: "success",
+    },
+    {
+      id: "respondeu",
+      label: "Respondeu",
+      value: displayStats.respondeu,
+      sublabel: "engajaram",
+      tone: "chart-4",
+    },
+    {
+      id: "scheduled",
+      label: "Agendados",
+      value: displayStats.scheduled,
+      sublabel: "reunião marcada",
+      tone: "chart-5",
+    },
+  ];
+
   const handleStatusChange = async (itemId: string, newStatus: string) => {
     const item = pipeData?.find(p => p.id === itemId);
     if (!item) return;
@@ -265,22 +310,20 @@ export default function PipeWhatsapp() {
       logAction({ leadId: item.lead_id, action: "stage_changed", description: `Etapa alterada para "${stageLabel}" no Funil WhatsApp` });
       if (organizationId) track({ event: "card_moved", organizationId, entityType: "pipe_whatsapp", entityId: itemId, metadata: { from_stage: item.status, to_stage: newStatus } });
 
-      // If moved to a success stage, automatically create entry in the target pipe
       const movedStage = pipelineStages.find(s => s.stage_key === newStatus);
       if (movedStage?.is_final_positive) {
-        const targetPipe = movedStage.target_pipe_type || "confirmacao"; // fallback
-        const targetStage = movedStage.target_stage_key || "reuniao_marcada"; // fallback
+        const targetPipe = movedStage.target_pipe_type || "confirmacao";
+        const targetStage = movedStage.target_stage_key || "reuniao_marcada";
         const targetPipeName = getPipelineTypeName(targetPipe as any);
 
         if (targetPipe === "confirmacao") {
-          // Open AddMeetingModal so the user can enter date/time and Google Calendar details
           setMeetingModal({
             open: true,
             leadId: item.lead_id,
             sdrId: item.sdr_id ?? null,
             closerId: item.lead?.closer?.id ?? null,
           });
-          return; // toast is shown by the modal on success
+          return;
         } else if (targetPipe === "propostas") {
           await createPipeProposta.mutateAsync({
             lead_id: item.lead_id,
@@ -291,7 +334,7 @@ export default function PipeWhatsapp() {
 
         toast.success(`Lead movido para ${targetPipeName} automaticamente!`);
       } else {
-        toast.success("Status atualizado com sucesso!");
+        toast.success("Status atualizado!");
       }
     } catch (error) {
       toast.error("Erro ao atualizar status");
@@ -299,7 +342,6 @@ export default function PipeWhatsapp() {
     }
   };
 
-  // Handle delete — always removes only from this pipe, never deletes the full lead
   const handleDelete = async () => {
     if (!deleteDialog) return;
 
@@ -337,136 +379,46 @@ export default function PipeWhatsapp() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <motion.h1
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="text-2xl font-bold"
-          >
-            Funil de Qualificação
-          </motion.h1>
-          <p className="text-muted-foreground mt-1">
-            Arraste os cards para alterar o status • Agendado → move para Confirmação
-          </p>
-        </div>
+    <div className="space-y-5">
+      <PipeHeader
+        title="Funil de Qualificação"
+        subtitle="Arraste cards para mudar de etapa"
+        count={displayStats.total}
+        countLabel="leads"
+        onOpenSettings={() => setIsSettingsOpen(true)}
+        primaryActions={[
+          {
+            id: "opportunity",
+            label: "Nova oportunidade",
+            description: "Adicionar lead existente ao funil",
+            icon: Target,
+            onClick: () => setIsOpportunityModalOpen(true),
+          },
+          {
+            id: "lead",
+            label: "Novo lead",
+            description: "Cadastrar lead do zero",
+            icon: Users,
+            onClick: () => setIsCreateLeadModalOpen(true),
+          },
+        ]}
+      />
 
-        <div className="flex items-center gap-3">
-          <Button size="sm" variant="outline" onClick={() => setIsSettingsOpen(true)}>
-            <Settings2 className="w-4 h-4 mr-2" />
-            Configurações
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => setIsCreateLeadModalOpen(true)}>
-            <Plus className="w-4 h-4 mr-2" />
-            Novo Lead
-          </Button>
-          <Button size="sm" className="gradient-gold" onClick={() => setIsOpportunityModalOpen(true)}>
-            <Plus className="w-4 h-4 mr-2" />
-            Nova Oportunidade
-          </Button>
-        </div>
+      <PipeStatsRow stats={statsRow} showDeltaPlaceholder={false} />
+
+      <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-2 justify-between">
+        <PipeFilterBar
+          searchValue={searchTerm}
+          onSearchChange={setSearchTerm}
+          searchPlaceholder="Buscar lead, empresa, telefone..."
+          primaryFilters={primaryFilters}
+          extraActions={extraActions}
+          activeFiltersCount={activeFiltersCount}
+          onClearAll={clearAllFilters}
+        />
+        <PipePeriodChip state={periodState} onChange={setPeriodState} activeRange={metricsRange} />
       </div>
 
-      {/* Período das métricas */}
-      <MetricsPeriodSelector state={periodState} onChange={setPeriodState} />
-
-      {/* Stats Bar - Updated based on filters and period */}
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="grid grid-cols-2 md:grid-cols-4 gap-4"
-      >
-        <div className="bg-card rounded-lg border border-border p-4">
-          <p className="text-sm text-muted-foreground">Total Leads</p>
-          <p className="text-2xl font-bold mt-1">{displayStats.total}</p>
-        </div>
-        <div className="bg-card rounded-lg border border-border p-4">
-          <p className="text-sm text-muted-foreground">Abordados</p>
-          <p className="text-2xl font-bold text-success mt-1">{displayStats.abordado}</p>
-        </div>
-        <div className="bg-card rounded-lg border border-border p-4">
-          <p className="text-sm text-muted-foreground">Respondeu</p>
-          <p className="text-2xl font-bold text-blue-500 mt-1">{displayStats.respondeu}</p>
-        </div>
-        <div className="bg-card rounded-lg border border-border p-4">
-          <p className="text-sm text-muted-foreground">Agendados</p>
-          <p className="text-2xl font-bold text-primary mt-1">{displayStats.scheduled}</p>
-        </div>
-      </motion.div>
-
-      {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Buscar lead, empresa, telefone..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-9"
-          />
-        </div>
-        
-        {/* Origin Filter */}
-        <Select value={filterOrigin} onValueChange={setFilterOrigin}>
-          <SelectTrigger className="w-[180px]">
-            <Globe className="w-4 h-4 mr-2" />
-            <SelectValue placeholder="Origem" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todas Origens</SelectItem>
-            {ALL_ORIGIN_OPTIONS.map(origin => (
-              <SelectItem key={origin} value={origin}>
-                {originLabels[origin]?.label || origin}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Select value={filterResponsible} onValueChange={setFilterResponsible}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Responsável" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos os responsáveis</SelectItem>
-            {responsibleMembers.map((m) => (
-              <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Button
-          variant={filterScheduled ? "default" : "outline"}
-          size="sm"
-          onClick={() => setFilterScheduled(!filterScheduled)}
-          className="gap-1.5"
-        >
-          <Clock className="w-4 h-4" />
-          Agendados
-        </Button>
-      </div>
-
-      {/* Period filter indicator — aparece quando um período está selecionado */}
-      {metricsRange && (
-        <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-card border border-border text-sm text-muted-foreground">
-          <Calendar className="w-4 h-4 shrink-0" />
-          <span className="flex-1">
-            Exibindo cards criados em{" "}
-            <span className="text-foreground font-medium">{formatPeriodLabel(metricsRange)}</span>
-          </span>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 text-xs"
-            onClick={() => setPeriodState(createInitialPeriodState())}
-          >
-            Ver todos
-          </Button>
-        </div>
-      )}
-
-      {/* Kanban Board with Drag-and-Drop */}
       <DraggableKanbanBoard
         columns={columns}
         onStatusChange={handleStatusChange}
@@ -510,7 +462,6 @@ export default function PipeWhatsapp() {
         )}
       />
 
-      {/* Pipe Settings Dialog */}
       <PipeSettingsDialog
         open={isSettingsOpen}
         onOpenChange={setIsSettingsOpen}
@@ -518,14 +469,12 @@ export default function PipeWhatsapp() {
         stages={pipelineStages}
       />
 
-      {/* Create Opportunity Modal */}
       <CreateOpportunityModal
         open={isOpportunityModalOpen}
         onOpenChange={setIsOpportunityModalOpen}
         onSuccess={() => refetch()}
       />
 
-      {/* Create Lead Modal */}
       <LeadModal
         open={isCreateLeadModalOpen}
         onOpenChange={setIsCreateLeadModalOpen}
@@ -533,7 +482,6 @@ export default function PipeWhatsapp() {
         onSuccess={() => refetch()}
       />
 
-      {/* Lead Detail Drawer */}
       <LeadDetailDrawer
         open={isDetailDrawerOpen}
         onOpenChange={setIsDetailDrawerOpen}
@@ -546,59 +494,29 @@ export default function PipeWhatsapp() {
         )}
       />
 
-      {/* Delete Confirmation Dialog */}
-      <AlertDialog open={deleteDialog?.open} onOpenChange={(open) => !open && setDeleteDialog(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
-            <AlertDialogDescription>
-              Você irá remover esta oportunidade do funil. O lead será mantido no sistema.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDelete}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              Remover do Funil
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <DeletePipeCardDialog
+        open={!!deleteDialog?.open}
+        onOpenChange={(open) => !open && setDeleteDialog(null)}
+        onConfirm={handleDelete}
+      />
 
-      {/* Delete leads from a specific stage (Qualificação) confirmation */}
-      <AlertDialog open={!!stageToDelete} onOpenChange={(open) => { if (!open) setStageToDelete(null); }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Excluir leads da etapa "{stageToDelete?.title}"</AlertDialogTitle>
-            <AlertDialogDescription>
-              Esta ação irá excluir todos os leads que estão na etapa "{stageToDelete?.title}" do funil de Qualificação (WhatsApp) e na base de dados (histórico, tags, etc.). Leads em outras etapas não serão afetados. Não é possível desfazer.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={async () => {
-                if (!stageToDelete) return;
-                try {
-                  const result = await deleteAllLeadsInPipe.mutateAsync({ stageId: stageToDelete.id });
-                  setStageToDelete(null);
-                  refetch();
-                  toast.success(result?.deleted ? `${result.deleted} leads excluídos da etapa "${stageToDelete.title}".` : "Leads da etapa excluídos.");
-                } catch (e) {
-                  toast.error("Erro ao excluir leads.");
-                }
-              }}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {deleteAllLeadsInPipe.isPending ? "Excluindo..." : "Excluir leads desta etapa"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <DeleteStageLeadsDialog
+        stageToDelete={stageToDelete}
+        onOpenChange={(open) => { if (!open) setStageToDelete(null); }}
+        funnelName="Qualificação (WhatsApp)"
+        isPending={deleteAllLeadsInPipe.isPending}
+        onConfirm={async (stageId, stageTitle) => {
+          try {
+            const result = await deleteAllLeadsInPipe.mutateAsync({ stageId });
+            setStageToDelete(null);
+            refetch();
+            toast.success(result?.deleted ? `${result.deleted} leads excluídos da etapa "${stageTitle}".` : "Leads da etapa excluídos.");
+          } catch (e) {
+            toast.error("Erro ao excluir leads.");
+          }
+        }}
+      />
 
-      {/* AddMeetingModal — opened when a lead is dragged to an "agendado" stage */}
       {meetingModal && (
         <AddMeetingModal
           open={meetingModal.open}
@@ -615,7 +533,6 @@ export default function PipeWhatsapp() {
           }}
         />
       )}
-
     </div>
   );
 }
