@@ -15,7 +15,7 @@ export default function Privacidade() {
           </p>
         </div>
 
-        <div className="space-y-8 text-sm leading-relaxed text-muted-foreground">
+        <div className="space-y-8 text-sm leading-relaxed text-foreground/80">
 
           <section>
             <h2 className="text-lg font-semibold text-foreground mb-2">1. Quem somos</h2>
