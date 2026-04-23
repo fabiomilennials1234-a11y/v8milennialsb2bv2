@@ -7,6 +7,7 @@
  */
 import React from "react";
 import { ArrowLeft, Phone, UserCircle, Plus, Bot, UserPlus, ArrowRightLeft, Loader2, AlignJustify, List, LayoutList } from "lucide-react";
+import { TakeoverControls } from "@/components/chat/takeover/TakeoverControls";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -36,6 +37,8 @@ export interface ChatHeaderProps {
   contactName: string;
   hasLead: boolean;
   leadId?: string;
+  /** ID da conversa — usado pelo TakeoverControls (C30) */
+  conversationId?: string | null;
   aiDisabled: boolean;
   isWaitingHuman: boolean;
   szChatSession: SzChatSession | null;
@@ -50,6 +53,8 @@ export interface ChatHeaderProps {
   density?: DensityMode;
   /** Callback para alterar a densidade (C11) */
   onDensityChange?: (d: DensityMode) => void;
+  /** Callback para abrir AITimeline — passado para TakeoverControls (C30) */
+  onOpenTimeline?: () => void;
 }
 
 // ─── Toggle de densidade ──────────────────────────────────────────────────────
@@ -106,6 +111,7 @@ export function ChatHeader({
   contactName,
   hasLead,
   leadId,
+  conversationId,
   aiDisabled,
   isWaitingHuman,
   szChatSession,
@@ -118,6 +124,7 @@ export function ChatHeader({
   transferPending,
   density,
   onDensityChange,
+  onOpenTimeline,
 }: ChatHeaderProps) {
   return (
     <div className="flex items-center gap-3 p-3 border-b border-border/60 bg-background shrink-0">
@@ -186,6 +193,12 @@ export function ChatHeader({
           </>
         )}
       </Button>
+
+      {/* TakeoverControls — FSM IA↔humano (C30) — posição: antes do AI toggle */}
+      <TakeoverControls
+        conversationId={conversationId}
+        onOpenTimeline={onOpenTimeline}
+      />
 
       {/* AI Toggle */}
       <div

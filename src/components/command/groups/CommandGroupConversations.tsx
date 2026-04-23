@@ -15,7 +15,7 @@ import { pushRecent } from "../recentCommands";
 // Importar hook de contatos — usa cache existente do TanStack Query
 // sem nova query, apenas leitura do cache via hook
 import { useWhatsAppContacts } from "@/hooks/chat/useWhatsAppContacts";
-import { useWhatsAppInstances } from "@/hooks/chat/useWhatsAppInstances";
+import { useWhatsAppInstancesForUser } from "@/hooks/chat/useWhatsAppInstances";
 
 interface CommandGroupConversationsProps {
   onClose: () => void;
@@ -26,7 +26,7 @@ export function CommandGroupConversations({ onClose }: CommandGroupConversations
   const { user } = useAuth();
 
   // Pegar a primeira instância disponível para o usuário
-  const { data: instances } = useWhatsAppInstances();
+  const { data: instances } = useWhatsAppInstancesForUser();
   const firstInstance = instances?.[0] ?? null;
   const instanceId = firstInstance?.id ?? null;
 
