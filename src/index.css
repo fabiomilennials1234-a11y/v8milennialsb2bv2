@@ -13,6 +13,13 @@
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
   }
+
+  /* ─── Lead Drawer · Salvar CTA glow when dirty ─────────────── */
+  .btn-dirty-glow { animation: gold-pulse 2.4s ease-in-out infinite; }
+  @keyframes gold-pulse {
+    0%, 100% { box-shadow: 0 2px 10px hsl(var(--primary) / 0.28); }
+    50%      { box-shadow: 0 2px 20px hsl(var(--primary) / 0.55); }
+  }
 }
 
 @layer base {
@@ -277,6 +284,69 @@
 
   .glass-card {
     @apply bg-card border border-border shadow-sm;
+  }
+
+  /* ─── Pipes v2 · filter chip + pills + drawer helpers ─────── */
+  .filter-chip {
+    @apply inline-flex items-center gap-1.5 h-9 px-[11px] rounded-lg text-[12.5px] font-medium transition-all duration-150;
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border) / 0.7);
+    color: hsl(var(--muted-foreground));
+  }
+  .filter-chip:hover {
+    background: hsl(var(--muted) / 0.5);
+    border-color: hsl(var(--border));
+    color: hsl(var(--foreground));
+  }
+  .filter-chip-active {
+    background: hsl(var(--primary) / 0.08);
+    border-color: hsl(var(--primary) / 0.4);
+    color: hsl(var(--foreground));
+  }
+  .chip-value {
+    color: hsl(var(--primary));
+    font-weight: 600;
+  }
+
+  .tag-pill {
+    @apply inline-flex items-center h-[20px] px-[7px] rounded-[4px] text-[10.5px] font-medium;
+    background: hsl(var(--muted));
+    border: 1px solid hsl(var(--border));
+    color: hsl(var(--muted-foreground));
+  }
+
+  .origin-pill {
+    @apply inline-flex items-center gap-1.5 h-[20px] px-[7px] rounded-[4px] text-[11px] font-medium;
+    background: hsl(var(--muted));
+    border: 1px solid hsl(var(--border));
+    color: hsl(var(--muted-foreground));
+    letter-spacing: -0.005em;
+  }
+  .origin-pill .origin-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    box-shadow: 0 0 6px currentColor;
+  }
+
+  .heat-chip {
+    @apply inline-flex items-center gap-1 h-[20px] px-[8px] rounded-full text-[11px] font-bold tabular-nums;
+    letter-spacing: -0.02em;
+    border: 1px solid;
+  }
+  .heat-chip-hot   { color: hsl(358 72% 54%); background: hsl(358 72% 60% / 0.12); border-color: hsl(358 72% 60% / 0.32); }
+  .heat-chip-warm  { color: hsl(30 96% 48%);  background: hsl(30 96% 58% / 0.12);  border-color: hsl(30 96% 58% / 0.32); }
+  .heat-chip-cold  { color: hsl(212 86% 54%); background: hsl(212 86% 64% / 0.12); border-color: hsl(212 86% 64% / 0.32); }
+  .dark .heat-chip-hot   { color: hsl(358 72% 60%); }
+  .dark .heat-chip-warm  { color: hsl(30 96% 58%); }
+  .dark .heat-chip-cold  { color: hsl(212 86% 64%); }
+
+  .font-display {
+    font-family: 'Inter', sans-serif;
+    font-feature-settings: 'ss01','cv11';
+    letter-spacing: -0.028em;
+  }
+  .font-mono-num {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'zero';
   }
 
   @keyframes shimmer {
