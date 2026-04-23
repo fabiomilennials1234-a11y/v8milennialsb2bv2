@@ -23,11 +23,26 @@ import {
   Workflow,
   UserPlus,
   Trophy,
+  Database,
+  Trash2,
+  Loader2,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import {
   useOnboardingChecklist,
@@ -35,6 +50,7 @@ import {
   type OnboardingProgress,
 } from "@/hooks/onboarding/useOnboardingChecklist";
 import { usePrimeOnboardingProgress } from "@/hooks/onboarding/usePrimeOnboardingProgress";
+import { useHasDemoData, useSeedDemoData, useRemoveDemoData } from "@/hooks/onboarding/useDemoData";
 
 // ─── Config dos steps ─────────────────────────────────────────────────────────
 
@@ -159,6 +175,74 @@ function StepItem({
 
 // ─── Card expandido ───────────────────────────────────────────────────────────
 
+function DemoDataSection() {
+  const { data: hasDemoData, isLoading: checkingDemo } = useHasDemoData();
+  const seed = useSeedDemoData();
+  const remove = useRemoveDemoData();
+
+  return (
+    <div className="px-4 pb-4">
+      <Separator className="mb-3" />
+      <p className="text-[11px] text-muted-foreground mb-2 font-medium uppercase tracking-wide">
+        Testando o app?
+      </p>
+
+      {hasDemoData ? (
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full h-8 text-xs text-destructive border-destructive/30 hover:bg-destructive/10"
+              disabled={remove.isPending}
+            >
+              {remove.isPending ? (
+                <Loader2 className="w-3 h-3 mr-1.5 animate-spin" />
+              ) : (
+                <Trash2 className="w-3 h-3 mr-1.5" />
+              )}
+              Remover dados demo
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Remover dados demo?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Isso vai deletar os leads e o pipeline de demonstração.
+                Dados reais ficam completamente intactos.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={() => remove.mutate()}
+              >
+                Remover
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      ) : (
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full h-8 text-xs"
+          onClick={() => seed.mutate()}
+          disabled={seed.isPending || checkingDemo}
+        >
+          {seed.isPending ? (
+            <Loader2 className="w-3 h-3 mr-1.5 animate-spin" />
+          ) : (
+            <Database className="w-3 h-3 mr-1.5" />
+          )}
+          Popular com dados de exemplo
+        </Button>
+      )}
+    </div>
+  );
+}
+
 function OnboardingCard({
   progress,
   onDismiss,
@@ -220,6 +304,9 @@ function OnboardingCard({
           />
         ))}
       </ul>
+
+      {/* Demo data section */}
+      <DemoDataSection />
     </motion.div>
   );
 }
