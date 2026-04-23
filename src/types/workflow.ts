@@ -603,7 +603,7 @@ export const NODE_COLORS: Record<WorkflowNodeType, { border: string; bgLight: st
   condition:      { border: "border-yellow-500",  bgLight: "bg-yellow-50",  bgDark: "dark:bg-yellow-950" },
   delay:          { border: "border-purple-500",  bgLight: "bg-purple-50",  bgDark: "dark:bg-purple-950" },
   copilot:        { border: "border-cyan-500",    bgLight: "bg-cyan-50",    bgDark: "dark:bg-cyan-950" },
-  end:            { border: "border-gray-400",    bgLight: "bg-gray-50",    bgDark: "dark:bg-gray-900" },
+  end:            { border: "border-border",      bgLight: "bg-muted",      bgDark: "dark:bg-muted" },
   wait_response:  { border: "border-orange-500",  bgLight: "bg-orange-50",  bgDark: "dark:bg-orange-950" },
   split_ab:       { border: "border-pink-500",    bgLight: "bg-pink-50",    bgDark: "dark:bg-pink-950" },
   webhook_call:   { border: "border-indigo-500",  bgLight: "bg-indigo-50",  bgDark: "dark:bg-indigo-950" },

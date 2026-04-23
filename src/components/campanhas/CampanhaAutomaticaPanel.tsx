@@ -59,7 +59,7 @@ export function CampanhaAutomaticaPanel({ campanha }: CampanhaAutomaticaPanelPro
               )}>
                 <Bot className={cn(
                   "w-6 h-6",
-                  agent?.is_active ? "text-green-600 dark:text-green-400" : "text-gray-400 dark:text-muted-foreground"
+                  agent?.is_active ? "text-green-600 dark:text-green-400" : "text-muted-foreground"
                 )} />
               </div>
               <div>

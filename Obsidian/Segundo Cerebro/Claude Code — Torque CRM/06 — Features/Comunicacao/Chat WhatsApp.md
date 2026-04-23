@@ -109,6 +109,21 @@ Webhook externo (Evolution/Meta/SZ.Chat)
 
 ## Historico de mudancas
 
+### 2026-04-23 — Onda 6.1 (Dark LOW components sweep)
+
+- 13 arquivos em `src/components/**` + `src/types/workflow.ts` normalizados para semantic tokens
+- Kanban (CreateOpportunityModal, KanbanCard, StageWorkflowsBadge): TikTok `bg-foreground`, origin fallback semantico, inactive workflow indicator
+- Campanhas (5 arquivos): inactive agent + pending batch + muted text/border + Trophy rank 2 gradient
+- Automacoes (WorkflowToolbar, EndNode): `text-muted-foreground` em end node
+- Confirmacao: TikTok tinted badge
+- Chat/ConversationNotes: `text-gray-800 dark:text-gray-200` → `text-foreground`
+- ui/sidebar-demo: 3x `bg-gray-100 dark:bg-neutral-800` → `bg-muted`
+- types/workflow: NODE_COLORS end node semantico
+
+Dark LOW components: **fechado**. Grep `gray-[0-9]+` em `src/` → 1 match restante (`WhatsAppChat.tsx` legacy, delete em Onda 3.3).
+
+Branch: `feat/chat-onda-6-1` (bifurcada de `feat/chat-onda-6-final`).
+
 ### 2026-04-23 — Onda 6 final (Dark LOW pages closure)
 
 - `src/pages/Privacidade.tsx` — full dark-ification (14 ocorrencias gray-* → semantic tokens)
