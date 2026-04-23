@@ -14,6 +14,8 @@ import {
   GitBranch,
   History,
 } from "lucide-react";
+import { LeadHeader } from "@/components/lead/header/LeadHeader";
+import { LeadTabHistory } from "@/components/lead/tabs/LeadTabHistory";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -437,27 +439,11 @@ export function LeadDetailContent({
   return (
     <div className="flex flex-col flex-1 min-h-0">
       {showHeader && (
-        <div className="pb-4 border-b border-border/60 mb-4 px-6 pt-6">
-          <div className="flex items-center gap-2">
-            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-              <User className="w-5 h-5 text-primary" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-semibold truncate">{lead?.name || pushName || phoneNumber}</span>
-                {lead && (
-                  <Badge variant="secondary" className="text-xs shrink-0">
-                    Lead
-                  </Badge>
-                )}
-              </div>
-              <p className="text-sm text-muted-foreground flex items-center gap-1 mt-0.5">
-                <Phone className="w-3 h-3 shrink-0" />
-                {phoneNumber}
-              </p>
-            </div>
-          </div>
-        </div>
+        <LeadHeader
+          name={lead?.name || pushName || phoneNumber}
+          phoneNumber={phoneNumber}
+          hasLead={!!lead}
+        />
       )}
 
       {isLoading ? (
@@ -1006,31 +992,10 @@ export function LeadDetailContent({
 
             {/* ─── TAB: HISTÓRICO (últimos 8 eventos) ─── */}
             <TabsContent value="history" className="mt-0 space-y-0">
-              {recentHistory.length > 0 ? (
-                <>
-                  {recentHistory.map((item, index) => (
-                    <TimelineItem
-                      key={item.id}
-                      event={item as TimelineEvent}
-                      isLast={index === recentHistory.length - 1}
-                      compact
-                    />
-                  ))}
-                  {lead && (
-                    <button
-                      onClick={() => window.open(`/leads?id=${lead.id}`, "_blank")}
-                      className="w-full text-center text-xs text-primary hover:underline py-1"
-                    >
-                      Ver histórico completo
-                    </button>
-                  )}
-                </>
-              ) : (
-                <div className="text-center py-6">
-                  <History className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
-                  <p className="text-xs text-muted-foreground">Nenhum evento registrado.</p>
-                </div>
-              )}
+              <LeadTabHistory
+                leadId={lead?.id}
+                events={recentHistory as TimelineEvent[]}
+              />
             </TabsContent>
           </div>
         </Tabs>
