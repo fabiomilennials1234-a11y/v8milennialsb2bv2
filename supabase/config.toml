@@ -181,3 +181,14 @@ verify_jwt = false
 # whatsapp-webhook: auth via secret in path segment (Uazapi has no HMAC nor customHeaders)
 [functions.whatsapp-webhook]
 verify_jwt = false
+# mass-send-create: UI invoca com JWT (admin/master); proxy authenticated
+[functions.mass-send-create]
+verify_jwt = false
+
+# mass-send-status: polls status (JWT user OR x-cron-secret)
+[functions.mass-send-status]
+verify_jwt = false
+
+# mass-send-control: pause/resume/stop (JWT admin/master)
+[functions.mass-send-control]
+verify_jwt = false
