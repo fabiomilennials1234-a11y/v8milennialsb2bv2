@@ -19,7 +19,9 @@
     "test:edge:coverage": "cd supabase/functions && rm -rf .coverage && deno task test:coverage && deno task coverage:report",
     "test:all": "npm run test:unit && npm run test:integration && npm run test:e2e",
     "docs:sync": "node scripts/docs-sync.mjs",
-    "docs:check": "node scripts/docs-sync.mjs --check"
+    "docs:check": "node scripts/docs-sync.mjs --check",
+    "storybook": "storybook dev -p 6006",
+    "build-storybook": "storybook build -o dist-storybook"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -56,12 +58,15 @@
     "@sentry/vite-plugin": "^5.1.1",
     "@supabase/supabase-js": "^2.89.0",
     "@tanstack/react-query": "^5.83.0",
+    "@tanstack/react-virtual": "^3.13.24",
+    "@types/dompurify": "^3.0.5",
     "@types/papaparse": "^5.5.2",
     "@xyflow/react": "^12.10.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
     "date-fns": "^3.6.0",
+    "dompurify": "^3.4.1",
     "embla-carousel-react": "^8.6.0",
     "framer-motion": "^12.24.7",
     "input-otp": "^1.4.2",
@@ -89,6 +94,10 @@
   "devDependencies": {
     "@eslint/js": "^9.32.0",
     "@playwright/test": "^1.58.2",
+    "@storybook/addon-a11y": "^8.6.18",
+    "@storybook/addon-essentials": "^8.6.14",
+    "@storybook/blocks": "^8.6.14",
+    "@storybook/react-vite": "^8.6.18",
     "@tailwindcss/typography": "^0.5.16",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",

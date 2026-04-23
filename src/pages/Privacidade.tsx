@@ -5,20 +5,20 @@
 
 export default function Privacidade() {
   return (
-    <div className="min-h-screen bg-white text-gray-900">
+    <div className="min-h-screen bg-background text-foreground">
       <div className="max-w-3xl mx-auto px-6 py-16">
         {/* Header */}
         <div className="mb-10">
           <h1 className="text-3xl font-bold mb-2">Política de Privacidade</h1>
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-muted-foreground">
             TorqueCRM · Última atualização: fevereiro de 2026
           </p>
         </div>
 
-        <div className="space-y-8 text-sm leading-relaxed text-gray-700">
+        <div className="space-y-8 text-sm leading-relaxed text-muted-foreground">
 
           <section>
-            <h2 className="text-lg font-semibold text-gray-900 mb-2">1. Quem somos</h2>
+            <h2 className="text-lg font-semibold text-foreground mb-2">1. Quem somos</h2>
             <p>
               O <strong>TorqueCRM</strong> é uma plataforma de CRM e gestão de equipes
               comerciais desenvolvida pela <strong>Millennials B2B</strong>. Nossa plataforma
@@ -28,7 +28,7 @@ export default function Privacidade() {
               Website:{" "}
               <a
                 href="https://torquecrm.com.br"
-                className="text-blue-600 underline"
+                className="text-primary underline"
                 target="_blank"
                 rel="noopener noreferrer"
               >
@@ -38,7 +38,7 @@ export default function Privacidade() {
           </section>
 
           <section>
-            <h2 className="text-lg font-semibold text-gray-900 mb-2">2. Dados coletados</h2>
+            <h2 className="text-lg font-semibold text-foreground mb-2">2. Dados coletados</h2>
             <p>Coletamos apenas os dados necessários para o funcionamento da plataforma:</p>
             <ul className="mt-2 list-disc list-inside space-y-1">
               <li>Nome, e-mail e informações de perfil para autenticação</li>
@@ -53,7 +53,7 @@ export default function Privacidade() {
           </section>
 
           <section>
-            <h2 className="text-lg font-semibold text-gray-900 mb-2">
+            <h2 className="text-lg font-semibold text-foreground mb-2">
               3. Uso das informações do Google Calendar
             </h2>
             <p>
@@ -73,7 +73,7 @@ export default function Privacidade() {
           </section>
 
           <section>
-            <h2 className="text-lg font-semibold text-gray-900 mb-2">4. Como armazenamos seus dados</h2>
+            <h2 className="text-lg font-semibold text-foreground mb-2">4. Como armazenamos seus dados</h2>
             <ul className="mt-2 list-disc list-inside space-y-1">
               <li>
                 Os dados são armazenados em servidores seguros da{" "}
@@ -89,7 +89,7 @@ export default function Privacidade() {
           </section>
 
           <section>
-            <h2 className="text-lg font-semibold text-gray-900 mb-2">5. Compartilhamento de dados</h2>
+            <h2 className="text-lg font-semibold text-foreground mb-2">5. Compartilhamento de dados</h2>
             <p>
               Não vendemos, alugamos ou compartilhamos seus dados pessoais com terceiros,
               exceto quando necessário para operação do serviço (provedores de infraestrutura)
@@ -98,7 +98,7 @@ export default function Privacidade() {
           </section>
 
           <section>
-            <h2 className="text-lg font-semibold text-gray-900 mb-2">6. Seus direitos</h2>
+            <h2 className="text-lg font-semibold text-foreground mb-2">6. Seus direitos</h2>
             <p>Você tem direito a:</p>
             <ul className="mt-2 list-disc list-inside space-y-1">
               <li>Acessar os dados que armazenamos sobre você</li>
@@ -112,7 +112,7 @@ export default function Privacidade() {
           </section>
 
           <section>
-            <h2 className="text-lg font-semibold text-gray-900 mb-2">7. Retenção de dados</h2>
+            <h2 className="text-lg font-semibold text-foreground mb-2">7. Retenção de dados</h2>
             <p>
               Mantemos seus dados enquanto sua conta estiver ativa. Após o encerramento da
               conta, os dados são excluídos em até 30 dias, exceto quando retidos por
@@ -121,7 +121,7 @@ export default function Privacidade() {
           </section>
 
           <section>
-            <h2 className="text-lg font-semibold text-gray-900 mb-2">8. Cookies</h2>
+            <h2 className="text-lg font-semibold text-foreground mb-2">8. Cookies</h2>
             <p>
               Utilizamos apenas cookies essenciais para autenticação e manutenção de sessão.
               Não utilizamos cookies de rastreamento ou publicidade.
@@ -129,7 +129,7 @@ export default function Privacidade() {
           </section>
 
           <section>
-            <h2 className="text-lg font-semibold text-gray-900 mb-2">9. Contato</h2>
+            <h2 className="text-lg font-semibold text-foreground mb-2">9. Contato</h2>
             <p>
               Para dúvidas sobre esta política ou para exercer seus direitos, entre em contato:
             </p>
@@ -137,7 +137,7 @@ export default function Privacidade() {
               <strong>E-mail:</strong>{" "}
               <a
                 href="mailto:contato@torquecrm.com.br"
-                className="text-blue-600 underline"
+                className="text-primary underline"
               >
                 contato@torquecrm.com.br
               </a>
@@ -145,7 +145,7 @@ export default function Privacidade() {
           </section>
 
           <section>
-            <h2 className="text-lg font-semibold text-gray-900 mb-2">
+            <h2 className="text-lg font-semibold text-foreground mb-2">
               10. Alterações nesta política
             </h2>
             <p>
@@ -155,7 +155,7 @@ export default function Privacidade() {
           </section>
         </div>
 
-        <div className="mt-12 pt-6 border-t border-gray-200 text-xs text-gray-400 text-center">
+        <div className="mt-12 pt-6 border-t border-border text-xs text-muted-foreground/60 text-center">
           © {new Date().getFullYear()} TorqueCRM · Millennials B2B · Todos os direitos reservados
         </div>
       </div>

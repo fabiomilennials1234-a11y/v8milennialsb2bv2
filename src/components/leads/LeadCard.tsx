@@ -38,7 +38,7 @@ export const ORIGIN_COLORS: Record<string, { bg: string; text: string; label: st
   whatsapp:        { bg: "#E1F5EE", text: "#0F6E56", label: "WhatsApp" },
   meta_ads:        { bg: "#EEEDFE", text: "#534AB7", label: "Meta Ads" },
   instagram:       { bg: "#FDEEF4", text: "#C2185B", label: "Instagram" },
-  tiktok:          { bg: "#F0F0F0", text: "#010101", label: "Tiktok" },
+  tiktok:          { bg: "hsl(var(--muted))", text: "hsl(var(--muted-foreground))", label: "Tiktok" },
   google_ads:      { bg: "#FCEBEB", text: "#A32D2D", label: "Google Ads" },
   site:            { bg: "#E6F1FB", text: "#185FA5", label: "Site" },
   landing_page:    { bg: "#E0F2FE", text: "#0369A1", label: "Landing Page" },

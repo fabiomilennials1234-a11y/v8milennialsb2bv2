@@ -296,7 +296,7 @@ export function CampanhaSemiAutomaticaPanel({ campanha }: CampanhaSemiAutomatica
                         "w-10 h-10 rounded-lg flex items-center justify-center",
                         batch.status === "scheduled" ? "bg-blue-100 dark:bg-blue-900/40" :
                         batch.status === "processing" ? "bg-amber-100 dark:bg-amber-900/40" :
-                        batch.status === "completed" ? "bg-green-100 dark:bg-green-900/40" : "bg-gray-100 dark:bg-muted"
+                        batch.status === "completed" ? "bg-green-100 dark:bg-green-900/40" : "bg-muted"
                       )}>
                         <Zap className={cn(
                           "w-5 h-5",

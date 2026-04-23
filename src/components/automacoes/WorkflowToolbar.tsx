@@ -65,7 +65,7 @@ const ADD_NODE_GROUPS: NodeOptionGroup[] = [
       { type: "action", label: "Ação", icon: Play, color: "text-green-500" },
       { type: "condition", label: "Condição", icon: GitBranch, color: "text-yellow-500" },
       { type: "delay", label: "Delay", icon: Clock, color: "text-purple-500" },
-      { type: "end", label: "Fim", icon: CircleStop, color: "text-gray-400" },
+      { type: "end", label: "Fim", icon: CircleStop, color: "text-muted-foreground" },
     ],
   },
   {

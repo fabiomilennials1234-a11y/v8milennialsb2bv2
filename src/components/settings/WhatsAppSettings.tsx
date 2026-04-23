@@ -50,7 +50,7 @@ import {
   useSetAllowedMembersForInstance,
 } from "@/hooks/useWhatsAppInstanceAllowedMembers";
 import { Checkbox } from "@/components/ui/checkbox";
-import { testEvolutionConnection } from "@/lib/evolutionApi";
+import { supabase } from "@/integrations/supabase/client";
 import { useOrgQuotas } from "@/hooks/useOrgQuotas";
 import { toast } from "sonner";
 
@@ -67,31 +67,37 @@ function QRCodeModal({
 }) {
   const refreshQR = useRefreshQRCode();
   const checkStatus = useCheckConnectionStatus();
-  const [isChecking, setIsChecking] = useState(false);
+  const [pairCode, setPairCode] = useState<string | null>(null);
+  const [pairMode, setPairMode] = useState<"qr" | "code">("qr");
+  const [phoneInput, setPhoneInput] = useState("");
+  const [, setIsChecking] = useState(false);
 
   // Always read fresh data from the query cache via instances prop
   const instance = instances.find((i) => i.id === instanceId) ?? null;
 
   // Auto-refresh QR when modal opens and instance has no valid QR
   useEffect(() => {
-    if (!isOpen || !instance?.instance_name) return;
-    if (!instance.qr_code && instance.status !== "connected") {
-      refreshQR.mutateAsync(instance.instance_name).catch((error) => {
-        console.error("Erro ao gerar QR Code:", error);
-        toast.error(error.message || "Erro ao gerar QR Code");
-      });
+    if (!isOpen || !instance?.id) return;
+    if (!instance.qr_code && instance.status !== "connected" && pairMode === "qr") {
+      refreshQR
+        .mutateAsync({ instance_id: instance.id })
+        .then((res) => setPairCode(res.paircode ?? null))
+        .catch((error) => {
+          console.error("Erro ao gerar QR Code:", error);
+          toast.error(error.message || "Erro ao gerar QR Code");
+        });
     }
-  }, [isOpen, instance?.id, instance?.qr_code, instance?.status]);
+  }, [isOpen, instance?.id, instance?.qr_code, instance?.status, pairMode]);
 
   // Poll connection status every 3s — stops when connected
   useEffect(() => {
     if (!isOpen || !instance || instance.status === "connected") return;
 
     const interval = setInterval(async () => {
-      if (instance.instance_name) {
+      if (instance.id) {
         setIsChecking(true);
         try {
-          await checkStatus.mutateAsync(instance.instance_name);
+          await checkStatus.mutateAsync({ instance_id: instance.id });
         } catch (error) {
           console.error("Erro ao verificar status:", error);
         } finally {
@@ -104,14 +110,39 @@ function QRCodeModal({
   }, [isOpen, instance?.id, instance?.status]);
 
   const handleRefreshQR = async () => {
-    if (!instance?.instance_name) return;
+    if (!instance?.id) return;
     try {
-      await refreshQR.mutateAsync(instance.instance_name);
+      const res = await refreshQR.mutateAsync({ instance_id: instance.id });
+      setPairCode(res.paircode ?? null);
       toast.success("QR Code atualizado!");
     } catch (error: any) {
       const errorMessage = error.message || "Erro ao atualizar QR Code";
       toast.error(errorMessage);
       console.error("Erro ao atualizar QR Code:", error);
+    }
+  };
+
+  const handleRequestPairCode = async () => {
+    if (!instance?.id) return;
+    const phone = phoneInput.replace(/\D/g, "");
+    if (phone.length < 10) {
+      toast.error("Informe o número com DDD (ex: 11987654321)");
+      return;
+    }
+    try {
+      const res = await refreshQR.mutateAsync({
+        instance_id: instance.id,
+        phone,
+      });
+      if (!res.paircode) {
+        toast.error("Provedor não retornou código de pareamento. Use o QR.");
+        return;
+      }
+      setPairCode(res.paircode);
+      toast.success("Código gerado! Insira no WhatsApp do celular.");
+    } catch (error: any) {
+      const errorMessage = error.message || "Erro ao gerar código de pareamento";
+      toast.error(errorMessage);
     }
   };
 
@@ -127,71 +158,123 @@ function QRCodeModal({
         <DialogHeader>
           <DialogTitle>Conectar WhatsApp</DialogTitle>
           <DialogDescription>
-            Escaneie o QR code com seu WhatsApp para conectar
+            Escolha como conectar: QR code ou código numérico de pareamento
           </DialogDescription>
         </DialogHeader>
+
+        <div className="flex gap-2 mb-2">
+          <Button
+            size="sm"
+            variant={pairMode === "qr" ? "default" : "outline"}
+            onClick={() => setPairMode("qr")}
+          >
+            <QrCode className="w-4 h-4 mr-2" />
+            QR Code
+          </Button>
+          <Button
+            size="sm"
+            variant={pairMode === "code" ? "default" : "outline"}
+            onClick={() => setPairMode("code")}
+          >
+            Código numérico
+          </Button>
+        </div>
+
         <div className="flex flex-col items-center gap-4 py-4">
-          {refreshQR.isPending ? (
-            <div className="flex flex-col items-center gap-3 py-8">
-              <Loader2 className="w-8 h-8 animate-spin text-primary" />
-              <p className="text-sm text-muted-foreground">Gerando QR Code...</p>
-            </div>
-          ) : instance.qr_code ? (
-            <>
-              <div className="p-4 bg-card rounded-lg border border-border">
-                <img
-                  src={qrCodeData}
-                  alt="QR Code WhatsApp"
-                  className="w-64 h-64"
+          {pairMode === "qr" ? (
+            refreshQR.isPending ? (
+              <div className="flex flex-col items-center gap-3 py-8">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                <p className="text-sm text-muted-foreground">Gerando QR Code...</p>
+              </div>
+            ) : instance.qr_code ? (
+              <>
+                <div className="p-4 bg-card rounded-lg border border-border">
+                  <img src={qrCodeData} alt="QR Code WhatsApp" className="w-64 h-64" />
+                </div>
+                <p className="text-sm text-muted-foreground text-center">
+                  Abra o WhatsApp → Configurações → Aparelhos conectados → Conectar um aparelho
+                  e escaneie este código.
+                </p>
+              </>
+            ) : (
+              <div className="text-center py-8">
+                <p className="text-muted-foreground">QR Code não disponível</p>
+              </div>
+            )
+          ) : (
+            <div className="w-full space-y-3">
+              <div className="space-y-2">
+                <Label htmlFor="pair-phone">Número do WhatsApp (com DDD)</Label>
+                <Input
+                  id="pair-phone"
+                  type="tel"
+                  placeholder="11987654321"
+                  value={phoneInput}
+                  onChange={(e) => setPhoneInput(e.target.value)}
+                  disabled={refreshQR.isPending}
                 />
               </div>
-              <p className="text-sm text-muted-foreground text-center">
-                Abra o WhatsApp no seu celular, vá em Configurações → Aparelhos conectados →
-                Conectar um aparelho e escaneie este código
-              </p>
-              <div className="flex items-center gap-2">
-                <Badge
-                  variant={
-                    instance.status === "connected"
-                      ? "default"
-                      : instance.status === "connecting"
-                      ? "secondary"
-                      : "destructive"
-                  }
-                >
-                  {instance.status === "connected" && (
-                    <CheckCircle2 className="w-3 h-3 mr-1" />
-                  )}
-                  {instance.status === "connecting" && (
-                    <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                  )}
-                  {instance.status === "disconnected" && (
-                    <XCircle className="w-3 h-3 mr-1" />
-                  )}
-                  {instance.status === "connected"
-                    ? "Conectado"
-                    : instance.status === "connecting"
-                    ? "Conectando..."
-                    : "Desconectado"}
-                </Badge>
-              </div>
-            </>
-          ) : (
-            <div className="text-center py-8">
-              <p className="text-muted-foreground">QR Code não disponível</p>
+              <Button
+                onClick={handleRequestPairCode}
+                disabled={refreshQR.isPending || phoneInput.trim().length === 0}
+                className="w-full"
+              >
+                {refreshQR.isPending ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : null}
+                Gerar código
+              </Button>
+              {pairCode && (
+                <div className="p-4 rounded-lg border border-border text-center">
+                  <p className="text-xs text-muted-foreground mb-2">
+                    Insira este código no WhatsApp do celular:
+                  </p>
+                  <p className="font-mono text-2xl tracking-widest">{pairCode}</p>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Abra WhatsApp → Aparelhos conectados → Conectar com código do telefone.
+                  </p>
+                </div>
+              )}
             </div>
           )}
+
+          <div className="flex items-center gap-2">
+            <Badge
+              variant={
+                instance.status === "connected"
+                  ? "default"
+                  : instance.status === "connecting"
+                  ? "secondary"
+                  : "destructive"
+              }
+            >
+              {instance.status === "connected" && (
+                <CheckCircle2 className="w-3 h-3 mr-1" />
+              )}
+              {instance.status === "connecting" && (
+                <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+              )}
+              {instance.status === "disconnected" && (
+                <XCircle className="w-3 h-3 mr-1" />
+              )}
+              {instance.status === "connected"
+                ? "Conectado"
+                : instance.status === "connecting"
+                ? "Conectando..."
+                : "Desconectado"}
+            </Badge>
+          </div>
         </div>
+
         <DialogFooter className="flex gap-2">
-          <Button variant="outline" onClick={handleRefreshQR} disabled={refreshQR.isPending}>
-            <RefreshCw className="w-4 h-4 mr-2" />
-            Atualizar QR Code
-          </Button>
-          {instance.status === "connected" && (
-            <Button onClick={onClose}>
-              Concluído
+          {pairMode === "qr" && (
+            <Button variant="outline" onClick={handleRefreshQR} disabled={refreshQR.isPending}>
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Atualizar QR Code
             </Button>
           )}
+          {instance.status === "connected" && <Button onClick={onClose}>Concluído</Button>}
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -261,14 +344,17 @@ export function WhatsAppSettings() {
     setIsTestingConnection(true);
     setErrorDetails(null);
     try {
-      const result = await testEvolutionConnection();
-      if (result.working) {
+      const { data, error } = await supabase.functions.invoke<{ results: Array<{ service: string; status: string; error?: string }> }>("check-api-health");
+      if (error) throw new Error(error.message);
+      const uazapi = data?.results?.find((r) => r.service === "Uazapi");
+      if (uazapi?.status === "connected") {
         setApiStatus("connected");
-        toast.success(`Conexão bem-sucedida! ${result.message || ""}`);
+        toast.success("Conexão Uazapi bem-sucedida!");
       } else {
         setApiStatus("error");
-        setErrorDetails(result.message);
-        toast.error(`Falha na conexão: ${result.message}`);
+        const msg = uazapi?.error || uazapi?.status || "Serviço indisponível";
+        setErrorDetails(msg);
+        toast.error(`Falha Uazapi: ${msg}`);
       }
     } catch (error: any) {
       setApiStatus("error");
@@ -341,9 +427,9 @@ export function WhatsAppSettings() {
     }
   };
 
-  const handleCheckStatus = async (instanceName: string) => {
+  const handleCheckStatus = async (instanceId: string) => {
     try {
-      await checkStatus.mutateAsync(instanceName);
+      await checkStatus.mutateAsync({ instance_id: instanceId });
       toast.success("Status atualizado!");
     } catch (error: any) {
       const errorMessage = error.message || "Erro ao verificar status";
@@ -352,9 +438,9 @@ export function WhatsAppSettings() {
     }
   };
 
-  const handleLogout = async (instanceName: string) => {
+  const handleLogout = async (instanceId: string) => {
     try {
-      await logout.mutateAsync(instanceName);
+      await logout.mutateAsync({ instance_id: instanceId });
       toast.success("Logout realizado!");
     } catch (error: any) {
       const errorMessage = error.message || "Erro ao fazer logout";
@@ -563,7 +649,7 @@ export function WhatsAppSettings() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => handleCheckStatus(instance.instance_name)}
+                    onClick={() => handleCheckStatus(instance.id)}
                     disabled={checkStatus.isPending}
                   >
                     <RefreshCw className="w-4 h-4" />
@@ -572,7 +658,7 @@ export function WhatsAppSettings() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => handleLogout(instance.instance_name)}
+                      onClick={() => handleLogout(instance.id)}
                       disabled={logout.isPending}
                     >
                       <LogOut className="w-4 h-4" />
@@ -657,7 +743,7 @@ export function WhatsAppSettings() {
           const closingInstance = instances.find((i) => i.id === qrCodeInstanceId);
           setQrCodeInstanceId(null);
           if (closingInstance?.instance_name) {
-            handleCheckStatus(closingInstance.instance_name);
+            handleCheckStatus(closingInstance.id);
           }
         }}
       />

@@ -258,7 +258,7 @@ export default function ConversationNotes({ leadId }: ConversationNotesProps) {
                     </div>
                   ) : (
                     <>
-                      <p className="text-sm whitespace-pre-wrap text-gray-800 dark:text-gray-200">
+                      <p className="text-sm whitespace-pre-wrap text-foreground">
                         {note.content}
                       </p>
                       <div className="flex items-center justify-between mt-1.5">

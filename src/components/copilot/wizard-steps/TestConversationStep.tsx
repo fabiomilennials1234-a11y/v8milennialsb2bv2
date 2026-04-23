@@ -430,7 +430,7 @@ export function TestConversationStep() {
                           />
                         )}
                         {msg.attachment && msg.attachment.type === "pdf" && (
-                          <div className="flex items-center gap-1.5 mb-1 px-2 py-1 rounded bg-black/10 text-xs">
+                          <div className="flex items-center gap-1.5 mb-1 px-2 py-1 rounded bg-foreground/10 text-xs">
                             <FileText className="w-3.5 h-3.5" />
                             {msg.attachment.fileName}
                           </div>

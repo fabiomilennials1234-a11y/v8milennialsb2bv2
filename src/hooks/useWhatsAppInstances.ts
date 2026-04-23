@@ -3,12 +3,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "./useTeamMembers";
 import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
 import {
-  createEvolutionInstance,
-  getQRCode,
-  getConnectionState,
-  deleteEvolutionInstance,
-  logoutInstance,
-} from "@/lib/evolutionApi";
+  createWhatsAppInstance as proxyCreateInstance,
+  connectInstanceQR as proxyConnectQR,
+  getInstanceStatus as proxyGetStatus,
+  deleteWhatsAppInstance as proxyDeleteInstance,
+  logoutWhatsAppInstance as proxyLogoutInstance,
+} from "@/lib/whatsappApi";
 
 export type WhatsAppInstance = Tables<"whatsapp_instances">;
 export type WhatsAppInstanceInsert = TablesInsert<"whatsapp_instances">;
@@ -23,7 +23,6 @@ export function useWhatsAppInstances() {
     queryFn: async () => {
       if (!organizationId) return [];
 
-      // Query básica que funciona mesmo sem a migração de copilot_agent_id
       const { data, error } = await supabase
         .from("whatsapp_instances")
         .select("*")
@@ -39,7 +38,6 @@ export function useWhatsAppInstances() {
 
 /**
  * Hook para buscar instâncias com informação do agente vinculado
- * Usa após aplicar a migração 20260124200000_link_agent_to_whatsapp_instance.sql
  */
 export function useWhatsAppInstancesWithAgent() {
   const { data: teamMember } = useCurrentTeamMember();
@@ -58,7 +56,6 @@ export function useWhatsAppInstancesWithAgent() {
           .order("created_at", { ascending: false });
 
         if (error) {
-          // Se o campo não existir, usar query básica
           if (error.message?.includes("copilot_agent_id")) {
             const { data: basicData } = await supabase
               .from("whatsapp_instances")
@@ -71,7 +68,6 @@ export function useWhatsAppInstancesWithAgent() {
         }
         return data as (WhatsAppInstance & { copilot_agent_id?: string | null })[];
       } catch (e) {
-        // Fallback para query básica
         const { data } = await supabase
           .from("whatsapp_instances")
           .select("*")
@@ -84,6 +80,11 @@ export function useWhatsAppInstancesWithAgent() {
   });
 }
 
+/**
+ * Creates a WhatsApp instance via whatsapp-api-proxy (provider-agnostic).
+ * Proxy inserts the row, creates the provider-side instance, and returns
+ * initial status (which may already include qrcode/paircode).
+ */
 export function useCreateWhatsAppInstance() {
   const queryClient = useQueryClient();
   const { data: teamMember } = useCurrentTeamMember();
@@ -94,28 +95,27 @@ export function useCreateWhatsAppInstance() {
         throw new Error("Usuário não está vinculado a uma organização");
       }
 
-      // Criar instância na Evolution API
-      const evolutionResponse = await createEvolutionInstance(data.instance_name);
+      const { instance_id, result } = await proxyCreateInstance(data.instance_name);
 
-      // Salvar no Supabase
-      const instanceData: WhatsAppInstanceInsert = {
-        organization_id: teamMember.organization_id,
-        instance_name: data.instance_name,
-        instance_id: evolutionResponse.instance?.instanceName,
-        status: "connecting",
-        qr_code: evolutionResponse.qrcode?.base64 || evolutionResponse.qrcode?.code,
-        qr_code_expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(), // 5 minutos
-        metadata: evolutionResponse,
-      };
+      // Persist qrcode/paircode in local row so UI can read from query cache
+      await supabase
+        .from("whatsapp_instances")
+        .update({
+          qr_code: result.status.qrcode ?? null,
+          qr_code_expires_at: result.status.qrcode
+            ? new Date(Date.now() + 5 * 60 * 1000).toISOString()
+            : null,
+        })
+        .eq("id", instance_id);
 
       const { data: instance, error } = await supabase
         .from("whatsapp_instances")
-        .insert(instanceData)
-        .select()
+        .select("*")
+        .eq("id", instance_id)
         .single();
 
       if (error) throw error;
-      return instance;
+      return { ...(instance as WhatsAppInstance), paircode: result.status.paircode };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["whatsapp_instances"] });
@@ -149,31 +149,37 @@ export function useUpdateWhatsAppInstance() {
   });
 }
 
+/**
+ * Re-fetches QR code / pair code for an existing instance via proxy.
+ * Returns both — UI may show either depending on provider + user input.
+ */
 export function useRefreshQRCode() {
   const queryClient = useQueryClient();
   const { data: teamMember } = useCurrentTeamMember();
 
   return useMutation({
-    mutationFn: async (instanceName: string) => {
+    mutationFn: async (args: { instance_id: string; phone?: string }) => {
       if (!teamMember?.organization_id) {
         throw new Error("Usuário não está vinculado a uma organização");
       }
-      const qrResponse = await getQRCode(instanceName);
+      const { qrcode, paircode } = await proxyConnectQR(args.instance_id, args.phone);
 
       const { data, error } = await supabase
         .from("whatsapp_instances")
         .update({
-          qr_code: qrResponse.base64 || qrResponse.code,
-          qr_code_expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+          qr_code: qrcode ?? null,
+          qr_code_expires_at: qrcode
+            ? new Date(Date.now() + 5 * 60 * 1000).toISOString()
+            : null,
           status: "connecting",
         })
-        .eq("instance_name", instanceName)
+        .eq("id", args.instance_id)
         .eq("organization_id", teamMember.organization_id)
         .select()
         .single();
 
       if (error) throw error;
-      return data;
+      return { instance: data as WhatsAppInstance, paircode };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["whatsapp_instances"] });
@@ -186,20 +192,19 @@ export function useCheckConnectionStatus() {
   const { data: teamMember } = useCurrentTeamMember();
 
   return useMutation({
-    mutationFn: async (instanceName: string) => {
+    mutationFn: async (args: { instance_id: string }) => {
       if (!teamMember?.organization_id) {
         throw new Error("Usuário não está vinculado a uma organização");
       }
-      const statusResponse = await getConnectionState(instanceName);
-      const isConnected = statusResponse.instance?.state === "open";
+      const status = await proxyGetStatus(args.instance_id);
 
       const { data, error } = await supabase
         .from("whatsapp_instances")
         .update({
-          status: isConnected ? "connected" : "disconnected",
-          last_connection_at: isConnected ? new Date().toISOString() : null,
+          status: status.connected ? "connected" : "disconnected",
+          last_connection_at: status.connected ? new Date().toISOString() : null,
         })
-        .eq("instance_name", instanceName)
+        .eq("id", args.instance_id)
         .eq("organization_id", teamMember.organization_id)
         .select()
         .single();
@@ -214,8 +219,8 @@ export function useCheckConnectionStatus() {
 }
 
 export type DeleteInstanceResult = {
-  removedFromEvolution: boolean;
-  evolutionError?: string;
+  removedFromProvider: boolean;
+  providerError?: string;
 };
 
 export function useDeleteWhatsAppInstance() {
@@ -225,44 +230,27 @@ export function useDeleteWhatsAppInstance() {
   return useMutation({
     mutationFn: async ({
       id,
-      instance_name,
     }: {
       id: string;
-      instance_name: string;
+      instance_name?: string; // kept for back-compat; not used
     }): Promise<DeleteInstanceResult> => {
       if (!teamMember?.organization_id) {
         throw new Error("Usuário não está vinculado a uma organização");
       }
-      let removedFromEvolution = false;
 
       try {
-        await deleteEvolutionInstance(instance_name);
-        removedFromEvolution = true;
+        await proxyDeleteInstance(id);
+        return { removedFromProvider: true };
       } catch (error: any) {
-        const status = error?.status;
-        const is404 = status === 404;
-        if (is404) {
-          removedFromEvolution = true;
-        } else {
-          console.error("Erro ao deletar da Evolution API:", error);
-          removedFromEvolution = false;
-        }
+        // Proxy already cleans up the local row even on provider failure via
+        // cascade / best-effort; if proxy itself failed, surface the error.
+        return {
+          removedFromProvider: false,
+          providerError:
+            error?.message ??
+            "Não foi possível remover a instância no provedor. Verifique manualmente se necessário.",
+        };
       }
-
-      const { error } = await supabase
-        .from("whatsapp_instances")
-        .delete()
-        .eq("id", id)
-        .eq("organization_id", teamMember.organization_id);
-
-      if (error) throw error;
-
-      return {
-        removedFromEvolution,
-        evolutionError: removedFromEvolution
-          ? undefined
-          : "Não foi possível remover a instância na Evolution API. Remova manualmente no painel da Evolution se necessário.",
-      };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["whatsapp_instances"] });
@@ -275,11 +263,11 @@ export function useLogoutInstance() {
   const { data: teamMember } = useCurrentTeamMember();
 
   return useMutation({
-    mutationFn: async (instanceName: string) => {
+    mutationFn: async (args: { instance_id: string }) => {
       if (!teamMember?.organization_id) {
         throw new Error("Usuário não está vinculado a uma organização");
       }
-      await logoutInstance(instanceName);
+      await proxyLogoutInstance(args.instance_id);
 
       const { data, error } = await supabase
         .from("whatsapp_instances")
@@ -288,7 +276,7 @@ export function useLogoutInstance() {
           qr_code: null,
           qr_code_expires_at: null,
         })
-        .eq("instance_name", instanceName)
+        .eq("id", args.instance_id)
         .eq("organization_id", teamMember.organization_id)
         .select()
         .single();

@@ -37,7 +37,7 @@ function OraculoFloatingButtonBase({ remaining, isOpen, onClick }: Props) {
         <motion.div
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
-          className="absolute -top-1 -right-1 w-5 h-5 bg-white text-purple-600 rounded-full text-xs font-bold flex items-center justify-center shadow-sm"
+          className="absolute -top-1 -right-1 w-5 h-5 bg-card text-purple-600 rounded-full text-xs font-bold flex items-center justify-center shadow-sm ring-1 ring-border/50"
         >
           {remaining}
         </motion.div>

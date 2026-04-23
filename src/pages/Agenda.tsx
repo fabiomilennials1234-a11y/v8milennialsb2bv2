@@ -615,7 +615,7 @@ function EventDetailPopover({
       animate={{ opacity: 1, scale: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.96 }}
       transition={{ duration: 0.12 }}
-      className="fixed z-50 w-72 bg-card border border-border/50 rounded-xl shadow-2xl overflow-hidden"
+      className="fixed z-50 w-72 bg-card border border-border/50 rounded-xl shadow-2xl dark:shadow-none dark:ring-1 dark:ring-border overflow-hidden"
       style={{ left: pos.left, top: pos.top }}
     >
       {/* Color bar */}

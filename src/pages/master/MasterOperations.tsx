@@ -159,7 +159,7 @@ function OverviewTab() {
 const STATUS_BADGE: Record<string, { class: string; label: string }> = {
   success: { class: "bg-green-500/10 text-green-600 border-green-500/20", label: "success" },
   error: { class: "bg-red-500/10 text-red-600 border-red-500/20", label: "error" },
-  skipped: { class: "bg-gray-500/10 text-gray-500 border-gray-500/20", label: "skipped" },
+  skipped: { class: "bg-muted/50 text-muted-foreground border-border", label: "skipped" },
 };
 
 const MODULES = [
@@ -769,7 +769,7 @@ function JobRow({
   formatDuration: (s: string, f: string | null) => string;
 }) {
   const statusBadge = JOB_STATUS_BADGE[job.status] || JOB_STATUS_BADGE.failed;
-  const engineBadge = SOURCE_ENGINE_BADGE[job.source_engine] || { class: "bg-gray-500/10 text-gray-500 border-gray-500/20", label: job.source_engine };
+  const engineBadge = SOURCE_ENGINE_BADGE[job.source_engine] || { class: "bg-muted/50 text-muted-foreground border-border", label: job.source_engine };
   const isDeadLetter = job.status === "dead_letter";
   const hasDetails = job.error_message || job.payload_snapshot;
   const canRetry = isDeadLetter || job.status === "failed";
