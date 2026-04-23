@@ -108,6 +108,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         `chat-panels-${userId}`,
         `chat-layout-sizes-${userId}`,
         `chat-last-read:${userId}:`,
+        // B3 (Security): limpar recentes do command palette user-scoped
+        `cmd-palette-recent-${userId}`,
       ];
       try {
         const keysToRemove: string[] = [];
