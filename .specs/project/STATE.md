@@ -4,6 +4,12 @@
 
 ## Decisions
 
+### D035: Pipes + LeadCard v2 redesign (2026-04-23)
+
+Revisão UX/UI de todos os 4 funis + card lead compartilhado. Inspirada no redesign do chat (dark-first editorial). 3 ondas executadas: (1) LeadCard v2 com hero slot por variant + calor como border-left permanente + quick actions hover-reveal; (2) PipeShell componentes compartilhados — PipeHeader/StatsRow/FilterBar/PeriodChip/DeletePipeCardDialog — 4 pages refatoradas (PipeWhatsapp 621→406 LOC, PipePropostas 1479→1305); (3) Kanban column slim + botão `+` wirado com `onAddInColumn` + preview destino `→ Confirmação` via `stageDestinations` prop + gradient fade L/R com scroll state. Mockup HTML standalone em [mockups/pipes-leadcard-v2.html](../../mockups/pipes-leadcard-v2.html). Build passa, zero novos erros TS. Spec em `.specs/features/pipes-leadcard-v2/`.
+
+Follow-ups diferidos: hook `usePipeMetricsCompare` (delta real), LeadDetailDrawer redesign (onda 4), mobile reflow.
+
 ### D034: Copilot fallback elimination + Uazapi bridge + tenant isolation (2026-04-23)
 
 Incidente: usuário pergunta "a granel quais sabores tem?" e recebe "Desculpe, houve um problema ao processar sua mensagem." Logs prod mostram dezenas de casos `messageLength: 54` + `action: SEND_DOCUMENT`, sem `LLM call #3`.

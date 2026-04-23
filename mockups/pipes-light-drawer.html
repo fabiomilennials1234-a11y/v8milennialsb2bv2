@@ -1,0 +1,1075 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Pipes · Kanban restaurado + Drawer simplificado — Torque CRM</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    /* Light mode — Torque warm palette (matches production) */
+    --bg: 42 25% 96%;
+    --card: 42 18% 99%;
+    --card-2: 42 16% 97%;
+    --surface-hover: 42 18% 94%;
+    --muted: 42 18% 93%;
+    --muted-fg: 30 10% 46%;
+    --border: 40 15% 88%;
+    --border-hard: 40 15% 82%;
+    --fg: 30 18% 16%;
+    --fg-dim: 30 10% 54%;
+    --primary: 47 100% 50%;
+    --primary-dim: 38 85% 42%;
+    --success: 142 70% 42%;
+    --destructive: 0 72% 52%;
+    --warning: 38 92% 48%;
+    --chart-4: 200 80% 48%;
+    --chart-5: 260 55% 60%;
+  }
+
+  * { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+  html, body {
+    background: hsl(var(--bg));
+    color: hsl(var(--fg));
+    font-family: 'Inter', system-ui, sans-serif;
+    font-feature-settings: 'cv11', 'ss01';
+    letter-spacing: -0.012em;
+  }
+  body {
+    background-image:
+      radial-gradient(ellipse 900px 500px at 12% 0%, hsl(var(--primary) / 0.06), transparent 60%),
+      radial-gradient(ellipse 600px 400px at 90% 100%, hsl(var(--primary) / 0.03), transparent 60%);
+    background-attachment: fixed;
+  }
+
+  .tabular-nums { font-variant-numeric: tabular-nums; }
+  .font-display { letter-spacing: -0.028em; }
+
+  /* Icon defaults — Lucide standard */
+  .ico { stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; fill: none; }
+  .ico-fill { fill: currentColor; stroke: none; }
+
+  /* ─── Kanban column (original) ─── */
+  .kanban-col {
+    background: hsl(var(--muted) / 0.6);
+    border-radius: 12px;
+    padding: 16px;
+    min-width: 308px; max-width: 336px;
+    flex-shrink: 0;
+    display: flex; flex-direction: column;
+    min-height: 420px;
+  }
+  .col-dot { width: 12px; height: 12px; border-radius: 50%; }
+  .col-title { font-weight: 600; font-size: 14px; }
+  .col-count {
+    background: hsl(var(--border));
+    color: hsl(var(--muted-fg));
+    font-size: 11px; font-weight: 500;
+    padding: 2px 8px; border-radius: 99px;
+  }
+
+  /* ─── Lead card (original) ─── */
+  .lead-card {
+    position: relative;
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    border-radius: 8px;
+    padding: 16px;
+    overflow: hidden;
+    box-shadow: 0 1px 2px hsl(30 18% 20% / 0.04);
+    transition: all 0.2s;
+    cursor: grab;
+  }
+  .lead-card::before {
+    content: ''; position: absolute; left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: var(--card-accent, hsl(var(--border)));
+  }
+  .lead-card:hover {
+    box-shadow: 0 6px 16px -8px hsl(30 18% 20% / 0.14);
+    transform: translateY(-2px);
+    border-color: hsl(var(--border-hard));
+  }
+
+  .bdg { display: inline-flex; align-items: center; gap: 3px; height: 18px; padding: 0 7px; border-radius: 4px; font-size: 10px; font-weight: 500; border: 1px solid; }
+  .bdg-ico { display: inline-flex; align-items: center; gap: 4px; height: 18px; padding: 0 7px; border-radius: 4px; font-size: 10px; font-weight: 500; border: 1px solid; }
+
+  .b-origin-meta { background: #EEEDFE; color: #534AB7; border-color: #534AB730; }
+  .b-origin-wpp { background: #E1F5EE; color: #0F6E56; border-color: #0F6E5630; }
+  .b-origin-google { background: #FCEBEB; color: #A32D2D; border-color: #A32D2D30; }
+  .b-origin-ind { background: #EAF3DE; color: #3B6D11; border-color: #3B6D1130; }
+
+  .b-urgency-hot { background: hsl(0 84% 60% / 0.10); color: hsl(0 72% 45%); border-color: hsl(0 84% 60% / 0.3); }
+
+  .b-tag-ouro { background: #FFD70020; color: #C99700; border-color: #FFD70040; }
+  .b-tag-prata { background: #C0C0E020; color: #787; border-color: #C0C0E040; }
+  .b-tag-distrib { background: #88888820; color: #888; border-color: #88888840; }
+
+  .calor-hot  { background: hsl(0 84% 60% / 0.10);  color: hsl(0 72% 48%);    border: 1px solid hsl(0 84% 60% / 0.30); }
+  .calor-warm { background: hsl(38 92% 50% / 0.10); color: hsl(30 90% 42%);   border: 1px solid hsl(38 92% 50% / 0.30); }
+  .calor-cold { background: hsl(200 80% 48% / 0.10); color: hsl(200 80% 40%); border: 1px solid hsl(200 80% 48% / 0.30); }
+
+  .contact-block {
+    border-left: 2px solid hsl(var(--primary) / 0.6);
+    padding: 4px 0 4px 12px;
+  }
+
+  .whatsapp-btn {
+    background: #25D366; color: white;
+    font-size: 12px; font-weight: 500;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    padding: 6px 8px; border-radius: 6px;
+    transition: background 0.15s;
+  }
+  .whatsapp-btn:hover { background: #1da851; }
+
+  .qa-target-btn {
+    width: 26px; height: 26px;
+    background: hsl(var(--muted));
+    color: hsl(var(--muted-fg));
+    border-radius: 6px;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .qa-target-btn:hover { background: hsl(var(--surface-hover)); color: hsl(var(--fg)); }
+
+  /* ─── Stat card (original simples) ─── */
+  .stat-card {
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    border-radius: 8px;
+    padding: 16px;
+    box-shadow: 0 1px 2px hsl(30 18% 20% / 0.03);
+  }
+  .stat-label { font-size: 13px; color: hsl(var(--muted-fg)); }
+  .stat-value { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; margin-top: 4px; }
+  .stat-sub { font-size: 11px; color: hsl(var(--fg-dim)); margin-top: 4px; }
+
+  /* ─── Filter chip + button ─── */
+  .filter-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    height: 36px; padding: 0 11px; border-radius: 8px;
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    font-size: 12.5px; font-weight: 500;
+    color: hsl(var(--muted-fg));
+    transition: all 0.15s;
+  }
+  .filter-chip:hover { background: hsl(var(--surface-hover)); color: hsl(var(--fg)); border-color: hsl(var(--border-hard)); }
+  .filter-chip.active {
+    background: hsl(var(--primary) / 0.08);
+    border-color: hsl(var(--primary) / 0.4);
+    color: hsl(var(--fg));
+  }
+
+  .btn-gold {
+    background: linear-gradient(135deg, hsl(31 85% 53%) 0%, hsl(31 85% 53%) 25%, hsl(47 100% 50%) 100%);
+    color: hsl(30 18% 15%);
+    font-weight: 600;
+    box-shadow: 0 2px 10px hsl(var(--primary) / 0.3);
+    transition: box-shadow 0.3s ease-out, transform 0.15s;
+  }
+  .btn-gold.dirty { animation: gold-pulse 2.4s ease-in-out infinite; }
+  @keyframes gold-pulse {
+    0%, 100% { box-shadow: 0 2px 10px hsl(var(--primary) / 0.3); }
+    50%      { box-shadow: 0 2px 18px hsl(var(--primary) / 0.55); }
+  }
+
+  /* ─── Drawer world-class ─── */
+  .drawer {
+    max-width: 980px; width: 100%;
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    border-radius: 16px;
+    box-shadow: 0 40px 80px -20px hsl(30 18% 20% / 0.18);
+    overflow: hidden;
+    margin: 0 auto;
+  }
+
+  .drawer-header {
+    position: relative;
+    padding: 24px 28px 22px;
+    border-bottom: 1px solid hsl(var(--border));
+    overflow: hidden;
+  }
+  .drawer-header::before {
+    content: ''; position: absolute;
+    top: -40%; right: -10%;
+    width: 380px; height: 380px;
+    border-radius: 50%;
+    background: hsl(var(--primary));
+    opacity: 0.09;
+    filter: blur(60px);
+    pointer-events: none;
+  }
+
+  .drawer-avatar {
+    width: 60px; height: 60px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, hsl(var(--primary) / 0.3), hsl(var(--primary) / 0.1));
+    box-shadow: 0 0 0 1.5px hsl(var(--primary) / 0.45), 0 0 24px -4px hsl(var(--primary) / 0.3);
+    display: flex; align-items: center; justify-content: center;
+    color: hsl(var(--primary-dim));
+    font-weight: 700; font-size: 20px;
+    letter-spacing: -0.03em;
+  }
+
+  .drawer-tabs {
+    display: flex; gap: 2px; height: 42px;
+    padding: 0 24px;
+    border-bottom: 1px solid hsl(var(--border) / 0.6);
+    background: hsl(var(--card-2) / 0.4);
+  }
+  .drawer-tab {
+    display: inline-flex; align-items: center; gap: 6px;
+    height: 42px; padding: 0 14px;
+    color: hsl(var(--muted-fg));
+    font-size: 13px; font-weight: 500;
+    border-bottom: 2px solid transparent;
+    transition: color 0.15s, border-color 0.15s;
+    cursor: pointer;
+  }
+  .drawer-tab:hover { color: hsl(var(--fg)); }
+  .drawer-tab.active {
+    color: hsl(var(--fg));
+    border-bottom-color: hsl(var(--primary));
+    font-weight: 600;
+  }
+
+  .section-label {
+    font-size: 10.5px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.1em;
+    color: hsl(var(--fg-dim));
+    margin-bottom: 10px;
+    display: flex; align-items: center; gap: 6px;
+  }
+
+  .input-base {
+    width: 100%;
+    height: 38px; padding: 0 12px;
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    border-radius: 8px;
+    font-size: 13px;
+    color: hsl(var(--fg));
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .input-base:focus { outline: none; border-color: hsl(var(--primary) / 0.5); box-shadow: 0 0 0 3px hsl(var(--primary) / 0.1); }
+  .textarea-base {
+    width: 100%; padding: 10px 12px;
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    border-radius: 8px;
+    font-size: 13px;
+    color: hsl(var(--fg));
+    resize: none;
+  }
+  .label-small {
+    font-size: 11px; color: hsl(var(--muted-fg));
+    font-weight: 500;
+    margin-bottom: 4px; display: block;
+  }
+
+  .sidebar-card {
+    background: hsl(var(--card-2) / 0.6);
+    border: 1px solid hsl(var(--border));
+    border-radius: 10px;
+    padding: 14px;
+  }
+
+  .timeline-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    flex-shrink: 0; margin-top: 6px;
+  }
+
+  .stage-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    height: 26px; padding: 0 10px;
+    border-radius: 99px;
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    font-size: 12px; font-weight: 500;
+    color: hsl(var(--muted-fg));
+  }
+  .stage-pill.current {
+    background: hsl(var(--primary) / 0.1);
+    border-color: hsl(var(--primary) / 0.4);
+    color: hsl(var(--primary-dim));
+    font-weight: 600;
+  }
+
+  .ai-toggle {
+    position: relative; width: 38px; height: 22px;
+    border-radius: 99px; background: hsl(var(--primary));
+    cursor: pointer;
+  }
+  .ai-toggle::after {
+    content: ''; position: absolute; top: 2px; right: 2px;
+    width: 18px; height: 18px; border-radius: 50%;
+    background: white;
+    box-shadow: 0 1px 3px hsl(30 18% 20% / 0.15);
+  }
+
+  .fade-l { background: linear-gradient(to right, hsl(var(--bg)) 0%, transparent 100%); }
+  .fade-r { background: linear-gradient(to left, hsl(var(--bg)) 0%, transparent 100%); }
+  .scrollbar-hide::-webkit-scrollbar { display: none; }
+  .scrollbar-hide { scrollbar-width: none; }
+
+  blockquote {
+    background: hsl(var(--card-2));
+    border-left: 2px solid hsl(var(--primary));
+    padding: 10px 12px;
+    border-radius: 6px;
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: hsl(var(--fg));
+  }
+
+  .dot-pulse { animation: dot-pulse 1.8s ease-in-out infinite; }
+  @keyframes dot-pulse {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.35; }
+  }
+</style>
+</head>
+<body class="min-h-screen relative">
+
+<!-- ═══ ICON SVG REFERENCES (inline per use, no sprite for mockup simplicity) ═══ -->
+
+<div class="max-w-[1480px] mx-auto px-8 py-10 space-y-14 relative">
+
+  <!-- ═══ HEADER ═══ -->
+  <header class="pb-7 border-b border-[hsl(var(--border))]">
+    <div class="flex items-center gap-2 mb-3">
+      <span class="w-1.5 h-1.5 rounded-full bg-[hsl(var(--primary))]" style="box-shadow: 0 0 12px hsl(var(--primary));"></span>
+      <p class="text-[10.5px] text-[hsl(var(--primary-dim))] font-bold uppercase tracking-[0.2em]">Estado atual · validado hm-design · zero emoji</p>
+    </div>
+    <h1 class="font-display text-5xl font-extrabold tracking-[-0.04em] leading-[0.95]">Revertido onde precisava,<br /><span class="text-[hsl(var(--muted-fg))]">refinado onde importa.</span></h1>
+    <p class="text-[hsl(var(--muted-fg))] mt-5 text-sm max-w-2xl leading-relaxed">Kanban + cards + stats voltaram ao visual que você já conhece. Drawer simplificado: 5 tabs para 3 tabs (Dados · Histórico · Pipeline). Contexto do funil moveu para a sidebar. Chat removido. Histórico recente da aba Dados saiu. Todos os ícones padronizados em Lucide SVG inline, stroke 2, currentColor — estética editorial Linear/Stripe/Vercel.</p>
+  </header>
+
+  <!-- ═══ SEÇÃO 1 — KANBAN ═══ -->
+  <section class="space-y-6">
+    <div class="flex items-baseline gap-3">
+      <h2 class="font-display text-2xl font-bold tracking-tight">Kanban · restaurado</h2>
+      <span class="text-xs text-[hsl(var(--muted-fg))]">badges pastel, CTA WhatsApp verde brand, coluna muted</span>
+    </div>
+
+    <!-- Stats originais -->
+    <div class="grid grid-cols-4 gap-4">
+      <div class="stat-card">
+        <p class="stat-label">Total Leads</p>
+        <p class="stat-value">127</p>
+      </div>
+      <div class="stat-card">
+        <p class="stat-label">Abordados</p>
+        <p class="stat-value" style="color: hsl(var(--success));">68</p>
+      </div>
+      <div class="stat-card">
+        <p class="stat-label">Respondeu</p>
+        <p class="stat-value" style="color: hsl(var(--chart-4));">34</p>
+      </div>
+      <div class="stat-card">
+        <p class="stat-label">Agendados</p>
+        <p class="stat-value" style="color: hsl(var(--primary-dim));">14</p>
+      </div>
+    </div>
+
+    <!-- Board -->
+    <div class="relative overflow-hidden">
+      <div class="absolute left-0 top-0 bottom-0 w-10 fade-l z-20 pointer-events-none"></div>
+      <div class="absolute right-0 top-0 bottom-0 w-10 fade-r z-20 pointer-events-none"></div>
+
+      <div class="flex gap-4 overflow-x-auto scrollbar-hide pb-4">
+
+        <!-- COL NOVO -->
+        <div class="kanban-col">
+          <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center gap-2">
+              <span class="col-dot" style="background: #6366f1;"></span>
+              <span class="col-title">Novo</span>
+              <span class="col-count">32</span>
+            </div>
+            <div class="flex items-center gap-1 text-[hsl(var(--muted-fg))]">
+              <button class="p-1.5 rounded-lg hover:bg-white" aria-label="Adicionar">
+                <svg class="ico w-3.5 h-3.5" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+              </button>
+              <button class="p-1.5 rounded-lg hover:bg-white" aria-label="Mais opções">
+                <svg class="ico w-3.5 h-3.5" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="space-y-3">
+            <!-- Card quente -->
+            <div class="lead-card" style="--card-accent: hsl(0 80% 55%);">
+              <div class="flex items-start justify-between gap-2 mb-0.5">
+                <h4 class="font-semibold text-[13px] leading-tight">Pedro Almeida</h4>
+                <button class="text-[hsl(var(--muted-fg))]" aria-label="Menu">
+                  <svg class="ico w-4 h-4" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+                </button>
+              </div>
+              <div class="flex items-center gap-1.5 text-xs text-[hsl(var(--muted-fg))] mb-1.5">
+                <svg class="ico w-3 h-3 opacity-60" viewBox="0 0 24 24"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/></svg>
+                <span>Morel Metal</span>
+              </div>
+              <div class="flex items-center flex-wrap gap-1 mb-2">
+                <span class="bdg b-origin-meta">Meta Ads</span>
+                <span class="bdg b-urgency-hot">Imediato</span>
+                <span class="bdg b-tag-ouro">Ouro</span>
+                <span class="bdg b-tag-distrib">Distribuidor</span>
+                <span class="bdg-ico calor-hot">
+                  <svg class="ico-fill w-2.5 h-2.5" viewBox="0 0 24 24"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5Z"/></svg>
+                  9
+                </span>
+              </div>
+              <div class="contact-block mb-2 space-y-1">
+                <div class="flex items-center justify-between gap-2 text-xs">
+                  <span class="text-[hsl(var(--muted-fg))]">Telefone</span>
+                  <span class="font-medium tabular-nums">(11) 98877-1234</span>
+                </div>
+                <div class="flex items-center justify-between gap-2 text-xs">
+                  <span class="text-[hsl(var(--muted-fg))]">Faturamento</span>
+                  <span class="font-semibold" style="color: hsl(var(--success));">R$ 2,4M</span>
+                </div>
+              </div>
+              <div class="flex items-center gap-1.5 mb-2">
+                <button class="whatsapp-btn flex-1">
+                  <svg class="ico-fill w-3.5 h-3.5" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413Z"/></svg>
+                  WhatsApp
+                </button>
+                <button class="qa-target-btn" title="Ação do dia" aria-label="Ação do dia">
+                  <svg class="ico w-3.5 h-3.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+                </button>
+              </div>
+              <div class="flex items-center justify-between pt-2 border-t border-[hsl(var(--border))]">
+                <div class="flex items-center gap-1.5">
+                  <div class="w-5 h-5 rounded-full bg-[hsl(var(--primary)/0.15)] flex items-center justify-center">
+                    <span class="text-[9px] font-bold" style="color: hsl(var(--primary-dim));">JS</span>
+                  </div>
+                  <span class="text-[11px] text-[hsl(var(--muted-fg))]">João S.</span>
+                </div>
+                <div class="flex items-center gap-1 text-[10px] text-[hsl(var(--muted-fg))]">
+                  <svg class="ico w-3 h-3" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                  há 2h
+                </div>
+              </div>
+            </div>
+
+            <!-- Card morno -->
+            <div class="lead-card" style="--card-accent: hsl(38 92% 50%);">
+              <div class="flex items-start justify-between gap-2 mb-0.5">
+                <h4 class="font-semibold text-[13px] leading-tight">Maria Clara Souza</h4>
+                <button class="text-[hsl(var(--muted-fg))]" aria-label="Menu">
+                  <svg class="ico w-4 h-4" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+                </button>
+              </div>
+              <div class="flex items-center gap-1.5 text-xs text-[hsl(var(--muted-fg))] mb-1.5">
+                <svg class="ico w-3 h-3 opacity-60" viewBox="0 0 24 24"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/></svg>
+                <span>Distribuidora Central SP</span>
+              </div>
+              <div class="flex items-center flex-wrap gap-1 mb-2">
+                <span class="bdg b-origin-wpp">WhatsApp</span>
+                <span class="bdg b-tag-prata">Prata</span>
+                <span class="bdg-ico calor-warm">
+                  <svg class="ico-fill w-2.5 h-2.5" viewBox="0 0 24 24"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5Z"/></svg>
+                  6
+                </span>
+              </div>
+              <div class="contact-block mb-2 space-y-1">
+                <div class="flex items-center justify-between gap-2 text-xs">
+                  <span class="text-[hsl(var(--muted-fg))]">Telefone</span>
+                  <span class="font-medium tabular-nums">(47) 99912-5588</span>
+                </div>
+              </div>
+              <div class="flex items-center gap-1.5 mb-2">
+                <button class="whatsapp-btn flex-1">
+                  <svg class="ico-fill w-3.5 h-3.5" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413Z"/></svg>
+                  WhatsApp
+                </button>
+                <button class="qa-target-btn" aria-label="Ação do dia">
+                  <svg class="ico w-3.5 h-3.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+                </button>
+              </div>
+              <div class="flex items-center justify-between pt-2 border-t border-[hsl(var(--border))]">
+                <div class="flex items-center gap-1.5">
+                  <div class="w-5 h-5 rounded-full bg-[hsl(var(--primary)/0.15)] flex items-center justify-center">
+                    <span class="text-[9px] font-bold" style="color: hsl(var(--primary-dim));">AM</span>
+                  </div>
+                  <span class="text-[11px] text-[hsl(var(--muted-fg))]">Ana M.</span>
+                </div>
+                <div class="flex items-center gap-1 text-[10px] text-[hsl(var(--muted-fg))]">
+                  <svg class="ico w-3 h-3" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                  ontem
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- COL ABORDADO -->
+        <div class="kanban-col">
+          <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center gap-2">
+              <span class="col-dot" style="background: #f59e0b;"></span>
+              <span class="col-title">Abordado</span>
+              <span class="col-count">68</span>
+            </div>
+            <div class="flex items-center gap-1 text-[hsl(var(--muted-fg))]">
+              <button class="p-1.5 rounded-lg hover:bg-white">
+                <svg class="ico w-3.5 h-3.5" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+              </button>
+              <button class="p-1.5 rounded-lg hover:bg-white">
+                <svg class="ico w-3.5 h-3.5" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="space-y-3">
+            <div class="lead-card" style="--card-accent: hsl(38 92% 50%);">
+              <div class="flex items-start justify-between gap-2 mb-0.5">
+                <h4 class="font-semibold text-[13px] leading-tight">Lucas Ferreira</h4>
+                <button class="text-[hsl(var(--muted-fg))]">
+                  <svg class="ico w-4 h-4" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+                </button>
+              </div>
+              <div class="flex items-center gap-1.5 text-xs text-[hsl(var(--muted-fg))] mb-1.5">
+                <svg class="ico w-3 h-3 opacity-60" viewBox="0 0 24 24"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/></svg>
+                <span>Indústria Ipiranga</span>
+              </div>
+              <div class="flex items-center flex-wrap gap-1 mb-2">
+                <span class="bdg b-origin-ind">Indicação</span>
+                <span class="bdg b-tag-ouro">Ouro</span>
+                <span class="bdg-ico calor-warm">
+                  <svg class="ico-fill w-2.5 h-2.5" viewBox="0 0 24 24"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5Z"/></svg>
+                  7
+                </span>
+              </div>
+              <div class="contact-block mb-2 space-y-1">
+                <div class="flex items-center justify-between gap-2 text-xs">
+                  <span class="text-[hsl(var(--muted-fg))]">Telefone</span>
+                  <span class="font-medium tabular-nums">(11) 98877-9988</span>
+                </div>
+                <div class="flex items-center justify-between gap-2 text-xs">
+                  <span class="text-[hsl(var(--muted-fg))]">Faturamento</span>
+                  <span class="font-semibold" style="color: hsl(var(--success));">R$ 8,5M</span>
+                </div>
+              </div>
+              <div class="flex items-center gap-1.5 mb-2">
+                <button class="whatsapp-btn flex-1">
+                  <svg class="ico-fill w-3.5 h-3.5" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413Z"/></svg>
+                  WhatsApp
+                </button>
+                <button class="qa-target-btn">
+                  <svg class="ico w-3.5 h-3.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+                </button>
+              </div>
+              <div class="flex items-center justify-between pt-2 border-t border-[hsl(var(--border))]">
+                <div class="flex items-center gap-1.5">
+                  <div class="w-5 h-5 rounded-full bg-[hsl(var(--primary)/0.15)] flex items-center justify-center">
+                    <span class="text-[9px] font-bold" style="color: hsl(var(--primary-dim));">JS</span>
+                  </div>
+                  <span class="text-[11px] text-[hsl(var(--muted-fg))]">João S.</span>
+                </div>
+                <div class="flex items-center gap-1 text-[10px] text-[hsl(var(--muted-fg))]">
+                  <svg class="ico w-3 h-3" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                  há 1d
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- COL RESPONDEU -->
+        <div class="kanban-col">
+          <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center gap-2">
+              <span class="col-dot" style="background: #3b82f6;"></span>
+              <span class="col-title">Respondeu</span>
+              <span class="col-count">34</span>
+            </div>
+            <div class="flex items-center gap-1 text-[hsl(var(--muted-fg))]">
+              <button class="p-1.5 rounded-lg hover:bg-white">
+                <svg class="ico w-3.5 h-3.5" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+              </button>
+              <button class="p-1.5 rounded-lg hover:bg-white">
+                <svg class="ico w-3.5 h-3.5" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>
+              </button>
+            </div>
+          </div>
+          <div class="text-center text-xs text-[hsl(var(--fg-dim))] py-8 italic">— sem cards —</div>
+        </div>
+
+        <!-- COL AGENDADO -->
+        <div class="kanban-col">
+          <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center gap-2">
+              <span class="col-dot" style="background: #22c55e;"></span>
+              <span class="col-title">Agendado</span>
+              <span class="col-count">14</span>
+            </div>
+            <div class="flex items-center gap-1 text-[hsl(var(--muted-fg))]">
+              <button class="p-1.5 rounded-lg hover:bg-white">
+                <svg class="ico w-3.5 h-3.5" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+              </button>
+              <button class="p-1.5 rounded-lg hover:bg-white">
+                <svg class="ico w-3.5 h-3.5" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>
+              </button>
+            </div>
+          </div>
+          <div class="space-y-3">
+            <div class="lead-card" style="--card-accent: hsl(0 80% 55%);">
+              <div class="flex items-start justify-between gap-2 mb-0.5">
+                <h4 class="font-semibold text-[13px] leading-tight">Rafael Costa</h4>
+                <button class="text-[hsl(var(--muted-fg))]">
+                  <svg class="ico w-4 h-4" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+                </button>
+              </div>
+              <div class="flex items-center gap-1.5 text-xs text-[hsl(var(--muted-fg))] mb-1.5">
+                <svg class="ico w-3 h-3 opacity-60" viewBox="0 0 24 24"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/></svg>
+                <span>Laticínios Vale Verde</span>
+              </div>
+              <div class="flex items-center flex-wrap gap-1 mb-2">
+                <span class="bdg b-origin-meta">Meta Ads</span>
+                <span class="bdg b-tag-ouro">Ouro</span>
+                <span class="bdg-ico calor-hot">
+                  <svg class="ico-fill w-2.5 h-2.5" viewBox="0 0 24 24"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5Z"/></svg>
+                  8
+                </span>
+              </div>
+              <div class="contact-block mb-2 space-y-1">
+                <div class="flex items-center justify-between gap-2 text-xs">
+                  <span class="text-[hsl(var(--muted-fg))]">Telefone</span>
+                  <span class="font-medium tabular-nums">(11) 99977-1122</span>
+                </div>
+              </div>
+              <div class="flex items-center gap-1.5 mb-2">
+                <button class="whatsapp-btn flex-1">
+                  <svg class="ico-fill w-3.5 h-3.5" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413Z"/></svg>
+                  WhatsApp
+                </button>
+                <button class="qa-target-btn">
+                  <svg class="ico w-3.5 h-3.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+                </button>
+              </div>
+              <div class="flex items-center justify-between pt-2 border-t border-[hsl(var(--border))]">
+                <div class="flex items-center gap-1.5">
+                  <div class="w-5 h-5 rounded-full bg-[hsl(var(--primary)/0.15)] flex items-center justify-center">
+                    <span class="text-[9px] font-bold" style="color: hsl(var(--primary-dim));">RC</span>
+                  </div>
+                  <span class="text-[11px] text-[hsl(var(--muted-fg))]">Rodrigo C.</span>
+                </div>
+                <div class="flex items-center gap-1 text-[10px] text-[hsl(var(--muted-fg))]">
+                  <svg class="ico w-3 h-3" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                  há 4h
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ SEÇÃO 2 — DRAWER SIMPLIFICADO ═══ -->
+  <section class="space-y-6">
+    <div class="flex items-baseline gap-3">
+      <h2 class="font-display text-2xl font-bold tracking-tight">LeadDetailDrawer · simplificado</h2>
+      <span class="text-xs text-[hsl(var(--muted-fg))]">3 tabs · contexto na sidebar · foco no essencial</span>
+    </div>
+
+    <!-- Antes -> Depois -->
+    <div class="grid grid-cols-2 gap-4 mb-4">
+      <div class="sidebar-card">
+        <p class="section-label" style="color: hsl(var(--destructive));">Antes · 5 tabs</p>
+        <ul class="text-[12.5px] space-y-2 text-[hsl(var(--muted-fg))]">
+          <li class="flex items-start gap-2">
+            <svg class="ico w-3.5 h-3.5 mt-0.5 shrink-0" style="color: hsl(var(--destructive));" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            Dados
+          </li>
+          <li class="flex items-start gap-2">
+            <svg class="ico w-3.5 h-3.5 mt-0.5 shrink-0" style="color: hsl(var(--destructive));" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            Histórico
+          </li>
+          <li class="flex items-start gap-2">
+            <svg class="ico w-3.5 h-3.5 mt-0.5 shrink-0" style="color: hsl(var(--destructive));" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            <span>Contexto do funil <span class="text-[10px] opacity-70">(tab inteiro só para isso)</span></span>
+          </li>
+          <li class="flex items-start gap-2">
+            <svg class="ico w-3.5 h-3.5 mt-0.5 shrink-0" style="color: hsl(var(--destructive));" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            <span>Chat <span class="text-[10px] opacity-70">(duplica Chat WhatsApp dedicado)</span></span>
+          </li>
+          <li class="flex items-start gap-2">
+            <svg class="ico w-3.5 h-3.5 mt-0.5 shrink-0" style="color: hsl(var(--destructive));" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            Pipeline
+          </li>
+          <li class="pt-2 text-[11px] italic flex items-start gap-2">
+            <svg class="ico w-3 h-3 mt-0.5 shrink-0 opacity-60" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            + bloco "Histórico recente" repetido na aba Dados
+          </li>
+        </ul>
+      </div>
+      <div class="sidebar-card" style="border-color: hsl(var(--primary) / 0.3); background: hsl(var(--primary) / 0.04);">
+        <p class="section-label" style="color: hsl(var(--primary-dim));">Depois · 3 tabs</p>
+        <ul class="text-[12.5px] space-y-2">
+          <li class="flex items-start gap-2">
+            <svg class="ico w-3.5 h-3.5 mt-0.5 shrink-0" style="color: hsl(var(--success));" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+            <span><strong>Dados</strong> <span class="text-[11px] text-[hsl(var(--muted-fg))]">— contexto na sidebar, sem ruído</span></span>
+          </li>
+          <li class="flex items-start gap-2">
+            <svg class="ico w-3.5 h-3.5 mt-0.5 shrink-0" style="color: hsl(var(--success));" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+            <span><strong>Histórico</strong> <span class="text-[11px] text-[hsl(var(--muted-fg))]">— timeline world-class preservado</span></span>
+          </li>
+          <li class="flex items-start gap-2">
+            <svg class="ico w-3.5 h-3.5 mt-0.5 shrink-0" style="color: hsl(var(--success));" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+            <strong>Pipeline</strong>
+          </li>
+          <li class="pt-2 text-[11px] italic text-[hsl(var(--muted-fg))] flex items-start gap-2">
+            <svg class="ico w-3 h-3 mt-0.5 shrink-0 opacity-60" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+            Contexto moveu para sidebar acima de Responsável — sempre visível
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- DRAWER MOCK -->
+    <div class="drawer">
+
+      <!-- HEADER -->
+      <div class="drawer-header">
+        <div class="relative flex items-start justify-between gap-4">
+          <div class="flex items-center gap-4 min-w-0">
+            <div class="drawer-avatar">PA</div>
+            <div class="min-w-0">
+              <h2 class="font-display text-[22px] font-extrabold tracking-[-0.03em] leading-tight">Pedro Almeida</h2>
+              <p class="flex items-center gap-1.5 mt-1 text-[13px] text-[hsl(var(--muted-fg))]">
+                <svg class="ico w-3.5 h-3.5 opacity-70" viewBox="0 0 24 24"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/></svg>
+                <span>Morel Metal</span>
+              </p>
+              <div class="flex items-center gap-1.5 mt-2.5 flex-wrap">
+                <span class="bdg" style="color: hsl(var(--primary-dim)); border-color: hsl(var(--primary) / 0.4); background: hsl(var(--primary) / 0.08);">Qualificação</span>
+                <span class="bdg b-origin-meta">Meta Ads</span>
+                <span class="bdg b-urgency-hot">Imediato</span>
+                <span class="bdg-ico calor-hot">
+                  <svg class="ico-fill w-2.5 h-2.5" viewBox="0 0 24 24"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5Z"/></svg>
+                  9
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-2 shrink-0">
+            <button class="filter-chip">
+              <svg class="ico-fill w-3.5 h-3.5" style="color: #25D366;" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413Z"/></svg>
+              WhatsApp
+            </button>
+            <button class="filter-chip">
+              <svg class="ico w-3.5 h-3.5" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="12" y1="14" x2="12" y2="18"/><line x1="10" y1="16" x2="14" y2="16"/></svg>
+              Ação do dia
+            </button>
+            <button class="filter-chip">
+              <svg class="ico w-3.5 h-3.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              Agendar
+            </button>
+            <button class="filter-chip !w-9 !p-0 justify-center" aria-label="Mais opções">
+              <svg class="ico w-4 h-4" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- TABS (3) -->
+      <div class="drawer-tabs">
+        <div class="drawer-tab active">
+          <svg class="ico w-3.5 h-3.5" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          Dados
+        </div>
+        <div class="drawer-tab">
+          <svg class="ico w-3.5 h-3.5" viewBox="0 0 24 24"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg>
+          Histórico <span class="ml-1 text-[10px] opacity-60 tabular-nums">24</span>
+        </div>
+        <div class="drawer-tab">
+          <svg class="ico w-3.5 h-3.5" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          Pipeline
+        </div>
+      </div>
+
+      <!-- CONTENT -->
+      <div class="p-7 grid grid-cols-[1fr_260px] gap-6">
+
+        <!-- LEFT -->
+        <div class="space-y-6">
+          <div>
+            <h3 class="section-label">Contato</h3>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="label-small">Telefone</label>
+                <input class="input-base tabular-nums" value="(11) 98877-1234" />
+              </div>
+              <div>
+                <label class="label-small">E-mail</label>
+                <input class="input-base" value="pedro@morelmetal.com.br" />
+              </div>
+              <div>
+                <label class="label-small">Empresa</label>
+                <input class="input-base" value="Morel Metal" />
+              </div>
+              <div>
+                <label class="label-small">Faturamento</label>
+                <input class="input-base tabular-nums" value="R$ 2.400.000" />
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <h3 class="section-label">Observações</h3>
+            <textarea class="textarea-base" rows="3">Cliente quer fechar até fim do mês. Foco em descontos progressivos para volume.</textarea>
+          </div>
+
+          <div class="sidebar-card" style="border-style: dashed; opacity: 0.7;">
+            <p class="text-[11.5px] text-[hsl(var(--muted-fg))] italic flex items-start gap-2">
+              <svg class="ico w-3.5 h-3.5 mt-0.5 shrink-0" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+              Bloco <strong>"Histórico recente"</strong> removido desta aba — estava poluindo e duplicando o tab <strong>Histórico</strong>.
+            </p>
+          </div>
+        </div>
+
+        <!-- RIGHT SIDEBAR -->
+        <div class="space-y-5">
+          <!-- CONTEXTO (acima de Responsável) -->
+          <div>
+            <h3 class="section-label">
+              <svg class="ico w-3 h-3" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+              Contexto do funil
+            </h3>
+            <div class="sidebar-card">
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-[11px] text-[hsl(var(--muted-fg))]">Etapa atual</span>
+                <span class="stage-pill current" style="height: 22px; font-size: 11px;">Respondeu</span>
+              </div>
+              <div class="space-y-2 text-[12px]">
+                <div class="flex items-center justify-between">
+                  <span class="text-[hsl(var(--muted-fg))]">Dias nesta etapa</span>
+                  <span class="font-semibold tabular-nums">3</span>
+                </div>
+                <div class="flex items-center justify-between">
+                  <span class="text-[hsl(var(--muted-fg))]">Última mensagem</span>
+                  <span class="font-semibold">há 5h</span>
+                </div>
+              </div>
+              <button class="w-full mt-3 py-1.5 rounded-md text-[11.5px] font-medium flex items-center justify-center gap-1.5" style="background: hsl(var(--primary) / 0.1); color: hsl(var(--primary-dim));">
+                Mover para Agendado
+                <svg class="ico w-3 h-3" viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Responsável -->
+          <div>
+            <h3 class="section-label">Responsável</h3>
+            <button class="input-base flex items-center gap-2 text-left !px-3">
+              <div class="w-5 h-5 rounded-full bg-[hsl(var(--primary)/0.15)] flex items-center justify-center">
+                <span class="text-[9px] font-bold" style="color: hsl(var(--primary-dim));">JS</span>
+              </div>
+              <span class="truncate text-[13px] font-medium">João Silveira</span>
+              <svg class="ico w-3.5 h-3.5 ml-auto opacity-60" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+          </div>
+
+          <!-- Etiquetas -->
+          <div>
+            <h3 class="section-label">Etiquetas</h3>
+            <div class="flex flex-wrap gap-1.5">
+              <span class="bdg b-tag-ouro" style="padding-right: 4px;">
+                Ouro
+                <svg class="ico w-2.5 h-2.5 ml-1 opacity-70" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </span>
+              <span class="bdg b-tag-distrib" style="padding-right: 4px;">
+                Distribuidor
+                <svg class="ico w-2.5 h-2.5 ml-1 opacity-70" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </span>
+              <button class="bdg" style="border-style: dashed; color: hsl(var(--muted-fg)); gap: 3px;">
+                <svg class="ico w-2.5 h-2.5" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+                Adicionar
+              </button>
+            </div>
+          </div>
+
+          <!-- Nota rápida -->
+          <div>
+            <h3 class="section-label">Nota rápida</h3>
+            <textarea class="textarea-base" rows="3" placeholder="Escreva uma nota rápida..."></textarea>
+            <button class="filter-chip mt-2 w-full justify-center !h-8">Salvar nota</button>
+          </div>
+
+          <!-- Copilot toggle -->
+          <div class="sidebar-card">
+            <div class="flex items-center justify-between gap-3">
+              <div class="min-w-0 flex items-center gap-2">
+                <svg class="ico w-4 h-4 shrink-0" style="color: hsl(var(--primary-dim));" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><line x1="8" y1="16" x2="8" y2="16"/><line x1="16" y1="16" x2="16" y2="16"/></svg>
+                <div>
+                  <p class="text-[12.5px] font-semibold leading-tight">Copilot ativo</p>
+                  <p class="text-[11px] text-[hsl(var(--muted-fg))] mt-0.5 leading-snug">Respondendo automaticamente</p>
+                </div>
+              </div>
+              <div class="ai-toggle"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- FOOTER -->
+      <div class="px-6 py-3 border-t border-[hsl(var(--border))] flex items-center justify-between" style="background: hsl(var(--card-2) / 0.6);">
+        <div class="flex items-center gap-2 text-[11.5px] text-[hsl(var(--muted-fg))] tabular-nums">
+          <svg class="ico w-3 h-3 opacity-60" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          Criado há 1 dia · Atividade há 2h
+        </div>
+        <div class="flex items-center gap-2">
+          <div class="flex items-center gap-1.5 text-[11px] font-medium" style="color: hsl(var(--warning));">
+            <span class="dot-pulse w-1.5 h-1.5 rounded-full" style="background: hsl(var(--warning));"></span>
+            Alterações não salvas
+          </div>
+          <button class="filter-chip !h-8 !text-[12px]" style="color: hsl(var(--destructive));">
+            <svg class="ico w-3 h-3" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>
+            Excluir
+          </button>
+          <button class="filter-chip btn-gold dirty !h-8 !text-[12.5px] !px-4">Salvar alterações</button>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ═══ SEÇÃO 3 — ESTADO VAZIO DO CONTEXTO ═══ -->
+  <section class="space-y-5">
+    <div class="flex items-baseline gap-3">
+      <h2 class="font-display text-2xl font-bold tracking-tight">Contexto · estado vazio desenhado</h2>
+      <span class="text-xs text-[hsl(var(--muted-fg))]">quando renderFunnelContext vem null, não quebra layout</span>
+    </div>
+    <div class="grid grid-cols-2 gap-5 max-w-3xl">
+      <div>
+        <h3 class="section-label">Com contexto (variant pipe)</h3>
+        <div class="sidebar-card">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-[11px] text-[hsl(var(--muted-fg))]">Etapa atual</span>
+            <span class="stage-pill current" style="height: 22px; font-size: 11px;">Respondeu</span>
+          </div>
+          <div class="space-y-2 text-[12px]">
+            <div class="flex items-center justify-between">
+              <span class="text-[hsl(var(--muted-fg))]">Dias nesta etapa</span>
+              <span class="font-semibold tabular-nums">3</span>
+            </div>
+          </div>
+          <button class="w-full mt-3 py-1.5 rounded-md text-[11.5px] font-medium flex items-center justify-center gap-1.5" style="background: hsl(var(--primary) / 0.1); color: hsl(var(--primary-dim));">
+            Mover para Agendado
+            <svg class="ico w-3 h-3" viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+          </button>
+        </div>
+      </div>
+      <div>
+        <h3 class="section-label">Sem contexto (variant leads tabela)</h3>
+        <div class="sidebar-card" style="text-align: center; padding: 18px 14px;">
+          <svg class="ico w-6 h-6 mx-auto mb-2 opacity-40" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          <p class="text-[12px] font-medium mb-1">Sem ações contextuais</p>
+          <p class="text-[11px] text-[hsl(var(--muted-fg))] leading-relaxed mb-3">Este lead não está em nenhum funil com ações específicas.</p>
+          <button class="text-[11.5px] font-medium flex items-center justify-center gap-1 mx-auto" style="color: hsl(var(--primary-dim));">
+            Ver pipeline completo
+            <svg class="ico w-3 h-3" viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ SEÇÃO 4 — TAB HISTÓRICO ═══ -->
+  <section class="space-y-6">
+    <div class="flex items-baseline gap-3">
+      <h2 class="font-display text-2xl font-bold tracking-tight">Tab Histórico · mantido</h2>
+      <span class="text-xs text-[hsl(var(--muted-fg))]">você curtiu · zero mudança</span>
+    </div>
+
+    <div class="drawer" style="max-width: 900px;">
+      <div class="drawer-header" style="padding: 20px 24px;">
+        <div class="flex items-center gap-3">
+          <div class="drawer-avatar" style="width: 42px; height: 42px; font-size: 14px;">PA</div>
+          <div>
+            <h3 class="font-display font-semibold text-[15px]">Pedro Almeida · Histórico</h3>
+            <p class="text-[12px] text-[hsl(var(--muted-fg))]">24 eventos · últimos 30 dias</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="p-6 space-y-5">
+        <div class="flex items-center gap-2 flex-wrap">
+          <span class="filter-chip active !h-8 !text-[12px]">Todos</span>
+          <span class="filter-chip !h-8 !text-[12px]">Manual <span class="ml-1 tabular-nums opacity-60">7</span></span>
+          <span class="filter-chip !h-8 !text-[12px]">Copilot <span class="ml-1 tabular-nums opacity-60">9</span></span>
+          <span class="filter-chip !h-8 !text-[12px]">Automação <span class="ml-1 tabular-nums opacity-60">4</span></span>
+          <span class="filter-chip !h-8 !text-[12px]">Sistema <span class="ml-1 tabular-nums opacity-60">4</span></span>
+          <span class="ml-auto filter-chip !h-8 !text-[12px]">
+            <svg class="ico w-3.5 h-3.5" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            30 dias
+          </span>
+        </div>
+
+        <div class="space-y-4">
+          <div class="flex gap-3">
+            <div class="timeline-dot" style="background: hsl(var(--primary)); box-shadow: 0 0 0 3px hsl(var(--primary) / 0.2);"></div>
+            <div class="flex-1 sidebar-card" style="background: hsl(var(--primary) / 0.04); border-color: hsl(var(--primary) / 0.2);">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="text-[13px] font-semibold">Etapa alterada para <span style="color: hsl(var(--primary-dim));">"Respondeu"</span></span>
+                <span class="bdg" style="color: hsl(var(--primary-dim)); border-color: hsl(var(--primary) / 0.3); background: hsl(var(--primary) / 0.08);">Copilot</span>
+              </div>
+              <p class="text-[11.5px] text-[hsl(var(--muted-fg))] mt-1 tabular-nums">há 2 horas · Funil WhatsApp</p>
+            </div>
+          </div>
+          <div class="flex gap-3">
+            <div class="timeline-dot" style="background: hsl(var(--chart-4)); box-shadow: 0 0 0 3px hsl(var(--chart-4) / 0.2);"></div>
+            <div class="flex-1 sidebar-card">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="text-[13px] font-medium">Mensagem enviada via WhatsApp</span>
+                <span class="bdg">Manual</span>
+              </div>
+              <blockquote class="mt-2">"Oi Pedro, conseguimos bater a proposta do concorrente. Quer conversar hoje?"</blockquote>
+              <p class="text-[11.5px] text-[hsl(var(--fg-dim))] mt-2 tabular-nums">há 5 horas · João S.</p>
+            </div>
+          </div>
+          <div class="flex gap-3">
+            <div class="timeline-dot" style="background: hsl(var(--warning)); box-shadow: 0 0 0 3px hsl(var(--warning) / 0.2);"></div>
+            <div class="flex-1 sidebar-card">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="text-[13px] font-medium">Calor alterado para</span>
+                <span class="bdg-ico calor-hot">
+                  <svg class="ico-fill w-2.5 h-2.5" viewBox="0 0 24 24"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5Z"/></svg>
+                  9
+                </span>
+                <span class="bdg">Manual</span>
+              </div>
+              <p class="text-[11.5px] text-[hsl(var(--muted-fg))] mt-1 tabular-nums">há 5 horas · João S.</p>
+            </div>
+          </div>
+          <div class="flex gap-3">
+            <div class="timeline-dot" style="background: hsl(var(--success)); box-shadow: 0 0 0 3px hsl(var(--success) / 0.2);"></div>
+            <div class="flex-1 sidebar-card">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="text-[13px] font-medium">Lead criado</span>
+                <span class="bdg">Sistema</span>
+              </div>
+              <p class="text-[11.5px] text-[hsl(var(--muted-fg))] mt-1 tabular-nums">há 1 dia · Meta Ads (campanha LAL 3%)</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="text-center pt-10 border-t border-[hsl(var(--border))]">
+    <p class="text-[10.5px] text-[hsl(var(--fg-dim))] uppercase tracking-widest">Torque CRM · validado hm-design · 2026-04-23</p>
+  </footer>
+
+</div>
+</body>
+</html>

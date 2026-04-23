@@ -1,0 +1,951 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Pipes · LeadCard v2 Premium — Torque CRM</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    /* Near-black with subtle blue tint — Linear/Vercel palette */
+    --bg: 222 15% 4%;
+    --bg-2: 222 14% 5.5%;
+    --surface: 222 13% 7%;
+    --surface-2: 222 12% 9%;
+    --surface-hover: 222 12% 11%;
+
+    --border: 222 10% 14%;
+    --border-soft: 222 10% 11%;
+    --border-hard: 222 10% 18%;
+
+    --fg: 210 20% 98%;
+    --fg-muted: 222 8% 64%;
+    --fg-dim: 222 8% 46%;
+
+    /* Signature gold — more luminous, less saturated */
+    --gold: 43 96% 60%;
+    --gold-dim: 43 50% 44%;
+
+    --success: 152 65% 48%;
+    --danger: 358 72% 60%;
+    --info: 212 86% 64%;
+    --warning: 30 96% 58%;
+    --violet: 262 62% 66%;
+  }
+
+  * { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+  html, body {
+    background: hsl(var(--bg));
+    color: hsl(var(--fg));
+    font-family: 'Inter', system-ui, sans-serif;
+    font-feature-settings: 'cv11', 'ss01', 'ss03';
+    letter-spacing: -0.012em;
+  }
+  body {
+    background-image:
+      radial-gradient(ellipse 1200px 600px at 20% 0%, hsl(212 40% 18% / 0.15), transparent 60%),
+      radial-gradient(ellipse 800px 400px at 90% 100%, hsl(var(--gold) / 0.04), transparent 60%);
+    background-attachment: fixed;
+  }
+
+  .font-display { font-family: 'Inter', sans-serif; font-feature-settings: 'ss01','cv11'; letter-spacing: -0.03em; }
+  .font-mono-num { font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; font-feature-settings: 'zero'; }
+  .tabular-nums { font-variant-numeric: tabular-nums; }
+
+  /* Premium card — subtle depth via layered shadows */
+  .prem-card {
+    background: linear-gradient(180deg, hsl(var(--surface)) 0%, hsl(var(--surface-2)) 100%);
+    border: 1px solid hsl(var(--border-soft));
+    border-radius: 12px;
+    box-shadow:
+      0 0 0 1px hsl(0 0% 100% / 0.02) inset,
+      0 1px 0 hsl(0 0% 100% / 0.03) inset,
+      0 8px 32px -12px hsl(0 0% 0% / 0.7);
+  }
+
+  /* Lead card — premium */
+  .lead-card {
+    position: relative;
+    background: hsl(var(--surface));
+    border: 1px solid hsl(var(--border-soft));
+    border-radius: 10px;
+    padding: 14px;
+    overflow: hidden;
+    transition: all 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
+    cursor: grab;
+  }
+  .lead-card::before {
+    content: ''; position: absolute; left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: var(--card-accent, hsl(var(--border-hard)));
+    transition: width 0.2s, background 0.2s;
+  }
+  .lead-card::after {
+    content: ''; position: absolute; inset: 0;
+    border-radius: 10px;
+    box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.04);
+    pointer-events: none;
+  }
+  .lead-card:hover {
+    transform: translateY(-2px);
+    border-color: hsl(var(--border-hard));
+    background: hsl(var(--surface-hover));
+    box-shadow:
+      0 0 0 1px hsl(var(--border-hard)) inset,
+      0 18px 40px -18px hsl(0 0% 0% / 0.85),
+      0 0 32px -8px var(--card-accent, hsl(var(--info) / 0.25));
+  }
+  .lead-card:hover::before { width: 4px; }
+  .lead-card.dragging {
+    box-shadow: 0 22px 48px -8px hsl(0 0% 0% / 0.9);
+    transform: rotate(1.5deg) scale(1.02);
+    cursor: grabbing;
+  }
+
+  /* Calor micro-bar (top of card) */
+  .heat-bar {
+    position: absolute; top: 0; right: 0; height: 3px;
+    background: linear-gradient(90deg, transparent, var(--card-accent, transparent));
+    transition: width 0.3s;
+  }
+
+  /* Origin pill — monochrome, icon-led (no saturated pastel bg) */
+  .origin-pill {
+    display: inline-flex; align-items: center; gap: 5px;
+    height: 20px; padding: 0 7px; border-radius: 4px;
+    background: hsl(var(--surface-2));
+    border: 1px solid hsl(var(--border-soft));
+    font-size: 11px; font-weight: 500;
+    color: hsl(var(--fg-muted));
+    letter-spacing: -0.005em;
+  }
+  .origin-pill .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    box-shadow: 0 0 6px currentColor;
+  }
+
+  .tag-pill {
+    display: inline-flex; align-items: center;
+    height: 20px; padding: 0 7px; border-radius: 4px;
+    background: hsl(var(--surface-2));
+    border: 1px solid hsl(var(--border-soft));
+    font-size: 10.5px; font-weight: 500;
+    color: hsl(var(--fg-muted));
+  }
+
+  .meta-row {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 8px; padding: 9px 10px;
+    border-radius: 8px;
+    background: hsl(var(--bg-2) / 0.6);
+    border: 1px solid hsl(var(--border-soft));
+  }
+  .meta-label {
+    font-size: 10px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.09em;
+    color: hsl(var(--fg-dim));
+  }
+  .meta-value {
+    font-size: 12.5px; font-weight: 600;
+    color: hsl(var(--fg));
+    letter-spacing: -0.01em;
+  }
+  .meta-value-accent {
+    font-size: 14px; font-weight: 700;
+    color: hsl(var(--gold));
+    letter-spacing: -0.02em;
+    text-shadow: 0 0 20px hsl(var(--gold) / 0.3);
+  }
+
+  /* Kanban column — minimal, no filled bg */
+  .kanban-col {
+    position: relative;
+    width: 320px; flex-shrink: 0;
+    padding-top: 18px;
+    border-top: 1px solid hsl(var(--border-soft));
+  }
+  .kanban-col .stripe {
+    position: absolute; top: -1px; left: 0; right: 0;
+    height: 2px;
+    background: var(--stripe-color, hsl(var(--border-hard)));
+    box-shadow: 0 0 12px var(--stripe-color, hsl(var(--border-hard)));
+    opacity: 0.8;
+  }
+  .kanban-col .col-title {
+    font-family: 'Inter', sans-serif; font-weight: 600;
+    font-size: 13px; letter-spacing: -0.02em;
+    color: hsl(var(--fg));
+  }
+  .count-chip {
+    display: inline-flex; align-items: center;
+    height: 18px; padding: 0 7px;
+    border-radius: 99px;
+    background: hsl(var(--surface-2));
+    border: 1px solid hsl(var(--border-soft));
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px; font-weight: 600;
+    color: hsl(var(--fg-muted));
+  }
+  .auto-chip {
+    display: inline-flex; align-items: center; gap: 4px;
+    height: 20px; padding: 0 7px;
+    border-radius: 4px;
+    background: hsl(var(--info) / 0.10);
+    border: 1px solid hsl(var(--info) / 0.25);
+    color: hsl(var(--info));
+    font-size: 10.5px; font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .dest-chip {
+    display: inline-flex; align-items: center; gap: 4px;
+    height: 20px; padding: 0 7px;
+    border-radius: 4px;
+    background: hsl(var(--gold) / 0.08);
+    border: 1px solid hsl(var(--gold) / 0.25);
+    color: hsl(var(--gold));
+    font-size: 10.5px; font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  /* Stat card — premium */
+  .stat-card {
+    position: relative;
+    background: linear-gradient(180deg, hsl(var(--surface)) 0%, hsl(var(--surface-2)) 100%);
+    border: 1px solid hsl(var(--border-soft));
+    border-radius: 12px;
+    padding: 16px;
+    overflow: hidden;
+    transition: all 0.18s;
+  }
+  .stat-card:hover {
+    border-color: hsl(var(--border-hard));
+    transform: translateY(-1px);
+  }
+  .stat-card .halo {
+    position: absolute; top: -50%; right: -30%;
+    width: 180px; height: 180px;
+    border-radius: 50%;
+    opacity: 0.08;
+    filter: blur(40px);
+    pointer-events: none;
+  }
+  .stat-label {
+    font-size: 10.5px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.1em;
+    color: hsl(var(--fg-dim));
+  }
+  .stat-value {
+    font-family: 'Inter', sans-serif;
+    font-size: 26px; font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.03em;
+    line-height: 1;
+    color: hsl(var(--fg));
+    margin-top: 8px;
+  }
+  .stat-sub {
+    font-size: 11px; color: hsl(var(--fg-dim));
+    font-weight: 500; margin-top: 6px;
+  }
+  .stat-delta-up { color: hsl(var(--success)); background: hsl(var(--success) / 0.1); }
+  .stat-delta-down { color: hsl(var(--danger)); background: hsl(var(--danger) / 0.1); }
+
+  /* Button premium */
+  .btn-gold {
+    background: linear-gradient(180deg, hsl(47 100% 64%) 0%, hsl(43 96% 54%) 100%);
+    color: hsl(224 30% 8%);
+    font-weight: 600;
+    border: none;
+    box-shadow:
+      0 0 0 1px hsl(47 100% 70% / 0.3) inset,
+      0 2px 8px hsl(43 96% 54% / 0.3),
+      0 0 20px -6px hsl(43 96% 54% / 0.4);
+  }
+  .btn-gold:hover {
+    box-shadow:
+      0 0 0 1px hsl(47 100% 70% / 0.5) inset,
+      0 3px 14px hsl(43 96% 54% / 0.4),
+      0 0 32px -4px hsl(43 96% 54% / 0.5);
+  }
+  .btn-ghost {
+    background: hsl(var(--surface));
+    border: 1px solid hsl(var(--border-soft));
+    color: hsl(var(--fg-muted));
+  }
+  .btn-ghost:hover { background: hsl(var(--surface-hover)); color: hsl(var(--fg)); border-color: hsl(var(--border-hard)); }
+
+  /* Filter chip */
+  .filter-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    height: 32px; padding: 0 11px; border-radius: 8px;
+    background: hsl(var(--surface));
+    border: 1px solid hsl(var(--border-soft));
+    font-size: 12.5px; font-weight: 500;
+    color: hsl(var(--fg-muted));
+    transition: all 0.15s;
+  }
+  .filter-chip:hover { background: hsl(var(--surface-hover)); color: hsl(var(--fg)); border-color: hsl(var(--border-hard)); }
+  .filter-chip.active {
+    background: hsl(var(--gold) / 0.08);
+    border-color: hsl(var(--gold) / 0.4);
+    color: hsl(var(--fg));
+  }
+  .filter-chip.active .chip-value { color: hsl(var(--gold)); font-weight: 600; }
+
+  /* Quick action button (hover reveal) */
+  .qa-btn {
+    width: 30px; height: 30px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 8px;
+    background: hsl(var(--surface));
+    border: 1px solid hsl(var(--border-soft));
+    color: hsl(var(--fg-muted));
+    transition: all 0.15s;
+  }
+  .qa-btn:hover { background: hsl(var(--surface-hover)); color: hsl(var(--fg)); border-color: hsl(var(--border-hard)); transform: scale(1.05); }
+  .qa-btn.whatsapp:hover { color: #25D366; border-color: #25D36640; background: #25D36610; }
+  .qa-btn.gold:hover { color: hsl(var(--gold)); border-color: hsl(var(--gold) / 0.4); background: hsl(var(--gold) / 0.08); }
+
+  /* Hover reveal row */
+  .hover-row { max-height: 0; opacity: 0; overflow: hidden; transition: max-height 0.2s, opacity 0.2s, margin 0.2s; margin-top: 0; }
+  .lead-card:hover .hover-row { max-height: 60px; opacity: 1; margin-top: 10px; }
+
+  /* Flame icon flame */
+  .heat-chip {
+    display: inline-flex; align-items: center; gap: 4px;
+    height: 20px; padding: 0 8px; border-radius: 99px;
+    font-size: 11px; font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+  }
+  .heat-hot { color: hsl(var(--danger)); background: hsl(var(--danger) / 0.12); border: 1px solid hsl(var(--danger) / 0.3); }
+  .heat-warm { color: hsl(var(--warning)); background: hsl(var(--warning) / 0.12); border: 1px solid hsl(var(--warning) / 0.3); }
+  .heat-cold { color: hsl(var(--info)); background: hsl(var(--info) / 0.12); border: 1px solid hsl(var(--info) / 0.3); }
+  .heat-empty { color: hsl(var(--fg-dim)); background: hsl(var(--surface-2)); border: 1px solid hsl(var(--border-soft)); }
+
+  /* Column avatar */
+  .avatar {
+    width: 20px; height: 20px; border-radius: 50%;
+    background: linear-gradient(135deg, hsl(var(--gold) / 0.3), hsl(var(--gold) / 0.1));
+    border: 1px solid hsl(var(--gold) / 0.3);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 9px; font-weight: 700;
+    color: hsl(var(--gold));
+    letter-spacing: -0.02em;
+  }
+
+  /* Divider */
+  .divider-hair {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, hsl(var(--border)) 20%, hsl(var(--border)) 80%, transparent);
+  }
+
+  /* Gradient fade */
+  .fade-l { background: linear-gradient(to right, hsl(var(--bg)) 0%, transparent 100%); }
+  .fade-r { background: linear-gradient(to left, hsl(var(--bg)) 0%, transparent 100%); }
+
+  /* Scrollbars */
+  .scrollbar-thin::-webkit-scrollbar { height: 6px; width: 6px; }
+  .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+  .scrollbar-thin::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 99px; }
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover { background: hsl(var(--border-hard)); }
+  .scrollbar-hide::-webkit-scrollbar { display: none; }
+  .scrollbar-hide { scrollbar-width: none; }
+
+  /* Empty column CTA */
+  .empty-stage {
+    width: 100%; padding: 20px 12px;
+    border: 1.5px dashed hsl(var(--border));
+    border-radius: 10px;
+    font-size: 11px; font-weight: 500;
+    color: hsl(var(--fg-dim));
+    background: transparent;
+    transition: all 0.18s;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+  }
+  .empty-stage:hover {
+    border-color: hsl(var(--gold) / 0.5);
+    color: hsl(var(--gold));
+    background: hsl(var(--gold) / 0.04);
+  }
+
+  .glow-text { text-shadow: 0 0 24px hsl(var(--gold) / 0.4); }
+
+  /* Subtle noise texture via SVG */
+  .noise::after {
+    content: ''; position: absolute; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' /%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.02 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' /%3E%3C/svg%3E");
+    pointer-events: none; opacity: 0.4;
+  }
+</style>
+</head>
+<body class="min-h-screen relative">
+
+<div class="max-w-[1480px] mx-auto px-8 py-12 space-y-16 relative">
+
+  <!-- Hero header -->
+  <header class="flex items-end justify-between pb-8 border-b border-[hsl(var(--border-soft))]">
+    <div>
+      <div class="flex items-center gap-2 mb-3">
+        <span class="w-1.5 h-1.5 rounded-full bg-[hsl(var(--gold))] shadow-[0_0_12px_hsl(var(--gold))]"></span>
+        <p class="text-[10.5px] text-[hsl(var(--gold))] font-bold uppercase tracking-[0.2em]">Pipes v2 · Premium refresh</p>
+      </div>
+      <h1 class="font-display text-5xl font-extrabold tracking-[-0.04em] leading-[0.95]">Funis reimaginados<br /><span class="text-[hsl(var(--fg-muted))]">em cada pixel.</span></h1>
+      <p class="text-[hsl(var(--fg-muted))] mt-5 text-sm max-w-xl leading-relaxed">Dark-first editorial. Densidade trabalhada, depth sutil, tipografia tabular. Zero ruído visual — cada elemento ganha seu lugar por justificativa, não por default.</p>
+    </div>
+    <div class="flex flex-col items-end gap-1.5 text-[11px] text-[hsl(var(--fg-dim))]">
+      <div class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-[hsl(var(--success))]"></span><span>v2.0 mockup · Opus premium</span></div>
+      <span>Linear · Stripe · Vercel · Apple references</span>
+    </div>
+  </header>
+
+  <!-- SEÇÃO 1 — PipeShell -->
+  <section class="space-y-7">
+    <div class="flex items-baseline gap-3">
+      <h2 class="font-display text-2xl font-bold tracking-tight">Funil de Qualificação</h2>
+      <span class="text-xs text-[hsl(var(--fg-muted))]">127 leads · filtrando por João S.</span>
+      <div class="ml-auto flex items-center gap-2">
+        <button class="btn-ghost filter-chip !h-9 !w-9 !p-0 justify-center" title="Configurações do funil">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 15a3 3 0 100-6 3 3 0 000 6z"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.6 15a1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.6a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+        </button>
+        <button class="btn-gold filter-chip !h-9 !px-3.5 !font-semibold gap-1.5">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+          Novo
+          <svg class="w-3 h-3 opacity-70 ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M7 10l5 5 5-5H7z"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Stats grid -->
+    <div class="grid grid-cols-4 gap-4">
+      <div class="stat-card">
+        <div class="halo" style="background: hsl(var(--gold));"></div>
+        <div class="flex items-center justify-between">
+          <p class="stat-label">Total</p>
+          <span class="stat-delta-up text-[10px] px-1.5 py-0.5 rounded-full font-semibold font-mono-num">↑ 12%</span>
+        </div>
+        <p class="stat-value glow-text" style="color: hsl(var(--gold));">127</p>
+        <p class="stat-sub">leads no funil</p>
+      </div>
+
+      <div class="stat-card">
+        <div class="halo" style="background: hsl(var(--success));"></div>
+        <div class="flex items-center justify-between">
+          <p class="stat-label">Abordados</p>
+          <span class="stat-delta-up text-[10px] px-1.5 py-0.5 rounded-full font-semibold font-mono-num">↑ 6</span>
+        </div>
+        <p class="stat-value">68</p>
+        <p class="stat-sub">contato iniciado</p>
+      </div>
+
+      <div class="stat-card">
+        <div class="halo" style="background: hsl(var(--info));"></div>
+        <div class="flex items-center justify-between">
+          <p class="stat-label">Respondeu</p>
+          <span class="stat-delta-down text-[10px] px-1.5 py-0.5 rounded-full font-semibold font-mono-num">↓ 2</span>
+        </div>
+        <p class="stat-value">34</p>
+        <p class="stat-sub">engajaram</p>
+      </div>
+
+      <div class="stat-card">
+        <div class="halo" style="background: hsl(var(--warning));"></div>
+        <div class="flex items-center justify-between">
+          <p class="stat-label">Agendados</p>
+          <span class="stat-delta-up text-[10px] px-1.5 py-0.5 rounded-full font-semibold font-mono-num">↑ 14%</span>
+        </div>
+        <p class="stat-value">14</p>
+        <p class="stat-sub">reunião marcada</p>
+      </div>
+    </div>
+
+    <!-- Filter row -->
+    <div class="flex items-center gap-2.5 flex-wrap">
+      <div class="relative flex-1 min-w-[280px] max-w-md">
+        <svg class="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[hsl(var(--fg-dim))]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        <input type="text" placeholder="Buscar por nome, empresa, telefone…"
+          class="w-full h-10 bg-[hsl(var(--surface))] border border-[hsl(var(--border-soft))] focus:border-[hsl(var(--gold)/0.4)] rounded-lg pl-10 pr-3 text-[13px] text-[hsl(var(--fg))] placeholder-[hsl(var(--fg-dim))] outline-none transition-colors" />
+        <kbd class="absolute right-3 top-1/2 -translate-y-1/2 px-1.5 py-0.5 rounded border border-[hsl(var(--border-soft))] bg-[hsl(var(--bg-2))] text-[10px] text-[hsl(var(--fg-dim))] font-mono-num">⌘K</kbd>
+      </div>
+
+      <button class="filter-chip">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 010 20M12 2a15 15 0 000 20"/></svg>
+        Origem
+        <svg class="w-3 h-3 opacity-50" fill="currentColor" viewBox="0 0 24 24"><path d="M7 10l5 5 5-5H7z"/></svg>
+      </button>
+
+      <button class="filter-chip active">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        Responsável: <span class="chip-value">João S.</span>
+        <button class="opacity-70 hover:opacity-100 ml-1">
+          <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </button>
+
+      <button class="filter-chip">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+        Agendados
+      </button>
+
+      <button class="filter-chip relative">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 6h18M6 12h12M10 18h4"/></svg>
+        Mais filtros
+        <span class="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-[hsl(var(--gold))] text-[hsl(224_30%_8%)] text-[10px] font-bold flex items-center justify-center shadow-[0_0_12px_hsl(var(--gold)/0.5)]">2</span>
+      </button>
+
+      <div class="ml-auto">
+        <button class="filter-chip">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+          <span class="tabular-nums">Período: <span class="chip-value">Este mês</span></span>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- SEÇÃO 2 — Kanban Board -->
+  <section class="space-y-5">
+    <div class="relative overflow-hidden">
+      <!-- Gradient fades -->
+      <div class="absolute left-0 top-0 bottom-0 w-14 fade-l z-20 pointer-events-none"></div>
+      <div class="absolute right-0 top-0 bottom-0 w-14 fade-r z-20 pointer-events-none"></div>
+
+      <div class="flex gap-5 overflow-x-auto scrollbar-hide pb-6 relative">
+
+        <!-- COL 1: NOVO -->
+        <div class="kanban-col" style="--stripe-color: hsl(var(--info));">
+          <div class="stripe"></div>
+          <div class="flex items-center justify-between mb-5 pl-1">
+            <div class="flex items-center gap-2.5 min-w-0">
+              <span class="col-title">Novo</span>
+              <span class="count-chip">32</span>
+              <span class="auto-chip">
+                <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                2 auto
+              </span>
+            </div>
+            <div class="flex items-center gap-0.5">
+              <button class="qa-btn !w-7 !h-7 !rounded-md" title="Adicionar nesta etapa">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+              </button>
+              <button class="qa-btn !w-7 !h-7 !rounded-md">
+                <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="space-y-3">
+            <!-- CARD HOT -->
+            <div class="lead-card" style="--card-accent: hsl(var(--danger));">
+              <div class="heat-bar" style="width: 90%;"></div>
+
+              <div class="flex items-start justify-between gap-2 mb-1">
+                <h4 class="font-display text-[14px] font-semibold leading-tight tracking-[-0.02em]">Pedro Almeida</h4>
+                <span class="heat-chip heat-hot">
+                  <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M13.5.67c0 0-1 5.33-5.17 7.33C6.33 9.33 5 11.33 5 14c0 3.87 3.13 7 7 7s7-3.13 7-7c0-3.5-2-6.5-5.5-13.33z"/></svg>
+                  9
+                </span>
+              </div>
+
+              <div class="flex items-center gap-1.5 text-[12px] text-[hsl(var(--fg-muted))] mb-3">
+                <svg class="w-3 h-3 opacity-60" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-4"/></svg>
+                <span class="truncate">Morel Metal</span>
+              </div>
+
+              <div class="flex items-center flex-wrap gap-1.5 mb-3">
+                <span class="origin-pill"><span class="dot" style="color: hsl(var(--violet)); background: hsl(var(--violet));"></span>Meta Ads</span>
+                <span class="tag-pill" style="color: hsl(var(--danger)); border-color: hsl(var(--danger) / 0.3); background: hsl(var(--danger) / 0.08);">Imediato</span>
+              </div>
+
+              <div class="meta-row mb-3">
+                <span class="meta-label">Faturamento</span>
+                <span class="meta-value-accent font-mono-num">R$ 2,4M</span>
+              </div>
+
+              <div class="flex items-center flex-wrap gap-1.5 mb-1">
+                <span class="tag-pill" style="color: hsl(var(--gold)); border-color: hsl(var(--gold) / 0.3); background: hsl(var(--gold) / 0.08);">Ouro</span>
+                <span class="tag-pill">Distribuidor</span>
+              </div>
+
+              <div class="hover-row flex items-center gap-1.5 mb-2">
+                <button class="qa-btn" title="Ligar">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/></svg>
+                </button>
+                <button class="qa-btn whatsapp" title="WhatsApp">
+                  <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
+                </button>
+                <button class="qa-btn gold" title="Ação do dia">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01M16 18h.01"/></svg>
+                </button>
+                <div class="ml-auto flex items-center gap-1 text-[10.5px] text-[hsl(var(--fg-dim))]">
+                  Abrir ficha
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+                </div>
+              </div>
+
+              <div class="divider-hair mb-2.5"></div>
+
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <div class="avatar">JS</div>
+                  <span class="text-[11px] text-[hsl(var(--fg-muted))]">João S.</span>
+                </div>
+                <span class="text-[10.5px] text-[hsl(var(--fg-dim))] font-mono-num">há 2h</span>
+              </div>
+            </div>
+
+            <!-- CARD WARM -->
+            <div class="lead-card" style="--card-accent: hsl(var(--warning));">
+              <div class="heat-bar" style="width: 60%;"></div>
+
+              <div class="flex items-start justify-between gap-2 mb-1">
+                <h4 class="font-display text-[14px] font-semibold leading-tight tracking-[-0.02em]">Maria Clara Souza</h4>
+                <span class="heat-chip heat-warm">
+                  <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M13.5.67c0 0-1 5.33-5.17 7.33C6.33 9.33 5 11.33 5 14c0 3.87 3.13 7 7 7s7-3.13 7-7c0-3.5-2-6.5-5.5-13.33z"/></svg>
+                  6
+                </span>
+              </div>
+
+              <div class="flex items-center gap-1.5 text-[12px] text-[hsl(var(--fg-muted))] mb-3">
+                <svg class="w-3 h-3 opacity-60" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-4"/></svg>
+                <span class="truncate">Distribuidora Central SP</span>
+              </div>
+
+              <div class="flex items-center flex-wrap gap-1.5 mb-3">
+                <span class="origin-pill"><span class="dot" style="color: hsl(142 71% 45%); background: hsl(142 71% 45%);"></span>WhatsApp</span>
+                <span class="tag-pill" style="color: hsl(var(--warning)); border-color: hsl(var(--warning) / 0.3); background: hsl(var(--warning) / 0.08);">1 mês</span>
+              </div>
+
+              <div class="meta-row mb-3">
+                <span class="meta-label">Telefone</span>
+                <span class="meta-value font-mono-num">(47) 99912-5588</span>
+              </div>
+
+              <div class="flex items-center flex-wrap gap-1.5 mb-1">
+                <span class="tag-pill" style="color: #C0C0E0; border-color: #C0C0E030; background: #C0C0E010;">Prata</span>
+              </div>
+
+              <div class="divider-hair mb-2.5 mt-3"></div>
+
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <div class="avatar">AM</div>
+                  <span class="text-[11px] text-[hsl(var(--fg-muted))]">Ana M.</span>
+                </div>
+                <span class="text-[10.5px] text-[hsl(var(--fg-dim))] font-mono-num">ontem</span>
+              </div>
+            </div>
+
+            <!-- CARD COLD INACTIVE -->
+            <div class="lead-card opacity-60" style="--card-accent: hsl(var(--info));">
+              <div class="flex items-start justify-between gap-2 mb-1">
+                <h4 class="font-display text-[14px] font-semibold leading-tight tracking-[-0.02em]">Roberto Mendes</h4>
+                <span class="heat-chip heat-cold">
+                  <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M13.5.67c0 0-1 5.33-5.17 7.33C6.33 9.33 5 11.33 5 14c0 3.87 3.13 7 7 7s7-3.13 7-7c0-3.5-2-6.5-5.5-13.33z"/></svg>
+                  2
+                </span>
+              </div>
+              <div class="flex items-center gap-1.5 text-[12px] text-[hsl(var(--fg-muted))] mb-3">
+                <svg class="w-3 h-3 opacity-60" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-4"/></svg>
+                <span class="truncate">Sem empresa</span>
+              </div>
+              <div class="flex items-center flex-wrap gap-1.5 mb-3">
+                <span class="origin-pill"><span class="dot" style="color: hsl(var(--danger)); background: hsl(var(--danger));"></span>Google Ads</span>
+                <span class="tag-pill" style="color: hsl(var(--danger)); border-color: hsl(var(--danger) / 0.3); background: hsl(var(--danger) / 0.08);">Inativo</span>
+              </div>
+              <div class="meta-row mb-3">
+                <span class="meta-label">Telefone</span>
+                <span class="meta-value font-mono-num">(11) 2233-4455</span>
+              </div>
+              <div class="divider-hair mb-2.5"></div>
+              <div class="flex items-center justify-between">
+                <span class="text-[11px] text-[hsl(var(--fg-dim))] italic">Sem responsável</span>
+                <span class="text-[10.5px] text-[hsl(var(--fg-dim))] font-mono-num">há 12 dias</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- COL 2: ABORDADO -->
+        <div class="kanban-col" style="--stripe-color: hsl(var(--warning));">
+          <div class="stripe"></div>
+          <div class="flex items-center justify-between mb-5 pl-1">
+            <div class="flex items-center gap-2.5 min-w-0">
+              <span class="col-title">Abordado</span>
+              <span class="count-chip">68</span>
+              <span class="auto-chip">
+                <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                3 auto
+              </span>
+            </div>
+            <div class="flex items-center gap-0.5">
+              <button class="qa-btn !w-7 !h-7 !rounded-md"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+              <button class="qa-btn !w-7 !h-7 !rounded-md"><svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button>
+            </div>
+          </div>
+
+          <div class="space-y-3">
+            <div class="lead-card" style="--card-accent: hsl(var(--warning));">
+              <div class="heat-bar" style="width: 70%;"></div>
+              <div class="flex items-start justify-between gap-2 mb-1">
+                <h4 class="font-display text-[14px] font-semibold leading-tight tracking-[-0.02em]">Lucas Ferreira</h4>
+                <span class="heat-chip heat-warm"><svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M13.5.67c0 0-1 5.33-5.17 7.33C6.33 9.33 5 11.33 5 14c0 3.87 3.13 7 7 7s7-3.13 7-7c0-3.5-2-6.5-5.5-13.33z"/></svg>7</span>
+              </div>
+              <div class="flex items-center gap-1.5 text-[12px] text-[hsl(var(--fg-muted))] mb-3"><svg class="w-3 h-3 opacity-60" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-4"/></svg>Indústria Ipiranga</div>
+              <div class="flex items-center flex-wrap gap-1.5 mb-3">
+                <span class="origin-pill"><span class="dot" style="color: hsl(152 65% 48%); background: hsl(152 65% 48%);"></span>Indicação</span>
+              </div>
+              <div class="meta-row mb-3">
+                <span class="meta-label">Faturamento</span>
+                <span class="meta-value-accent font-mono-num">R$ 8,5M</span>
+              </div>
+              <div class="flex items-center flex-wrap gap-1.5 mb-1">
+                <span class="tag-pill" style="color: hsl(var(--gold)); border-color: hsl(var(--gold) / 0.3); background: hsl(var(--gold) / 0.08);">Ouro</span>
+                <span class="tag-pill">+2</span>
+              </div>
+              <div class="divider-hair mb-2.5 mt-3"></div>
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <div class="avatar">JS</div>
+                  <span class="text-[11px] text-[hsl(var(--fg-muted))]">João S.</span>
+                </div>
+                <span class="text-[10.5px] text-[hsl(var(--fg-dim))] font-mono-num">há 1d</span>
+              </div>
+            </div>
+
+            <div class="lead-card" style="--card-accent: hsl(var(--gold-dim));">
+              <div class="flex items-start justify-between gap-2 mb-1">
+                <h4 class="font-display text-[14px] font-semibold leading-tight tracking-[-0.02em]">Camila Ribeiro</h4>
+                <span class="heat-chip heat-empty"><svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M13.5.67c0 0-1 5.33-5.17 7.33C6.33 9.33 5 11.33 5 14c0 3.87 3.13 7 7 7s7-3.13 7-7c0-3.5-2-6.5-5.5-13.33z"/></svg>—</span>
+              </div>
+              <div class="flex items-center gap-1.5 text-[12px] text-[hsl(var(--fg-muted))] mb-3"><svg class="w-3 h-3 opacity-60" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-4"/></svg>Agro Ribeiro</div>
+              <div class="flex items-center flex-wrap gap-1.5 mb-3">
+                <span class="origin-pill"><span class="dot" style="color: hsl(212 86% 64%); background: hsl(212 86% 64%);"></span>Site</span>
+              </div>
+              <div class="divider-hair mb-2.5 mt-3"></div>
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <div class="avatar">JS</div>
+                  <span class="text-[11px] text-[hsl(var(--fg-muted))]">João S.</span>
+                </div>
+                <span class="text-[10.5px] text-[hsl(var(--fg-dim))] font-mono-num">há 3d</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- COL 3: RESPONDEU -->
+        <div class="kanban-col" style="--stripe-color: hsl(var(--info));">
+          <div class="stripe"></div>
+          <div class="flex items-center justify-between mb-5 pl-1">
+            <div class="flex items-center gap-2.5 min-w-0">
+              <span class="col-title">Respondeu</span>
+              <span class="count-chip">34</span>
+            </div>
+            <div class="flex items-center gap-0.5">
+              <button class="qa-btn !w-7 !h-7 !rounded-md"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+              <button class="qa-btn !w-7 !h-7 !rounded-md"><svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button>
+            </div>
+          </div>
+          <button class="empty-stage">
+            <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+            Adicionar em Respondeu
+          </button>
+        </div>
+
+        <!-- COL 4: AGENDADO (is_final_positive) -->
+        <div class="kanban-col" style="--stripe-color: hsl(var(--success));">
+          <div class="stripe"></div>
+          <div class="flex items-center justify-between mb-5 pl-1">
+            <div class="flex items-center gap-2.5 min-w-0">
+              <span class="col-title">Agendado</span>
+              <span class="count-chip">14</span>
+              <span class="dest-chip" title="Ao soltar aqui, o card vai para o funil de Confirmação">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+                Confirmação
+              </span>
+            </div>
+            <div class="flex items-center gap-0.5">
+              <button class="qa-btn !w-7 !h-7 !rounded-md"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+              <button class="qa-btn !w-7 !h-7 !rounded-md"><svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button>
+            </div>
+          </div>
+
+          <div class="space-y-3">
+            <div class="lead-card" style="--card-accent: hsl(var(--success));">
+              <div class="heat-bar" style="width: 80%;"></div>
+              <div class="flex items-start justify-between gap-2 mb-1">
+                <h4 class="font-display text-[14px] font-semibold leading-tight tracking-[-0.02em]">Rafael Costa</h4>
+                <span class="heat-chip heat-hot"><svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M13.5.67c0 0-1 5.33-5.17 7.33C6.33 9.33 5 11.33 5 14c0 3.87 3.13 7 7 7s7-3.13 7-7c0-3.5-2-6.5-5.5-13.33z"/></svg>8</span>
+              </div>
+              <div class="flex items-center gap-1.5 text-[12px] text-[hsl(var(--fg-muted))] mb-3"><svg class="w-3 h-3 opacity-60" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-4"/></svg>Laticínios Vale Verde</div>
+              <div class="flex items-center flex-wrap gap-1.5 mb-3">
+                <span class="origin-pill"><span class="dot" style="color: hsl(var(--violet)); background: hsl(var(--violet));"></span>Meta Ads</span>
+              </div>
+
+              <div class="meta-row mb-3">
+                <div class="flex flex-col flex-1 min-w-0">
+                  <span class="meta-label">Reunião</span>
+                  <span class="meta-value font-mono-num mt-0.5">24 abr · 14:30</span>
+                </div>
+                <a href="#" class="flex items-center gap-1 text-[11px] font-semibold text-[hsl(var(--gold))] hover:underline shrink-0">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+                  Meet
+                </a>
+              </div>
+
+              <div class="flex items-center flex-wrap gap-1.5 mb-1">
+                <span class="tag-pill" style="color: hsl(var(--gold)); border-color: hsl(var(--gold) / 0.3); background: hsl(var(--gold) / 0.08);">Ouro</span>
+              </div>
+              <div class="divider-hair mb-2.5 mt-3"></div>
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <div class="avatar">RC</div>
+                  <span class="text-[11px] text-[hsl(var(--fg-muted))]">Rodrigo C.</span>
+                </div>
+                <span class="text-[10.5px] text-[hsl(var(--fg-dim))] font-mono-num">há 4h</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- SEÇÃO 3 — Propostas variant + Analytics card -->
+  <section class="space-y-6">
+    <div class="flex items-baseline gap-3">
+      <h2 class="font-display text-xl font-bold tracking-tight">Propostas · hero com produtos</h2>
+      <span class="text-xs text-[hsl(var(--fg-muted))]">hierarquia muda conforme o contexto comercial</span>
+    </div>
+
+    <div class="grid grid-cols-3 gap-6">
+
+      <!-- Propostas card -->
+      <div class="lead-card w-full" style="--card-accent: hsl(var(--danger));">
+        <div class="heat-bar" style="width: 85%;"></div>
+        <div class="flex items-start justify-between gap-2 mb-1">
+          <h4 class="font-display text-[14px] font-semibold leading-tight tracking-[-0.02em]">Juliana Moraes</h4>
+          <span class="heat-chip heat-hot"><svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M13.5.67c0 0-1 5.33-5.17 7.33C6.33 9.33 5 11.33 5 14c0 3.87 3.13 7 7 7s7-3.13 7-7c0-3.5-2-6.5-5.5-13.33z"/></svg>9</span>
+        </div>
+        <div class="flex items-center gap-1.5 text-[12px] text-[hsl(var(--fg-muted))] mb-3"><svg class="w-3 h-3 opacity-60" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-4"/></svg>Importadora Oeste</div>
+        <div class="flex items-center flex-wrap gap-1.5 mb-3">
+          <span class="origin-pill"><span class="dot" style="color: hsl(152 65% 48%); background: hsl(152 65% 48%);"></span>Indicação</span>
+          <span class="tag-pill" style="color: hsl(var(--warning)); border-color: hsl(var(--warning) / 0.3); background: hsl(var(--warning) / 0.08);">D-3</span>
+        </div>
+
+        <div class="space-y-1.5 mb-3">
+          <div class="meta-row !py-2">
+            <div class="flex items-center gap-2 min-w-0">
+              <span class="px-1.5 py-0.5 rounded text-[9.5px] font-bold uppercase tracking-wider" style="color: hsl(var(--info)); background: hsl(var(--info) / 0.12);">Rec</span>
+              <span class="text-[12px] font-medium truncate">Plano Pro CRM</span>
+            </div>
+            <span class="font-mono-num text-[12px] font-semibold" style="color: hsl(var(--success));">R$ 1.200</span>
+          </div>
+          <div class="meta-row !py-2">
+            <div class="flex items-center gap-2 min-w-0">
+              <span class="px-1.5 py-0.5 rounded text-[9.5px] font-bold uppercase tracking-wider" style="color: hsl(var(--gold)); background: hsl(var(--gold) / 0.12);">Proj</span>
+              <span class="text-[12px] font-medium truncate">Implantação full</span>
+            </div>
+            <span class="font-mono-num text-[12px] font-semibold" style="color: hsl(var(--success));">R$ 15.000</span>
+          </div>
+        </div>
+
+        <div class="meta-row mb-3" style="background: linear-gradient(135deg, hsl(var(--gold) / 0.08), hsl(var(--gold) / 0.02)); border-color: hsl(var(--gold) / 0.2);">
+          <span class="meta-label" style="color: hsl(var(--gold));">Total estimado</span>
+          <span class="meta-value-accent font-mono-num">R$ 16,2k</span>
+        </div>
+
+        <div class="divider-hair mb-2.5"></div>
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <div class="avatar">GP</div>
+            <span class="text-[11px] text-[hsl(var(--fg-muted))]">Gabriel P.</span>
+          </div>
+          <span class="text-[10.5px] text-[hsl(var(--fg-dim))] font-mono-num">há 6h</span>
+        </div>
+      </div>
+
+      <!-- Calor popover open -->
+      <div class="prem-card p-5">
+        <p class="stat-label mb-4">Calor · popover</p>
+        <div class="flex items-center gap-3 mb-4">
+          <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" style="color: hsl(var(--warning));"><path d="M13.5.67c0 0-1 5.33-5.17 7.33C6.33 9.33 5 11.33 5 14c0 3.87 3.13 7 7 7s7-3.13 7-7c0-3.5-2-6.5-5.5-13.33z"/></svg>
+          <span class="font-display font-semibold text-[15px]">Calor do lead</span>
+          <span class="ml-auto font-display text-[24px] font-extrabold" style="color: hsl(var(--warning));">6</span>
+        </div>
+        <!-- Custom slider -->
+        <div class="relative h-1.5 bg-[hsl(var(--surface-2))] rounded-full mb-3">
+          <div class="absolute left-0 top-0 bottom-0 w-[60%] rounded-full" style="background: linear-gradient(90deg, hsl(var(--info)) 0%, hsl(var(--warning)) 100%);"></div>
+          <div class="absolute left-[60%] top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 rounded-full bg-white border-2 shadow-lg" style="border-color: hsl(var(--warning));"></div>
+        </div>
+        <div class="flex justify-between text-[10px] font-semibold tracking-wide mb-4">
+          <span style="color: hsl(var(--info));">FRIO</span>
+          <span style="color: hsl(var(--warning));">MORNO</span>
+          <span style="color: hsl(var(--danger));">QUENTE</span>
+        </div>
+        <p class="text-[11.5px] text-[hsl(var(--fg-muted))] leading-relaxed mb-4">Probabilidade de fechar este mês. Leads com maior calor aparecem primeiro.</p>
+        <button class="btn-gold filter-chip w-full !h-9 justify-center !font-semibold">Salvar</button>
+      </div>
+
+      <!-- Toast preview -->
+      <div class="space-y-3">
+        <p class="stat-label">Drag preview</p>
+        <div class="prem-card p-4 border-[hsl(var(--gold)/0.3)]" style="background: linear-gradient(135deg, hsl(var(--gold) / 0.06), hsl(var(--surface)));">
+          <div class="flex items-start gap-3">
+            <div class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style="background: hsl(var(--gold) / 0.15);">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="color: hsl(var(--gold));"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M8 14h2M14 14h2"/></svg>
+            </div>
+            <div class="flex-1 min-w-0">
+              <p class="text-[13px] font-semibold leading-tight">Ao soltar aqui</p>
+              <p class="text-[11.5px] text-[hsl(var(--fg-muted))] mt-1 leading-relaxed">O card vai para <span class="font-semibold" style="color: hsl(var(--gold));">Confirmação</span> e abrirá o modal de agendamento.</p>
+            </div>
+          </div>
+        </div>
+
+        <p class="stat-label mt-5">Origin dots (monochrome pills)</p>
+        <div class="flex flex-wrap gap-1.5">
+          <span class="origin-pill"><span class="dot" style="color: hsl(142 71% 45%); background: hsl(142 71% 45%);"></span>WhatsApp</span>
+          <span class="origin-pill"><span class="dot" style="color: hsl(var(--violet)); background: hsl(var(--violet));"></span>Meta Ads</span>
+          <span class="origin-pill"><span class="dot" style="color: hsl(var(--danger)); background: hsl(var(--danger));"></span>Google Ads</span>
+          <span class="origin-pill"><span class="dot" style="color: hsl(212 86% 64%); background: hsl(212 86% 64%);"></span>Site</span>
+          <span class="origin-pill"><span class="dot" style="color: hsl(152 65% 48%); background: hsl(152 65% 48%);"></span>Indicação</span>
+          <span class="origin-pill"><span class="dot" style="color: hsl(286 70% 65%); background: hsl(286 70% 65%);"></span>Instagram</span>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- Antes vs Depois -->
+  <section class="space-y-6">
+    <h2 class="font-display text-xl font-bold tracking-tight">Decisões de design</h2>
+    <div class="grid grid-cols-3 gap-5">
+      <div class="prem-card p-5">
+        <p class="stat-label mb-3" style="color: hsl(var(--gold));">Paleta</p>
+        <h3 class="font-display text-[15px] font-semibold mb-2">Near-black + gold signature</h3>
+        <p class="text-[12px] text-[hsl(var(--fg-muted))] leading-relaxed">Background com tint blue-gray imperceptível + radiais sutis. Gold luminoso reservado para o que realmente importa (valores, CTA, accent). Badges de origem = monochrome pill com dot glow — zero pastel.</p>
+      </div>
+      <div class="prem-card p-5">
+        <p class="stat-label mb-3" style="color: hsl(var(--gold));">Tipografia</p>
+        <h3 class="font-display text-[15px] font-semibold mb-2">Inter · tracking negativo · tabular</h3>
+        <p class="text-[12px] text-[hsl(var(--fg-muted))] leading-relaxed">Letter-spacing -0.03em para números e títulos. JetBrains Mono com tabular-nums em data/telefone/valores. Stat value em 26px com glow gold. Hierarquia por peso + spacing, não por cor.</p>
+      </div>
+      <div class="prem-card p-5">
+        <p class="stat-label mb-3" style="color: hsl(var(--gold));">Depth</p>
+        <h3 class="font-display text-[15px] font-semibold mb-2">Shadows stacked · border-accent hover</h3>
+        <p class="text-[12px] text-[hsl(var(--fg-muted))] leading-relaxed">Inset highlight 1px + outer shadow escalonada + accent glow no hover. Kanban column sem fundo preenchido — só stripe top luminoso. Cards flutuam sobre background radiall.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer class="text-center pt-10 border-t border-[hsl(var(--border-soft))]">
+    <p class="text-[10.5px] text-[hsl(var(--fg-dim))] uppercase tracking-widest">Torque CRM · Pipes v2 · 2026-04-23</p>
+  </footer>
+
+</div>
+</body>
+</html>
