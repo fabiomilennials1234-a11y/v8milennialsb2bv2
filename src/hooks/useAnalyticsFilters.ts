@@ -8,7 +8,7 @@ import {
   format,
 } from "date-fns";
 
-export type DatePreset = "hoje" | "7d" | "30d" | "90d" | "custom";
+export type DatePreset = "hoje" | "7d" | "14d" | "30d" | "90d" | "custom";
 
 export interface AnalyticsFilters {
   startDate: string;
@@ -21,7 +21,7 @@ export interface AnalyticsFilters {
   origin: string | null;
 }
 
-function getPresetDates(preset: DatePreset): { start: Date; end: Date } {
+export function getPresetDates(preset: DatePreset): { start: Date; end: Date } {
   const now = new Date();
   const end = endOfDay(now);
   switch (preset) {
@@ -29,6 +29,8 @@ function getPresetDates(preset: DatePreset): { start: Date; end: Date } {
       return { start: startOfDay(now), end };
     case "7d":
       return { start: startOfDay(subDays(now, 6)), end };
+    case "14d":
+      return { start: startOfDay(subDays(now, 13)), end };
     case "30d":
       return { start: startOfDay(subDays(now, 29)), end };
     case "90d":
@@ -38,7 +40,7 @@ function getPresetDates(preset: DatePreset): { start: Date; end: Date } {
   }
 }
 
-function getComparisonDates(start: Date, end: Date): { start: Date; end: Date } {
+export function getComparisonDates(start: Date, end: Date): { start: Date; end: Date } {
   const days = differenceInDays(end, start) + 1;
   const compEnd = startOfDay(subDays(start, 1));
   const compStart = startOfDay(subDays(compEnd, days - 1));

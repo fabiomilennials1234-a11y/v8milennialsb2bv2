@@ -10,6 +10,11 @@
  *   - src/hooks/chat/useWhatsAppRealtime.ts   — realtime subscription
  *   - src/hooks/chat/useWhatsAppSzChat.ts     — SZ.chat transfer/session
  *
+ * feat/migrate-uazapi-whatsapp: adicionados hooks Uazapi
+ *   - src/hooks/useMessageActions.ts          — react/edit/pin/delete/markRead
+ *   - src/hooks/useHistorySyncJobs.ts         — history-sync jobs
+ *   - src/hooks/useMassSendJobs.ts            — mass-send jobs
+ *
  * Todos os imports externos continuam funcionando sem mudança.
  */
 
@@ -50,3 +55,34 @@ export {
   useTransferToSzChatDepartment,
   useActiveSzChatSession,
 } from "./chat/useWhatsAppSzChat";
+
+// ─── Uazapi — Message Actions (react/edit/pin/delete/markRead) ────────────────
+export {
+  useReactMessage,
+  useEditMessage,
+  usePinMessage,
+  useDeleteMessage,
+  useMarkMessageRead,
+  isFeatureUnavailable,
+} from "./useMessageActions";
+
+// ─── Uazapi — History Sync ────────────────────────────────────────────────────
+export {
+  useHistorySyncJobs,
+  useCreateHistorySyncJob,
+  useControlHistorySyncJob,
+} from "./useHistorySyncJobs";
+export type {
+  HistorySyncJob,
+  HistorySyncJobInsert,
+  SyncScope,
+} from "./useHistorySyncJobs";
+
+// ─── Uazapi — Mass Send ───────────────────────────────────────────────────────
+export {
+  useMassSendJobs,
+  useCreateMassSend,
+  useControlMassSend,
+  useRefreshMassSendStatus,
+} from "./useMassSendJobs";
+export type { UazapiSenderJob } from "./useMassSendJobs";

@@ -34,12 +34,6 @@ verify_jwt = false
 [functions.webhook-orchestrator]
 verify_jwt = false
 
-[functions.evolution-api-proxy]
-verify_jwt = false
-
-[functions.evolution-webhook]
-verify_jwt = false
-
 [functions.process-webhook-deliveries]
 verify_jwt = false
 
@@ -178,4 +172,23 @@ verify_jwt = false
 
 # sz-chat-send: chamado internamente pelo webhook com service_role key; sem JWT externo
 [functions.sz-chat-send]
+verify_jwt = false
+
+# whatsapp-api-proxy: verify_jwt=false permite OPTIONS preflight; JWT validado dentro da função
+[functions.whatsapp-api-proxy]
+verify_jwt = false
+
+# whatsapp-webhook: auth via secret in path segment (Uazapi has no HMAC nor customHeaders)
+[functions.whatsapp-webhook]
+verify_jwt = false
+# mass-send-create: UI invoca com JWT (admin/master); proxy authenticated
+[functions.mass-send-create]
+verify_jwt = false
+
+# mass-send-status: polls status (JWT user OR x-cron-secret)
+[functions.mass-send-status]
+verify_jwt = false
+
+# mass-send-control: pause/resume/stop (JWT admin/master)
+[functions.mass-send-control]
 verify_jwt = false

@@ -70,11 +70,11 @@ describe("whatsapp_messages global idempotency contract", () => {
     // Webhooks receive echoes of messages the dispatcher/sender already wrote.
     // The first row is the source of truth — do not overwrite.
     //
-    // Exception: evolution-webhook send.message handler writes Storage-backed
+    // Exception: legacy send.message handler may write Storage-backed
     // media_url and must refresh it over a null/CDN URL. That block is anchored
     // by the "SEND_MESSAGE_MEDIA_REFRESH" marker in the 8 lines above.
     const webhookFiles = allTsFiles.filter((f) =>
-      /(evolution-webhook|sz-chat-webhook)\/index\.ts$/.test(f),
+      /(whatsapp-webhook|sz-chat-webhook)\/index\.ts$/.test(f),
     );
     expect(webhookFiles.length).toBeGreaterThan(0);
 

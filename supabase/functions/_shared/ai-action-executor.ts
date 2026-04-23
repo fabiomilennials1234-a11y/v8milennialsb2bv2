@@ -1202,9 +1202,8 @@ async function executeSendDocument(
     return { success: false, error: "Lead has no phone number" };
   }
 
-  // Find the correct instance: use the one linked to the conversation's agent.
-  // Fallback: any active instance in the org (last resort for legacy conversations).
-  let instanceName: string | null = null;
+  // Find the correct instance: prefer the one linked to the conversation's agent.
+  let preferredInstanceId: string | null = null;
 
   if (conversationId) {
     const { data: conv } = await supabase
@@ -1216,84 +1215,64 @@ async function executeSendDocument(
     if (conv?.agent_id) {
       const { data: linkedInst } = await supabase
         .from("whatsapp_instances")
-        .select("instance_name, status")
+        .select("id, status")
         .eq("copilot_agent_id", conv.agent_id)
         .eq("organization_id", organizationId)
         .in("status", ["open", "connected"])
         .limit(1)
         .maybeSingle();
-      if (linkedInst?.instance_name) instanceName = linkedInst.instance_name;
+      if (linkedInst?.id) preferredInstanceId = linkedInst.id;
     }
   }
 
-  // Fallback: any active instance in the org
-  if (!instanceName) {
-    const { data: instance } = await supabase
-      .from("whatsapp_instances")
-      .select("instance_name")
-      .eq("organization_id", organizationId)
-      .in("status", ["open", "connected"])
-      .limit(1)
-      .maybeSingle();
-    instanceName = instance?.instance_name ?? null;
+  // Resolve provider + instance + phone via adapter
+  const { resolveDispatchContext, DispatchResolutionError } = await import(
+    "./whatsapp-dispatch.ts"
+  );
+  let ctx;
+  try {
+    ctx = await resolveDispatchContext(supabase, {
+      organization_id: organizationId,
+      phone: lead.phone,
+      preferred_instance_id: preferredInstanceId,
+      require_connected: true,
+    });
+  } catch (e) {
+    const err = e as InstanceType<typeof DispatchResolutionError>;
+    return { success: false, error: err.message };
   }
 
-  if (!instanceName) {
-    return { success: false, error: "No active WhatsApp instance found" };
-  }
-
-  // 4. Enviar via Evolution API
-  const EVOLUTION_API_URL = Deno.env.get("EVOLUTION_API_URL");
-  const EVOLUTION_API_KEY = Deno.env.get("EVOLUTION_API_KEY");
-  if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY) {
-    return { success: false, error: "Evolution API not configured" };
-  }
-
-  let phone = lead.phone.replace(/\D/g, "");
-  if (!phone.startsWith("55")) phone = "55" + phone;
+  const { provider, instance, normalizedPhone: phone } = ctx;
 
   // Detect media type based on file_type column (image/video/document)
   const fileType = (doc as any).file_type || "document";
-  let mediatype = "document";
+  let mediaType: "image" | "video" | "document" = "document";
   let messageType = "document";
   if (fileType === "image" || (doc.mime_type && doc.mime_type.startsWith("image/"))) {
-    mediatype = "image";
+    mediaType = "image";
     messageType = "image";
   } else if (fileType === "video" || (doc.mime_type && doc.mime_type.startsWith("video/"))) {
-    mediatype = "video";
+    mediaType = "video";
     messageType = "video";
   }
 
-  const sendBody: Record<string, unknown> = {
-    number: phone,
-    mediatype,
-    media: signedUrlData.signedUrl,
-    fileName: doc.file_name,
-  };
-  if (caption) sendBody.caption = caption;
-
   try {
-    const response = await fetch(
-      `${EVOLUTION_API_URL}/message/sendMedia/${instanceName}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json", apikey: EVOLUTION_API_KEY },
-        body: JSON.stringify(sendBody),
-      }
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      return { success: false, error: `Evolution API error: HTTP ${response.status}: ${errorText}` };
-    }
-
-    const sendResult = await response.json();
+    const sendResult = await provider.sendMedia({
+      number: phone,
+      type: mediaType,
+      file: signedUrlData.signedUrl,
+      filename: doc.file_name,
+      caption: caption || undefined,
+      trackSource: "ai-action-send-document",
+      trackId: doc.id,
+    });
 
     // 5. Registrar mensagem de saida
     try {
       const { error: insertErr } = await supabase.from("whatsapp_messages").upsert({
         organization_id: organizationId,
-        message_id: sendResult.key?.id || `doc_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+        instance_id: instance.id,
+        message_id: sendResult.message_id || `doc_${Date.now()}_${Math.random().toString(36).substring(7)}`,
         remote_jid: `${phone}@s.whatsapp.net`,
         phone_number: phone,
         direction: "outgoing",
@@ -1312,7 +1291,7 @@ async function executeSendDocument(
     return {
       success: true,
       message: `Documento "${doc.file_name}" enviado com sucesso`,
-      data: { file_name: doc.file_name, message_id: sendResult.key?.id },
+      data: { file_name: doc.file_name, message_id: sendResult.message_id },
     };
   } catch (error) {
     return {

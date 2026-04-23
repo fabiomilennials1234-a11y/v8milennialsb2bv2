@@ -21,8 +21,6 @@ import { getTimeBasedVariables } from '../_shared/time-variables.ts';
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-const EVOLUTION_API_URL = Deno.env.get("EVOLUTION_API_URL") || "";
-const EVOLUTION_API_KEY = Deno.env.get("EVOLUTION_API_KEY") || "";
 
 // Delay aleatório entre mensagens para evitar detecção de disparo em massa
 const DEFAULT_DELAY_MIN_MS = 30000;  // 30 segundos mínimo
@@ -309,7 +307,8 @@ async function processBatch(
 
       if (isAudioTemplate) {
         sendResult = await sendWhatsAppAudio(
-          whatsappInstance.instance_name,
+          supabase,
+          whatsappInstance,
           lead.phone,
           template.audio_url
         );
@@ -328,7 +327,8 @@ async function processBatch(
           hora: timeVars.hora,
         });
         sendResult = await sendWhatsAppMessage(
-          whatsappInstance.instance_name,
+          supabase,
+          whatsappInstance,
           lead.phone,
           messageContent
         );
@@ -443,89 +443,32 @@ function replaceVariables(template: string, variables: Record<string, string>): 
   return result.trim();
 }
 
-/**
- * Envia mensagem de texto via Evolution API
- */
+// Provider-agnostic shims via whatsapp-dispatch adapter.
+import {
+  sendTextViaInstance,
+  sendAudioViaInstance,
+} from "../_shared/whatsapp-dispatch.ts";
+
 async function sendWhatsAppMessage(
-  instanceName: string,
+  supabase: any,
+  instance: any,
   phoneNumber: string,
   message: string
 ): Promise<{ success: boolean; messageId?: string; error?: string }> {
-  if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY) {
-    return { success: false, error: "Evolution API not configured" };
-  }
-
-  try {
-    let phone = phoneNumber.replace(/\D/g, "");
-    if (!phone.startsWith("55")) phone = "55" + phone;
-
-    const response = await fetch(`${EVOLUTION_API_URL}/message/sendText/${instanceName}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        apikey: EVOLUTION_API_KEY,
-      },
-      body: JSON.stringify({ number: phone, text: message }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      return { success: false, error: `HTTP ${response.status}: ${errorText}` };
-    }
-    const result = await response.json();
-    return { success: true, messageId: result.key?.id };
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : String(error),
-    };
-  }
+  return await sendTextViaInstance(supabase, instance, phoneNumber, message, {
+    trackSource: "semi-automatic-dispatch",
+  });
 }
 
-/**
- * Envia áudio via Evolution API (sendWhatsAppAudio)
- * audioUrl: URL pública do áudio (ex.: Supabase Storage public URL)
- */
 async function sendWhatsAppAudio(
-  instanceName: string,
+  supabase: any,
+  instance: any,
   phoneNumber: string,
   audioUrl: string
 ): Promise<{ success: boolean; messageId?: string; error?: string }> {
-  if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY) {
-    return { success: false, error: "Evolution API not configured" };
-  }
-
-  try {
-    let phone = phoneNumber.replace(/\D/g, "");
-    if (!phone.startsWith("55")) phone = "55" + phone;
-
-    const response = await fetch(
-      `${EVOLUTION_API_URL}/message/sendWhatsAppAudio/${instanceName}`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          apikey: EVOLUTION_API_KEY,
-        },
-        body: JSON.stringify({
-          number: phone,
-          audio: audioUrl,
-        }),
-      }
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      return { success: false, error: `HTTP ${response.status}: ${errorText}` };
-    }
-    const result = await response.json();
-    return { success: true, messageId: result.key?.id };
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : String(error),
-    };
-  }
+  return await sendAudioViaInstance(supabase, instance, phoneNumber, audioUrl, {
+    trackSource: "semi-automatic-dispatch",
+  });
 }
 
 /**

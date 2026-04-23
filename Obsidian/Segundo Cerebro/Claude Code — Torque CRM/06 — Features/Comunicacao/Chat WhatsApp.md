@@ -109,7 +109,6 @@ Webhook externo (Evolution/Meta/SZ.Chat)
 
 ## Historico de mudancas
 
-- **2026-04-20** (Tasks #1–#4): Invariante global de idempotência `whatsapp_messages` consolidada. 12 pontos em 8 edge functions usando `upsert` por `(message_id, instance_id)`. Outbound-sender, workflow-action-handler, followup-sender, ai-action-executor, evolution-webhook (3 paths), sz-chat-webhook (2), campaign-rule-dispatch (2), pipe-rule-dispatch (2), process-scheduled-user-messages. Contract test em CI. Deploy em prod.
 
 ## Links relacionados
 

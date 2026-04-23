@@ -52,6 +52,14 @@ import {
   useWhatsAppConversationsMeta,
 } from "@/hooks/useWhatsAppConversations";
 import { useTags } from "@/hooks/useTags";
+import {
+  MessageBubbleActions,
+  MessageMetaBadges,
+  DeletedPlaceholder,
+  EditMessageInline,
+} from "@/components/chat/actions";
+import { useEditMessage, isFeatureUnavailable } from "@/hooks/useMessageActions";
+import { toast } from "sonner";
 import { useIsAdmin } from "@/hooks/useUserRole";
 import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
 // ChannelBadge movido para view/ChatHeader.tsx (C6).
@@ -80,7 +88,6 @@ import {
 // Select extraído para list/ConversationList.tsx (C5).
 import { format, isToday, isYesterday } from "date-fns";
 // ptBR movido para view/MessageList.tsx (C7).
-import { toast } from "sonner";
 import { AudioPlayer, getAudioPlaybackUrl } from "./media/AudioPlayer";
 import { AudioRecorder as AudioRecorderMedia } from "./media/AudioRecorder";
 import { ImagePreviewModal as ImagePreviewModalMedia } from "./media/ImagePreviewModal";
@@ -174,6 +181,8 @@ export function MessageBubble({
   isLastInGroup = true,
   mountTime,
   onRetry,
+  instanceId,
+  enableActions = false,
 }: {
   message: WhatsAppMessage | import("@/hooks/useWhatsAppChat").FailedMessage;
   onImagePreview: (url: string) => void;
@@ -181,6 +190,9 @@ export function MessageBubble({
   isLastInGroup?: boolean;
   mountTime?: number;
   onRetry?: (message: import("@/hooks/useWhatsAppChat").FailedMessage) => void;
+  /** When set + enableActions=true, reveals S1 action bar on hover */
+  instanceId?: string;
+  enableActions?: boolean;
 }) {
   const isOutgoing = message.direction === "outgoing";
   const isFailed = message.status === "failed";
@@ -194,6 +206,54 @@ export function MessageBubble({
   const isDocument = messageType === "document";
   const isSticker = messageType === "sticker";
   const hasMedia = isAudio || isImage || isVideo || isDocument || isSticker;
+
+  const meta = message as unknown as {
+    edited?: boolean | null;
+    pinned_at?: string | null;
+    deleted_at?: string | null;
+    reactions?: unknown;
+    remote_jid?: string | null;
+  };
+  const isDeleted = !!meta.deleted_at;
+  const [isEditing, setIsEditing] = useState(false);
+  const editMut = useEditMessage();
+
+  const showActions =
+    enableActions &&
+    !!instanceId &&
+    !!message.message_id &&
+    !isDeleted;
+
+  const phone = (meta.remote_jid ?? "").split("@")[0] ?? "";
+  const canEdit = isOutgoing && !!message.content && !hasMedia;
+  const canDelete = isOutgoing;
+
+  const handleEditSave = async (newText: string) => {
+    if (!instanceId || !message.message_id || !phone) return;
+    try {
+      await editMut.mutateAsync({
+        instanceId,
+        messageId: message.message_id,
+        number: phone,
+        text: newText,
+      });
+      setIsEditing(false);
+      toast.success("Mensagem editada");
+    } catch (e) {
+      if (isFeatureUnavailable(e)) {
+        toast.error("Disponível apenas em instâncias Uazapi");
+      } else {
+        toast.error(`Erro ao editar: ${(e as Error).message}`);
+      }
+    }
+  };
+
+  // Bubble color tokens — C9
+  const bubbleColorClass = isAi
+    ? "bg-bubble-ai text-bubble-ai-foreground border border-bubble-ai-border/30 border-l-[3px] border-l-bubble-ai-border"
+    : isOutgoing
+      ? "bg-bubble-outgoing text-bubble-outgoing-foreground border border-bubble-outgoing-border"
+      : "bg-bubble-incoming text-bubble-incoming-foreground border border-bubble-incoming-border";
 
   const radiusClass = isOutgoing
     ? (isFirstInGroup && isLastInGroup
@@ -211,13 +271,6 @@ export function MessageBubble({
             ? "rounded-b-2xl rounded-br-2xl rounded-bl-sm"
             : "rounded-r-2xl rounded-l-md");
 
-  // Bubble color tokens — C9
-  const bubbleColorClass = isAi
-    ? "bg-bubble-ai text-bubble-ai-foreground border border-bubble-ai-border/30 border-l-[3px] border-l-bubble-ai-border"
-    : isOutgoing
-      ? "bg-bubble-outgoing text-bubble-outgoing-foreground border border-bubble-outgoing-border"
-      : "bg-bubble-incoming text-bubble-incoming-foreground border border-bubble-incoming-border";
-
   const shouldAnimate = mountTime !== undefined && new Date(message.timestamp).getTime() > mountTime;
   const prefersReduced = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const animInitial = shouldAnimate && !prefersReduced ? { opacity: 0, y: 8 } : false as const;
@@ -229,17 +282,34 @@ export function MessageBubble({
       animate={animAnimate}
       transition={shouldAnimate && !prefersReduced ? { duration: 0.18, ease: "easeOut" } : undefined}
       className={cn(
-        "flex gap-2",
+        "flex gap-2 group",
         isOutgoing ? "justify-end" : "justify-start",
         isFirstInGroup ? "mt-3" : "mt-0.5"
       )}
     >
+      {/* Action bar — hover reveal, outgoing only appears on left; incoming on right */}
+      {showActions && isOutgoing && !isEditing && (
+        <div className="self-center">
+          <MessageBubbleActions
+            instanceId={instanceId!}
+            messageId={message.message_id!}
+            number={phone}
+            direction="outgoing"
+            canEdit={canEdit}
+            canDelete={canDelete}
+            isPinned={!!meta.pinned_at}
+            onRequestEdit={() => setIsEditing(true)}
+          />
+        </div>
+      )}
+
       <div
         className={cn(
           "max-w-[75%] px-4 py-2.5",
           radiusClass,
           bubbleColorClass,
-          isFailed && "border-destructive/40"
+          isFailed && "border-destructive/40",
+          !!meta.pinned_at && "ring-1 ring-primary/30"
         )}
       >
         {/* Sender label for AI messages — only on first in group */}
@@ -250,58 +320,78 @@ export function MessageBubble({
           </div>
         )}
 
-        {/* Texto / Legenda */}
-        {message.content && (
-          <p className={cn(
-            "text-sm whitespace-pre-wrap break-words",
-            hasMedia && "mt-2"
-          )}>
-            {message.content}
-          </p>
-        )}
-
-        {/* Áudio */}
-        {isAudio && mediaUrl && (
-          <div>
-            <AudioPlayer src={getAudioPlaybackUrl(mediaUrl) ?? mediaUrl} isOutgoing={isOutgoing} />
-          </div>
-        )}
-
-        {/* Imagem */}
-        {isImage && mediaUrl && (
-          <MessageImage
-            src={mediaUrl}
-            onPreview={() => onImagePreview(mediaUrl)}
+        {isDeleted ? (
+          <DeletedPlaceholder deletedAt={meta.deleted_at} />
+        ) : isEditing ? (
+          <EditMessageInline
+            initialText={message.content ?? ""}
+            onSave={handleEditSave}
+            onCancel={() => setIsEditing(false)}
+            isPending={editMut.isPending}
           />
-        )}
+        ) : (
+          <>
+            {/* Texto / Legenda */}
+            {message.content && (
+              <p className={cn(
+                "text-sm whitespace-pre-wrap break-words",
+                hasMedia && "mt-2"
+              )}>
+                {message.content}
+              </p>
+            )}
 
-        {/* Vídeo */}
-        {isVideo && mediaUrl && (
-          <MessageVideo src={mediaUrl} />
-        )}
+            {/* Áudio */}
+            {isAudio && message.media_url && (
+              <div>
+                <AudioPlayer src={getAudioPlaybackUrl(message.media_url) ?? message.media_url} isOutgoing={isOutgoing} />
+              </div>
+            )}
 
-        {/* Documento */}
-        {isDocument && mediaUrl && (
-          <MessageDocument
-            src={mediaUrl}
-            isOutgoing={isOutgoing}
-          />
-        )}
+            {/* Imagem */}
+            {isImage && message.media_url && (
+              <MessageImage
+                src={message.media_url}
+                onPreview={() => onImagePreview(message.media_url!)}
+              />
+            )}
 
-        {/* Sticker */}
-        {isSticker && mediaUrl && (
-          <img
-            src={mediaUrl}
-            alt="Sticker"
-            className="w-32 h-32 object-contain"
-          />
-        )}
+            {/* Vídeo */}
+            {isVideo && message.media_url && (
+              <MessageVideo src={message.media_url} />
+            )}
 
-        {/* Mensagem sem conteúdo e sem mídia */}
-        {!message.content && !hasMedia && (
-          <p className="text-sm italic text-muted-foreground">
-            [Mensagem não suportada]
-          </p>
+            {/* Documento */}
+            {isDocument && message.media_url && (
+              <MessageDocument
+                src={message.media_url}
+                isOutgoing={isOutgoing}
+              />
+            )}
+
+            {/* Sticker */}
+            {isSticker && message.media_url && (
+              <img
+                src={message.media_url}
+                alt="Sticker"
+                className="w-32 h-32 object-contain"
+              />
+            )}
+
+            {/* Mensagem sem conteúdo e sem mídia */}
+            {!message.content && !hasMedia && (
+              <p className="text-sm italic text-muted-foreground">
+                [Mensagem não suportada]
+              </p>
+            )}
+
+            <MessageMetaBadges
+              edited={meta.edited}
+              pinnedAt={meta.pinned_at}
+              deletedAt={meta.deleted_at}
+              reactions={meta.reactions}
+            />
+          </>
         )}
 
         {/* Retry button for failed messages */}
@@ -324,6 +414,22 @@ export function MessageBubble({
           </div>
         )}
       </div>
+
+      {/* Incoming action bar — right side */}
+      {showActions && !isOutgoing && !isEditing && (
+        <div className="self-center">
+          <MessageBubbleActions
+            instanceId={instanceId!}
+            messageId={message.message_id!}
+            number={phone}
+            direction="incoming"
+            canEdit={false}
+            canDelete={false}
+            isPinned={!!meta.pinned_at}
+            onRequestEdit={() => {}}
+          />
+        </div>
+      )}
     </motion.div>
   );
 }
@@ -1138,7 +1244,7 @@ export function WhatsAppChat() {
 
   return (
     <>
-      <div className="flex flex-1 min-h-0 h-[calc(100vh-4rem)] max-h-[calc(100vh-4rem)] rounded-lg border bg-background overflow-hidden">
+      <div className="flex flex-1 min-h-0 rounded-lg border bg-background overflow-hidden">
         {/* Contact List - altura limitada com scroll interno */}
         <div
           className={cn(
@@ -1177,8 +1283,8 @@ export function WhatsAppChat() {
           />
         </div>
 
-        {/* Chat Window - min-h-0 para scroll interno na área de mensagens */}
-        <div className={cn("flex-1 min-h-0 overflow-hidden flex flex-col", !selectedPhone && "hidden md:flex")}>
+        {/* Chat Window - min-w-0 evita clipping horizontal; min-h-0 para scroll interno na área de mensagens */}
+        <div className={cn("flex-1 min-w-0 min-h-0 overflow-hidden flex flex-col", !selectedPhone && "hidden md:flex")}>
           {selectedPhone && selectedInstance ? (
             <ChatWindow
               phoneNumber={selectedPhone}

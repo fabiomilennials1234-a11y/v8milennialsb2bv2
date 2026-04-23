@@ -147,31 +147,32 @@ async function sendTypingIndicator(
   phone: string,
   organizationId: string
 ): Promise<void> {
-  const evolutionUrl = Deno.env.get("EVOLUTION_API_URL");
-  const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
-  if (!evolutionUrl || !evolutionKey) return;
+  try {
+    const { data: instance } = await supabase
+      .from("whatsapp_instances")
+      .select("*")
+      .eq("organization_id", organizationId)
+      .in("status", ["open", "connected"])
+      .limit(1)
+      .maybeSingle();
 
-  const { data: instance } = await supabase
-    .from("whatsapp_instances")
-    .select("instance_name")
-    .eq("organization_id", organizationId)
-    .eq("status", "open")
-    .limit(1)
-    .maybeSingle();
+    if (!instance) return;
 
-  if (!instance?.instance_name) return;
+    const { getWhatsAppProvider } = await import(
+      "../_shared/whatsapp-client.ts"
+    );
+    const { normalizeBrazilianPhone } = await import(
+      "../_shared/whatsapp-dispatch.ts"
+    );
 
-  let formattedPhone = String(phone).replace(/\D/g, "");
-  if (!formattedPhone.startsWith("55")) formattedPhone = "55" + formattedPhone;
+    const normalizedPhone = normalizeBrazilianPhone(phone);
+    if (!normalizedPhone) return;
 
-  await fetch(
-    `${evolutionUrl}/chat/sendPresence/${instance.instance_name}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json", apikey: evolutionKey },
-      body: JSON.stringify({ number: formattedPhone, delay: 500, presence: "composing" }),
-    }
-  ).catch(() => {}); // best-effort
+    const provider = await getWhatsAppProvider(instance, supabase);
+    await provider.setPresence(normalizedPhone, "composing");
+  } catch {
+    // best-effort — typing indicator is non-critical
+  }
 }
 
 /**
