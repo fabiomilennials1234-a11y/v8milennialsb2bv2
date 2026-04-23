@@ -65,16 +65,20 @@ import { cn } from "@/lib/utils";
 import { TimelineItem } from "@/components/leads/TimelineItem";
 import { useLeadTimelineCompact } from "@/hooks/useLeadTimeline";
 import type { TimelineEvent } from "@/hooks/useLeadTimeline";
-
-const originOptions = [
-  { value: "whatsapp", label: "WhatsApp" },
-  { value: "meta_ads", label: "Meta Ads" },
-  { value: "google_ads", label: "Google Ads" },
-  { value: "site", label: "Site" },
-  { value: "remarketing", label: "Remarketing" },
-  { value: "cal", label: "Calendário" },
-  { value: "outro", label: "Outro" },
-];
+import { originOptions } from "@/lib/lead/lead-origins";
+import {
+  DEST_TO_PIPE_TYPE,
+  isStandardDestination,
+} from "@/lib/lead/lead-destinations";
+import {
+  getPipelineKey,
+  getPipelineLabel,
+  getPipelineColor,
+  isInPipeline,
+  getCurrentStageLabel,
+  getCurrentStageId,
+  getNormalizedStages,
+} from "@/lib/lead/pipeline-adapters";
 
 export interface LeadDetailContentProps {
   phoneNumber: string;
@@ -189,13 +193,6 @@ export function LeadDetailContent({
   }, [createCustomPipelineId]);
 
   // ─── Dynamic stage definitions for creation dropdown ─────────
-  // Maps destination alias → pipeline_stages.pipeline_type
-  const DEST_TO_PIPE_TYPE: Record<string, string> = {
-    qualificacao: "whatsapp",
-    confirmacao: "confirmacao",
-    propostas: "propostas",
-  };
-
   const getStandardStages = (dest: string) => {
     const pipeType = DEST_TO_PIPE_TYPE[dest];
     if (!pipeType || !dynamicStagesByPipe[pipeType]) return [];
@@ -203,7 +200,7 @@ export function LeadDetailContent({
   };
 
   const standardStagesForCreate = getStandardStages(createDestination);
-  const isStandardDest = ["qualificacao", "confirmacao", "propostas"].includes(createDestination);
+  const isStandardDest = isStandardDestination(createDestination);
 
   // ─── Handlers ─────────────────────────────────────────────────
 
@@ -403,35 +400,6 @@ export function LeadDetailContent({
     if (createDestination === "custom" && (!createCustomPipelineId || !createCustomStageId)) return true;
     if (isStandardDest && !createStageId) return true;
     return false;
-  };
-
-  // ─── Render helpers ───────────────────────────────────────────
-
-  const getPipelineKey = (p: PipelineStatus) =>
-    p.type === "standard" ? p.pipeType : p.pipelineId;
-
-  const getPipelineLabel = (p: PipelineStatus) =>
-    p.type === "standard" ? p.label : p.pipelineName;
-
-  const getPipelineColor = (p: PipelineStatus) =>
-    p.type === "standard" ? p.color : p.pipelineColor;
-
-  const isInPipeline = (p: PipelineStatus) =>
-    p.type === "standard" ? !!p.pipeId : !!p.entryId;
-
-  const getCurrentStageLabel = (p: PipelineStatus) => {
-    if (p.type === "standard") return p.currentStageLabel;
-    return p.currentStageName;
-  };
-
-  const getStages = (p: PipelineStatus) => {
-    if (p.type === "standard") return p.stages.map((s) => ({ id: s.id, name: s.label, color: s.color }));
-    return p.stages.map((s) => ({ id: s.id, name: s.name, color: s.color }));
-  };
-
-  const getCurrentStageId = (p: PipelineStatus) => {
-    if (p.type === "standard") return p.currentStage;
-    return p.currentStageId;
   };
 
   // ─── Render ───────────────────────────────────────────────────
@@ -802,7 +770,7 @@ export function LeadDetailContent({
                     const inPipe = isInPipeline(pipeline);
                     const currentLabel = getCurrentStageLabel(pipeline);
                     const currentId = getCurrentStageId(pipeline);
-                    const stages = getStages(pipeline);
+                    const stages = getNormalizedStages(pipeline);
                     const isExpanded = expandedPipeline === key;
                     const isAdding = addingToPipeline === key;
 
