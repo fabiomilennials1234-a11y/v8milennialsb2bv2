@@ -90,6 +90,10 @@ const MockupChatV2 = lazy(() => lazyRetry(() => import("./pages/MockupChatV2")))
 import { MasterRoute } from "@/components/master/MasterRoute";
 import { MasterLayout } from "@/components/master/MasterLayout";
 
+// Command Palette — global ⌘K (C24)
+import { CommandPaletteProvider } from "@/components/command/CommandPaletteProvider";
+import { CommandPalette as CommandPaletteComponent } from "@/components/command/CommandPalette";
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -648,7 +652,10 @@ const App = () => {
             <BrowserRouter>
               <AuthProvider>
                 <GlobalErrorBoundary>
-                  <AppRoutes />
+                  <CommandPaletteProvider>
+                    <AppRoutes />
+                    <CommandPaletteComponent />
+                  </CommandPaletteProvider>
                 </GlobalErrorBoundary>
               </AuthProvider>
             </BrowserRouter>

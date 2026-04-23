@@ -118,6 +118,11 @@
     --shadow-md: 0 4px 6px -1px hsl(30 18% 20% / 0.08), 0 2px 4px -2px hsl(30 18% 20% / 0.05);
     --shadow-lg: 0 10px 15px -3px hsl(30 18% 20% / 0.1), 0 4px 6px -4px hsl(30 18% 20% / 0.05);
     --shadow-gold: 0 10px 30px -10px hsl(47 100% 50% / 0.3);
+
+    /* ─── Command Palette tokens ────────────────────────────────── */
+    /* Hue neutral-cool 220° separa perceptivamente do warm 36° do chat */
+    --command-palette-bg:     0 0% 100%;
+    --command-palette-border: 220 10% 88%;
   }
 
   html.dark,
@@ -172,6 +177,10 @@
     --bubble-system-border:       38 12% 22%;
 
     /* density vars não variam por tema — definidas só em :root */
+
+    /* ─── Command Palette tokens (dark) ─────────────────────────── */
+    --command-palette-bg:     220 15% 10%;
+    --command-palette-border: 220 10% 20%;
 
     --sidebar-background: 36 20% 10%;
     --sidebar-foreground: 45 20% 90%;
@@ -239,6 +248,23 @@
 }
 
 @layer components {
+  /* ─── Search highlight scope ─────────────────────────────────── */
+  /* Isolado em .search-highlight-scope para não poluir <mark> global */
+  .search-highlight-scope mark {
+    background-color: hsl(var(--primary) / 0.25);
+    color: hsl(var(--foreground));
+    border-radius: 2px;
+    padding: 0 2px;
+    font-weight: inherit;   /* não bold — highlight por cor, sem reflow */
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;  /* multi-line highlight sem corte */
+  }
+
+  html.dark .search-highlight-scope mark,
+  .dark .search-highlight-scope mark {
+    background-color: hsl(var(--primary) / 0.35);
+  }
+
   .glass-card {
     @apply bg-card border border-border shadow-sm;
   }
