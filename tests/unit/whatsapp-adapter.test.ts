@@ -43,7 +43,6 @@ import {
   type WhatsAppInstance,
 } from "../../supabase/functions/_shared/whatsapp-client.ts";
 import { UazapiProvider } from "../../supabase/functions/_shared/whatsapp-providers/uazapi-provider.ts";
-import { EvolutionProvider } from "../../supabase/functions/_shared/whatsapp-providers/evolution-provider.ts";
 import { UazapiClient } from "../../supabase/functions/_shared/uazapi-client.ts";
 
 // ---------------------------------------------------------------------------
@@ -122,13 +121,12 @@ describe("getWhatsAppProvider — factory", () => {
     });
   });
 
-  it("returns EvolutionProvider for evolution instance without calling RPC", async () => {
+  it("throws when provider is not uazapi (Evolution removed in Fase 7)", async () => {
     const rpcMock = vi.fn();
     const admin = makeAdminMock({ rpc: rpcMock });
-    const provider = await getWhatsAppProvider(EVOLUTION_INSTANCE, admin);
-
-    expect(provider).toBeInstanceOf(EvolutionProvider);
-    expect(provider.provider).toBe("evolution");
+    await expect(
+      getWhatsAppProvider(EVOLUTION_INSTANCE, admin)
+    ).rejects.toThrow(/only "uazapi" is supported/);
     expect(rpcMock).not.toHaveBeenCalled();
   });
 
@@ -234,68 +232,6 @@ describe("UazapiProvider.sendText — option translation", () => {
     expect(result.message_id).toBe("msg-1");
     expect(result.status).toBe("sent");
     expect(result.timestamp).toBe(1700000000);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// EvolutionProvider — NotSupportedError on Uazapi-only methods
-// ---------------------------------------------------------------------------
-
-describe("EvolutionProvider — NotSupportedError on uazapi-only methods", () => {
-  const provider = new EvolutionProvider(EVOLUTION_INSTANCE);
-
-  it("throws NotSupportedError on sendMenu", () => {
-    expect(() =>
-      provider.sendMenu!({ number: "5511999999999", type: "button", text: "hi", choices: ["a"] })
-    ).toThrow(NotSupportedError);
-  });
-
-  it("throws NotSupportedError on sendPixButton", () => {
-    expect(() =>
-      provider.sendPixButton!({
-        number: "5511999999999",
-        pixkey: "11122233344",
-        pixkeyType: "cpf",
-        amount: 49.9,
-        merchantName: "Loja",
-      })
-    ).toThrow(NotSupportedError);
-  });
-
-  it("throws NotSupportedError on react", () => {
-    expect(() =>
-      provider.react!("msg-id", "5511999999999", "👍")
-    ).toThrow(NotSupportedError);
-  });
-
-  it("throws NotSupportedError on edit", () => {
-    expect(() =>
-      provider.edit!("msg-id", "5511999999999", "new text")
-    ).toThrow(NotSupportedError);
-  });
-
-  it("throws NotSupportedError on pin", () => {
-    expect(() =>
-      provider.pin!("msg-id", "5511999999999")
-    ).toThrow(NotSupportedError);
-  });
-
-  it("throws NotSupportedError on deleteForAll", () => {
-    expect(() =>
-      provider.deleteForAll!("msg-id", "5511999999999")
-    ).toThrow(NotSupportedError);
-  });
-
-  it("throws NotSupportedError on markRead", () => {
-    expect(() =>
-      provider.markRead!("msg-id", "5511999999999")
-    ).toThrow(NotSupportedError);
-  });
-
-  it("throws NotSupportedError on historySync", () => {
-    expect(() =>
-      provider.historySync!({})
-    ).toThrow(NotSupportedError);
   });
 });
 

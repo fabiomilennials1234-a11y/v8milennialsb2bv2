@@ -174,9 +174,9 @@ verify_jwt = false
 [functions.sz-chat-send]
 verify_jwt = false
 
-# whatsapp-api-proxy: frontend envia JWT válido; proxy valida e impõe tenant boundary
+# whatsapp-api-proxy: verify_jwt=false permite OPTIONS preflight; JWT validado dentro da função
 [functions.whatsapp-api-proxy]
-verify_jwt = true
+verify_jwt = false
 
 # whatsapp-webhook: auth via secret in path segment (Uazapi has no HMAC nor customHeaders)
 [functions.whatsapp-webhook]
