@@ -268,6 +268,16 @@ function LeadFieldGridStub() {
         <Plus className="w-3.5 h-3.5 shrink-0" />
         Adicionar campo
       </button>
+
+      {/* Observações — LeadNotes já integrado no LeadTabInfo.tsx:118 */}
+      <div className="pt-3 mt-3 border-t border-border/40 space-y-1.5">
+        <label className="text-xs font-medium text-muted-foreground">Observações</label>
+        <div
+          className="min-h-[60px] w-full rounded-md border border-border/60 bg-background/40 px-2.5 py-2 text-sm leading-relaxed text-muted-foreground"
+        >
+          Lead veio via Meta Ads. Já demonstrou interesse no Plano Pro. Agendado call dia 22/04 às 14h.
+        </div>
+      </div>
     </div>
   );
 }
