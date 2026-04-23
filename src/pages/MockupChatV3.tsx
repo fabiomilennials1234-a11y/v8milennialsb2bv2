@@ -12,7 +12,7 @@
 
 import { useState, useCallback, useRef, Component, type ReactNode, type ErrorInfo } from "react";
 import { Link } from "react-router-dom";
-import { Moon, Sun, ExternalLink, CheckCircle2, XCircle, ChevronRight, GitBranch, Hash, Layers, Zap, Eye, Palette } from "lucide-react";
+import { Moon, Sun, ExternalLink, CheckCircle2, XCircle, ChevronRight, GitBranch, Hash, Layers, Zap, Eye, Palette, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -205,6 +205,44 @@ function LeadCurrentStageStub() {
         <ChevronRight className="w-3 h-3" />
         <span>agendado</span>
       </div>
+    </div>
+  );
+}
+
+function LeadCustomFieldsStub() {
+  const MOCK_FIELDS = [
+    { id: "f1", label: "Segmento", type: "select", value: "Distribuidora" },
+    { id: "f2", label: "Orçamento", type: "number", value: "150000" },
+    { id: "f3", label: "Website", type: "url", value: "https://souza.com.br" },
+  ] as const;
+
+  return (
+    <div className="space-y-3">
+      {MOCK_FIELDS.map((f) => (
+        <div key={f.id} className="space-y-1">
+          <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Sparkles className="w-3 h-3" />
+            {f.label}
+          </label>
+          <div
+            className="h-8 w-full rounded-md border border-transparent px-2 flex items-center text-sm
+              hover:border-border hover:bg-muted/40 transition-colors cursor-pointer"
+          >
+            {f.type === "number" ? (
+              <span className="tabular-nums">
+                {Number(f.value).toLocaleString("pt-BR")}
+              </span>
+            ) : f.type === "url" ? (
+              <span className="text-primary underline underline-offset-2 flex items-center gap-1">
+                {f.value}
+                <ExternalLink className="w-3 h-3" />
+              </span>
+            ) : (
+              <span>{f.value}</span>
+            )}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -596,6 +634,14 @@ export default function MockupChatV3() {
                   description="Stage ativa no pipeline. Props: leadId, pipelineEntries."
                 >
                   <LeadCurrentStageStub />
+                </ModuleCard>
+
+                <ModuleCard
+                  label="LeadCustomFields"
+                  path="src/components/lead/info/LeadCustomFields.tsx"
+                  description="Campos personalizados da org. Props: leadId. Inline edit por tipo (text, number, date, select, boolean)."
+                >
+                  <LeadCustomFieldsStub />
                 </ModuleCard>
               </CardContent>
             </Card>
