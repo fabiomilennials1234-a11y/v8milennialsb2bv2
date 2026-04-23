@@ -27,6 +27,7 @@ import { CommandGroupActions } from "./groups/CommandGroupActions";
 import { CommandGroupConversations } from "./groups/CommandGroupConversations";
 import { CommandGroupRecents } from "./groups/CommandGroupRecents";
 import { CommandGroupMessages } from "./groups/CommandGroupMessages";
+import { CommandGroupUazapi } from "./groups/CommandGroupUazapi";
 
 // ─── prefers-reduced-motion hook ─────────────────────────────────────────────
 
@@ -180,6 +181,10 @@ export function CommandPalette() {
 
                   {/* Ações */}
                   <CommandGroupActions onClose={close} />
+                  <CommandSeparator className="my-1 bg-border/40" />
+
+                  {/* WhatsApp / Uazapi — C2 Onda 5 */}
+                  <CommandGroupUazapi onClose={close} />
                   <CommandSeparator className="my-1 bg-border/40" />
 
                   {/* Conversas */}

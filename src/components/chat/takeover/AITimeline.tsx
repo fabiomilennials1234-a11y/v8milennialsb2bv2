@@ -17,6 +17,10 @@ import {
   Undo2,
   ChevronDown,
   AlertCircle,
+  Megaphone,
+  BadgeDollarSign,
+  Wrench,
+  DatabaseBackup,
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -89,6 +93,31 @@ const EVENT_CONFIG: Record<
     icon: Undo2,
     colorClass: "text-destructive",
     label: "Ação revertida",
+    revertible: false,
+  },
+  // Eventos Uazapi (Onda 5)
+  mass_send_completed: {
+    icon: Megaphone,
+    colorClass: "text-blue-500",
+    label: "Campanha enviada",
+    revertible: false,
+  },
+  pix_paid: {
+    icon: BadgeDollarSign,
+    colorClass: "text-green-500",
+    label: "Pix recebido",
+    revertible: false,
+  },
+  repair_executed: {
+    icon: Wrench,
+    colorClass: "text-amber-500",
+    label: "Conexão reparada",
+    revertible: false,
+  },
+  history_sync_finished: {
+    icon: DatabaseBackup,
+    colorClass: "text-primary",
+    label: "Histórico importado",
     revertible: false,
   },
 };

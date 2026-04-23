@@ -18,7 +18,12 @@ export type AiEventType =
   | "tag_added"
   | "silence_detected"
   | "handoff_triggered"
-  | "reverted";
+  | "reverted"
+  // Onda 5 — eventos Uazapi
+  | "mass_send_completed"
+  | "pix_paid"
+  | "repair_executed"
+  | "history_sync_finished";
 
 export interface AiTimelineEvent {
   id: string;
@@ -33,13 +38,18 @@ export interface AiTimelineEvent {
 // ─── Mapa de ação DB → tipo de evento UI ──────────────────────────────────────
 
 const ACTION_TO_TYPE: Record<string, AiEventType> = {
-  ai_message_sent:       "message_sent",
-  ai_action_executed:    "action_executed",
-  ai_stage_moved:        "stage_moved",
-  ai_tag_added:          "tag_added",
-  ai_silence_detected:   "silence_detected",
-  ai_handoff_triggered:  "handoff_triggered",
-  ai_reverted:           "reverted",
+  ai_message_sent:            "message_sent",
+  ai_action_executed:         "action_executed",
+  ai_stage_moved:             "stage_moved",
+  ai_tag_added:               "tag_added",
+  ai_silence_detected:        "silence_detected",
+  ai_handoff_triggered:       "handoff_triggered",
+  ai_reverted:                "reverted",
+  // Eventos Uazapi (Onda 5)
+  uazapi_mass_send_completed:   "mass_send_completed",
+  uazapi_pix_paid:              "pix_paid",
+  uazapi_repair_executed:       "repair_executed",
+  uazapi_history_sync_finished: "history_sync_finished",
 };
 
 const REVERSIBLE_ACTIONS = new Set<AiEventType>(["action_executed", "stage_moved", "tag_added"]);
@@ -59,11 +69,12 @@ export function useAITimeline(leadId: string | null | undefined) {
     queryFn: async () => {
       if (!leadId) return [];
 
+      // Filtra ações de IA (ai_*) e Uazapi (uazapi_*)
       const { data, error } = await supabase
         .from("lead_history")
         .select("id, action, description, metadata, created_at")
         .eq("lead_id", leadId)
-        .like("action", "ai_%")
+        .or("action.like.ai_%,action.like.uazapi_%")
         .order("created_at", { ascending: false })
         .limit(50);
 
