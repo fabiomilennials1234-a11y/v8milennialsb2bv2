@@ -39,7 +39,17 @@ Deno.serve(withSentry('agent-message', async (req) => {
     const body = await req.json();
     const { from, message, channel, organization_id, push_name, incoming_message_type } = body; // from = phone number ou user_id
 
-    // 1. IDENTIFY TENANT
+    // 1. IDENTIFY TENANT — organization_id is REQUIRED (security boundary).
+    if (!organization_id || typeof organization_id !== 'string') {
+      return new Response(
+        JSON.stringify({
+          error: "organization_id is required in request body",
+          code: "MISSING_ORGANIZATION_ID",
+        }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
     const { lead, organizationId } = await identifyTenant(supabase, from, channel, organization_id, push_name);
 
     if (!lead || !organizationId) {
@@ -228,24 +238,18 @@ async function identifyTenant(
     return { lead: null, organizationId: null };
   }
 
-  // Sem organization_id - buscar em todas organizações (fluxo legado)
-  // NOTA: Este caso deveria ser raro e idealmente eliminado
-  if (normalizedPhone) {
-    const { data: lead } = await supabase
-      .from('leads')
-      .select('*, organization_id')
-      .eq('normalized_phone', normalizedPhone)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (lead?.organization_id) {
-      console.log('[agent-message] Lead found without org_id:', { leadId: lead.id });
-      return { lead, organizationId: lead.organization_id };
-    }
-  }
-
-  console.log('[agent-message] No organization_id provided and no lead found');
+  // SECURITY: the legacy cross-tenant lookup (by phone, without
+  // organization_id) was removed. It allowed a caller with service_role to
+  // hit agent-message without an org_id and automatically bind to whatever
+  // lead existed globally for that phone — a cross-tenant boundary leak.
+  //
+  // Every legitimate caller today (sz-chat-webhook, whatsapp-webhook,
+  // evolution-webhook, internal scripts) MUST pass organization_id in the
+  // body. Callers that do not are a bug and must be fixed at the source.
+  console.error(
+    '[agent-message] organization_id MISSING in request — rejecting. Caller must send organization_id.',
+    { from, channel, normalizedPhone },
+  );
   return { lead: null, organizationId: null };
 }
 

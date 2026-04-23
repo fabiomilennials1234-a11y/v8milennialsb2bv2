@@ -1,6 +1,30 @@
 # Project State
 
-**Last updated:** 2026-04-20
+**Last updated:** 2026-04-23
+
+## Decisions
+
+### D034: Copilot fallback elimination + Uazapi bridge + tenant isolation (2026-04-23)
+
+Incidente: usuário pergunta "a granel quais sabores tem?" e recebe "Desculpe, houve um problema ao processar sua mensagem." Logs prod mostram dezenas de casos `messageLength: 54` + `action: SEND_DOCUMENT`, sem `LLM call #3`.
+
+7 causas raízes confirmadas no código:
+- CR-1 agent-engine:222 fallback quando LLM retorna content:null+tool_call não-inline
+- CR-2 assistant+tool_calls persistidos com content:'' (viola OpenAI contract)
+- CR-3 tool_calls[0] — extras silenciosamente descartados
+- CR-4 finish_reason nunca consultado
+- CR-5 loadConversation ignora agent_id e organization_id
+- CR-6 whatsapp-webhook (Uazapi) NUNCA invoca agent-message — Copilot inoperante para orgs Uazapi
+- CR-7 identifyTenant busca cross-tenant sem org_id
+
+Fixes: forced-text turn após loop multi-turn; telemetry por invocação; convertMessages respeita content:null; loadConversation filtra por (lead_id, agent_id, organization_id); whatsapp-webhook dispara agent-message fire-and-forget em cada incoming; identifyTenant hard-fail sem org_id. 13 testes novos. Branch `fix-copilot-fallback`. Ver [[ADR-2026-04-23-copilot-fallback-elimination]].
+
+Pendente: deploy em prod; enfileirar extraToolCalls em paralelo (follow-up).
+
+### L003: Fallback silencioso é anti-padrão (2026-04-23)
+
+Lição do incidente Copilot: "fallback se algo der errado" com mensagem genérica sem telemetria torna bugs invisíveis. Regra: toda função que pode retornar fallback deve: (1) logar severity=error com contexto, (2) marcar o caller com flag `fallback_used`, (3) idealmente tentar um retry direcionado (como o forced-text turn) antes do último recurso. Mensagens genéricas silenciam o sinal e o usuário paga pela invisibilidade operacional.
+
 
 ## Decisions
 
