@@ -858,7 +858,7 @@ export function CampanhaKanban({
 
         <DragOverlay>
           {activeLead && (
-            <Card className="bg-card shadow-lg">
+            <Card className="bg-card shadow-lg dark:shadow-none dark:ring-1 dark:ring-border/50">
               <CardContent className="p-3">
                 <h4 className="font-medium text-sm">{activeLead.lead?.name}</h4>
               </CardContent>
