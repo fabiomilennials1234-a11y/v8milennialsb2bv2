@@ -12,7 +12,7 @@
  */
 import { useState, useMemo, useRef, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
-import { AlignJustify, List, LayoutList, Moon, Sun, Plus, Inbox } from "lucide-react";
+import { AlignJustify, List, LayoutList, Moon, Sun, Plus, Inbox, Command, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -20,9 +20,14 @@ import { ChatShell } from "@/components/chat/layout/ChatShell";
 import { ChatHeader } from "@/components/chat/view/ChatHeader";
 import { MessageList } from "@/components/chat/view/MessageList";
 import { ContextPanel } from "@/components/chat/context-panel/ContextPanel";
+import { TakeoverControls } from "@/components/chat/takeover/TakeoverControls";
+import { AITimeline } from "@/components/chat/takeover/AITimeline";
+import { HighlightedText } from "@/components/chat/search/HighlightedText";
 import { useChatDensity } from "@/hooks/chat/useChatDensity";
+import { useCommandPalette } from "@/components/command/CommandPaletteContext";
 import type { WhatsAppMessage, FailedMessage } from "@/hooks/chat/types";
 import type { TransferEvent } from "@/components/chat/view/MessageList";
+import type { AiTakeoverState } from "@/lib/chat-types";
 
 // ─── Dados fake ───────────────────────────────────────────────────────────────
 
@@ -171,6 +176,63 @@ const MOCK_FAILED_MESSAGES: FailedMessage[] = [
   },
 ];
 
+// ─── Mock AITimeline events ───────────────────────────────────────────────────
+
+const MOCK_AI_EVENTS = [
+  {
+    id: "ae1",
+    type: "message_sent" as const,
+    description: 'Olá Rodrigo, como posso ajudar com nosso CRM?',
+    created_at: new Date("2026-04-22T10:02:00").toISOString(),
+    is_reversible: false,
+    reverted: false,
+    metadata: {},
+  },
+  {
+    id: "ae2",
+    type: "action_executed" as const,
+    description: "Moveu para stage: respondeu",
+    created_at: new Date("2026-04-22T10:05:00").toISOString(),
+    is_reversible: true,
+    reverted: false,
+    metadata: {},
+  },
+  {
+    id: "ae3",
+    type: "tag_added" as const,
+    description: "Tag adicionada: Interesse Alto",
+    created_at: new Date("2026-04-22T10:08:00").toISOString(),
+    is_reversible: true,
+    reverted: false,
+    metadata: {},
+  },
+  {
+    id: "ae4",
+    type: "silence_detected" as const,
+    description: "Sem resposta por 15 min",
+    created_at: new Date("2026-04-22T10:23:00").toISOString(),
+    is_reversible: false,
+    reverted: false,
+    metadata: {},
+  },
+  {
+    id: "ae5",
+    type: "handoff_triggered" as const,
+    description: "Lead fez pergunta sobre contrato",
+    created_at: new Date("2026-04-22T10:30:00").toISOString(),
+    is_reversible: false,
+    reverted: false,
+    metadata: {},
+  },
+];
+
+// Mock search results with highlighted text
+const MOCK_SEARCH_HIGHLIGHTS = [
+  { id: "s1", phone: "11987654321", name: "Rodrigo Ferreira", headline: 'Baseado no seu perfil, a <mark>proposta</mark> Profissional é a melhor', time: "14:32" },
+  { id: "s2", phone: "11976543210", name: "Carla Mendes", headline: 'Pode me enviar a <mark>proposta</mark> comercial esta semana?', time: "13:45" },
+  { id: "s3", phone: "11954321098", name: "Ana Oliveira", headline: 'Aguardando <mark>proposta</mark> de contrato anual', time: "10:52" },
+];
+
 // ─── ConversationListMock ─────────────────────────────────────────────────────
 
 function MockConversationList({
@@ -240,6 +302,33 @@ function MockConversationList({
 
 // ─── MockChatView (center panel) ─────────────────────────────────────────────
 
+// ─── TakeoverControlsMock — pill sem hook (dados fake) ───────────────────────
+
+function TakeoverControlsMock({
+  aiState,
+  onStateChange,
+}: {
+  aiState: AiTakeoverState;
+  onStateChange: (s: AiTakeoverState) => void;
+}) {
+  const STATES: AiTakeoverState[] = ["AI_ACTIVE", "AI_PAUSED_MANUAL", "WAITING_HUMAN", "HUMAN_ACTIVE", "HANDOFF_BACK"];
+  return (
+    <div className="flex items-center gap-1">
+      {STATES.map((s) => (
+        <Button
+          key={s}
+          variant="ghost"
+          size="sm"
+          className={cn("h-5 text-[9px] px-1", aiState === s && "bg-primary/20 text-primary")}
+          onClick={() => onStateChange(s)}
+        >
+          {s.split("_")[0]}
+        </Button>
+      ))}
+    </div>
+  );
+}
+
 function MockChatView({
   messages,
   transferEvents,
@@ -249,6 +338,7 @@ function MockChatView({
   density,
   onDensityChange,
   showEmpty,
+  aiState,
 }: {
   messages: WhatsAppMessage[];
   transferEvents: TransferEvent[];
@@ -258,6 +348,7 @@ function MockChatView({
   density: "compact" | "comfortable" | "spacious";
   onDensityChange: (d: "compact" | "comfortable" | "spacious") => void;
   showEmpty: boolean;
+  aiState: AiTakeoverState;
 }) {
   const mountTime = useRef(MOCK_MOUNT_TIME).current;
   // lastReadAt: simular que lemos até a msg 8 (base + 660000)
@@ -265,13 +356,15 @@ function MockChatView({
 
   return (
     <div className="flex flex-col h-full">
+      {/* ChatHeader sem conversationId real — TakeoverControls não renderiza (null) */}
       <ChatHeader
         phoneNumber={selectedPhone ?? MOCK_PHONE}
         contactName={MOCK_CONTACT_NAME}
         hasLead={true}
         leadId="lead1"
-        aiDisabled={false}
-        isWaitingHuman={false}
+        conversationId={null}
+        aiDisabled={aiState !== "AI_ACTIVE"}
+        isWaitingHuman={aiState === "WAITING_HUMAN"}
         szChatSession={null}
         organizationId="org1"
         onBack={onBack}
@@ -322,6 +415,7 @@ function MockChatView({
 export default function MockupChatV2() {
   const [searchParams] = useSearchParams();
   const scenario = searchParams.get("scenario") ?? "active";
+  const { open: openCommandPalette } = useCommandPalette();
 
   const [selectedPhone, setSelectedPhone] = useState<string | null>(
     scenario === "empty" ? null : MOCK_PHONE
@@ -331,6 +425,8 @@ export default function MockupChatV2() {
     document.documentElement.classList.contains("dark")
   );
   const [messageCount, setMessageCount] = useState(10);
+  const [aiState, setAiState] = useState<AiTakeoverState>("AI_ACTIVE");
+  const [showSearchMock, setShowSearchMock] = useState(false);
 
   // Density sem userId — fallback in-memory "comfortable"
   const { density, setDensity, cssVars } = useChatDensity(undefined);
@@ -407,6 +503,28 @@ export default function MockupChatV2() {
           {showEmpty ? "Ver mensagens" : "Empty state"}
         </Button>
 
+        {/* ⌘K opener */}
+        <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={openCommandPalette}>
+          <Command className="w-3 h-3 mr-1" />
+          Abrir ⌘K
+        </Button>
+
+        {/* Search highlight mock */}
+        <Button
+          variant="ghost"
+          size="sm"
+          className={cn("h-7 text-xs", showSearchMock && "bg-muted")}
+          onClick={() => setShowSearchMock((v) => !v)}
+        >
+          Search highlight
+        </Button>
+
+        {/* AI State control */}
+        <div className="flex items-center gap-1 ml-1">
+          <span className="text-[9px] text-muted-foreground">IA:</span>
+          <TakeoverControlsMock aiState={aiState} onStateChange={setAiState} />
+        </div>
+
         {/* Scenario selector */}
         <div className="ml-auto flex items-center gap-2">
           <span className="text-[10px] text-muted-foreground">cenário:</span>
@@ -426,6 +544,26 @@ export default function MockupChatV2() {
           ))}
         </div>
       </div>
+
+      {/* ── Search highlight mock ─────────────────────────────────────────── */}
+      {showSearchMock && (
+        <div className="px-4 py-2 border-b border-border/60 bg-background/95 shrink-0">
+          <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-2">
+            Mock — resultados para &quot;proposta&quot; (HighlightedText + DOMPurify)
+          </p>
+          <div className="space-y-1.5">
+            {MOCK_SEARCH_HIGHLIGHTS.map((r) => (
+              <div key={r.id} className="flex items-start gap-3 px-3 py-2 rounded-md bg-muted/30">
+                <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />
+                <div className="flex flex-col min-w-0 flex-1">
+                  <span className="text-xs text-muted-foreground">{r.name} · {r.time}</span>
+                  <HighlightedText html={r.headline} className="text-sm leading-tight" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ── ChatShell ─────────────────────────────────────────────────────── */}
       <div className="flex-1 min-h-0 p-3">
@@ -447,6 +585,7 @@ export default function MockupChatV2() {
                 density={density}
                 onDensityChange={setDensity}
                 showEmpty={showEmpty}
+                aiState={aiState}
               />
             ) : (
               <div className="flex flex-col items-center justify-center h-full text-center p-8 gap-4">
