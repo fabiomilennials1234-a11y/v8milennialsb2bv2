@@ -102,11 +102,11 @@ export default function MasterOrganizations() {
     }
     switch (status) {
       case "active":
-        return <Badge className="bg-green-500">Ativo</Badge>;
+        return <Badge className="bg-success text-success-foreground">Ativo</Badge>;
       case "trial":
         return <Badge className="bg-blue-500">Trial</Badge>;
       case "suspended":
-        return <Badge className="bg-yellow-500">Suspenso</Badge>;
+        return <Badge className="bg-warning text-warning-foreground">Suspenso</Badge>;
       case "cancelled":
       case "expired":
         return <Badge variant="destructive">Cancelado</Badge>;

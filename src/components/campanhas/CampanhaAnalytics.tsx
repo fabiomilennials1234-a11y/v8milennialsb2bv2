@@ -99,7 +99,7 @@ function ProgressRing({ progress, size = 80, strokeWidth = 8, showLabel = true }
           animate={{ scale: 1, rotate: 0 }}
           transition={{ delay: 1, type: "spring", stiffness: 200 }}
         >
-          <div className="w-6 h-6 bg-success rounded-full flex items-center justify-center shadow-md dark:shadow-none dark:ring-1 dark:ring-success/30">
+          <div className="w-6 h-6 bg-success rounded-full flex items-center justify-center shadow-lg">
             <Sparkles className="w-3 h-3 text-white" />
           </div>
         </motion.div>
@@ -128,14 +128,14 @@ function MemberGoalCard({
 
   const getRankIcon = () => {
     if (rank === 1) return <Crown className="w-5 h-5 text-yellow-400" />;
-    if (rank === 2) return <Trophy className="w-5 h-5 text-muted-foreground" />;
+    if (rank === 2) return <Trophy className="w-5 h-5 text-silver" />;
     if (rank === 3) return <Award className="w-5 h-5 text-orange-400" />;
     return <span className="text-muted-foreground font-bold">{rank}º</span>;
   };
 
   const getRankBg = () => {
     if (rank === 1) return "from-yellow-500/20 via-yellow-500/10 to-transparent border-yellow-500/30";
-    if (rank === 2) return "from-muted-foreground/20 via-muted-foreground/10 to-transparent border-muted-foreground/30";
+    if (rank === 2) return "from-silver/20 via-silver/10 to-transparent border-silver/30";
     if (rank === 3) return "from-orange-500/20 via-orange-500/10 to-transparent border-orange-500/30";
     return "from-muted/30 to-transparent border-border";
   };
@@ -299,7 +299,7 @@ function TeamThermometer({ current, goal, daysRemaining }: { current: number; go
             animate={{ scale: 1, rotate: 0 }}
             transition={{ type: "spring", stiffness: 200 }}
           >
-            <Badge className="bg-success text-success-foreground text-lg px-4 py-2 gap-2">
+            <Badge className="bg-success text-white text-lg px-4 py-2 gap-2">
               <Trophy className="w-5 h-5" />
               META BATIDA!
             </Badge>
@@ -345,8 +345,8 @@ function TeamThermometer({ current, goal, daysRemaining }: { current: number; go
           animate={{ left: `${Math.min(progress, 95)}%` }}
           transition={{ duration: 1.5, ease: "easeOut" }}
         >
-          <div className={`px-4 py-2 rounded-full font-bold shadow-md dark:shadow-none dark:ring-1 dark:ring-border/30 ${
-            isComplete ? "bg-success text-success-foreground" : "bg-primary text-primary-foreground"
+          <div className={`px-4 py-2 rounded-full font-bold text-white shadow-lg ${
+            isComplete ? "bg-success" : "bg-primary"
           }`}>
             <AnimatedNumber value={current} />
           </div>

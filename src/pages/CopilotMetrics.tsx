@@ -187,7 +187,7 @@ function ScoreBar({ score, label }: { score: number; label: string }) {
       </div>
       <div className="h-2 bg-muted rounded-full overflow-hidden">
         <div
-          className={`h-full rounded-full transition-all ${score >= 8 ? "bg-green-500" : score >= 6 ? "bg-yellow-500" : "bg-red-500"}`}
+          className={`h-full rounded-full transition-all ${score >= 8 ? "bg-success" : score >= 6 ? "bg-warning" : "bg-destructive"}`}
           style={{ width: `${pct}%` }}
         />
       </div>
