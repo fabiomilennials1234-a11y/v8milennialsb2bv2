@@ -801,10 +801,86 @@ export default function MockupChatV3() {
           </Card>
         </section>
 
+        {/* Seção Onda 5 — Integration real */}
+        <section aria-labelledby="section-onda-5">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="flex items-center justify-center w-7 h-7 rounded-full bg-green-500/15 text-green-600 dark:text-green-400 text-sm font-bold shrink-0">5</div>
+            <div>
+              <h2 id="section-onda-5" className="text-base font-semibold">Onda 5 — Integration real</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Features conectadas à produção em <code className="font-mono text-primary text-[11px]">/chat</code> com flag ativa.
+              </p>
+            </div>
+            <Badge
+              variant="outline"
+              className="ml-auto font-mono text-[10px] border-green-500/40 text-green-600 dark:text-green-400 gap-1 select-all shrink-0"
+            >
+              VITE_CHAT_ONDA_2B=true
+            </Badge>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {(
+              [
+                {
+                  title: "C1 — TakeoverControls FSM real",
+                  file: "ChatShellWithContext.tsx",
+                  desc: "useTakeover(conversationId) real. Banner laranja WAITING_HUMAN. AI toggle desabilitado em HUMAN_ACTIVE.",
+                  status: "ok",
+                },
+                {
+                  title: "C2 — ⌘K ações Uazapi",
+                  file: "CommandGroupUazapi.tsx",
+                  desc: "Grupo 'WhatsApp' no Command Palette: Importar histórico (HistorySyncDialog), Reparar conexão (RepairingWizard), Campanha em massa.",
+                  status: "ok",
+                },
+                {
+                  title: "C3 — AITimeline events reais",
+                  file: "useAITimeline.ts + AITimeline.tsx",
+                  desc: "Filtra ai_* e uazapi_* do lead_history. 4 novos tipos: mass_send, pix_paid, repair, history_sync.",
+                  status: "ok",
+                },
+                {
+                  title: "C4 — LeadTabInfo mutation wire",
+                  file: "ContextPanelInfo.tsx",
+                  desc: "useUpdateLeadField: mutation real supabase.from('leads').update + optimistic cache + toast erros.",
+                  status: "ok",
+                },
+                {
+                  title: "C5 — Bubble actions visíveis",
+                  file: "MessageBubbleActions.tsx",
+                  desc: "Actions já wired com hooks reais (react/edit/pin/delete/markRead). enableActions=true ativo no ChatView.",
+                  status: "ok",
+                },
+                {
+                  title: "C6 — Stop-gaps resolvidos",
+                  file: "ChatShellWithContext.tsx",
+                  desc: "Image preview inline via ImagePreviewModal. Retry failed messages via useRetryMessage. SZ.chat transfer → Onda 6.",
+                  status: "partial",
+                },
+              ] as { title: string; file: string; desc: string; status: "ok" | "partial" | "deferred" }[]
+            ).map(({ title, file, desc, status }) => (
+              <Card key={title} className={cn("border", status === "ok" && "border-green-500/20", status === "partial" && "border-amber-500/20")}>
+                <CardHeader className="pb-2 pt-4 px-4">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    {status === "ok" && <CheckCircle2 className="w-3.5 h-3.5 text-green-500 shrink-0" />}
+                    {status === "partial" && <Zap className="w-3.5 h-3.5 text-amber-500 shrink-0" />}
+                    <span className="truncate">{title}</span>
+                  </CardTitle>
+                  <CardDescription className="text-[11px] font-mono truncate">{file}</CardDescription>
+                </CardHeader>
+                <CardContent className="px-4 pb-4">
+                  <p className="text-xs text-muted-foreground leading-relaxed">{desc}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </section>
+
         {/* Footer */}
         <footer className="border-t border-border pt-6 pb-2 flex flex-wrap items-center justify-between gap-3 text-[11px] text-muted-foreground/60">
           <div className="flex items-center gap-3 flex-wrap">
-            <span>Onda 3.1 · branch <code className="font-mono">feat/chat-ux-ui-redesign</code></span>
+            <span>Onda 5 · branch <code className="font-mono">feat/chat-onda-5</code></span>
             <Badge
               variant="outline"
               className="font-mono text-[10px] border-primary/40 text-primary/70 gap-1 select-all"
