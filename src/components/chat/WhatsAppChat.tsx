@@ -73,6 +73,14 @@ import {
   useWhatsAppConversationsMeta,
 } from "@/hooks/useWhatsAppConversations";
 import { useTags } from "@/hooks/useTags";
+import {
+  MessageBubbleActions,
+  MessageMetaBadges,
+  DeletedPlaceholder,
+  EditMessageInline,
+} from "@/components/chat/actions";
+import { useEditMessage, isFeatureUnavailable } from "@/hooks/useMessageActions";
+import { toast } from "sonner";
 import { useIsAdmin } from "@/hooks/useUserRole";
 import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
 import { ChannelBadge, type ChannelType } from "./ChannelBadge";
@@ -1064,9 +1072,14 @@ function MessageDocument({
 export function MessageBubble({
   message,
   onImagePreview,
+  instanceId,
+  enableActions = false,
 }: {
   message: WhatsAppMessage;
   onImagePreview: (url: string) => void;
+  /** When set + enableActions=true, reveals S1 action bar on hover */
+  instanceId?: string;
+  enableActions?: boolean;
 }) {
   const isOutgoing = message.direction === "outgoing";
   const isAudio = message.message_type === "audio" || message.message_type === "ptt";
@@ -1076,18 +1089,76 @@ export function MessageBubble({
   const isSticker = message.message_type === "sticker";
   const hasMedia = isAudio || isImage || isVideo || isDocument || isSticker;
 
+  const meta = message as unknown as {
+    edited?: boolean | null;
+    pinned_at?: string | null;
+    deleted_at?: string | null;
+    reactions?: unknown;
+    remote_jid?: string | null;
+  };
+  const isDeleted = !!meta.deleted_at;
+  const [isEditing, setIsEditing] = useState(false);
+  const editMut = useEditMessage();
+
+  const showActions =
+    enableActions &&
+    !!instanceId &&
+    !!message.message_id &&
+    !isDeleted;
+
+  const phone = (meta.remote_jid ?? "").split("@")[0] ?? "";
+  const canEdit = isOutgoing && !!message.content && !hasMedia;
+  const canDelete = isOutgoing;
+
+  const handleEditSave = async (newText: string) => {
+    if (!instanceId || !message.message_id || !phone) return;
+    try {
+      await editMut.mutateAsync({
+        instanceId,
+        messageId: message.message_id,
+        number: phone,
+        text: newText,
+      });
+      setIsEditing(false);
+      toast.success("Mensagem editada");
+    } catch (e) {
+      if (isFeatureUnavailable(e)) {
+        toast.error("Disponível apenas em instâncias Uazapi");
+      } else {
+        toast.error(`Erro ao editar: ${(e as Error).message}`);
+      }
+    }
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      className={cn("flex gap-2", isOutgoing ? "justify-end" : "justify-start")}
+      className={cn("flex gap-2 group", isOutgoing ? "justify-end" : "justify-start")}
     >
+      {/* Action bar — hover reveal, outgoing only appears on left; incoming on right */}
+      {showActions && isOutgoing && !isEditing && (
+        <div className="self-center">
+          <MessageBubbleActions
+            instanceId={instanceId!}
+            messageId={message.message_id!}
+            number={phone}
+            direction="outgoing"
+            canEdit={canEdit}
+            canDelete={canDelete}
+            isPinned={!!meta.pinned_at}
+            onRequestEdit={() => setIsEditing(true)}
+          />
+        </div>
+      )}
+
       <div
         className={cn(
           "max-w-[75%] rounded-2xl px-4 py-2.5",
           isOutgoing
             ? "bg-primary/12 border border-primary/20 rounded-br-sm"
-            : "bg-muted/60 border border-border/30 rounded-bl-sm"
+            : "bg-muted/60 border border-border/30 rounded-bl-sm",
+          !!meta.pinned_at && "ring-1 ring-primary/30"
         )}
       >
         {/* Sender label for AI messages */}
@@ -1098,58 +1169,78 @@ export function MessageBubble({
           </div>
         )}
 
-        {/* Texto / Legenda */}
-        {message.content && (
-          <p className={cn(
-            "text-sm whitespace-pre-wrap break-words",
-            hasMedia && "mt-2"
-          )}>
-            {message.content}
-          </p>
-        )}
-
-        {/* Áudio */}
-        {isAudio && message.media_url && (
-          <div>
-            <AudioPlayer src={getAudioPlaybackUrl(message.media_url) ?? message.media_url} isOutgoing={isOutgoing} />
-          </div>
-        )}
-
-        {/* Imagem */}
-        {isImage && message.media_url && (
-          <MessageImage
-            src={message.media_url}
-            onPreview={() => onImagePreview(message.media_url!)}
+        {isDeleted ? (
+          <DeletedPlaceholder deletedAt={meta.deleted_at} />
+        ) : isEditing ? (
+          <EditMessageInline
+            initialText={message.content ?? ""}
+            onSave={handleEditSave}
+            onCancel={() => setIsEditing(false)}
+            isPending={editMut.isPending}
           />
-        )}
+        ) : (
+          <>
+            {/* Texto / Legenda */}
+            {message.content && (
+              <p className={cn(
+                "text-sm whitespace-pre-wrap break-words",
+                hasMedia && "mt-2"
+              )}>
+                {message.content}
+              </p>
+            )}
 
-        {/* Vídeo */}
-        {isVideo && message.media_url && (
-          <MessageVideo src={message.media_url} />
-        )}
+            {/* Áudio */}
+            {isAudio && message.media_url && (
+              <div>
+                <AudioPlayer src={getAudioPlaybackUrl(message.media_url) ?? message.media_url} isOutgoing={isOutgoing} />
+              </div>
+            )}
 
-        {/* Documento */}
-        {isDocument && message.media_url && (
-          <MessageDocument
-            src={message.media_url}
-            isOutgoing={isOutgoing}
-          />
-        )}
+            {/* Imagem */}
+            {isImage && message.media_url && (
+              <MessageImage
+                src={message.media_url}
+                onPreview={() => onImagePreview(message.media_url!)}
+              />
+            )}
 
-        {/* Sticker */}
-        {isSticker && message.media_url && (
-          <img
-            src={message.media_url}
-            alt="Sticker"
-            className="w-32 h-32 object-contain"
-          />
-        )}
+            {/* Vídeo */}
+            {isVideo && message.media_url && (
+              <MessageVideo src={message.media_url} />
+            )}
 
-        {/* Mensagem sem conteúdo e sem mídia */}
-        {!message.content && !hasMedia && (
-          <p className="text-sm italic text-muted-foreground">
-            [Mensagem não suportada]
-          </p>
+            {/* Documento */}
+            {isDocument && message.media_url && (
+              <MessageDocument
+                src={message.media_url}
+                isOutgoing={isOutgoing}
+              />
+            )}
+
+            {/* Sticker */}
+            {isSticker && message.media_url && (
+              <img
+                src={message.media_url}
+                alt="Sticker"
+                className="w-32 h-32 object-contain"
+              />
+            )}
+
+            {/* Mensagem sem conteúdo e sem mídia */}
+            {!message.content && !hasMedia && (
+              <p className="text-sm italic text-muted-foreground">
+                [Mensagem não suportada]
+              </p>
+            )}
+
+            <MessageMetaBadges
+              edited={meta.edited}
+              pinnedAt={meta.pinned_at}
+              deletedAt={meta.deleted_at}
+              reactions={meta.reactions}
+            />
+          </>
         )}
 
         {/* Linha: data/hora e status */}
@@ -1158,6 +1249,22 @@ export function MessageBubble({
           {isOutgoing && <MessageStatusIcon status={message.status} />}
         </div>
       </div>
+
+      {/* Incoming action bar — right side */}
+      {showActions && !isOutgoing && !isEditing && (
+        <div className="self-center">
+          <MessageBubbleActions
+            instanceId={instanceId!}
+            messageId={message.message_id!}
+            number={phone}
+            direction="incoming"
+            canEdit={false}
+            canDelete={false}
+            isPinned={!!meta.pinned_at}
+            onRequestEdit={() => {}}
+          />
+        </div>
+      )}
     </motion.div>
   );
 }
