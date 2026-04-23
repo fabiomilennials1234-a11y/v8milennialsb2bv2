@@ -184,7 +184,47 @@ async function handleMessagesUpdateEvent(
   const update: Record<string, unknown> = {};
   if (data.status) update.status = String(data.status).toLowerCase();
   if (data.edited) update.edited = true;
-  if (data.deleted) update.status = "deleted";
+  if (data.deleted) {
+    update.status = "deleted";
+    update.deleted_at = new Date().toISOString();
+  }
+
+  // Pin/unpin (Uazapi action)
+  if (data.pinned === true) update.pinned_at = new Date().toISOString();
+  if (data.pinned === false) update.pinned_at = null;
+
+  // Reactions — Uazapi sends { reactions: [{ emoji, from, count }] } or
+  // { reaction: { emoji, from } } depending on event. Merge by emoji+from.
+  if (data.reactions && Array.isArray(data.reactions)) {
+    update.reactions = data.reactions;
+  } else if (data.reaction && typeof data.reaction === "object") {
+    // Fetch existing + merge
+    const { data: current } = await supabase
+      .from("whatsapp_messages")
+      .select("reactions")
+      .eq("message_id", messageId)
+      .eq("instance_id", instance.id)
+      .maybeSingle();
+    const existing: any[] = Array.isArray(current?.reactions)
+      ? (current!.reactions as any[])
+      : [];
+    const key = `${data.reaction.emoji}|${data.reaction.from ?? "them"}`;
+    const idx = existing.findIndex(
+      (r) => `${r.emoji}|${r.from ?? "them"}` === key
+    );
+    if (data.reaction.remove) {
+      if (idx >= 0) existing.splice(idx, 1);
+    } else if (idx >= 0) {
+      existing[idx].count = (existing[idx].count ?? 1) + 1;
+    } else {
+      existing.push({
+        emoji: data.reaction.emoji,
+        from: data.reaction.from ?? "them",
+        count: 1,
+      });
+    }
+    update.reactions = existing;
+  }
 
   if (Object.keys(update).length === 0) return;
 

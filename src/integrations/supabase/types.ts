@@ -8338,7 +8338,9 @@ export type Database = {
           assigned_to: string | null
           content: string | null
           created_at: string | null
+          deleted_at: string | null
           direction: string
+          edited: boolean
           id: string
           instance_id: string | null
           lead_id: string | null
@@ -8347,9 +8349,11 @@ export type Database = {
           message_type: string
           organization_id: string
           phone_number: string
+          pinned_at: string | null
           processed_by_agent_at: string | null
           push_name: string | null
           raw_payload: Json | null
+          reactions: Json
           remote_jid: string
           sent_by_ai: boolean | null
           status: string | null
@@ -8359,7 +8363,9 @@ export type Database = {
           assigned_to?: string | null
           content?: string | null
           created_at?: string | null
+          deleted_at?: string | null
           direction: string
+          edited?: boolean
           id?: string
           instance_id?: string | null
           lead_id?: string | null
@@ -8368,9 +8374,11 @@ export type Database = {
           message_type?: string
           organization_id: string
           phone_number: string
+          pinned_at?: string | null
           processed_by_agent_at?: string | null
           push_name?: string | null
           raw_payload?: Json | null
+          reactions?: Json
           remote_jid: string
           sent_by_ai?: boolean | null
           status?: string | null
@@ -8380,7 +8388,9 @@ export type Database = {
           assigned_to?: string | null
           content?: string | null
           created_at?: string | null
+          deleted_at?: string | null
           direction?: string
+          edited?: boolean
           id?: string
           instance_id?: string | null
           lead_id?: string | null
@@ -8389,9 +8399,11 @@ export type Database = {
           message_type?: string
           organization_id?: string
           phone_number?: string
+          pinned_at?: string | null
           processed_by_agent_at?: string | null
           push_name?: string | null
           raw_payload?: Json | null
+          reactions?: Json
           remote_jid?: string
           sent_by_ai?: boolean | null
           status?: string | null
