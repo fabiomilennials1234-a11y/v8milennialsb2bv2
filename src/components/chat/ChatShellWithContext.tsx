@@ -27,6 +27,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2, WifiOff, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { ChatShell } from "@/components/chat/layout/ChatShell";
+import { MobileChatLayout } from "@/components/chat/layout/MobileChatLayout";
+import { useChatViewport } from "@/hooks/chat/useChatViewport";
 import { ConversationList } from "@/components/chat/list/ConversationList";
 import { ChatHeader } from "@/components/chat/view/ChatHeader";
 import { MessageList } from "@/components/chat/view/MessageList";
@@ -406,6 +408,10 @@ export function ChatShellWithContext() {
   // ── mountTime estável (capturado uma vez no mount) ───────────────────────────
   const mountTimeRef = useRef(Date.now());
 
+  // ── Viewport: mobile <780px usa MobileChatLayout ─────────────────────────────
+  const { isMobile } = useChatViewport();
+  const ShellComponent = isMobile ? MobileChatLayout : ChatShell;
+
   // ── Loading state ────────────────────────────────────────────────────────────
   if (instancesLoading) {
     return (
@@ -426,7 +432,7 @@ export function ChatShellWithContext() {
 
   return (
     <>
-      <ChatShell
+      <ShellComponent
         list={
           <ConversationList
             contacts={contacts}
