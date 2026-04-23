@@ -59,7 +59,7 @@ export default function MasterAuditLogs() {
       ORG_DELETE: "bg-red-600",
     };
     return (
-      <Badge className={colors[action] || "bg-gray-500"}>
+      <Badge className={colors[action] || "bg-muted text-muted-foreground"}>
         {action.replace(/_/g, " ")}
       </Badge>
     );

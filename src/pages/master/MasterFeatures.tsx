@@ -168,7 +168,7 @@ export default function MasterFeatures() {
       branding: "bg-yellow-500",
     };
     return (
-      <Badge className={colors[category] || "bg-gray-500"}>
+      <Badge className={colors[category] || "bg-muted text-muted-foreground"}>
         {category}
       </Badge>
     );
