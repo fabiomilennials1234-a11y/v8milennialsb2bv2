@@ -55,7 +55,7 @@ export function CampanhaAutomaticaPanel({ campanha }: CampanhaAutomaticaPanelPro
             <div className="flex items-center gap-3">
               <div className={cn(
                 "w-12 h-12 rounded-lg flex items-center justify-center",
-                agent?.is_active ? "bg-green-100 dark:bg-green-900/40" : "bg-gray-100 dark:bg-muted"
+                agent?.is_active ? "bg-green-100 dark:bg-green-900/40" : "bg-muted"
               )}>
                 <Bot className={cn(
                   "w-6 h-6",

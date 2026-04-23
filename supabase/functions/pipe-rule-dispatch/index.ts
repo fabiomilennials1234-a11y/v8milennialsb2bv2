@@ -416,7 +416,7 @@ async function processPipeQueue(
           // Sync with chat
           try {
             const phone = lead.phone!.replace(/\D/g, "").replace(/^(?!55)/, "55");
-            await supabase.from("whatsapp_messages").insert({
+            await supabase.from("whatsapp_messages").upsert({
               organization_id: orgId,
               instance_id: instance.id,
               message_id: sendResult.messageId || `pipe_${row.id}_${Date.now()}`,
@@ -430,7 +430,7 @@ async function processPipeQueue(
               lead_id: lead.id,
               timestamp: new Date().toISOString(),
               sent_by_ai: true,
-            });
+            }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
           } catch (chatSyncErr) {
             console.warn("[pipe-rule-dispatch] chat sync error:", chatSyncErr);
           }
@@ -761,7 +761,7 @@ async function processExpiredTimeouts(
             if (result.success) {
               try {
                 const phone = lead.phone!.replace(/\D/g, "").replace(/^(?!55)/, "55");
-                await supabase.from("whatsapp_messages").insert({
+                await supabase.from("whatsapp_messages").upsert({
                   organization_id: orgId,
                   instance_id: instance.id,
                   message_id: result.messageId || `pipe_timeout_${row.id}_${Date.now()}`,
@@ -775,7 +775,7 @@ async function processExpiredTimeouts(
                   lead_id: lead.id,
                   timestamp: new Date().toISOString(),
                   sent_by_ai: true,
-                });
+                }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
               } catch (_) { /* ignore */ }
             }
             console.log(`[pipe-rule-dispatch][${pipeType}] Timeout: sent template to lead ${lead.name}`);

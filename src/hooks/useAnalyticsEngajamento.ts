@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "./useOrganization";
 import { useAnalyticsFilters } from "./useAnalyticsFilters";
+import { isMissingSchemaError } from "@/lib/rpc-errors";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -119,6 +120,10 @@ export function useAnalyticsEngajamento() {
       );
 
       if (error) {
+        if (isMissingSchemaError(error)) {
+          console.warn("⚠️ [useAnalyticsEngajamento] RPC ausente (migration pendente?):", error.message);
+          return EMPTY;
+        }
         console.error("❌ [useAnalyticsEngajamento] RPC error:", error.message);
         throw new Error(`Analytics engajamento failed: ${error.message}`);
       }

@@ -99,7 +99,7 @@ export function StageWorkflowsBadge({
                   <span
                     className={cn(
                       "w-1.5 h-1.5 rounded-full flex-shrink-0",
-                      w.is_active ? "bg-green-500" : "bg-gray-400"
+                      w.is_active ? "bg-green-500" : "bg-muted-foreground/50"
                     )}
                   />
                   <span className="truncate">{w.name}</span>

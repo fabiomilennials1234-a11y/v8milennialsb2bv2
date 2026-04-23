@@ -25,21 +25,21 @@ export function CalorAnalyticsChart({ data }: CalorAnalyticsChartProps) {
         name: "Quente (7-10)",
         count: hot.reduce((sum, d) => sum + d.count, 0),
         value: hot.reduce((sum, d) => sum + d.value, 0),
-        color: "#EF4444", // destructive
+        color: "hsl(var(--destructive))",
         icon: "🔥",
       },
       {
         name: "Morno (4-6)",
         count: warm.reduce((sum, d) => sum + d.count, 0),
         value: warm.reduce((sum, d) => sum + d.value, 0),
-        color: "#F59E0B", // chart-5 amber
+        color: "hsl(var(--chart-5))",
         icon: "🌡️",
       },
       {
         name: "Frio (0-3)",
         count: cold.reduce((sum, d) => sum + d.count, 0),
         value: cold.reduce((sum, d) => sum + d.value, 0),
-        color: "#94A3B8", // muted
+        color: "hsl(var(--muted-foreground))",
         icon: "❄️",
       },
     ].filter(item => item.count > 0);

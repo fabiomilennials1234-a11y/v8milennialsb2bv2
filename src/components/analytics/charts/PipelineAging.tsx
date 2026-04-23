@@ -93,7 +93,7 @@ export function PipelineAging({ stages }: Props) {
             <span className="w-3 h-3 rounded-sm bg-red-500 inline-block" /> Risco (7–14d)
           </div>
           <div className="flex items-center gap-1">
-            <span className="w-3 h-3 rounded-sm bg-red-900 inline-block" /> Crítico (&gt;14d)
+            <span className="w-3 h-3 rounded-sm bg-destructive/60 inline-block" /> Crítico (&gt;14d)
           </div>
         </div>
 
@@ -123,25 +123,25 @@ export function PipelineAging({ stages }: Props) {
                   <Segment
                     count={stage.healthy_count}
                     total={stage.total}
-                    color="#22c55e"
+                    color="hsl(var(--success))"
                     label="Saudável"
                   />
                   <Segment
                     count={stage.attention_count}
                     total={stage.total}
-                    color="#fb923c"
+                    color="hsl(var(--chart-5))"
                     label="Atenção"
                   />
                   <Segment
                     count={stage.risk_count}
                     total={stage.total}
-                    color="#ef4444"
+                    color="hsl(var(--destructive))"
                     label="Risco"
                   />
                   <Segment
                     count={stage.critical_count}
                     total={stage.total}
-                    color="#7f1d1d"
+                    color="hsl(var(--destructive) / 0.6)"
                     label="Crítico"
                   />
                 </div>

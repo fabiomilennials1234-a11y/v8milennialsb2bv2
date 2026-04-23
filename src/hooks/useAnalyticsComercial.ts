@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "./useOrganization";
 import { useAnalyticsFilters } from "./useAnalyticsFilters";
+import { isMissingSchemaError } from "@/lib/rpc-errors";
 
 export interface MemberStat {
   member_id: string;
@@ -73,6 +74,10 @@ export function useAnalyticsComercial() {
       );
 
       if (error) {
+        if (isMissingSchemaError(error)) {
+          console.warn("⚠️ [useAnalyticsComercial] RPC ausente (migration pendente?):", error.message);
+          return EMPTY;
+        }
         console.error("❌ [useAnalyticsComercial] RPC error:", error.message);
         throw new Error(`Analytics comercial failed: ${error.message}`);
       }
