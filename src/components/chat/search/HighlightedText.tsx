@@ -40,7 +40,6 @@ export function HighlightedText({ html, className }: HighlightedTextProps) {
       // search-highlight-scope isola o escopo — não polui <mark> global
       // box-decoration-break: clone aplicado via CSS companion
       className={`search-highlight-scope${className ? ` ${className}` : ""}`}
-      // eslint-disable-next-line react/no-danger
       dangerouslySetInnerHTML={{ __html: safe }}
     />
   );

@@ -53,7 +53,6 @@ export function CommandGroupMessages({ query, onClose }: CommandGroupMessagesPro
   const { results, isLoading, activeQuery, search } = useMessageSearch();
 
   // Sincronizar query prop com o hook (debounce interno no hook)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const searchRef = useRef(search);
   useEffect(() => { searchRef.current = search; }, [search]);
 
