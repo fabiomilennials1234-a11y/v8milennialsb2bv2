@@ -26,6 +26,7 @@ import { CommandGroupNavigation } from "./groups/CommandGroupNavigation";
 import { CommandGroupActions } from "./groups/CommandGroupActions";
 import { CommandGroupConversations } from "./groups/CommandGroupConversations";
 import { CommandGroupRecents } from "./groups/CommandGroupRecents";
+import { CommandGroupMessages } from "./groups/CommandGroupMessages";
 
 // ─── prefers-reduced-motion hook ─────────────────────────────────────────────
 
@@ -183,6 +184,14 @@ export function CommandPalette() {
 
                   {/* Conversas */}
                   <CommandGroupConversations onClose={close} />
+
+                  {/* Mensagens — full-text search (C35), só quando query > 3 chars */}
+                  {query.length >= 3 && (
+                    <>
+                      <CommandSeparator className="my-1 bg-border/40" />
+                      <CommandGroupMessages query={query} onClose={close} />
+                    </>
+                  )}
                 </CommandList>
 
                 {/* ── Footer de hints ──────────────────────────────────── */}
