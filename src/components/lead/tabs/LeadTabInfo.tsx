@@ -5,7 +5,7 @@
  * Extraído de LeadDetailContent (Onda 3.1, C8).
  */
 
-import { Loader2, Check, ExternalLink, Tag } from "lucide-react";
+import { Loader2, Check, ExternalLink, Tag, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
@@ -13,6 +13,7 @@ import { LeadContactInfo } from "@/components/lead/info/LeadContactInfo";
 import { LeadQualification } from "@/components/lead/info/LeadQualification";
 import { LeadResponsibles } from "@/components/lead/info/LeadResponsibles";
 import { LeadSource } from "@/components/lead/info/LeadSource";
+import { LeadCustomFields } from "@/components/lead/info/LeadCustomFields";
 import { LeadNotes } from "@/components/lead/notes/LeadNotes";
 import type { LeadContactFormData } from "@/components/lead/info/LeadContactInfo";
 
@@ -101,6 +102,17 @@ export function LeadTabInfo({
 
       {/* Responsáveis */}
       <LeadResponsibles responsible={responsible} sdr={sdr} closer={closer} />
+
+      {/* Campos personalizados */}
+      <div className="border-t border-border/40 pt-4 mt-4 space-y-3">
+        <div className="flex items-center gap-1.5">
+          <Sparkles className="w-3.5 h-3.5 text-muted-foreground" />
+          <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+            Campos personalizados
+          </Label>
+        </div>
+        <LeadCustomFields leadId={leadId} />
+      </div>
 
       {/* Ações */}
       <div className="flex gap-2 pt-2">
