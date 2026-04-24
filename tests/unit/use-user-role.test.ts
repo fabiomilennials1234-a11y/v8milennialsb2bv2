@@ -6,7 +6,7 @@ import { createElement, type ReactNode } from 'react';
 // ─── Shared mock state ──────────────────────────────────
 const mockUser = { id: 'user-1', email: 'test@example.com' };
 const mockSession = { access_token: 'jwt-token-abc' };
-let mockTeamMember: { id?: string; role?: string } | null = null;
+let mockTeamMember: { id?: string; role?: string; organization_id?: string } | null = null;
 let mockIsMaster = false;
 
 // ─── Mock Supabase client ───────────────────────────────
@@ -116,7 +116,7 @@ describe('useUserRole hooks', () => {
 
   // ── 1. useUserRole returns role from currentTeamMember.role (primary source)
   it('useUserRole returns role from currentTeamMember.role (primary source)', async () => {
-    mockTeamMember = { id: 'tm-1', role: 'admin' };
+    mockTeamMember = { id: 'tm-1', role: 'admin', organization_id: 'org-1' };
 
     const { result } = renderHook(() => useUserRole(), { wrapper: createWrapper() });
 
@@ -128,7 +128,7 @@ describe('useUserRole hooks', () => {
 
   // ── 2. useUserRole falls back to user_roles table when teamMember has no role
   it('useUserRole falls back to user_roles table when teamMember has no role', async () => {
-    mockTeamMember = { id: 'tm-1' }; // no role field
+    mockTeamMember = { id: 'tm-1', organization_id: 'org-1' }; // no role field
     mockMaybeSingle.mockResolvedValue({
       data: { user_id: 'user-1', role: 'member' },
       error: null,
@@ -143,7 +143,7 @@ describe('useUserRole hooks', () => {
 
   // ── 3. useIsAdmin returns true when role === "admin"
   it('useIsAdmin returns true when role === "admin"', async () => {
-    mockTeamMember = { id: 'tm-1', role: 'admin' };
+    mockTeamMember = { id: 'tm-1', role: 'admin', organization_id: 'org-1' };
 
     const { result } = renderHook(() => useIsAdmin(), { wrapper: createWrapper() });
 
@@ -153,7 +153,7 @@ describe('useUserRole hooks', () => {
 
   // ── 4. useIsAdmin returns false when role === "member"
   it('useIsAdmin returns false when role === "member"', async () => {
-    mockTeamMember = { id: 'tm-1', role: 'member' };
+    mockTeamMember = { id: 'tm-1', role: 'member', organization_id: 'org-1' };
 
     const { result } = renderHook(() => useIsAdmin(), { wrapper: createWrapper() });
 
@@ -163,7 +163,7 @@ describe('useUserRole hooks', () => {
 
   // ── 5. useFeaturePermissions calls get-member-permissions edge function with JWT
   it('useFeaturePermissions calls get-member-permissions edge function with JWT', async () => {
-    mockTeamMember = { id: 'tm-1', role: 'member' };
+    mockTeamMember = { id: 'tm-1', role: 'member', organization_id: 'org-1' };
     mockGetSession.mockResolvedValue({
       data: { session: { access_token: 'jwt-token-abc' } },
     });
@@ -196,7 +196,7 @@ describe('useUserRole hooks', () => {
 
   // ── 6. useFeaturePermissions returns {} when edge function fails
   it('useFeaturePermissions returns {} when edge function fails', async () => {
-    mockTeamMember = { id: 'tm-1', role: 'member' };
+    mockTeamMember = { id: 'tm-1', role: 'member', organization_id: 'org-1' };
     mockGetSession.mockResolvedValue({
       data: { session: { access_token: 'jwt-token-abc' } },
     });
@@ -215,7 +215,7 @@ describe('useUserRole hooks', () => {
 
   // ── 7. useFeaturePermission returns true for master regardless of feature
   it('useFeaturePermission returns true for master regardless of feature', async () => {
-    mockTeamMember = { id: 'tm-1', role: 'member' };
+    mockTeamMember = { id: 'tm-1', role: 'member', organization_id: 'org-1' };
     mockIsMaster = true;
     mockGetSession.mockResolvedValue({
       data: { session: { access_token: 'jwt-token-abc' } },
@@ -240,7 +240,7 @@ describe('useUserRole hooks', () => {
 
   // ── 8. useFeaturePermission returns true for admin regardless of feature
   it('useFeaturePermission returns true for admin regardless of feature', async () => {
-    mockTeamMember = { id: 'tm-1', role: 'admin' };
+    mockTeamMember = { id: 'tm-1', role: 'admin', organization_id: 'org-1' };
     mockGetSession.mockResolvedValue({
       data: { session: { access_token: 'jwt-token-abc' } },
     });
@@ -264,7 +264,7 @@ describe('useUserRole hooks', () => {
 
   // ── 9. useFeaturePermission returns features[key] value for regular member
   it('useFeaturePermission returns features[key] value for regular member', async () => {
-    mockTeamMember = { id: 'tm-1', role: 'member' };
+    mockTeamMember = { id: 'tm-1', role: 'member', organization_id: 'org-1' };
     mockGetSession.mockResolvedValue({
       data: { session: { access_token: 'jwt-token-abc' } },
     });
@@ -288,7 +288,7 @@ describe('useUserRole hooks', () => {
 
   // ── 10. useFeaturePermission returns false for unknown feature key
   it('useFeaturePermission returns false for unknown feature key', async () => {
-    mockTeamMember = { id: 'tm-1', role: 'member' };
+    mockTeamMember = { id: 'tm-1', role: 'member', organization_id: 'org-1' };
     mockGetSession.mockResolvedValue({
       data: { session: { access_token: 'jwt-token-abc' } },
     });
@@ -312,7 +312,7 @@ describe('useUserRole hooks', () => {
 
   // ── 11. useCanManageCopilot checks 4 copilot feature keys
   it('useCanManageCopilot checks 4 copilot feature keys', async () => {
-    mockTeamMember = { id: 'tm-1', role: 'member' };
+    mockTeamMember = { id: 'tm-1', role: 'member', organization_id: 'org-1' };
     mockGetSession.mockResolvedValue({
       data: { session: { access_token: 'jwt-token-abc' } },
     });
@@ -348,7 +348,7 @@ describe('useUserRole hooks', () => {
 
   // ── 12. useHasRole matches exact role string
   it('useHasRole matches exact role string', async () => {
-    mockTeamMember = { id: 'tm-1', role: 'member' };
+    mockTeamMember = { id: 'tm-1', role: 'member', organization_id: 'org-1' };
 
     const { result } = renderHook(() => useHasRole('member'), { wrapper: createWrapper() });
 
