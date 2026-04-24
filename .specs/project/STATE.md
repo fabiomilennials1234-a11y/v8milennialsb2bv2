@@ -25,8 +25,21 @@ Pendente: deploy em prod; enfileirar extraToolCalls em paralelo (follow-up).
 
 Lição do incidente Copilot: "fallback se algo der errado" com mensagem genérica sem telemetria torna bugs invisíveis. Regra: toda função que pode retornar fallback deve: (1) logar severity=error com contexto, (2) marcar o caller com flag `fallback_used`, (3) idealmente tentar um retry direcionado (como o forced-text turn) antes do último recurso. Mensagens genéricas silenciam o sinal e o usuário paga pela invisibilidade operacional.
 
+### D032: phone_ai_preferences as single source of truth for AI toggle (2026-04-22)
 
-## Decisions
+Resolveu incidentes REALSC (2026-04-22) — três modos de falha do toggle de IA (IA respondendo após desligada; toggle falhando silenciosamente em contato sem lead por causa de enum inválido `shadow_ai_toggle`; IA disparando em conversa iniciada pelo operador).
+
+Nova tabela `phone_ai_preferences(organization_id, normalized_phone, ai_disabled, set_by, set_at)` com PK composta, RLS (SELECT por team_members ativos; INSERT/UPDATE/DELETE bloqueados — writes só via RPC SECURITY DEFINER). 3 migrations novas (`20260916000000`, `20260916000001`, `20260916000002`). RPCs `toggle_phone_ai` + `get_phone_ai_status` + `toggle_lead_ai` ampliada + trigger `sync_lead_ai_to_preferences` defensiva. `toggle_conversation_ai` (RPC quebrada não-versionada) removida. `leads.ai_disabled` permanece como denormalização — consumidores (agent-message, evolution-webhook) não mudam.
+
+Frontend: novo `usePhoneAiStatus(phone)`, `useToggleConversationAI` reescrito com optimistic+rollback, `useToggleLeadAI` ganha optimistic em `lead_ai_status`. `getOrCreateLead` consulta preference antes de INSERT → herança automática na 1ª mensagem.
+
+32 testes novos (9 hooks, 5 lead-service, 18 equivalência de normalização). `test:unit` 2587/2588 passing. `tsc --noEmit` clean. Build OK. Security gate APPROVED. Migrations aplicadas em dev (`bcfadphgsibjzivtbjvc`); prod (`jsjsmuncfkbsbzqzqhfq`) **pendente**.
+
+Detalhes em `.specs/features/phone-ai-preferences/` e [[ADR-2026-04-22-phone-ai-preferences]].
+
+### L002: RPCs não-versionadas são anti-padrão (2026-04-22)
+
+A `toggle_conversation_ai` quebrada só foi descoberta via logs Postgres. Existia no banco de prod mas não no repositório. Pesquisa por `shadow_ai_toggle` no codebase retornou zero resultados — só via `pg_get_functiondef` foi possível diagnosticar. **Regra**: qualquer RPC/trigger/função SQL criada direto no banco deve ser capturada em migration versionada antes de merge. Revisar outros projetos para RPCs órfãs.
 
 ### D001: SDD adopted as mandatory workflow (2026-04-01)
 All work on this project must follow the Spec-Driven Development workflow (`tlc-spec-driven` skill). No exceptions. Auto-sized by scope (Small/Medium/Large/Complex).
@@ -52,6 +65,9 @@ Chat page used `h-[calc(100vh-4rem)]` — wrong (TopNav is 3.5rem, not 4rem) and
 - [ ] Address CONCERN-S3 (Critical): Audit edge functions for `verify_jwt` settings
 - [ ] Address CONCERN-T1 (Critical): Increase test coverage from 3% -- prioritize auth, payments, RLS
 - [ ] Address CONCERN-A1 (High): Decompose 30+ files over 800 lines
+- [ ] **phone_ai_preferences**: aplicar as 3 migrations em produção (`jsjsmuncfkbsbzqzqhfq`) após validação manual do fluxo em dev
+- [ ] **Copilot send-time re-check**: fechar gap temporal de 15–36s entre gerar resposta IA e enviar pelo Evolution API — re-checar `leads.ai_disabled` imediatamente antes do `fetch` em `agent-message`
+- [ ] **Auditoria de RPCs órfãs**: rodar `SELECT proname FROM pg_proc WHERE pronamespace='public'::regnamespace` em prod e conferir quais estão no repo (task surgiu ao descobrir `toggle_conversation_ai` não versionada)
 
 ### D003: S1+S3 deferred, T2+T5 prioritized (2026-04-01)
 CTO decided to defer security fixes (S1: service role key exposure, S3: verify_jwt audit) and focus first on building the testing safety net (T2: auth/permissions tests, T5: RLS policy tests). Rationale: tests prevent future regressions; fixes without tests just create new untested code.

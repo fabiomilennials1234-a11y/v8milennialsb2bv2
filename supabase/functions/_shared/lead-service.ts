@@ -187,12 +187,41 @@ export async function getOrCreateLead(
       ? `WhatsApp ${normalizedPhone.slice(-4)}`
       : `Lead ${Date.now()}`);
 
+  // 3a. Consulta preferência por telefone (phone_ai_preferences)
+  //     antes de default ai_disabled=false. Se o vendedor desligou a IA pro
+  //     contato antes do lead existir, herdamos essa escolha.
+  let inheritedAiDisabled = false;
+  let inheritedAiDisabledBy: string | null = null;
+  if (normalizedPhone) {
+    const { data: prefRow, error: prefError } = await supabase
+      .from("phone_ai_preferences")
+      .select("ai_disabled, set_by")
+      .eq("organization_id", organizationId)
+      .eq("normalized_phone", normalizedPhone)
+      .maybeSingle();
+
+    if (prefError) {
+      console.warn(
+        "[lead-service] phone_ai_preferences lookup error (continuing with default):",
+        prefError.message
+      );
+    } else if (prefRow?.ai_disabled === true) {
+      inheritedAiDisabled = true;
+      inheritedAiDisabledBy = prefRow.set_by ?? null;
+      console.log(
+        "[lead-service] Inheriting ai_disabled=true from phone_ai_preferences for",
+        normalizedPhone
+      );
+    }
+  }
+
   console.log("[lead-service] Creating new lead:", {
     name: leadName,
     phone,
     normalizedPhone,
     email: normalizedEmailValue,
     origin: origin || "whatsapp",
+    inheritedAiDisabled,
   });
 
   const insertData: Record<string, unknown> = {
@@ -203,6 +232,14 @@ export async function getOrCreateLead(
     origin: origin || "whatsapp",
     organization_id: organizationId,
   };
+
+  if (inheritedAiDisabled) {
+    insertData.ai_disabled = true;
+    insertData.ai_disabled_at = new Date().toISOString();
+    if (inheritedAiDisabledBy) {
+      insertData.ai_disabled_by = inheritedAiDisabledBy;
+    }
+  }
 
   // Only include is_shadow when explicitly true (column defaults to false)
   if (isShadow) {

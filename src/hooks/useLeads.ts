@@ -5,6 +5,7 @@ import { useRealtimeSubscription } from "./useRealtimeSubscription";
 import { useOrganization } from "./useOrganization";
 import { track } from "@/lib/analytics";
 import { useCanPerformActionAsync } from "@/lib/permissions";
+import { normalizePhone } from "@/lib/normalizePhone";
 
 export type Lead = Tables<"leads">;
 export type LeadInsert = TablesInsert<"leads">;
@@ -562,13 +563,16 @@ export function useToggleLeadAI() {
       await queryClient.cancelQueries({ queryKey: ["pipe_confirmacao"] });
       await queryClient.cancelQueries({ queryKey: ["pipe_propostas"] });
       await queryClient.cancelQueries({ queryKey: ["lead_by_phone"] });
-      
+      await queryClient.cancelQueries({ queryKey: ["lead_ai_status", leadId] });
+      await queryClient.cancelQueries({ queryKey: ["phone_ai_status"] });
+
       // Snapshot do estado anterior
       const previousLeadDetail = queryClient.getQueryData(["lead-detail", leadId]);
       const previousLeads = queryClient.getQueryData(["leads", organizationId]);
       const previousPipeWhatsapp = queryClient.getQueryData(["pipe_whatsapp"]);
       const previousPipeConfirmacao = queryClient.getQueryData(["pipe_confirmacao"]);
       const previousPipePropostas = queryClient.getQueryData(["pipe_propostas"]);
+      const previousLeadAiStatus = queryClient.getQueryData(["lead_ai_status", leadId]);
       
       // Snapshot de todas as queries lead_by_phone que podem conter esse lead
       const previousLeadByPhone: Record<string, any> = {};
@@ -630,6 +634,11 @@ export function useToggleLeadAI() {
         });
       });
       
+      // Atualização otimista do lead_ai_status (fonte de verdade da Switch no chat)
+      queryClient.setQueryData(["lead_ai_status", leadId], {
+        ai_disabled: disabled,
+      });
+
       // Retornar contexto para rollback em caso de erro
       return {
         previousLeadDetail,
@@ -638,6 +647,7 @@ export function useToggleLeadAI() {
         previousPipeConfirmacao,
         previousPipePropostas,
         previousLeadByPhone,
+        previousLeadAiStatus,
       };
     },
     onError: (err, variables, context) => {
@@ -662,6 +672,10 @@ export function useToggleLeadAI() {
         Object.entries(context.previousLeadByPhone).forEach(([key, value]) => {
           queryClient.setQueryData(JSON.parse(key), value);
         });
+      }
+      // Rollback do lead_ai_status (fonte da Switch no chat)
+      if (context?.previousLeadAiStatus !== undefined) {
+        queryClient.setQueryData(["lead_ai_status", variables.leadId], context.previousLeadAiStatus);
       }
     },
     onSuccess: (_, variables) => {
@@ -723,31 +737,134 @@ export function useToggleLeadAI() {
 }
 
 /**
+ * Read ai_disabled status by phone number (works without a lead).
+ *
+ * Priority chain:
+ *   1. phone_ai_preferences (source of truth, set by toggle_phone_ai)
+ *   2. leads.ai_disabled (fallback for legacy leads without preference)
+ *   3. default false
+ *
+ * Bypasses RLS via SECURITY DEFINER RPC (get_phone_ai_status) so the
+ * hook returns the real state regardless of whether the user has SELECT
+ * on a specific lead.
+ */
+export function usePhoneAiStatus(phone: string | undefined | null) {
+  const { organizationId } = useOrganization();
+  const normalized = normalizePhone(phone ?? null);
+
+  return useQuery({
+    queryKey: ["phone_ai_status", organizationId, normalized],
+    queryFn: async () => {
+      if (!phone) return { ai_disabled: false, source: "default" as const };
+      const { data, error } = await supabase.rpc("get_phone_ai_status", {
+        p_phone: phone,
+      });
+      if (error) {
+        console.error("[usePhoneAiStatus] RPC error:", error);
+        return { ai_disabled: false, source: "error" as const };
+      }
+      const parsed = typeof data === "string" ? JSON.parse(data) : data;
+      return {
+        ai_disabled: parsed?.ai_disabled ?? false,
+        source: (parsed?.source as string) ?? "default",
+        normalized_phone: parsed?.normalized_phone ?? null,
+        lead_id: parsed?.lead_id ?? null,
+      };
+    },
+    enabled: !!phone && !!organizationId,
+    staleTime: 30_000,
+  });
+}
+
+/**
  * Toggle AI for a conversation by phone number.
- * If no lead exists, creates a shadow lead automatically.
- * Use this when the user wants to disable AI for a contact that has no lead card.
+ *
+ * Persists to `phone_ai_preferences` (source of truth) via `toggle_phone_ai`
+ * RPC. If leads already exist with the same normalized_phone, their
+ * `ai_disabled` is synced too. Does NOT create any shadow lead — the
+ * preference exists independently of a lead entity.
+ *
+ * When the contact later sends their first message, `getOrCreateLead`
+ * reads the preference and honors it on lead creation.
  */
 export function useToggleConversationAI() {
   const queryClient = useQueryClient();
+  const { organizationId } = useOrganization();
 
   return useMutation({
     mutationFn: async ({ phone, disabled }: { phone: string; disabled: boolean }) => {
-      const { data, error } = await supabase.rpc("toggle_conversation_ai", {
+      const { data, error } = await supabase.rpc("toggle_phone_ai", {
         p_phone: phone,
         p_disabled: disabled,
       });
-
-      if (error) throw error;
+      if (error) {
+        console.error("[useToggleConversationAI] RPC error:", error.message, error.code);
+        throw new Error(error.message || "Erro ao alterar Copilot");
+      }
       return data;
     },
-    onSuccess: (data) => {
+    onMutate: async ({ phone, disabled }) => {
+      const normalized = normalizePhone(phone);
+      const phoneKey = ["phone_ai_status", organizationId, normalized] as const;
+
+      await queryClient.cancelQueries({ queryKey: phoneKey });
+      await queryClient.cancelQueries({ queryKey: ["lead_by_phone"] });
+
+      const previousPhoneStatus = queryClient.getQueryData(phoneKey);
+
+      // Snapshot lead_ai_status of any lead that might match this phone, so
+      // the chat Switch reflects the new state immediately even when leadId
+      // is already known. We don't know the leadId here, so we snapshot the
+      // full cache shape by query key.
+      const previousLeadAiStatuses: Array<{ key: readonly unknown[]; value: unknown }> = [];
+      const queryCache = queryClient.getQueryCache();
+      queryCache.findAll({ queryKey: ["lead_ai_status"] }).forEach((q) => {
+        previousLeadAiStatuses.push({ key: q.queryKey, value: queryClient.getQueryData(q.queryKey) });
+      });
+
+      // Optimistic update on phone-keyed status
+      queryClient.setQueryData(phoneKey, {
+        ai_disabled: disabled,
+        source: "preference" as const,
+        normalized_phone: normalized,
+        lead_id: null,
+      });
+
+      return { previousPhoneStatus, previousLeadAiStatuses, phoneKey };
+    },
+    onError: (err, _vars, context) => {
+      console.error("[useToggleConversationAI] Error:", err);
+      if (context?.previousPhoneStatus !== undefined) {
+        queryClient.setQueryData(context.phoneKey, context.previousPhoneStatus);
+      }
+      if (context?.previousLeadAiStatuses) {
+        for (const snap of context.previousLeadAiStatuses) {
+          queryClient.setQueryData(snap.key, snap.value);
+        }
+      }
+    },
+    onSuccess: (data, { phone, disabled }) => {
+      const normalized = normalizePhone(phone);
+      const phoneKey = ["phone_ai_status", organizationId, normalized] as const;
+
+      // Reaffirm optimistic value with server-confirmed data
+      const leadId = data && typeof data === "object" && "lead_id" in data ? (data as { lead_id: string | null }).lead_id : null;
+      queryClient.setQueryData(phoneKey, {
+        ai_disabled: disabled,
+        source: "preference" as const,
+        normalized_phone: normalized,
+        lead_id: leadId,
+      });
+
+      // If the RPC touched leads (duplicates), sync their lead_ai_status caches
+      if (leadId) {
+        queryClient.setQueryData(["lead_ai_status", leadId], { ai_disabled: disabled });
+      }
+
       queryClient.invalidateQueries({ queryKey: ["lead_by_phone"], refetchType: "active" });
       queryClient.invalidateQueries({ queryKey: ["leads"], refetchType: "active" });
       queryClient.invalidateQueries({ queryKey: ["pipe_whatsapp"], refetchType: "active" });
       queryClient.invalidateQueries({ queryKey: ["waiting-human-leads"], refetchType: "active" });
-      if (data && typeof data === "object" && "id" in data) {
-        queryClient.invalidateQueries({ queryKey: ["lead-detail", (data as any).id] });
-      }
     },
   });
 }
