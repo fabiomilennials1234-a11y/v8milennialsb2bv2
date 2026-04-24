@@ -135,11 +135,17 @@ interface FeaturePermissionsResponse {
 export function useFeaturePermissions() {
   const { user } = useAuth();
   const { data: currentTeamMember } = useCurrentTeamMember();
+  const { isMaster } = useMasterAuth();
   const organizationId = currentTeamMember?.organization_id ?? null;
 
   return useQuery({
-    queryKey: ["feature-permissions", user?.id, organizationId],
+    queryKey: ["feature-permissions", user?.id, organizationId, isMaster],
     queryFn: async (): Promise<Record<string, boolean>> => {
+      // Master bypassa permission checks via useFeaturePermission.allowed.
+      // Não precisa chamar edge function — evita 500 quando shadow user
+      // está em org sem team_member real. Incidente 2026-04-24.
+      if (isMaster) return {};
+
       if (!user?.id) throw new Error("feature-permissions: usuário ausente");
       if (!organizationId) throw new Error("feature-permissions: organization_id ausente");
 

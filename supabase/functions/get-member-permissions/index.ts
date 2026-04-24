@@ -34,17 +34,28 @@ serve(async (req) => {
 
     if (featErr) throw featErr;
 
-    // Buscar overrides do membro
-    const { data: overrides, error: ovErr } = await supabase
-      .from("member_feature_permissions")
-      .select("feature_key, enabled")
-      .eq("team_member_id", auth.teamMemberId);
+    // Buscar overrides do membro. Master sem team_member real na org (shadow
+    // user no switcher) tem teamMemberId="" — skip a query pra evitar
+    // PostgreSQL 22P02 "invalid input syntax for type uuid: ''".
+    // Incidente 2026-04-24: master trocando pra org sem TM quebrava edge
+    // function e travava loader no SubscriptionProtectedRoute.
+    const isValidTeamMemberId =
+      typeof auth.teamMemberId === "string" &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(auth.teamMemberId);
 
-    if (ovErr) throw ovErr;
+    let overrideMap = new Map<string, boolean>();
+    if (isValidTeamMemberId) {
+      const { data: overrides, error: ovErr } = await supabase
+        .from("member_feature_permissions")
+        .select("feature_key, enabled")
+        .eq("team_member_id", auth.teamMemberId);
 
-    const overrideMap = new Map(
-      (overrides || []).map((o: { feature_key: string; enabled: boolean }) => [o.feature_key, o.enabled]),
-    );
+      if (ovErr) throw ovErr;
+
+      overrideMap = new Map(
+        (overrides || []).map((o: { feature_key: string; enabled: boolean }) => [o.feature_key, o.enabled]),
+      );
+    }
 
     // Montar resultado
     const result: Record<string, boolean> = {};

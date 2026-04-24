@@ -58,7 +58,15 @@ export function SubscriptionProtectedRoute({
     }
   }, [user, authLoading, isMaster, masterLoading]);
 
-  if (authLoading || loading || roleLoading || masterLoading || copilotLoading) {
+  // Loading gate. Não espera copilotLoading nem roleLoading quando master
+  // (master bypassa subscription check — esperar por feature perms cria
+  // loader eterno se a query falha trocando para org sem team_member real).
+  // Incidente 2026-04-24.
+  const effectiveLoading = isMaster
+    ? authLoading || masterLoading || loading
+    : authLoading || loading || roleLoading || masterLoading || copilotLoading;
+
+  if (effectiveLoading) {
     return <TorqueLoader variant="full" />;
   }
 
