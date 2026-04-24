@@ -5,7 +5,7 @@ tags:
   - torque-crm
   - vendas
 created: 2026-04-12
-last_updated: 2026-04-12
+last_updated: 2026-04-24
 status: active
 ---
 
@@ -62,7 +62,14 @@ Funis customizados por org com kanban, stages configuraveis, e auto-routing para
 
 - `custom_pipelines` — name, slug, icon, color, lifecycle_type, status, team_goal, individual_goal, organization_id
 - `custom_pipeline_stages` — stage_key, color, is_final_positive, is_final_negative, target_pipeline (routing), position
-- `custom_pipe_entries` — lead_id, stage_id, assigned_to, stage_changed_at
+- `custom_pipe_entries` — lead_id, stage_id, assigned_to (FK → `team_members.id`), stage_changed_at
+
+### Import de leads (CSV/XLSX)
+
+- UI: `ImportCustomPipelineContent.tsx` → hook `useImportLeads.importLeadsToCustomPipeline`
+- Backend: edge function `import-leads` → `importToCustomPipeline()`
+- Reconhecimento: colunas `Etapa` (fuzzy match por nome em `custom_pipeline_stages`) e `Vendedor` (fuzzy match em `team_members`)
+- Falhas no insert de `custom_pipe_entries` retornam erro explícito em `report.errors` (não silencia mais — ver changelog 2026-04-24)
 
 ### Fluxo de dados
 
@@ -78,6 +85,8 @@ Admin cria pipeline → define stages com routing
 ---
 
 ## Historico de mudancas
+
+- **2026-04-24** — Fix FK `custom_pipe_entries.assigned_to` (era `profiles(id)`, passou a `team_members(id)` alinhado com resto do sistema). Import de leads em custom pipelines estava falhando silenciosamente quando usuário escolhia um responsável. Edge function `import-leads` passou a capturar erros no INSERT de `custom_pipe_entries` e reportar em `report.errors`. Ver [[../../07 — Changelog/2026-04-24]].
 
 ## Links relacionados
 

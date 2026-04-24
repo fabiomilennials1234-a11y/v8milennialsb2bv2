@@ -12,7 +12,7 @@ import {
 } from "@/hooks/useImportLeads";
 import { useLeadCustomFields } from "@/hooks/useLeadCustomFields";
 import { useCanPerformAction } from "@/lib/permissions";
-import { useTeamMembers } from "@/hooks/useTeamMembers";
+import { useTeamMembers, isVirtualTeamMember } from "@/hooks/useTeamMembers";
 import { downloadLeadsImportTemplate } from "@/lib/leadsImportTemplate";
 import { toast } from "sonner";
 import {
@@ -130,7 +130,9 @@ export function ImportCustomPipelineContent({
     e.preventDefault();
   }, []);
 
-  const memberOptions = (members || []).map((m) => ({ id: m.id, name: m.name || "" }));
+  const memberOptions = (members || [])
+    .filter((m) => !isVirtualTeamMember(m.id) && m.is_active !== false)
+    .map((m) => ({ id: m.id, name: m.name || "" }));
 
   const handleImport = async () => {
     if (!file || !selectedStageId) {
@@ -499,7 +501,9 @@ export function ImportCustomPipelineContent({
           )}
 
           <p className="text-sm text-center text-muted-foreground">
-            Os leads já estão em {pipelineName}.
+            {lastReport && lastReport.errors.length > 0
+              ? `${result.imported} leads entraram em ${pipelineName}. Veja os erros acima.`
+              : `Os leads já estão em ${pipelineName}.`}
           </p>
           <Button className="w-full" onClick={handleClose}>
             Fechar
