@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useIsAdmin } from "./useUserRole";
 import { useCurrentTeamMember } from "./useTeamMembers";
 import { useRealtimeSubscription } from "./useRealtimeSubscription";
+import { isMissingSchemaError } from "@/lib/rpc-errors";
 
 /** Intervalo do mês em UTC — igual ao usado na importação (metrics_period_at = 1º do mês 00:00 UTC). */
 function getMonthRangeUTC(month: number, year: number) {
@@ -32,6 +33,15 @@ interface DashboardMetrics {
   taxaConversao: number;
   dailySales: Array<{ day: string; revenue: number; count: number }>;
 }
+
+const EMPTY_DASHBOARD_METRICS: DashboardMetrics = {
+  totalLeads: 0, reunioesMarcadas: 0, reunioesComparecidas: 0,
+  noShow: 0, taxaNoShow: 0, vendaTotal: 0, vendaMRR: 0,
+  vendaProjeto: 0, ticketMedio: 0, ticketMedioMRR: 0,
+  ticketMedioProjeto: 0, novosClientes: 0,
+  propostasEnviadas: 0, tempoMedioResposta: 0,
+  vendaPrimeiroPedido: 0, vendaBaseAtiva: 0, taxaConversao: 0, dailySales: [],
+};
 
 interface ConversionRate {
   id: string;
@@ -87,15 +97,12 @@ export function useDashboardMetrics(month?: number, year?: number, filterMemberI
       });
 
       if (error) {
+        if (isMissingSchemaError(error)) {
+          console.warn("⚠️ [useDashboardMetrics] RPC ausente (migration pendente?):", error.message);
+          return EMPTY_DASHBOARD_METRICS;
+        }
         console.error("❌ [useDashboardMetrics] RPC error:", error.message, error.code, error.details, error.hint);
-        return {
-          totalLeads: 0, reunioesMarcadas: 0, reunioesComparecidas: 0,
-          noShow: 0, taxaNoShow: 0, vendaTotal: 0, vendaMRR: 0,
-          vendaProjeto: 0, ticketMedio: 0, ticketMedioMRR: 0,
-          ticketMedioProjeto: 0, novosClientes: 0,
-          propostasEnviadas: 0, tempoMedioResposta: 0,
-          vendaPrimeiroPedido: 0, vendaBaseAtiva: 0, taxaConversao: 0, dailySales: [],
-        };
+        throw new Error(`Dashboard metrics failed: ${error.message}`);
       }
 
       console.log("📊 [useDashboardMetrics] RPC raw response:", data);
@@ -180,10 +187,10 @@ export function useConversionRates(month?: number, year?: number) {
 
       // Calculate sales conversion: TODOS no pipe X vendido
       const salesRates: ConversionRate[] = salesMembers.map((member) => {
-        const total = (propostasData || []).filter((p) => (p.responsible_id || p.closer_id) === member.id).length;
+        const total = (propostasData || []).filter((p) => p.responsible_id === member.id || p.closer_id === member.id).length;
         const vendidas = (propostasData || []).filter(
-          (p) => (p.responsible_id || p.closer_id) === member.id && p.status === "vendido"
-        ).length || 0;
+          (p) => (p.responsible_id === member.id || p.closer_id === member.id) && p.status === "vendido"
+        ).length;
         return {
           id: member.id,
           name: member.name,
@@ -229,8 +236,12 @@ export function useFunnelData(month?: number, year?: number) {
       });
 
       if (error) {
+        if (isMissingSchemaError(error)) {
+          console.warn("⚠️ [useFunnelData] RPC ausente (migration pendente?):", error.message);
+          return empty;
+        }
         console.error("[useFunnelData] RPC error:", error);
-        return empty;
+        throw new Error(`Funnel data failed: ${error.message}`);
       }
 
       // Supabase RPC pode retornar JSONB como array — desembrulhar
@@ -273,8 +284,12 @@ export function useRankingData(month?: number, year?: number) {
       });
 
       if (error) {
+        if (isMissingSchemaError(error)) {
+          console.warn("⚠️ [useRankingData] RPC ausente (migration pendente?):", error.message);
+          return { salesRanking: [], meetingsRanking: [] };
+        }
         console.error("[useRankingData] RPC error:", error);
-        return { salesRanking: [], meetingsRanking: [] };
+        throw new Error(`Ranking data failed: ${error.message}`);
       }
 
       const raw = Array.isArray(data) && data.length > 0 ? data[0] : data;

@@ -555,6 +555,43 @@ describe("handleSendWhatsApp — deep", () => {
     });
     expect(result.success).toBe(true);
   });
+
+  it("records whatsapp_messages with Evolution message_id + sent_by_ai=true (no duplicate with webhook echo)", async () => {
+    setupEvolutionEnv();
+    const { sb, mockTable, getInserted, getUpsertOpts } = createMockSupabase();
+    mockTable("leads", [LEAD_WITH_PHONE]);
+    mockTable("whatsapp_instances", [WA_INSTANCE]);
+    mockTable("whatsapp_messages", []);
+    mockTable("lead_history", []);
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ key: { id: "evolution-real-id-42" } }),
+      text: () => Promise.resolve(""),
+    });
+
+    await executeWorkflowAction({
+      supabase: sb, organizationId: "org-1", leadId: "lead-1",
+      nodeData: { actionType: "send_whatsapp", messageTemplate: "Oi!" },
+      executionContext: {},
+    });
+
+    const inserted = getInserted("whatsapp_messages");
+    expect(inserted.length).toBe(1);
+    const row = inserted[0] as Record<string, unknown>;
+    expect(row.message_id).toBe("evolution-real-id-42");
+    expect(row.sent_by_ai).toBe(true);
+    expect(row.direction).toBe("outgoing");
+
+    // Idempotency contract: must upsert on (message_id, instance_id) so the
+    // Evolution send.message echo cannot duplicate the row.
+    const opts = getUpsertOpts("whatsapp_messages") as Array<{
+      onConflict?: string;
+      ignoreDuplicates?: boolean;
+    }>;
+    expect(opts.length).toBe(1);
+    expect(opts[0]?.onConflict).toBe("message_id,instance_id");
+    expect(opts[0]?.ignoreDuplicates).toBe(false);
+  });
 });
 
 describe("handleSendWhatsAppAudio — deep", () => {

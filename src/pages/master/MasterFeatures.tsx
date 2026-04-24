@@ -168,7 +168,7 @@ export default function MasterFeatures() {
       branding: "bg-yellow-500",
     };
     return (
-      <Badge className={colors[category] || "bg-gray-500"}>
+      <Badge className={colors[category] || "bg-muted text-muted-foreground"}>
         {category}
       </Badge>
     );
@@ -252,7 +252,7 @@ export default function MasterFeatures() {
                     <TableCell>{getCategoryBadge(feature.category)}</TableCell>
                     <TableCell>
                       {feature.default_enabled ? (
-                        <Badge className="bg-green-500">Ativo</Badge>
+                        <Badge className="bg-success text-success-foreground">Ativo</Badge>
                       ) : (
                         <Badge variant="secondary">Inativo</Badge>
                       )}

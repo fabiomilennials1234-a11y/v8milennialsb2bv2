@@ -5,7 +5,7 @@ tags:
   - torque-crm
   - comunicacao
 created: 2026-04-12
-last_updated: 2026-04-12
+last_updated: 2026-04-23
 status: active
 ---
 
@@ -38,6 +38,29 @@ Interface unificada de chat multi-canal (WhatsApp via Evolution API, Messenger e
 - Audio cross-browser precisa conversao OGG/WebM → MP3 (ver docs/AUDIO_CONVERSION_WEBHOOK.md)
 - CORS de audio no Supabase Storage precisa config separada (ver docs/STORAGE_CORS.md)
 - onUpdate do realtime recebe apenas campos alterados, nao row completo com joins
+
+## Invariante — Idempotência `whatsapp_messages` (2026-04-20)
+
+**Toda** escrita em `whatsapp_messages` em `supabase/functions/**` usa `upsert` com `onConflict: "message_id,instance_id"`. Zero `.insert()` brutos. UNIQUE `(message_id, instance_id)` existe desde `20260127000000_add_whatsapp_messages.sql:37`.
+
+Por que: outbound-sender / workflow-action-handler / dispatchers gravam a linha ANTES do echo do Evolution chegar (com o mesmo `key.id`). Sem upsert idempotente, o echo criava duplicata ou precisava ser silenciado via `msgError.message.includes("duplicate")` (frágil, mascarava falhas reais).
+
+**Política de `ignoreDuplicates`**:
+
+| Contexto | Valor | Razão |
+|---|---|---|
+| Webhook echo handler (`evolution-webhook`, `sz-chat-webhook`) | `true` | Outbound/dispatcher é fonte de verdade para `content` humanizado + `sent_by_ai`. Echo não deve sobrescrever. |
+| Dispatcher/sender (`outbound-sender`, `workflow-action-handler`, `followup-sender`, `ai-action-executor`, `campaign-rule-dispatch`, `pipe-rule-dispatch`, `process-scheduled-user-messages`) | `false` | Dispatcher escreve o state final — se alguma linha pré-existir, sobrescreve com o dado autoritativo. |
+| **Exceção única**: `evolution-webhook` `send.message` handler (`SEND_MESSAGE_MEDIA_REFRESH` marker) | `false` | Precisa refrescar `media_url` com URL Storage-backed quando `MESSAGES_UPSERT` chegou antes com URL null/CDN expirada. |
+
+**Contract test em CI**: `tests/unit/whatsapp-messages-idempotency-contract.test.ts` — 5 asserts AST-grep sobre `supabase/functions/**`:
+1. Zero `.insert(` em `whatsapp_messages`.
+2. Todo `.upsert(` tem `onConflict: "message_id,instance_id"`.
+3. Webhook files = `ignoreDuplicates: true` (exceto `SEND_MESSAGE_MEDIA_REFRESH`).
+4. Dispatcher files = `ignoreDuplicates: false`.
+5. Nenhum arquivo que escreve `whatsapp_messages` swallows erro via `.includes("duplicate")`.
+
+Qualquer PR que violar cai no CI.
 
 ---
 
@@ -85,6 +108,36 @@ Webhook externo (Evolution/Meta/SZ.Chat)
 ---
 
 ## Historico de mudancas
+
+### 2026-04-23 — Onda 6.1 (Dark LOW components sweep)
+
+- 13 arquivos em `src/components/**` + `src/types/workflow.ts` normalizados para semantic tokens
+- Kanban (CreateOpportunityModal, KanbanCard, StageWorkflowsBadge): TikTok `bg-foreground`, origin fallback semantico, inactive workflow indicator
+- Campanhas (5 arquivos): inactive agent + pending batch + muted text/border + Trophy rank 2 gradient
+- Automacoes (WorkflowToolbar, EndNode): `text-muted-foreground` em end node
+- Confirmacao: TikTok tinted badge
+- Chat/ConversationNotes: `text-gray-800 dark:text-gray-200` → `text-foreground`
+- ui/sidebar-demo: 3x `bg-gray-100 dark:bg-neutral-800` → `bg-muted`
+- types/workflow: NODE_COLORS end node semantico
+
+Dark LOW components: **fechado**. Grep `gray-[0-9]+` em `src/` → 1 match restante (`WhatsAppChat.tsx` legacy, delete em Onda 3.3).
+
+Branch: `feat/chat-onda-6-1` (bifurcada de `feat/chat-onda-6-final`).
+
+### 2026-04-23 — Onda 6 final (Dark LOW pages closure)
+
+- `src/pages/Privacidade.tsx` — full dark-ification (14 ocorrencias gray-* → semantic tokens)
+- `src/pages/master/MasterFeatures.tsx` + `MasterAuditLogs.tsx` — badge fallback `bg-gray-500` → `bg-muted text-muted-foreground`
+- `src/pages/master/MasterOperations.tsx` — skipped + engine badge fallback semantico
+- `src/pages/AutomacoesExecucoes.tsx` — skipped status `text-gray-400` → `text-muted-foreground` (2 ocorrencias)
+- `src/pages/PipeWhatsapp.tsx` — TikTok badge `bg-gray-900` → `bg-foreground text-background` (brand compliant), "Outros" fallback semantico
+- `src/pages/CampanhaDetail.tsx` — manual campaign badge simplificado para semantic puro
+
+Dark LOW pages: **100% limpo** (grep `gray-[0-9]+` em `src/pages/` → 0 matches).
+
+Diferido para Onda 6.1: 13 componentes em `src/components/**` com 22 ocorrencias residuais. Ver `.specs/features/chat-onda-6/tasks.md` para lista exata.
+
+Branch: `feat/chat-onda-6-final` (nao mergeada — PR manual pelo CTO).
 
 ## Links relacionados
 

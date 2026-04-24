@@ -15,8 +15,8 @@ import { WeeklyPipelineFlow } from "../charts/WeeklyPipelineFlow";
 
 export function PipelineSection() {
   const [selectedPipeline, setSelectedPipeline] = useState<PipelineSelectorType>(null);
-  const { data, isLoading } = useAnalyticsPipesFunis(selectedPipeline);
-  const { data: overviewData } = useAnalyticsOverview();
+  const { data, isLoading, isError, error } = useAnalyticsPipesFunis(selectedPipeline);
+  const { data: overviewData, isError: overviewError } = useAnalyticsOverview();
 
   return (
     <div>
@@ -29,6 +29,13 @@ export function PipelineSection() {
       <AnalyticsErrorBoundary>
         <PipelineSelector selected={selectedPipeline} onChange={setSelectedPipeline} />
       </AnalyticsErrorBoundary>
+
+      {(isError || overviewError) && (
+        <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive mb-4">
+          <p className="font-medium">Erro ao carregar pipeline</p>
+          <p className="text-xs text-muted-foreground mt-1">{error?.message || "Verifique a conexão."}</p>
+        </div>
+      )}
 
       {isLoading ? (
         <div className="flex items-center justify-center py-16">

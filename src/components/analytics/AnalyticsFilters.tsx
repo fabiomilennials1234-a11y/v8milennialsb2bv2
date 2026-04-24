@@ -15,6 +15,7 @@ import { type DatePreset, useAnalyticsFilters } from "@/hooks/useAnalyticsFilter
 const PRESETS: { value: DatePreset; label: string }[] = [
   { value: "hoje", label: "Hoje" },
   { value: "7d", label: "7 dias" },
+  { value: "14d", label: "14 dias" },
   { value: "30d", label: "30 dias" },
   { value: "90d", label: "90 dias" },
 ];

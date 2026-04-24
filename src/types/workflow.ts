@@ -49,6 +49,8 @@ export type WorkflowActionType =
   | "send_whatsapp_audio"
   | "send_whatsapp_image"
   | "send_whatsapp_template"
+  | "send_whatsapp_menu"
+  | "send_whatsapp_pix_button"
   | "send_meta_message"
   | "send_semi_automatic"
   // Lead Management
@@ -269,6 +271,18 @@ export interface ActionNodeData {
   // Send WhatsApp (imagem)
   imageUrl?: string;
   imageCaption?: string;
+  // Send WhatsApp Menu (Uazapi-only)
+  menuType?: "button" | "list" | "poll" | "carousel";
+  menuText?: string;
+  menuFooter?: string;
+  menuChoices?: string[];
+  menuSelectableCount?: number;
+  // Send WhatsApp PIX Button (Uazapi-only)
+  pixkey?: string;
+  pixkeyType?: "cpf" | "cnpj" | "email" | "phone" | "random";
+  pixAmount?: number;
+  pixMerchantName?: string;
+  pixText?: string;
   // Send Meta
   metaChannel?: "instagram" | "facebook";
   metaMessage?: string;
@@ -589,7 +603,7 @@ export const NODE_COLORS: Record<WorkflowNodeType, { border: string; bgLight: st
   condition:      { border: "border-yellow-500",  bgLight: "bg-yellow-50",  bgDark: "dark:bg-yellow-950" },
   delay:          { border: "border-purple-500",  bgLight: "bg-purple-50",  bgDark: "dark:bg-purple-950" },
   copilot:        { border: "border-cyan-500",    bgLight: "bg-cyan-50",    bgDark: "dark:bg-cyan-950" },
-  end:            { border: "border-gray-400",    bgLight: "bg-gray-50",    bgDark: "dark:bg-gray-900" },
+  end:            { border: "border-border",      bgLight: "bg-muted",      bgDark: "dark:bg-muted" },
   wait_response:  { border: "border-orange-500",  bgLight: "bg-orange-50",  bgDark: "dark:bg-orange-950" },
   split_ab:       { border: "border-pink-500",    bgLight: "bg-pink-50",    bgDark: "dark:bg-pink-950" },
   webhook_call:   { border: "border-indigo-500",  bgLight: "bg-indigo-50",  bgDark: "dark:bg-indigo-950" },
@@ -619,6 +633,8 @@ export const ACTION_LABELS: Record<WorkflowActionType, string> = {
   send_whatsapp_audio: "Enviar WhatsApp (Áudio)",
   send_whatsapp_image: "Enviar WhatsApp (Imagem)",
   send_whatsapp_template: "Enviar Template WhatsApp",
+  send_whatsapp_menu: "Enviar Menu Interativo (Uazapi)",
+  send_whatsapp_pix_button: "Enviar Botão PIX (Uazapi)",
   send_meta_message: "Enviar Mensagem Meta",
   send_semi_automatic: "Envio Semi-Automático",
   // Lead Management
@@ -723,6 +739,8 @@ export const ACTION_CATEGORIES: ActionCategory[] = [
       "send_whatsapp_audio",
       "send_whatsapp_image",
       "send_whatsapp_template",
+      "send_whatsapp_menu",
+      "send_whatsapp_pix_button",
       "send_meta_message",
       "send_semi_automatic",
     ],

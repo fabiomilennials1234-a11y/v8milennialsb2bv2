@@ -55,7 +55,7 @@ const originLabels: Record<string, { label: string; color: string }> = {
   whatsapp: { label: "WhatsApp", color: "bg-green-500" },
   meta_ads: { label: "Meta Ads", color: "bg-purple-500" },
   instagram: { label: "Instagram", color: "bg-pink-500" },
-  tiktok: { label: "Tiktok", color: "bg-gray-900" },
+  tiktok: { label: "Tiktok", color: "bg-foreground/15" },
   google_ads: { label: "Google Ads", color: "bg-red-500" },
   site: { label: "Site", color: "bg-teal-500" },
   landing_page: { label: "Landing Page", color: "bg-sky-500" },
@@ -64,7 +64,7 @@ const originLabels: Record<string, { label: string; color: string }> = {
   evento: { label: "Evento", color: "bg-violet-500" },
   prospeccao_ativa: { label: "Prospecção Ativa", color: "bg-orange-600" },
   cal: { label: "Cal.com", color: "bg-blue-600" },
-  outro: { label: "Outros", color: "bg-gray-500" },
+  outro: { label: "Outros", color: "bg-muted-foreground/15" },
 };
 
 // Origens para filtro (enum lead_origin), em ordem de exibição

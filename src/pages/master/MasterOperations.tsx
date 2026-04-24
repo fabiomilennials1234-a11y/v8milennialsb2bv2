@@ -109,29 +109,29 @@ function OverviewTab() {
             </CardContent>
           </Card>
 
-          <Card className={cn(isHighError && "border-red-500 bg-red-500/5")}>
+          <Card className={cn(isHighError && "border-destructive bg-destructive/5")}>
             <CardContent className="pt-6">
               <div className="flex items-center gap-2 mb-1">
-                <XCircle className={cn("w-4 h-4", isHighError ? "text-red-500" : "text-muted-foreground")} />
-                <span className={cn("text-sm", isHighError ? "text-red-600 font-medium" : "text-muted-foreground")}>
+                <XCircle className={cn("w-4 h-4", isHighError ? "text-destructive" : "text-muted-foreground")} />
+                <span className={cn("text-sm", isHighError ? "text-destructive font-medium" : "text-muted-foreground")}>
                   Jobs com Erro
                 </span>
               </div>
-              <div className={cn("text-2xl font-bold", isHighError && "text-red-600")}>
+              <div className={cn("text-2xl font-bold", isHighError && "text-destructive")}>
                 {data?.jobs_error ?? 0}
               </div>
             </CardContent>
           </Card>
 
-          <Card className={cn(isHighError && "border-red-500 bg-red-500/5")}>
+          <Card className={cn(isHighError && "border-destructive bg-destructive/5")}>
             <CardContent className="pt-6">
               <div className="flex items-center gap-2 mb-1">
-                <AlertTriangle className={cn("w-4 h-4", isHighError ? "text-red-500" : "text-muted-foreground")} />
-                <span className={cn("text-sm", isHighError ? "text-red-600 font-medium" : "text-muted-foreground")}>
+                <AlertTriangle className={cn("w-4 h-4", isHighError ? "text-destructive" : "text-muted-foreground")} />
+                <span className={cn("text-sm", isHighError ? "text-destructive font-medium" : "text-muted-foreground")}>
                   Taxa de Erro
                 </span>
               </div>
-              <div className={cn("text-2xl font-bold", isHighError && "text-red-600")}>
+              <div className={cn("text-2xl font-bold", isHighError && "text-destructive")}>
                 {errorRate.toFixed(1)}%
               </div>
             </CardContent>
@@ -140,7 +140,7 @@ function OverviewTab() {
           <Card>
             <CardContent className="pt-6">
               <div className="flex items-center gap-2 mb-1">
-                <Building2 className="w-4 h-4 text-green-500" />
+                <Building2 className="w-4 h-4 text-success" />
                 <span className="text-sm text-muted-foreground">
                   Organizações Ativas
                 </span>
@@ -157,9 +157,9 @@ function OverviewTab() {
 // ─── Aba 2: Logs de Runtime ──────────────────────────────
 
 const STATUS_BADGE: Record<string, { class: string; label: string }> = {
-  success: { class: "bg-green-500/10 text-green-600 border-green-500/20", label: "success" },
-  error: { class: "bg-red-500/10 text-red-600 border-red-500/20", label: "error" },
-  skipped: { class: "bg-gray-500/10 text-gray-500 border-gray-500/20", label: "skipped" },
+  success: { class: "bg-success/10 text-success border-success/20", label: "success" },
+  error: { class: "bg-destructive/10 text-destructive border-destructive/20", label: "error" },
+  skipped: { class: "bg-muted text-muted-foreground border-border", label: "skipped" },
 };
 
 const MODULES = [
@@ -347,12 +347,12 @@ function LogRow({ log, isExpanded, onToggle }: { log: RuntimeLog; isExpanded: bo
         </TableCell>
       </TableRow>
       {isExpanded && hasDetails && (
-        <TableRow className="bg-red-500/5">
+        <TableRow className="bg-destructive/5">
           <TableCell colSpan={7} className="p-4">
             <div className="space-y-3 text-sm">
               {log.error_message && (
                 <div>
-                  <span className="font-medium text-red-600">Mensagem de erro:</span>
+                  <span className="font-medium text-destructive">Mensagem de erro:</span>
                   <pre className="mt-1 p-3 bg-background rounded border text-xs whitespace-pre-wrap break-words">
                     {log.error_message}
                   </pre>
@@ -435,12 +435,12 @@ function UsageByOrgTab() {
                   orgs.map((org) => {
                     const churn = isChurnRisk(org.ultima_atividade);
                     return (
-                      <TableRow key={org.organization_id} className={cn(churn && "bg-red-500/5")}>
+                      <TableRow key={org.organization_id} className={cn(churn && "bg-destructive/5")}>
                         <TableCell className="font-medium">
                           <div className="flex items-center gap-2">
                             {org.organization_name}
                             {churn && (
-                              <Badge className="bg-red-500/10 text-red-600 border-red-500/20 text-xs">
+                              <Badge className="bg-destructive/10 text-destructive border-destructive/20 text-xs">
                                 risco churn
                               </Badge>
                             )}
@@ -450,7 +450,7 @@ function UsageByOrgTab() {
                         <TableCell className="text-right tabular-nums">{org.cards_movidos}</TableCell>
                         <TableCell className="text-right tabular-nums">{org.mensagens_enviadas}</TableCell>
                         <TableCell className="text-right tabular-nums font-medium">{org.total_events}</TableCell>
-                        <TableCell className={cn("text-sm", churn ? "text-red-600 font-medium" : "text-muted-foreground")}>
+                        <TableCell className={cn("text-sm", churn ? "text-destructive font-medium" : "text-muted-foreground")}>
                           {formatDistanceToNow(new Date(org.ultima_atividade), { addSuffix: true, locale: ptBR })}
                         </TableCell>
                       </TableRow>
@@ -470,10 +470,10 @@ function UsageByOrgTab() {
 
 const JOB_STATUS_BADGE: Record<string, { class: string; label: string }> = {
   running: { class: "bg-blue-500/10 text-blue-600 border-blue-500/20", label: "running" },
-  success: { class: "bg-green-500/10 text-green-600 border-green-500/20", label: "success" },
+  success: { class: "bg-success/10 text-success border-success/20", label: "success" },
   failed: { class: "bg-orange-500/10 text-orange-600 border-orange-500/20", label: "failed" },
-  retrying: { class: "bg-yellow-500/10 text-yellow-700 border-yellow-500/20", label: "retrying" },
-  dead_letter: { class: "bg-red-500/10 text-red-600 border-red-500/20", label: "dead letter" },
+  retrying: { class: "bg-warning/10 text-warning border-warning/20", label: "retrying" },
+  dead_letter: { class: "bg-destructive/10 text-destructive border-destructive/20", label: "dead letter" },
 };
 
 const SOURCE_ENGINE_BADGE: Record<string, { class: string; label: string }> = {
@@ -547,20 +547,20 @@ function JobsTab() {
     <div className="space-y-6">
       {/* Dead letter banner */}
       {hasDeadLetters && (
-        <div className="flex items-center gap-3 p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
-          <Skull className="w-5 h-5 text-red-600 shrink-0" />
+        <div className="flex items-center gap-3 p-4 bg-destructive/10 border border-destructive/30 rounded-lg">
+          <Skull className="w-5 h-5 text-destructive shrink-0" />
           <div className="flex-1">
-            <span className="font-medium text-red-600">
+            <span className="font-medium text-destructive">
               {overview!.dead_letter} job{overview!.dead_letter !== 1 ? "s" : ""} em dead letter nas últimas {intervalLabel[intervalFilter] || "24h"}
             </span>
-            <span className="text-sm text-red-500 ml-2">
+            <span className="text-sm text-destructive ml-2">
               — jobs que falharam após todas as tentativas
             </span>
           </div>
           <Button
             variant="outline"
             size="sm"
-            className="border-red-500/30 text-red-600 hover:bg-red-500/10"
+            className="border-destructive/30 text-destructive hover:bg-destructive/10"
             onClick={() => { setStatusFilter("dead_letter"); setPage(0); }}
           >
             Ver dead letters
@@ -587,10 +587,10 @@ function JobsTab() {
           <Card>
             <CardContent className="pt-4 pb-3">
               <div className="flex items-center gap-1.5 mb-1">
-                <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
+                <CheckCircle2 className="w-3.5 h-3.5 text-success" />
                 <span className="text-xs text-muted-foreground">Sucesso</span>
               </div>
-              <div className="text-2xl font-bold text-green-600">{overview?.success ?? 0}</div>
+              <div className="text-2xl font-bold text-success">{overview?.success ?? 0}</div>
             </CardContent>
           </Card>
           <Card>
@@ -605,10 +605,10 @@ function JobsTab() {
           <Card>
             <CardContent className="pt-4 pb-3">
               <div className="flex items-center gap-1.5 mb-1">
-                <RotateCcw className="w-3.5 h-3.5 text-yellow-500" />
+                <RotateCcw className="w-3.5 h-3.5 text-warning" />
                 <span className="text-xs text-muted-foreground">Retrying</span>
               </div>
-              <div className="text-2xl font-bold text-yellow-600">{overview?.retrying ?? 0}</div>
+              <div className="text-2xl font-bold text-warning">{overview?.retrying ?? 0}</div>
             </CardContent>
           </Card>
           <Card>
@@ -620,13 +620,13 @@ function JobsTab() {
               <div className="text-2xl font-bold text-blue-500">{overview?.running ?? 0}</div>
             </CardContent>
           </Card>
-          <Card className={cn(hasDeadLetters && "border-red-500 bg-red-500/5")}>
+          <Card className={cn(hasDeadLetters && "border-destructive bg-destructive/5")}>
             <CardContent className="pt-4 pb-3">
               <div className="flex items-center gap-1.5 mb-1">
-                <Skull className={cn("w-3.5 h-3.5", hasDeadLetters ? "text-red-500" : "text-muted-foreground")} />
-                <span className={cn("text-xs", hasDeadLetters ? "text-red-600 font-medium" : "text-muted-foreground")}>Dead Letter</span>
+                <Skull className={cn("w-3.5 h-3.5", hasDeadLetters ? "text-destructive" : "text-muted-foreground")} />
+                <span className={cn("text-xs", hasDeadLetters ? "text-destructive font-medium" : "text-muted-foreground")}>Dead Letter</span>
               </div>
-              <div className={cn("text-2xl font-bold", hasDeadLetters && "text-red-600")}>{overview?.dead_letter ?? 0}</div>
+              <div className={cn("text-2xl font-bold", hasDeadLetters && "text-destructive")}>{overview?.dead_letter ?? 0}</div>
             </CardContent>
           </Card>
         </div>
@@ -779,7 +779,7 @@ function JobRow({
       <TableRow
         className={cn(
           hasDetails && "cursor-pointer hover:bg-accent/50",
-          isDeadLetter && "bg-red-500/5",
+          isDeadLetter && "bg-destructive/5",
         )}
         onClick={hasDetails ? onToggle : undefined}
       >
@@ -817,7 +817,7 @@ function JobRow({
             <Button
               variant="outline"
               size="sm"
-              className={cn("h-7 text-xs", isDeadLetter && "border-red-500/30 text-red-600 hover:bg-red-500/10")}
+              className={cn("h-7 text-xs", isDeadLetter && "border-destructive/30 text-destructive hover:bg-destructive/10")}
               disabled={isRetrying}
               onClick={(e) => { e.stopPropagation(); onRetry(); }}
             >
@@ -828,12 +828,12 @@ function JobRow({
         </TableCell>
       </TableRow>
       {isExpanded && hasDetails && (
-        <TableRow className={cn(isDeadLetter ? "bg-red-500/5" : "bg-accent/30")}>
+        <TableRow className={cn(isDeadLetter ? "bg-destructive/5" : "bg-accent/30")}>
           <TableCell colSpan={10} className="p-4">
             <div className="space-y-3 text-sm">
               {job.error_message && (
                 <div>
-                  <span className="font-medium text-red-600">Mensagem de erro:</span>
+                  <span className="font-medium text-destructive">Mensagem de erro:</span>
                   <pre className="mt-1 p-3 bg-background rounded border text-xs whitespace-pre-wrap break-words">
                     {job.error_message}
                   </pre>

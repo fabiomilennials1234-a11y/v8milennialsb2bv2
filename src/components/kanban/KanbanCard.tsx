@@ -47,7 +47,7 @@ const originColors: Record<string, string> = {
   whatsapp: "bg-success/10 text-success border-success/20",
   meta_ads: "bg-chart-5/10 text-chart-5 border-chart-5/20",
   instagram: "bg-pink-500/10 text-pink-600 border-pink-500/20",
-  tiktok: "bg-gray-900/10 text-gray-900 border-gray-900/20",
+  tiktok: "bg-foreground/10 text-foreground border-foreground/20",
   google_ads: "bg-red-500/10 text-red-600 border-red-500/20",
   site: "bg-teal-500/10 text-teal-600 border-teal-500/20",
   landing_page: "bg-sky-500/10 text-sky-600 border-sky-500/20",

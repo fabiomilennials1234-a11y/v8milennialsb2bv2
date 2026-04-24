@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "./useOrganization";
 import { useAnalyticsFilters } from "./useAnalyticsFilters";
+import { isMissingSchemaError } from "@/lib/rpc-errors";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -124,8 +125,12 @@ export function useAnalyticsUtms(
       );
 
       if (rpcError) {
+        if (isMissingSchemaError(rpcError)) {
+          console.warn("⚠️ [useAnalyticsUtms] RPC ausente (migration pendente?):", rpcError.message);
+          return EMPTY;
+        }
         console.error("❌ [useAnalyticsUtms] RPC error:", rpcError.message);
-        return EMPTY;
+        throw new Error(`Analytics UTMs failed: ${rpcError.message}`);
       }
 
       const rpcResult = Array.isArray(rpcData) && rpcData.length > 0

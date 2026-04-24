@@ -318,7 +318,7 @@ export default function Signup() {
           </div>
 
           {/* Card */}
-          <div className="bg-card border border-border rounded-2xl p-8 shadow-lg">
+          <div className="bg-card border border-border rounded-2xl p-8 shadow-lg dark:shadow-none dark:ring-1 dark:ring-border">
             <div className="mb-7">
               <h2
                 className="text-2xl font-black mb-1.5"

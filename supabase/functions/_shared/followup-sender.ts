@@ -1,11 +1,19 @@
+// deno-lint-ignore-file no-explicit-any
 /**
- * Envia mensagem de follow-up via Evolution API e registra execução
+ * Follow-up message sender — provider-agnostic via whatsapp-client adapter.
+ *
+ * Accepts either a pre-resolved instance_id or falls back to the first
+ * instance of the org. Preserves smart-split + humanization contract from
+ * the Evolution-era implementation.
  */
 
 import { humanizeMessage } from "./message-humanizer.ts";
 import { smartSplitMessage } from "./natural-messaging.ts";
+import {
+  resolveDispatchContext,
+  DispatchResolutionError,
+} from "./whatsapp-dispatch.ts";
 
-// deno-lint-ignore no-explicit-any
 export async function sendFollowupMessage(
   supabase: any,
   params: {
@@ -15,7 +23,8 @@ export async function sendFollowupMessage(
     phone: string;
     messageContent: string;
     instanceId: string | null;
-    instanceName: string;
+    /** @deprecated kept for telemetry logging only; provider is resolved via instanceId */
+    instanceName?: string;
   }
 ): Promise<{ success: boolean; error?: string }> {
   const {
@@ -28,55 +37,54 @@ export async function sendFollowupMessage(
     instanceName,
   } = params;
 
-  const evolutionUrl = Deno.env.get("EVOLUTION_API_URL");
-  const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
-  if (!evolutionUrl || !evolutionKey) {
-    return { success: false, error: "Evolution API not configured" };
+  let ctx;
+  try {
+    ctx = await resolveDispatchContext(supabase, {
+      organization_id: organizationId,
+      phone,
+      preferred_instance_id: instanceId,
+    });
+  } catch (e) {
+    const err = e as DispatchResolutionError;
+    return { success: false, error: err.message };
   }
 
-  let formattedPhone = String(phone).replace(/\D/g, "");
-  if (!formattedPhone.startsWith("55")) formattedPhone = "55" + formattedPhone;
+  const { provider, instance, normalizedPhone } = ctx;
 
-  // Humanizar mensagem para evitar banimento por mensagens repetitivas
   const humanizedContent = await humanizeMessage(messageContent);
+  const { chunks, delays } = await smartSplitMessage(humanizedContent, {
+    enabled: true,
+    intensity: "natural",
+  });
 
-  // Smart split: sempre ativo com intensidade "natural"
-  const { chunks, delays } = await smartSplitMessage(humanizedContent, { enabled: true, intensity: "natural" });
-
+  let firstMessageId: string | undefined;
   let allSent = true;
   for (let i = 0; i < chunks.length; i++) {
-    // Typing indicator antes de cada chunk
     try {
-      await fetch(`${evolutionUrl}/chat/sendPresence/${instanceName}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", apikey: evolutionKey },
-        body: JSON.stringify({ number: formattedPhone, delay: 500, presence: "composing" }),
-      });
-    } catch { /* best-effort */ }
+      await provider.setPresence(normalizedPhone, "composing");
+    } catch {
+      /* best-effort */
+    }
 
-    // Delay proporcional
     if (delays[i] > 0) {
       await new Promise((r) => setTimeout(r, delays[i]));
     }
 
-    const sendResponse = await fetch(
-      `${evolutionUrl}/message/sendText/${instanceName}`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          apikey: evolutionKey,
-        },
-        body: JSON.stringify({
-          number: formattedPhone,
-          text: chunks[i],
-        }),
-      }
-    );
-
-    if (!sendResponse.ok) {
-      const errText = await sendResponse.text();
-      console.error("[followup-sender] Evolution API error on chunk", i + 1, ":", errText);
+    try {
+      const res = await provider.sendText({
+        number: normalizedPhone,
+        text: chunks[i],
+        trackSource: "copilot-followup",
+        trackId: ruleId,
+      });
+      if (i === 0) firstMessageId = res.message_id;
+    } catch (err) {
+      console.error(
+        "[followup-sender] provider error on chunk",
+        i + 1,
+        ":",
+        (err as Error).message
+      );
       allSent = false;
     }
   }
@@ -85,14 +93,14 @@ export async function sendFollowupMessage(
     return { success: false, error: "Failed to send one or more chunks" };
   }
 
-  const messageId = `followup-${crypto.randomUUID()}`;
+  const messageId = firstMessageId || `followup-${crypto.randomUUID()}`;
 
-  await supabase.from("whatsapp_messages").insert({
+  await supabase.from("whatsapp_messages").upsert({
     organization_id: organizationId,
-    instance_id: instanceId,
+    instance_id: instance.id,
     message_id: messageId,
-    remote_jid: formattedPhone + "@s.whatsapp.net",
-    phone_number: formattedPhone,
+    remote_jid: normalizedPhone + "@s.whatsapp.net",
+    phone_number: normalizedPhone,
     direction: "outgoing",
     message_type: "conversation",
     content: humanizedContent,
@@ -100,36 +108,34 @@ export async function sendFollowupMessage(
     lead_id: leadId,
     timestamp: new Date().toISOString(),
     sent_by_ai: true,
-  });
+  }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
 
   await supabase.from("copilot_followup_execution_log").insert({
     lead_id: leadId,
     rule_id: ruleId,
     organization_id: organizationId,
     message_content: humanizedContent,
-    instance_name: instanceName,
+    instance_name: instanceName ?? instance.instance_name,
   });
 
-  const { data: ctx } = await supabase
+  const { data: summaryRow } = await supabase
     .from("conversation_context_summary")
     .select("followup_count")
     .eq("lead_id", leadId)
     .maybeSingle();
 
-  const newCount = (ctx?.followup_count ?? 0) + 1;
-  await supabase
-    .from("conversation_context_summary")
-    .upsert(
-      {
-        lead_id: leadId,
-        organization_id: organizationId,
-        followup_count: newCount,
-        last_followup_at: new Date().toISOString(),
-        last_message_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "lead_id" }
-    );
+  const newCount = (summaryRow?.followup_count ?? 0) + 1;
+  await supabase.from("conversation_context_summary").upsert(
+    {
+      lead_id: leadId,
+      organization_id: organizationId,
+      followup_count: newCount,
+      last_followup_at: new Date().toISOString(),
+      last_message_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "lead_id" }
+  );
 
   return { success: true };
 }

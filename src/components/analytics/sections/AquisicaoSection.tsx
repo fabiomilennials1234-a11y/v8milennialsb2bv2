@@ -25,9 +25,9 @@ export function AquisicaoSection({ month, year }: Props) {
   const [configOpen, setConfigOpen] = useState(false);
   const { isAdmin } = useIsAdmin();
 
-  const { data: overviewData } = useAnalyticsOverview();
-  const { data: financeiroData } = useAnalyticsFinanceiro();
-  const { data: comercialData } = useAnalyticsComercial();
+  const { data: overviewData, isError: overviewError } = useAnalyticsOverview();
+  const { data: financeiroData, isError: financeiroError } = useAnalyticsFinanceiro();
+  const { data: comercialData, isError: comercialError } = useAnalyticsComercial();
   const { byOrigin, summary } = useMktByOrigin(month, year);
   const { configMap } = useMktOriginConfigs(month, year);
 
@@ -49,6 +49,13 @@ export function AquisicaoSection({ month, year }: Props) {
         title="Aquisição"
         description="De onde vêm seus leads e quanto custa cada um?"
       />
+
+      {(overviewError || financeiroError || comercialError) && (
+        <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive mb-4">
+          <p className="font-medium">Erro ao carregar dados de aquisição</p>
+          <p className="text-xs text-muted-foreground mt-1">Alguns widgets podem estar indisponíveis.</p>
+        </div>
+      )}
 
       {/* Row 1: Attribution Table + Origin Ranking */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

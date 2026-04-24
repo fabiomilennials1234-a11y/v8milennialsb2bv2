@@ -83,6 +83,10 @@ Admin cria produto (ou sync TinyERP)
 
 ## Historico de mudancas
 
+### 2026-04-16 — Busca digitavel na selecao de produto em propostas
+- ProductCombobox: busca por nome e SKU ao selecionar produto em propostas
+- Produtos agora vinculados com quantidade e preco unitario em `pipe_proposta_items`
+
 ## Links relacionados
 
 - [[Pipe Propostas]]

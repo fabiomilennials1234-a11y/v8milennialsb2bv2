@@ -9,9 +9,9 @@ interface Props {
 }
 
 const BUCKET_COLORS: Record<string, { bar: string; bg: string; text: string }> = {
-  "<2min":   { bar: "bg-green-500",  bg: "bg-green-500/10",  text: "text-green-600 dark:text-green-400" },
+  "<2min":   { bar: "bg-success",    bg: "bg-success/10",    text: "text-success" },
   "2-5min":  { bar: "bg-blue-500",   bg: "bg-blue-500/10",   text: "text-blue-600 dark:text-blue-400" },
-  "5-15min": { bar: "bg-yellow-500", bg: "bg-yellow-500/10", text: "text-yellow-600 dark:text-yellow-400" },
+  "5-15min": { bar: "bg-warning",    bg: "bg-warning/10",    text: "text-warning" },
   ">15min":  { bar: "bg-destructive",bg: "bg-destructive/10",text: "text-destructive" },
 };
 

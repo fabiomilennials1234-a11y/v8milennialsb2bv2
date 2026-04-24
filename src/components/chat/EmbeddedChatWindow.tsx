@@ -41,7 +41,7 @@ import {
   AudioRecorder,
   ImagePreviewModal,
   MessagesAreaErrorBoundary,
-} from "./WhatsAppChat";
+} from "@/components/chat";
 import { ScheduleMessageModal } from "./ScheduleMessageModal";
 
 interface EmbeddedChatWindowProps {
@@ -155,6 +155,7 @@ function EmbeddedChatContent({
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const mountTimeRef = useRef<number>(Date.now());
 
   useEffect(() => { preloadLamejs(); }, []);
 
@@ -299,12 +300,12 @@ function EmbeddedChatContent({
                         <div key={safeKey}>
                           {showDateSeparator && (
                             <div className="flex justify-center py-2">
-                              <span className="text-[10px] font-medium tracking-wider uppercase text-muted-foreground/40 bg-muted/30 px-2.5 py-0.5 rounded-full">
+                              <time dateTime={validDate ? format(date, "yyyy-MM-dd") : ""} className="text-[10px] font-medium tracking-wider uppercase text-muted-foreground/40 bg-muted/30 px-2.5 py-0.5 rounded-full">
                                 {dateLabel}
-                              </span>
+                              </time>
                             </div>
                           )}
-                          <MessageBubble message={message} onImagePreview={setPreviewImageUrl} />
+                          <MessageBubble message={message} onImagePreview={setPreviewImageUrl} mountTime={mountTimeRef.current} />
                         </div>
                       );
                     });
@@ -362,7 +363,7 @@ function EmbeddedChatContent({
               onChange={(e) => setNewMessage(e.target.value)}
               onKeyDown={handleKeyDown}
               disabled={sendMessage.isPending || sendMedia.isPending}
-              className="flex-1 h-8 text-sm rounded-full border border-border/60 bg-background focus:ring-1 focus:ring-primary/30"
+              className="flex-1 h-8 text-sm rounded-full border border-border/60 bg-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
             />
             <Button variant="ghost" size="icon" className="h-8 w-8 opacity-50 hover:opacity-100 hover:text-primary" onClick={() => setScheduleModalOpen(true)} title="Agendar mensagem">
               <Clock className="w-3.5 h-3.5" />

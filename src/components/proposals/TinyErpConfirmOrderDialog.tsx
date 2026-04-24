@@ -42,7 +42,7 @@ interface TinyErpConfirmOrderDialogProps {
   onOpenChange: (open: boolean) => void;
   pipePropostaId: string;
   lead: LeadData | null;
-  items: Array<{ product_name: string; sale_value: number }>;
+  items: Array<{ product_name: string; sale_value: number; quantity?: number; unit_price?: number }>;
   totalValue: number;
   onSuccess: () => void;
 }
@@ -215,7 +215,12 @@ export function TinyErpConfirmOrderDialog({
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Resumo do pedido</p>
           {items.map((item, i) => (
             <div key={i} className="flex justify-between text-sm">
-              <span className="truncate mr-2">{item.product_name}</span>
+              <span className="truncate mr-2">
+                {item.product_name}
+                {(item.quantity ?? 1) > 1 && (
+                  <span className="text-muted-foreground ml-1">x{item.quantity}</span>
+                )}
+              </span>
               <span className="font-medium shrink-0">
                 {item.sale_value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
               </span>

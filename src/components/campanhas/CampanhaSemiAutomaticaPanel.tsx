@@ -296,13 +296,13 @@ export function CampanhaSemiAutomaticaPanel({ campanha }: CampanhaSemiAutomatica
                         "w-10 h-10 rounded-lg flex items-center justify-center",
                         batch.status === "scheduled" ? "bg-blue-100 dark:bg-blue-900/40" :
                         batch.status === "processing" ? "bg-amber-100 dark:bg-amber-900/40" :
-                        batch.status === "completed" ? "bg-green-100 dark:bg-green-900/40" : "bg-gray-100 dark:bg-muted"
+                        batch.status === "completed" ? "bg-green-100 dark:bg-green-900/40" : "bg-muted"
                       )}>
                         <Zap className={cn(
                           "w-5 h-5",
                           batch.status === "scheduled" ? "text-blue-600 dark:text-blue-400" :
                           batch.status === "processing" ? "text-amber-600 dark:text-amber-400" :
-                          batch.status === "completed" ? "text-green-600 dark:text-green-400" : "text-gray-400 dark:text-muted-foreground"
+                          batch.status === "completed" ? "text-green-600 dark:text-green-400" : "text-muted-foreground"
                         )} />
                       </div>
                       <div>
