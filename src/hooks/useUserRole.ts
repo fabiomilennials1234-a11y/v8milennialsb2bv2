@@ -125,6 +125,11 @@ interface FeaturePermissionsResponse {
  * ativo" do usuário (ordem created_at) e avalia permissões contra a org
  * errada — bloqueando ou liberando indevidamente para usuários em múltiplas
  * orgs. Ver incidente 2026-04-23-funis-access-multi-org-rls.
+ *
+ * Erros NÃO são silenciados (retornavam {}). Propagados via `isError` da
+ * query, para o PermissionProtectedRoute diferenciar falha técnica de
+ * "sem permissão" e oferecer retry em vez de Lock definitivo.
+ * Incidente 2026-04-24 — membros com tela bloqueada pós PR #87.
  */
 export function useFeaturePermissions() {
   const { user } = useAuth();
@@ -134,10 +139,11 @@ export function useFeaturePermissions() {
   return useQuery({
     queryKey: ["feature-permissions", user?.id, organizationId],
     queryFn: async (): Promise<Record<string, boolean>> => {
-      if (!user?.id || !organizationId) return {};
+      if (!user?.id) throw new Error("feature-permissions: usuário ausente");
+      if (!organizationId) throw new Error("feature-permissions: organization_id ausente");
 
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) return {};
+      if (!session?.access_token) throw new Error("feature-permissions: sessão sem token");
 
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
       const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
@@ -155,28 +161,48 @@ export function useFeaturePermissions() {
         },
       );
 
-      if (!res.ok) return {};
+      if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        throw new Error(
+          `get-member-permissions ${res.status}: ${body.slice(0, 200)}`,
+        );
+      }
 
       const data = (await res.json()) as FeaturePermissionsResponse;
       return data.features || {};
     },
     enabled: !!user?.id && !!organizationId,
     staleTime: 5 * 60 * 1000,
+    retry: 1,
   });
 }
 
 /**
  * Verifica se o membro tem permissão para uma feature específica.
  * Admin retorna sempre true.
+ *
+ * `isLoading` considera também team_member async (sem isso, organizationId
+ * null deixa a query disabled e o hook reportava isLoading=false,
+ * provocando render prematuro da tela Lock em membros).
+ * `hasError` expõe falhas técnicas (400/500/network) para diferenciar
+ * de "sem permissão" no PermissionProtectedRoute.
  */
-export function useFeaturePermission(featureKey: string): { allowed: boolean; isLoading: boolean } {
-  const { data: features, isLoading } = useFeaturePermissions();
+export function useFeaturePermission(
+  featureKey: string,
+): { allowed: boolean; isLoading: boolean; hasError: boolean } {
+  const { data: currentTeamMember, isLoading: teamMemberLoading } = useCurrentTeamMember();
+  const { data: features, isLoading: featuresLoading, isError } = useFeaturePermissions();
   const { isAdmin } = useIsAdmin();
   const { isMaster } = useMasterAuth();
 
+  // Aguarda team_member OU (team_member presente mas query ainda rodando).
+  const waitingForTeamMember = teamMemberLoading || !currentTeamMember;
+  const waitingForFeatures = !!currentTeamMember && featuresLoading;
+
   return {
     allowed: isMaster || isAdmin || features?.[featureKey] === true,
-    isLoading,
+    isLoading: waitingForTeamMember || waitingForFeatures,
+    hasError: isError,
   };
 }
 

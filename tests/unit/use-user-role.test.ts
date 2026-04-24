@@ -194,8 +194,10 @@ describe('useUserRole hooks', () => {
     fetchSpy.mockRestore();
   });
 
-  // ── 6. useFeaturePermissions returns {} when edge function fails
-  it('useFeaturePermissions returns {} when edge function fails', async () => {
+  // ── 6. useFeaturePermissions surfaces error when edge function fails
+  // (antes silenciava como {}; hotfix 2026-04-24 propaga para o
+  // PermissionProtectedRoute diferenciar falha técnica de "sem permissão")
+  it('useFeaturePermissions surfaces error when edge function fails', async () => {
     mockTeamMember = { id: 'tm-1', role: 'member', organization_id: 'org-1' };
     mockGetSession.mockResolvedValue({
       data: { session: { access_token: 'jwt-token-abc' } },
@@ -207,8 +209,12 @@ describe('useUserRole hooks', () => {
 
     const { result } = renderHook(() => useFeaturePermissions(), { wrapper: createWrapper() });
 
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data).toEqual({});
+    await waitFor(
+      () => expect(result.current.isError).toBe(true),
+      { timeout: 5000 },
+    );
+    expect(result.current.data).toBeUndefined();
+    expect(String(result.current.error)).toMatch(/get-member-permissions 500/);
 
     fetchSpy.mockRestore();
   });
