@@ -1,3 +1,6 @@
+// Invariante: receita do mês = Σ sale_value (SEM × contract_duration).
+// Regra vale para toda superfície do projeto — RPC, hooks, componentes.
+// Ref: Obsidian/…/04 — Decisões/2026-04-24-receita-mes-canonica-projeto.md
 import { useQuery } from "@tanstack/react-query";
 import { useTeamMembers, useCurrentTeamMember } from "./useTeamMembers";
 import { usePipePropostas } from "./usePipePropostas";
@@ -5,6 +8,7 @@ import { usePipeConfirmacao } from "./usePipeConfirmacao";
 import { usePipeWhatsapp } from "./usePipeWhatsapp";
 import { useTeamGoals, useIndividualGoals } from "./useGoals";
 import { useIsAdmin } from "./useUserRole";
+import { useDashboardMetrics } from "./useDashboardMetrics";
 
 export interface TVDashboardMetrics {
   // Sales goals
@@ -76,9 +80,12 @@ export function useTVDashboardData() {
   const { data: whatsapp } = usePipeWhatsapp();
   const { data: teamGoals } = useTeamGoals(currentMonth, currentYear);
   const { data: individualGoals } = useIndividualGoals(currentMonth, currentYear);
-  
+  // Fonte canônica de receita do mês: mesma RPC usada pelo card "Receita do Mês"
+  // da aba de comando (TabVisaoGeral). Garante paridade do termômetro. ADR 2026-04-24.
+  const { data: dashboardMetrics } = useDashboardMetrics(currentMonth, currentYear);
+
   return useQuery({
-    queryKey: ["tv-dashboard", currentMonth, currentYear, isAdmin, currentTeamMember?.id, propostas, confirmacoes, whatsapp, teamGoals, individualGoals],
+    queryKey: ["tv-dashboard", currentMonth, currentYear, isAdmin, currentTeamMember?.id, propostas, confirmacoes, whatsapp, teamGoals, individualGoals, dashboardMetrics],
     queryFn: () => {
       // Dashboard da central de controle: só admin vê todos; outros veem apenas seus números
       const myId = currentTeamMember?.id ?? null;
@@ -93,10 +100,11 @@ export function useTVDashboardData() {
         ? (teamMembers?.filter(m => (m as any).metric_type === "meetings" && m.is_active) || [])
         : (currentTeamMember && (currentTeamMember as any).metric_type === "meetings" ? [currentTeamMember] : []);
       
-      // Meta: admin vê meta do time (fonte canônica); não-admin vê meta individual
-      const salesGoalVendas = teamGoals?.find(g => g.type === "vendas" && !g.team_member_id);
+      // Meta: admin vê meta do time (fonte canônica); não-admin vê meta individual.
+      // Prioridade "faturamento" espelha o speedômetro da aba de comando.
       const salesGoalFaturamento = teamGoals?.find(g => g.type === "faturamento" || g.name.toLowerCase().includes("faturamento"));
-      const salesGoal = salesGoalVendas || salesGoalFaturamento;
+      const salesGoalVendas = teamGoals?.find(g => g.type === "vendas" && !g.team_member_id);
+      const salesGoal = salesGoalFaturamento || salesGoalVendas;
       const somaMetasSales =
         individualGoals?.salesGoals?.reduce((s, g) => s + (g.goal || 0), 0) ?? 0;
       const myGoal = myId && individualGoals?.salesGoals
@@ -117,44 +125,13 @@ export function useTVDashboardData() {
           p.status === "vendido";
       }) || [];
       
-      // Calculate sales values
-      // vendasMRR = soma do valor mensal recorrente (sem multiplicar pela duração)
-      // vendasRealizadas = Venda Total = Rec. × duração + Projeto (valor real contratado)
-      let vendasMRR = 0;
-      let vendasProjeto = 0;
-      let vendasRealizadas = 0;
-      for (const p of currentMonthPropostas) {
-        // contract_duration nulo/inválido → fallback de 1 mês
-        const duration = Math.max(1, Number((p as any).contract_duration) || 1);
-        const items = ((p as any).items as Array<{ sale_value: number | null; product?: { type: string } | null }> | null)
-          ?.filter(i => i != null) ?? [];
-        if (items.length > 0) {
-          for (const item of items) {
-            const val = Number(item.sale_value) || 0;
-            const t = item.product?.type;
-            if (t === "mrr") {
-              vendasMRR += val;
-              vendasRealizadas += val * duration;
-            } else if (t === "projeto") {
-              vendasProjeto += val;
-              vendasRealizadas += val;
-            } else {
-              vendasRealizadas += val;
-            }
-          }
-        } else {
-          const val = Number(p.sale_value) || 0;
-          if (p.product_type === "mrr") {
-            vendasMRR += val;
-            vendasRealizadas += val * duration;
-          } else if (p.product_type === "projeto") {
-            vendasProjeto += val;
-            vendasRealizadas += val;
-          } else {
-            vendasRealizadas += val;
-          }
-        }
-      }
+      // Receita do mês: fonte canônica = RPC get_dashboard_metrics (ADR 2026-04-24).
+      // Espelha EXATAMENTE o card "Receita do Mês" da aba de comando: mesmo filtro de
+      // período (COALESCE(metrics_period_at, closed_at)), mesmo agregado (top-level
+      // sale_value, sem iteração de items, sem × contract_duration).
+      const vendasRealizadas = dashboardMetrics?.vendaTotal ?? 0;
+      const vendasMRR = dashboardMetrics?.vendaMRR ?? 0;
+      const vendasProjeto = dashboardMetrics?.vendaProjeto ?? 0;
       
       // Where should we be (proportional to days passed)
       const progressoEsperado = dayOfMonth / lastDayOfMonth;
@@ -239,16 +216,14 @@ export function useTVDashboardData() {
         !["vendido", "perdido"].includes(p.status)
       ).slice(0, 10);
       
-      // Monthly sales — value = Venda Total (Rec. × duração; Projeto = pontual)
+      // Monthly sales — value = sale_value (sem × contract_duration). ADR 2026-04-24.
       const vendasDoMes = currentMonthPropostas.map(p => {
-        const duration = Math.max(1, Number((p as any).contract_duration) || 1);
         const baseVal = p.sale_value || 0;
-        const totalVal = p.product_type === "mrr" ? baseVal * duration : baseVal;
         return {
           id: p.id,
           leadName: p.lead?.name || "Lead",
           company: p.lead?.company || "",
-          value: totalVal,
+          value: baseVal,
           type: p.product_type,
           closerName: p.closer?.name || "",
           closedAt: p.closed_at
@@ -261,15 +236,10 @@ export function useTVDashboardData() {
       const meetingsGoalsSource = isAdmin ? (individualGoals?.meetingsGoals || []) : (myId && individualGoals?.meetingsGoals?.find(g => g.id === myId) ? [individualGoals.meetingsGoals.find(g => g.id === myId)!] : []);
 
       const salesGoals = salesGoalsSource.map(g => {
-        // Venda Total por membro = Rec. × duração + Projeto
+        // Receita do mês por membro = Σ sale_value (sem × contract_duration). ADR 2026-04-24.
         const memberSales = currentMonthPropostas
           .filter(p => (p.responsible_id || p.closer_id) === g.id)
-          .reduce((sum, p) => {
-            const duration = Math.max(1, Number((p as any).contract_duration) || 1);
-            return p.product_type === "mrr"
-              ? sum + (p.sale_value || 0) * duration
-              : sum + (p.sale_value || 0);
-          }, 0);
+          .reduce((sum, p) => sum + (p.sale_value || 0), 0);
         const currentValue = memberSales;
         const goalValue = g.goal || 0;
         const percentage = goalValue > 0 ? Math.round((currentValue / goalValue) * 100) : 0;
@@ -347,6 +317,8 @@ export function useTVDashboardData() {
         }
       } as TVDashboardMetrics;
     },
+    // Não gate em !!dashboardMetrics: se a RPC falhar (ex.: RLS/schema), melhor
+    // renderizar TV com zeros na receita do que travar em loading indefinido.
     enabled: !!teamMembers && !!propostas && !!confirmacoes && !!whatsapp && (isAdmin !== undefined),
     staleTime: 1000 * 30, // 30 segundos — dados de TV atualizam via realtime
     refetchInterval: 1000 * 60, // Fallback: refresh a cada 60s caso realtime falhe
