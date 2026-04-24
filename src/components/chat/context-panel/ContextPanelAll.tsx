@@ -1,22 +1,40 @@
 /**
  * ContextPanelAll — painel unificado single-scroll com todas as informações do lead.
  *
- * Consolida conteúdo que antes estava em 4 tabs (Info, Pipe, Tags, Histórico).
+ * Consolida conteúdo antes distribuído em 4 tabs (Info, Pipe, Tags, Histórico).
  * Usuário vê tudo de uma vez, sem precisar clicar em tabs.
+ *
+ * Seções (ordem):
+ *   1. Header — avatar + nome + empresa + score chip com tone
+ *   2. Quick meta — Origem + Responsável + E-mail
+ *   3. Tags (sempre visíveis, empty state)
+ *   4. Jornada — pipelines ativos (dot + stage)
+ *   5. Histórico recente — top 5 events
+ *   6. AI Timeline — ações do Copilot
+ *   7. Copilot toggle — ativa/desativa IA
+ *   8. Nota rápida — textarea + salvar inline
+ *   9. CTA — Abrir ficha completa
  */
+import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Building2, ExternalLink, Flame, GitBranch, History, Loader2, User } from "lucide-react";
+import { Bot, Building2, ExternalLink, Flame, GitBranch, History, Loader2, StickyNote, User } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { useLeadByPhone } from "@/hooks/useWhatsAppLeadIntegration";
 import { useLeadAllPipelines } from "@/hooks/useLeadAllPipelines";
 import { useLeadTimelineCompact } from "@/hooks/useLeadTimeline";
+import { useToggleLeadAI, useLeadAiStatus } from "@/hooks/useLeads";
 import { AITimeline } from "@/components/chat/takeover/AITimeline";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { supabase } from "@/integrations/supabase/client";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 const SOURCE_LABELS: Record<string, string> = {
   whatsapp: "WhatsApp",
@@ -51,7 +69,7 @@ const SOURCE_DOTS: Record<string, string> = {
 function getScoreTone(score: number) {
   if (score >= 80) return { label: "Quente", className: "text-[hsl(358_72%_54%)] bg-[hsl(358_72%_60%/0.10)] border-[hsl(358_72%_60%/0.3)]" };
   if (score >= 50) return { label: "Morno", className: "text-[hsl(30_96%_48%)] bg-[hsl(30_96%_58%/0.10)] border-[hsl(30_96%_58%/0.3)]" };
-  if (score > 0)   return { label: "Frio",  className: "text-[hsl(212_86%_54%)] bg-[hsl(212_86%_64%/0.10)] border-[hsl(212_86%_64%/0.3)]" };
+  if (score > 0) return { label: "Frio", className: "text-[hsl(212_86%_54%)] bg-[hsl(212_86%_64%/0.10)] border-[hsl(212_86%_64%/0.3)]" };
   return null;
 }
 
@@ -62,10 +80,16 @@ export interface ContextPanelAllProps {
 }
 
 export function ContextPanelAll({ leadId, phoneNumber, pushName }: ContextPanelAllProps) {
+  const qc = useQueryClient();
   const { data: lead, isLoading: leadLoading } = useLeadByPhone(phoneNumber ?? null);
   const activeLeadId = lead?.id ?? leadId ?? null;
   const { data: pipelines = [] } = useLeadAllPipelines(activeLeadId);
   const { data: history = [] } = useLeadTimelineCompact(activeLeadId ?? undefined);
+  const { data: aiStatus } = useLeadAiStatus(activeLeadId ?? undefined);
+  const toggleAiMutation = useToggleLeadAI();
+
+  const [noteValue, setNoteValue] = useState("");
+  const [savingNote, setSavingNote] = useState(false);
 
   if (!phoneNumber) {
     return (
@@ -97,6 +121,38 @@ export function ContextPanelAll({ leadId, phoneNumber, pushName }: ContextPanelA
     p.type === "standard" ? !!p.pipeId : !!p.entryId,
   );
   const recentEvents = (history as Array<{ id: string; title?: string; description?: string; created_at?: string; source?: string }>).slice(0, 5);
+  const aiDisabled = aiStatus?.ai_disabled ?? false;
+
+  const handleSaveNote = async () => {
+    if (!activeLeadId || !noteValue.trim()) return;
+    setSavingNote(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data: member } = user
+        ? await supabase.from("team_members").select("name").eq("user_id", user.id).maybeSingle()
+        : { data: null };
+      const userName = member?.name || user?.email?.split("@")[0] || "Usuário";
+
+      const { error } = await supabase.from("lead_history").insert({
+        lead_id: activeLeadId,
+        action: "note_added",
+        description: `${userName}: ${noteValue.trim()}`,
+        created_by: user?.id || null,
+        organization_id: lead?.organization_id || null,
+      });
+      if (error) throw error;
+
+      qc.invalidateQueries({ queryKey: ["lead-timeline", activeLeadId] });
+      qc.invalidateQueries({ queryKey: ["lead-history", activeLeadId] });
+      qc.invalidateQueries({ queryKey: ["lead-history-compact", activeLeadId] });
+      toast.success("Nota adicionada");
+      setNoteValue("");
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao salvar nota");
+    } finally {
+      setSavingNote(false);
+    }
+  };
 
   return (
     <ScrollArea className="h-full">
@@ -133,15 +189,13 @@ export function ContextPanelAll({ leadId, phoneNumber, pushName }: ContextPanelA
         {/* Sem lead vinculado */}
         {!lead && (
           <div className="px-4 py-6 text-center border-b border-border/40">
-            <p className="text-xs text-muted-foreground mb-1">
-              Nenhum lead vinculado a
-            </p>
+            <p className="text-xs text-muted-foreground mb-1">Nenhum lead vinculado a</p>
             <p className="text-sm font-medium tabular-nums">{phoneNumber}</p>
           </div>
         )}
 
-        {/* Quick meta — source + responsible */}
-        {lead && (sourceLabel || responsible?.name) && (
+        {/* Quick meta */}
+        {lead && (sourceLabel || responsible?.name || lead.email) && (
           <div className="px-4 py-3 border-b border-border/40 space-y-2.5">
             {sourceLabel && (
               <div className="flex items-center justify-between gap-2">
@@ -218,7 +272,7 @@ export function ContextPanelAll({ leadId, phoneNumber, pushName }: ContextPanelA
           </div>
         )}
 
-        {/* Pipelines / Jornada */}
+        {/* Jornada */}
         {lead && (
           <div className="px-4 py-3 border-b border-border/40">
             <p className="text-[10.5px] uppercase tracking-wider font-semibold text-muted-foreground/70 mb-2 flex items-center gap-1.5">
@@ -237,13 +291,18 @@ export function ContextPanelAll({ leadId, phoneNumber, pushName }: ContextPanelA
                       : pipeline.currentStageName;
 
                   return (
-                    <div key={key} className="flex items-center gap-2 px-2.5 py-2 rounded-md border border-border/60 bg-muted/30">
+                    <div
+                      key={key}
+                      className="flex items-center gap-2 px-2.5 py-2 rounded-md border border-border/60 bg-muted/30"
+                    >
                       <span
                         className="w-2 h-2 rounded-full shrink-0"
                         style={{ backgroundColor: color }}
                       />
                       <div className="flex flex-col min-w-0 flex-1">
-                        <span className="text-[11.5px] font-medium text-foreground truncate">{label}</span>
+                        <span className="text-[11.5px] font-medium text-foreground truncate">
+                          {label}
+                        </span>
                         {currentLabel && (
                           <span className="text-[10.5px] text-muted-foreground truncate">
                             {currentLabel}
@@ -255,12 +314,14 @@ export function ContextPanelAll({ leadId, phoneNumber, pushName }: ContextPanelA
                 })}
               </div>
             ) : (
-              <p className="text-[11.5px] text-muted-foreground/60 italic">Lead não está em nenhum funil</p>
+              <p className="text-[11.5px] text-muted-foreground/60 italic">
+                Lead não está em nenhum funil
+              </p>
             )}
           </div>
         )}
 
-        {/* Histórico recente (compacto) */}
+        {/* Histórico recente */}
         {lead && recentEvents.length > 0 && (
           <div className="px-4 py-3 border-b border-border/40">
             <p className="text-[10.5px] uppercase tracking-wider font-semibold text-muted-foreground/70 mb-2 flex items-center gap-1.5">
@@ -289,6 +350,62 @@ export function ContextPanelAll({ leadId, phoneNumber, pushName }: ContextPanelA
 
         {/* AI Timeline */}
         <AITimeline leadId={activeLeadId ?? undefined} />
+
+        {/* Copilot toggle */}
+        {lead && activeLeadId && (
+          <div className="px-4 py-3 border-b border-border/40">
+            <div className="flex items-center justify-between gap-3 rounded-md border border-border/60 bg-muted/30 px-3 py-2.5">
+              <div className="flex items-center gap-2 min-w-0">
+                <Bot className="w-4 h-4 text-primary shrink-0" />
+                <div className="flex flex-col min-w-0">
+                  <span className="text-[12px] font-semibold leading-tight">
+                    {aiDisabled ? "Copilot desativado" : "Copilot ativo"}
+                  </span>
+                  <span className="text-[10.5px] text-muted-foreground leading-tight">
+                    {aiDisabled ? "IA não responderá este lead" : "Respondendo automaticamente"}
+                  </span>
+                </div>
+              </div>
+              <Switch
+                checked={!aiDisabled}
+                onCheckedChange={(checked) =>
+                  toggleAiMutation.mutate({ leadId: activeLeadId, disabled: !checked })
+                }
+                disabled={toggleAiMutation.isPending}
+                aria-label="Ativar ou desativar Copilot"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Nota rápida */}
+        {lead && activeLeadId && (
+          <div className="px-4 py-3 border-b border-border/40">
+            <p className="text-[10.5px] uppercase tracking-wider font-semibold text-muted-foreground/70 mb-2 flex items-center gap-1.5">
+              <StickyNote className="w-3 h-3" />
+              Nota rápida
+            </p>
+            <Textarea
+              value={noteValue}
+              onChange={(e) => setNoteValue(e.target.value)}
+              placeholder="Escreva uma nota sobre o lead..."
+              rows={3}
+              className="text-[12.5px] resize-none"
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              className="w-full mt-2 h-7 text-[11.5px]"
+              disabled={!noteValue.trim() || savingNote}
+              onClick={handleSaveNote}
+            >
+              {savingNote ? (
+                <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+              ) : null}
+              Salvar nota
+            </Button>
+          </div>
+        )}
 
         {/* CTA — Abrir ficha completa */}
         {activeLeadId && (
