@@ -37,6 +37,7 @@ import { usePipePropostas, useUpdatePipeProposta, useDeletePipeProposta, PipePro
 import { usePipePropostasMetrics } from "@/hooks/usePipeMetrics";
 import { type MetricsPeriodState, getDateRange, createInitialPeriodState } from "@/lib/metrics-period";
 import { MetricsPeriodSelector } from "@/components/pipelines/MetricsPeriodSelector";
+import { GhostLeadsBanner } from "@/components/pipelines/GhostLeadsBanner";
 import { useDeleteAllLeadsInPipe, useUpdateLead } from "@/hooks/useLeads";
 import { usePipelineStages, stagesToColumns } from "@/hooks/usePipelineStages";
 import { PipeSettingsDialog } from "@/components/pipelines/PipeSettingsDialog";
@@ -401,6 +402,13 @@ export default function PipePropostas() {
       };
     });
   }, [pipeData, statusColumns, searchTerm, filterResponsible, filterProductType, filterPriority, filterCalor, filterScheduled, leadsWithSchedule, periodRange]);
+
+  // Count ghost leads — rows visíveis no pipe cujo join com leads é null.
+  // Indica divergência entre RLS do pipe e de leads (ver GhostLeadsBanner).
+  const ghostLeadsCount = useMemo(() => {
+    if (!pipeData) return 0;
+    return pipeData.filter(item => item.lead == null).length;
+  }, [pipeData]);
 
   // Calculate stats (Vendas Total / Rec. Vendida / Projetos Vendidos por item quando houver items)
   const stats = useMemo(() => {
@@ -924,6 +932,9 @@ export default function PipePropostas() {
         pipeType="propostas"
         stages={pipelineStages}
       />
+
+      {/* Ghost leads (RLS divergente entre pipe e leads) */}
+      <GhostLeadsBanner pipeType="propostas" ghostCount={ghostLeadsCount} />
 
       {/* Período das métricas */}
       <MetricsPeriodSelector state={periodState} onChange={setPeriodState} />

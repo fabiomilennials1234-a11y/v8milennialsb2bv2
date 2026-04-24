@@ -13,7 +13,10 @@ serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const auth = await requireAuth(req, { body });
+    // organization_id é obrigatório: sem ele, o fallback "primeiro
+    // team_member ativo" avalia permissões contra a org errada para
+    // usuários multi-org (incidente 2026-04-23 funis bloqueados).
+    const auth = await requireAuth(req, { body, requireOrganization: true });
 
     const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
     const supabase = createClient(
