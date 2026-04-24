@@ -7,7 +7,8 @@
  */
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { sendWhatsAppAudio } from "./audio-sender.ts";
+import { sendAudioViaProvider } from "./audio-sender.ts";
+import { getWhatsAppProvider } from "./whatsapp-client.ts";
 import { getTimeBasedVariables } from "./time-variables.ts";
 
 export interface ActionResult {
@@ -481,9 +482,8 @@ async function handleSendWhatsApp(ctx: ActionContext): Promise<ActionResult> {
     return { success: false, error: `WhatsApp send failed: ${sendResult.error}` };
   }
 
-  // Use Evolution's real message ID (returned by sendTextViaInstance) so the
-  // send.message webhook echo UPSERTs this same row instead of creating a
-  // duplicate. Preserves sent_by_ai: true.
+  // Use the provider's real message ID so the send.message webhook echo UPSERTs
+  // this same row instead of creating a duplicate. Preserves sent_by_ai: true.
   const messageId = sendResult.messageId || `wf_${crypto.randomUUID()}`;
 
   await ctx.supabase.from("whatsapp_messages").upsert({
@@ -513,7 +513,11 @@ async function handleSendWhatsAppAudio(ctx: ActionContext): Promise<ActionResult
   const audioUrl = ctx.nodeData.audioUrl as string;
   if (!audioUrl) return { success: false, error: "No audio URL configured" };
 
-  const result = await sendWhatsAppAudio(wa.instanceName, phone, audioUrl);
+  const provider = await getWhatsAppProvider(wa.instance, ctx.supabase);
+  const result = await sendAudioViaProvider(provider, phone, audioUrl, {
+    trackSource: "workflow-action-audio",
+    trackId: (ctx as unknown as { executionId?: string }).executionId,
+  });
   if (!result.success) return { success: false, error: result.error || "Audio send failed" };
 
   const messageId = result.messageId || `wf_${crypto.randomUUID()}`;

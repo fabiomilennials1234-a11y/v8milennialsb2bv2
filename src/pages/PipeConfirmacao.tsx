@@ -30,6 +30,7 @@ import { RescheduleModal } from "@/components/confirmacao/RescheduleModal";
 import { ConfirmacaoStats } from "@/components/confirmacao/ConfirmacaoStats";
 import { type MetricsPeriodState, getDateRange, createInitialPeriodState } from "@/lib/metrics-period";
 import { MetricsPeriodSelector } from "@/components/pipelines/MetricsPeriodSelector";
+import { GhostLeadsBanner } from "@/components/pipelines/GhostLeadsBanner";
 import { LeadCard, type LeadCardData } from "@/components/leads/LeadCard";
 import { LeadDetailDrawer } from "@/components/leads/LeadDetailDrawer";
 import { ConfirmacaoContext } from "@/components/leads/funnel-contexts/ConfirmacaoContext";
@@ -416,6 +417,13 @@ export default function PipeConfirmacao() {
     });
   }, [pipeData, statusColumns, searchQuery, originFilter, urgencyFilter, timeFilter, selectedStatuses, selectedResponsibleId, overdueDays, filterScheduled, leadsWithSchedule, metricsRange]);
 
+  // Count ghost leads — rows visíveis no pipe cujo join com leads é null.
+  // Indica divergência entre RLS do pipe e de leads (ver GhostLeadsBanner).
+  const ghostLeadsCount = useMemo(() => {
+    if (!pipeData) return 0;
+    return pipeData.filter(item => item.lead == null).length;
+  }, [pipeData]);
+
   const handleStatusChange = async (itemId: string, newStatus: string) => {
     const item = pipeData?.find(p => p.id === itemId);
     if (!item) return;
@@ -602,6 +610,9 @@ export default function PipeConfirmacao() {
         pipeType="confirmacao"
         stages={pipelineStages}
       />
+
+      {/* Ghost leads (RLS divergente entre pipe e leads) */}
+      <GhostLeadsBanner pipeType="confirmacao" ghostCount={ghostLeadsCount} />
 
       {/* Período das métricas */}
       <MetricsPeriodSelector state={periodState} onChange={setPeriodState} />

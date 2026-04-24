@@ -29,6 +29,7 @@ import { usePipeWhatsapp, useCreatePipeWhatsapp, useUpdatePipeWhatsapp, useDelet
 import { usePipeWhatsappMetrics } from "@/hooks/usePipeMetrics";
 import { type MetricsPeriodState, getDateRange, createInitialPeriodState } from "@/lib/metrics-period";
 import { MetricsPeriodSelector } from "@/components/pipelines/MetricsPeriodSelector";
+import { GhostLeadsBanner } from "@/components/pipelines/GhostLeadsBanner";
 import { usePipelineStages, stagesToColumns, getPipelineTypeName } from "@/hooks/usePipelineStages";
 import { PipeSettingsDialog } from "@/components/pipelines/PipeSettingsDialog";
 import { useCreatePipeProposta } from "@/hooks/usePipePropostas";
@@ -227,6 +228,15 @@ export default function PipeWhatsapp() {
     });
   }, [pipeData, pipelineStages, statusColumns, searchTerm, filterResponsible, filterOrigin, filterScheduled, leadsWithSchedule, metricsRange]);
 
+  // Count "ghost leads" — rows do pipe que o usuário enxerga mas cujo join
+  // com `leads` retornou null. Indica divergência entre RLS do pipe e de
+  // `leads` (ex.: responsible_id do pipe aponta para o usuário, mas sdr_id
+  // do lead aponta para outro — ou drift entre as duas tabelas).
+  const ghostLeadsCount = useMemo(() => {
+    if (!pipeData) return 0;
+    return pipeData.filter(item => item.lead == null).length;
+  }, [pipeData]);
+
   // Calculate stats based on FILTERED data (excludes ghost leads)
   const stats = useMemo(() => {
     if (!pipeData) return { total: 0, abordado: 0, respondeu: 0, scheduled: 0, pending: 0 };
@@ -368,6 +378,9 @@ export default function PipeWhatsapp() {
           </Button>
         </div>
       </div>
+
+      {/* Ghost leads (RLS divergente entre pipe e leads) */}
+      <GhostLeadsBanner pipeType="whatsapp" ghostCount={ghostLeadsCount} />
 
       {/* Período das métricas */}
       <MetricsPeriodSelector state={periodState} onChange={setPeriodState} />

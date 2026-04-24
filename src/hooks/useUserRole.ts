@@ -118,17 +118,23 @@ interface FeaturePermissionsResponse {
 }
 
 /**
- * Busca todas as feature permissions do membro logado.
- * Cache de 5 minutos. Admin retorna tudo true.
+ * Busca todas as feature permissions do membro logado NA ORG ATUAL.
+ *
+ * Multi-tenant: `organization_id` é enviado explicitamente no body e faz
+ * parte da queryKey. Sem isso, a edge function cai no "primeiro team_member
+ * ativo" do usuário (ordem created_at) e avalia permissões contra a org
+ * errada — bloqueando ou liberando indevidamente para usuários em múltiplas
+ * orgs. Ver incidente 2026-04-23-funis-access-multi-org-rls.
  */
 export function useFeaturePermissions() {
   const { user } = useAuth();
   const { data: currentTeamMember } = useCurrentTeamMember();
+  const organizationId = currentTeamMember?.organization_id ?? null;
 
   return useQuery({
-    queryKey: ["feature-permissions", user?.id, currentTeamMember?.id],
+    queryKey: ["feature-permissions", user?.id, organizationId],
     queryFn: async (): Promise<Record<string, boolean>> => {
-      if (!user?.id) return {};
+      if (!user?.id || !organizationId) return {};
 
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) return {};
@@ -145,7 +151,7 @@ export function useFeaturePermissions() {
             Authorization: `Bearer ${anonKey}`,
             "X-User-JWT": session.access_token,
           },
-          body: JSON.stringify({}),
+          body: JSON.stringify({ organization_id: organizationId }),
         },
       );
 
@@ -154,7 +160,7 @@ export function useFeaturePermissions() {
       const data = (await res.json()) as FeaturePermissionsResponse;
       return data.features || {};
     },
-    enabled: !!user?.id && !!currentTeamMember?.id,
+    enabled: !!user?.id && !!organizationId,
     staleTime: 5 * 60 * 1000,
   });
 }
