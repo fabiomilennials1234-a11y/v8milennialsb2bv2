@@ -184,7 +184,7 @@ describe("useSendChannelMessage", () => {
         });
       } catch {}
     });
-    expect(mockInvoke).toHaveBeenCalledWith("evolution-api-proxy", expect.any(Object));
+    expect(mockInvoke).toHaveBeenCalledWith("whatsapp-api-proxy", expect.any(Object));
   });
 
   it("sends a meta message (instagram)", async () => {

@@ -220,7 +220,7 @@ function SplitAbAnalytics({ workflowId }: SplitAbAnalyticsProps) {
                         {isBest && (
                           <Badge
                             variant="default"
-                            className="bg-green-600 text-white"
+                            className="bg-success text-success-foreground"
                           >
                             Melhor
                           </Badge>

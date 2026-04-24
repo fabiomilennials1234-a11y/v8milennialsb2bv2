@@ -40,14 +40,14 @@ function formatValue(value: number, metricType: string) {
 }
 
 function getProgressColor(progress: number) {
-  if (progress >= 100) return { bar: "bg-green-500", text: "text-green-500" };
+  if (progress >= 100) return { bar: "bg-success", text: "text-success" };
   if (progress >= 80)
     return {
       bar: "bg-gradient-to-r from-orange-500 to-amber-400",
       text: "text-orange-400",
     };
   if (progress >= 50) return { bar: "bg-blue-500", text: "text-blue-400" };
-  return { bar: "bg-red-500", text: "text-red-400" };
+  return { bar: "bg-destructive", text: "text-destructive" };
 }
 
 // ---------------------------------------------------------------------------
@@ -162,7 +162,7 @@ function RankingRow({ user, index, metricType, change }: RankingRowProps) {
       </span>
 
       {/* Progress bar */}
-      <div className="flex-1 h-1 rounded-full overflow-hidden bg-white/5">
+      <div className="flex-1 h-1 rounded-full overflow-hidden bg-muted/50">
         <motion.div
           initial={{ width: 0 }}
           animate={controls}

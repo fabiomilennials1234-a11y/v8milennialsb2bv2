@@ -47,7 +47,7 @@ const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secon
 const STEP_STATUS_CONFIG: Record<string, { label: string; color: string }> = {
   success: { label: "Sucesso", color: "text-green-600" },
   failed: { label: "Falhou", color: "text-red-600" },
-  skipped: { label: "Pulado", color: "text-gray-400" },
+  skipped: { label: "Pulado", color: "text-muted-foreground" },
 };
 
 export default function AutomacoesExecucoes() {
@@ -338,7 +338,7 @@ function StepsDialog({
                       </Badge>
                       {step.status === "success" && <CheckCircle2 className="h-4 w-4 text-green-500" />}
                       {step.status === "failed" && <XCircle className="h-4 w-4 text-red-500" />}
-                      {step.status === "skipped" && <span className="text-xs text-gray-400">pulado</span>}
+                      {step.status === "skipped" && <span className="text-xs text-muted-foreground">pulado</span>}
                     </div>
 
                     {step.error && (

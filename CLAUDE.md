@@ -64,7 +64,7 @@ Não pule o Conductor. Não pule o SDD. Não declare pronto sem atualizar Obsidi
 | Forms | React Hook Form + Zod |
 | Backend | Supabase (Postgres + Auth + Edge Functions + Realtime + Storage) |
 | AI | Google Gemini (embeddings 1536d) + pgvector (RAG) |
-| Integrações | Evolution API (WhatsApp), Meta, Google Calendar, TinyERP, Asaas, n8n, SZ.Chat, ElevenLabs |
+| Integrações | Uazapi (WhatsApp provider), Meta, Google Calendar, TinyERP, Asaas, n8n, SZ.Chat, ElevenLabs |
 | Testes | Vitest (unit/integration) + Playwright (E2E) |
 | Monitoring | Sentry |
 
@@ -227,6 +227,43 @@ Fluxo que mais gera confusão com usuários e bugs recorrentes. Ao mexer aqui, s
 - `supabase/functions/agent-message/` — Processamento de mensagem do agente
 - `supabase/functions/_shared/ai-action-executor.ts` — Executor de ações IA
 - `supabase/functions/outbound-trigger/` — Disparo outbound do agente
+
+### WhatsApp Provider (Uazapi)
+Migração completa Evolution→Uazapi feita em 7 fases + UI em 7 sprints.
+Provider-agnostic via `WhatsAppProvider` adapter.
+
+**Arquivos chave:**
+- `supabase/functions/_shared/whatsapp-client.ts` — adapter factory
+- `supabase/functions/_shared/whatsapp-providers/` — UazapiProvider + EvolutionProvider (kill-switch)
+- `supabase/functions/whatsapp-api-proxy/` — único entry point frontend (JWT+tenant+rate limit)
+- `supabase/functions/whatsapp-webhook/` — ingress com secret no path + excludeMessages:[wasSentByApi]
+- `supabase/functions/history-sync-worker/` — cron 1min processa `history_sync_jobs`
+- `supabase/functions/mass-send-{create,status,control}/` — blast server-side via `/sender/*`
+- `src/lib/whatsappApi.ts` — client helpers pro proxy
+- `src/components/chat/actions/` — react/edit/pin/delete/markRead bubble UI
+- `src/components/chat/history-sync/` — import histórico modal+cards
+- `src/components/whatsapp-migration/` — banner + RepairingWizard (30 orgs rollout)
+- `src/components/automacoes/action-configs/MenuNodeConfig.tsx` + `PixButtonNodeConfig.tsx`
+- `src/pages/campaigns/MassSend.tsx` — dashboard blasts
+- `src/pages/master/WhatsAppMigration.tsx` — admin dashboard migração
+
+**Tabelas novas**: `whatsapp_instance_secrets` (RLS deny-all), `history_sync_jobs`, `uazapi_sender_jobs`.
+
+**RPCs**: `get_uazapi_credentials` + `set_uazapi_credentials` (ambas service_role only).
+
+**Features Uazapi-only** (Evolution lança `NotSupportedError`):
+- `sendMenu` (button/list/poll/carousel)
+- `sendPixButton` (PIX dinâmico)
+- `react`/`edit`/`pin`/`deleteForAll`/`markRead`
+- `historySync`
+- `/sender/*` mass send
+
+**Kill-switch**: `organizations.whatsapp_provider_override` força provider por org (panic button durante migração).
+
+**Envs obrigatórios em prod**:
+- `UAZAPI_BASE_URL`, `UAZAPI_ADMIN_TOKEN`, `UAZAPI_WEBHOOK_SECRET` (Supabase secrets)
+- `CRON_SECRET` (já existia)
+- `EVOLUTION_API_URL`/`KEY` — mantidos até migração 100% completa, depois unset
 
 ### Permissões
 Sistema de 3 camadas que tem issues recorrentes. Ao mexer:

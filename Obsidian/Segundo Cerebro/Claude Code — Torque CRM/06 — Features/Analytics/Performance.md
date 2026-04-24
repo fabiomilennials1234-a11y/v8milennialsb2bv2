@@ -5,7 +5,7 @@ tags:
   - torque-crm
   - analytics
 created: 2026-04-12
-last_updated: 2026-04-12
+last_updated: 2026-04-20
 status: active
 ---
 
@@ -63,6 +63,10 @@ Pagina unificada com 4 tabs: Ranking (leaderboard realtime), Metas (progresso in
 ---
 
 ## Historico de mudancas
+
+### 2026-04-20 — Filtro de visibilidade de masters no ranking (front-only)
+
+`src/pages/Performance.tsx` passou a filtrar `rankingData.salesRanking` e `meetingsRanking` usando `visibleMemberIds`, um `Set` derivado de `useTeamMembers()` (view `org_visible_members`, que ja exclui masters). Defesa extra: descarta entries com `role === "master"` e ids virtuais (`master-virtual-*` via `isVirtualTeamMember`). Posicoes sao renumeradas apos o filtro para manter podio e medalhas coerentes. Competition ranking e lista de participantes no tab Gestao tambem aplicam o mesmo filtro; `participants.length` foi substituido por `visibleParticipantsCount` no header da competition e no card de gestao.
 
 ## Links relacionados
 

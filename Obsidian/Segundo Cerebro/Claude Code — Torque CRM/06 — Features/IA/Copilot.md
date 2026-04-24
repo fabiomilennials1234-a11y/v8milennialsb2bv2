@@ -149,8 +149,19 @@ Ver detalhes em [[Chat WhatsApp#Toggle de IA (ai_disabled)]] e [[ADR-2026-04-22-
 > [!warning] Gap de envio — task pendente
 > Existe uma janela de 15–36s entre o copilot **gerar** a resposta (via OpenRouter LLM em `agent-message`) e o **envio** pelo Evolution API. Durante essa janela, `ai_disabled` **não** é re-checada. Resultado: se o vendedor desliga a IA no meio dessa janela, a mensagem da IA ainda é enviada. Task separada — resolver via re-check em `agent-message` imediatamente antes do send. A task atual fechou as inconsistências de estado; essa fecha o gap temporal.
 
+## Invariantes operacionais (pós-ADR 2026-04-23)
+
+- **Toda resposta do Copilot termina em 1 de 3 estados explícitos**: texto válido / transferência humana / erro estruturado com telemetria. Fallback genérico é último recurso com `fallback_used=true` em runtime_logs.
+- **Contrato OpenAI respeitado**: assistant com tool_calls envia `content:null`, nunca string vazia.
+- **Forced-text turn**: se o loop multi-turn termina sem texto, o engine faz uma chamada extra com `tool_choice:'none'` antes de cair em fallback.
+- **Telemetria por invocação** em `runtime_logs.payload_snapshot`: `turns_used`, `tools_called`, `finish_reasons`, `forced_text_turn_used`, `fallback_used`, `truncated`.
+- **Tenant isolation em loadConversation**: filtra por `(lead_id, agent_id, organization_id)` com `.order().limit(1)` — sem risco de cross-agent bleeding.
+- **`organization_id` obrigatório** no body de `agent-message`. Modo legado de lookup cross-tenant por telefone foi removido (retorna 400).
+- **Uazapi → Copilot bridge**: `whatsapp-webhook` dispara `agent-message` fire-and-forget em cada incoming com texto. Parity com `sz-chat-webhook` e `evolution-webhook`.
+
 ## Historico de mudancas
 
+- **2026-04-23**: Fallback elimination + Uazapi→Copilot bridge + tenant isolation + telemetria. Ver [[ADR-2026-04-23-copilot-fallback-elimination]].
 - **2026-04-22**: Fonte única do ai_disabled migrada para `phone_ai_preferences`. Gap temporal de envio mapeado como débito.
 - **2026-04-13**: Documentacao atualizada — wizard deprecated, Playground e o fluxo principal. Dead code mapeado.
 - **2026-04-12**: Documentacao inicial criada.

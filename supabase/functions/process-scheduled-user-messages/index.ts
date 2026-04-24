@@ -63,32 +63,33 @@ Deno.serve(async (req) => {
       if (lockErr) { failed++; continue; }
 
       try {
-        let instanceName: string | null = null;
+        // Resolve instance — may be SZ.Chat (handled separately) or WA provider
+        let instance: any = null;
         let isSzChat = false;
 
         if (msg.whatsapp_instance_id) {
           const { data: inst } = await supabase
             .from("whatsapp_instances")
-            .select("instance_name, metadata")
+            .select("*")
             .eq("id", msg.whatsapp_instance_id)
             .single();
-          instanceName = inst?.instance_name ?? null;
+          instance = inst;
           isSzChat = inst?.metadata?.provider === "szchat";
         }
 
-        if (!instanceName) {
+        if (!instance) {
           const { data: defaultInst } = await supabase
             .from("whatsapp_instances")
-            .select("instance_name, metadata")
+            .select("*")
             .eq("organization_id", msg.organization_id)
-            .eq("status", "connected")
+            .in("status", ["connected", "open"])
             .limit(1)
             .single();
-          instanceName = defaultInst?.instance_name ?? null;
+          instance = defaultInst;
           isSzChat = defaultInst?.metadata?.provider === "szchat";
         }
 
-        if (!instanceName) {
+        if (!instance) {
           throw new Error("Nenhuma instancia WhatsApp disponivel");
         }
 
@@ -105,34 +106,45 @@ Deno.serve(async (req) => {
               },
             });
           } else {
-            await supabase.functions.invoke("evolution-api-proxy", {
-              body: {
-                endpoint: `/message/sendText/${instanceName}`,
-                method: "POST",
-                body: { number: formattedNumber, text: msg.message_content },
-              },
-            });
+            const { sendTextViaInstance } = await import(
+              "../_shared/whatsapp-dispatch.ts"
+            );
+            await sendTextViaInstance(
+              supabase,
+              instance,
+              formattedNumber,
+              msg.message_content,
+              { trackSource: "scheduled-user-message", trackId: msg.id }
+            );
           }
         }
 
         if (msg.media_url && msg.media_type) {
-          const mediaEndpoint = msg.media_type === "audio"
-            ? `/message/sendWhatsAppAudio/${instanceName}`
-            : `/message/sendMedia/${instanceName}`;
-
-          await supabase.functions.invoke("evolution-api-proxy", {
-            body: {
-              endpoint: mediaEndpoint,
-              method: "POST",
-              body: {
-                number: formattedNumber,
-                media: msg.media_url,
-                mediatype: msg.media_type,
-                fileName: msg.media_filename || undefined,
-                caption: msg.media_type !== "audio" ? msg.message_content : undefined,
+          const { sendMediaViaInstance, sendAudioViaInstance } = await import(
+            "../_shared/whatsapp-dispatch.ts"
+          );
+          if (msg.media_type === "audio") {
+            await sendAudioViaInstance(
+              supabase,
+              instance,
+              formattedNumber,
+              msg.media_url,
+              { trackSource: "scheduled-user-message", trackId: msg.id }
+            );
+          } else {
+            await sendMediaViaInstance(
+              supabase,
+              instance,
+              formattedNumber,
+              {
+                type: msg.media_type as "image" | "video" | "document",
+                file: msg.media_url,
+                filename: msg.media_filename || undefined,
+                caption: msg.message_content || undefined,
               },
-            },
-          });
+              { trackSource: "scheduled-user-message", trackId: msg.id }
+            );
+          }
         }
 
         await supabase
@@ -141,7 +153,7 @@ Deno.serve(async (req) => {
           .eq("id", msg.id);
 
         const messageId = `sched_${msg.id}_${Date.now()}`;
-        await supabase.from("whatsapp_messages").insert({
+        await supabase.from("whatsapp_messages").upsert({
           organization_id: msg.organization_id,
           instance_id: msg.whatsapp_instance_id,
           message_id: messageId,
@@ -154,7 +166,7 @@ Deno.serve(async (req) => {
           status: "sent",
           lead_id: msg.lead_id,
           timestamp: new Date().toISOString(),
-        });
+        }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
 
         const { data: member } = await supabase
           .from("team_members")

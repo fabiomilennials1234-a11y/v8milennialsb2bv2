@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "./useOrganization";
 import { useAnalyticsFilters } from "./useAnalyticsFilters";
+import { isMissingSchemaError } from "@/lib/rpc-errors";
 
 export interface CohortRetentionPoint {
   month_index: number;
@@ -114,6 +115,10 @@ export function useAnalyticsOverview() {
       );
 
       if (error) {
+        if (isMissingSchemaError(error)) {
+          console.warn("⚠️ [useAnalyticsOverview] RPC ausente (migration pendente?):", error.message);
+          return EMPTY;
+        }
         console.error("❌ [useAnalyticsOverview] RPC error:", error.message);
         throw new Error(`Analytics overview failed: ${error.message}`);
       }

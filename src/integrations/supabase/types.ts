@@ -1631,6 +1631,44 @@ export type Database = {
           },
         ]
       }
+      conversation_read_state: {
+        Row: {
+          conversation_key: string
+          created_at: string
+          id: string
+          last_read_at: string
+          organization_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          conversation_key: string
+          created_at?: string
+          id?: string
+          last_read_at?: string
+          organization_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          conversation_key?: string
+          created_at?: string
+          id?: string
+          last_read_at?: string
+          organization_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversation_read_state_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       conversation_summaries: {
         Row: {
           coaching_tips: Json | null
@@ -1710,6 +1748,10 @@ export type Database = {
       conversations: {
         Row: {
           agent_id: string
+          ai_state: Database["public"]["Enums"]["ai_takeover_state_enum"]
+          ai_state_resume_mode: string | null
+          ai_state_updated_at: string | null
+          ai_state_updated_by: string | null
           assigned_to: string | null
           context: Json | null
           created_at: string | null
@@ -1725,6 +1767,10 @@ export type Database = {
         }
         Insert: {
           agent_id: string
+          ai_state?: Database["public"]["Enums"]["ai_takeover_state_enum"]
+          ai_state_resume_mode?: string | null
+          ai_state_updated_at?: string | null
+          ai_state_updated_by?: string | null
           assigned_to?: string | null
           context?: Json | null
           created_at?: string | null
@@ -1740,6 +1786,10 @@ export type Database = {
         }
         Update: {
           agent_id?: string
+          ai_state?: Database["public"]["Enums"]["ai_takeover_state_enum"]
+          ai_state_resume_mode?: string | null
+          ai_state_updated_at?: string | null
+          ai_state_updated_by?: string | null
           assigned_to?: string | null
           context?: Json | null
           created_at?: string | null
@@ -3852,6 +3902,78 @@ export type Database = {
           },
         ]
       }
+      history_sync_jobs: {
+        Row: {
+          chat_jid: string | null
+          completed_at: string | null
+          created_at: string
+          cursor: string | null
+          error: string | null
+          id: string
+          instance_id: string
+          max_chats: number
+          max_days: number
+          max_messages_per_chat: number
+          organization_id: string
+          scope: string
+          started_at: string | null
+          status: string
+          total_fetched: number
+          updated_at: string
+        }
+        Insert: {
+          chat_jid?: string | null
+          completed_at?: string | null
+          created_at?: string
+          cursor?: string | null
+          error?: string | null
+          id?: string
+          instance_id: string
+          max_chats?: number
+          max_days?: number
+          max_messages_per_chat?: number
+          organization_id: string
+          scope?: string
+          started_at?: string | null
+          status?: string
+          total_fetched?: number
+          updated_at?: string
+        }
+        Update: {
+          chat_jid?: string | null
+          completed_at?: string | null
+          created_at?: string
+          cursor?: string | null
+          error?: string | null
+          id?: string
+          instance_id?: string
+          max_chats?: number
+          max_days?: number
+          max_messages_per_chat?: number
+          organization_id?: string
+          scope?: string
+          started_at?: string | null
+          status?: string
+          total_fetched?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "history_sync_jobs_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_instances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "history_sync_jobs_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       impersonation_sessions: {
         Row: {
           ended_at: string | null
@@ -5112,6 +5234,9 @@ export type Database = {
           subscription_status: string
           updated_at: string | null
           user_creation_key: string | null
+          whatsapp_migration_completed_at: string | null
+          whatsapp_migration_status: string
+          whatsapp_provider_override: string | null
           whatsapp_rate_limit: Json | null
         }
         Insert: {
@@ -5135,6 +5260,9 @@ export type Database = {
           subscription_status?: string
           updated_at?: string | null
           user_creation_key?: string | null
+          whatsapp_migration_completed_at?: string | null
+          whatsapp_migration_status?: string
+          whatsapp_provider_override?: string | null
           whatsapp_rate_limit?: Json | null
         }
         Update: {
@@ -5158,6 +5286,9 @@ export type Database = {
           subscription_status?: string
           updated_at?: string | null
           user_creation_key?: string | null
+          whatsapp_migration_completed_at?: string | null
+          whatsapp_migration_status?: string
+          whatsapp_provider_override?: string | null
           whatsapp_rate_limit?: Json | null
         }
         Relationships: [
@@ -7284,6 +7415,86 @@ export type Database = {
           },
         ]
       }
+      uazapi_sender_jobs: {
+        Row: {
+          campaign_id: string | null
+          created_at: string
+          failed: number
+          id: string
+          instance_id: string
+          organization_id: string
+          payload: Json
+          sent: number
+          status: string
+          total_messages: number
+          triggered_by_user_id: string | null
+          triggered_via: string
+          uazapi_sender_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          campaign_id?: string | null
+          created_at?: string
+          failed?: number
+          id?: string
+          instance_id: string
+          organization_id: string
+          payload?: Json
+          sent?: number
+          status?: string
+          total_messages?: number
+          triggered_by_user_id?: string | null
+          triggered_via?: string
+          uazapi_sender_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          campaign_id?: string | null
+          created_at?: string
+          failed?: number
+          id?: string
+          instance_id?: string
+          organization_id?: string
+          payload?: Json
+          sent?: number
+          status?: string
+          total_messages?: number
+          triggered_by_user_id?: string | null
+          triggered_via?: string
+          uazapi_sender_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "uazapi_sender_jobs_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campanhas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "uazapi_sender_jobs_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_instances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "uazapi_sender_jobs_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "uazapi_sender_jobs_triggered_by_user_id_fkey"
+            columns: ["triggered_by_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       upsell_campanhas: {
         Row: {
           client_id: string
@@ -8067,6 +8278,51 @@ export type Database = {
           },
         ]
       }
+      whatsapp_instance_secrets: {
+        Row: {
+          created_at: string
+          instance_id: string
+          organization_id: string
+          uazapi_instance_id: string | null
+          uazapi_token: string
+          updated_at: string
+          webhook_secret: string | null
+        }
+        Insert: {
+          created_at?: string
+          instance_id: string
+          organization_id: string
+          uazapi_instance_id?: string | null
+          uazapi_token: string
+          updated_at?: string
+          webhook_secret?: string | null
+        }
+        Update: {
+          created_at?: string
+          instance_id?: string
+          organization_id?: string
+          uazapi_instance_id?: string | null
+          uazapi_token?: string
+          updated_at?: string
+          webhook_secret?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_instance_secrets_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: true
+            referencedRelation: "whatsapp_instances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_instance_secrets_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       whatsapp_instances: {
         Row: {
           copilot_agent_id: string | null
@@ -8078,6 +8334,8 @@ export type Database = {
           metadata: Json | null
           organization_id: string
           phone_number: string | null
+          provider: string
+          provider_config: Json
           qr_code: string | null
           qr_code_expires_at: string | null
           status: string
@@ -8093,6 +8351,8 @@ export type Database = {
           metadata?: Json | null
           organization_id: string
           phone_number?: string | null
+          provider?: string
+          provider_config?: Json
           qr_code?: string | null
           qr_code_expires_at?: string | null
           status?: string
@@ -8108,6 +8368,8 @@ export type Database = {
           metadata?: Json | null
           organization_id?: string
           phone_number?: string | null
+          provider?: string
+          provider_config?: Json
           qr_code?: string | null
           qr_code_expires_at?: string | null
           status?: string
@@ -8135,7 +8397,9 @@ export type Database = {
           assigned_to: string | null
           content: string | null
           created_at: string | null
+          deleted_at: string | null
           direction: string
+          edited: boolean
           id: string
           instance_id: string | null
           lead_id: string | null
@@ -8144,10 +8408,13 @@ export type Database = {
           message_type: string
           organization_id: string
           phone_number: string
+          pinned_at: string | null
           processed_by_agent_at: string | null
           push_name: string | null
           raw_payload: Json | null
+          reactions: Json
           remote_jid: string
+          search_tsv: unknown
           sent_by_ai: boolean | null
           status: string | null
           timestamp: string
@@ -8156,7 +8423,9 @@ export type Database = {
           assigned_to?: string | null
           content?: string | null
           created_at?: string | null
+          deleted_at?: string | null
           direction: string
+          edited?: boolean
           id?: string
           instance_id?: string | null
           lead_id?: string | null
@@ -8165,10 +8434,13 @@ export type Database = {
           message_type?: string
           organization_id: string
           phone_number: string
+          pinned_at?: string | null
           processed_by_agent_at?: string | null
           push_name?: string | null
           raw_payload?: Json | null
+          reactions?: Json
           remote_jid: string
+          search_tsv?: unknown
           sent_by_ai?: boolean | null
           status?: string | null
           timestamp?: string
@@ -8177,7 +8449,9 @@ export type Database = {
           assigned_to?: string | null
           content?: string | null
           created_at?: string | null
+          deleted_at?: string | null
           direction?: string
+          edited?: boolean
           id?: string
           instance_id?: string | null
           lead_id?: string | null
@@ -8186,10 +8460,13 @@ export type Database = {
           message_type?: string
           organization_id?: string
           phone_number?: string
+          pinned_at?: string | null
           processed_by_agent_at?: string | null
           push_name?: string | null
           raw_payload?: Json | null
+          reactions?: Json
           remote_jid?: string
+          search_tsv?: unknown
           sent_by_ai?: boolean | null
           status?: string | null
           timestamp?: string
@@ -8820,6 +9097,15 @@ export type Database = {
         Returns: Json
       }
       get_segment_benchmark: { Args: { p_org_id: string }; Returns: Json }
+      get_uazapi_credentials: {
+        Args: { p_instance_id: string }
+        Returns: {
+          organization_id: string
+          uazapi_instance_id: string
+          uazapi_token: string
+          webhook_secret: string
+        }[]
+      }
       get_usage_by_org: {
         Args: { interval_param?: string }
         Returns: {
@@ -9027,6 +9313,35 @@ export type Database = {
         }
         Returns: boolean
       }
+      search_messages: {
+        Args: {
+          p_limit?: number
+          p_offset?: number
+          p_org_id: string
+          p_query: string
+        }
+        Returns: {
+          content: string
+          direction: string
+          headline: string
+          id: string
+          instance_id: string
+          lead_id: string
+          phone_number: string
+          rank: number
+          timestamp: string
+        }[]
+      }
+      set_uazapi_credentials: {
+        Args: {
+          p_instance_id: string
+          p_organization_id: string
+          p_uazapi_instance_id?: string
+          p_uazapi_token: string
+          p_webhook_secret?: string
+        }
+        Returns: undefined
+      }
       soft_delete_whatsapp_conversation: {
         Args: {
           p_instance_id: string
@@ -9083,6 +9398,12 @@ export type Database = {
         | "amigavel"
         | "energetico"
         | "consultivo"
+      ai_takeover_state_enum:
+        | "AI_ACTIVE"
+        | "AI_PAUSED_MANUAL"
+        | "WAITING_HUMAN"
+        | "HUMAN_ACTIVE"
+        | "HANDOFF_BACK"
       app_role:
         | "admin"
         | "sdr"
@@ -9270,6 +9591,13 @@ export const Constants = {
         "amigavel",
         "energetico",
         "consultivo",
+      ],
+      ai_takeover_state_enum: [
+        "AI_ACTIVE",
+        "AI_PAUSED_MANUAL",
+        "WAITING_HUMAN",
+        "HUMAN_ACTIVE",
+        "HANDOFF_BACK",
       ],
       app_role: [
         "admin",

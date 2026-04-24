@@ -1,8 +1,29 @@
 # Project State
 
-**Last updated:** 2026-04-22
+**Last updated:** 2026-04-23
 
 ## Decisions
+
+### D034: Copilot fallback elimination + Uazapi bridge + tenant isolation (2026-04-23)
+
+Incidente: usuário pergunta "a granel quais sabores tem?" e recebe "Desculpe, houve um problema ao processar sua mensagem." Logs prod mostram dezenas de casos `messageLength: 54` + `action: SEND_DOCUMENT`, sem `LLM call #3`.
+
+7 causas raízes confirmadas no código:
+- CR-1 agent-engine:222 fallback quando LLM retorna content:null+tool_call não-inline
+- CR-2 assistant+tool_calls persistidos com content:'' (viola OpenAI contract)
+- CR-3 tool_calls[0] — extras silenciosamente descartados
+- CR-4 finish_reason nunca consultado
+- CR-5 loadConversation ignora agent_id e organization_id
+- CR-6 whatsapp-webhook (Uazapi) NUNCA invoca agent-message — Copilot inoperante para orgs Uazapi
+- CR-7 identifyTenant busca cross-tenant sem org_id
+
+Fixes: forced-text turn após loop multi-turn; telemetry por invocação; convertMessages respeita content:null; loadConversation filtra por (lead_id, agent_id, organization_id); whatsapp-webhook dispara agent-message fire-and-forget em cada incoming; identifyTenant hard-fail sem org_id. 13 testes novos. Branch `fix-copilot-fallback`. Ver [[ADR-2026-04-23-copilot-fallback-elimination]].
+
+Pendente: deploy em prod; enfileirar extraToolCalls em paralelo (follow-up).
+
+### L003: Fallback silencioso é anti-padrão (2026-04-23)
+
+Lição do incidente Copilot: "fallback se algo der errado" com mensagem genérica sem telemetria torna bugs invisíveis. Regra: toda função que pode retornar fallback deve: (1) logar severity=error com contexto, (2) marcar o caller com flag `fallback_used`, (3) idealmente tentar um retry direcionado (como o forced-text turn) antes do último recurso. Mensagens genéricas silenciam o sinal e o usuário paga pela invisibilidade operacional.
 
 ### D032: phone_ai_preferences as single source of truth for AI toggle (2026-04-22)
 
@@ -34,6 +55,9 @@ None currently.
 
 ### L001: Sub-agents need Write permissions
 When dispatching sub-agents for brownfield mapping, they couldn't write files due to permission restrictions. The orchestrating agent must handle file writes itself after receiving research results.
+
+### L002: Never hardcode viewport math for full-height panels (2026-04-20)
+Chat page used `h-[calc(100vh-4rem)]` — wrong (TopNav is 3.5rem, not 4rem) and brittle (ignored MainLayout's `py-6 lg:py-8`). Root fix was propagating height through the flex chain in MainLayout (`h-screen` on outer, `min-h-0` on main, `min-h-full flex flex-col` on inner wrapper), then letting children use `flex-1 min-h-0` with no viewport math. Rule: if a panel needs full height, the layout chain should give it to them — hardcoded calcs are an anti-pattern. Also: flex items that contain wide content (composer, fixed-min-width children) need `min-w-0` to prevent horizontal clip when the parent has `overflow-hidden`.
 
 ## Todos
 
@@ -243,6 +267,59 @@ Fase 0 delivered:
 3. Stood up Deno test pipeline for edge functions: `supabase/functions/deno.json`, seed test `_shared/response.test.ts` (94.9 line cov), npm scripts `test:edge` + `test:edge:coverage`.
 4. Hardened CI (`.github/workflows/test.yml`): removed `continue-on-error` on coverage, bumped Node 18 → 20, added `edge-function-tests` job, coverage artifacts uploaded.
 Target roadmap: 85% lines global, 90% branches on fragile areas (permissions, copilot, webhooks), mutation testing on critical modules, contract tests on public webhooks, RLS isolation tests. Not "100% coverage" — correctness + gates, not numbers.
+
+### D032: Fix "receita do mês" / MRR contract duration inflation (2026-04-17)
+A RPC `get_dashboard_metrics` (latest: `20260911000000_fix_dashboard_conversion_rate.sql`) multiplicava `sale_value × contract_duration` para produtos MRR em `v_venda_total`, `v_venda_base_ativa` e `v_venda_primeiro_pedido`, resultando em "Faturamento do Mês" exibindo o valor TOTAL CONTRATADO ao longo do contrato (LTV-like) em vez das vendas que efetivamente entraram no mês. Ex.: MRR R$1.000 × 12 meses mostrava R$12.000 como receita do mês.
+
+**Histórico**: `20260708000004` adicionou a multiplicação intencionalmente (confundiu semântica), `20260829400000` removeu, `20260911000000` regrediu ao reescrever a RPC para fix de `taxaConversao`.
+
+**Fix**: migration `20260417100000_fix_receita_mes_mrr_contract_duration.sql` recria a RPC sem a multiplicação em `v_venda_total/base_ativa/primeiro_pedido`. `vendaMRR` e `vendaProjeto` já estavam corretos e permanecem intactos. `ticketMedio` deixa de ser inflado.
+
+**Invariante**: `vendaTotal` = Σ sale_value das vendas do período, nunca × contract_duration. Se algum consumidor precisar de "valor total contratado" (LTV-like), deve ser campo separado explicitamente nomeado.
+
+**Evidência**: `tests/sql/validate_receita_mes_mrr.sql` — fixtures MRR(1000, dur=12) + Projeto(5000) → `vendaTotal=6000` (não 17000), `vendaMRR=1000`, `ticketMedio=3000`. Roda em transação com ROLLBACK.
+
+**Pendente**: aplicar migration no dev (`bcfadphgsibjzivtbjvc`) via SQL Editor, CLI bloqueada por Device Guard.
+
+### L002: Duas semânticas de receita ("mês" vs "LTV contratado") são fáceis de confundir (2026-04-17)
+A multiplicação `sale_value × contract_duration` para MRR faz sentido em contextos de LTV/forecast ("valor total contratado"), mas NUNCA no card "Receita do Mês" do dashboard. Já houve 3 migrations flipando a regra (`20260708` adicionou, `20260829` removeu, `20260911` regrediu). Regra operacional: se aparecer PR que mude agregação de receita, validar explicitamente qual semântica está sendo atingida antes de aprovar. Preferir campos separados e nomeados (ex: `valorTotalContratado` vs `vendaTotal`) em vez de reusar o mesmo campo com semântica diferente.
+
+### D033: Fix pipe closer_id/sdr_id sync from leads → pipes (2026-04-17)
+Trigger `trg_sync_responsible_from_lead_to_pipes` (definido em 20260826100000) sincronizava apenas `responsible_id` de `leads` para os pipes. Quando o closer de um lead era transferido via `leads.closer_id`, o `pipe_propostas.closer_id` ficava obsoleto. A RLS SELECT de pipe_propostas lê `closer_id` do próprio pipe — resultado: closer antigo continuava vendo o card, dois closers atendiam o mesmo lead, métricas individuais ficavam infladas.
+
+**Fix**: migration `20260417110000_fix_pipe_closer_sdr_sync.sql` estende a função e o trigger para propagar `responsible_id`, `closer_id` e `sdr_id` de `leads` para todos os pipes aplicáveis. Backfill histórico corrige drift existente. Bloco de validação falha se drift > 0 após backfill.
+
+**Frontend defensivo**: `PipePropostas.tsx` e `PipeConfirmacao.tsx` aplicam `filterResponsible = teamMemberId` como default one-shot para role `member` (flag `membroDefaultApplied` persiste a decisão). Admin/Master começam com "all".
+
+**Evidência**: `tests/sql/validate_pipe_closer_sync.sql` (sync) + `tests/sql/validate_pipe_closer_rls.sql` (RLS end-to-end com impersonation via `request.jwt.claims`). Ambos rodados contra dev `bcfadphgsibjzivtbjvc` e passaram. Build ok, 2543 tests pass, zero regressões.
+
+**Invariante**: `pipe_propostas.closer_id ≡ leads.closer_id`, `pipe_confirmacao.{sdr_id, closer_id} ≡ leads.{sdr_id, closer_id}`, `pipe_whatsapp.sdr_id ≡ leads.sdr_id`. Manutenção via trigger após esta fix.
+
+**Produção (`jsjsmuncfkbsbzqzqhfq`) NÃO foi tocada** — migration pronta para aplicar quando CTO autorizar.
+
+### L003: RLS em pipes precisa espelhar leads ou usar subquery (2026-04-17)
+Se a RLS usa colunas DO PIPE (ex: `pipe_propostas.closer_id`) e o pipe não está sincronizado com `leads`, nascem vazamentos de visibilidade. Duas opções: (a) garantir sync via trigger (escolhida — menor impacto em performance), (b) fazer a RLS ler de `leads` via subquery (adiciona custo por linha). Se aparecer PR mudando `closer_id`/`sdr_id`/`responsible_id` em tabelas de pipe, verificar se o trigger cobre o caminho ou se é necessária nova policy.
+
+### D034: Outbound idempotência — Task #3 shipped (2026-04-20)
+Ciclo de idempotência `whatsapp_messages` fechado. Tasks #1/#2 (sessão anterior) fizeram `outbound-sender.ts` e `workflow-action-handler.ts` persistirem com `message_id = key.id` da Evolution e `onConflict: "message_id,instance_id"`. Task #3 converteu os 3 `insert`s restantes em `evolution-webhook/index.ts` (`:978` messages.upsert, `:1251` agent TTS, `:1300` agent text) para `upsert` com `ignoreDuplicates: true` (política conservadora — outbound/copilot é fonte de verdade para `content` humanizado + `sent_by_ai`). Mantido `:1461` (send.message) com `ignoreDuplicates: false` por precisar atualizar `media_url` pós-MESSAGES_UPSERT. Removido swallow string-match `.includes("duplicate")` — dead code.
+
+**Invariante**: toda escrita em `whatsapp_messages` (qualquer edge function) usa `upsert` com `onConflict: "message_id,instance_id"`. UNIQUE constraint existe desde `20260127000000_add_whatsapp_messages.sql:37`.
+
+**Evidência**: `tests/unit/evolution-webhook-idempotency.test.ts` — 4 contract asserts via grep no source (nenhum `.insert(`, todo upsert tem onConflict correto, 3 paths usam ignoreDuplicates:true, zero swallow por string-match). `npm run test:unit` = 2548 passed, zero regressão. `tsc --noEmit` = 0 erros.
+
+**Pendente**: deploy `evolution-webhook` em prod após review (`supabase functions deploy evolution-webhook --project-ref jsjsmuncfkbsbzqzqhfq`).
+
+### D035: Outbound idempotência — Task #4 shipped (2026-04-20)
+Invariante global fechada. 9 pontos em 5 edge functions convertidos de `.insert()` para `.upsert()` com `onConflict: "message_id,instance_id"`:
+- `_shared/followup-sender.ts:90` (false), `_shared/ai-action-executor.ts:1294` (false).
+- `sz-chat-webhook:359` (true, inbound), `:558` (true, agent reply).
+- `process-scheduled-user-messages:144` (false), `campaign-rule-dispatch:373` (false), `:716` (false), `pipe-rule-dispatch:419` (false), `:764` (false).
+
+Política consolidada: webhook echo handlers = `ignoreDuplicates:true`; dispatcher/sender = `false`. Exceção única anchorada por marker `SEND_MESSAGE_MEDIA_REFRESH` no `evolution-webhook` send.message handler (refresh de media_url).
+
+Contract test global em `tests/unit/whatsapp-messages-idempotency-contract.test.ts` (5 asserts AST-grep) garante invariante em CI para qualquer PR futuro. Deploy 8 funções em prod.
+
+**Evidência**: `npm run test:unit` = 2554 passed (+5 vs. baseline Task #3), `tsc --noEmit` = 0, 9 pontos com grep zero de `.insert(` em `whatsapp_messages` no projeto.
 
 ## Deferred Ideas
 

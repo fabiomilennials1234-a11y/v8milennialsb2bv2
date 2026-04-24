@@ -52,7 +52,8 @@ import { CelebrationEffect } from "@/components/gamification/CelebrationEffect";
 import { useTeamGoals, useGoals, useCreateGoal, useUpdateGoal, Goal } from "@/hooks/useGoals";
 import { useAwards, useCreateAward, useUpdateAward, useDeleteAward, Award as AwardType } from "@/hooks/useAwards";
 import { useDashboardMetrics, useRankingData } from "@/hooks/useDashboardMetrics";
-import { useTeamMembers, type TeamMember } from "@/hooks/useTeamMembers";
+import { useTeamMembers, isVirtualTeamMember, type TeamMember } from "@/hooks/useTeamMembers";
+import { filterVisibleRanking } from "@/lib/visible-ranking";
 import { useUserRole, useFeaturePermission } from "@/hooks/useUserRole";
 import { useOrganization } from "@/hooks/useOrganization";
 import { supabase } from "@/integrations/supabase/client";
@@ -726,6 +727,9 @@ export default function Performance() {
 
   const participantIds = useMemo(() => new Set(participants.map(p => p.team_member_id)), [participants]);
 
+  // Total de participantes visíveis da organização (exclui masters e virtuais).
+  // Calculado após teamMembers para aproveitar a mesma fonte de verdade (org_visible_members).
+
   // Seed demo competition (temporary — remove after testing)
   const handleSeedCompetition = useCallback(async () => {
     if (!organizationId) return;
@@ -805,9 +809,31 @@ export default function Performance() {
   const daysInMonth = new Date(selectedYear, selectedMonth, 0).getDate();
   const expectedProgress = (dayOfMonth / daysInMonth) * 100;
 
-  // Calculated data
-  const closers: RankingUser[] = rankingData?.salesRanking || [];
-  const sdrs: RankingUser[] = rankingData?.meetingsRanking || [];
+  // Conjunto de ids realmente visíveis da organização.
+  // useTeamMembers() consulta `org_visible_members`, que já exclui masters.
+  // Qualquer ranking vindo da RPC é filtrado aqui para garantir consistência no frontend.
+  const visibleMemberIds = useMemo(
+    () => new Set(teamMembers.map((m) => m.id)),
+    [teamMembers]
+  );
+
+  // Calculated data — somente membros visíveis da organização
+  const closers: RankingUser[] = useMemo(
+    () => filterVisibleRanking(rankingData?.salesRanking, visibleMemberIds),
+    [rankingData, visibleMemberIds]
+  );
+  const sdrs: RankingUser[] = useMemo(
+    () => filterVisibleRanking(rankingData?.meetingsRanking, visibleMemberIds),
+    [rankingData, visibleMemberIds]
+  );
+
+  const visibleParticipantsCount = useMemo(
+    () =>
+      participants.filter(
+        (p) => visibleMemberIds.has(p.team_member_id) && !isVirtualTeamMember(p.team_member_id)
+      ).length,
+    [participants, visibleMemberIds]
+  );
 
   // Metas cards: dados públicos da organização via RPC (SECURITY DEFINER) — todos veem metas e vendas de todos
   const closerGoals = useMemo(() =>
@@ -853,9 +879,15 @@ export default function Performance() {
     // Build a map of ranking data by member id
     const rankMap = new Map(source.map(u => [u.id, u]));
 
+    // Apenas participantes que pertencem aos membros visíveis da organização
+    // (exclui masters, virtuais e qualquer participante órfão).
+    const visibleParticipants = participants
+      .filter((p) => visibleMemberIds.has(p.team_member_id))
+      .filter((p) => !isVirtualTeamMember(p.team_member_id));
+
     // Build ranking for ALL participants, even those with 0 activity
     // Participants without ranking data get value=0
-    const participantMembers = participants.map(p => {
+    const participantMembers = visibleParticipants.map(p => {
       const member = teamMembers.find(m => m.id === p.team_member_id);
       const rank = rankMap.get(p.team_member_id);
       return {
@@ -874,9 +906,10 @@ export default function Performance() {
 
     // Sort by value descending and assign positions
     return participantMembers
+      .filter((u) => u.role !== "master")
       .sort((a, b) => b.value - a.value)
       .map((u, i) => ({ ...u, position: i + 1 }));
-  }, [activeCompetition, rankingData, participants, teamMembers, avatarMap]);
+  }, [activeCompetition, rankingData, participants, teamMembers, avatarMap, visibleMemberIds]);
 
   // Ranking transitions (replay animation of position changes)
   const rankingTransitions = useRankingTransitions(
@@ -1099,7 +1132,7 @@ export default function Performance() {
             <>
               <CompetitionHeader
                 competition={activeCompetition}
-                participantCount={participants.length}
+                participantCount={visibleParticipantsCount}
               />
               <CompetitionPodiumV2
                 users={compPodiumUsers}
@@ -1332,7 +1365,7 @@ export default function Performance() {
                     </div>
                     <div className="p-3 rounded-lg bg-muted/50">
                       <p className="text-muted-foreground text-xs">Participantes</p>
-                      <p className="font-semibold">{participants.length} vendedores</p>
+                      <p className="font-semibold">{visibleParticipantsCount} vendedores</p>
                     </div>
                   </div>
 
@@ -1375,15 +1408,17 @@ export default function Performance() {
                       Participantes
                     </p>
                     <div className="flex flex-wrap gap-2">
-                      {participants.map((p) => {
-                        const member = teamMembers.find(m => m.id === p.team_member_id);
-                        return (
-                          <div key={p.id} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/50">
-                            <UserAvatar name={member?.name || "?"} avatarUrl={avatarMap.get(p.team_member_id)} size="xs" />
-                            <span className="text-sm">{member?.name || "Desconhecido"}</span>
-                          </div>
-                        );
-                      })}
+                      {participants
+                        .filter((p) => visibleMemberIds.has(p.team_member_id) && !isVirtualTeamMember(p.team_member_id))
+                        .map((p) => {
+                          const member = teamMembers.find(m => m.id === p.team_member_id);
+                          return (
+                            <div key={p.id} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/50">
+                              <UserAvatar name={member?.name || "?"} avatarUrl={avatarMap.get(p.team_member_id)} size="xs" />
+                              <span className="text-sm">{member?.name || "Desconhecido"}</span>
+                            </div>
+                          );
+                        })}
                     </div>
                   </div>
                 </CardContent>

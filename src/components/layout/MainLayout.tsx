@@ -1,16 +1,69 @@
 import { ReactNode } from "react";
+import { useLocation } from "react-router-dom";
 import { TopNavigation } from "./TopNavigation";
+import { OnboardingChecklist } from "@/components/onboarding/OnboardingChecklist";
+import { cn } from "@/lib/utils";
+
+// Rotas onde o checklist NÃO deve aparecer
+const CHECKLIST_HIDDEN_PATTERNS = [
+  /^\/auth/,
+  /^\/signup/,
+  /^\/reset-password/,
+  /^\/_mockup/,
+  /^\/master/,
+  /^\/checkout/,
+  /^\/tv/,
+];
+
+// Rotas full-bleed: chat ocupa viewport completo (sem padding/max-width)
+const FULL_BLEED_PATTERNS = [
+  /^\/chat(\/|$)/,
+  /^\/chat-whatsapp/,
+];
 
 interface MainLayoutProps {
   children: ReactNode;
 }
 
 export function MainLayout({ children }: MainLayoutProps) {
+  const location = useLocation();
+
+  const showChecklist = !CHECKLIST_HIDDEN_PATTERNS.some((pattern) =>
+    pattern.test(location.pathname),
+  );
+
+  const isFullBleed = FULL_BLEED_PATTERNS.some((pattern) =>
+    pattern.test(location.pathname),
+  );
+
   return (
-    <div className="flex flex-col min-h-screen bg-background" data-layout="main">
+    <div className="flex flex-col h-screen bg-background" data-layout="main">
       <TopNavigation />
-      <main className="flex-1 overflow-auto">
-        <div className="px-6 lg:px-10 xl:px-12 py-6 lg:py-8 max-w-[1600px] mx-auto w-full">
+
+      {/* Checklist de onboarding — pill fixado no top-right, abaixo do topnav */}
+      {showChecklist && !isFullBleed && (
+        <div
+          className="fixed top-[3.75rem] right-4 z-40"
+          aria-label="Onboarding"
+        >
+          <OnboardingChecklist />
+        </div>
+      )}
+
+      <main
+        className={cn(
+          "flex-1 min-h-0",
+          isFullBleed ? "overflow-hidden" : "overflow-auto",
+        )}
+      >
+        <div
+          className={cn(
+            "w-full flex flex-col",
+            isFullBleed
+              ? "h-full px-0 py-0"
+              : "px-6 lg:px-10 xl:px-12 py-6 lg:py-8 max-w-[1600px] mx-auto min-h-full",
+          )}
+        >
           {children}
         </div>
       </main>

@@ -30,6 +30,7 @@ import { RescheduleModal } from "@/components/confirmacao/RescheduleModal";
 import { ConfirmacaoStats } from "@/components/confirmacao/ConfirmacaoStats";
 import { type MetricsPeriodState, getDateRange, createInitialPeriodState } from "@/lib/metrics-period";
 import { MetricsPeriodSelector } from "@/components/pipelines/MetricsPeriodSelector";
+import { GhostLeadsBanner } from "@/components/pipelines/GhostLeadsBanner";
 import { LeadCard, type LeadCardData } from "@/components/leads/LeadCard";
 import { LeadDetailDrawer } from "@/components/leads/LeadDetailDrawer";
 import { ConfirmacaoContext } from "@/components/leads/funnel-contexts/ConfirmacaoContext";
@@ -45,9 +46,19 @@ import { toast } from "sonner";
 import { useOrganization } from "@/hooks/useOrganization";
 import { useLeadsWithScheduledMessages } from "@/hooks/useScheduledMessages";
 import { track, trackModuleVisit } from "@/lib/analytics";
-import { useFeaturePermission } from "@/hooks/useUserRole";
+import { useFeaturePermission, useIsAdmin } from "@/hooks/useUserRole";
+import { useMasterAuth } from "@/hooks/useMasterAuth";
 
 // ConfirmacaoCardData is now LeadCardData from the unified LeadCard component
+
+const MONTHS_PT = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+function formatPeriodLabel(range: { startStr: string; endStr: string }): string {
+  const [sy, sm, sd] = range.startStr.slice(0, 10).split("-").map(Number);
+  const [ey, em, ed] = range.endStr.slice(0, 10).split("-").map(Number);
+  if (sy === ey && sm === em) return `${sd}–${ed} ${MONTHS_PT[em - 1]} ${ey}`;
+  if (sy === ey) return `${sd} ${MONTHS_PT[sm - 1]} – ${ed} ${MONTHS_PT[em - 1]} ${ey}`;
+  return `${sd} ${MONTHS_PT[sm - 1]} ${sy} – ${ed} ${MONTHS_PT[em - 1]} ${ey}`;
+}
 
 // Calculate correct status based on meeting date using CALENDAR DAYS (not hours)
 // Note: pre_confirmada and confirmada_no_dia are NOT used as statuses anymore
@@ -124,6 +135,8 @@ type ConfirmacaoFilterState = {
   selectedStatuses: string[];
   selectedResponsibleId: string;
   viewMode: "kanban" | "timeline";
+  // One-shot: aplica teamMemberId como default para membros na primeira visita.
+  membroDefaultApplied?: boolean;
 };
 
 const DEFAULT_CONFIRMACAO_FILTERS: ConfirmacaoFilterState = {
@@ -134,6 +147,7 @@ const DEFAULT_CONFIRMACAO_FILTERS: ConfirmacaoFilterState = {
   selectedStatuses: [],
   selectedResponsibleId: "all",
   viewMode: "kanban",
+  membroDefaultApplied: false,
 };
 
 export default function PipeConfirmacao() {
@@ -182,6 +196,20 @@ export default function PipeConfirmacao() {
   );
   const { data: leadsWithSchedule } = useLeadsWithScheduledMessages();
   const [filterScheduled, setFilterScheduled] = useState(false);
+
+  // Filtro defensivo: membros começam vendo só os próprios leads. Admin/Master veem tudo.
+  const { teamMemberId } = useOrganization();
+  const { isAdmin } = useIsAdmin();
+  const { isMaster } = useMasterAuth();
+  useEffect(() => {
+    if (filterState.membroDefaultApplied) return;
+    if (!teamMemberId || isAdmin || isMaster) return;
+    setFilterState((f) => ({
+      ...f,
+      selectedResponsibleId: f.selectedResponsibleId === "all" ? teamMemberId : f.selectedResponsibleId,
+      membroDefaultApplied: true,
+    }));
+  }, [teamMemberId, isAdmin, isMaster, filterState.membroDefaultApplied, setFilterState]);
 
   const [isLeadModalOpen, setIsLeadModalOpen] = useState(false);
   const [isMeetingModalOpen, setIsMeetingModalOpen] = useState(false);
@@ -343,6 +371,12 @@ export default function PipeConfirmacao() {
           // Hide ghost leads (RLS blocked the lead data for this user)
           if (!lead) return false;
 
+          // Date range filter (only when a period is selected)
+          if (metricsRange) {
+            if (!item.created_at) return false;
+            if (item.created_at < metricsRange.startStr || item.created_at > metricsRange.endStr) return false;
+          }
+
           const matchesSearch = searchQuery === "" ||
             lead?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
             lead?.company?.toLowerCase().includes(searchQuery.toLowerCase());
@@ -381,7 +415,14 @@ export default function PipeConfirmacao() {
 
       return { ...col, items: columnItems };
     });
-  }, [pipeData, statusColumns, searchQuery, originFilter, urgencyFilter, timeFilter, selectedStatuses, selectedResponsibleId, overdueDays, filterScheduled, leadsWithSchedule]);
+  }, [pipeData, statusColumns, searchQuery, originFilter, urgencyFilter, timeFilter, selectedStatuses, selectedResponsibleId, overdueDays, filterScheduled, leadsWithSchedule, metricsRange]);
+
+  // Count ghost leads — rows visíveis no pipe cujo join com leads é null.
+  // Indica divergência entre RLS do pipe e de leads (ver GhostLeadsBanner).
+  const ghostLeadsCount = useMemo(() => {
+    if (!pipeData) return 0;
+    return pipeData.filter(item => item.lead == null).length;
+  }, [pipeData]);
 
   const handleStatusChange = async (itemId: string, newStatus: string) => {
     const item = pipeData?.find(p => p.id === itemId);
@@ -570,6 +611,9 @@ export default function PipeConfirmacao() {
         stages={pipelineStages}
       />
 
+      {/* Ghost leads (RLS divergente entre pipe e leads) */}
+      <GhostLeadsBanner pipeType="confirmacao" ghostCount={ghostLeadsCount} />
+
       {/* Período das métricas */}
       <MetricsPeriodSelector state={periodState} onChange={setPeriodState} />
 
@@ -599,6 +643,25 @@ export default function PipeConfirmacao() {
           Agendados
         </Button>
       </div>
+
+      {/* Period filter indicator — aparece quando um período está selecionado (apenas no kanban) */}
+      {viewMode === "kanban" && metricsRange && (
+        <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-card border border-border text-sm text-muted-foreground">
+          <Calendar className="w-4 h-4 shrink-0" />
+          <span className="flex-1">
+            Exibindo cards criados em{" "}
+            <span className="text-foreground font-medium">{formatPeriodLabel(metricsRange)}</span>
+          </span>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs"
+            onClick={() => setPeriodState(createInitialPeriodState())}
+          >
+            Ver todos
+          </Button>
+        </div>
+      )}
 
       {/* Content */}
       {viewMode === "kanban" ? (

@@ -355,8 +355,9 @@ async function handleClientMessage(
   // Generate a unique message_id for this message
   const messageId = `sz_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
-  // Save incoming message to whatsapp_messages
-  const { error: msgError } = await supabase.from("whatsapp_messages").insert({
+  // Save incoming message to whatsapp_messages — upsert preserves first row
+  // if the same webhook event is replayed.
+  const { error: msgError } = await supabase.from("whatsapp_messages").upsert({
     organization_id: organizationId,
     instance_id: instanceId,
     message_id: messageId,
@@ -369,12 +370,10 @@ async function handleClientMessage(
     status: "received",
     timestamp: new Date().toISOString(),
     raw_payload: data,
-  });
+  }, { onConflict: "message_id,instance_id", ignoreDuplicates: true });
 
   if (msgError) {
-    if (!msgError.message?.includes("duplicate")) {
-      console.error("[SZ Chat Webhook] Error saving message:", msgError);
-    }
+    console.error("[SZ Chat Webhook] Error saving message:", msgError);
   } else {
     console.log("[SZ Chat Webhook] Message saved:", { phone: phoneNumber, messageId });
   }
@@ -554,8 +553,8 @@ async function handleClientMessage(
     );
 
     if (sent) {
-      // Save outgoing message record
-      const { error: outMsgError } = await supabase.from("whatsapp_messages").insert({
+      // Save outgoing message record — agent reply is the source of truth.
+      const { error: outMsgError } = await supabase.from("whatsapp_messages").upsert({
         organization_id: organizationId,
         instance_id: instanceId,
         message_id: `agent_sz_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
@@ -567,7 +566,7 @@ async function handleClientMessage(
         status: "sent",
         timestamp: new Date().toISOString(),
         sent_by_ai: true,
-      });
+      }, { onConflict: "message_id,instance_id", ignoreDuplicates: true });
 
       if (outMsgError) {
         console.error("[SZ Chat Webhook] Error saving outgoing message:", outMsgError);

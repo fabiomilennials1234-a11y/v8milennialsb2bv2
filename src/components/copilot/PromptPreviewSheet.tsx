@@ -45,7 +45,7 @@ export function PromptPreviewSheet({
 
           {/* Painel lateral */}
           <motion.div
-            className="fixed inset-y-0 right-0 z-50 w-full max-w-xl bg-background border-l shadow-xl flex flex-col"
+            className="fixed inset-y-0 right-0 z-50 w-full max-w-xl bg-background border-l shadow-xl dark:shadow-none flex flex-col"
             initial={{ x: "100%" }}
             animate={{ x: 0 }}
             exit={{ x: "100%" }}

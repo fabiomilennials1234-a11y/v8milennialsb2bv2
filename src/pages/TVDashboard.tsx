@@ -317,7 +317,7 @@ export default function TVDashboard() {
                         animate={{ scale: [1, 1.02, 1] }}
                         transition={{ repeat: Infinity, duration: 2 }}
                         className={`px-2 py-1.5 rounded-lg font-bold text-sm shadow-lg ${
-                          isAhead ? "bg-emerald-500 text-white" : "bg-amber-500 text-black"
+                          isAhead ? "bg-emerald-500 text-white" : "bg-amber-500 text-amber-950"
                         }`}
                       >
                         R$ {formatCurrency(atual)}

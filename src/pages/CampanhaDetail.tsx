@@ -31,7 +31,7 @@ import { useQueryClient } from "@tanstack/react-query";
 const CAMPAIGN_TYPE_LABELS = {
   automatica: { label: "Automática", color: "bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-200", icon: Bot },
   semi_automatica: { label: "Semi-Automática", color: "bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-200", icon: Zap },
-  manual: { label: "Manual", color: "bg-gray-100 text-gray-700 dark:bg-muted dark:text-muted-foreground", icon: Kanban },
+  manual: { label: "Manual", color: "bg-muted text-muted-foreground", icon: Kanban },
 };
 
 export default function CampanhaDetail() {

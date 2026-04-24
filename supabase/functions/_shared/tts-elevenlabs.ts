@@ -1,7 +1,9 @@
 /**
  * ElevenLabs TTS — generate audio from text and upload to Supabase Storage.
  *
- * Used by evolution-webhook to convert copilot responses to voice notes.
+ * Consumed by copilot senders (outbound-sender, agent-message) to convert
+ * copilot responses to voice notes (PTT). Upload URL is then sent via the
+ * provider adapter as sendMedia(type="ptt").
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";

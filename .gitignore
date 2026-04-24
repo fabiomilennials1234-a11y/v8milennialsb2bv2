@@ -66,3 +66,7 @@ coverage/
 # Deno edge-function coverage artifacts
 supabase/functions/.coverage/
 supabase/functions/coverage.lcov
+
+# Storybook build output
+dist-storybook/
+storybook-static/

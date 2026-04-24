@@ -37,6 +37,7 @@ import { usePipePropostas, useUpdatePipeProposta, useDeletePipeProposta, PipePro
 import { usePipePropostasMetrics } from "@/hooks/usePipeMetrics";
 import { type MetricsPeriodState, getDateRange, createInitialPeriodState } from "@/lib/metrics-period";
 import { MetricsPeriodSelector } from "@/components/pipelines/MetricsPeriodSelector";
+import { GhostLeadsBanner } from "@/components/pipelines/GhostLeadsBanner";
 import { useDeleteAllLeadsInPipe, useUpdateLead } from "@/hooks/useLeads";
 import { usePipelineStages, stagesToColumns } from "@/hooks/usePipelineStages";
 import { PipeSettingsDialog } from "@/components/pipelines/PipeSettingsDialog";
@@ -66,7 +67,17 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useOrganization } from "@/hooks/useOrganization";
 import { track, trackModuleVisit } from "@/lib/analytics";
-import { useFeaturePermission } from "@/hooks/useUserRole";
+import { useFeaturePermission, useIsAdmin } from "@/hooks/useUserRole";
+import { useMasterAuth } from "@/hooks/useMasterAuth";
+
+const MONTHS_PT = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+function formatPeriodLabel(range: { startStr: string; endStr: string }): string {
+  const [sy, sm, sd] = range.startStr.slice(0, 10).split("-").map(Number);
+  const [ey, em, ed] = range.endStr.slice(0, 10).split("-").map(Number);
+  if (sy === ey && sm === em) return `${sd}–${ed} ${MONTHS_PT[em - 1]} ${ey}`;
+  if (sy === ey) return `${sd} ${MONTHS_PT[sm - 1]} – ${ed} ${MONTHS_PT[em - 1]} ${ey}`;
+  return `${sd} ${MONTHS_PT[sm - 1]} ${sy} – ${ed} ${MONTHS_PT[em - 1]} ${ey}`;
+}
 
 // ─── Helper: temporal filter para o kanban no modo "Este mês" ────────────────
 const CLOSED_STATUSES_PROPOSTAS = ["vendido", "perdido"];
@@ -118,6 +129,9 @@ type PropostasFilterState = {
   filterPriority: string;
   filterCalor: string;
   viewMode: "kanban" | "analytics";
+  // Marca se já aplicamos o default "me" para membros (one-shot por usuário).
+  // Depois de true, respeitamos a escolha manual do usuário.
+  membroDefaultApplied?: boolean;
 };
 
 const DEFAULT_PROPOSTAS_FILTERS: PropostasFilterState = {
@@ -127,6 +141,7 @@ const DEFAULT_PROPOSTAS_FILTERS: PropostasFilterState = {
   filterPriority: "all",
   filterCalor: "all",
   viewMode: "kanban",
+  membroDefaultApplied: false,
 };
 
 export default function PipePropostas() {
@@ -163,6 +178,24 @@ export default function PipePropostas() {
   );
   const { data: leadsWithSchedule } = useLeadsWithScheduledMessages();
   const [filterScheduled, setFilterScheduled] = useState(false);
+
+  // ─── Filtro defensivo: para role "member" (ex-membro), pré-seleciona o próprio
+  // teamMemberId na primeira visita. Cria camada extra de proteção client-side
+  // além da RLS. Membros ainda podem trocar manualmente; a flag membroDefaultApplied
+  // garante que o default só aplica uma vez por usuário.
+  const { teamMemberId } = useOrganization();
+  const { isAdmin } = useIsAdmin();
+  const { isMaster } = useMasterAuth();
+  useEffect(() => {
+    if (filterState.membroDefaultApplied) return;
+    if (!teamMemberId || isAdmin || isMaster) return;
+    // Usuário sem privilégio (membro): aplicar teamMemberId como default
+    setFilterState((f) => ({
+      ...f,
+      filterResponsible: f.filterResponsible === "all" ? teamMemberId : f.filterResponsible,
+      membroDefaultApplied: true,
+    }));
+  }, [teamMemberId, isAdmin, isMaster, filterState.membroDefaultApplied, setFilterState]);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
@@ -369,6 +402,13 @@ export default function PipePropostas() {
       };
     });
   }, [pipeData, statusColumns, searchTerm, filterResponsible, filterProductType, filterPriority, filterCalor, filterScheduled, leadsWithSchedule, periodRange]);
+
+  // Count ghost leads — rows visíveis no pipe cujo join com leads é null.
+  // Indica divergência entre RLS do pipe e de leads (ver GhostLeadsBanner).
+  const ghostLeadsCount = useMemo(() => {
+    if (!pipeData) return 0;
+    return pipeData.filter(item => item.lead == null).length;
+  }, [pipeData]);
 
   // Calculate stats (Vendas Total / Rec. Vendida / Projetos Vendidos por item quando houver items)
   const stats = useMemo(() => {
@@ -893,6 +933,9 @@ export default function PipePropostas() {
         stages={pipelineStages}
       />
 
+      {/* Ghost leads (RLS divergente entre pipe e leads) */}
+      <GhostLeadsBanner pipeType="propostas" ghostCount={ghostLeadsCount} />
+
       {/* Período das métricas */}
       <MetricsPeriodSelector state={periodState} onChange={setPeriodState} />
 
@@ -978,11 +1021,21 @@ export default function PipePropostas() {
           >
             {/* Banner: kanban filtrado por período */}
             {periodRange && (
-              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/10 border border-primary/20 text-sm text-primary mb-4">
+              <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-card border border-border text-sm text-muted-foreground mb-4">
                 <CalendarIcon className="w-4 h-4 shrink-0" />
-                <span>
-                  Filtrando por período — {periodFilteredCount} proposta{periodFilteredCount !== 1 ? "s" : ""}
+                <span className="flex-1">
+                  Exibindo cards criados em{" "}
+                  <span className="text-foreground font-medium">{formatPeriodLabel(periodRange)}</span>
+                  {" "}• {periodFilteredCount} proposta{periodFilteredCount !== 1 ? "s" : ""}
                 </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => setPeriodState(createInitialPeriodState())}
+                >
+                  Ver todos
+                </Button>
               </div>
             )}
 

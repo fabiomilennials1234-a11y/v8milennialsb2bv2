@@ -1,18 +1,26 @@
+// deno-lint-ignore-file no-explicit-any
 /**
- * Shared logic for sending outbound messages via Evolution API
- * Used by outbound-trigger (immediate) and process-outbound-dispatches (scheduled)
+ * Shared logic for sending outbound messages via the WhatsApp adapter.
+ * Used by outbound-trigger (immediate) and process-outbound-dispatches (scheduled).
+ *
+ * Provider-agnostic: resolves Evolution or Uazapi via whatsapp-client adapter.
  *
  * Supports:
- * - Text message (firstMessageTemplate, humanized)
- * - Audio voice note (pre-recorded, random from pool) — via copilot_agent_audios
+ * - Text message (firstMessageTemplate, humanized + smart split)
+ * - Audio voice note (pre-recorded, random from pool) via copilot_agent_audios
  * - Configurable order: text_first or audio_first
  */
 
 import { humanizeMessage } from "./message-humanizer.ts";
-import { sendWhatsAppAudio } from "./audio-sender.ts";
+import { sendAudioViaProvider } from "./audio-sender.ts";
 import { smartSplitMessage } from "./natural-messaging.ts";
+import {
+  resolveDispatchContext,
+  DispatchResolutionError,
+} from "./whatsapp-dispatch.ts";
+import type { WhatsAppProvider } from "./whatsapp-client.ts";
 
-const AUDIO_DELAY_MS = 8000; // 8 seconds between text and audio
+const AUDIO_DELAY_MS = 8000;
 
 interface DispatchRow {
   id: string;
@@ -36,10 +44,6 @@ interface AudioRecord {
   name: string;
 }
 
-/**
- * Sends a single outbound dispatch via WhatsApp Evolution API
- */
-// deno-lint-ignore no-explicit-any
 export async function sendOutboundDispatch(
   supabase: any,
   dispatchId: string,
@@ -62,61 +66,30 @@ export async function sendOutboundDispatch(
     }
 
     const row = dispatch as unknown as DispatchRow;
-    if (!row.lead?.phone) {
-      console.error("[outbound-sender] Lead has no phone");
+
+    // Resolve provider + instance + phone via unified dispatch helper
+    let ctx;
+    try {
+      ctx = await resolveDispatchContext(supabase, {
+        organization_id: organizationId,
+        phone: row.lead?.phone,
+        preferred_instance_id: row.agent?.whatsapp_instance_id ?? null,
+      });
+    } catch (e) {
+      const err = e as DispatchResolutionError;
       await supabase
         .from("outbound_dispatch_log")
-        .update({ status: "failed", error_message: "Lead has no phone" })
+        .update({ status: "failed", error_message: err.message })
         .eq("id", dispatchId);
-      return { success: false, error: "Lead has no phone" };
+      return { success: false, error: err.message };
     }
 
-    let instanceName: string | null = null;
-    if (row.agent?.whatsapp_instance_id) {
-      const { data: instance } = await supabase
-        .from("whatsapp_instances")
-        .select("instance_name")
-        .eq("id", row.agent.whatsapp_instance_id)
-        .single();
-      instanceName = instance?.instance_name ?? null;
-    }
-    if (!instanceName) {
-      const { data: instance } = await supabase
-        .from("whatsapp_instances")
-        .select("instance_name")
-        .eq("organization_id", organizationId)
-        .eq("status", "open")
-        .limit(1)
-        .maybeSingle();
-      instanceName = instance?.instance_name ?? null;
-    }
-    if (!instanceName) {
-      console.error("[outbound-sender] No WhatsApp instance found");
-      await supabase
-        .from("outbound_dispatch_log")
-        .update({ status: "failed", error_message: "No WhatsApp instance available" })
-        .eq("id", dispatchId);
-      return { success: false, error: "No WhatsApp instance available" };
-    }
+    const { provider, instance, normalizedPhone: phone } = ctx;
 
-    const evolutionUrl = Deno.env.get("EVOLUTION_API_URL");
-    const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
-    if (!evolutionUrl || !evolutionKey) {
-      console.error("[outbound-sender] Evolution API not configured");
-      await supabase
-        .from("outbound_dispatch_log")
-        .update({ status: "failed", error_message: "Evolution API not configured" })
-        .eq("id", dispatchId);
-      return { success: false, error: "Evolution API not configured" };
-    }
-
-    let phone = String(row.lead.phone).replace(/\D/g, "");
-    if (!phone.startsWith("55")) phone = "55" + phone;
-
-    // Humanizar mensagem para evitar banimento por mensagens repetitivas
+    // Humanize
     const humanizedContent = await humanizeMessage(row.message_content);
 
-    // Resolver configuração de áudio
+    // Resolve audio config
     const outboundConfig = row.agent?.outbound_config;
     const audioEnabled = outboundConfig?.audioEnabled === true;
     const audioSendOrder = outboundConfig?.audioSendOrder || "text_first";
@@ -130,85 +103,74 @@ export async function sendOutboundDispatch(
         .eq("is_active", true);
 
       if (audios && audios.length > 0) {
-        // Escolher aleatoriamente
         chosenAudio = audios[Math.floor(Math.random() * audios.length)] as AudioRecord;
       }
     }
 
-    // =====================================================
-    // Função auxiliar: enviar texto (com smart split natural)
-    // =====================================================
+    // ---------------------------------------------------------------
+    // Text send (with smart split + typing indicator per chunk)
+    // ---------------------------------------------------------------
     const sendText = async (): Promise<{ ok: boolean; messageId?: string; error?: string }> => {
-      // Smart split: sempre ativo com intensidade "natural"
-      const { chunks, delays } = await smartSplitMessage(humanizedContent, { enabled: true, intensity: "natural" });
+      const { chunks, delays } = await smartSplitMessage(humanizedContent, {
+        enabled: true,
+        intensity: "natural",
+      });
 
       let firstMessageId: string | undefined;
       for (let i = 0; i < chunks.length; i++) {
-        // Typing indicator antes de cada chunk
         try {
-          await fetch(`${evolutionUrl}/chat/sendPresence/${instanceName}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", apikey: evolutionKey },
-            body: JSON.stringify({ number: phone, delay: 500, presence: "composing" }),
-          });
-        } catch { /* best-effort */ }
+          await provider.setPresence(phone, "composing");
+        } catch {
+          /* best-effort */
+        }
 
-        // Delay proporcional
         if (delays[i] > 0) {
           await new Promise((r) => setTimeout(r, delays[i]));
         }
 
-        const sendResponse = await fetch(`${evolutionUrl}/message/sendText/${instanceName}`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            apikey: evolutionKey,
-          },
-          body: JSON.stringify({
+        try {
+          const res = await provider.sendText({
             number: phone,
             text: chunks[i],
-          }),
-        });
-
-        if (!sendResponse.ok) {
-          const errorText = await sendResponse.text();
-          return { ok: false, error: errorText };
-        }
-
-        if (i === 0) {
-          const result = await sendResponse.json();
-          firstMessageId = result?.key?.id;
+            trackSource: "copilot-outbound",
+            trackId: dispatchId,
+          });
+          if (i === 0) firstMessageId = res.message_id;
+        } catch (err) {
+          return { ok: false, error: (err as Error).message };
         }
       }
 
       return { ok: true, messageId: firstMessageId };
     };
 
-    // =====================================================
-    // Função auxiliar: enviar áudio
-    // =====================================================
+    // ---------------------------------------------------------------
+    // Audio send (voice note PTT via adapter)
+    // ---------------------------------------------------------------
     const sendAudio = async (): Promise<{ ok: boolean; messageId?: string; error?: string }> => {
       if (!chosenAudio) return { ok: false, error: "No audio available" };
-
-      const result = await sendWhatsAppAudio(instanceName!, phone, chosenAudio.public_url);
+      const result = await sendAudioViaProvider(
+        provider as WhatsAppProvider,
+        phone,
+        chosenAudio.public_url,
+        { trackSource: "copilot-outbound-audio", trackId: dispatchId }
+      );
       return { ok: result.success, messageId: result.messageId, error: result.error };
     };
 
-    // =====================================================
-    // Executar envio na ordem configurada
-    // =====================================================
+    // ---------------------------------------------------------------
+    // Execute in configured order
+    // ---------------------------------------------------------------
     let textResult: { ok: boolean; messageId?: string; error?: string };
     let audioResult: { ok: boolean; messageId?: string; error?: string } | null = null;
 
     if (chosenAudio && audioSendOrder === "audio_first") {
-      // Áudio primeiro → texto imediato (delay assíncrono)
       audioResult = await sendAudio();
       textResult = await sendText();
     } else if (chosenAudio) {
-      // Texto primeiro → áudio agendado em background (não bloqueia)
       textResult = await sendText();
       if (textResult.ok) {
-        // Fire-and-forget: envia áudio após delay sem bloquear o dispatch loop
+        // Background — don't block dispatch loop
         setTimeout(async () => {
           try {
             await sendAudio();
@@ -218,11 +180,9 @@ export async function sendOutboundDispatch(
         }, AUDIO_DELAY_MS);
       }
     } else {
-      // Sem áudio — comportamento padrão
       textResult = await sendText();
     }
 
-    // Verificar resultado do texto (obrigatório)
     if (!textResult.ok) {
       console.error("[outbound-sender] Failed to send text:", textResult.error);
       await supabase
@@ -232,7 +192,7 @@ export async function sendOutboundDispatch(
       return { success: false, error: textResult.error };
     }
 
-    // Atualizar dispatch log
+    // Update dispatch log
     const triggerReason = dispatch.trigger_reason || {};
     if (chosenAudio && audioResult?.ok) {
       triggerReason.audioSent = true;
@@ -250,6 +210,7 @@ export async function sendOutboundDispatch(
       })
       .eq("id", dispatchId);
 
+    // Pipe auto-move: novo_lead → abordado
     await supabase.from("leads").update({ pipe_whatsapp: "abordado" }).eq("id", row.lead_id);
 
     const { data: existingPipe } = await supabase
@@ -268,32 +229,40 @@ export async function sendOutboundDispatch(
       });
     }
 
-    // Registrar mensagem de texto no histórico
-    await supabase.from("whatsapp_messages").insert({
+    // Register text message in whatsapp_messages history.
+    // message_id = real provider id so webhook echo UPSERT matches this row
+    // instead of creating a duplicate. sent_by_ai:true → Copilot badge in chat.
+    const outboundTextMessageId = textResult.messageId || `cp_${crypto.randomUUID()}`;
+    await supabase.from("whatsapp_messages").upsert({
       organization_id: organizationId,
-      instance_name: instanceName,
+      instance_id: instance.id,
+      message_id: outboundTextMessageId,
       remote_jid: phone + "@s.whatsapp.net",
-      from_me: true,
+      phone_number: phone,
+      direction: "outgoing",
       message_type: "conversation",
       content: humanizedContent,
       timestamp: new Date().toISOString(),
       status: "sent",
-    });
+      sent_by_ai: true,
+    }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
 
-    // Registrar áudio no histórico (se enviado com sucesso)
     if (chosenAudio && audioResult?.ok) {
-      await supabase.from("whatsapp_messages").insert({
+      const outboundAudioMessageId = audioResult.messageId || `cp_${crypto.randomUUID()}`;
+      await supabase.from("whatsapp_messages").upsert({
         organization_id: organizationId,
-        instance_name: instanceName,
+        instance_id: instance.id,
+        message_id: outboundAudioMessageId,
         remote_jid: phone + "@s.whatsapp.net",
-        from_me: true,
+        phone_number: phone,
+        direction: "outgoing",
         message_type: "audio",
         content: "[Áudio]",
         media_url: chosenAudio.public_url,
         timestamp: new Date().toISOString(),
         status: "sent",
-      });
-      console.log(`[outbound-sender] Audio sent: ${chosenAudio.name} (${chosenAudio.id})`);
+        sent_by_ai: true,
+      }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
     }
 
     return { success: true };

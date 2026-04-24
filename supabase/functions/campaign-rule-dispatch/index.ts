@@ -27,8 +27,6 @@ import { getTimeBasedVariables } from '../_shared/time-variables.ts';
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-const EVOLUTION_API_URL = Deno.env.get("EVOLUTION_API_URL") || "";
-const EVOLUTION_API_KEY = Deno.env.get("EVOLUTION_API_KEY") || "";
 const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
 
 const DEFAULT_DELAY_MIN_MS = 30000;
@@ -339,14 +337,14 @@ async function processCampaignQueue(
 
         let sendResult: { success: boolean; messageId?: string; error?: string };
         if (isAudio) {
-          sendResult = await sendWhatsAppAudio(instance.instance_name, lead.phone, template.audio_url!);
+          sendResult = await sendWhatsAppAudio(supabase, instance, lead.phone, template.audio_url!);
         } else if (isImage) {
-          sendResult = await sendWhatsAppMedia(instance.instance_name, lead.phone, "image", template.image_url!, { caption: messageContent || undefined });
+          sendResult = await sendWhatsAppMedia(supabase, instance, lead.phone, "image", template.image_url!, { caption: messageContent || undefined });
         } else if (isDocument) {
           const resolvedFileName = template.file_name ? replaceVariables(template.file_name, leadVars) : undefined;
-          sendResult = await sendWhatsAppMedia(instance.instance_name, lead.phone, "document", template.document_url!, { caption: messageContent || undefined, fileName: resolvedFileName });
+          sendResult = await sendWhatsAppMedia(supabase, instance, lead.phone, "document", template.document_url!, { caption: messageContent || undefined, fileName: resolvedFileName });
         } else {
-          sendResult = await sendWhatsAppMessage(instance.instance_name, lead.phone, messageContent);
+          sendResult = await sendWhatsAppMessage(supabase, instance, lead.phone, messageContent);
         }
 
         if (sendResult.success) {
@@ -370,7 +368,7 @@ async function processCampaignQueue(
           // Sync with chat
           try {
             const phone = lead.phone!.replace(/\D/g, "").replace(/^(?!55)/, "55");
-            const { error: chatErr } = await supabase.from("whatsapp_messages").insert({
+            const { error: chatErr } = await supabase.from("whatsapp_messages").upsert({
               organization_id: campanha.organization_id,
               instance_id: instance.id,
               message_id: sendResult.messageId || `campaign_${row.id}_${Date.now()}`,
@@ -384,9 +382,9 @@ async function processCampaignQueue(
               lead_id: lead.id,
               timestamp: new Date().toISOString(),
               sent_by_ai: true,
-            });
-            if (chatErr && !chatErr.message?.includes("duplicate")) {
-              console.warn("[campaign-rule-dispatch] whatsapp_messages insert failed:", chatErr);
+            }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
+            if (chatErr) {
+              console.warn("[campaign-rule-dispatch] whatsapp_messages upsert failed:", chatErr);
             }
           } catch (chatSyncErr) {
             console.warn("[campaign-rule-dispatch] chat sync error:", chatSyncErr);
@@ -706,14 +704,14 @@ async function processExpiredTimeouts(
             });
 
             const result = isAudio
-              ? await sendWhatsAppAudio(instance.instance_name, lead.phone, tmpl.audio_url!)
-              : await sendWhatsAppMessage(instance.instance_name, lead.phone, content);
+              ? await sendWhatsAppAudio(supabase, instance, lead.phone, tmpl.audio_url!)
+              : await sendWhatsAppMessage(supabase, instance, lead.phone, content);
 
             if (result.success) {
               // Sync with chat
               try {
                 const phone = lead.phone!.replace(/\D/g, "").replace(/^(?!55)/, "55");
-                await supabase.from("whatsapp_messages").insert({
+                await supabase.from("whatsapp_messages").upsert({
                   organization_id: campanha.organization_id,
                   instance_id: instance.id,
                   message_id: result.messageId || `timeout_${row.id}_${Date.now()}`,
@@ -727,7 +725,7 @@ async function processExpiredTimeouts(
                   lead_id: lead.id,
                   timestamp: new Date().toISOString(),
                   sent_by_ai: true,
-                });
+                }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
               } catch (_) { /* ignore */ }
             }
             console.log(`[campaign-rule-dispatch][${campanhaId}] Timeout: sent template to lead ${lead.name}`);
@@ -822,94 +820,55 @@ function replaceVariables(template: string, variables: Record<string, string>): 
   return result.trim();
 }
 
+// Legacy send shims — provider-agnostic via whatsapp-dispatch adapter.
+import {
+  sendTextViaInstance,
+  sendAudioViaInstance,
+  sendMediaViaInstance,
+} from "../_shared/whatsapp-dispatch.ts";
+
 async function sendWhatsAppMessage(
-  instanceName: string,
+  supabase: any,
+  instance: any,
   phoneNumber: string,
   message: string
 ): Promise<{ success: boolean; messageId?: string; error?: string }> {
-  if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY) {
-    return { success: false, error: "Evolution API not configured" };
-  }
-  try {
-    let phone = phoneNumber.replace(/\D/g, "");
-    if (!phone.startsWith("55")) phone = "55" + phone;
-    const response = await fetch(`${EVOLUTION_API_URL}/message/sendText/${instanceName}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", apikey: EVOLUTION_API_KEY },
-      body: JSON.stringify({ number: phone, text: message }),
-    });
-    if (!response.ok) {
-      const errorText = await response.text();
-      return { success: false, error: `HTTP ${response.status}: ${errorText}` };
-    }
-    const result = await response.json();
-    return { success: true, messageId: result.key?.id };
-  } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : String(error) };
-  }
+  return await sendTextViaInstance(supabase, instance, phoneNumber, message, {
+    trackSource: "campaign-rule-dispatch",
+  });
 }
 
 async function sendWhatsAppAudio(
-  instanceName: string,
+  supabase: any,
+  instance: any,
   phoneNumber: string,
   audioUrl: string
 ): Promise<{ success: boolean; messageId?: string; error?: string }> {
-  if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY) {
-    return { success: false, error: "Evolution API not configured" };
-  }
-  try {
-    let phone = phoneNumber.replace(/\D/g, "");
-    if (!phone.startsWith("55")) phone = "55" + phone;
-    const response = await fetch(`${EVOLUTION_API_URL}/message/sendWhatsAppAudio/${instanceName}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", apikey: EVOLUTION_API_KEY },
-      body: JSON.stringify({ number: phone, audio: audioUrl }),
-    });
-    if (!response.ok) {
-      const errorText = await response.text();
-      return { success: false, error: `HTTP ${response.status}: ${errorText}` };
-    }
-    const result = await response.json();
-    return { success: true, messageId: result.key?.id };
-  } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : String(error) };
-  }
+  return await sendAudioViaInstance(supabase, instance, phoneNumber, audioUrl, {
+    trackSource: "campaign-rule-dispatch",
+  });
 }
 
 async function sendWhatsAppMedia(
-  instanceName: string,
+  supabase: any,
+  instance: any,
   phoneNumber: string,
   mediaType: "image" | "document",
   mediaUrl: string,
   options?: { caption?: string; fileName?: string }
 ): Promise<{ success: boolean; messageId?: string; error?: string }> {
-  if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY) {
-    return { success: false, error: "Evolution API not configured" };
-  }
-  try {
-    let phone = phoneNumber.replace(/\D/g, "");
-    if (!phone.startsWith("55")) phone = "55" + phone;
-    const body: Record<string, unknown> = {
-      number: phone,
-      mediatype: mediaType,
-      media: mediaUrl,
-    };
-    if (options?.caption) body.caption = options.caption;
-    if (options?.fileName) body.fileName = options.fileName;
-    const response = await fetch(`${EVOLUTION_API_URL}/message/sendMedia/${instanceName}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", apikey: EVOLUTION_API_KEY },
-      body: JSON.stringify(body),
-    });
-    if (!response.ok) {
-      const errorText = await response.text();
-      return { success: false, error: `HTTP ${response.status}: ${errorText}` };
-    }
-    const result = await response.json();
-    return { success: true, messageId: result.key?.id };
-  } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : String(error) };
-  }
+  return await sendMediaViaInstance(
+    supabase,
+    instance,
+    phoneNumber,
+    {
+      type: mediaType,
+      file: mediaUrl,
+      filename: options?.fileName,
+      caption: options?.caption,
+    },
+    { trackSource: "campaign-rule-dispatch" }
+  );
 }
 
 function randomDelay(minMs: number, maxMs: number): Promise<void> {

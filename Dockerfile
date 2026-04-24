@@ -22,6 +22,8 @@ ARG VITE_CALENDAR_SERVICE_URL
 ARG VITE_INVITE_API_URL
 ARG VITE_INTERNAL_API_KEY
 ARG VITE_META_APP_ID
+# Feature flags — ChatShell 3-col com ContextPanel sidebar (default ligado em prod)
+ARG VITE_CHAT_ONDA_2B=true
 
 ENV VITE_SUPABASE_URL=${VITE_SUPABASE_URL} \
     VITE_SUPABASE_PUBLISHABLE_KEY=${VITE_SUPABASE_PUBLISHABLE_KEY} \
@@ -29,7 +31,8 @@ ENV VITE_SUPABASE_URL=${VITE_SUPABASE_URL} \
     VITE_CALENDAR_SERVICE_URL=${VITE_CALENDAR_SERVICE_URL} \
     VITE_INVITE_API_URL=${VITE_INVITE_API_URL} \
     VITE_INTERNAL_API_KEY=${VITE_INTERNAL_API_KEY} \
-    VITE_META_APP_ID=${VITE_META_APP_ID}
+    VITE_META_APP_ID=${VITE_META_APP_ID} \
+    VITE_CHAT_ONDA_2B=${VITE_CHAT_ONDA_2B}
 
 RUN npm run build
 
@@ -55,12 +58,21 @@ RUN printf '%s\n' \
   '    add_header X-Content-Type-Options "nosniff" always;' \
   '    try_files $uri =404;' \
   '  }' \
+  '  location = / {' \
+  '    add_header Cache-Control "no-store, must-revalidate" always;' \
+  '    add_header X-Content-Type-Options "nosniff" always;' \
+  '    add_header X-Frame-Options "DENY" always;' \
+  '    try_files /index.html =404;' \
+  '  }' \
   '  location = /index.html {' \
   '    add_header Cache-Control "no-store, must-revalidate" always;' \
   '    add_header X-Content-Type-Options "nosniff" always;' \
   '    add_header X-Frame-Options "DENY" always;' \
   '  }' \
-  '  location / { try_files $uri $uri/ /index.html; }' \
+  '  location / {' \
+  '    add_header Cache-Control "no-store, must-revalidate" always;' \
+  '    try_files $uri $uri/ /index.html;' \
+  '  }' \
   '}' > /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
