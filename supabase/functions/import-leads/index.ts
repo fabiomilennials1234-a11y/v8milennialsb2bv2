@@ -176,6 +176,11 @@ function resolveStageFromName(
   return defaultStageKey;
 }
 
+function truncateErr(msg: string | undefined | null, max = 200): string {
+  if (!msg) return "erro desconhecido";
+  return msg.length <= max ? msg : `${msg.slice(0, max)}…`;
+}
+
 function resolveSellerToId(
   sellerName: string | undefined,
   members: { id: string; name: string }[],
@@ -1012,32 +1017,74 @@ async function importToCustomPipeline(
         }
 
         // Upsert into custom_pipe_entries
-        const { data: existingEntry } = await supabase
+        const { data: existingEntry, error: existingEntryError } = await supabase
           .from("custom_pipe_entries")
           .select("id")
           .eq("lead_id", leadId)
           .eq("pipeline_id", pipelineId)
           .maybeSingle();
 
+        if (existingEntryError) {
+          report.errors.push({
+            row: rowIndex + 1,
+            reason: `Falha ao verificar funil existente: ${truncateErr(existingEntryError.message)}`,
+          });
+          if (!existingLead) {
+            report.created = Math.max(0, report.created - 1);
+            report.rejected++;
+          }
+          continue;
+        }
+
+        let pipeEntryError: { message: string } | null = null;
+
         if (existingEntry) {
-          await supabase
+          const { error: updateError } = await supabase
             .from("custom_pipe_entries")
             .update({
               stage_id: stageIdForLead,
               assigned_to: assignedTo,
               stage_changed_at: new Date().toISOString(),
             })
-            .eq("id", existingEntry.id);
+            .eq("id", existingEntry.id)
+            .select("id")
+            .single();
+          pipeEntryError = updateError;
         } else {
-          await supabase.from("custom_pipe_entries").insert({
-            lead_id: leadId,
-            organization_id: organizationId,
-            pipeline_id: pipelineId,
-            stage_id: stageIdForLead,
-            assigned_to: assignedTo,
-            entered_at: new Date().toISOString(),
-            stage_changed_at: new Date().toISOString(),
+          const { error: insertError } = await supabase
+            .from("custom_pipe_entries")
+            .insert({
+              lead_id: leadId,
+              organization_id: organizationId,
+              pipeline_id: pipelineId,
+              stage_id: stageIdForLead,
+              assigned_to: assignedTo,
+              entered_at: new Date().toISOString(),
+              stage_changed_at: new Date().toISOString(),
+            })
+            .select("id")
+            .single();
+          pipeEntryError = insertError;
+        }
+
+        if (pipeEntryError) {
+          console.error("[import-leads] custom_pipe_entries write failed", {
+            row: rowIndex + 1,
+            leadId,
+            pipelineId,
+            stageId: stageIdForLead,
+            assignedTo,
+            error: pipeEntryError.message,
           });
+          report.errors.push({
+            row: rowIndex + 1,
+            reason: `Lead criado mas não entrou no funil: ${truncateErr(pipeEntryError.message)}`,
+          });
+          if (!existingLead) {
+            report.created = Math.max(0, report.created - 1);
+            report.rejected++;
+          }
+          continue;
         }
 
         if (formattedPhone) processedPhones.add(formattedPhone);
