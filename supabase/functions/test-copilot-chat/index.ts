@@ -13,6 +13,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { withSentry } from '../_shared/sentry.ts';
 import { logRuntime } from "../_shared/logger.ts";
+import { sanitizeAssistantMessage, splitByDelimiter } from "../_shared/message-sanitizer.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -246,10 +247,8 @@ Deno.serve(withSentry('test-copilot-chat', async (req) => {
 
       const rawContent: string = (result as any).choices?.[0]?.message?.content || "";
 
-      const messageParts = rawContent
-        .split("||SPLIT||")
-        .map((s: string) => s.trim())
-        .filter((s: string) => s.length > 0);
+      const sanitizedContent = sanitizeAssistantMessage(rawContent, false).text;
+      const messageParts = splitByDelimiter(sanitizedContent);
 
       const cleanMessage = messageParts.join(" ");
 
@@ -292,10 +291,8 @@ Deno.serve(withSentry('test-copilot-chat', async (req) => {
 
     const rawContent: string = (result as any).choices?.[0]?.message?.content || "";
 
-    const messageParts = rawContent
-      .split("||SPLIT||")
-      .map((s: string) => s.trim())
-      .filter((s: string) => s.length > 0);
+    const sanitizedContent = sanitizeAssistantMessage(rawContent, false).text;
+    const messageParts = splitByDelimiter(sanitizedContent);
 
     const cleanMessage = messageParts.join(" ");
 

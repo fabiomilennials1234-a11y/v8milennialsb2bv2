@@ -3,6 +3,7 @@ import { OpenRouterClient } from "./openrouter-client.ts";
 import { generateEmbedding } from "../_shared/embeddings.ts";
 import { enqueueAiAction } from "../_shared/ai-queue.ts";
 import { immediateTransferHuman } from "../_shared/ai-action-executor.ts";
+import { sanitizeAssistantMessage, splitByDelimiter } from "../_shared/message-sanitizer.ts";
 
 /** Parse custom_instructions (JSON ou string legada) para { dos, donts } */
 function parseCustomInstructions(raw: string): { dos: string; donts: string } {
@@ -218,15 +219,29 @@ export class AgentEngine {
     }
 
     const nextState = finalNextState;
-    const actionToExecute = finalAction;
-    const assistantMessage = finalAssistantMessage || 'Desculpe, houve um problema ao processar sua mensagem.';
+    let actionToExecute = finalAction;
+    const rawAssistantMessage = finalAssistantMessage || 'Desculpe, houve um problema ao processar sua mensagem.';
+
+    // 8a.0 Sanitizar JSON de ReAct leak + recuperar ação textual se tool nativo não foi usado.
+    // Evita vazamento de blocos {"action":"...","action_input":"..."} para o lead (incidente 2026-04-24).
+    const sanitized = sanitizeAssistantMessage(rawAssistantMessage, !!actionToExecute);
+    if (sanitized.recoveredAction && !actionToExecute) {
+      console.warn('[AgentEngine] Recovered inline action from LLM text (tool_call missed):', sanitized.recoveredAction.action);
+      actionToExecute = {
+        action: sanitized.recoveredAction.action,
+        params: sanitized.recoveredAction.params,
+        tenant_id: this.organizationId,
+      };
+    }
+    if (sanitized.droppedBlocks > 0) {
+      console.warn('[AgentEngine] Stripped', sanitized.droppedBlocks, 'JSON action block(s) from LLM output');
+    }
+    const assistantMessage = sanitized.text;
     console.log('[AgentEngine] Response processed:', { nextState, hasAction: !!actionToExecute, messageLength: assistantMessage?.length });
 
     // 8a. Split message on ||SPLIT|| delimiter (WhatsApp natural messaging)
-    const messageParts = assistantMessage
-      .split('||SPLIT||')
-      .map((s: string) => s.trim())
-      .filter((s: string) => s.length > 0);
+    // Case-insensitive + tolera variações (||split||, || SPLIT ||, etc)
+    const messageParts = splitByDelimiter(assistantMessage);
     // Versão limpa sem delimitadores (usada para memória e logs)
     const cleanMessage = messageParts.join(' ');
 
@@ -2140,6 +2155,18 @@ Regras:
     sections.push("- Em caso de dúvida ou situação complexa, transfira para um humano");
     sections.push("- Nunca invente informações - se não souber, admita e ofereça alternativa");
     sections.push("- Mantenha o foco no objetivo principal sem ser insistente ou agressivo");
+
+    // =====================================================
+    // FORMATO DE SAÍDA — PROTEÇÃO CONTRA VAZAMENTO DE JSON/TOOL
+    // =====================================================
+    sections.push("");
+    sections.push("# FORMATO DE SAÍDA (OBRIGATÓRIO)");
+    sections.push("");
+    sections.push('- NUNCA escreva blocos JSON ou código no seu conteúdo de resposta. NUNCA escreva {"action":...} ou {"action_input":...} no texto.');
+    sections.push("- Para executar qualquer ação (agendar, enviar material, qualificar, transferir etc), use EXCLUSIVAMENTE o mecanismo nativo de tool/function call do modelo — nunca descreva a ação em texto.");
+    sections.push("- Para enviar um material, use a tool `send_product_material` (com `material_id` UUID). NÃO existe tool `send_media` — não invente nomes.");
+    sections.push('- Use o delimitador `||SPLIT||` em MAIÚSCULAS exatas para separar mensagens. Nunca use `||split||` ou variações.');
+    sections.push("- Se não for separar, apenas escreva o texto direto, sem delimitador.");
 
     // =====================================================
     // AUDIO MODE INSTRUCTIONS (TTS)
