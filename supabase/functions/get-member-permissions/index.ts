@@ -71,8 +71,26 @@ serve(async (req) => {
     );
   } catch (error) {
     if (error instanceof AuthError) {
+      // Telemetria Fase 3: AuthError de requireOrganization é sinal da
+      // regressão de permissões (incidente 2026-04-24). Log estruturado
+      // pra Sentry/log aggregator filtrar. 400 aqui = frontend chamou sem
+      // org_id ou org_id inválida para o user.
+      console.error(
+        JSON.stringify({
+          event: "get-member-permissions.auth_error",
+          status: error.status,
+          message: error.message,
+          url: req.url,
+        }),
+      );
       return authErrorResponse(error, corsHeaders);
     }
+    console.error(
+      JSON.stringify({
+        event: "get-member-permissions.unhandled",
+        message: (error as Error).message,
+      }),
+    );
     return new Response(
       JSON.stringify({ error: (error as Error).message }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },

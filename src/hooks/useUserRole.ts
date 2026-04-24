@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import * as Sentry from "@sentry/react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
@@ -163,9 +164,24 @@ export function useFeaturePermissions() {
 
       if (!res.ok) {
         const body = await res.text().catch(() => "");
-        throw new Error(
+        const err = new Error(
           `get-member-permissions ${res.status}: ${body.slice(0, 200)}`,
         );
+        // Telemetria Fase 3: toda falha de get-member-permissions é sinal
+        // forte de regressão em permissões (causa raiz do incidente 2026-04-24).
+        // Capturar com contexto pra alertas e dashboards Sentry.
+        Sentry.captureException(err, {
+          tags: {
+            feature: "permissions",
+            kind: "get-member-permissions-http-error",
+          },
+          extra: {
+            status: res.status,
+            organizationId,
+            userId: user.id,
+          },
+        });
+        throw err;
       }
 
       const data = (await res.json()) as FeaturePermissionsResponse;
