@@ -11,14 +11,14 @@ export default function ChatWhatsApp() {
 
   if (featureFlags.chatOnda2b) {
     return (
-      <div className="flex flex-col flex-1 min-h-0 h-full p-2">
+      <div className="flex flex-col flex-1 min-h-0 p-2">
         <ChatShellWithContext />
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col flex-1 min-h-0 h-full">
+    <div className="flex flex-col flex-1 min-h-0">
       <WhatsAppChat />
     </div>
   );
