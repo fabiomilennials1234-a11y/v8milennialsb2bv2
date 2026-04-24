@@ -197,27 +197,25 @@ export function useFeaturePermissions() {
  * Verifica se o membro tem permissão para uma feature específica.
  * Admin retorna sempre true.
  *
- * `isLoading` considera também team_member async (sem isso, organizationId
- * null deixa a query disabled e o hook reportava isLoading=false,
- * provocando render prematuro da tela Lock em membros).
- * `hasError` expõe falhas técnicas (400/500/network) para diferenciar
- * de "sem permissão" no PermissionProtectedRoute.
+ * `isLoading` considera team_member async E feature permissions query, mas
+ * NUNCA depende de `!currentTeamMember` (teamMember pode resolver null
+ * legitimamente — masters sem team_member real, por exemplo — e manter
+ * isLoading=true nesse caso provoca loader eterno em gates globais como
+ * SubscriptionProtectedRoute → useCanManageCopilot). PermissionProtectedRoute
+ * trata o caso `!currentTeamMember` separadamente como erro recuperável.
+ * `hasError` expõe falhas técnicas (400/500/network).
  */
 export function useFeaturePermission(
   featureKey: string,
 ): { allowed: boolean; isLoading: boolean; hasError: boolean } {
-  const { data: currentTeamMember, isLoading: teamMemberLoading } = useCurrentTeamMember();
+  const { isLoading: teamMemberLoading } = useCurrentTeamMember();
   const { data: features, isLoading: featuresLoading, isError } = useFeaturePermissions();
   const { isAdmin } = useIsAdmin();
   const { isMaster } = useMasterAuth();
 
-  // Aguarda team_member OU (team_member presente mas query ainda rodando).
-  const waitingForTeamMember = teamMemberLoading || !currentTeamMember;
-  const waitingForFeatures = !!currentTeamMember && featuresLoading;
-
   return {
     allowed: isMaster || isAdmin || features?.[featureKey] === true,
-    isLoading: waitingForTeamMember || waitingForFeatures,
+    isLoading: teamMemberLoading || featuresLoading,
     hasError: isError,
   };
 }
