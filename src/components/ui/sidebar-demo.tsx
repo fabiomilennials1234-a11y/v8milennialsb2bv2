@@ -47,7 +47,7 @@ export function SidebarDemo() {
   return (
     <div
       className={cn(
-        "rounded-md flex flex-col md:flex-row bg-gray-100 dark:bg-neutral-800 w-full flex-1 max-w-7xl mx-auto border border-neutral-200 dark:border-neutral-700 overflow-hidden",
+        "rounded-md flex flex-col md:flex-row bg-muted w-full flex-1 max-w-7xl mx-auto border border-neutral-200 dark:border-neutral-700 overflow-hidden",
         "h-[60vh]"
       )}
     >
@@ -122,7 +122,7 @@ const SidebarDemoContent = () => {
           {[...new Array(4)].map((i) => (
             <div
               key={"first-array" + i}
-              className="h-20 w-full rounded-lg bg-gray-100 dark:bg-neutral-800 animate-pulse"
+              className="h-20 w-full rounded-lg bg-muted animate-pulse"
             />
           ))}
         </div>
@@ -130,7 +130,7 @@ const SidebarDemoContent = () => {
           {[...new Array(2)].map((i) => (
             <div
               key={"second-array" + i}
-              className="h-full w-full rounded-lg bg-gray-100 dark:bg-neutral-800 animate-pulse"
+              className="h-full w-full rounded-lg bg-muted animate-pulse"
             />
           ))}
         </div>

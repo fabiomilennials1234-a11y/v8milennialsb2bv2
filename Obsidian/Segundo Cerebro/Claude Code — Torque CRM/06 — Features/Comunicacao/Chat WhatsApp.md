@@ -5,7 +5,7 @@ tags:
   - torque-crm
   - comunicacao
 created: 2026-04-12
-last_updated: 2026-04-20
+last_updated: 2026-04-23
 status: active
 ---
 
@@ -109,6 +109,35 @@ Webhook externo (Evolution/Meta/SZ.Chat)
 
 ## Historico de mudancas
 
+### 2026-04-23 — Onda 6.1 (Dark LOW components sweep)
+
+- 13 arquivos em `src/components/**` + `src/types/workflow.ts` normalizados para semantic tokens
+- Kanban (CreateOpportunityModal, KanbanCard, StageWorkflowsBadge): TikTok `bg-foreground`, origin fallback semantico, inactive workflow indicator
+- Campanhas (5 arquivos): inactive agent + pending batch + muted text/border + Trophy rank 2 gradient
+- Automacoes (WorkflowToolbar, EndNode): `text-muted-foreground` em end node
+- Confirmacao: TikTok tinted badge
+- Chat/ConversationNotes: `text-gray-800 dark:text-gray-200` → `text-foreground`
+- ui/sidebar-demo: 3x `bg-gray-100 dark:bg-neutral-800` → `bg-muted`
+- types/workflow: NODE_COLORS end node semantico
+
+Dark LOW components: **fechado**. Grep `gray-[0-9]+` em `src/` → 1 match restante (`WhatsAppChat.tsx` legacy, delete em Onda 3.3).
+
+Branch: `feat/chat-onda-6-1` (bifurcada de `feat/chat-onda-6-final`).
+
+### 2026-04-23 — Onda 6 final (Dark LOW pages closure)
+
+- `src/pages/Privacidade.tsx` — full dark-ification (14 ocorrencias gray-* → semantic tokens)
+- `src/pages/master/MasterFeatures.tsx` + `MasterAuditLogs.tsx` — badge fallback `bg-gray-500` → `bg-muted text-muted-foreground`
+- `src/pages/master/MasterOperations.tsx` — skipped + engine badge fallback semantico
+- `src/pages/AutomacoesExecucoes.tsx` — skipped status `text-gray-400` → `text-muted-foreground` (2 ocorrencias)
+- `src/pages/PipeWhatsapp.tsx` — TikTok badge `bg-gray-900` → `bg-foreground text-background` (brand compliant), "Outros" fallback semantico
+- `src/pages/CampanhaDetail.tsx` — manual campaign badge simplificado para semantic puro
+
+Dark LOW pages: **100% limpo** (grep `gray-[0-9]+` em `src/pages/` → 0 matches).
+
+Diferido para Onda 6.1: 13 componentes em `src/components/**` com 22 ocorrencias residuais. Ver `.specs/features/chat-onda-6/tasks.md` para lista exata.
+
+Branch: `feat/chat-onda-6-final` (nao mergeada — PR manual pelo CTO).
 
 ## Links relacionados
 

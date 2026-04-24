@@ -230,6 +230,19 @@ export async function executeAiAction(
     case "send_document":
       result = await executeSendDocument(supabase, payload, organization_id, lead_id, conversation_id);
       break;
+    case "generate_message": {
+      // workflow-executor.ts case "copilot" enqueues this action_type but no
+      // handler exists. Returning success no-op stops infinite retry loop.
+      // Proper outbound pipeline (workflow-node copilot -> agent message)
+      // pending design — see Backlog: workflow-copilot-pipeline-design.
+      console.warn(
+        `[ai-action-executor] generate_message no-op (handler pending design): lead=${lead_id} org=${organization_id}`,
+      );
+      return {
+        success: true,
+        message: "no-op: generate_message handler pending design (workflow→copilot pipeline)",
+      };
+    }
     default:
       return { success: false, error: `Tipo de ação desconhecido: ${action_type}` };
   }

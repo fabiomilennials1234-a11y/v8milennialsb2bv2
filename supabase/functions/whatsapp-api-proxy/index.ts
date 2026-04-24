@@ -165,13 +165,24 @@ Deno.serve(
         const webhookBaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
         const webhookSecret = Deno.env.get("UAZAPI_WEBHOOK_SECRET") ?? "";
 
+        // Provisioning provider gate. Default Evolution until Uazapi rollout
+        // is complete (secrets set + per-instance creds populated). Flip
+        // ENABLE_UAZAPI_PROVISIONING=true once secrets land in prod.
+        const uazapiEnabled =
+          (Deno.env.get("ENABLE_UAZAPI_PROVISIONING") ?? "").toLowerCase() === "true" &&
+          !!Deno.env.get("UAZAPI_BASE_URL") &&
+          !!Deno.env.get("UAZAPI_ADMIN_TOKEN");
+        const provisioningProvider: "uazapi" | "evolution" = uazapiEnabled
+          ? "uazapi"
+          : "evolution";
+
         // Insert row first to obtain a stable UUID
         const { data: newRow, error: insertErr } = await supabaseAdmin
           .from("whatsapp_instances")
           .insert({
             organization_id: callerOrgId,
             instance_name: instanceName,
-            provider: "uazapi",
+            provider: provisioningProvider,
             status: "connecting",
           })
           .select("*")

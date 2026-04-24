@@ -222,7 +222,7 @@ export default function Copilot() {
                         <Star className="w-4 h-4 fill-primary text-primary" />
                       )}
                       {agent.is_active ? (
-                        <Badge className="bg-green-500">Ativo</Badge>
+                        <Badge className="bg-success text-success-foreground">Ativo</Badge>
                       ) : (
                         <Badge variant="secondary">Inativo</Badge>
                       )}
