@@ -226,16 +226,62 @@ function AITimelineSkeleton() {
 
 export interface AITimelineProps {
   leadId: string | null | undefined;
+  /** Quando true, renderiza sem o header colapsável e ocupa toda a altura. */
+  hideHeader?: boolean;
 }
 
-export function AITimeline({ leadId }: AITimelineProps) {
+export function AITimeline({ leadId, hideHeader = false }: AITimelineProps) {
   const prefersReduced = usePrefersReducedMotion();
   const [expanded, setExpanded] = useState(true);
   const { data: events = [], isLoading, error, revert } = useAITimeline(leadId);
 
+  const body = (
+    <>
+      {isLoading && <AITimelineSkeleton />}
+
+      {error && !isLoading && (
+        <div className="flex items-center gap-1.5 px-4 py-4 text-xs text-destructive">
+          <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden />
+          Erro ao carregar histórico da IA
+        </div>
+      )}
+
+      {!isLoading && !error && events.length === 0 && (
+        <p className="text-xs text-muted-foreground text-center py-6 px-4">
+          Nenhuma ação da IA registrada
+        </p>
+      )}
+
+      {!isLoading && !error && events.length > 0 && (
+        <ScrollArea className={hideHeader ? "h-full" : "max-h-[320px]"}>
+          <ol>
+            <AnimatePresence initial={false}>
+              {events.map((event, index) => (
+                <AITimelineEventItem
+                  key={event.id}
+                  event={event}
+                  isLast={index === events.length - 1}
+                  onRevert={revert}
+                  prefersReduced={prefersReduced}
+                />
+              ))}
+            </AnimatePresence>
+          </ol>
+        </ScrollArea>
+      )}
+    </>
+  );
+
+  if (hideHeader) {
+    return (
+      <section aria-label="Histórico de ações da IA" className="h-full flex flex-col">
+        {body}
+      </section>
+    );
+  }
+
   return (
     <section aria-label="Histórico de ações da IA">
-      {/* Header colapsável */}
       <button
         type="button"
         className={cn(
@@ -258,44 +304,7 @@ export function AITimeline({ leadId }: AITimelineProps) {
           aria-hidden
         />
       </button>
-
-      {/* Conteúdo */}
-      {expanded && (
-        <>
-          {isLoading && <AITimelineSkeleton />}
-
-          {error && !isLoading && (
-            <div className="flex items-center gap-1.5 px-4 py-4 text-xs text-destructive">
-              <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden />
-              Erro ao carregar histórico da IA
-            </div>
-          )}
-
-          {!isLoading && !error && events.length === 0 && (
-            <p className="text-xs text-muted-foreground text-center py-6 px-4">
-              Nenhuma ação da IA registrada
-            </p>
-          )}
-
-          {!isLoading && !error && events.length > 0 && (
-            <ScrollArea className="max-h-[320px]">
-              <ol>
-                <AnimatePresence initial={false}>
-                  {events.map((event, index) => (
-                    <AITimelineEventItem
-                      key={event.id}
-                      event={event}
-                      isLast={index === events.length - 1}
-                      onRevert={revert}
-                      prefersReduced={prefersReduced}
-                    />
-                  ))}
-                </AnimatePresence>
-              </ol>
-            </ScrollArea>
-          )}
-        </>
-      )}
+      {expanded && body}
     </section>
   );
 }
