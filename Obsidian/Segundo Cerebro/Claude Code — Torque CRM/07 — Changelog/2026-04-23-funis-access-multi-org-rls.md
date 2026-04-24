@@ -56,6 +56,29 @@ Descoberto durante a triagem. Em [20260130000000_security_fix_rls_policies.sql:4
 - Testes diretamente tocados: **141 passed** em 7 arquivos (shared-user-auth, use-feature-permissions-orgid, ghost-leads-banner, permission-protected-route, use-permissions-hooks, permissions, shared-permission-engine).
 - Suite completa: falhas pré-existentes em e2e (precisam Playwright), integration (precisam Supabase local), `dompurify missing` no build (já documentado em 2026-04-23 copilot fix) — nenhuma introduzida por este fix.
 
+## Baseline dev (2026-04-24)
+
+Rodado `node tools/check-pipe-drift.mjs` contra `bcfadphgsibjzivtbjvc` (somente leitura, service_role):
+
+```
+pipe_propostas.closer_id           OK   (1 rows scanned)
+pipe_propostas.responsible_id      OK   (1 rows scanned)
+pipe_confirmacao.closer_id         OK   (1 rows scanned)
+pipe_confirmacao.sdr_id            OK   (1 rows scanned)
+pipe_confirmacao.responsible_id    OK   (1 rows scanned)
+pipe_whatsapp.sdr_id               OK   (3 rows scanned)
+pipe_whatsapp.responsible_id       OK   (3 rows scanned)
+RESULTADO: sem drift (✓). Invariante pipe_* ≡ leads.* mantido.
+```
+
+Dev já tinha a fix `20260417110000` aplicada (consistente com daily 2026-04-17). Migration `20260423120000` é idempotente em dev — no-op nos backfills + validação de trigger. Mesmo script deve ser rodado pelo CTO em prod para confirmar as orgs afetadas antes de deploy:
+
+```bash
+SUPABASE_URL="https://jsjsmuncfkbsbzqzqhfq.supabase.co" \
+SERVICE_ROLE_KEY="<service-role-prod>" \
+  node tools/check-pipe-drift.mjs
+```
+
 ## Pendências operacionais
 
 1. **Aplicar em dev** (`bcfadphgsibjzivtbjvc`) a migration `20260423120000` e rodar `SELECT * FROM v_pipe_responsibility_drift LIMIT 100` para confirmar drift zero.
