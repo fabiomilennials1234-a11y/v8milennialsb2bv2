@@ -27,4 +27,45 @@ export interface LlmCallResult {
   durationMs: number;
 }
 
-// TODO: extrair OpenRouter call sites de agent-engine.ts:198, 949, 2672, 3161
+// ─── Timing helpers (extracted timing pattern from Onda 2 instrumentation) ───
+
+/**
+ * Mede latência de chamada LLM. Use:
+ *   const t = startTimer();
+ *   const response = await openRouter.chat(...);
+ *   const ms = t.elapsed();
+ */
+export function startTimer(): { elapsed: () => number } {
+  const start = Date.now();
+  return { elapsed: () => Date.now() - start };
+}
+
+/**
+ * Extrai usage tokens de response OpenRouter de forma defensiva.
+ * Retorna null se shape inválido.
+ */
+export function extractTokenUsage(response: unknown): { prompt: number; completion: number; total: number } | null {
+  const r = response as { usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } } | null;
+  const u = r?.usage;
+  if (!u || typeof u.prompt_tokens !== "number" || typeof u.completion_tokens !== "number") return null;
+  return {
+    prompt: u.prompt_tokens,
+    completion: u.completion_tokens,
+    total: u.total_tokens ?? u.prompt_tokens + u.completion_tokens,
+  };
+}
+
+/**
+ * Wrapper genérico com timeout pra qualquer Promise.
+ * Útil pra envolver openRouter.chat() com hard limit.
+ */
+export async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  errorMessage = "LLM call timeout",
+): Promise<T> {
+  const timeoutPromise = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error(`${errorMessage} after ${timeoutMs}ms`)), timeoutMs)
+  );
+  return Promise.race([promise, timeoutPromise]);
+}

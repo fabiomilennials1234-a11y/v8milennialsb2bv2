@@ -5,6 +5,10 @@ import { enqueueAiAction } from "../_shared/ai-queue.ts";
 import { immediateTransferHuman } from "../_shared/ai-action-executor.ts";
 import { sanitizeAssistantMessage, splitByDelimiter } from "../_shared/message-sanitizer.ts";
 import { logRuntime } from "../_shared/logger.ts";
+import { loadCapabilities as loadCapabilitiesExternal } from "../_shared/copilot/context-loader.ts";
+import { determineNextState as determineNextStateExternal } from "../_shared/copilot/state-machine.ts";
+import { buildIdempotencyKey as buildIdempotencyKeyExternal } from "../_shared/copilot/dispatcher.ts";
+import { executeSearchKnowledge as executeSearchKnowledgeExternal } from "../_shared/copilot/search-knowledge.ts";
 
 /** Parse custom_instructions (JSON ou string legada) para { dos, donts } */
 function parseCustomInstructions(raw: string): { dos: string; donts: string } {
@@ -623,137 +627,12 @@ export class AgentEngine {
    * Item #4: Se leadId for fornecido, tenta rotear para o agente configurado
    * para a etapa atual do lead (routing_stages). Caso não encontre, usa is_default.
    */
+  /**
+   * Trilha 3.B T3B.2: delegado pra _shared/copilot/context-loader.ts
+   * com cache LRU integrado (TTL 5min, MAX 200 entries por org+lead).
+   */
   private async loadCapabilities(leadId?: string) {
-    const SELECT = '*, copilot_agent_faqs(*), copilot_agent_kanban_rules(*)';
-
-    // Item #4 + #12: Roteamento por etapa, origem e segmento do lead (paralelo)
-    // Inclui stages de todos os funis: whatsapp, confirmacao, propostas, upsell_base, upsell_gestao, campanha
-    if (leadId) {
-      try {
-        // Buscar lead + todos os funis em paralelo
-        const [leadRes, upsellRes, confirmacaoRes, propostasRes, campanhaRes] = await Promise.all([
-          this.supabase
-            .from('leads')
-            .select('pipe_whatsapp, origin, segment')
-            .eq('id', leadId)
-            .maybeSingle(),
-          this.supabase
-            .from('upsell_clients')
-            .select('tipo_cliente_tempo, gestao_stage')
-            .eq('lead_id', leadId)
-            .maybeSingle(),
-          this.supabase
-            .from('pipe_confirmacao')
-            .select('status')
-            .eq('lead_id', leadId)
-            .maybeSingle(),
-          this.supabase
-            .from('pipe_propostas')
-            .select('status')
-            .eq('lead_id', leadId)
-            .maybeSingle(),
-          this.supabase
-            .from('campanha_leads')
-            .select('stage_id, campanha_stages(name)')
-            .eq('lead_id', leadId)
-            .limit(1)
-            .maybeSingle(),
-        ]);
-
-        const leadRow = leadRes.data;
-        const upsellRow = upsellRes.data;
-        const confirmacaoRow = confirmacaoRes.data;
-        const propostasRow = propostasRes.data;
-        const campanhaRow = campanhaRes.data;
-
-        if (leadRow || upsellRow || confirmacaoRow || propostasRow || campanhaRow) {
-          // Coletar todas as stages ativas do lead em todos os funis
-          const allStages: string[] = [];
-          if (leadRow?.pipe_whatsapp) allStages.push(leadRow.pipe_whatsapp);
-          if (upsellRow?.tipo_cliente_tempo) allStages.push(upsellRow.tipo_cliente_tempo);
-          if (upsellRow?.gestao_stage) allStages.push(upsellRow.gestao_stage);
-          if (confirmacaoRow?.status) allStages.push(confirmacaoRow.status);
-          if (propostasRow?.status) allStages.push(propostasRow.status);
-          const campanhaStage = (campanhaRow as any)?.campanha_stages?.name;
-          if (campanhaStage) allStages.push(campanhaStage);
-
-          // Executar as 3 tentativas de routing em paralelo (prioridade: stage > origin > segment)
-          const [stageResult, originResult, segmentResult] = await Promise.all([
-            allStages.length > 0
-              ? this.supabase
-                  .from('copilot_agents')
-                  .select(SELECT)
-                  .eq('organization_id', this.organizationId)
-                  .eq('is_active', true)
-                  .overlaps('routing_stages', allStages)
-                  .maybeSingle()
-              : Promise.resolve({ data: null }),
-            leadRow?.origin
-              ? this.supabase
-                  .from('copilot_agents')
-                  .select(SELECT)
-                  .eq('organization_id', this.organizationId)
-                  .eq('is_active', true)
-                  .contains('routing_origins', [leadRow.origin])
-                  .maybeSingle()
-              : Promise.resolve({ data: null }),
-            leadRow?.segment
-              ? this.supabase
-                  .from('copilot_agents')
-                  .select(SELECT)
-                  .eq('organization_id', this.organizationId)
-                  .eq('is_active', true)
-                  .contains('routing_segments', [leadRow.segment])
-                  .maybeSingle()
-              : Promise.resolve({ data: null }),
-          ]);
-
-          // Respeitar prioridade: stage > origin > segment
-          const routedAgent = stageResult.data || originResult.data || segmentResult.data;
-          if (routedAgent) {
-            const routeType = stageResult.data ? 'etapa' : originResult.data ? 'origem' : 'segmento';
-            console.log(`[AgentEngine] Roteado por ${routeType}:`, { agentId: routedAgent.id, stages: allStages });
-            return routedAgent;
-          }
-        }
-      } catch (e) {
-        console.warn('[AgentEngine] Routing lookup failed (non-fatal):', e);
-      }
-    }
-
-    // Fallback 1: agente padrão da organização
-    const { data: defaultAgent } = await this.supabase
-      .from('copilot_agents')
-      .select(SELECT)
-      .eq('organization_id', this.organizationId)
-      .eq('is_active', true)
-      .eq('is_default', true)
-      .maybeSingle();
-
-    if (defaultAgent) {
-      console.log('[AgentEngine] Using default agent:', { agentId: defaultAgent.id });
-      return defaultAgent;
-    }
-
-    // Fallback 2: qualquer agente ativo da organização (mais recente)
-    // Garante que shadow leads e leads sem routing match ainda recebam resposta
-    console.warn('[AgentEngine] No default agent found, trying any active agent');
-    const { data: anyAgent } = await this.supabase
-      .from('copilot_agents')
-      .select(SELECT)
-      .eq('organization_id', this.organizationId)
-      .eq('is_active', true)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (anyAgent) {
-      console.log('[AgentEngine] Using fallback active agent:', { agentId: anyAgent.id });
-    } else {
-      console.error('[AgentEngine] No active agents found for organization:', this.organizationId);
-    }
-
-    return anyAgent;
+    return loadCapabilitiesExternal(this.supabase, this.organizationId, leadId);
   }
 
   /**
@@ -846,73 +725,9 @@ export class AgentEngine {
    * Executa busca na base de conhecimento inline (search_knowledge tool).
    * Retorna trechos relevantes + lista de arquivos disponiveis para envio.
    */
+  /** T3B.7: delegado pra _shared/copilot/search-knowledge.ts */
   private async executeSearchKnowledge(query: string, agentId: string): Promise<string> {
-    try {
-      const apiKey = Deno.env.get('GEMINI_API_KEY');
-      if (!apiKey) return 'Erro: API key nao configurada.';
-
-      const queryEmbedding = await generateEmbedding(query, apiKey);
-      if (!queryEmbedding || queryEmbedding.length === 0) return 'Nao foi possivel processar a busca.';
-
-      const embeddingStr = `[${queryEmbedding.join(',')}]`;
-      const parts: string[] = [];
-
-      // Buscar chunks relevantes (generoso: 8 resultados, threshold baixo)
-      const { data: chunks } = await (this.supabase as any)
-        .rpc('match_document_chunks', {
-          query_embedding: embeddingStr,
-          agent_id_filter: agentId,
-          match_count: 8,
-          similarity_threshold: 0.45,
-        });
-
-      if (chunks && chunks.length > 0) {
-        parts.push('=== INFORMACOES ENCONTRADAS ===\n');
-        for (const chunk of chunks as Array<{content: string; similarity: number}>) {
-          parts.push(chunk.content);
-          parts.push('');
-        }
-      }
-
-      // Buscar FAQs relevantes
-      const { data: faqs } = await (this.supabase as any)
-        .rpc('match_faqs', {
-          query_embedding: embeddingStr,
-          agent_id_filter: agentId,
-          match_count: 4,
-          similarity_threshold: 0.5,
-        });
-
-      if (faqs && faqs.length > 0) {
-        parts.push('=== PERGUNTAS FREQUENTES ===\n');
-        for (const faq of faqs as Array<{question: string; answer: string}>) {
-          parts.push(`P: ${faq.question}\nR: ${faq.answer}\n`);
-        }
-      }
-
-      // Listar documentos disponiveis para envio
-      const { data: docs } = await this.supabase
-        .from('copilot_agent_documents')
-        .select('id, file_name')
-        .eq('agent_id', agentId)
-        .eq('status', 'ready');
-
-      if (docs && docs.length > 0) {
-        parts.push('=== DOCUMENTOS DISPONIVEIS PARA ENVIO ===');
-        for (const doc of docs) {
-          parts.push(`- "${doc.file_name.trim()}" (id: ${doc.id}) — use send_document para enviar ao lead`);
-        }
-      }
-
-      if (parts.length === 0) {
-        return 'Nenhuma informacao encontrada na base de conhecimento para: "' + query + '"';
-      }
-
-      return parts.join('\n');
-    } catch (e) {
-      console.error('[AgentEngine] executeSearchKnowledge error:', e);
-      return 'Erro ao consultar a base de conhecimento.';
-    }
+    return executeSearchKnowledgeExternal(this.supabase, query, agentId);
   }
 
   /**
@@ -2989,21 +2804,9 @@ Regras:
   /**
    * Determine next state based on action
    */
+  /** T3B.5: delegado pra _shared/copilot/state-machine.ts (pure function) */
   private determineNextState(currentState: string, toolName: string): string {
-    if (toolName === 'schedule_meeting') return 'SCHEDULED';
-    if (toolName === 'transfer_to_human') return 'WAITING_HUMAN';
-    if (toolName === 'qualify_lead') return 'QUALIFIED';
-    if (toolName === 'disqualify_lead') return 'DISQUALIFIED';
-    if (toolName === 'advance_stage') return currentState;
-    if (toolName === 'confirm_meeting') return 'QUALIFIED'; // Confirmação dispara onQualify automation
-    if (toolName === 'advance_confirmation_stage') return currentState;
-    if (toolName === 'create_custom_field') return currentState;
-    if (toolName === 'transfer_sz_chat') return 'CLOSED_WON';
-    if (toolName === 'send_document') return currentState;
-    if (toolName === 'send_product_material') return currentState;
-    if (toolName === 'search_knowledge') return currentState;
-    if (currentState === 'NEW_LEAD') return 'QUALIFYING';
-    return currentState;
+    return determineNextStateExternal(currentState, toolName);
   }
 
   /**
@@ -3079,38 +2882,14 @@ Regras:
   /**
    * Gera chave de idempotência baseada no tipo de ação e parâmetros.
    */
+  /** T3B.6: delegado pra _shared/copilot/dispatcher.ts (pure function) */
   private buildIdempotencyKey(
     actionType: string,
     leadId: string | null,
     params: Record<string, unknown>,
     turnCount?: number,
   ): string {
-    // Onda 1 / T1.3.2: usa turn_count quando disponível (granularidade de turno),
-    // fallback para timestamp 1min granular. Antes, ts puro permitia colisão
-    // a cada 31s+ — telemetria de race condition perdia ações duplicadas.
-    const turnOrTs = turnCount !== undefined && turnCount !== null
-      ? `t${turnCount}`
-      : `ts${Math.floor(Date.now() / 60_000)}`;
-    switch (actionType) {
-      case 'schedule_meeting':
-        return `schedule_meeting_${leadId}_${params.preferred_date}`;
-      case 'transfer_to_human':
-        return `transfer_human_${leadId}`;
-      case 'transfer_to_human_notify':
-        return `transfer_human_notify_${leadId}_${turnOrTs}`;
-      case 'advance_stage':
-        return `advance_stage_${leadId}_${params.target_pipe || 'whatsapp'}_${params.target_stage}`;
-      case 'confirm_meeting':
-        return `confirm_meeting_${leadId}_${params.confirmation_type || 'pre_confirmed'}`;
-      case 'advance_confirmation_stage':
-        return `advance_confirmation_${leadId}_${params.target_stage}`;
-      case 'create_custom_field':
-        return `create_field_${this.organizationId}_${params.field_name}`;
-      case 'update_qualification_score':
-        return `update_score_${leadId}_${params.score}_${turnOrTs}`;
-      default:
-        return `${actionType}_${leadId || this.organizationId}_${turnOrTs}`;
-    }
+    return buildIdempotencyKeyExternal(actionType, leadId, this.organizationId, params, turnCount);
   }
 
   // ── Tool execution methods removed — all writes now go through pending_ai_actions queue ──

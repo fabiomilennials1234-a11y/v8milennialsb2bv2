@@ -48,4 +48,35 @@ export function isValidTransition(from: ConversationState, to: ConversationState
   return VALID_TRANSITIONS[from]?.includes(to) ?? false;
 }
 
-// TODO: extrair determineNextState de agent-engine.ts
+// ─── determineNextState (extracted from agent-engine.ts:2868) ────────────────
+
+/**
+ * Decide próximo estado da conversa baseado no tool/action chamado pelo LLM.
+ * Pure function — sem side effects, fácil de testar.
+ *
+ * Comportamento:
+ *   - schedule_meeting → SCHEDULED
+ *   - transfer_to_human → WAITING_HUMAN
+ *   - qualify_lead → QUALIFIED
+ *   - disqualify_lead → DISQUALIFIED
+ *   - confirm_meeting → QUALIFIED (dispara onQualify automation)
+ *   - transfer_sz_chat → CLOSED_WON
+ *   - search_knowledge / advance_* / send_* / create_* → mantém estado
+ *   - Default: NEW_LEAD → QUALIFYING (auto-advance ao primeiro turn)
+ */
+export function determineNextState(currentState: string, toolName: string): ConversationState {
+  if (toolName === "schedule_meeting") return "SCHEDULED";
+  if (toolName === "transfer_to_human") return "WAITING_HUMAN";
+  if (toolName === "qualify_lead") return "QUALIFIED";
+  if (toolName === "disqualify_lead") return "DISQUALIFIED";
+  if (toolName === "advance_stage") return currentState as ConversationState;
+  if (toolName === "confirm_meeting") return "QUALIFIED";
+  if (toolName === "advance_confirmation_stage") return currentState as ConversationState;
+  if (toolName === "create_custom_field") return currentState as ConversationState;
+  if (toolName === "transfer_sz_chat") return "CLOSED_WON";
+  if (toolName === "send_document") return currentState as ConversationState;
+  if (toolName === "send_product_material") return currentState as ConversationState;
+  if (toolName === "search_knowledge") return currentState as ConversationState;
+  if (currentState === "NEW_LEAD") return "QUALIFYING";
+  return currentState as ConversationState;
+}
