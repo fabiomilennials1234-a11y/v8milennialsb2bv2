@@ -19,6 +19,28 @@ type ProxyResponse<T> = {
   error?: string;
 };
 
+async function extractFunctionError(error: any): Promise<string> {
+  // supabase-js v2 wraps non-2xx responses in FunctionsHttpError; the real
+  // payload lives on error.context (a Response). Read it so we surface the
+  // edge function's actual error message instead of the generic
+  // "non-2xx status code" string.
+  try {
+    const ctx = error?.context;
+    if (ctx && typeof ctx.json === "function") {
+      const body = await ctx.json();
+      if (body?.error) return String(body.error);
+      if (body?.message) return String(body.message);
+    }
+    if (ctx && typeof ctx.text === "function") {
+      const text = await ctx.text();
+      if (text) return text.slice(0, 500);
+    }
+  } catch {
+    // ignore parse errors and fall back to error.message
+  }
+  return error?.message ?? "Unknown proxy error";
+}
+
 async function callProxy<T = unknown>(
   action: string,
   body: Record<string, unknown> = {}
@@ -27,7 +49,10 @@ async function callProxy<T = unknown>(
     "whatsapp-api-proxy",
     { body: { action, ...body } }
   );
-  if (error) throw new Error(`whatsapp-api-proxy: ${error.message}`);
+  if (error) {
+    const msg = await extractFunctionError(error);
+    throw new Error(`whatsapp-api-proxy: ${msg}`);
+  }
   if (!data?.ok) throw new Error(data?.error ?? "Unknown proxy error");
   // createInstance puts instance_id at top level and result inside
   return (data.result ?? (data as unknown as T)) as T;
@@ -57,7 +82,10 @@ export async function createWhatsAppInstance(
     "whatsapp-api-proxy",
     { body: { action: "createInstance", payload: { instance_name: instanceName } } }
   );
-  if (error) throw new Error(`whatsapp-api-proxy: ${error.message}`);
+  if (error) {
+    const msg = await extractFunctionError(error);
+    throw new Error(`whatsapp-api-proxy: ${msg}`);
+  }
   if (!data?.ok || !data.result || !data.instance_id) {
     throw new Error(data?.error ?? "createInstance returned invalid response");
   }
