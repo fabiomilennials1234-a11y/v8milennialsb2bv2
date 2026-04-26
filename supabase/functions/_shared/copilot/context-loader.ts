@@ -400,8 +400,8 @@ export async function loadLeadData(
       .eq("id", leadId)
       .single();
 
-    if (leadError) {
-      console.warn("[context-loader] loadLeadData error:", leadError.message);
+    if (leadError || !lead) {
+      if (leadError) console.warn("[context-loader] loadLeadData error:", leadError.message);
       return null;
     }
 

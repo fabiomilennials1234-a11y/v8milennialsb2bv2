@@ -226,6 +226,45 @@ export function useReprocessJob() {
   });
 }
 
+// ─── Copilot Engine Version (B3 feature flag) ───────────────────────────────
+
+export interface OrgEngineRow {
+  id: string;
+  name: string;
+  copilot_engine_version: "v1" | "v2";
+}
+
+export function useOrgsCopilotEngine() {
+  return useQuery({
+    queryKey: ["orgs-copilot-engine"],
+    queryFn: async (): Promise<OrgEngineRow[]> => {
+      const { data, error } = await supabase
+        .from("organizations")
+        .select("id, name, copilot_engine_version")
+        .order("name", { ascending: true });
+      if (error) throw error;
+      return ((data ?? []) as Array<{ id: string; name: string; copilot_engine_version: string | null }>)
+        .map((o) => ({ id: o.id, name: o.name, copilot_engine_version: (o.copilot_engine_version as "v1" | "v2") ?? "v1" }));
+    },
+  });
+}
+
+export function useToggleCopilotEngine() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { orgId: string; version: "v1" | "v2" }) => {
+      const { error } = await supabase
+        .from("organizations")
+        .update({ copilot_engine_version: input.version })
+        .eq("id", input.orgId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["orgs-copilot-engine"] });
+    },
+  });
+}
+
 // ─── Audit log ───────────────────────────────────────────────────────────────
 
 export interface AuditLogFilter {

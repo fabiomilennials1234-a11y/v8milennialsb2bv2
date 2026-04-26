@@ -85,7 +85,17 @@ Deno.serve(withSentry('agent-message', async (req) => {
       context: { trigger: "lead_replied", channel, message },
     }).catch(() => {});
 
-    // 2. INITIALIZE AGENT ENGINE
+    // 2. ROUTE engine version (Trilha 3.B B3 feature flag)
+    // Hoje v1==v2 funcionalmente (refactor B1 transparente). Flag preparado
+    // pra A/B comparison futura quando v2 divergir.
+    const { data: orgRow } = await supabase
+      .from("organizations")
+      .select("copilot_engine_version")
+      .eq("id", organizationId)
+      .maybeSingle();
+    const engineVersion = (orgRow?.copilot_engine_version as string) ?? "v1";
+
+    // 2.5 INITIALIZE AGENT ENGINE
     const engine = new AgentEngine(supabase, openRouter, organizationId);
 
     // 2.5 TYPING INDICATOR — item #10 — fire-and-forget, não bloqueia
@@ -110,13 +120,13 @@ Deno.serve(withSentry('agent-message', async (req) => {
       }).catch(e => console.warn('[agent-message] Evaluation failed (non-fatal):', e));
     }
 
-    // 4. TRACK USAGE EVENT (fire-and-forget)
+    // 4. TRACK USAGE EVENT (fire-and-forget) — inclui engine_version pra A/B telemetry
     trackEvent({
       organizationId,
       eventType: "message_sent",
       entityType: "lead",
       entityId: lead.id,
-      metadata: { channel, action: response.action, hasMessage: !!response.message },
+      metadata: { channel, action: response.action, hasMessage: !!response.message, engine_version: engineVersion },
     }).catch(() => {});
 
     // 5. LOG SUCCESS

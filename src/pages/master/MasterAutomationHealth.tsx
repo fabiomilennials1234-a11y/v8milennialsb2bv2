@@ -38,6 +38,8 @@ import {
   useResolveAlert,
   useReprocessJob,
   useAuditLog,
+  useOrgsCopilotEngine,
+  useToggleCopilotEngine,
   type ReprocessType,
 } from "@/hooks/useAutomationHealth";
 import { formatDistanceToNow } from "date-fns";
@@ -110,13 +112,14 @@ export default function MasterAutomationHealth() {
       </div>
 
       <Tabs defaultValue="dead-letter" className="w-full">
-        <TabsList className="grid grid-cols-2 sm:grid-cols-6 gap-1 h-auto">
+        <TabsList className="grid grid-cols-2 sm:grid-cols-7 gap-1 h-auto">
           <TabsTrigger value="dead-letter">Dead-Letter</TabsTrigger>
           <TabsTrigger value="workflows">Workflows</TabsTrigger>
           <TabsTrigger value="stuck">Stuck</TabsTrigger>
           <TabsTrigger value="webhooks">Webhooks</TabsTrigger>
           <TabsTrigger value="alerts">Alerts</TabsTrigger>
           <TabsTrigger value="audit">Audit</TabsTrigger>
+          <TabsTrigger value="engine">Engine</TabsTrigger>
         </TabsList>
 
         <TabsContent value="dead-letter">
@@ -136,6 +139,9 @@ export default function MasterAutomationHealth() {
         </TabsContent>
         <TabsContent value="audit">
           <AuditTab />
+        </TabsContent>
+        <TabsContent value="engine">
+          <EngineTab />
         </TabsContent>
       </Tabs>
     </div>
@@ -463,6 +469,78 @@ function AuditTab() {
         )}
       </CardContent>
     </Card>
+  );
+}
+
+// ─── Engine Tab (B3 feature flag toggle) ─────────────────────────────────────
+
+function EngineTab() {
+  const { data, isLoading } = useOrgsCopilotEngine();
+  const toggle = useToggleCopilotEngine();
+
+  if (isLoading) return <p className="text-sm text-muted-foreground p-4">Carregando…</p>;
+  if (!data?.length) return <EmptyState message="Sem orgs" />;
+
+  const v2Count = data.filter((o) => o.copilot_engine_version === "v2").length;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-sm font-medium">Copilot Engine Version (Trilha 3.B B3)</h3>
+          <p className="text-xs text-muted-foreground mt-1">
+            v1 = orchestrator atual. v2 = mesma lógica via módulos extraídos (refactor transparente).
+            Hoje funcionalmente idênticos. Toggle prepara A/B futura.
+          </p>
+        </div>
+        <Badge variant={v2Count > 0 ? "default" : "outline"}>
+          {v2Count}/{data.length} em v2
+        </Badge>
+      </div>
+      <Card>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Organização</TableHead>
+                <TableHead>Engine atual</TableHead>
+                <TableHead className="text-right">Toggle</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {data.map((org) => (
+                <TableRow key={org.id}>
+                  <TableCell className="font-medium">{org.name}</TableCell>
+                  <TableCell>
+                    <Badge variant={org.copilot_engine_version === "v2" ? "default" : "outline"}>
+                      {org.copilot_engine_version}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        const next = org.copilot_engine_version === "v1" ? "v2" : "v1";
+                        toggle.mutate(
+                          { orgId: org.id, version: next },
+                          {
+                            onSuccess: () => toast.success(`${org.name} → ${next}`),
+                            onError: (e) => toast.error(e instanceof Error ? e.message : "Falha"),
+                          },
+                        );
+                      }}
+                    >
+                      {org.copilot_engine_version === "v1" ? "Ativar v2" : "Voltar v1"}
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
