@@ -123,8 +123,24 @@ async function processAction(
       payloadSnapshot: payload as Record<string, unknown> || {},
     });
 
-    // 4. Executar ação
-    const result = await executeAiAction(supabase, action);
+    // 4. Executar ação com timeout duro (Onda 1 / T1.1.4)
+    // Telemetria 30d (2026-04-26): 6 pending órfãs >24h confirmaram que ação
+    // travada bloqueia batch indefinidamente. Cap de 30s força failure path
+    // → retry com backoff [1,5,15min] → dead_letter ao terceiro retry.
+    const ACTION_TIMEOUT_MS = 30_000;
+    const timeoutPromise = new Promise<{ success: false; error: string }>((_, reject) =>
+      setTimeout(
+        () => reject(new Error(`timeout: action ${action_type} exceeded ${ACTION_TIMEOUT_MS}ms`)),
+        ACTION_TIMEOUT_MS,
+      )
+    );
+    // Onda 2 / T2.C.2: timing per action
+    const actionStart = Date.now();
+    const result = await Promise.race([
+      executeAiAction(supabase, action),
+      timeoutPromise,
+    ]).catch((e) => ({ success: false, error: e instanceof Error ? e.message : String(e) }));
+    const actionDurationMs = Date.now() - actionStart;
 
     if (result.success) {
       // 5a. Sucesso → completed
@@ -156,6 +172,7 @@ async function processAction(
         status: "success",
         entityType: "lead",
         entityId: lead_id || undefined,
+        durationMs: actionDurationMs,
         payloadSnapshot: {
           action_id: id,
           result_message: result.message,

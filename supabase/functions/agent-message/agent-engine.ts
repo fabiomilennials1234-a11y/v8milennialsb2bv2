@@ -4,6 +4,7 @@ import { generateEmbedding } from "../_shared/embeddings.ts";
 import { enqueueAiAction } from "../_shared/ai-queue.ts";
 import { immediateTransferHuman } from "../_shared/ai-action-executor.ts";
 import { sanitizeAssistantMessage, splitByDelimiter } from "../_shared/message-sanitizer.ts";
+import { logRuntime } from "../_shared/logger.ts";
 
 /** Parse custom_instructions (JSON ou string legada) para { dos, donts } */
 function parseCustomInstructions(raw: string): { dos: string; donts: string } {
@@ -139,6 +140,25 @@ export class AgentEngine {
     console.log('[AgentEngine] Step 4: Building prompt...');
     const systemPrompt = await this.buildDynamicPrompt(capabilities, conversation, leadData, documentSummaries, semanticContext, longTermMemories, productCatalog);
 
+    // Onda 1 / T1.3.3: log tamanho do prompt para detectar truncagem silenciosa
+    // (LLM pode receber prompt cortado se exceder context window — sem alarme).
+    const promptChars = systemPrompt.length;
+    const estimatedTokens = Math.ceil(promptChars / 4);
+    logRuntime({
+      organizationId: this.organizationId,
+      module: 'copilot',
+      action: 'prompt_built',
+      status: 'success',
+      entityType: 'lead',
+      entityId: leadId,
+      payloadSnapshot: {
+        agent_id: capabilities.id,
+        prompt_chars: promptChars,
+        estimated_tokens: estimatedTokens,
+        turn_count: conversation.turn_count,
+      },
+    }).catch(() => {/* non-fatal */});
+
     // 5. Build Tools (based on capabilities)
     console.log('[AgentEngine] Step 5: Building tools...');
     const tools = await this.buildDynamicTools(capabilities, orgCustomFields, pipelineStages);
@@ -175,6 +195,8 @@ export class AgentEngine {
       console.log(`[AgentEngine] LLM call #${turn + 1}...`);
       const orMessages = this.openRouter.convertMessages(multiTurnMessages, systemPrompt);
 
+      // Onda 2 / T2.C.1: timing + tokens
+      const llmStart = Date.now();
       const response = await this.openRouter.chat({
         model,
         messages: orMessages,
@@ -183,6 +205,23 @@ export class AgentEngine {
         max_tokens: 1024,
         temperature,
       });
+      const llmDurationMs = Date.now() - llmStart;
+      const usage = (response as any)?.usage;
+      logRuntime({
+        organizationId: this.organizationId,
+        module: 'copilot',
+        action: 'llm_call',
+        status: 'success',
+        entityType: 'lead',
+        entityId: leadId,
+        durationMs: llmDurationMs,
+        tokens: {
+          prompt: usage?.prompt_tokens,
+          completion: usage?.completion_tokens,
+          model,
+        },
+        payloadSnapshot: { agent_id: capabilities.id, turn: turn + 1 },
+      }).catch(() => {/* non-fatal */});
 
       const { nextState: ns, actionToExecute: action, assistantMessage: msg } = await this.processLLMResponse(
         response, conversation, capabilities
@@ -294,7 +333,7 @@ export class AgentEngine {
           });
           executionResult = { success: true, queued: true, immediate: true };
         } else {
-          executionResult = await this.enqueueToolAction(currentAction, conversation.id);
+          executionResult = await this.enqueueToolAction(currentAction, conversation.id, conversation.turn_count);
         }
       } catch (enqueueError) {
         console.warn('[AgentEngine] Action enqueue failed (non-fatal):', enqueueError);
@@ -2850,7 +2889,7 @@ Regras:
    * Mapeia o nome da action (UPPER_CASE) para action_type (snake_case)
    * e gera idempotency_key baseado nos parâmetros.
    */
-  private async enqueueToolAction(action: any, conversationId: string) {
+  private async enqueueToolAction(action: any, conversationId: string, turnCount?: number) {
     const params = action.params || {};
 
     // Mapeamento de ação para action_type na fila
@@ -2898,9 +2937,9 @@ Regras:
       params.current_lead_id = this.currentLeadId;
     }
 
-    // Gerar idempotency_key
+    // Gerar idempotency_key (Onda 1 / T1.3.2: turn-based quando disponível)
     const leadId = params.lead_id || this.currentLeadId;
-    const idempotencyKey = this.buildIdempotencyKey(actionType, leadId, params);
+    const idempotencyKey = this.buildIdempotencyKey(actionType, leadId, params, turnCount);
 
     const result = await enqueueAiAction(this.supabase, {
       organizationId: this.organizationId,
@@ -2918,15 +2957,25 @@ Regras:
   /**
    * Gera chave de idempotência baseada no tipo de ação e parâmetros.
    */
-  private buildIdempotencyKey(actionType: string, leadId: string | null, params: Record<string, unknown>): string {
-    const ts = Math.floor(Date.now() / 60_000); // granularidade de 1 minuto
+  private buildIdempotencyKey(
+    actionType: string,
+    leadId: string | null,
+    params: Record<string, unknown>,
+    turnCount?: number,
+  ): string {
+    // Onda 1 / T1.3.2: usa turn_count quando disponível (granularidade de turno),
+    // fallback para timestamp 1min granular. Antes, ts puro permitia colisão
+    // a cada 31s+ — telemetria de race condition perdia ações duplicadas.
+    const turnOrTs = turnCount !== undefined && turnCount !== null
+      ? `t${turnCount}`
+      : `ts${Math.floor(Date.now() / 60_000)}`;
     switch (actionType) {
       case 'schedule_meeting':
         return `schedule_meeting_${leadId}_${params.preferred_date}`;
       case 'transfer_to_human':
         return `transfer_human_${leadId}`;
       case 'transfer_to_human_notify':
-        return `transfer_human_notify_${leadId}_${ts}`;
+        return `transfer_human_notify_${leadId}_${turnOrTs}`;
       case 'advance_stage':
         return `advance_stage_${leadId}_${params.target_pipe || 'whatsapp'}_${params.target_stage}`;
       case 'confirm_meeting':
@@ -2936,10 +2985,9 @@ Regras:
       case 'create_custom_field':
         return `create_field_${this.organizationId}_${params.field_name}`;
       case 'update_qualification_score':
-        return `update_score_${leadId}_${params.score}_${ts}`;
+        return `update_score_${leadId}_${params.score}_${turnOrTs}`;
       default:
-        // update_lead, create_lead: usar timestamp por minuto para agrupar
-        return `${actionType}_${leadId || this.organizationId}_${ts}`;
+        return `${actionType}_${leadId || this.organizationId}_${turnOrTs}`;
     }
   }
 
@@ -2958,30 +3006,15 @@ Regras:
         return;
       }
 
-      // Buscar conversation atual para incrementar turn_count
-      const { data: currentConv, error: fetchError } = await this.supabase
-        .from('conversations')
-        .select('turn_count')
-        .eq('id', conversationId)
-        .single();
+      // Onda 1 / T1.2.1: incremento atômico via RPC. SELECT+UPDATE separado
+      // perdia incremento em race (2 mensagens simultâneas → +1 em vez de +2).
+      const { error: rpcError } = await this.supabase.rpc('increment_conversation_turn', {
+        p_conversation_id: conversationId,
+        p_new_state: newState,
+      });
 
-      if (fetchError) {
-        console.warn('[AgentEngine] Error fetching conversation for update:', fetchError.message);
-        return;
-      }
-
-      const { error: updateError } = await this.supabase
-        .from('conversations')
-        .update({
-          state: newState,
-          turn_count: (currentConv?.turn_count || 0) + 1,
-          last_message_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', conversationId);
-
-      if (updateError) {
-        console.warn('[AgentEngine] Error updating conversation state:', updateError.message);
+      if (rpcError) {
+        console.warn('[AgentEngine] Error in increment_conversation_turn RPC:', rpcError.message);
       }
 
       // Salvar mensagem do assistente
@@ -3002,13 +3035,32 @@ Regras:
         return;
       }
 
+      // Onda 1 / T1.1.6: idempotency_key dedup mensagens duplicadas em race
+      // (telemetria 30d: 209 pares assistant duplicadas <60s, 56 conversas).
+      // Key combina role + hash(content) + bucket de 5min — bloqueia dup
+      // dentro da janela de race, permite mesma frase legítima em turnos
+      // distantes. UNIQUE INDEX em (conversation_id, idempotency_key) +
+      // ON CONFLICT DO NOTHING (Supabase: ignoreDuplicates: true).
+      const contentBytes = new TextEncoder().encode(content);
+      const hashBuf = await crypto.subtle.digest('SHA-256', contentBytes);
+      const contentHash = Array.from(new Uint8Array(hashBuf))
+        .slice(0, 8)
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('');
+      const bucket = Math.floor(Date.now() / 300_000); // 5min
+      const idempotency_key = `${role}:${contentHash}:${bucket}`;
+
       const { error } = await this.supabase
         .from('conversation_messages')
-        .insert({
-          conversation_id: conversationId,
-          role,
-          content,
-        });
+        .upsert(
+          {
+            conversation_id: conversationId,
+            role,
+            content,
+            idempotency_key,
+          },
+          { onConflict: 'conversation_id,idempotency_key', ignoreDuplicates: true },
+        );
 
       if (error) {
         console.warn('[AgentEngine] Error adding message to memory:', error.message);
@@ -3021,14 +3073,23 @@ Regras:
   /**
    * Log Decision
    */
-  private async logDecision(conversationId: string, stateBefore: string, stateAfter: string, action: any, capabilities: any) {
+  private async logDecision(
+    conversationId: string,
+    stateBefore: string,
+    stateAfter: string,
+    action: any,
+    capabilities: any,
+    opts?: { success?: boolean; errorMessage?: string },
+  ) {
     try {
       // Se for conversa temporária, apenas log no console
       if (conversationId.startsWith('temp_')) {
-        console.log('[AgentEngine] Decision (temp):', { stateBefore, stateAfter, action: action?.action });
+        console.log('[AgentEngine] Decision (temp):', { stateBefore, stateAfter, action: action?.action, ...opts });
         return;
       }
 
+      // Onda 1 / T1.3.1: registra success=false explicitamente para
+      // observabilidade. Telemetria mostrava 607 decisions, 0 falhas — sub-log.
       const { error } = await this.supabase
         .from('agent_decision_logs')
         .insert({
@@ -3039,6 +3100,8 @@ Regras:
           action_decided: action?.action || 'RESPOND_ONLY',
           reasoning: `Based on capabilities: ${JSON.stringify(capabilities)}`,
           capabilities_snapshot: capabilities,
+          success: opts?.success ?? true,
+          error_message: opts?.errorMessage ?? null,
         });
 
       if (error) {

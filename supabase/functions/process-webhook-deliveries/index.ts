@@ -86,7 +86,7 @@ Deno.serve(withSentry('process-webhook-deliveries', async (req) => {
   for (const d of deliveries as DeliveryRow[]) {
     const { data: webhook, error: whError } = await supabase
       .from("webhooks")
-      .select("id, url, secret, http_method, custom_headers, consecutive_failures")
+      .select("id, name, organization_id, url, secret, http_method, custom_headers, consecutive_failures, is_active")
       .eq("id", d.webhook_id)
       .single();
 
@@ -184,6 +184,21 @@ Deno.serve(withSentry('process-webhook-deliveries', async (req) => {
             disabled_reason: "Circuit breaker: 10+ consecutive failures",
           })
           .eq("id", d.webhook_id);
+
+        // Onda 2 / T2.D.1: cria system_alert apenas na 1ª desativação
+        // (wh.is_active==true antes do update). Evita dup em cada falha.
+        if (wh.is_active) {
+          await supabase.from("system_alerts").insert({
+            organization_id: wh.organization_id,
+            severity: "critical",
+            category: "webhook_circuit_breaker",
+            source_type: "webhook",
+            source_id: wh.id,
+            title: "Webhook desativado por falhas consecutivas",
+            message: `${wh.name} (${wh.url}) atingiu ${CIRCUIT_BREAKER_THRESHOLD} falhas consecutivas e foi desativado.`,
+            metadata: { url: wh.url, last_error: result.errorMessage ?? null, failures: newFailures },
+          });
+        }
       } else {
         await supabase
           .from("webhooks")
@@ -209,6 +224,21 @@ Deno.serve(withSentry('process-webhook-deliveries', async (req) => {
             disabled_reason: "Circuit breaker: 10+ consecutive failures",
           })
           .eq("id", d.webhook_id);
+
+        // Onda 2 / T2.D.1: cria system_alert apenas na 1ª desativação
+        // (wh.is_active==true antes do update). Evita dup em cada falha.
+        if (wh.is_active) {
+          await supabase.from("system_alerts").insert({
+            organization_id: wh.organization_id,
+            severity: "critical",
+            category: "webhook_circuit_breaker",
+            source_type: "webhook",
+            source_id: wh.id,
+            title: "Webhook desativado por falhas consecutivas",
+            message: `${wh.name} (${wh.url}) atingiu ${CIRCUIT_BREAKER_THRESHOLD} falhas consecutivas e foi desativado.`,
+            metadata: { url: wh.url, last_error: result.errorMessage ?? null, failures: newFailures },
+          });
+        }
       } else {
         await supabase
           .from("webhooks")

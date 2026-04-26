@@ -39,27 +39,21 @@ export async function immediateTransferHuman(
   supabase: SupabaseClient,
   leadId: string,
 ): Promise<{ success: boolean; error?: string }> {
+  // Onda 1 / T1.0.7: usa RPC atômica para garantir sincronia entre
+  // leads.ai_disabled e conversations.state. Backfill em
+  // 20260426000001_transfer_lead_to_human_rpc.sql corrigiu drift histórico
+  // (115 conversas dessincronizadas em snapshot 2026-04-26).
   try {
-    const { error: leadError } = await supabase
-      .from("leads")
-      .update({ ai_disabled: true, ai_disabled_at: new Date().toISOString() })
-      .eq("id", leadId);
+    const { error } = await supabase.rpc("transfer_lead_to_human", {
+      p_lead_id: leadId,
+    });
 
-    if (leadError) {
-      console.warn("[immediateTransferHuman] Failed to update lead:", leadError.message);
-      return { success: false, error: leadError.message };
+    if (error) {
+      console.warn("[immediateTransferHuman] RPC failed:", error.message);
+      return { success: false, error: error.message };
     }
 
-    const { error: convError } = await supabase
-      .from("conversations")
-      .update({ state: "WAITING_HUMAN" })
-      .eq("lead_id", leadId);
-
-    if (convError) {
-      console.warn("[immediateTransferHuman] Failed to update conversation:", convError.message);
-    }
-
-    console.log("[immediateTransferHuman] Transfer executed immediately for lead:", leadId);
+    console.log("[immediateTransferHuman] Transfer executed atomically for lead:", leadId);
     return { success: true };
   } catch (err) {
     console.warn("[immediateTransferHuman] Unexpected error:", err);
@@ -175,11 +169,35 @@ const ACTION_HISTORY_MAP: Record<string, HistoryMapping> = {
 
 // ─── Main Router ──────────────────────────────────────────────────────────────
 
+// Onda 1 / T1.0.5: action types enfileirados por callers (workflow `copilot` node
+// em workflow-executor.ts:344, kanban rules legacy) que não têm handler real
+// ainda. Tratados como noop com log explícito (status=skipped) em vez de
+// "Tipo de ação desconhecido" → retry → dead_letter (telemetria 30d:
+// 10.881 retries de generate_message + 8 dead_letter por ausência de handler).
+//
+// Comportamento alvo permanente fica para Trilha 3 (refactor copilot).
+const NOOP_ACTION_TYPES = new Set<string>([
+  "generate_message",
+  "send_product_material",
+]);
+
 export async function executeAiAction(
   supabase: SupabaseClient,
   action: ActionRecord,
 ): Promise<ActionResult> {
   const { action_type, payload, organization_id, lead_id, conversation_id } = action;
+
+  if (NOOP_ACTION_TYPES.has(action_type)) {
+    console.log(
+      `[executeAiAction] noop:${action_type} skipped (handler not implemented)`,
+      { lead_id, organization_id },
+    );
+    return {
+      success: true,
+      message: `noop:${action_type}`,
+      data: { skipped: true, reason: "handler_not_implemented" },
+    };
+  }
 
   let result: ActionResult;
 

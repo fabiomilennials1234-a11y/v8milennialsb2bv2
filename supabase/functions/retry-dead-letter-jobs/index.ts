@@ -88,9 +88,10 @@ Deno.serve(
         const result = await retrySpecificJob(supabase, jobId);
         return new Response(JSON.stringify(result), { headers });
       } else {
-        // === Cron mode: process retrying jobs ===
+        // === Cron mode: process retrying jobs + detect dead_letter pattern ===
         const result = await processRetryingJobs(supabase);
-        return new Response(JSON.stringify(result), { headers });
+        const alerts = await detectDeadLetterPatterns(supabase);
+        return new Response(JSON.stringify({ ...result, alerts_created: alerts }), { headers });
       }
     } catch (err) {
       console.error("[retry-dead-letter-jobs] Error:", err);
@@ -98,6 +99,71 @@ Deno.serve(
     }
   }),
 );
+
+/**
+ * Onda 2 / T2.D.2 — Detecta padrões de dead_letter
+ *
+ * Pra cada combinação (org, action_type) com >=5 dead_letter nas últimas 24h,
+ * cria 1 system_alert. Dedup: pula se já existe alert unresolved categoria
+ * 'dead_letter_pattern' pra mesma source nas últimas 24h.
+ */
+async function detectDeadLetterPatterns(
+  supabase: ReturnType<typeof createClient>,
+): Promise<number> {
+  try {
+    const { data: patterns, error } = await supabase
+      .from("automation_jobs")
+      .select("organization_id, action_type")
+      .eq("status", "dead_letter")
+      .gte("created_at", new Date(Date.now() - 24 * 3600 * 1000).toISOString());
+
+    if (error || !patterns) return 0;
+
+    const counts = new Map<string, { org: string; action: string; count: number }>();
+    for (const row of patterns as Array<{ organization_id: string; action_type: string }>) {
+      const key = `${row.organization_id}|${row.action_type}`;
+      const cur = counts.get(key) ?? { org: row.organization_id, action: row.action_type, count: 0 };
+      cur.count++;
+      counts.set(key, cur);
+    }
+
+    let created = 0;
+    for (const { org, action, count } of counts.values()) {
+      if (count < 5) continue;
+
+      // Dedup: existe alert unresolved < 24h?
+      const { data: existing } = await supabase
+        .from("system_alerts")
+        .select("id")
+        .eq("category", "dead_letter_pattern")
+        .eq("organization_id", org)
+        .eq("source_type", "action_type")
+        .is("resolved_at", null)
+        .gte("created_at", new Date(Date.now() - 24 * 3600 * 1000).toISOString())
+        .contains("metadata", { action_type: action })
+        .limit(1)
+        .maybeSingle();
+
+      if (existing) continue;
+
+      await supabase.from("system_alerts").insert({
+        organization_id: org,
+        severity: "warning",
+        category: "dead_letter_pattern",
+        source_type: "action_type",
+        title: `Padrão de falha: ${action}`,
+        message: `${count} ações ${action} entraram em dead_letter nas últimas 24h. Investigar root cause.`,
+        metadata: { action_type: action, count, window_hours: 24 },
+      });
+      created++;
+    }
+
+    return created;
+  } catch (err) {
+    console.warn("[detectDeadLetterPatterns] non-fatal:", err);
+    return 0;
+  }
+}
 
 /**
  * Manual retry: reseta dead_letter → running, tenta re-executar

@@ -114,6 +114,9 @@ interface LogRuntimeParams {
   entityType?: string;
   entityId?: string;
   triggeredBy?: string;
+  // Onda 2 / T2.B.2: telemetria de performance + custo LLM
+  durationMs?: number;
+  tokens?: { prompt?: number; completion?: number; model?: string };
 }
 
 /**
@@ -143,6 +146,10 @@ export async function logRuntime(params: LogRuntimeParams): Promise<void> {
       entity_type: params.entityType || null,
       entity_id: params.entityId || null,
       triggered_by: params.triggeredBy || null,
+      duration_ms: params.durationMs ?? null,
+      prompt_tokens: params.tokens?.prompt ?? null,
+      completion_tokens: params.tokens?.completion ?? null,
+      llm_model: params.tokens?.model ?? null,
     });
   } catch (err) {
     console.warn("[logRuntime] Failed to write log (non-fatal):", err);

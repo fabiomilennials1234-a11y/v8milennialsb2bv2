@@ -12,6 +12,7 @@ import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { evaluateCondition } from "./workflow-condition-evaluator.ts";
 import { executeWorkflowAction, type ActionResult } from "./workflow-action-handler.ts";
 import { getNextSendTime } from "./followupSchedule.ts";
+import { logRuntime } from "./logger.ts";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -58,6 +59,8 @@ export interface ExecuteWorkflowResult {
 // ─── Main Executor ──────────────────────────────────────────────────────────
 
 export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<ExecuteWorkflowResult> {
+  // Onda 2 / T2.C.3: timing total da execução
+  const wfStart = Date.now();
   const {
     supabase,
     executionId,
@@ -133,9 +136,15 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
 
     stepsExecuted++;
 
-    // Update current_node_id
+    // Onda 1 / T1.1.1: heartbeat updated_at impede double-claim por
+    // claim_workflow_executions (que reclama processing >10min). Combinado com
+    // batch=20 + nodes individuais rápidos, custo desprezível (1 UPDATE por node).
     await supabase.from("workflow_executions")
-      .update({ current_node_id: nodeId, loop_counters: loopCounters })
+      .update({
+        current_node_id: nodeId,
+        loop_counters: loopCounters,
+        updated_at: new Date().toISOString(),
+      })
       .eq("id", executionId);
 
     try {
@@ -698,6 +707,18 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
   }
 
   await updateExecution(supabase, executionId, "completed", null, loopCounters);
+  // Onda 2 / T2.C.3: log latência total
+  logRuntime({
+    organizationId,
+    module: "workflow",
+    action: "execute",
+    status: "success",
+    entityType: "workflow_execution",
+    entityId: executionId,
+    durationMs: Date.now() - wfStart,
+    payloadSnapshot: { workflow_id: workflowId, lead_id: leadId, steps: stepsExecuted },
+  }).catch(() => {/* non-fatal */});
+
   return { success: true, status: "completed", stepsExecuted };
 }
 

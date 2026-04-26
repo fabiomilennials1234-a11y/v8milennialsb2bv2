@@ -481,10 +481,9 @@ async function handleSendWhatsApp(ctx: ActionContext): Promise<ActionResult> {
     return { success: false, error: `WhatsApp send failed: ${sendResult.error}` };
   }
 
-  // Use Evolution's real message ID so the send.message webhook echo UPSERTs
-  // this same row instead of creating a duplicate. Preserves sent_by_ai: true.
-  const sendResult = await res.json().catch(() => null) as { key?: { id?: string } } | null;
-  const messageId = sendResult?.key?.id || `wf_${crypto.randomUUID()}`;
+  // Use provider's real message ID so the inbound webhook echo UPSERTs this same row
+  // instead of creating a duplicate. Preserves sent_by_ai: true.
+  const messageId = sendResult.messageId || `wf_${crypto.randomUUID()}`;
 
   await ctx.supabase.from("whatsapp_messages").upsert({
     organization_id: ctx.organizationId,

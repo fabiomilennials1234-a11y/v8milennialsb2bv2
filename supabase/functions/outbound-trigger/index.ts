@@ -49,6 +49,8 @@ serve(withSentry('outbound-trigger', async (req) => {
     return new Response("ok", { headers: corsHeaders });
   }
 
+  // Onda 2 / T2.C.4: timing global do request
+  const requestStart = Date.now();
   try {
     const payload: OutboundTriggerPayload = await req.json();
     console.log("[outbound-trigger] Received:", JSON.stringify(payload));
@@ -196,22 +198,9 @@ serve(withSentry('outbound-trigger', async (req) => {
       );
     }
 
-    // Verificar se já existe disparo agendado/enviado para este lead
-    const { data: existingDispatch } = await supabase
-      .from("outbound_dispatch_log")
-      .select("id, status")
-      .eq("lead_id", payload.lead_id)
-      .eq("agent_id", matchingAgent.id)
-      .in("status", ["pending", "sent"])
-      .maybeSingle();
-
-    if (existingDispatch) {
-      console.log("[outbound-trigger] Dispatch already exists:", existingDispatch.status);
-      return new Response(
-        JSON.stringify({ success: false, reason: "Dispatch already exists", status: existingDispatch.status }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    // Onda 1 / T1.1.3: dedup migrada para UNIQUE INDEX
+    // (idx_outbound_dispatch_unique_active em 20260426000002). SELECT prévio
+    // removido — INSERT abaixo trata 23505 como "já existe" sem race.
 
     // Configurar outbound
     const outboundConfig: OutboundConfig = matchingAgent.outbound_config || {
@@ -260,7 +249,8 @@ serve(withSentry('outbound-trigger', async (req) => {
     const scheduledAt = new Date();
     scheduledAt.setMinutes(scheduledAt.getMinutes() + outboundConfig.delayMinutes);
 
-    // Criar registro de disparo
+    // Criar registro de disparo (Onda 1 / T1.1.3: UNIQUE em (lead_id, agent_id)
+    // WHERE status IN ('pending','sent') previne race; 23505 = already exists)
     const { data: dispatch, error: dispatchError } = await supabase
       .from("outbound_dispatch_log")
       .insert({
@@ -274,6 +264,14 @@ serve(withSentry('outbound-trigger', async (req) => {
       })
       .select()
       .single();
+
+    if (dispatchError?.code === "23505") {
+      console.log("[outbound-trigger] Dispatch already exists (UNIQUE constraint)");
+      return new Response(
+        JSON.stringify({ success: false, reason: "Dispatch already exists" }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     if (dispatchError) {
       console.error("[outbound-trigger] Error creating dispatch:", dispatchError);
@@ -298,6 +296,7 @@ serve(withSentry('outbound-trigger', async (req) => {
       status: "success",
       entityType: "lead",
       entityId: payload.lead_id,
+      durationMs: Date.now() - requestStart,
       payloadSnapshot: { dispatch_id: dispatch.id, agent_name: matchingAgent.name, scheduled_at: scheduledAt.toISOString() },
     });
 
@@ -318,6 +317,7 @@ serve(withSentry('outbound-trigger', async (req) => {
       module: "outbound",
       action: "trigger",
       status: "error",
+      durationMs: Date.now() - requestStart,
       errorMessage: error instanceof Error ? error.message : String(error),
     });
     return new Response(
