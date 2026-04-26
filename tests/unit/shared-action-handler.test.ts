@@ -1,10 +1,26 @@
 /**
  * Tests for workflow-action-handler — the 30 action type dispatcher
+ *
+ * Note: handleSendWhatsApp* + handleSendCampaignMessage usam dynamic import
+ * de _shared/whatsapp-dispatch.ts (refactor adapter Uazapi/Evolution).
+ * Mock abaixo retorna shape { success, messageId } esperado pelo handler novo.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import "../../tests/helpers/deno-mock";
 import { setDenoEnv, clearDenoEnv } from "../../tests/helpers/deno-mock";
 import { createMockSupabase } from "../helpers/supabase-mock";
+
+vi.mock("../../supabase/functions/_shared/whatsapp-dispatch.ts", () => ({
+  sendTextViaInstance: vi.fn().mockResolvedValue({ success: true, messageId: "mock-text-id" }),
+  sendMediaViaInstance: vi.fn().mockResolvedValue({ success: true, messageId: "mock-media-id" }),
+  sendMenuViaInstance: vi.fn().mockResolvedValue({ success: true, messageId: "mock-menu-id" }),
+  sendPixButtonViaInstance: vi.fn().mockResolvedValue({ success: true, messageId: "mock-pix-id" }),
+  sendAudioViaInstance: vi.fn().mockResolvedValue({ success: true, messageId: "mock-audio-id" }),
+}));
+
+vi.mock("../../supabase/functions/_shared/audio-sender.ts", () => ({
+  sendWhatsAppAudio: vi.fn().mockResolvedValue({ success: true, messageId: "mock-audio-direct-id" }),
+}));
 
 const mockFetch = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({}), text: () => Promise.resolve("") });
 global.fetch = mockFetch as any;
