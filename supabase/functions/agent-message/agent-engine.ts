@@ -11,7 +11,16 @@ import {
   loadPipelineStages as loadPipelineStagesExternal,
   loadDocumentSummaries as loadDocumentSummariesExternal,
   loadConversation as loadConversationExternal,
+  loadLeadData as loadLeadDataExternal,
+  loadProductCatalog as loadProductCatalogExternal,
+  loadConversationContextSummary as loadConversationContextSummaryExternal,
+  getDefaultContext as getDefaultContextExternal,
+  type ConversationContextSummary as ConversationContextSummaryExternal,
 } from "../_shared/copilot/context-loader.ts";
+import {
+  retrieveSemanticContext as retrieveSemanticContextExternal,
+  retrieveLongTermMemories as retrieveLongTermMemoriesExternal,
+} from "../_shared/copilot/rag.ts";
 import {
   determineNextState as determineNextStateExternal,
   updateConversationState as updateConversationStateExternal,
@@ -662,60 +671,9 @@ export class AgentEngine {
    * Load product catalog for the org (all active products + materials).
    * Injected into prompt so the agent knows what products exist.
    */
+  /** T3B.8c: delegado pra context-loader.ts */
   private async loadProductCatalog(): Promise<string> {
-    try {
-      const { data: products, error } = await this.supabase
-        .from('products')
-        .select('id, name, type, description, ticket, ticket_minimo, entregaveis, materiais, links')
-        .eq('organization_id', this.organizationId)
-        .eq('is_active', true)
-        .order('name');
-
-      if (error || !products?.length) return '';
-
-      // Load materials for all products in one query
-      const productIds = products.map(p => p.id);
-      const { data: materials } = await this.supabase
-        .from('product_materials')
-        .select('id, product_id, file_name, material_type, summary, file_path')
-        .in('product_id', productIds)
-        .eq('is_active', true);
-
-      const materialsByProduct = new Map<string, typeof materials>();
-      for (const m of materials || []) {
-        const list = materialsByProduct.get(m.product_id) || [];
-        list.push(m);
-        materialsByProduct.set(m.product_id, list);
-      }
-
-      const typeLabels: Record<string, string> = { mrr: 'Recorrência', projeto: 'Projeto', unitario: 'Unitário' };
-
-      const lines = products.map(p => {
-        const parts: string[] = [];
-        parts.push(`Produto: "${p.name}"`);
-        parts.push(`Tipo: ${typeLabels[p.type] || p.type}`);
-        if (p.ticket) parts.push(`Ticket: R$ ${p.ticket.toLocaleString('pt-BR')}`);
-        if (p.ticket_minimo) parts.push(`Ticket mínimo: R$ ${p.ticket_minimo.toLocaleString('pt-BR')}`);
-        if (p.description) parts.push(`Descrição: ${p.description}`);
-        if (p.entregaveis) parts.push(`Entregáveis: ${p.entregaveis}`);
-
-        const mats = materialsByProduct.get(p.id) || [];
-        if (mats.length > 0) {
-          parts.push('Materiais disponíveis para envio:');
-          for (const m of mats) {
-            parts.push(`  - "${m.file_name}" (id: ${m.id}, tipo: ${m.material_type}) — use send_product_material para enviar ao lead`);
-          }
-        }
-
-        return parts.join('\n');
-      });
-
-      console.log(`[AgentEngine] Product catalog loaded: ${products.length} products, ${materials?.length || 0} materials`);
-      return lines.join('\n\n');
-    } catch (e) {
-      console.warn('[AgentEngine] Failed to load product catalog:', e);
-      return '';
-    }
+    return loadProductCatalogExternal(this.supabase, this.organizationId);
   }
 
   /**
@@ -732,93 +690,18 @@ export class AgentEngine {
    * via pgvector — busca chunks de documentos E FAQs semanticamente próximos.
    * Retorna string formatada para injeção no prompt, ou "" se não houver resultados.
    */
+  /** T3B.8d: delegado pra rag.ts */
   private async retrieveSemanticContext(userMessage: string, agentId: string): Promise<string> {
-    try {
-      const apiKey = Deno.env.get('GEMINI_API_KEY');
-      if (!apiKey) return '';
-
-      // Gerar embedding da mensagem do usuário
-      const queryEmbedding = await generateEmbedding(userMessage, apiKey);
-      if (!queryEmbedding || queryEmbedding.length === 0) return '';
-
-      const embeddingStr = `[${queryEmbedding.join(',')}]`;
-
-      const parts: string[] = [];
-
-      // Buscar chunks de documentos relevantes (mais chunks, threshold mais baixo)
-      const { data: chunks, error: chunksErr } = await (this.supabase as any)
-        .rpc('match_document_chunks', {
-          query_embedding: embeddingStr,
-          agent_id_filter: agentId,
-          match_count: 6,
-          similarity_threshold: 0.6,
-        });
-
-      if (!chunksErr && chunks && chunks.length > 0) {
-        const chunkTexts = (chunks as Array<{content: string; similarity: number}>)
-          .map(c => c.content)
-          .join('\n\n');
-        parts.push(chunkTexts);
-      }
-
-      // Buscar FAQs relevantes
-      const { data: faqs, error: faqsErr } = await (this.supabase as any)
-        .rpc('match_faqs', {
-          query_embedding: embeddingStr,
-          agent_id_filter: agentId,
-          match_count: 4,
-          similarity_threshold: 0.65,
-        });
-
-      if (!faqsErr && faqs && faqs.length > 0) {
-        const faqTexts = (faqs as Array<{question: string; answer: string; similarity: number}>)
-          .map(f => `P: ${f.question}\nR: ${f.answer}`)
-          .join('\n\n');
-        parts.push(faqTexts);
-      }
-
-      if (parts.length === 0) return '';
-
-      return '\n\n---\n' + parts.join('\n\n') + '\n---\n';
-    } catch (e) {
-      console.warn('[AgentEngine] Semantic context retrieval failed (non-fatal):', e);
-      return '';
-    }
+    return retrieveSemanticContextExternal(this.supabase, userMessage, agentId);
   }
 
   /**
    * Item #19: Recupera memórias de longo prazo relevantes para a mensagem atual
    * via pgvector. Retorna string formatada ou "" se não houver memórias.
    */
+  /** T3B.8d: delegado pra rag.ts */
   private async retrieveLongTermMemories(userMessage: string, leadId: string): Promise<string> {
-    try {
-      const apiKey = Deno.env.get('GEMINI_API_KEY');
-      if (!apiKey) return '';
-
-      const queryEmbedding = await generateEmbedding(userMessage, apiKey);
-      if (!queryEmbedding || queryEmbedding.length === 0) return '';
-
-      const embeddingStr = `[${queryEmbedding.join(',')}]`;
-
-      const { data: memories, error } = await (this.supabase as any)
-        .rpc('match_lead_memories', {
-          query_embedding: embeddingStr,
-          lead_id_filter: leadId,
-          match_count: 5,
-          similarity_threshold: 0.70,
-        });
-
-      if (error || !memories || memories.length === 0) return '';
-
-      const lines = (memories as Array<{memory_type: string; content: string; importance: number}>)
-        .sort((a, b) => b.importance - a.importance)
-        .map(m => `[${m.memory_type.toUpperCase()}] ${m.content}`);
-
-      return lines.join('\n');
-    } catch (e) {
-      console.warn('[AgentEngine] Long-term memory retrieval failed (non-fatal):', e);
-      return '';
-    }
+    return retrieveLongTermMemoriesExternal(this.supabase, userMessage, leadId);
   }
 
   /**
@@ -969,127 +852,9 @@ Regras:
   /**
    * Load Lead Data including custom fields
    */
+  /** T3B.8a: delegado pra context-loader.ts */
   private async loadLeadData(leadId: string) {
-    console.log('[AgentEngine] Loading lead data for:', leadId);
-    
-    try {
-      // 1. Carregar dados básicos do lead
-      const { data: lead, error: leadError } = await this.supabase
-        .from('leads')
-        .select(`
-          id,
-          name,
-          phone,
-          email,
-          company,
-          origin,
-          rating,
-          segment,
-          faturamento,
-          urgency,
-          notes,
-          pipe_whatsapp,
-          created_at,
-          updated_at
-        `)
-        .eq('id', leadId)
-        .single();
-
-      if (leadError) {
-        console.warn('[AgentEngine] Error loading lead data:', leadError.message);
-        return null;
-      }
-
-      // 2. Carregar campos personalizados e dados de todos os funis em paralelo
-      const [customFieldsRes, upsellRes, confirmacaoRes, propostasRes, campanhaRes] = await Promise.all([
-        this.supabase
-          .from('lead_custom_field_values')
-          .select(`
-            value,
-            field:lead_custom_fields(
-              id,
-              field_name,
-              field_type
-            )
-          `)
-          .eq('lead_id', leadId),
-        this.supabase
-          .from('upsell_clients')
-          .select('tipo_cliente_tempo, gestao_stage, potencial, is_active')
-          .eq('lead_id', leadId)
-          .maybeSingle(),
-        this.supabase
-          .from('pipe_confirmacao')
-          .select('status, meeting_date, is_confirmed')
-          .eq('lead_id', leadId)
-          .maybeSingle(),
-        this.supabase
-          .from('pipe_propostas')
-          .select('status, sale_value, product_type')
-          .eq('lead_id', leadId)
-          .maybeSingle(),
-        this.supabase
-          .from('campanha_leads')
-          .select('stage_id, campanha_id, campanha_stages(name)')
-          .eq('lead_id', leadId)
-          .limit(1)
-          .maybeSingle(),
-      ]);
-
-      if (customFieldsRes.error) {
-        console.warn('[AgentEngine] Error loading custom fields:', customFieldsRes.error.message);
-      }
-
-      // 3. Formatar campos personalizados
-      const customFields: Record<string, string> = {};
-      if (customFieldsRes.data && customFieldsRes.data.length > 0) {
-        customFieldsRes.data.forEach((cfv: any) => {
-          if (cfv.field && cfv.value) {
-            customFields[cfv.field.field_name] = cfv.value;
-          }
-        });
-      }
-
-      // 4. Dados de todos os funis
-      const upsellData = upsellRes.data || null;
-      const confirmacaoData = confirmacaoRes.data || null;
-      const propostasData = propostasRes.data || null;
-      const campanhaData = campanhaRes.data || null;
-
-      console.log('[AgentEngine] Lead data loaded:', {
-        leadId,
-        hasBasicData: !!lead,
-        customFieldsCount: Object.keys(customFields).length,
-        hasUpsellData: !!upsellData,
-        hasConfirmacaoData: !!confirmacaoData,
-        hasPropostasData: !!propostasData,
-        hasCampanhaData: !!campanhaData,
-      });
-
-      return {
-        ...lead,
-        customFields,
-        // Carteira: stages e potencial do cliente
-        upsell_base_stage: upsellData?.tipo_cliente_tempo || null,
-        upsell_gestao_stage: upsellData?.gestao_stage || null,
-        upsell_potencial: upsellData?.potencial || null,
-        upsell_is_active: upsellData?.is_active ?? null,
-        // Confirmação
-        confirmacao_status: confirmacaoData?.status || null,
-        confirmacao_meeting_date: confirmacaoData?.meeting_date || null,
-        confirmacao_is_confirmed: confirmacaoData?.is_confirmed ?? null,
-        // Propostas
-        propostas_status: propostasData?.status || null,
-        propostas_sale_value: propostasData?.sale_value || null,
-        propostas_product_type: propostasData?.product_type || null,
-        // Campanhas
-        campanha_stage: (campanhaData as any)?.campanha_stages?.name || null,
-        campanha_id: campanhaData?.campanha_id || null,
-      };
-    } catch (e) {
-      console.error('[AgentEngine] Failed to load lead data:', e);
-      return null;
-    }
+    return loadLeadDataExternal(this.supabase, leadId);
   }
 
   /**
@@ -1109,39 +874,13 @@ Regras:
    * Load Conversation Context Summary
    * Busca o contexto resumido da última conversa para personalizar follow-ups
    */
+  /** T3B.8b: delegado pra context-loader.ts. Cache primeiro; fallback extrai mensagens (interno). */
   private async loadConversationContext(leadId: string): Promise<ConversationContextSummary | null> {
-    console.log('[AgentEngine] Loading conversation context for lead:', leadId);
-    
+    const cached = await loadConversationContextSummaryExternal(this.supabase, leadId);
+    if (cached) return cached;
+
+    // Fallback: extrai contexto das últimas 20 mensagens
     try {
-      // 1. Tentar buscar contexto já resumido do banco
-      const { data: existingContext, error: contextError } = await this.supabase
-        .from('conversation_context_summary')
-        .select('*')
-        .eq('lead_id', leadId)
-        .maybeSingle();
-
-      if (existingContext && !contextError) {
-        console.log('[AgentEngine] Found existing context summary');
-        return {
-          lastTopic: existingContext.last_topic,
-          lastIntent: existingContext.last_intent,
-          keyPoints: existingContext.key_points || [],
-          objectionsRaised: existingContext.objections_raised || [],
-          questionsAsked: existingContext.questions_asked || [],
-          nextAction: existingContext.next_action,
-          qualificationData: existingContext.qualification_data || {},
-          leadTemperature: existingContext.lead_temperature || 'cold',
-          engagementScore: existingContext.engagement_score || 0,
-          lastMessageAt: existingContext.last_message_at,
-          messageCount: existingContext.message_count || 0,
-          followupCount: existingContext.followup_count || 0,
-        };
-      }
-
-      // 2. Se não existir contexto resumido, extrair das últimas mensagens
-      console.log('[AgentEngine] No existing context, extracting from messages...');
-
-      // Buscar últimas mensagens usando lead_id diretamente (evita ILIKE lento em phone_number)
       const { data: messages, error: msgError } = await this.supabase
         .from('whatsapp_messages')
         .select('direction, content, created_at')
@@ -1153,36 +892,21 @@ Regras:
         .limit(20);
 
       if (msgError || !messages || messages.length === 0) {
-        return this.getDefaultContext();
+        return getDefaultContextExternal();
       }
 
-      // 3. Extrair contexto das mensagens
       const context = await this.extractContextFromMessages(messages);
-      
-      // 4. Salvar contexto para uso futuro
       await this.saveConversationContext(leadId, context);
-      
       return context;
     } catch (e) {
-      console.warn('[AgentEngine] Failed to load conversation context:', e);
-      return this.getDefaultContext();
+      console.warn('[AgentEngine] loadConversationContext fallback failed:', e);
+      return getDefaultContextExternal();
     }
   }
 
-  /**
-   * Retorna contexto padrão quando não há histórico
-   */
+  /** T3B.8b: delegado pra context-loader.ts */
   private getDefaultContext(): ConversationContextSummary {
-    return {
-      keyPoints: [],
-      objectionsRaised: [],
-      questionsAsked: [],
-      qualificationData: {},
-      leadTemperature: 'cold',
-      engagementScore: 0,
-      messageCount: 0,
-      followupCount: 0,
-    };
+    return getDefaultContextExternal();
   }
 
   /**

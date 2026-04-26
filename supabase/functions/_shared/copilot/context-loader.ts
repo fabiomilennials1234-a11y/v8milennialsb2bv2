@@ -234,6 +234,242 @@ export async function loadPipelineStages(
   }
 }
 
+// ─── ConversationContextSummary (extracted type) ─────────────────────────────
+
+export interface ConversationContextSummary {
+  lastTopic?: string;
+  lastIntent?: string;
+  keyPoints: string[];
+  objectionsRaised: string[];
+  questionsAsked: string[];
+  nextAction?: string;
+  qualificationData: Record<string, unknown>;
+  leadTemperature: "cold" | "warm" | "hot";
+  engagementScore: number;
+  lastMessageAt?: string;
+  messageCount: number;
+  followupCount: number;
+}
+
+/**
+ * Default context quando não há histórico.
+ */
+export function getDefaultContext(): ConversationContextSummary {
+  return {
+    keyPoints: [],
+    objectionsRaised: [],
+    questionsAsked: [],
+    qualificationData: {},
+    leadTemperature: "cold",
+    engagementScore: 0,
+    messageCount: 0,
+    followupCount: 0,
+  };
+}
+
+/**
+ * Carrega contexto resumido da última conversa do lead pra personalizar
+ * follow-ups. Tenta cache em conversation_context_summary, fallback retorna
+ * default (extração de mensagens fica no caller — função pesada).
+ */
+export async function loadConversationContextSummary(
+  supabase: SupabaseClient,
+  leadId: string,
+): Promise<ConversationContextSummary | null> {
+  try {
+    const { data: existingContext, error: contextError } = await supabase
+      .from("conversation_context_summary")
+      .select("*")
+      .eq("lead_id", leadId)
+      .maybeSingle();
+
+    if (existingContext && !contextError) {
+      const ec = existingContext as Record<string, unknown>;
+      return {
+        lastTopic: ec.last_topic as string | undefined,
+        lastIntent: ec.last_intent as string | undefined,
+        keyPoints: (ec.key_points as string[]) ?? [],
+        objectionsRaised: (ec.objections_raised as string[]) ?? [],
+        questionsAsked: (ec.questions_asked as string[]) ?? [],
+        nextAction: ec.next_action as string | undefined,
+        qualificationData: (ec.qualification_data as Record<string, unknown>) ?? {},
+        leadTemperature: (ec.lead_temperature as "cold" | "warm" | "hot") ?? "cold",
+        engagementScore: (ec.engagement_score as number) ?? 0,
+        lastMessageAt: ec.last_message_at as string | undefined,
+        messageCount: (ec.message_count as number) ?? 0,
+        followupCount: (ec.followup_count as number) ?? 0,
+      };
+    }
+
+    return null;
+  } catch (e) {
+    console.warn("[context-loader] loadConversationContextSummary exception:", e);
+    return null;
+  }
+}
+
+/**
+ * Carrega catálogo de produtos da org (ativos + materiais).
+ * Retorna string formatada pra injeção no prompt.
+ */
+export async function loadProductCatalog(
+  supabase: SupabaseClient,
+  organizationId: string,
+): Promise<string> {
+  try {
+    const { data: products, error } = await supabase
+      .from("products")
+      .select("id, name, type, description, ticket, ticket_minimo, entregaveis, materiais, links")
+      .eq("organization_id", organizationId)
+      .eq("is_active", true)
+      .order("name");
+
+    if (error || !products?.length) return "";
+
+    const productIds = (products as Array<{ id: string }>).map((p) => p.id);
+    const { data: materials } = await supabase
+      .from("product_materials")
+      .select("id, product_id, file_name, material_type, summary, file_path")
+      .in("product_id", productIds)
+      .eq("is_active", true);
+
+    type Material = { id: string; product_id: string; file_name: string; material_type: string };
+    const materialsByProduct = new Map<string, Material[]>();
+    for (const m of (materials ?? []) as Material[]) {
+      const list = materialsByProduct.get(m.product_id) ?? [];
+      list.push(m);
+      materialsByProduct.set(m.product_id, list);
+    }
+
+    const typeLabels: Record<string, string> = { mrr: "Recorrência", projeto: "Projeto", unitario: "Unitário" };
+
+    const lines = (products as Array<{ id: string; name: string; type: string; description?: string; ticket?: number; ticket_minimo?: number; entregaveis?: string }>).map((p) => {
+      const parts: string[] = [];
+      parts.push(`Produto: "${p.name}"`);
+      parts.push(`Tipo: ${typeLabels[p.type] ?? p.type}`);
+      if (p.ticket) parts.push(`Ticket: R$ ${p.ticket.toLocaleString("pt-BR")}`);
+      if (p.ticket_minimo) parts.push(`Ticket mínimo: R$ ${p.ticket_minimo.toLocaleString("pt-BR")}`);
+      if (p.description) parts.push(`Descrição: ${p.description}`);
+      if (p.entregaveis) parts.push(`Entregáveis: ${p.entregaveis}`);
+
+      const mats = materialsByProduct.get(p.id) ?? [];
+      if (mats.length > 0) {
+        parts.push("Materiais disponíveis para envio:");
+        for (const m of mats) {
+          parts.push(`  - "${m.file_name}" (id: ${m.id}, tipo: ${m.material_type}) — use send_product_material para enviar ao lead`);
+        }
+      }
+      return parts.join("\n");
+    });
+
+    return lines.join("\n\n");
+  } catch (e) {
+    console.warn("[context-loader] loadProductCatalog exception:", e);
+    return "";
+  }
+}
+
+/**
+ * Carrega dados completos do lead: campos básicos + custom fields + dados
+ * de todos os pipes (upsell, confirmação, propostas, campanhas).
+ * Retorna objeto enriquecido pra injeção no prompt LLM.
+ */
+export async function loadLeadData(
+  supabase: SupabaseClient,
+  leadId: string,
+): Promise<Record<string, unknown> | null> {
+  try {
+    const { data: lead, error: leadError } = await supabase
+      .from("leads")
+      .select(`
+        id,
+        name,
+        phone,
+        email,
+        company,
+        origin,
+        rating,
+        segment,
+        faturamento,
+        urgency,
+        notes,
+        pipe_whatsapp,
+        created_at,
+        updated_at
+      `)
+      .eq("id", leadId)
+      .single();
+
+    if (leadError) {
+      console.warn("[context-loader] loadLeadData error:", leadError.message);
+      return null;
+    }
+
+    const [customFieldsRes, upsellRes, confirmacaoRes, propostasRes, campanhaRes] = await Promise.all([
+      supabase
+        .from("lead_custom_field_values")
+        .select(`value, field:lead_custom_fields(id, field_name, field_type)`)
+        .eq("lead_id", leadId),
+      supabase
+        .from("upsell_clients")
+        .select("tipo_cliente_tempo, gestao_stage, potencial, is_active")
+        .eq("lead_id", leadId)
+        .maybeSingle(),
+      supabase
+        .from("pipe_confirmacao")
+        .select("status, meeting_date, is_confirmed")
+        .eq("lead_id", leadId)
+        .maybeSingle(),
+      supabase
+        .from("pipe_propostas")
+        .select("status, sale_value, product_type")
+        .eq("lead_id", leadId)
+        .maybeSingle(),
+      supabase
+        .from("campanha_leads")
+        .select("stage_id, campanha_id, campanha_stages(name)")
+        .eq("lead_id", leadId)
+        .limit(1)
+        .maybeSingle(),
+    ]);
+
+    const customFields: Record<string, string> = {};
+    const cfData = customFieldsRes.data as Array<{ value?: string; field?: { field_name?: string } }> | null;
+    if (cfData && cfData.length > 0) {
+      for (const cfv of cfData) {
+        if (cfv.field?.field_name && cfv.value) {
+          customFields[cfv.field.field_name] = cfv.value;
+        }
+      }
+    }
+
+    const upsellData = upsellRes.data as { tipo_cliente_tempo?: string; gestao_stage?: string; potencial?: string; is_active?: boolean } | null;
+    const confirmacaoData = confirmacaoRes.data as { status?: string; meeting_date?: string; is_confirmed?: boolean } | null;
+    const propostasData = propostasRes.data as { status?: string; sale_value?: number; product_type?: string } | null;
+    const campanhaData = campanhaRes.data as { campanha_id?: string; campanha_stages?: { name?: string } } | null;
+
+    return {
+      ...(lead as Record<string, unknown>),
+      customFields,
+      upsell_base_stage: upsellData?.tipo_cliente_tempo ?? null,
+      upsell_gestao_stage: upsellData?.gestao_stage ?? null,
+      upsell_potencial: upsellData?.potencial ?? null,
+      upsell_is_active: upsellData?.is_active ?? null,
+      confirmacao_status: confirmacaoData?.status ?? null,
+      confirmacao_meeting_date: confirmacaoData?.meeting_date ?? null,
+      confirmacao_is_confirmed: confirmacaoData?.is_confirmed ?? null,
+      propostas_status: propostasData?.status ?? null,
+      propostas_sale_value: propostasData?.sale_value ?? null,
+      propostas_product_type: propostasData?.product_type ?? null,
+      campanha_stage: campanhaData?.campanha_stages?.name ?? null,
+      campanha_id: campanhaData?.campanha_id ?? null,
+    };
+  } catch (e) {
+    console.error("[context-loader] loadLeadData exception:", e);
+    return null;
+  }
+}
+
 /**
  * Carrega conversa do lead com agente específico (tenant-isolated).
  * Filtra por (lead_id, agent_id, organization_id) — defense-in-depth contra
