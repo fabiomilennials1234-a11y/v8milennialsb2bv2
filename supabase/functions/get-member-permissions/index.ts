@@ -13,7 +13,10 @@ serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const auth = await requireAuth(req, { body });
+    // organization_id é obrigatório: sem ele, o fallback "primeiro
+    // team_member ativo" avalia permissões contra a org errada para
+    // usuários multi-org (incidente 2026-04-23 funis bloqueados).
+    const auth = await requireAuth(req, { body, requireOrganization: true });
 
     const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
     const supabase = createClient(
@@ -31,17 +34,28 @@ serve(async (req) => {
 
     if (featErr) throw featErr;
 
-    // Buscar overrides do membro
-    const { data: overrides, error: ovErr } = await supabase
-      .from("member_feature_permissions")
-      .select("feature_key, enabled")
-      .eq("team_member_id", auth.teamMemberId);
+    // Buscar overrides do membro. Master sem team_member real na org (shadow
+    // user no switcher) tem teamMemberId="" — skip a query pra evitar
+    // PostgreSQL 22P02 "invalid input syntax for type uuid: ''".
+    // Incidente 2026-04-24: master trocando pra org sem TM quebrava edge
+    // function e travava loader no SubscriptionProtectedRoute.
+    const isValidTeamMemberId =
+      typeof auth.teamMemberId === "string" &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(auth.teamMemberId);
 
-    if (ovErr) throw ovErr;
+    let overrideMap = new Map<string, boolean>();
+    if (isValidTeamMemberId) {
+      const { data: overrides, error: ovErr } = await supabase
+        .from("member_feature_permissions")
+        .select("feature_key, enabled")
+        .eq("team_member_id", auth.teamMemberId);
 
-    const overrideMap = new Map(
-      (overrides || []).map((o: { feature_key: string; enabled: boolean }) => [o.feature_key, o.enabled]),
-    );
+      if (ovErr) throw ovErr;
+
+      overrideMap = new Map(
+        (overrides || []).map((o: { feature_key: string; enabled: boolean }) => [o.feature_key, o.enabled]),
+      );
+    }
 
     // Montar resultado
     const result: Record<string, boolean> = {};
@@ -68,8 +82,26 @@ serve(async (req) => {
     );
   } catch (error) {
     if (error instanceof AuthError) {
+      // Telemetria Fase 3: AuthError de requireOrganization é sinal da
+      // regressão de permissões (incidente 2026-04-24). Log estruturado
+      // pra Sentry/log aggregator filtrar. 400 aqui = frontend chamou sem
+      // org_id ou org_id inválida para o user.
+      console.error(
+        JSON.stringify({
+          event: "get-member-permissions.auth_error",
+          status: error.status,
+          message: error.message,
+          url: req.url,
+        }),
+      );
       return authErrorResponse(error, corsHeaders);
     }
+    console.error(
+      JSON.stringify({
+        event: "get-member-permissions.unhandled",
+        message: (error as Error).message,
+      }),
+    );
     return new Response(
       JSON.stringify({ error: (error as Error).message }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },

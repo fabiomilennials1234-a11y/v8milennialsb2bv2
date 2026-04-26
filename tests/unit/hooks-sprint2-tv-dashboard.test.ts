@@ -139,6 +139,36 @@ vi.mock("@/hooks/useUserRole", () => ({
   useIsAdmin: () => ({ isAdmin: true, isLoading: false }),
 }));
 
+// RPC canônica (ADR 2026-04-24): vendaTotal = Σ sale_value (sem × duration).
+// Mock espelha a resposta de get_dashboard_metrics para o fixture acima.
+vi.mock("@/hooks/useDashboardMetrics", () => ({
+  useDashboardMetrics: () => ({
+    data: {
+      totalLeads: 0,
+      reunioesMarcadas: 0,
+      reunioesComparecidas: 0,
+      noShow: 0,
+      taxaNoShow: 0,
+      vendaTotal: 5000,
+      vendaMRR: 5000,
+      vendaProjeto: 0,
+      ticketMedio: 5000,
+      ticketMedioMRR: 5000,
+      ticketMedioProjeto: 0,
+      novosClientes: 1,
+      propostasEnviadas: 1,
+      tempoMedioResposta: 0,
+      vendaPrimeiroPedido: 5000,
+      vendaBaseAtiva: 0,
+      taxaConversao: 50,
+      dailySales: [],
+    },
+  }),
+  useConversionRates: () => ({ data: { meetingsRates: [], salesRates: [] } }),
+  useFunnelData: () => ({ data: [] }),
+  useRankingData: () => ({ data: { salesRanking: [], meetingsRanking: [] } }),
+}));
+
 vi.mock("@/hooks/usePipelineStages", () => ({
   usePipelineStages: () => ({ data: [] }),
   DEFAULT_STAGES: {},
@@ -176,13 +206,14 @@ describe("useTVDashboardData", () => {
       // Sales goal
       expect(data.metaVendasMes).toBe(100000);
 
-      // Vendas realizadas: MRR 5000 * 12 = 60000
-      expect(data.vendasRealizadas).toBe(60000);
+      // Receita do mês = Σ sale_value (canônico ADR 2026-04-24) — vem da RPC mockada.
+      // MRR 5000, sem × contract_duration.
+      expect(data.vendasRealizadas).toBe(5000);
       expect(data.vendasMRR).toBe(5000);
       expect(data.vendasProjeto).toBe(0);
 
       // quantoFalta
-      expect(data.quantoFalta).toBe(100000 - 60000);
+      expect(data.quantoFalta).toBe(100000 - 5000);
 
       // reunioesComparecidas
       expect(data.reunioesComparecidas).toBe(1);

@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import * as Sentry from "@sentry/react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
@@ -118,20 +119,38 @@ interface FeaturePermissionsResponse {
 }
 
 /**
- * Busca todas as feature permissions do membro logado.
- * Cache de 5 minutos. Admin retorna tudo true.
+ * Busca todas as feature permissions do membro logado NA ORG ATUAL.
+ *
+ * Multi-tenant: `organization_id` é enviado explicitamente no body e faz
+ * parte da queryKey. Sem isso, a edge function cai no "primeiro team_member
+ * ativo" do usuário (ordem created_at) e avalia permissões contra a org
+ * errada — bloqueando ou liberando indevidamente para usuários em múltiplas
+ * orgs. Ver incidente 2026-04-23-funis-access-multi-org-rls.
+ *
+ * Erros NÃO são silenciados (retornavam {}). Propagados via `isError` da
+ * query, para o PermissionProtectedRoute diferenciar falha técnica de
+ * "sem permissão" e oferecer retry em vez de Lock definitivo.
+ * Incidente 2026-04-24 — membros com tela bloqueada pós PR #87.
  */
 export function useFeaturePermissions() {
   const { user } = useAuth();
   const { data: currentTeamMember } = useCurrentTeamMember();
+  const { isMaster } = useMasterAuth();
+  const organizationId = currentTeamMember?.organization_id ?? null;
 
   return useQuery({
-    queryKey: ["feature-permissions", user?.id, currentTeamMember?.id],
+    queryKey: ["feature-permissions", user?.id, organizationId, isMaster],
     queryFn: async (): Promise<Record<string, boolean>> => {
-      if (!user?.id) return {};
+      // Master bypassa permission checks via useFeaturePermission.allowed.
+      // Não precisa chamar edge function — evita 500 quando shadow user
+      // está em org sem team_member real. Incidente 2026-04-24.
+      if (isMaster) return {};
+
+      if (!user?.id) throw new Error("feature-permissions: usuário ausente");
+      if (!organizationId) throw new Error("feature-permissions: organization_id ausente");
 
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) return {};
+      if (!session?.access_token) throw new Error("feature-permissions: sessão sem token");
 
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
       const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
@@ -145,32 +164,65 @@ export function useFeaturePermissions() {
             Authorization: `Bearer ${anonKey}`,
             "X-User-JWT": session.access_token,
           },
-          body: JSON.stringify({}),
+          body: JSON.stringify({ organization_id: organizationId }),
         },
       );
 
-      if (!res.ok) return {};
+      if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        const err = new Error(
+          `get-member-permissions ${res.status}: ${body.slice(0, 200)}`,
+        );
+        // Telemetria Fase 3: toda falha de get-member-permissions é sinal
+        // forte de regressão em permissões (causa raiz do incidente 2026-04-24).
+        // Capturar com contexto pra alertas e dashboards Sentry.
+        Sentry.captureException(err, {
+          tags: {
+            feature: "permissions",
+            kind: "get-member-permissions-http-error",
+          },
+          extra: {
+            status: res.status,
+            organizationId,
+            userId: user.id,
+          },
+        });
+        throw err;
+      }
 
       const data = (await res.json()) as FeaturePermissionsResponse;
       return data.features || {};
     },
-    enabled: !!user?.id && !!currentTeamMember?.id,
+    enabled: !!user?.id && !!organizationId,
     staleTime: 5 * 60 * 1000,
+    retry: 1,
   });
 }
 
 /**
  * Verifica se o membro tem permissão para uma feature específica.
  * Admin retorna sempre true.
+ *
+ * `isLoading` considera team_member async E feature permissions query, mas
+ * NUNCA depende de `!currentTeamMember` (teamMember pode resolver null
+ * legitimamente — masters sem team_member real, por exemplo — e manter
+ * isLoading=true nesse caso provoca loader eterno em gates globais como
+ * SubscriptionProtectedRoute → useCanManageCopilot). PermissionProtectedRoute
+ * trata o caso `!currentTeamMember` separadamente como erro recuperável.
+ * `hasError` expõe falhas técnicas (400/500/network).
  */
-export function useFeaturePermission(featureKey: string): { allowed: boolean; isLoading: boolean } {
-  const { data: features, isLoading } = useFeaturePermissions();
+export function useFeaturePermission(
+  featureKey: string,
+): { allowed: boolean; isLoading: boolean; hasError: boolean } {
+  const { isLoading: teamMemberLoading } = useCurrentTeamMember();
+  const { data: features, isLoading: featuresLoading, isError } = useFeaturePermissions();
   const { isAdmin } = useIsAdmin();
   const { isMaster } = useMasterAuth();
 
   return {
     allowed: isMaster || isAdmin || features?.[featureKey] === true,
-    isLoading,
+    isLoading: teamMemberLoading || featuresLoading,
+    hasError: isError,
   };
 }
 

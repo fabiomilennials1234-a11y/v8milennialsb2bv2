@@ -89,6 +89,15 @@ export async function requireAuth(
     body?: Record<string, unknown>;
     /** Se true, permite chamadas internas via X-Internal-Api-Key */
     allowInternalKey?: boolean;
+    /**
+     * Se true, exige organization_id (via option ou body). Falha com
+     * AuthError 400 em vez de cair no fallback "primeiro team_member ativo".
+     *
+     * Use para edge functions org-scoped (ex.: get-member-permissions,
+     * save-member-permissions). O fallback é inseguro para usuários
+     * multi-org — avalia permissões/dados contra a org errada.
+     */
+    requireOrganization?: boolean;
   },
 ): Promise<AuthContext> {
   const supabase = getServiceClient();
@@ -160,7 +169,23 @@ export async function requireAuth(
       .maybeSingle();
     teamMember = data;
   } else {
-    // Sem org específica — pega o primeiro team_member ativo
+    if (options?.requireOrganization && !isMaster) {
+      throw new AuthError(
+        "organization_id obrigatório (edge function org-scoped; fallback por created_at é inseguro em multi-org)",
+        400,
+      );
+    }
+    // Sem org específica — pega o primeiro team_member ativo (legado).
+    // Telemetria: identifica callers que ainda dependem do fallback para
+    // ser migrados para requireOrganization:true.
+    console.warn(
+      JSON.stringify({
+        event: "requireAuth.org_fallback_used",
+        user_id: user.id,
+        is_master: isMaster,
+        url: req.url,
+      }),
+    );
     const { data } = await supabase
       .from("team_members")
       .select("id, role, organization_id, job_title, metric_type")
@@ -173,6 +198,13 @@ export async function requireAuth(
   }
 
   if (!teamMember && !isMaster) {
+    throw new AuthError("Você não pertence a esta organização", 403);
+  }
+
+  // Safety net: se a org foi fornecida mas o user não é membro dela e
+  // também não é master, falha explicitamente (evita service-role bypass
+  // silencioso quando body.organization_id é arbitrário).
+  if (orgId && !teamMember && !isMaster) {
     throw new AuthError("Você não pertence a esta organização", 403);
   }
 

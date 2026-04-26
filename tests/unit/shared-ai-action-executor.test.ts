@@ -2348,3 +2348,55 @@ describe.skip("executeAiAction", () => {
     });
   });
 });
+
+// ─── generate_message no-op handler ──────────────────────────────────────────
+// Active (no skip): regression guard for the infinite-retry loop bug fixed
+// 2026-04-24. workflow-executor.ts:344 enqueues action_type="generate_message"
+// but historically no executor case existed → "Tipo desconhecido" → retry loop.
+// The no-op handler returns success and bypasses lead_history logging.
+
+describe("executeAiAction — generate_message no-op", () => {
+  function makeAction(overrides: Partial<ActionRecord> = {}): ActionRecord {
+    return {
+      id: "a-gm",
+      organization_id: "org-1",
+      lead_id: "lead-1",
+      conversation_id: null,
+      action_type: "generate_message",
+      payload: { source: "workflow", agent_id: null, prompt: "test" },
+      ...overrides,
+    };
+  }
+
+  it("returns success with no-op message and does NOT throw 'Tipo desconhecido'", async () => {
+    const { sb } = createMockSupabase();
+    const result = await executeAiAction(sb, makeAction());
+    expect(result.success).toBe(true);
+    expect(result.message).toContain("no-op");
+    expect(result.message).toContain("generate_message");
+    expect(result.error).toBeUndefined();
+  });
+
+  it("does NOT call the default 'Tipo de ação desconhecido' branch", async () => {
+    const { sb } = createMockSupabase();
+    const result = await executeAiAction(sb, makeAction());
+    expect(result.error ?? "").not.toContain("desconhecido");
+  });
+
+  it("works with null lead_id (does not require lead context)", async () => {
+    const { sb } = createMockSupabase();
+    const result = await executeAiAction(sb, makeAction({ lead_id: null }));
+    expect(result.success).toBe(true);
+  });
+
+  it("preserves the unknown-action error path for genuinely unknown types", async () => {
+    const { sb } = createMockSupabase();
+    const result = await executeAiAction(
+      sb,
+      makeAction({ action_type: "definitely_not_a_real_action" }),
+    );
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("desconhecido");
+    expect(result.error).toContain("definitely_not_a_real_action");
+  });
+});

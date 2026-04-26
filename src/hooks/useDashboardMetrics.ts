@@ -72,6 +72,14 @@ export function useDashboardMetrics(month?: number, year?: number, filterMemberI
 
   const { startStr, endStr } = getMonthRangeUTC(selectedMonth, selectedYear);
 
+  // Realtime: RPC canônica de receita do mês. Invalida quando qualquer pipe
+  // muda (venda fechada, reunião compareceu, proposta criada) para que TV
+  // Dashboard e aba de comando reflitam em tempo real. Debounce de 2s já
+  // tratado em useRealtimeSubscription.
+  useRealtimeSubscription("pipe_propostas", ["dashboard-metrics"]);
+  useRealtimeSubscription("pipe_confirmacao", ["dashboard-metrics"]);
+  useRealtimeSubscription("leads", ["dashboard-metrics"]);
+
   return useQuery({
     queryKey: ["dashboard-metrics", selectedMonth, selectedYear, effectiveFilter, organizationId],
     queryFn: async (): Promise<DashboardMetrics> => {

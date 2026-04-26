@@ -190,6 +190,90 @@ async function handleMessagesEvent(
       status: "error",
       payloadSnapshot: { instance_id: instance.id, error: error.message },
     });
+    return;
+  }
+
+  // Bridge to Copilot — previously missing: whatsapp-webhook only persisted
+  // messages and never invoked agent-message, leaving Uazapi-backed orgs with
+  // a silent Copilot. Parity with sz-chat-webhook and evolution-webhook.
+  //
+  // Rules:
+  //   - only incoming messages (outgoing echoes are already filtered by
+  //     excludeMessages in Uazapi, but guard defensively)
+  //   - must have text content (media without caption is skipped for now)
+  //   - fire-and-forget: we do not await to keep webhook latency low.
+  //     agent-message itself handles ai_disabled / WAITING_HUMAN / batching.
+  if (
+    normalized.direction === "incoming" &&
+    normalized.content &&
+    normalized.content.trim().length > 0 &&
+    normalized.phone_number
+  ) {
+    const agentMessagePayload = {
+      from: normalized.phone_number,
+      message: normalized.content,
+      channel: "whatsapp",
+      organization_id: instance.organization_id,
+      push_name: normalized.push_name,
+      incoming_message_type: normalized.message_type,
+    };
+
+    // Fire-and-forget. Errors are logged but do NOT fail the webhook.
+    fetch(`${SUPABASE_URL}/functions/v1/agent-message`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${SERVICE_ROLE_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(agentMessagePayload),
+    })
+      .then((res) => {
+        if (!res.ok) {
+          console.error(
+            `[whatsapp-webhook] agent-message returned ${res.status} for message ${normalized.message_id}`,
+          );
+          void logRuntime({
+            organizationId: instance.organization_id,
+            module: "webhook",
+            action: "uazapi_agent_message_failed",
+            status: "error",
+            payloadSnapshot: {
+              instance_id: instance.id,
+              message_id: normalized.message_id,
+              http_status: res.status,
+            },
+          });
+        }
+      })
+      .catch((err) => {
+        console.error(
+          `[whatsapp-webhook] agent-message fetch threw for message ${normalized.message_id}:`,
+          err,
+        );
+        void logRuntime({
+          organizationId: instance.organization_id,
+          module: "webhook",
+          action: "uazapi_agent_message_error",
+          status: "error",
+          payloadSnapshot: {
+            instance_id: instance.id,
+            message_id: normalized.message_id,
+            error: err instanceof Error ? err.message : String(err),
+          },
+        });
+      });
+
+    void logRuntime({
+      organizationId: instance.organization_id,
+      module: "webhook",
+      action: "uazapi_agent_message_dispatched",
+      status: "success",
+      payloadSnapshot: {
+        instance_id: instance.id,
+        message_id: normalized.message_id,
+        channel: "whatsapp",
+      },
+    });
   }
 }
 

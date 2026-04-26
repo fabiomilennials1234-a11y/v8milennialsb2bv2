@@ -95,7 +95,10 @@ export function useCreateWhatsAppInstance() {
         throw new Error("Usuário não está vinculado a uma organização");
       }
 
-      const { instance_id, result } = await proxyCreateInstance(data.instance_name);
+      const { instance_id, result } = await proxyCreateInstance(
+        data.instance_name,
+        teamMember.organization_id
+      );
 
       // Persist qrcode/paircode in local row so UI can read from query cache
       await supabase
@@ -162,7 +165,11 @@ export function useRefreshQRCode() {
       if (!teamMember?.organization_id) {
         throw new Error("Usuário não está vinculado a uma organização");
       }
-      const { qrcode, paircode } = await proxyConnectQR(args.instance_id, args.phone);
+      const { qrcode, paircode } = await proxyConnectQR(
+        args.instance_id,
+        args.phone,
+        teamMember.organization_id
+      );
 
       const { data, error } = await supabase
         .from("whatsapp_instances")
@@ -196,7 +203,7 @@ export function useCheckConnectionStatus() {
       if (!teamMember?.organization_id) {
         throw new Error("Usuário não está vinculado a uma organização");
       }
-      const status = await proxyGetStatus(args.instance_id);
+      const status = await proxyGetStatus(args.instance_id, teamMember.organization_id);
 
       const { data, error } = await supabase
         .from("whatsapp_instances")
@@ -239,7 +246,7 @@ export function useDeleteWhatsAppInstance() {
       }
 
       try {
-        await proxyDeleteInstance(id);
+        await proxyDeleteInstance(id, teamMember.organization_id);
         return { removedFromProvider: true };
       } catch (error: any) {
         // Proxy already cleans up the local row even on provider failure via
@@ -267,7 +274,7 @@ export function useLogoutInstance() {
       if (!teamMember?.organization_id) {
         throw new Error("Usuário não está vinculado a uma organização");
       }
-      await proxyLogoutInstance(args.instance_id);
+      await proxyLogoutInstance(args.instance_id, teamMember.organization_id);
 
       const { data, error } = await supabase
         .from("whatsapp_instances")

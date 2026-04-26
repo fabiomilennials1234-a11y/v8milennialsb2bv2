@@ -302,7 +302,7 @@ export function CampanhaSemiAutomaticaPanel({ campanha }: CampanhaSemiAutomatica
                           "w-5 h-5",
                           batch.status === "scheduled" ? "text-blue-600 dark:text-blue-400" :
                           batch.status === "processing" ? "text-amber-600 dark:text-amber-400" :
-                          batch.status === "completed" ? "text-green-600 dark:text-green-400" : "text-gray-400 dark:text-muted-foreground"
+                          batch.status === "completed" ? "text-green-600 dark:text-green-400" : "text-muted-foreground"
                         )} />
                       </div>
                       <div>

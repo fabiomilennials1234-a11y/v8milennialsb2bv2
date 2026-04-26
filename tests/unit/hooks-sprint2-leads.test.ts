@@ -303,6 +303,6 @@ describe("useToggleConversationAI", () => {
         await result.current.mutateAsync({ phone: "+5511999999999", disabled: true });
       } catch {}
     });
-    expect(mockRpc).toHaveBeenCalledWith("toggle_conversation_ai", { p_phone: "+5511999999999", p_disabled: true });
+    expect(mockRpc).toHaveBeenCalledWith("toggle_phone_ai", { p_phone: "+5511999999999", p_disabled: true });
   });
 });

@@ -11,20 +11,35 @@ vi.mock('@/hooks/useMasterAuth', () => ({
   useMasterAuth: vi.fn(),
 }));
 
+vi.mock('@/hooks/useTeamMembers', () => ({
+  useCurrentTeamMember: vi.fn(),
+}));
+
 import { useFeaturePermission, useIsAdmin } from '@/hooks/useUserRole';
 import { useMasterAuth } from '@/hooks/useMasterAuth';
+import { useCurrentTeamMember } from '@/hooks/useTeamMembers';
 import { PermissionProtectedRoute } from '@/components/PermissionProtectedRoute';
 
 // ─── Typed references ───────────────────────────────────
 const mockUseFeaturePermission = useFeaturePermission as ReturnType<typeof vi.fn>;
 const mockUseIsAdmin = useIsAdmin as ReturnType<typeof vi.fn>;
 const mockUseMasterAuth = useMasterAuth as ReturnType<typeof vi.fn>;
+const mockUseCurrentTeamMember = useCurrentTeamMember as ReturnType<typeof vi.fn>;
+
+const fakeTeamMember = {
+  id: 'tm-1',
+  user_id: 'u-1',
+  organization_id: 'org-1',
+  role: 'member',
+  is_active: true,
+};
 
 // ─── Helpers ────────────────────────────────────────────
 function setMocks(overrides: {
   admin?: { isAdmin: boolean; isLoading: boolean };
   master?: { isMaster: boolean; isLoading: boolean };
-  feature?: { allowed: boolean; isLoading: boolean };
+  feature?: { allowed: boolean; isLoading: boolean; hasError?: boolean };
+  teamMember?: { data: unknown; isLoading: boolean };
 }) {
   mockUseIsAdmin.mockReturnValue(
     overrides.admin ?? { isAdmin: false, isLoading: false },
@@ -33,7 +48,10 @@ function setMocks(overrides: {
     overrides.master ?? { isMaster: false, isLoading: false },
   );
   mockUseFeaturePermission.mockReturnValue(
-    overrides.feature ?? { allowed: false, isLoading: false },
+    overrides.feature ?? { allowed: false, isLoading: false, hasError: false },
+  );
+  mockUseCurrentTeamMember.mockReturnValue(
+    overrides.teamMember ?? { data: fakeTeamMember, isLoading: false },
   );
 }
 
@@ -46,8 +64,6 @@ describe('PermissionProtectedRoute', () => {
   it('shows spinner when admin is loading', () => {
     setMocks({
       admin: { isAdmin: false, isLoading: true },
-      master: { isMaster: false, isLoading: false },
-      feature: { allowed: false, isLoading: false },
     });
 
     const { container } = render(
@@ -62,9 +78,7 @@ describe('PermissionProtectedRoute', () => {
 
   it('shows spinner when master is loading', () => {
     setMocks({
-      admin: { isAdmin: false, isLoading: false },
       master: { isMaster: false, isLoading: true },
-      feature: { allowed: false, isLoading: false },
     });
 
     const { container } = render(
@@ -79,7 +93,6 @@ describe('PermissionProtectedRoute', () => {
 
   it('master renders children immediately (skips feature check)', () => {
     setMocks({
-      admin: { isAdmin: false, isLoading: false },
       master: { isMaster: true, isLoading: false },
       feature: { allowed: false, isLoading: true },
     });
@@ -96,7 +109,6 @@ describe('PermissionProtectedRoute', () => {
   it('admin renders children immediately (skips feature check)', () => {
     setMocks({
       admin: { isAdmin: true, isLoading: false },
-      master: { isMaster: false, isLoading: false },
       feature: { allowed: false, isLoading: true },
     });
 
@@ -111,8 +123,6 @@ describe('PermissionProtectedRoute', () => {
 
   it('shows spinner when feature permission is loading (non-admin)', () => {
     setMocks({
-      admin: { isAdmin: false, isLoading: false },
-      master: { isMaster: false, isLoading: false },
       feature: { allowed: false, isLoading: true },
     });
 
@@ -126,10 +136,61 @@ describe('PermissionProtectedRoute', () => {
     expect(screen.queryByText('Protected Content')).toBeNull();
   });
 
+  it('shows spinner when team_member is still loading (prevents premature Lock)', () => {
+    setMocks({
+      teamMember: { data: undefined, isLoading: true },
+    });
+
+    const { container } = render(
+      <PermissionProtectedRoute featureKey="leads.view">
+        <p>Protected Content</p>
+      </PermissionProtectedRoute>,
+    );
+
+    expect(container.querySelector('.animate-spin')).toBeTruthy();
+    expect(screen.queryByText('Protected Content')).toBeNull();
+  });
+
+  it('shows error view (retry) when feature permission fetch fails', () => {
+    setMocks({
+      feature: { allowed: false, isLoading: false, hasError: true },
+    });
+
+    render(
+      <PermissionProtectedRoute featureKey="leads.view">
+        <p>Protected Content</p>
+      </PermissionProtectedRoute>,
+    );
+
+    expect(screen.queryByText('Protected Content')).toBeNull();
+    expect(
+      screen.getByText('Nao foi possivel carregar suas permissoes.'),
+    ).toBeTruthy();
+    expect(screen.getByRole('button', { name: /recarregar/i })).toBeTruthy();
+  });
+
+  it('shows error view when team_member is missing after resolve (not Lock)', () => {
+    setMocks({
+      teamMember: { data: undefined, isLoading: false },
+    });
+
+    render(
+      <PermissionProtectedRoute featureKey="leads.view">
+        <p>Protected Content</p>
+      </PermissionProtectedRoute>,
+    );
+
+    expect(screen.queryByText('Protected Content')).toBeNull();
+    expect(
+      screen.getByText('Nao foi possivel carregar seus dados de membro.'),
+    ).toBeTruthy();
+    expect(
+      screen.queryByText('Voce nao tem permissao para acessar esta pagina.'),
+    ).toBeNull();
+  });
+
   it('renders children when feature is allowed', () => {
     setMocks({
-      admin: { isAdmin: false, isLoading: false },
-      master: { isMaster: false, isLoading: false },
       feature: { allowed: true, isLoading: false },
     });
 
@@ -144,8 +205,6 @@ describe('PermissionProtectedRoute', () => {
 
   it('shows default lock screen when feature is denied', () => {
     setMocks({
-      admin: { isAdmin: false, isLoading: false },
-      master: { isMaster: false, isLoading: false },
       feature: { allowed: false, isLoading: false },
     });
 
@@ -166,8 +225,6 @@ describe('PermissionProtectedRoute', () => {
 
   it('renders custom fallback when feature denied + fallback prop', () => {
     setMocks({
-      admin: { isAdmin: false, isLoading: false },
-      master: { isMaster: false, isLoading: false },
       feature: { allowed: false, isLoading: false },
     });
 
@@ -189,8 +246,6 @@ describe('PermissionProtectedRoute', () => {
 
   it('nonexistent featureKey shows lock screen', () => {
     setMocks({
-      admin: { isAdmin: false, isLoading: false },
-      master: { isMaster: false, isLoading: false },
       feature: { allowed: false, isLoading: false },
     });
 
@@ -209,7 +264,6 @@ describe('PermissionProtectedRoute', () => {
   it('admin renders children even when featureKey is invalid', () => {
     setMocks({
       admin: { isAdmin: true, isLoading: false },
-      master: { isMaster: false, isLoading: false },
       feature: { allowed: false, isLoading: false },
     });
 

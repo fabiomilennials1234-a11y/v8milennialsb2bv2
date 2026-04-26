@@ -1,75 +1,173 @@
 /**
  * ContextPanel — painel de contexto 3ª coluna do ChatShell.
  *
- * Shell com Tabs (shadcn/ui) para 4 abas: Info, Pipe, Tags, Histórico.
- * Stubs agora; Onda 2b preenche com conteúdo real.
+ * Layout em 3 abas:
+ *   INFOS     — origem, responsável, email, tags, jornada, campos
+ *               personalizados, copilot toggle, nota rápida, CTA ficha
+ *   HISTÓRICO — timeline completa de ações do lead (lead_history)
+ *   I.A       — mensagens e ações do agente (AITimeline)
  *
- * Extraído como skeleton novo (C8) — não há código movido de WhatsAppChat.tsx.
- * Em produção (pré-Onda 2b), fica atrás de feature flag e não é montado.
+ * Header persistente acima das abas: avatar, nome, empresa, score.
  */
+import { useState } from "react";
+import { Building2, Flame, Loader2 } from "lucide-react";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ContextPanelInfo } from "./ContextPanelInfo";
-import { ContextPanelPipe } from "./ContextPanelPipe";
-import { ContextPanelTags } from "./ContextPanelTags";
-import { ContextPanelHistory } from "./ContextPanelHistory";
-
-export type ContextPanelTab = "info" | "pipe" | "tags" | "history";
+import { cn } from "@/lib/utils";
+import { useLeadByPhone } from "@/hooks/useWhatsAppLeadIntegration";
+import { ContextPanelTabInfo } from "./ContextPanelTabInfo";
+import { ContextPanelTabHistory } from "./ContextPanelTabHistory";
+import { ContextPanelTabAI } from "./ContextPanelTabAI";
 
 export interface ContextPanelProps {
   leadId?: string;
   phoneNumber?: string;
   pushName?: string | null;
-  defaultTab?: ContextPanelTab;
   onClose?: () => void;
 }
 
-export function ContextPanel({
-  leadId,
-  phoneNumber,
-  pushName,
-  defaultTab = "info",
-}: ContextPanelProps) {
+export type ContextPanelTab = "info" | "history" | "ai";
+
+function getScoreTone(score: number) {
+  if (score >= 80)
+    return {
+      label: "Quente",
+      className:
+        "text-[hsl(358_72%_54%)] bg-[hsl(358_72%_60%/0.10)] border-[hsl(358_72%_60%/0.3)]",
+    };
+  if (score >= 50)
+    return {
+      label: "Morno",
+      className:
+        "text-[hsl(30_96%_48%)] bg-[hsl(30_96%_58%/0.10)] border-[hsl(30_96%_58%/0.3)]",
+    };
+  if (score > 0)
+    return {
+      label: "Frio",
+      className:
+        "text-[hsl(212_86%_54%)] bg-[hsl(212_86%_64%/0.10)] border-[hsl(212_86%_64%/0.3)]",
+    };
+  return null;
+}
+
+export function ContextPanel({ leadId, phoneNumber, pushName }: ContextPanelProps) {
+  const [activeTab, setActiveTab] = useState<ContextPanelTab>("info");
+  const { data: lead, isLoading: leadLoading } = useLeadByPhone(phoneNumber ?? null);
+  const activeLeadId = lead?.id ?? leadId ?? null;
+
+  if (!phoneNumber) {
+    return (
+      <div className="flex flex-col h-full bg-background border-l border-border/60">
+        <div className="flex flex-col items-center justify-center h-full gap-3 p-6 text-center">
+          <p className="text-sm text-muted-foreground">
+            Selecione uma conversa para ver as informações do lead
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (leadLoading) {
+    return (
+      <div className="flex flex-col h-full bg-background border-l border-border/60">
+        <div className="flex items-center justify-center h-full">
+          <Loader2
+            className="h-5 w-5 animate-spin text-muted-foreground"
+            aria-label="Carregando lead"
+          />
+        </div>
+      </div>
+    );
+  }
+
+  const displayName = lead?.name || pushName || phoneNumber;
+  const initials = displayName.slice(0, 2).toUpperCase();
+  const score =
+    typeof lead?.qualification_score === "number" ? lead.qualification_score : 0;
+  const scoreTone = getScoreTone(score);
+
   return (
     <div className="flex flex-col h-full bg-background border-l border-border/60">
-      <Tabs defaultValue={defaultTab} className="flex flex-col h-full">
-        <div className="px-4 pt-3 shrink-0">
-          <TabsList className="w-full justify-start">
-            <TabsTrigger value="info" className="text-xs">
-              Info
-            </TabsTrigger>
-            <TabsTrigger value="pipe" className="text-xs">
-              Pipe
-            </TabsTrigger>
-            <TabsTrigger value="tags" className="text-xs">
-              Tags
-            </TabsTrigger>
-            <TabsTrigger value="history" className="text-xs">
-              Histórico
-            </TabsTrigger>
-          </TabsList>
+      {/* Header persistente */}
+      <div className="px-4 py-4 border-b border-border/40 flex items-start gap-3 shrink-0">
+        <Avatar className="h-12 w-12 shrink-0">
+          <AvatarFallback className="bg-primary/15 text-primary font-semibold text-base">
+            {initials}
+          </AvatarFallback>
+        </Avatar>
+        <div className="flex flex-col min-w-0 flex-1">
+          <span className="text-[15px] font-semibold leading-tight truncate text-foreground">
+            {displayName}
+          </span>
+          {lead?.company && (
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground leading-tight mt-1">
+              <Building2 className="w-3 h-3 opacity-70 shrink-0" />
+              <span className="truncate">{lead.company}</span>
+            </div>
+          )}
+          {score > 0 && scoreTone && (
+            <div className="flex items-center gap-1.5 mt-2">
+              <Badge
+                variant="outline"
+                className={cn(
+                  "text-[10px] font-bold gap-1 h-5",
+                  scoreTone.className,
+                )}
+              >
+                <Flame className="w-3 h-3" />
+                {score}
+              </Badge>
+              <span className="text-[11px] text-muted-foreground">
+                {scoreTone.label}
+              </span>
+            </div>
+          )}
         </div>
+      </div>
 
-        <div className="flex-1 min-h-0 overflow-y-auto">
-          <TabsContent value="info" className="h-full mt-0">
-            <ContextPanelInfo
-              leadId={leadId}
-              phoneNumber={phoneNumber}
-              pushName={pushName}
-            />
-          </TabsContent>
+      {/* Tabs */}
+      <Tabs
+        value={activeTab}
+        onValueChange={(v) => setActiveTab(v as ContextPanelTab)}
+        className="flex flex-col flex-1 min-h-0"
+      >
+        <TabsList className="w-full justify-start gap-5 px-4 pt-2 shrink-0 rounded-none bg-transparent">
+          <TabsTrigger value="info" className="text-[11.5px] uppercase tracking-wider">
+            Infos
+          </TabsTrigger>
+          <TabsTrigger value="history" className="text-[11.5px] uppercase tracking-wider">
+            Histórico
+          </TabsTrigger>
+          <TabsTrigger value="ai" className="text-[11.5px] uppercase tracking-wider">
+            I.A
+          </TabsTrigger>
+        </TabsList>
 
-          <TabsContent value="pipe" className="h-full mt-0">
-            <ContextPanelPipe phoneNumber={phoneNumber} />
-          </TabsContent>
+        <TabsContent
+          value="info"
+          className="flex-1 min-h-0 mt-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+        >
+          <ContextPanelTabInfo
+            lead={lead ?? null}
+            activeLeadId={activeLeadId}
+            phoneNumber={phoneNumber}
+          />
+        </TabsContent>
 
-          <TabsContent value="tags" className="h-full mt-0">
-            <ContextPanelTags phoneNumber={phoneNumber} />
-          </TabsContent>
+        <TabsContent
+          value="history"
+          className="flex-1 min-h-0 mt-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+        >
+          <ContextPanelTabHistory leadId={activeLeadId} />
+        </TabsContent>
 
-          <TabsContent value="history" className="h-full mt-0">
-            <ContextPanelHistory phoneNumber={phoneNumber} />
-          </TabsContent>
-        </div>
+        <TabsContent
+          value="ai"
+          className="flex-1 min-h-0 mt-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+        >
+          <ContextPanelTabAI leadId={activeLeadId} />
+        </TabsContent>
       </Tabs>
     </div>
   );

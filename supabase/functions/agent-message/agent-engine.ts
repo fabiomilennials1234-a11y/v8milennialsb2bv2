@@ -185,14 +185,27 @@ export class AgentEngine {
     
     // 7. Call LLM com suporte a multi-turn para tools inline (search_knowledge)
     const openRouterTools = tools.length > 0 ? this.openRouter.convertTools(tools) : undefined;
-    const multiTurnMessages: Array<{ role: string; content: string; tool_calls?: any; tool_call_id?: string }> = [...allMessages];
+    const multiTurnMessages: Array<{ role: string; content: string | null; tool_calls?: any; tool_call_id?: string }> = [...allMessages];
     let finalNextState = conversation.state;
     let finalAction: { action: string; params: Record<string, unknown>; tenant_id: string } | null = null;
     let finalAssistantMessage = '';
     const MAX_TOOL_TURNS = 3;
 
+    // Telemetria por invocação — salva em runtime_logs
+    const telemetry = {
+      turns_used: 0,
+      tools_called: [] as string[],
+      finish_reasons: [] as string[],
+      content_null_turns: 0,
+      forced_text_turn_used: false,
+      forced_text_succeeded: false,
+      fallback_used: false,
+      truncated: false,
+    };
+
     for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
       console.log(`[AgentEngine] LLM call #${turn + 1}...`);
+      telemetry.turns_used = turn + 1;
       const orMessages = this.openRouter.convertMessages(multiTurnMessages, systemPrompt);
 
       // Onda 2 / T2.C.1: timing + tokens
@@ -223,9 +236,30 @@ export class AgentEngine {
         payloadSnapshot: { agent_id: capabilities.id, turn: turn + 1 },
       }).catch(() => {/* non-fatal */});
 
-      const { nextState: ns, actionToExecute: action, assistantMessage: msg } = await this.processLLMResponse(
+      const choice = response.choices?.[0];
+      const finishReason = choice?.finish_reason ?? 'unknown';
+      telemetry.finish_reasons.push(finishReason);
+      if (!choice?.message?.content) telemetry.content_null_turns += 1;
+      if (finishReason === 'length') telemetry.truncated = true;
+
+      const { nextState: ns, actionToExecute: action, assistantMessage: msg, extraToolCalls } = await this.processLLMResponse(
         response, conversation, capabilities
       );
+      if (action?.action) telemetry.tools_called.push(action.action);
+      // Multi-tool responses: log + metric. Today only the first is executed;
+      // the others are dropped. This warn surfaces the case in runtime_logs.
+      // Escalar para enqueue paralelo é follow-up documentado no design.md.
+      if (extraToolCalls && extraToolCalls.length > 0) {
+        console.warn(
+          '[AgentEngine] LLM returned',
+          extraToolCalls.length + 1,
+          'tool_calls; executing only first. Extras:',
+          extraToolCalls.map((c) => c.action).join(','),
+        );
+        for (const extra of extraToolCalls) {
+          telemetry.tools_called.push(`DROPPED:${extra.action}`);
+        }
+      }
 
       // Se o LLM chamou search_knowledge: executar INLINE e fazer outra chamada
       if (action?.action === 'SEARCH_KNOWLEDGE' && action.params?.query) {
@@ -236,10 +270,11 @@ export class AgentEngine {
         console.log(`[AgentEngine] search_knowledge returned ${searchResult.length} chars`);
 
         // Adicionar tool call + resultado ao historico para proxima chamada
+        // Contrato OpenAI: assistant com tool_calls deve ter content: null, NÃO "".
         const toolCallId = response.choices?.[0]?.message?.tool_calls?.[0]?.id || `kb_${Date.now()}`;
         multiTurnMessages.push({
           role: 'assistant',
-          content: msg || '',
+          content: msg && msg.length > 0 ? msg : null,
           tool_calls: response.choices?.[0]?.message?.tool_calls,
         });
         multiTurnMessages.push({
@@ -257,9 +292,51 @@ export class AgentEngine {
       break;
     }
 
+    // FORCED-TEXT TURN — Se o loop terminou sem texto (LLM chamou tool não-inline
+    // com content:null, ou sair do loop no último turn via continue), fazer uma
+    // chamada final SEM tools forçando resposta textual. Elimina o fallback
+    // silencioso "Desculpe, houve um problema ao processar sua mensagem." que
+    // era enviado a clientes quando o modelo retornava apenas tool_calls sem texto.
+    if (!finalAssistantMessage || finalAssistantMessage.trim().length === 0) {
+      console.log('[AgentEngine] Empty final message — running forced-text turn');
+      telemetry.forced_text_turn_used = true;
+      try {
+        const forcedMessages = this.openRouter.convertMessages(multiTurnMessages, systemPrompt);
+        const forcedResp = await this.openRouter.chat({
+          model,
+          messages: forcedMessages,
+          tool_choice: 'none',
+          max_tokens: 1024,
+          temperature,
+        });
+        const forcedChoice = forcedResp.choices?.[0];
+        telemetry.finish_reasons.push(forcedChoice?.finish_reason ?? 'unknown_forced');
+        const forcedText = forcedChoice?.message?.content?.trim() ?? '';
+        if (forcedText.length > 0) {
+          finalAssistantMessage = forcedText;
+          telemetry.forced_text_succeeded = true;
+          console.log('[AgentEngine] Forced-text turn produced', forcedText.length, 'chars');
+        } else {
+          console.warn('[AgentEngine] Forced-text turn also empty — will fallback');
+        }
+      } catch (forceErr) {
+        console.error('[AgentEngine] Forced-text turn failed:', forceErr);
+      }
+    }
+
     const nextState = finalNextState;
     let actionToExecute = finalAction;
-    const rawAssistantMessage = finalAssistantMessage || 'Desculpe, houve um problema ao processar sua mensagem.';
+
+    // Último recurso: fallback genérico — sinalizado via telemetry.fallback_used
+    // e logado com severity=error. Callers podem suprimir envio observando fallback_used.
+    let rawAssistantMessage: string;
+    if (finalAssistantMessage && finalAssistantMessage.trim().length > 0) {
+      rawAssistantMessage = finalAssistantMessage;
+    } else {
+      rawAssistantMessage = 'Desculpe, houve um problema ao processar sua mensagem.';
+      telemetry.fallback_used = true;
+      console.error('[AgentEngine] FALLBACK USED — no text after forced-text turn', telemetry);
+    }
 
     // 8a.0 Sanitizar JSON de ReAct leak + recuperar ação textual se tool nativo não foi usado.
     // Evita vazamento de blocos {"action":"...","action_input":"..."} para o lead (incidente 2026-04-24).
@@ -276,7 +353,12 @@ export class AgentEngine {
       console.warn('[AgentEngine] Stripped', sanitized.droppedBlocks, 'JSON action block(s) from LLM output');
     }
     const assistantMessage = sanitized.text;
-    console.log('[AgentEngine] Response processed:', { nextState, hasAction: !!actionToExecute, messageLength: assistantMessage?.length });
+    console.log('[AgentEngine] Response processed:', {
+      nextState,
+      hasAction: !!actionToExecute,
+      messageLength: assistantMessage?.length,
+      telemetry,
+    });
 
     // 8a. Split message on ||SPLIT|| delimiter (WhatsApp natural messaging)
     // Case-insensitive + tolera variações (||split||, || SPLIT ||, etc)
@@ -1068,12 +1150,25 @@ Regras:
    * Load Conversation
    */
   private async loadConversation(leadId: string, agentId: string) {
-    console.log('[AgentEngine] Loading conversation for lead:', leadId);
-    
+    console.log('[AgentEngine] Loading conversation for lead:', leadId, 'agent:', agentId);
+
+    // Tenant-isolated query: filter by lead_id + agent_id + organization_id.
+    // Previously the query filtered only by lead_id, which caused:
+    //   - "multiple rows returned" errors when a lead had conversations with
+    //     different agents (historically or via agent switch).
+    //   - cross-agent context bleeding (a different agent's conversation
+    //     being loaded for the current one).
+    //   - missing defense-in-depth: organization_id filter protects against
+    //     edge cases even though RLS is service_role bypassed here.
+    // .order + .limit(1) guarantees determinism if duplicates exist.
     const { data, error } = await this.supabase
       .from('conversations')
       .select('*')
       .eq('lead_id', leadId)
+      .eq('agent_id', agentId)
+      .eq('organization_id', this.organizationId)
+      .order('created_at', { ascending: false })
+      .limit(1)
       .maybeSingle();
 
     if (error) {
@@ -2794,49 +2889,76 @@ Regras:
   }
 
   /**
-   * Process LLM Response (OpenRouter/OpenAI format)
+   * Process LLM Response (OpenRouter/OpenAI format).
+   *
+   * Returns the FIRST actionable tool_call for inline handling (search_knowledge
+   * is processed specially by the outer loop). Any additional tool_calls are
+   * surfaced via `extraToolCalls` so the caller can enfileirá-las em paralelo
+   * em vez de descartá-las silenciosamente (era um bug: CR-3).
+   *
+   * Logs `finish_reason` and presence of text content for diagnostics.
    */
   private async processLLMResponse(response: any, conversation: any, capabilities: any) {
     let assistantMessage = '';
     let actionToExecute: { action: string; params: Record<string, unknown>; tenant_id: string } | null = null;
+    const extraToolCalls: Array<{ action: string; params: Record<string, unknown>; tenant_id: string }> = [];
     let nextState = conversation.state;
 
-    // OpenRouter retorna no formato OpenAI
     const choice = response.choices?.[0];
     if (!choice) {
       throw new Error('No response from LLM');
     }
 
     const message = choice.message;
+    const finishReason = choice.finish_reason ?? 'unknown';
+
+    console.log('[AgentEngine] LLM response:', {
+      finish_reason: finishReason,
+      has_content: !!message?.content,
+      tool_calls_count: message?.tool_calls?.length ?? 0,
+    });
 
     // Extrair resposta de texto
     if (message.content) {
       assistantMessage = message.content;
     }
 
-    // Verificar se LLM usou tool (formato OpenAI)
+    // Processar tool calls (múltiplos tratados corretamente).
+    // Estratégia: coletar tudo que tem JSON válido. Primeiro válido vira
+    // actionToExecute; os demais vão para extraToolCalls. Entradas com JSON
+    // corrompido são silenciosamente puladas (com log error) — nunca são
+    // enfileiradas com params vazios/meios-porcos, o que causaria side-effects
+    // imprevisíveis (ex: advance_stage sem stage name).
     if (message.tool_calls && message.tool_calls.length > 0) {
-      const toolCall = message.tool_calls[0];
-      const toolName = toolCall.function.name;
-      let toolParams = {};
-      
-      try {
-        toolParams = JSON.parse(toolCall.function.arguments);
-      } catch (e) {
-        console.error('Error parsing tool arguments:', e);
+      const parsed: Array<{ toolName: string; entry: typeof actionToExecute }> = [];
+      for (const toolCall of message.tool_calls) {
+        const toolName = toolCall.function.name;
+        let toolParams: Record<string, unknown> | null = null;
+        try {
+          toolParams = JSON.parse(toolCall.function.arguments);
+        } catch (e) {
+          console.error('[AgentEngine] Error parsing tool arguments:', e, 'raw:', toolCall.function.arguments);
+          continue;
+        }
+        parsed.push({
+          toolName,
+          entry: {
+            action: this.mapToolToAction(toolName),
+            params: toolParams ?? {},
+            tenant_id: this.organizationId,
+          },
+        });
       }
-
-      actionToExecute = {
-        action: this.mapToolToAction(toolName),
-        params: toolParams,
-        tenant_id: this.organizationId,
-      };
-
-      // Atualizar estado baseado na ação
-      nextState = this.determineNextState(conversation.state, toolName);
+      if (parsed.length > 0) {
+        actionToExecute = parsed[0].entry;
+        nextState = this.determineNextState(conversation.state, parsed[0].toolName);
+        for (let i = 1; i < parsed.length; i++) {
+          if (parsed[i].entry) extraToolCalls.push(parsed[i].entry!);
+        }
+      }
     }
 
-    return { nextState, actionToExecute, assistantMessage };
+    return { nextState, actionToExecute, assistantMessage, extraToolCalls, finishReason };
   }
 
   /**

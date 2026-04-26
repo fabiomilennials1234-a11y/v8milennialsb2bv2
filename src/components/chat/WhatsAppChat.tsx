@@ -22,7 +22,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
-import { useToggleLeadAI, useToggleConversationAI, useLeadAiStatus } from "@/hooks/useLeads";
+import { useToggleLeadAI, useToggleConversationAI, useLeadAiStatus, usePhoneAiStatus } from "@/hooks/useLeads";
 import {
   useWhatsAppContacts,
   useWhatsAppMessages,
@@ -493,9 +493,15 @@ function ChatWindow({
   const toggleAIMutation = useToggleLeadAI();
   const toggleConversationAIMutation = useToggleConversationAI();
 
-  // Ler ai_disabled via RPC dedicado (bypass RLS) — fonte de verdade
-  const { data: aiStatus } = useLeadAiStatus(leadId);
-  const currentAiDisabled = aiStatus?.ai_disabled ?? false;
+  // Ler ai_disabled via RPC dedicado (bypass RLS) — fonte de verdade.
+  // Quando há lead: leadAiStatus é a verdade (inclui duplicatas syncadas).
+  // Quando não há lead: phoneAiStatus lê de phone_ai_preferences com fallback
+  // para leads legados — cobre o caso de toggle antes da 1ª mensagem do contato.
+  const { data: leadAiStatus } = useLeadAiStatus(leadId);
+  const { data: phoneAiStatus } = usePhoneAiStatus(leadId ? null : phoneNumber);
+  const currentAiDisabled = leadId
+    ? (leadAiStatus?.ai_disabled ?? false)
+    : (phoneAiStatus?.ai_disabled ?? false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);

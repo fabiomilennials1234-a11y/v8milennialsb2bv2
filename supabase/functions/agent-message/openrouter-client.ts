@@ -104,9 +104,17 @@ export class OpenRouterClient {
   }
 
   /**
-   * Converte mensagens do formato interno para formato OpenRouter
+   * Converte mensagens do formato interno para formato OpenRouter.
+   *
+   * Contrato OpenAI (seguido por OpenRouter e maioria dos providers):
+   *   - assistant messages com tool_calls DEVEM ter content === null
+   *     (não string vazia). Alguns modelos rejeitam "" e outros tratam
+   *     inconsistentemente. Preservar null aqui elimina ambiguidade.
+   *   - assistant messages sem tool_calls: content é string (pode ser "").
+   *   - tool messages: content string obrigatório.
+   *   - user/system: content string obrigatório.
    */
-  convertMessages(messages: Array<{ role: string; content: string; tool_calls?: any; tool_call_id?: string }>, systemPrompt?: string): OpenRouterMessage[] {
+  convertMessages(messages: Array<{ role: string; content: string | null; tool_calls?: any; tool_call_id?: string }>, systemPrompt?: string): OpenRouterMessage[] {
     const openRouterMessages: OpenRouterMessage[] = [];
 
     if (systemPrompt) {
@@ -114,13 +122,20 @@ export class OpenRouterClient {
     }
 
     for (const msg of messages) {
+      const hasToolCalls = !!msg.tool_calls && msg.tool_calls.length > 0;
+      // Assistant + tool_calls: preservar null; caso contrário, coagir para string
+      let contentForWire: string | null;
+      if (hasToolCalls) {
+        contentForWire = msg.content === null || msg.content === '' ? null : msg.content;
+      } else {
+        contentForWire = msg.content ?? '';
+      }
+
       const orMsg: OpenRouterMessage = {
         role: msg.role as OpenRouterMessage['role'],
-        content: msg.content,
+        content: contentForWire,
       };
-      // Preservar tool_calls para mensagens assistant que chamaram tools
-      if (msg.tool_calls) orMsg.tool_calls = msg.tool_calls;
-      // Preservar tool_call_id para respostas de tool
+      if (hasToolCalls) orMsg.tool_calls = msg.tool_calls;
       if (msg.tool_call_id) orMsg.tool_call_id = msg.tool_call_id;
       openRouterMessages.push(orMsg);
     }
