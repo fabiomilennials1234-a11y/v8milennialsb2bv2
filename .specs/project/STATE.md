@@ -1,6 +1,6 @@
 # Project State
 
-**Last updated:** 2026-04-20
+**Last updated:** 2026-04-26
 
 ## Decisions
 
@@ -280,6 +280,33 @@ Política consolidada: webhook echo handlers = `ignoreDuplicates:true`; dispatch
 Contract test global em `tests/unit/whatsapp-messages-idempotency-contract.test.ts` (5 asserts AST-grep) garante invariante em CI para qualquer PR futuro. Deploy 8 funções em prod.
 
 **Evidência**: `npm run test:unit` = 2554 passed (+5 vs. baseline Task #3), `tsc --noEmit` = 0, 9 pontos com grep zero de `.insert(` em `whatsapp_messages` no projeto.
+
+### D050: Revisão arquitetura automações + copilots (2026-04-26)
+
+CTO solicitou revisão profunda. Conduzida via 4 agentes paralelos (AI, Automation, DBA, Backend) + telemetria 30d real do prod.
+
+**Achados topo:**
+- 3 engines paralelos (workflows + pipe_rules + campaign_rules) — duplicação estrutural
+- 13 bugs identificados; 6 já corrigidos pré-revisão (C1, C4, A2, A7, M3, M4)
+- **115/115 conversas (100%)** com transferência human dessincronizada (`leads.ai_disabled=true` mas `conversations.state≠WAITING_HUMAN`) — RPC atomic faltando
+- 24.4k erros `lead_origin "web"` (enum não aceita) em 30d
+- 11.7k erros `outbound_dispatch_log` tabela inexistente em 30d
+- 10.9k erros action_type desconhecido em 30d
+- 209 pares de mensagens assistant duplicadas em <60s (race condition)
+
+**Decisões:**
+1. **Não reescrever copilot do zero** — refactor cirúrgico em 5 fases com feature flag `copilot_engine_version` (Trilha 3.B)
+2. **Unificar engines** — workflow vira fonte única, pipe/campaign rules viram macros (Trilha 3.A, absorção em 4 fases, sem big-bang)
+3. **Ondas:** Onda 1 (fix bleeding ~30h) → Onda 2 (visibility ~25h) → Trilha 3 (4-8 semanas estratégica)
+
+**Specs criadas:**
+- `.specs/features/automations-onda-1/` — 20 tasks P0/P1/P2/P3
+- `.specs/features/automations-onda-2/` — 19 tasks (5 fases A-E)
+- `.specs/features/automations-trilha-3/` — 37 tasks (sub-features 3.A + 3.B)
+
+**Próximo:** CTO confirma kickoff Onda 1 P0 (fixes táticos ~9h, 5 paralelizáveis).
+
+**Telemetria SQL salva em:** `/tmp/torque_telemetry/q*.sql`
 
 ## Deferred Ideas
 
