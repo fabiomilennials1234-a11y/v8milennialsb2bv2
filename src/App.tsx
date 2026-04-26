@@ -83,6 +83,7 @@ const MasterPlans = lazy(() => lazyRetry(() => import("./pages/master/MasterPlan
 const MasterFeatures = lazy(() => lazyRetry(() => import("./pages/master/MasterFeatures")));
 const MasterAuditLogs = lazy(() => lazyRetry(() => import("./pages/master/MasterAuditLogs")));
 const MasterOperations = lazy(() => lazyRetry(() => import("./pages/master/MasterOperations")));
+const MasterAutomationHealth = lazy(() => lazyRetry(() => import("./pages/master/MasterAutomationHealth")));
 const MockupChat = lazy(() => lazyRetry(() => import("./pages/MockupChat")));
 const MockupChatV2 = lazy(() => lazyRetry(() => import("./pages/MockupChatV2")));
 const MockupChatV3 = lazy(() => lazyRetry(() => import("./pages/MockupChatV3")));
@@ -631,6 +632,7 @@ function AppRoutes() {
         <Route path="features" element={<MasterFeatures />} />
         <Route path="audit-logs" element={<MasterAuditLogs />} />
         <Route path="operations" element={<MasterOperations />} />
+        <Route path="automation-health" element={<MasterAutomationHealth />} />
       </Route>
 
       <Route path="*" element={<NotFound />} />

@@ -33,6 +33,7 @@ import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import type { WorkflowExecution, WorkflowExecutionStep, WorkflowExecutionStatus, WorkflowStepStatus } from "@/types/workflow";
 import SplitAbAnalytics from "@/components/automacoes/SplitAbAnalytics";
+import { AlertsBanner } from "@/components/system-alerts/AlertsBanner";
 
 const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline"; icon: typeof CheckCircle2 }> = {
   running: { label: "Executando", variant: "default", icon: Loader2 },
@@ -87,6 +88,9 @@ export default function AutomacoesExecucoes() {
 
   return (
     <div className="p-6 space-y-6">
+      {/* Onda 2: alerts dead-letter pattern (workflow execution falhas em padrão) */}
+      <AlertsBanner category="dead_letter_pattern" />
+
       {/* Header */}
       <div className="flex items-center gap-4">
         <Link to={`/automacoes/${id}`}>

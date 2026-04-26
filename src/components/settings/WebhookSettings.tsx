@@ -60,6 +60,7 @@ import { useOrganization } from "@/hooks/useOrganization";
 import { useIsAdmin } from "@/hooks/useUserRole";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { AlertsBanner } from "@/components/system-alerts/AlertsBanner";
 
 /** Chaves de etapa por pipe para place_in_pipe.stage (lead-webhook) */
 const PIPE_STAGES_REF: Record<string, { label: string; stages: { key: string; label: string }[] }> = {
@@ -341,6 +342,9 @@ export function WebhookSettings() {
 
   return (
     <div className="space-y-4">
+      {/* Onda 2: alerts críticos webhook circuit breaker */}
+      <AlertsBanner category="webhook_circuit_breaker" organizationId={organizationId} />
+
       {/* Webhook inbound: integrar fontes externas */}
       <div className="rounded-lg border border-border bg-card p-4 space-y-3">
         <div className="flex items-center gap-2">
