@@ -346,15 +346,15 @@ export function WhatsAppSettings() {
     try {
       const { data, error } = await supabase.functions.invoke<{ results: Array<{ service: string; status: string; error?: string }> }>("check-api-health");
       if (error) throw new Error(error.message);
-      const uazapi = data?.results?.find((r) => r.service === "Uazapi");
-      if (uazapi?.status === "connected") {
+      const evolution = data?.results?.find((r) => r.service === "Evolution API");
+      if (evolution?.status === "connected") {
         setApiStatus("connected");
-        toast.success("Conexão Uazapi bem-sucedida!");
+        toast.success("Conexão Evolution API bem-sucedida!");
       } else {
         setApiStatus("error");
-        const msg = uazapi?.error || uazapi?.status || "Serviço indisponível";
+        const msg = evolution?.error || evolution?.status || "Serviço indisponível";
         setErrorDetails(msg);
-        toast.error(`Falha Uazapi: ${msg}`);
+        toast.error(`Falha Evolution API: ${msg}`);
       }
     } catch (error: any) {
       setApiStatus("error");
