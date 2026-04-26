@@ -108,21 +108,7 @@ Deno.serve(
     const user = userData.user;
 
     // -------------------------------------------------------------------------
-    // 2. Resolve caller's organization_id
-    // -------------------------------------------------------------------------
-    const { data: userOrg, error: orgErr } = await supabaseAdmin
-      .from("team_members")
-      .select("organization_id")
-      .eq("user_id", user.id)
-      .maybeSingle();
-
-    if (orgErr || !userOrg?.organization_id) {
-      return jsonResponse(403, { error: "No organization" }, corsHeaders);
-    }
-    const callerOrgId: string = userOrg.organization_id;
-
-    // -------------------------------------------------------------------------
-    // 3. Parse body
+    // 2. Parse body (needed before org resolution for master targeting)
     // -------------------------------------------------------------------------
     let body: Record<string, unknown>;
     try {
@@ -138,6 +124,64 @@ Deno.serve(
 
     const instanceId = body?.instance_id as string | undefined;
     const payload = (body?.payload ?? {}) as Record<string, unknown>;
+    const targetOrgId = (body?.organization_id ?? payload?.organization_id) as
+      | string
+      | undefined;
+
+    // -------------------------------------------------------------------------
+    // 3. Resolve caller's organization_id with master bypass
+    // -------------------------------------------------------------------------
+    const { data: masterRow } = await supabaseAdmin
+      .from("master_users")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("is_active", true)
+      .maybeSingle();
+    const isMaster = !!masterRow;
+
+    let callerOrgId: string;
+
+    if (isMaster) {
+      // Master can act on any org. Require explicit target so we never assume.
+      if (!targetOrgId) {
+        return jsonResponse(
+          400,
+          { error: "Master must provide organization_id" },
+          corsHeaders
+        );
+      }
+      const { data: orgRow } = await supabaseAdmin
+        .from("organizations")
+        .select("id")
+        .eq("id", targetOrgId)
+        .maybeSingle();
+      if (!orgRow) {
+        return jsonResponse(404, { error: "Organization not found" }, corsHeaders);
+      }
+      callerOrgId = targetOrgId;
+    } else {
+      const { data: userOrg, error: orgErr } = await supabaseAdmin
+        .from("team_members")
+        .select("organization_id")
+        .eq("user_id", user.id)
+        .eq("is_active", true)
+        .maybeSingle();
+
+      if (orgErr || !userOrg?.organization_id) {
+        return jsonResponse(403, { error: "No organization" }, corsHeaders);
+      }
+      callerOrgId = userOrg.organization_id;
+
+      // If a target org was supplied, it must match the user's own org —
+      // prevents a regular user from acting on another tenant via the param.
+      if (targetOrgId && targetOrgId !== callerOrgId) {
+        return jsonResponse(
+          403,
+          { error: "Cannot target a different organization" },
+          corsHeaders
+        );
+      }
+    }
 
     // -------------------------------------------------------------------------
     // 4. Rate limit (per org)

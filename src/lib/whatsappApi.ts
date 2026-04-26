@@ -76,11 +76,18 @@ export type InstanceStatus = {
 };
 
 export async function createWhatsAppInstance(
-  instanceName: string
+  instanceName: string,
+  organizationId?: string
 ): Promise<{ instance_id: string; result: CreateInstanceResult }> {
   const { data, error } = await supabase.functions.invoke<ProxyResponse<CreateInstanceResult>>(
     "whatsapp-api-proxy",
-    { body: { action: "createInstance", payload: { instance_name: instanceName } } }
+    {
+      body: {
+        action: "createInstance",
+        organization_id: organizationId,
+        payload: { instance_name: instanceName },
+      },
+    }
   );
   if (error) {
     const msg = await extractFunctionError(error);
@@ -92,26 +99,46 @@ export async function createWhatsAppInstance(
   return { instance_id: data.instance_id, result: data.result };
 }
 
-export async function getInstanceStatus(instanceId: string): Promise<InstanceStatus> {
-  return await callProxy<InstanceStatus>("getStatus", { instance_id: instanceId });
+export async function getInstanceStatus(
+  instanceId: string,
+  organizationId?: string
+): Promise<InstanceStatus> {
+  return await callProxy<InstanceStatus>("getStatus", {
+    instance_id: instanceId,
+    organization_id: organizationId,
+  });
 }
 
 export async function connectInstanceQR(
   instanceId: string,
-  phone?: string
+  phone?: string,
+  organizationId?: string
 ): Promise<{ qrcode?: string; paircode?: string }> {
   return await callProxy<{ qrcode?: string; paircode?: string }>("connectQR", {
     instance_id: instanceId,
+    organization_id: organizationId,
     payload: phone ? { phone } : {},
   });
 }
 
-export async function deleteWhatsAppInstance(instanceId: string): Promise<void> {
-  await callProxy("deleteInstance", { instance_id: instanceId });
+export async function deleteWhatsAppInstance(
+  instanceId: string,
+  organizationId?: string
+): Promise<void> {
+  await callProxy("deleteInstance", {
+    instance_id: instanceId,
+    organization_id: organizationId,
+  });
 }
 
-export async function logoutWhatsAppInstance(instanceId: string): Promise<void> {
-  await callProxy("logoutInstance", { instance_id: instanceId });
+export async function logoutWhatsAppInstance(
+  instanceId: string,
+  organizationId?: string
+): Promise<void> {
+  await callProxy("logoutInstance", {
+    instance_id: instanceId,
+    organization_id: organizationId,
+  });
 }
 
 // ============================================================================
