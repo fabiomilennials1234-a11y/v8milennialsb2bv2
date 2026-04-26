@@ -24,6 +24,7 @@ import {
   getWhatsAppProvider,
   type WhatsAppInstance,
 } from "../_shared/whatsapp-client.ts";
+import { EvolutionProvider } from "../_shared/whatsapp-providers/evolution-provider.ts";
 
 // ---------------------------------------------------------------------------
 // Rate limit state (in-memory, per org)
@@ -171,7 +172,7 @@ Deno.serve(
           .insert({
             organization_id: callerOrgId,
             instance_name: instanceName,
-            provider: "uazapi",
+            provider: "evolution",
             status: "connecting",
           })
           .select("*")
@@ -184,20 +185,35 @@ Deno.serve(
         }
 
         const instance = newRow as WhatsAppInstance;
-        const provider = await getWhatsAppProvider(instance, supabaseAdmin);
 
-        const result = await provider.createInstance({
-          instance_id: instance.id,
-          organization_id: callerOrgId,
-          instance_name: instanceName,
-          webhook_url: `${webhookBaseUrl}/functions/v1/whatsapp-webhook`,
-          webhook_secret: webhookSecret,
-        });
+        // Evolution provider needs no per-instance credentials — uses global
+        // EVOLUTION_API_KEY. Construct directly; factory would still work
+        // for Evolution but we mirror createInstance bootstrap pattern.
+        const provider = new EvolutionProvider(instance);
+
+        let result;
+        try {
+          result = await provider.createInstance({
+            instance_id: instance.id,
+            organization_id: callerOrgId,
+            instance_name: instanceName,
+            webhook_url: `${webhookBaseUrl}/functions/v1/whatsapp-webhook`,
+            webhook_secret: webhookSecret,
+          });
+        } catch (initErr) {
+          // Roll back the placeholder row so the unique
+          // (organization_id, instance_name) constraint does not block retries.
+          await supabaseAdmin
+            .from("whatsapp_instances")
+            .delete()
+            .eq("id", instance.id);
+          throw initErr;
+        }
 
         // Update status from provider response
         await supabaseAdmin
           .from("whatsapp_instances")
-          .update({ status: result.status.connected ? "open" : "connecting" })
+          .update({ status: result.status.connected ? "connected" : "connecting" })
           .eq("id", instance.id);
 
         await logRuntime({
@@ -291,7 +307,7 @@ Deno.serve(
           // Update local status
           await supabaseAdmin
             .from("whatsapp_instances")
-            .update({ status: "close" })
+            .update({ status: "disconnected" })
             .eq("id", instanceId);
           result = { loggedOut: true };
           break;
