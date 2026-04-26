@@ -2372,7 +2372,7 @@ describe("executeAiAction — generate_message no-op", () => {
     const { sb } = createMockSupabase();
     const result = await executeAiAction(sb, makeAction());
     expect(result.success).toBe(true);
-    expect(result.message).toContain("no-op");
+    expect(result.message).toContain("noop");
     expect(result.message).toContain("generate_message");
     expect(result.error).toBeUndefined();
   });
