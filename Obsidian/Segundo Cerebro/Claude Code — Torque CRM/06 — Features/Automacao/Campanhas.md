@@ -5,11 +5,16 @@ tags:
   - torque-crm
   - automacao
 created: 2026-04-12
-last_updated: 2026-04-12
-status: active
+last_updated: 2026-04-26
+status: active-migrating
 ---
 
 # Campanhas
+
+> [!warning] Trilha 3.A — Campaign rules em migracao pro workflow engine (2026-04-26)
+> Dispatch rules de campanha geram **wrapper workflows** via `convert_campaign_rule_to_workflow`.
+> Em prod hoje: 1 wrapper criado (workflow `237a3c1e`, 8 nodes). UI nao muda.
+> `campaign-rule-dispatch` cron vira shim. Workflow engine assume processamento.
 
 ## O que faz
 

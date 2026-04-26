@@ -4,7 +4,7 @@ tags:
   - index
   - torque-crm
 created: 2026-04-12
-last_updated: 2026-04-22
+last_updated: 2026-04-26
 status: active
 ---
 
@@ -84,6 +84,8 @@ SaaS B2B multi-tenant para gestao de leads, pipelines de vendas, campanhas e aut
 - [[ADR-2026-04-14-coverage-roadmap]] — Roadmap de cobertura de testes (4 fases)
 - [[ADR-2026-04-15-agente-security]] — Adicao do agente Security ao time (9 → 10)
 - [[ADR-2026-04-22-phone-ai-preferences]] — Fonte única do toggle de IA por telefone normalizado
+- [[ADR-2026-04-23-copilot-fallback-elimination]] — Eliminacao de fallbacks no copilot
+- [[ADR-2026-04-26-trilha-3-unificacao-engines-refactor-copilot]] — **Trilha 3: workflow vira engine unica + agent-engine refatorado em 9 modulos**
 
 ### 05 — Log de Contexto
 - [[2026-04-12—sessao-inicial]] — Varredura completa do projeto
@@ -147,6 +149,7 @@ SaaS B2B multi-tenant para gestao de leads, pipelines de vendas, campanhas e aut
 - [[API Docs]] — Documentacao interativa da API
 - [[Webhooks]] — Webhooks outgoing com retry e dead letter
 - [[Master Admin]] — Super-panel administrativo (master only)
+- [[Automation Health]] — **Dashboard master de saude das automacoes (Onda 2)**
 
 #### Seguranca
 - [[Overview]] — Dominio de seguranca — threat model, superficie critica, owner (agent-security)
@@ -157,6 +160,9 @@ SaaS B2B multi-tenant para gestao de leads, pipelines de vendas, campanhas e aut
 - [[2026-04-15]] — Adicao do agente Security ao time
 - [[2026-04-17]] — Fix Analytics — dados reais em toda a aba
 - [[2026-04-22]] — phone_ai_preferences — solução definitiva do toggle de IA
+- [[2026-04-25]] — Fix race condition lead-webhook duplicados
+- [[2026-04-26]] — Fix createInstance whatsapp-api-proxy
+- [[2026-04-26-trilha-3-completa]] — **Ondas 1+2 + Trilha 3.A+3.B deploy completo (sessão massiva)**
 - `individuais/` — Notas detalhadas por mudanca significativa
 
 ### 08 — Backlog

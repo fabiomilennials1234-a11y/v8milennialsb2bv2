@@ -5,14 +5,27 @@ tags:
   - torque-crm
   - ia
 created: 2026-04-12
-last_updated: 2026-04-22
+last_updated: 2026-04-26
 status: active
 ---
 
 # Copilot
 
-> [!danger] Area Fragil
-> Fluxo que mais gera confusao com usuarios e bugs recorrentes. Ao mexer aqui, SEMPRE testar o fluxo completo: criar agente → configurar → ativar → conversar com lead.
+> [!warning] Area Fragil — agora com refactor + cobertura
+> Continua sendo o fluxo mais complexo. Mas Trilha 3.B (2026-04-26) extraiu
+> 17 funcoes pure de `agent-engine.ts` (3314 → 2828 LOC) pra modulos
+> `_shared/copilot/*.ts` com **88 testes unit 100% PASS**. Bugs estruturais
+> de Onda 1 (race condition turn_count, idempotency_key, transfer atomic)
+> corrigidos via RPCs atomic. Cache LRU em `loadCapabilities` evita 1
+> query/mensagem em burst.
+> Ao mexer aqui ainda: testar criar agente → configurar → ativar →
+> conversar. Mas agora tu tem testes pra rodar antes (`npx vitest run tests/unit/copilot/`).
+
+> [!info] Feature flag `organizations.copilot_engine_version` (Trilha 3.B B3)
+> Coluna `v1` (default) | `v2` controla qual engine roda por org. Hoje
+> v1==v2 funcionalmente (refactor B1 transparente). Toggle disponivel em
+> `/master/automation-health` tab "Engine". Quando v2 real divergir
+> (refactor maior, mudanca LLM, etc), canary 1-2 orgs antes rollout 100%.
 
 ## O que faz
 

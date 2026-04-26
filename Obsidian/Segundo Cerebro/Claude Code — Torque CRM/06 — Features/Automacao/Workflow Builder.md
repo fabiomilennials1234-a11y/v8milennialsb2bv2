@@ -5,7 +5,7 @@ tags:
   - torque-crm
   - automacao
 created: 2026-04-12
-last_updated: 2026-04-12
+last_updated: 2026-04-26
 status: active
 ---
 
@@ -14,6 +14,15 @@ status: active
 ## O que faz
 
 Editor visual de automacoes (DAG) baseado em React Flow. Usuarios criam workflows com nodes drag-drop: trigger, action (send_whatsapp, move_stage, add_tag, assign_responsible), condition, delay, wait_response, split_ab, copilot, webhook_call, wait_business_window. 29+ trigger types, 25+ action types, 12 node types.
+
+> [!info] Trilha 3.A — Workflow é fonte única de execucao (2026-04-26)
+> Pipe rules + campaign rules agora geram **wrapper workflows** internamente
+> via `convert_pipe_rule_to_workflow` + `convert_campaign_rule_to_workflow`
+> RPCs. Marcados via `workflows.wrapper_for IN ('pipe_rule', 'campaign_rule')`
+> + `wrapper_source_id`. UI dessas features nao muda.
+> Dispatchers antigos (`pipe-rule-dispatch`, `campaign-rule-dispatch`) viraram
+> shims que cancelam items de rules com wrapper. Workflow engine assume.
+> Drop crons + tabelas legadas: +30d soak (A4 cleanup futuro).
 
 ## Regras de negocio
 

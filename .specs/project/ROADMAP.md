@@ -4,14 +4,22 @@
 
 ## Active
 
-### Automations Hardening (3 ondas)
+### Automations Hardening — DEPLOYED PROD 2026-04-26
 
-| Onda | Status | Specs | ETA |
-|---|---|---|---|
-| Onda 1 — Fix bleeding | Aprovado, awaiting kickoff | `automations-onda-1/` | 4 dias úteis |
-| Onda 2 — Visibility | Specced, depends Onda 1 | `automations-onda-2/` | 3-4 dias úteis |
-| Trilha 3.A — Unificação engines | Specced, depends Onda 2 | `automations-trilha-3/` | ~7 sem |
-| Trilha 3.B — Refactor copilot | Specced, depends Onda 2 | `automations-trilha-3/` | ~8 sem |
+| Onda/Fase | Status | Notas |
+|---|---|---|
+| Onda 1 P0+P1+P2+P3 | ✅ **prod** | 47k+ erros eliminados, drift transfer 125→0 |
+| Onda 2 backend (system_alerts + audit + perf) | ✅ **prod** | Telemetria fluindo |
+| Onda 2 frontend (/master/automation-health) | ✅ **prod** | 7 tabs operacionais |
+| Trilha 3.B B1 (17 funções extraídas) | ✅ **prod** | agent-engine 3314→2828 LOC |
+| Trilha 3.B B2 (88 testes 100%) | ✅ **commited** | Coverage pure functions |
+| Trilha 3.B B3 (feature flag v1/v2) | ✅ **prod** | UI master toggle |
+| Trilha 3.A A1 (cols + RPCs conversor) | ✅ **prod** | additive only |
+| Trilha 3.A A2 (shim dispatchers) | ✅ **prod** | sem dup risk |
+| Trilha 3.A A3 (migration converteu 1 rule) | ✅ **prod** | 1 wrapper criado |
+| Trilha 3.A A4 (cleanup) | ⏳ **+30d soak** | drop crons + tabelas legadas |
+| Trilha 3.B B4 (piloto v2) | ⏳ **quando v2 divergir** | hoje v1==v2 |
+| Trilha 3.B B5 (rollout 100%) | ⏳ **+60d após piloto** | — |
 
 ### Coverage 70% (active sprint)
 

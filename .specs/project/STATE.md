@@ -1,6 +1,6 @@
 # Project State
 
-**Last updated:** 2026-04-26
+**Last updated:** 2026-04-26 (Trilha 3 completa)
 
 ## Decisions
 
@@ -347,6 +347,66 @@ CTO solicitou revisão profunda. Conduzida via 4 agentes paralelos (AI, Automati
 **Próximo:** CTO confirma kickoff Onda 1 P0 (fixes táticos ~9h, 5 paralelizáveis).
 
 **Telemetria SQL salva em:** `/tmp/torque_telemetry/q*.sql`
+
+### D051: Trilha 3 (A+B) + Ondas 1+2 deploy completo (2026-04-26)
+
+Sessão única massiva. Tudo em prod (jsjsmuncfkbsbzqzqhfq) sem incidente.
+
+**Onda 1 (P0+P1+P2+P3):**
+- 7 migrations corrigem 47k+ erros/30d (lead_origin web, outbound_dispatch_log, action types desconhecidos)
+- Backfill 125 conversas drift transfer → 0
+- RPCs atomic (transfer_lead_to_human, increment_conversation_turn)
+- Per-org cap em claim_workflow_executions + claim_pending_ai_actions
+- Idempotency conv_msgs sha256+bucket5min
+- Bug fix invoke_process_scheduled_user_messages 401 (-150 erros/h)
+
+**Onda 2 (visibility):**
+- system_alerts + audit_log tables + 4 triggers
+- runtime_logs perf cols (duration_ms, prompt_tokens, completion_tokens, llm_model)
+- 6 edge functions instrumentadas
+- Webhook circuit breaker auto-disable + alert
+- Dead-letter pattern detector
+- Frontend /master/automation-health (7 tabs) + AlertsBanner reusable
+
+**Trilha 3.B (refactor copilot):**
+- 17 funções pure extraídas pra _shared/copilot/* (3314→2828 LOC, -14.7%)
+- 88 testes unit copilot 100% PASS (state-machine, dispatcher, helpers, cache, DB loaders)
+- Feature flag organizations.copilot_engine_version v1/v2 + UI master toggle
+- Decisão: buildDynamicPrompt + buildDynamicTools ficam em agent-engine (orchestrator methods)
+
+**Trilha 3.A (unificação engines):**
+- Cols workflows.wrapper_for + wrapper_source_id
+- 2 RPCs PL/pgSQL convert_pipe_rule_to_workflow + convert_campaign_rule_to_workflow
+- Dispatchers viram shim (cancelam items de rules com wrapper)
+- Migration converteu 1 campaign rule ativa em wrapper (workflow 237a3c1e, 8 nodes)
+- A4 cleanup: +30d soak
+
+**Stats:**
+- 13 migrations (20260426000000 → 20260426050000)
+- 9 edge functions deployed
+- 8 RPCs novas
+- 2 tabelas novas
+- 11 cols agregados
+- 4 triggers audit
+- 9 módulos copilot extraídos (1210 LOC)
+- 88 tests novos
+- 1 página frontend nova
+- 47k+ erros eliminados
+
+**Push:** develop + main → fd37f9c
+
+**Pendências:**
+- 17 mocks Uazapi (débito independente)
+- 45 cron 401 residual (-40% vs baseline, investigação separada)
+- A4 cleanup +30d
+- B4 piloto quando v2 divergir
+- buildDynamic* extração se virar útil (não bloqueante)
+
+**Docs criados:**
+- Obsidian/.../07 — Changelog/2026-04-26-trilha-3-completa.md
+- Obsidian/.../04 — Decisões/ADR-2026-04-26-trilha-3-unificacao-engines-refactor-copilot.md
+- Obsidian/.../06 — Features/Admin/Automation Health.md
+- .specs/features/automations-trilha-3/{T3A-A1-AUDIT,T3B-EXECUTION-LOG,T3B-FINAL-REPORT}.md
 
 ## Deferred Ideas
 

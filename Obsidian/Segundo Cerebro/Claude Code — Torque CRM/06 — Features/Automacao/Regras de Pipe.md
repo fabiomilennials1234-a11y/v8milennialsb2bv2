@@ -5,11 +5,21 @@ tags:
   - torque-crm
   - automacao
 created: 2026-04-12
-last_updated: 2026-04-12
-status: active
+last_updated: 2026-04-26
+status: active-migrating
 ---
 
 # Regras de Pipe
+
+> [!warning] Trilha 3.A — Em migracao pro workflow engine (2026-04-26)
+> Pipe rules agora geram **wrapper workflows** internamente. UI nao muda.
+> Backend persiste em `workflows` com `wrapper_for='pipe_rule'` +
+> `wrapper_source_id` (FK virtual pra `pipe_dispatch_rules.id`).
+> `pipe-rule-dispatch` cron continua rodando mas vira shim que cancela
+> items pendentes de rules com wrapper. Workflow engine (`process-workflow-executions`)
+> assume processamento.
+> Drop tabelas + cron legados: +30d soak (Fase A4 cleanup).
+> Conversor: `convert_pipe_rule_to_workflow(p_rule_id uuid) RETURNS uuid`.
 
 ## O que faz
 
