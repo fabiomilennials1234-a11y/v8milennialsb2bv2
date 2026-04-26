@@ -194,6 +194,31 @@ async function processCampaignQueue(
 ): Promise<ProcessResult> {
   let sent = 0, failed = 0, actionsExecuted = 0, timeoutsProcessed = 0;
 
+  // --- 0a. Trilha 3.A A2: cancel scheduled items for rules migrated to wrappers ---
+  try {
+    const { data: wrapperRuleIds } = await supabase
+      .from("workflows")
+      .select("wrapper_source_id")
+      .eq("wrapper_for", "campaign_rule");
+
+    if (wrapperRuleIds && wrapperRuleIds.length > 0) {
+      const ruleIds = (wrapperRuleIds as Array<{ wrapper_source_id: string }>).map((r) => r.wrapper_source_id);
+      const { data: cancelled } = await supabase
+        .from("scheduled_campaign_messages")
+        .update({ status: "cancelled", error_message: "Rule migrated to workflow wrapper (Trilha 3.A)" })
+        .eq("campanha_id", campanhaId)
+        .eq("status", "scheduled")
+        .in("rule_id", ruleIds)
+        .select("id");
+
+      if (cancelled && cancelled.length > 0) {
+        console.log(`[campaign-rule-dispatch][${campanhaId}] Cancelled ${cancelled.length} item(s) — rules migrated to wrappers`);
+      }
+    }
+  } catch (e) {
+    console.warn(`[campaign-rule-dispatch][${campanhaId}] wrapper-skip check failed (non-fatal):`, e);
+  }
+
   // --- 0. Reset stale "processing" items (stuck from crashed/timed-out runs) ---
   const STALE_MINUTES = 5;
   const staleThreshold = new Date(Date.now() - STALE_MINUTES * 60 * 1000).toISOString();
