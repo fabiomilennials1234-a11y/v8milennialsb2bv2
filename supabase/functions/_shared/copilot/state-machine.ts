@@ -48,6 +48,41 @@ export function isValidTransition(from: ConversationState, to: ConversationState
   return VALID_TRANSITIONS[from]?.includes(to) ?? false;
 }
 
+// ─── updateConversationState (extracted from agent-engine.ts:2843) ───────────
+
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+/**
+ * Atualiza state da conversation via RPC atomic increment_conversation_turn.
+ * Onda 1 / T1.2.1: substituiu SELECT+UPDATE separado (race condition perdia
+ * incrementos em mensagens simultâneas).
+ *
+ * Conversation temporária (id 'temp_') skipa.
+ */
+export async function updateConversationState(
+  supabase: SupabaseClient,
+  conversationId: string,
+  newState: string,
+): Promise<void> {
+  try {
+    if (conversationId.startsWith("temp_")) {
+      console.log("[state-machine] temp conversation, skipping state update");
+      return;
+    }
+
+    const { error } = await supabase.rpc("increment_conversation_turn", {
+      p_conversation_id: conversationId,
+      p_new_state: newState,
+    });
+
+    if (error) {
+      console.warn("[state-machine] increment_conversation_turn RPC error:", error.message);
+    }
+  } catch (e) {
+    console.warn("[state-machine] updateConversationState exception:", e);
+  }
+}
+
 // ─── determineNextState (extracted from agent-engine.ts:2868) ────────────────
 
 /**

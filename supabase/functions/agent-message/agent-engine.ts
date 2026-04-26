@@ -5,9 +5,23 @@ import { enqueueAiAction } from "../_shared/ai-queue.ts";
 import { immediateTransferHuman } from "../_shared/ai-action-executor.ts";
 import { sanitizeAssistantMessage, splitByDelimiter } from "../_shared/message-sanitizer.ts";
 import { logRuntime } from "../_shared/logger.ts";
-import { loadCapabilities as loadCapabilitiesExternal } from "../_shared/copilot/context-loader.ts";
-import { determineNextState as determineNextStateExternal } from "../_shared/copilot/state-machine.ts";
-import { buildIdempotencyKey as buildIdempotencyKeyExternal } from "../_shared/copilot/dispatcher.ts";
+import {
+  loadCapabilities as loadCapabilitiesExternal,
+  loadOrgCustomFields as loadOrgCustomFieldsExternal,
+  loadPipelineStages as loadPipelineStagesExternal,
+  loadDocumentSummaries as loadDocumentSummariesExternal,
+  loadConversation as loadConversationExternal,
+} from "../_shared/copilot/context-loader.ts";
+import {
+  determineNextState as determineNextStateExternal,
+  updateConversationState as updateConversationStateExternal,
+} from "../_shared/copilot/state-machine.ts";
+import {
+  buildIdempotencyKey as buildIdempotencyKeyExternal,
+  mapToolToAction as mapToolToActionExternal,
+  logDecision as logDecisionExternal,
+  addMessageToMemory as addMessageToMemoryExternal,
+} from "../_shared/copilot/dispatcher.ts";
 import { executeSearchKnowledge as executeSearchKnowledgeExternal } from "../_shared/copilot/search-knowledge.ts";
 
 /** Parse custom_instructions (JSON ou string legada) para { dos, donts } */
@@ -639,26 +653,9 @@ export class AgentEngine {
    * Load Knowledge Base — carrega conteudo COMPLETO dos documentos
    * Prioriza content (texto integral), fallback para summary se content nao disponivel.
    */
+  /** T3B.8: delegado pra context-loader.ts */
   private async loadDocumentSummaries(agentId: string): Promise<Array<{file_name: string; summary: string}>> {
-    try {
-      // Carregar apenas nomes dos documentos (conteudo agora e via search_knowledge tool)
-      const { data, error } = await this.supabase
-        .from('copilot_agent_documents')
-        .select('file_name')
-        .eq('agent_id', agentId)
-        .eq('status', 'ready');
-
-      if (error) {
-        console.warn('[AgentEngine] KB list error:', error.message);
-        return [];
-      }
-
-      console.log('[AgentEngine] KB docs available:', data?.length || 0);
-      return (data || []).map(d => ({ file_name: d.file_name, summary: '' }));
-    } catch (e) {
-      console.warn('[AgentEngine] Failed to load KB:', e);
-      return [];
-    }
+    return loadDocumentSummariesExternal(this.supabase, agentId);
   }
 
   /**
@@ -964,39 +961,9 @@ Regras:
   /**
    * Load Conversation
    */
+  /** T3B.8: delegado pra context-loader.ts */
   private async loadConversation(leadId: string, agentId: string) {
-    console.log('[AgentEngine] Loading conversation for lead:', leadId, 'agent:', agentId);
-
-    // Tenant-isolated query: filter by lead_id + agent_id + organization_id.
-    // Previously the query filtered only by lead_id, which caused:
-    //   - "multiple rows returned" errors when a lead had conversations with
-    //     different agents (historically or via agent switch).
-    //   - cross-agent context bleeding (a different agent's conversation
-    //     being loaded for the current one).
-    //   - missing defense-in-depth: organization_id filter protects against
-    //     edge cases even though RLS is service_role bypassed here.
-    // .order + .limit(1) guarantees determinism if duplicates exist.
-    const { data, error } = await this.supabase
-      .from('conversations')
-      .select('*')
-      .eq('lead_id', leadId)
-      .eq('agent_id', agentId)
-      .eq('organization_id', this.organizationId)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (error) {
-      console.error('[AgentEngine] Error loading conversation:', error);
-      // Se a tabela não existir, retornar null para criar uma nova
-      if (error.message?.includes('does not exist') || error.code === '42P01') {
-        console.warn('[AgentEngine] Conversations table may not exist, will create in-memory conversation');
-        return null;
-      }
-    }
-
-    console.log('[AgentEngine] Conversation loaded:', data ? { id: data.id, state: data.state, turnCount: data.turn_count } : 'null');
-    return data;
+    return loadConversationExternal(this.supabase, leadId, agentId, this.organizationId);
   }
 
   /**
@@ -1128,47 +1095,14 @@ Regras:
   /**
    * Load custom fields da organização (para descrição da tool update_lead)
    */
+  /** T3B.8: delegado pra context-loader.ts */
   private async loadOrgCustomFields(): Promise<{ field_name: string }[]> {
-    try {
-      const { data, error } = await this.supabase
-        .from('lead_custom_fields')
-        .select('field_name')
-        .eq('organization_id', this.organizationId)
-        .order('display_order', { ascending: true });
-
-      if (error) {
-        console.warn('[AgentEngine] Error loading org custom fields:', error.message);
-        return [];
-      }
-      return data || [];
-    } catch (e) {
-      console.warn('[AgentEngine] Failed to load org custom fields:', e);
-      return [];
-    }
+    return loadOrgCustomFieldsExternal(this.supabase, this.organizationId);
   }
 
-  /**
-   * Carrega etapas de TODOS os pipelines da organização (pipeline_stages)
-   */
+  /** T3B.8: delegado pra context-loader.ts */
   private async loadPipelineStages(): Promise<{ stage_key: string; name: string; pipeline_type: string }[]> {
-    try {
-      const { data, error } = await this.supabase
-        .from('pipeline_stages')
-        .select('stage_key, name, pipeline_type')
-        .eq('organization_id', this.organizationId)
-        .eq('is_active', true)
-        .order('pipeline_type', { ascending: true })
-        .order('position', { ascending: true });
-
-      if (error) {
-        console.warn('[AgentEngine] Error loading pipeline stages:', error.message);
-        return [];
-      }
-      return data || [];
-    } catch (e) {
-      console.warn('[AgentEngine] Failed to load pipeline stages:', e);
-      return [];
-    }
+    return loadPipelineStagesExternal(this.supabase, this.organizationId);
   }
 
   /**
@@ -2779,26 +2713,9 @@ Regras:
   /**
    * Map tool name to n8n action
    */
+  /** T3B.8: delegado pra _shared/copilot/dispatcher.ts (pure function) */
   private mapToolToAction(toolName: string): string {
-    const mapping: Record<string, string> = {
-      'schedule_meeting': 'SCHEDULE_MEETING',
-      'create_lead': 'CREATE_LEAD',
-      'update_crm': 'UPDATE_CRM',
-      'update_lead': 'UPDATE_LEAD',
-      'transfer_to_human': 'TRANSFER_HUMAN',
-      'update_qualification_score': 'UPDATE_QUALIFICATION_SCORE',
-      'qualify_lead': 'QUALIFY_LEAD',
-      'disqualify_lead': 'DISQUALIFY_LEAD',
-      'advance_stage': 'ADVANCE_STAGE',
-      'confirm_meeting': 'CONFIRM_MEETING',
-      'advance_confirmation_stage': 'ADVANCE_CONFIRMATION_STAGE',
-      'create_custom_field': 'CREATE_CUSTOM_FIELD',
-      'transfer_sz_chat': 'TRANSFER_SZ_CHAT',
-      'send_document': 'SEND_DOCUMENT',
-      'send_product_material': 'SEND_PRODUCT_MATERIAL',
-      'search_knowledge': 'SEARCH_KNOWLEDGE',
-    };
-    return mapping[toolName] || 'UNKNOWN';
+    return mapToolToActionExternal(toolName);
   }
 
   /**
@@ -2899,81 +2816,18 @@ Regras:
   /**
    * Update Conversation State
    */
+  /** T3B.8: delegado pra state-machine.ts (RPC atomic) + dispatcher.ts (assistant message) */
   private async updateConversationState(conversationId: string, newState: string, message: string) {
-    try {
-      // Se for conversa temporária, apenas log
-      if (conversationId.startsWith('temp_')) {
-        console.log('[AgentEngine] Temporary conversation, skipping state update');
-        return;
-      }
-
-      // Onda 1 / T1.2.1: incremento atômico via RPC. SELECT+UPDATE separado
-      // perdia incremento em race (2 mensagens simultâneas → +1 em vez de +2).
-      const { error: rpcError } = await this.supabase.rpc('increment_conversation_turn', {
-        p_conversation_id: conversationId,
-        p_new_state: newState,
-      });
-
-      if (rpcError) {
-        console.warn('[AgentEngine] Error in increment_conversation_turn RPC:', rpcError.message);
-      }
-
-      // Salvar mensagem do assistente
-      await this.addMessageToMemory(conversationId, 'assistant', message);
-    } catch (e) {
-      console.warn('[AgentEngine] Failed to update conversation state:', e);
-    }
+    await updateConversationStateExternal(this.supabase, conversationId, newState);
+    await addMessageToMemoryExternal(this.supabase, conversationId, "assistant", message);
   }
 
-  /**
-   * Add message to memory
-   */
+  /** T3B.8: delegado pra dispatcher.ts (com idempotency_key turn-bucket 5min) */
   private async addMessageToMemory(conversationId: string, role: string, content: string) {
-    try {
-      // Se for conversa temporária, apenas log
-      if (conversationId.startsWith('temp_')) {
-        console.log('[AgentEngine] Temporary conversation, skipping memory save');
-        return;
-      }
-
-      // Onda 1 / T1.1.6: idempotency_key dedup mensagens duplicadas em race
-      // (telemetria 30d: 209 pares assistant duplicadas <60s, 56 conversas).
-      // Key combina role + hash(content) + bucket de 5min — bloqueia dup
-      // dentro da janela de race, permite mesma frase legítima em turnos
-      // distantes. UNIQUE INDEX em (conversation_id, idempotency_key) +
-      // ON CONFLICT DO NOTHING (Supabase: ignoreDuplicates: true).
-      const contentBytes = new TextEncoder().encode(content);
-      const hashBuf = await crypto.subtle.digest('SHA-256', contentBytes);
-      const contentHash = Array.from(new Uint8Array(hashBuf))
-        .slice(0, 8)
-        .map((b) => b.toString(16).padStart(2, '0'))
-        .join('');
-      const bucket = Math.floor(Date.now() / 300_000); // 5min
-      const idempotency_key = `${role}:${contentHash}:${bucket}`;
-
-      const { error } = await this.supabase
-        .from('conversation_messages')
-        .upsert(
-          {
-            conversation_id: conversationId,
-            role,
-            content,
-            idempotency_key,
-          },
-          { onConflict: 'conversation_id,idempotency_key', ignoreDuplicates: true },
-        );
-
-      if (error) {
-        console.warn('[AgentEngine] Error adding message to memory:', error.message);
-      }
-    } catch (e) {
-      console.warn('[AgentEngine] Failed to add message to memory:', e);
-    }
+    await addMessageToMemoryExternal(this.supabase, conversationId, role, content);
   }
 
-  /**
-   * Log Decision
-   */
+  /** T3B.8: delegado pra dispatcher.ts (logDecision com success/errorMessage opcional) */
   private async logDecision(
     conversationId: string,
     stateBefore: string,
@@ -2982,35 +2836,7 @@ Regras:
     capabilities: any,
     opts?: { success?: boolean; errorMessage?: string },
   ) {
-    try {
-      // Se for conversa temporária, apenas log no console
-      if (conversationId.startsWith('temp_')) {
-        console.log('[AgentEngine] Decision (temp):', { stateBefore, stateAfter, action: action?.action, ...opts });
-        return;
-      }
-
-      // Onda 1 / T1.3.1: registra success=false explicitamente para
-      // observabilidade. Telemetria mostrava 607 decisions, 0 falhas — sub-log.
-      const { error } = await this.supabase
-        .from('agent_decision_logs')
-        .insert({
-          conversation_id: conversationId,
-          organization_id: this.organizationId,
-          state_before: stateBefore,
-          state_after: stateAfter,
-          action_decided: action?.action || 'RESPOND_ONLY',
-          reasoning: `Based on capabilities: ${JSON.stringify(capabilities)}`,
-          capabilities_snapshot: capabilities,
-          success: opts?.success ?? true,
-          error_message: opts?.errorMessage ?? null,
-        });
-
-      if (error) {
-        console.warn('[AgentEngine] Error logging decision:', error.message);
-      }
-    } catch (e) {
-      console.warn('[AgentEngine] Failed to log decision:', e);
-    }
+    await logDecisionExternal(this.supabase, this.organizationId, conversationId, stateBefore, stateAfter, action, capabilities, opts);
   }
 
   // ── Item #3: Geração de follow-up com AgentEngine ────────────────────────

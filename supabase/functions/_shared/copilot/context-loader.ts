@@ -181,3 +181,114 @@ export async function loadCapabilities(
   console.error("[context-loader] no active agents for org:", organizationId);
   return null;
 }
+
+// ─── Org-level loaders (extracted from agent-engine.ts) ──────────────────────
+
+/**
+ * Carrega custom fields da org pra injeção no prompt.
+ */
+export async function loadOrgCustomFields(
+  supabase: SupabaseClient,
+  organizationId: string,
+): Promise<{ field_name: string }[]> {
+  try {
+    const { data, error } = await supabase
+      .from("lead_custom_fields")
+      .select("field_name")
+      .eq("organization_id", organizationId)
+      .order("display_order", { ascending: true });
+    if (error) {
+      console.warn("[context-loader] loadOrgCustomFields error:", error.message);
+      return [];
+    }
+    return (data ?? []) as { field_name: string }[];
+  } catch (e) {
+    console.warn("[context-loader] loadOrgCustomFields exception:", e);
+    return [];
+  }
+}
+
+/**
+ * Carrega stages de TODOS os pipelines ativos da org.
+ */
+export async function loadPipelineStages(
+  supabase: SupabaseClient,
+  organizationId: string,
+): Promise<{ stage_key: string; name: string; pipeline_type: string }[]> {
+  try {
+    const { data, error } = await supabase
+      .from("pipeline_stages")
+      .select("stage_key, name, pipeline_type")
+      .eq("organization_id", organizationId)
+      .eq("is_active", true)
+      .order("pipeline_type", { ascending: true })
+      .order("position", { ascending: true });
+    if (error) {
+      console.warn("[context-loader] loadPipelineStages error:", error.message);
+      return [];
+    }
+    return (data ?? []) as { stage_key: string; name: string; pipeline_type: string }[];
+  } catch (e) {
+    console.warn("[context-loader] loadPipelineStages exception:", e);
+    return [];
+  }
+}
+
+/**
+ * Carrega conversa do lead com agente específico (tenant-isolated).
+ * Filtra por (lead_id, agent_id, organization_id) — defense-in-depth contra
+ * cross-agent context bleeding. Retorna conversation row ou null.
+ */
+export async function loadConversation(
+  supabase: SupabaseClient,
+  leadId: string,
+  agentId: string,
+  organizationId: string,
+): Promise<Record<string, unknown> | null> {
+  const { data, error } = await supabase
+    .from("conversations")
+    .select("*")
+    .eq("lead_id", leadId)
+    .eq("agent_id", agentId)
+    .eq("organization_id", organizationId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    if (error.message?.includes("does not exist") || error.code === "42P01") {
+      console.warn("[context-loader] conversations table missing, returning null");
+      return null;
+    }
+    console.error("[context-loader] loadConversation error:", error);
+  }
+  return data as Record<string, unknown> | null;
+}
+
+/**
+ * Lista documentos KB disponíveis pro agente (status=ready).
+ * Retorna apenas file_name (conteúdo via search_knowledge tool).
+ */
+export async function loadDocumentSummaries(
+  supabase: SupabaseClient,
+  agentId: string,
+): Promise<Array<{ file_name: string; summary: string }>> {
+  try {
+    const { data, error } = await supabase
+      .from("copilot_agent_documents")
+      .select("file_name")
+      .eq("agent_id", agentId)
+      .eq("status", "ready");
+    if (error) {
+      console.warn("[context-loader] loadDocumentSummaries error:", error.message);
+      return [];
+    }
+    return ((data ?? []) as Array<{ file_name: string }>).map((d) => ({
+      file_name: d.file_name,
+      summary: "",
+    }));
+  } catch (e) {
+    console.warn("[context-loader] loadDocumentSummaries exception:", e);
+    return [];
+  }
+}
