@@ -57,6 +57,10 @@ import {
   updateContextSummaryAfterTurn as updateContextSummaryAfterTurnExternal,
   extractAndSaveMemories as extractAndSaveMemoriesExternal,
 } from "./engine/persist-response.ts";
+import {
+  loadConversationContext as loadConversationContextExternal,
+  getConversationHistory as getConversationHistoryExternal,
+} from "./engine/history.ts";
 
 // Interface para contexto resumido da conversa
 interface ConversationContextSummary {
@@ -143,7 +147,7 @@ export class AgentEngine {
       this.resolveABVariant(leadId, capabilities.id),
       this.loadConversation(leadId, capabilities.id).then(c => c || createConversationExternal(this.supabase, this.organizationId, leadId, capabilities.id)),
       this.loadLeadData(leadId),
-      this.loadConversationContext(leadId),
+      loadConversationContextExternal(this.supabase, this.organizationId, leadId),
       this.loadDocumentSummaries(capabilities.id),
       this.retrieveSemanticContext(userMessage, capabilities.id),
       this.retrieveLongTermMemories(userMessage, leadId),
@@ -235,7 +239,13 @@ export class AgentEngine {
 
     // 6. Call LLM via OpenRouter
     console.log('[AgentEngine] Step 6: Getting conversation history...');
-    const historyMessages = await this.getConversationHistory(conversation.id);
+    const historyMessages = await getConversationHistoryExternal({
+      supabase: this.supabase,
+      openRouter: this.openRouter,
+      organizationId: this.organizationId,
+      currentLeadId: this.currentLeadId,
+      conversationId: conversation.id,
+    });
     console.log('[AgentEngine] History messages count:', historyMessages.length);
     
     // Garantir que a mensagem atual do usuário está incluída
@@ -761,112 +771,7 @@ export class AgentEngine {
     return loadPipelineStagesExternal(this.supabase, this.organizationId);
   }
 
-  /**
-   * Load Conversation Context Summary
-   * Busca o contexto resumido da última conversa para personalizar follow-ups
-   */
-  /** T3B.8b: delegado pra context-loader.ts. Cache primeiro; fallback extrai mensagens (interno). */
-  private async loadConversationContext(leadId: string): Promise<ConversationContextSummary | null> {
-    const cached = await loadConversationContextSummaryExternal(this.supabase, leadId);
-    if (cached) return cached;
-
-    // Fallback: extrai contexto das últimas 20 mensagens
-    try {
-      const { data: messages, error: msgError } = await this.supabase
-        .from('whatsapp_messages')
-        .select('direction, content, created_at')
-        .eq('organization_id', this.organizationId)
-        .eq('lead_id', leadId)
-        .eq('message_type', 'text')
-        .not('content', 'is', null)
-        .order('created_at', { ascending: false })
-        .limit(20);
-
-      if (msgError || !messages || messages.length === 0) {
-        return getDefaultContextExternal();
-      }
-
-      const context = await this.extractContextFromMessages(messages);
-      await saveConversationContextExternal(this.supabase, this.organizationId, leadId, context);
-      return context;
-    } catch (e) {
-      console.warn('[AgentEngine] loadConversationContext fallback failed:', e);
-      return getDefaultContextExternal();
-    }
-  }
-
-  /** T3B.8b: delegado pra context-loader.ts */
-  private getDefaultContext(): ConversationContextSummary {
-    return getDefaultContextExternal();
-  }
-
-  /**
-   * Extrai contexto das últimas mensagens
-   * Analisa as mensagens para identificar tópicos, intenções e pontos-chave
-   */
-  private async extractContextFromMessages(messages: any[]): Promise<ConversationContextSummary> {
-    const context = this.getDefaultContext();
-    
-    if (!messages || messages.length === 0) return context;
-
-    // Ordenar por data (mais antigas primeiro para análise)
-    const sortedMessages = [...messages].reverse();
-    
-    context.messageCount = sortedMessages.length;
-    
-    // Última mensagem do lead (incoming)
-    const lastLeadMessage = sortedMessages
-      .filter(m => m.direction === 'incoming')
-      .pop();
-    
-    if (lastLeadMessage) {
-      context.lastMessageAt = lastLeadMessage.created_at;
-      
-      // Extrair tópico da última mensagem (simplificado)
-      context.lastTopic = extractTopicFromMessage(lastLeadMessage.content);
-      context.lastIntent = detectIntentFromMessage(lastLeadMessage.content);
-    }
-
-    // Analisar todas as mensagens do lead
-    const leadMessages = sortedMessages.filter(m => m.direction === 'incoming');
-    
-    // Extrair perguntas feitas pelo lead
-    context.questionsAsked = leadMessages
-      .filter(m => m.content && m.content.includes('?'))
-      .map(m => m.content.trim())
-      .slice(-5);
-
-    // Detectar objeções comuns
-    const objectionKeywords = [
-      'caro', 'preço', 'não tenho', 'sem verba', 'orçamento',
-      'não preciso', 'já tenho', 'não é o momento', 'depois',
-      'sem tempo', 'muito ocupado', 'não sei'
-    ];
-    
-    leadMessages.forEach(m => {
-      if (m.content) {
-        const lowerContent = m.content.toLowerCase();
-        objectionKeywords.forEach(kw => {
-          if (lowerContent.includes(kw)) {
-            context.objectionsRaised.push(m.content.substring(0, 100));
-          }
-        });
-      }
-    });
-    context.objectionsRaised = [...new Set(context.objectionsRaised)].slice(-5);
-
-    // Calcular temperatura e engajamento
-    context.leadTemperature = calculateLeadTemperature(leadMessages);
-    context.engagementScore = calculateEngagementScore(sortedMessages);
-
-    // Extrair pontos-chave (mensagens mais longas do lead)
-    context.keyPoints = leadMessages
-      .filter(m => m.content && m.content.length > 50)
-      .map(m => m.content.substring(0, 150))
-      .slice(-3);
-
-    return context;
-  }
+  // loadConversationContext + getDefaultContext + extractContextFromMessages extraidos para engine/history.ts
 
   // saveConversationContext + createConversation extraidos para engine/persist-response.ts
 
@@ -875,205 +780,7 @@ export class AgentEngine {
   // buildDynamicToolsExternal (importados no topo).
 
   /**
-   * Get Conversation History
-   * Tenta buscar de conversation_messages, se falhar usa whatsapp_messages como fallback
-   */
-  private async getConversationHistory(conversationId: string) {
-    try {
-      // Se for conversa temporária, usar whatsapp_messages como histórico
-      if (conversationId.startsWith('temp_')) {
-        console.log('[AgentEngine] Temporary conversation, using whatsapp_messages as history');
-        return await this.getWhatsAppMessageHistory();
-      }
-
-      const { data: messages, error } = await this.supabase
-        .from('conversation_messages')
-        .select('id, conversation_id, role, content, created_at')
-        .eq('conversation_id', conversationId)
-        .order('created_at', { ascending: true })
-        .limit(100); // busca mais para verificar se precisa comprimir
-
-      if (error) {
-        console.warn('[AgentEngine] Error getting conversation history, falling back to whatsapp_messages:', error.message);
-        return await this.getWhatsAppMessageHistory();
-      }
-
-      if (!messages || messages.length === 0) {
-        console.log('[AgentEngine] No conversation_messages found, using whatsapp_messages');
-        return await this.getWhatsAppMessageHistory();
-      }
-
-      // Compressão automática de histórico quando excede o limite (item #1)
-      if (messages.length > this.HISTORY_COMPRESS_THRESHOLD) {
-        console.log(`[AgentEngine] History has ${messages.length} messages — scheduling background compression`);
-
-        // Verificar se já existe resumo (compressão anterior)
-        const firstMsg = messages[0];
-        if (firstMsg?.content?.startsWith('[RESUMO HISTÓRICO]')) {
-          // Resumo já existe — retornar resumo + recentes (fast path, sem LLM)
-          const recentMessages = messages.slice(-this.HISTORY_KEEP_RECENT);
-          return [
-            { role: 'user' as const, content: firstMsg.content },
-            { role: 'assistant' as const, content: messages[1]?.content || 'Entendido.' },
-            ...recentMessages.map((m: any) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
-          ];
-        }
-
-        // Sem resumo ainda — fire-and-forget compressão em background, retornar recentes imediatamente
-        this.compressHistoryIfNeeded(conversationId, messages)
-          .catch(e => console.warn('[AgentEngine] Background history compression failed (non-fatal):', e));
-
-        const recentMessages = messages.slice(-this.HISTORY_KEEP_RECENT);
-        return recentMessages.map((m: any) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
-      }
-
-      return messages.map((msg: any) => ({
-        role: msg.role as 'user' | 'assistant',
-        content: msg.content,
-      }));
-    } catch (e) {
-      console.warn('[AgentEngine] Failed to get conversation history:', e);
-      return await this.getWhatsAppMessageHistory();
-    }
-  }
-
-  /**
-   * Comprime histórico antigo em um resumo para economizar tokens (item #1)
-   * Mantém os HISTORY_KEEP_RECENT mais recentes verbatim + resumo das anteriores
-   */
-  private async compressHistoryIfNeeded(
-    conversationId: string,
-    messages: any[]
-  ): Promise<{ role: 'user' | 'assistant'; content: string }[]> {
-    // Verificar se já existe mensagem de resumo (compressão anterior)
-    const firstMsg = messages[0];
-    if (firstMsg?.content?.startsWith('[RESUMO HISTÓRICO]')) {
-      // Já existe resumo — apenas retorna resumo + mensagens recentes
-      const recentMessages = messages.slice(-this.HISTORY_KEEP_RECENT);
-      return [
-        { role: 'user' as const, content: firstMsg.content },
-        { role: 'assistant' as const, content: messages[1]?.content || 'Entendido.' },
-        ...recentMessages.map((m: any) => ({
-          role: m.role as 'user' | 'assistant',
-          content: m.content,
-        })),
-      ];
-    }
-
-    // Dividir: mensagens antigas (a comprimir) + recentes (manter verbatim)
-    const oldMessages = messages.slice(0, -this.HISTORY_KEEP_RECENT);
-    const recentMessages = messages.slice(-this.HISTORY_KEEP_RECENT);
-
-    try {
-      const conversationText = oldMessages
-        .filter((m: any) => !m.content?.startsWith('[RESUMO HISTÓRICO]'))
-        .map((m: any) => `${m.role === 'user' ? 'Lead' : 'Agente'}: ${m.content}`)
-        .join('\n');
-
-      const summaryResponse = await this.openRouter.chat({
-        model: 'google/gemini-3-flash-preview',
-        messages: [
-          {
-            role: 'system',
-            content: 'Você é um assistente de CRM. Resuma a conversa abaixo em 4-6 frases incluindo: tópicos discutidos, nível de interesse, objeções levantadas, informações coletadas do lead, e estado atual. Seja objetivo. Retorne apenas o resumo em português.',
-          },
-          { role: 'user', content: `Histórico de ${oldMessages.length} mensagens:\n\n${conversationText}` },
-        ],
-        temperature: 0.2,
-        max_tokens: 400,
-      });
-
-      const summary = summaryResponse.choices[0]?.message?.content?.trim() || '';
-
-      if (summary) {
-        const summaryContent = `[RESUMO HISTÓRICO]\n${summary}`;
-        const ackContent = 'Entendido. Continuarei com base no histórico resumido.';
-
-        // Deletar mensagens antigas do banco e inserir par de resumo
-        const oldIds = oldMessages.map((m: any) => m.id).filter(Boolean);
-        if (oldIds.length > 0) {
-          await this.supabase
-            .from('conversation_messages')
-            .delete()
-            .in('id', oldIds);
-        }
-
-        const earliestDate = oldMessages[0]?.created_at || new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
-        const secondDate = new Date(new Date(earliestDate).getTime() + 1000).toISOString();
-
-        await this.supabase.from('conversation_messages').insert([
-          { conversation_id: conversationId, role: 'user', content: summaryContent, created_at: earliestDate },
-          { conversation_id: conversationId, role: 'assistant', content: ackContent, created_at: secondDate },
-        ]);
-
-        console.log(`[AgentEngine] History compressed: ${oldMessages.length} msgs → 1 summary`);
-
-        return [
-          { role: 'user' as const, content: summaryContent },
-          { role: 'assistant' as const, content: ackContent },
-          ...recentMessages.map((m: any) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
-        ];
-      }
-    } catch (err) {
-      console.warn('[AgentEngine] History compression failed (non-fatal):', err);
-    }
-
-    // Fallback: retorna apenas as mensagens recentes sem comprimir
-    return recentMessages.map((m: any) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
-  }
-
-  /**
-   * Busca histórico de mensagens do WhatsApp para o lead atual
-   * Usado como fallback quando conversations não está disponível
-   */
-  private async getWhatsAppMessageHistory(): Promise<{ role: 'user' | 'assistant'; content: string }[]> {
-    if (!this.currentLeadId) {
-      console.log('[AgentEngine] No currentLeadId, returning empty history');
-      return [];
-    }
-
-    try {
-      // Buscar telefone do lead
-      const { data: lead, error: leadError } = await this.supabase
-        .from('leads')
-        .select('phone')
-        .eq('id', this.currentLeadId)
-        .single();
-
-      if (leadError || !lead?.phone) {
-        console.warn('[AgentEngine] Could not get lead phone for history');
-        return [];
-      }
-
-      // Buscar mensagens do WhatsApp para este telefone
-      const { data: messages, error: msgError } = await this.supabase
-        .from('whatsapp_messages')
-        .select('direction, content, created_at')
-        .eq('organization_id', this.organizationId)
-        .ilike('phone_number', `%${lead.phone.slice(-8)}%`)
-        .eq('message_type', 'text')
-        .not('content', 'is', null)
-        .order('created_at', { ascending: true })
-        .limit(50);
-
-      if (msgError) {
-        console.warn('[AgentEngine] Error getting whatsapp_messages:', msgError.message);
-        return [];
-      }
-
-      console.log('[AgentEngine] Found', messages?.length || 0, 'whatsapp messages for history');
-
-      return (messages || [])
-        .filter((m: any) => m.content && m.content.trim())
-        .map((m: any) => ({
-          role: (m.direction === 'incoming' ? 'user' : 'assistant') as 'user' | 'assistant',
-          content: m.content,
-        }));
-    } catch (e) {
-      console.warn('[AgentEngine] Failed to get whatsapp message history:', e);
-      return [];
-    }
-  }
+  // getConversationHistory + compressHistoryIfNeeded + getWhatsAppMessageHistory extraidos para engine/history.ts
 
   // processLLMResponse + enqueueToolAction extraidos para engine/decide-action.ts
 
@@ -1140,7 +847,7 @@ export class AgentEngine {
     if (!capabilities) throw new Error('No active agent found for generateFollowupMessage');
 
     const leadData = await this.loadLeadData(leadId);
-    this.conversationContext = await this.loadConversationContext(leadId);
+    this.conversationContext = await loadConversationContextExternal(this.supabase, this.organizationId, leadId);
     const documentSummaries = await this.loadDocumentSummaries(capabilities.id);
 
     // Buscar últimas mensagens da conversa para contexto (máx 8)
