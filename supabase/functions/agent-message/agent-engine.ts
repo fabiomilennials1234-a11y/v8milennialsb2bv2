@@ -380,6 +380,20 @@ export class AgentEngine {
       console.warn('[AgentEngine] Stripped', sanitized.droppedBlocks, 'JSON action block(s) from LLM output');
     }
     const assistantMessage = sanitized.text;
+    // RC.4: chain-of-thought capturado de <thinking>...</thinking> (se reasoning_mode != 'off')
+    const capturedReasoning = sanitized.reasoning ?? null;
+    if (capturedReasoning && !conversation.id.startsWith('temp_')) {
+      logRuntime({
+        organizationId: this.organizationId,
+        module: 'copilot',
+        action: 'reasoning',
+        status: 'success',
+        entityType: 'conversation',
+        entityId: conversation.id,
+        triggeredBy: capabilities.id,
+        reasoning: capturedReasoning,
+      }).catch((e) => console.warn('[AgentEngine] reasoning log failed (non-fatal):', e));
+    }
     console.log('[AgentEngine] Response processed:', {
       nextState,
       hasAction: !!actionToExecute,
@@ -456,7 +470,9 @@ export class AgentEngine {
 
     // 10. Log Decision
     console.log('[AgentEngine] Step 11: Logging decision...');
-    await this.logDecision(conversation.id, conversation.state, nextState, actionToExecute, capabilities);
+    await this.logDecision(conversation.id, conversation.state, nextState, actionToExecute, capabilities, {
+      reasoningChain: capturedReasoning ?? undefined,
+    });
 
     // 11. Enqueue Pipeline Stage Update (Funil WhatsApp)
     console.log('[AgentEngine] Step 12: Enqueuing pipeline stage update...');
@@ -1796,6 +1812,35 @@ Regras:
       }
     }
 
+    // =====================================================
+    // REASONING CHAIN (chain-of-thought visível p/ debug)
+    // =====================================================
+    const reasoningMode = (capabilities.reasoning_mode ?? 'always') as 'always' | 'actions_only' | 'off';
+    if (reasoningMode !== 'off') {
+      const trigger = reasoningMode === 'always'
+        ? 'SEMPRE'
+        : 'QUANDO usar tools (schedule_meeting, qualify_lead, transfer_to_human, advance_stage, send_product_material, etc)';
+      sections.push("");
+      sections.push("# FORMATO DE RESPOSTA OBRIGATÓRIO");
+      sections.push("");
+      sections.push(`${trigger} responda EXATAMENTE neste formato:`);
+      sections.push("");
+      sections.push("<thinking>");
+      sections.push("Pense passo-a-passo:");
+      sections.push("1. O que o lead realmente quer?");
+      sections.push("2. Qual contexto da conversa importa?");
+      sections.push("3. Qual é a melhor ação? (responder texto OU usar tool)");
+      sections.push("4. Se vou usar tool: pré-condições atendidas? (lead tem telefone? agenda livre? stage correto?)");
+      sections.push("5. Riscos da ação?");
+      sections.push("</thinking>");
+      sections.push("<response>");
+      sections.push("[mensagem que vai pro lead — texto puro, pode usar ||SPLIT||]");
+      sections.push("</response>");
+      sections.push("");
+      sections.push("CRÍTICO: conteúdo de <thinking> NUNCA aparece pro lead. Apenas <response> é entregue.");
+      sections.push("Se for usar tool, ainda assim feche o <thinking> antes de invocar a tool.");
+    }
+
     return sections.join("\n");
   }
 
@@ -2558,7 +2603,7 @@ Regras:
     stateAfter: string,
     action: any,
     capabilities: any,
-    opts?: { success?: boolean; errorMessage?: string },
+    opts?: { success?: boolean; errorMessage?: string; reasoningChain?: string },
   ) {
     await logDecisionExternal(this.supabase, this.organizationId, conversationId, stateBefore, stateAfter, action, capabilities, opts);
   }

@@ -39,6 +39,47 @@ export interface SanitizeResult {
   text: string;
   droppedBlocks: number;
   recoveredAction: RecoveredAction | null;
+  /** Reasoning chain extraído de <thinking>...</thinking> antes da resposta. */
+  reasoning?: string;
+}
+
+/**
+ * Extrai e remove blocos <thinking>...</thinking> e <response>...</response>.
+ *
+ * Bug crítico: se LLM esquece tag de fechamento `</thinking>`, regex normal
+ * captura tudo até EOF e vaza pro lead. Mitigação: detecta abertura sem
+ * fechamento → remove tudo APÓS `<thinking>` (descarta resposta inválida).
+ *
+ * Returns: { cleanedText, reasoning }
+ */
+function extractReasoningChain(input: string): { cleaned: string; reasoning?: string } {
+  if (!input || !input.includes("<thinking")) return { cleaned: input };
+
+  // 1. Bloco completo <thinking>...</thinking>
+  const completeMatch = input.match(/<thinking>([\s\S]*?)<\/thinking>/i);
+  if (completeMatch) {
+    const reasoning = completeMatch[1].trim();
+    let cleaned = input.replace(/<thinking>[\s\S]*?<\/thinking>/gi, "").trim();
+
+    // 2. Se houver bloco <response>...</response>, usa só o conteúdo dentro
+    const responseMatch = cleaned.match(/<response>([\s\S]*?)<\/response>/i);
+    if (responseMatch) {
+      cleaned = responseMatch[1].trim();
+    }
+
+    // 3. Strip tags resíduo (fallback defensivo)
+    cleaned = cleaned.replace(/<\/?(?:thinking|response)[^>]*>/gi, "").trim();
+    return { cleaned, reasoning };
+  }
+
+  // 4. <thinking> abriu mas NÃO fechou — descarta tudo a partir dele (vazamento)
+  const openIdx = input.search(/<thinking[^>]*>/i);
+  if (openIdx >= 0) {
+    const before = input.slice(0, openIdx).trim();
+    return { cleaned: before, reasoning: undefined };
+  }
+
+  return { cleaned: input };
 }
 
 /**
@@ -98,6 +139,11 @@ export function sanitizeAssistantMessage(
 ): SanitizeResult {
   if (!raw) return { text: raw, droppedBlocks: 0, recoveredAction: null };
 
+  // Passo 0: extrair reasoning chain (<thinking>...</thinking>) ANTES de tudo
+  // Defensive: se LLM vazar <thinking> sem fechar, descartamos tudo após.
+  const { cleaned: afterReasoning, reasoning } = extractReasoningChain(raw);
+  raw = afterReasoning;
+
   let droppedBlocks = 0;
   let recoveredAction: RecoveredAction | null = null;
 
@@ -140,7 +186,10 @@ export function sanitizeAssistantMessage(
   // Normalização de whitespace
   text = text.replace(/\n{3,}/g, "\n\n").trim();
 
-  return { text, droppedBlocks, recoveredAction };
+  // Defensive final: garantir zero vazamento de tags reasoning
+  text = text.replace(/<\/?(?:thinking|response)[^>]*>/gi, "").trim();
+
+  return { text, droppedBlocks, recoveredAction, reasoning };
 }
 
 function tryRecoverFromString(jsonStr: string): RecoveredAction | null {

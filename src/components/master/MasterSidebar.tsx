@@ -18,6 +18,7 @@ import {
   ArrowLeft,
   Monitor,
   Heart,
+  Brain,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -41,6 +42,7 @@ const allNavItems: NavItem[] = [
   { label: "Logs de Auditoria", icon: Activity, path: "/master/audit-logs", permission: "audit" },
   { label: "Operations", icon: Monitor, path: "/master/operations", permission: "audit" },
   { label: "Automation Health", icon: Heart, path: "/master/automation-health", permission: "audit" },
+  { label: "Copilot Reasoning", icon: Brain, path: "/master/copilot-reasoning", permission: "audit" },
 ];
 
 export function MasterSidebar() {

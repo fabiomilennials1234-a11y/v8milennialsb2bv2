@@ -117,6 +117,8 @@ interface LogRuntimeParams {
   // Onda 2 / T2.B.2: telemetria de performance + custo LLM
   durationMs?: number;
   tokens?: { prompt?: number; completion?: number; model?: string };
+  // RC.1: chain-of-thought capturado do agente (extraído de <thinking>...</thinking>)
+  reasoning?: string;
 }
 
 /**
@@ -150,6 +152,7 @@ export async function logRuntime(params: LogRuntimeParams): Promise<void> {
       prompt_tokens: params.tokens?.prompt ?? null,
       completion_tokens: params.tokens?.completion ?? null,
       llm_model: params.tokens?.model ?? null,
+      reasoning: params.reasoning ?? null,
     });
   } catch (err) {
     console.warn("[logRuntime] Failed to write log (non-fatal):", err);

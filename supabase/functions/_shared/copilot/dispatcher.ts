@@ -105,7 +105,7 @@ export async function logDecision(
   stateAfter: string,
   action: { action?: string } | null,
   capabilities: unknown,
-  opts: { success?: boolean; errorMessage?: string } = {},
+  opts: { success?: boolean; errorMessage?: string; reasoningChain?: string } = {},
 ): Promise<void> {
   try {
     if (conversationId.startsWith("temp_")) {
@@ -120,6 +120,7 @@ export async function logDecision(
       state_after: stateAfter,
       action_decided: action?.action ?? "RESPOND_ONLY",
       reasoning: `Based on capabilities: ${JSON.stringify(capabilities)}`,
+      reasoning_chain: opts.reasoningChain ?? null,
       capabilities_snapshot: capabilities,
       success: opts.success ?? true,
       error_message: opts.errorMessage ?? null,
