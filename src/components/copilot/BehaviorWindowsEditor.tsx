@@ -4,7 +4,6 @@
  * Standalone, props-based. Usado por:
  *  - PlaygroundSettings (criação + edição via /copilot/novo e /copilot/:id/editar)
  *  - AgentConfigModal (edição rápida via tab "Comportamento")
- *  - AvailabilityStep (wizard legacy em /copilot/novo-wizard)
  *
  * Modelo:
  *  - Até 6 janelas { id, name, days, start, end, behavior }

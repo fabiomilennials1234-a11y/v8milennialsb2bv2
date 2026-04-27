@@ -59,9 +59,7 @@ const CustomPipeline = lazy(() => lazyRetry(() => import("./pages/CustomPipeline
 const Agenda = lazy(() => lazyRetry(() => import("./pages/Agenda")));
 const Privacidade = lazy(() => lazyRetry(() => import("./pages/Privacidade")));
 const ApiDocs = lazy(() => lazyRetry(() => import("./pages/ApiDocs")));
-const CopilotWizard = lazy(() => lazyRetry(() => import("@/components/copilot/CopilotWizard").then(m => ({ default: m.CopilotWizard }))));
 const CopilotPlayground = lazy(() => lazyRetry(() => import("@/components/copilot/playground").then(m => ({ default: m.CopilotPlayground }))));
-const CopilotWizardTest = lazy(() => lazyRetry(() => import("./pages/CopilotWizardTest")));
 const ChecklistPage = lazy(() => lazyRetry(() => import("./pages/ChecklistPage")));
 const MessageTemplates = lazy(() => lazyRetry(() => import("./pages/MessageTemplates")));
 const Automacoes = lazy(() => lazyRetry(() => import("./pages/Automacoes")));
@@ -453,16 +451,6 @@ function AppRoutes() {
         }
       />
       <Route
-        path="/copilot/teste-wizard"
-        element={
-          <ProtectedRoute>
-            <LayoutWrapper>
-              <CopilotWizardTest />
-            </LayoutWrapper>
-          </ProtectedRoute>
-        }
-      />
-      <Route
         path="/chat"
         element={
           <ProtectedRoute>
@@ -541,18 +529,6 @@ function AppRoutes() {
             <LayoutWrapper>
               <SubscriptionProtectedRoute requireActive>
                 <CopilotPlayground />
-              </SubscriptionProtectedRoute>
-            </LayoutWrapper>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/copilot/novo-wizard"
-        element={
-          <ProtectedRoute>
-            <LayoutWrapper>
-              <SubscriptionProtectedRoute requireActive>
-                <CopilotWizard />
               </SubscriptionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>

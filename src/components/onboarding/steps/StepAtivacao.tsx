@@ -12,7 +12,7 @@ const CHECKLIST_ITEMS: ChecklistItem[] = [
   { key: "whatsapp", label: "Conectar WhatsApp", description: "Escaneie o QR Code para ativar o chat", icon: MessageSquare, link: "/configuracoes" },
   { key: "produtos", label: "Cadastrar Produtos", description: "Adicione seu catálogo de produtos ou serviços", icon: Package, link: "/produtos" },
   { key: "equipe", label: "Convidar Equipe", description: "Adicione vendedores e defina papéis", icon: Users, link: "/equipe" },
-  { key: "copilot", label: "Configurar Copilot IA", description: "Crie um agente de IA para qualificar leads", icon: Bot, link: "/copilot/novo-wizard" },
+  { key: "copilot", label: "Configurar Copilot IA", description: "Crie um agente de IA para qualificar leads", icon: Bot, link: "/copilot/novo" },
 ];
 
 interface Props {
