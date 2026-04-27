@@ -21,6 +21,7 @@ import {
   Target,
   Route,
   ShieldCheck,
+  Package,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -59,7 +60,7 @@ const SECTIONS: SectionConfig[] = [
     icon: <User className="w-4 h-4" />,
     placeholder:
       "Quem e o copilot? Descreva a persona, tom de voz, como se apresenta, como age...\n\nEx: Voce e a Ana, consultora de vendas B2B da TechCorp. Tom profissional mas acessivel, sempre consultivo. Nunca e agressiva ou insistente. Se apresenta pelo nome e pergunta como pode ajudar.",
-    minHeight: "min-h-[120px]",
+    minHeight: "min-h-[220px]",
   },
   {
     key: "objective",
@@ -67,7 +68,7 @@ const SECTIONS: SectionConfig[] = [
     icon: <Target className="w-4 h-4" />,
     placeholder:
       "Qual a missao principal? Criterio de sucesso? Limites?\n\nEx: Sua missao e qualificar leads inbound identificando fit, budget e timeline. Sucesso = lead qualificado transferido para vendedor. Limite: nunca negocie preco ou faca promessas de desconto.",
-    minHeight: "min-h-[100px]",
+    minHeight: "min-h-[200px]",
   },
   {
     key: "flow",
@@ -75,7 +76,15 @@ const SECTIONS: SectionConfig[] = [
     icon: <Route className="w-4 h-4" />,
     placeholder:
       "Como deve ser o fluxo da conversa? Etapas, quando avancar, quando recuar?\n\nEx:\n1. Saudacao + entender contexto\n2. Identificar dor principal (1-2 perguntas)\n3. Apresentar solucao alinhada a dor\n4. Se interesse, agendar reuniao\n5. Se objecao, contornar com case de sucesso\n6. Se nao qualificado, agradecer e encerrar",
-    minHeight: "min-h-[140px]",
+    minHeight: "min-h-[260px]",
+  },
+  {
+    key: "products",
+    label: "Produtos / Servicos",
+    icon: <Package className="w-4 h-4" />,
+    placeholder:
+      "Catalogo de produtos ou servicos que o copilot vende. Descricao curta, preco, diferenciais, casos de uso.\n\nEx:\n## Plano Starter — R$ 297/mes\n- Para times de ate 5 pessoas\n- Inclui CRM + WhatsApp + 1 copilot\n- Diferencial: setup em 24h\n\n## Plano Pro — R$ 697/mes\n- Para times de ate 20 pessoas\n- Tudo do Starter + automacoes ilimitadas + 3 copilots\n- Diferencial: integracao Trello/Sheets nativa\n\n## Servico de Implantacao\n- Consultoria de onboarding\n- Configura funis, copilot e integracoes\n- 8h de mentoria + 30 dias de suporte premium",
+    minHeight: "min-h-[280px]",
   },
   {
     key: "instructions",
@@ -83,7 +92,7 @@ const SECTIONS: SectionConfig[] = [
     icon: <ShieldCheck className="w-4 h-4" />,
     placeholder:
       "Regras rigidas. O que DEVE fazer e o que NUNCA deve fazer.\n\nEx:\n- Faca no maximo 1 pergunta por mensagem\n- Sempre use o nome do lead\n- Nunca mencione concorrentes\n- Nunca invente dados ou precos\n- Se nao souber, diga que vai verificar",
-    minHeight: "min-h-[120px]",
+    minHeight: "min-h-[220px]",
   },
 ];
 
@@ -202,7 +211,7 @@ export function PromptEditor({
       if (!ta) return;
 
       const sectionKey = activeMention.sectionKey as keyof PromptSections;
-      const currentValue = sections[sectionKey];
+      const currentValue = sections[sectionKey] ?? "";
       const before = currentValue.slice(0, activeMention.startPos - 1);
       const after = currentValue.slice(ta.selectionStart);
       const mentionText = `@${item.id}`;
@@ -243,7 +252,7 @@ export function PromptEditor({
       const ta = textareaRefs.current[sectionKey];
       if (!ta) return;
       const cursorPos = ta.selectionStart;
-      const currentValue = sections[sectionKey];
+      const currentValue = sections[sectionKey] ?? "";
       const before = currentValue.slice(0, cursorPos);
       const after = currentValue.slice(cursorPos);
       const newValue = `${before}@${after}`;
@@ -286,7 +295,8 @@ export function PromptEditor({
       <div className="divide-y">
         {SECTIONS.map((section) => {
           const isCollapsed = collapsedSections[section.key] ?? false;
-          const hasContent = sections[section.key].length > 0;
+          const sectionValue = sections[section.key] ?? "";
+          const hasContent = sectionValue.length > 0;
 
           return (
             <div key={section.key} className="relative">
@@ -305,7 +315,7 @@ export function PromptEditor({
                 <span className="text-sm font-medium">{section.label}</span>
                 {hasContent && isCollapsed && (
                   <span className="text-xs text-muted-foreground truncate ml-2 max-w-[300px]">
-                    {sections[section.key].slice(0, 60)}...
+                    {sectionValue.slice(0, 60)}...
                   </span>
                 )}
                 {!isCollapsed && (
@@ -331,7 +341,7 @@ export function PromptEditor({
                     ref={(el) => {
                       textareaRefs.current[section.key] = el;
                     }}
-                    value={sections[section.key]}
+                    value={sectionValue}
                     onChange={(e) => handleChange(section.key, e)}
                     onKeyDown={handleKeyDown}
                     onBlur={() => {

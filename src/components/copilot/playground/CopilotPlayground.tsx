@@ -20,6 +20,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { FileText, Wrench, BookOpen } from "lucide-react";
 
 import { PromptEditor } from "./PromptEditor";
 import { PlaygroundSettings } from "./PlaygroundSettings";
@@ -97,6 +99,10 @@ function buildSystemPrompt(data: PlaygroundData): string {
 
   if (s.flow.trim()) {
     parts.push(`# FLUXO DE ATENDIMENTO\n\n${resolveMentions(s.flow.trim(), data)}`);
+  }
+
+  if (s.products?.trim()) {
+    parts.push(`# PRODUTOS E SERVICOS\n\n${resolveMentions(s.products.trim(), data)}`);
   }
 
   // Tool instructions — only enabled tools
@@ -333,9 +339,14 @@ export function CopilotPlayground() {
       const preset = getTemplatePreset(type);
       if (!preset) return;
 
+      const base = createDefaultPlaygroundData();
       setData({
-        ...createDefaultPlaygroundData(),
+        ...base,
         ...preset.data,
+        promptSections: {
+          ...base.promptSections,
+          ...(preset.data.promptSections || {}),
+        },
         name: data.name, // keep current name
       } as PlaygroundData);
       bumpConfigVersion();
@@ -505,32 +516,52 @@ export function CopilotPlayground() {
 
       {/* ===== Main Content ===== */}
       <div className="flex flex-1 min-h-0">
-        {/* ===== Left Column: Prompt + Panels ===== */}
-        <div className="flex flex-col w-[60%] border-r overflow-y-auto">
-          {/* Prompt Editor */}
-          <div className={`border-b ${isEditorExpanded ? "flex-1" : ""}`}>
-            <PromptEditor
-              sections={data.promptSections}
-              onSectionsChange={(promptSections) => updateData({ promptSections })}
-              tools={data.tools}
-              toolDefs={PLAYGROUND_TOOLS}
-              documents={data.documents}
-              links={data.links}
-              isExpanded={isEditorExpanded}
-              onToggleExpand={() => setIsEditorExpanded(!isEditorExpanded)}
-            />
-          </div>
+        {/* ===== Left Column: Tabs (Prompt | Tools | Conhecimento) ===== */}
+        <div className="flex flex-col w-[60%] border-r min-h-0">
+          <Tabs defaultValue="prompt" className="flex flex-col flex-1 min-h-0">
+            <TabsList className="grid w-full grid-cols-3 rounded-none border-b bg-background h-11 shrink-0">
+              <TabsTrigger value="prompt" className="gap-2 data-[state=active]:bg-muted/50">
+                <FileText className="w-4 h-4" />
+                Prompt
+              </TabsTrigger>
+              <TabsTrigger value="tools" className="gap-2 data-[state=active]:bg-muted/50">
+                <Wrench className="w-4 h-4" />
+                Tools
+              </TabsTrigger>
+              <TabsTrigger value="knowledge" className="gap-2 data-[state=active]:bg-muted/50">
+                <BookOpen className="w-4 h-4" />
+                Conhecimento
+              </TabsTrigger>
+            </TabsList>
 
-          {/* Collapsible panels (hidden when editor is expanded) */}
-          {!isEditorExpanded && (
-            <div className="p-4 space-y-4">
-              <PlaygroundSettings data={data} onChange={updateData} />
+            <TabsContent value="prompt" className="flex-1 overflow-y-auto m-0 p-0 data-[state=inactive]:hidden">
+              <div className={`border-b ${isEditorExpanded ? "flex-1" : ""}`}>
+                <PromptEditor
+                  sections={data.promptSections}
+                  onSectionsChange={(promptSections) => updateData({ promptSections })}
+                  tools={data.tools}
+                  toolDefs={PLAYGROUND_TOOLS}
+                  documents={data.documents}
+                  links={data.links}
+                  isExpanded={isEditorExpanded}
+                  onToggleExpand={() => setIsEditorExpanded(!isEditorExpanded)}
+                />
+              </div>
+              {!isEditorExpanded && (
+                <div className="p-4">
+                  <PlaygroundSettings data={data} onChange={updateData} />
+                </div>
+              )}
+            </TabsContent>
 
+            <TabsContent value="tools" className="flex-1 overflow-y-auto m-0 p-4 data-[state=inactive]:hidden">
               <PlaygroundTools
                 tools={data.tools}
                 onChange={(tools) => updateData({ tools })}
               />
+            </TabsContent>
 
+            <TabsContent value="knowledge" className="flex-1 overflow-y-auto m-0 p-4 data-[state=inactive]:hidden">
               <PlaygroundKnowledge
                 documents={data.documents}
                 links={data.links}
@@ -545,11 +576,11 @@ export function CopilotPlayground() {
                   if (editId) deleteDocument.mutate({ documentId: docId, filePath, agentId: editId });
                 }}
               />
-            </div>
-          )}
+            </TabsContent>
+          </Tabs>
         </div>
 
-        {/* ===== Right Column: Live Preview Chat ===== */}
+        {/* ===== Right Column: Live Preview Chat (sempre visivel) ===== */}
         <div className="w-[40%] p-4">
           <LivePreviewChat
             systemPrompt={systemPromptForPreview}

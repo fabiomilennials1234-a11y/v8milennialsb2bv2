@@ -74,6 +74,8 @@ export interface PromptSections {
   objective: string;
   /** Fluxo de atendimento/conversa — etapas, como conduzir */
   flow: string;
+  /** Catálogo de produtos/serviços — descrição, preço, diferenciais (opcional, sempre preenchido com "" via DEFAULT_PROMPT_SECTIONS) */
+  products?: string;
   /** Do's e Don'ts — regras rígidas */
   instructions: string;
 }
@@ -82,6 +84,7 @@ export const DEFAULT_PROMPT_SECTIONS: PromptSections = {
   personality: "",
   objective: "",
   flow: "",
+  products: "",
   instructions: "",
 };
 
