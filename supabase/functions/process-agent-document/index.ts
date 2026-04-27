@@ -11,8 +11,13 @@ import { splitPdfIntoBatches, encodeBatchAsBase64 } from "./pdf-chunking.ts";
 // background processing (evita WORKER_RESOURCE_LIMIT em isolate Deno).
 const PDF_CHUNK_THRESHOLD_BYTES = 5 * 1024 * 1024; // 5MB
 
-// Limite duro absoluto. PDFs maiores que isso = erro imediato.
-const PDF_MAX_BYTES = 100 * 1024 * 1024; // 100MB
+// Limite duro absoluto. PDFs maiores que isso = erro imediato com mensagem
+// pra usuario dividir o arquivo. Valor conservador: pdf-lib.load() carrega
+// PDF inteiro em memoria e cria copias intermediarias durante o split, o que
+// na pratica usa ~3x do tamanho do arquivo. Edge function Deno isolate tem
+// ~150MB heap, mas OpenAI multimodal payload + outros buffers comem o resto.
+// Empiricamente: PDFs >8MB travam silenciosamente em prod.
+const PDF_MAX_BYTES = 8 * 1024 * 1024; // 8MB
 
 // Configuração do chunking
 const PDF_PAGES_PER_BATCH = 3;
@@ -332,9 +337,10 @@ serve(withSentry('process-agent-document', async (req) => {
     // ---------- DOCUMENT PATH: text extraction + chunking ----------
 
     if (isPdf || isImage) {
-      // Limite duro absoluto
-      if (fileBytes.length > PDF_MAX_BYTES) {
-        const errMsg = `Arquivo muito grande (${(fileBytes.length / 1024 / 1024).toFixed(1)}MB). Limite: ${PDF_MAX_BYTES / 1024 / 1024}MB. Reduza o documento ou divida em partes menores.`;
+      // Limite duro absoluto pra PDFs (8MB). Imagens passam direto.
+      if (isPdf && fileBytes.length > PDF_MAX_BYTES) {
+        const sizeMB = (fileBytes.length / 1024 / 1024).toFixed(1);
+        const errMsg = `PDF muito grande (${sizeMB}MB). Limite atual: ${PDF_MAX_BYTES / 1024 / 1024}MB por arquivo. Divida o PDF em partes menores e envie cada parte separadamente. Suporte para PDFs maiores via worker dedicado esta no roadmap.`;
         await supabase.from("copilot_agent_documents")
           .update({ status: "error", error_message: errMsg, updated_at: new Date().toISOString() })
           .eq("id", documentId);
