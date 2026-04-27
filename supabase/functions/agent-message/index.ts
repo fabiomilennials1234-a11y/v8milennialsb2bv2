@@ -60,13 +60,17 @@ Deno.serve(withSentry('agent-message', async (req) => {
       });
     }
 
-    // 1.5. CHECK IF AI IS DISABLED FOR THIS LEAD
-    if (lead.ai_disabled === true) {
-      console.log('[agent-message] AI disabled for lead:', lead.id);
-      return new Response(JSON.stringify({ 
-        skipped: true, 
+    // 1.5. CHECK IF AI IS DISABLED FOR THIS LEAD (F5a 2026-04-26: canonical)
+    // Lê phone_ai_preferences (fonte de verdade) com fallback leads.ai_disabled.
+    // Antes lia só lead.ai_disabled (denormalizado) — drift se sync falhasse.
+    const initialCancel = await isCopilotCanceled(supabase, organizationId, from);
+    if (initialCancel.canceled) {
+      console.log('[agent-message] AI disabled for lead:', lead.id, 'source:', initialCancel.source);
+      return new Response(JSON.stringify({
+        skipped: true,
         reason: "AI disabled for this lead",
-        lead_id: lead.id
+        lead_id: lead.id,
+        source: initialCancel.source,
       }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" }

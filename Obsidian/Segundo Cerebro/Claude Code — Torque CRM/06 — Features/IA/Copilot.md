@@ -231,8 +231,37 @@ Decisões CTO:
 
 NÃO coberto: `whatsapp-webhook` Uazapi reply (rota não mapeada), `send_document/send_product_material` (sem delay relevante).
 
+## Toggle Copilot — sistema unificado (Onda 1+2+3 — 2026-04-26)
+
+Bugs reportados pelo time ("switch não desliga", "responde mesmo desligado", "switch volta sozinho", etc) tratados em 3 ondas:
+
+### Onda 1 — Hotfixes
+- RPC `toggle_lead_ai/toggle_phone_ai/get_phone_ai_status` corrigida pra users multi-org (deriva org do lead via EXISTS, não LIMIT 1).
+- UNIQUE INDEX `idx_leads_org_phone_unique` previne duplicatas (race webhook Meta).
+- RPC `master_set_copilot_disabled` bypass `team_members` pra Master cross-org com audit.
+- ChatShellWithContext usa RPC canônica.
+
+### Onda 2 — Unify
+- **`useCopilotToggle`** hook único — substitui 5 hooks fragmentados.
+- Query key canônica `["copilot-toggle", orgId, normalizedPhone]`.
+- Realtime publication em `phone_ai_preferences` + `useCopilotToggleRealtime` em MainLayout — broadcast cross-tela e cross-usuário.
+
+### Onda 3 — Canonical
+- Edge functions (`agent-message`, `sz-chat-webhook`, `process-copilot-followups`) lêem via `isCopilotCanceled` (preferences-first com fallback leads). `leads.ai_disabled` deixou de ser fonte de decisão.
+- Trigger `sync_ai_state_from_preferences` propaga `phone_ai_preferences.ai_disabled` → `conversations.ai_state` automaticamente. Resolve banner takeover ambíguo.
+- Página Master `/master/copilot-toggle-audit` — histórico de toggles + drift detection.
+
+### Fonte de verdade
+
+`phone_ai_preferences` (PK `organization_id+normalized_phone`) é fonte canônica:
+- Frontend lê via `useCopilotToggle` (que chama `get_phone_ai_status`)
+- Backend lê via `isCopilotCanceled` em `_shared/copilot/cancellation.ts`
+- `conversations.ai_state` deriva via trigger
+- `leads.ai_disabled` é denormalização (RPCs sincronizam ambas)
+
 ## Historico de mudancas
 
+- **2026-04-26**: Toggle Copilot Onda 1+2+3 — fonte única canônica + hook unificado + realtime + audit page. Ver `07 — Changelog/2026-04-26.md`.
 - **2026-04-26**: Cancel-on-Disable (RC-cancel) — cancela copilot mid-flight em todas as janelas de delay. Ver `07 — Changelog/2026-04-26.md` (seção RC-cancel).
 - **2026-04-26**: Reasoning Chain v1 — chain-of-thought visível pra debug, configurável por agente, default `'always'`. Ver `07 — Changelog/2026-04-26.md` (seção RC).
 - **2026-04-23**: Fallback elimination + Uazapi→Copilot bridge + tenant isolation + telemetria. Ver [[ADR-2026-04-23-copilot-fallback-elimination]].

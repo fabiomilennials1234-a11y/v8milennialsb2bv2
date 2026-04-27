@@ -462,12 +462,13 @@ async function handleClientMessage(
     return;
   }
 
-  // Check if AI is disabled for this lead (early exit before batch wait)
-  const leadForAiCheck = await findLeadByPhoneOrEmail(supabase, organizationId, phoneNumber);
-  if ((leadForAiCheck as any)?.ai_disabled === true) {
-    console.log("[SZ Chat Webhook] AI disabled for lead, skipping copilot:", {
-      leadId: leadForAiCheck?.id,
+  // F5b 2026-04-26: canonical check (phone_ai_preferences first, fallback leads).
+  // Antes lia só leadForAiCheck.ai_disabled (denormalizado).
+  const preBatchCancel = await isCopilotCanceled(supabase, organizationId, phoneNumber);
+  if (preBatchCancel.canceled) {
+    console.log("[SZ Chat Webhook] AI disabled for phone (pre-batch), skipping copilot:", {
       phone: phoneNumber,
+      source: preBatchCancel.source,
     });
     return;
   }
@@ -531,13 +532,12 @@ async function handleClientMessage(
     .filter((c: string) => c && c.trim())
     .join("\n\n");
 
-  // Re-check ai_disabled AFTER batch wait (defense in depth:
-  // user may have toggled the switch during the 8s wait window)
-  const leadPostBatch = await findLeadByPhoneOrEmail(supabase, organizationId, phoneNumber);
-  if ((leadPostBatch as any)?.ai_disabled === true) {
-    console.log("[SZ Chat Webhook] AI disabled for lead (post-batch check), skipping copilot:", {
-      leadId: leadPostBatch?.id,
+  // F5b 2026-04-26: re-check pós-batch via fonte canônica.
+  const postBatchCancel = await isCopilotCanceled(supabase, organizationId, phoneNumber);
+  if (postBatchCancel.canceled) {
+    console.log("[SZ Chat Webhook] AI disabled for phone (post-batch), skipping copilot:", {
       phone: phoneNumber,
+      source: postBatchCancel.source,
     });
     // Mark messages as processed to avoid reprocessing
     const skipMsgIds = pendingMessages.map((m: { message_id: string }) => m.message_id);

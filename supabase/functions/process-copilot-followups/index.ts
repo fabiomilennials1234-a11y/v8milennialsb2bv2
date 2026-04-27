@@ -17,6 +17,7 @@ import { getNextSendTime } from "../_shared/followupSchedule.ts";
 import { sendFollowupMessage } from "../_shared/followup-sender.ts";
 import { AgentEngine } from "../agent-message/agent-engine.ts";
 import { OpenRouterClient } from "../agent-message/openrouter-client.ts";
+import { isCopilotCanceled } from "../_shared/copilot/cancellation.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -191,8 +192,12 @@ Deno.serve(withSentry('process-copilot-followups', async (req) => {
         continue;
       }
 
-      // Defense in depth: skip leads with copilot disabled
-      if (lead.ai_disabled === true) {
+      // F5c 2026-04-26: skip leads com copilot disabled via fonte canônica
+      // (phone_ai_preferences > leads.ai_disabled fallback). Cobre case onde
+      // user toggla via toggle_phone_ai sem lead — preference muda mas
+      // lead.ai_disabled denormalizado pode estar stale.
+      const followupCancel = await isCopilotCanceled(supabase, rule.organization_id, lead.phone);
+      if (followupCancel.canceled) {
         totalSkipped++;
         continue;
       }
