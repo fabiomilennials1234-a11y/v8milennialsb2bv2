@@ -111,7 +111,9 @@ BEGIN
       THEN 'IA Copilot desativada por Master Admin'
       ELSE 'IA Copilot reativada por Master Admin'
     END,
-    'master',
+    -- lead_history.source CHECK accepts manual|agent|automation|system.
+    -- Master flag vai em metadata.set_by_master + master_user_id.
+    'system',
     jsonb_build_object(
       CASE WHEN p_disabled THEN 'disabled_by' ELSE 'reactivated_by' END, v_user_id,
       'master_user_id', v_master_user_id,
@@ -131,7 +133,7 @@ BEGIN
       v_user_id,
       CASE WHEN p_disabled THEN 'copilot_disabled' ELSE 'copilot_enabled' END,
       'lead',
-      p_lead_id::text,
+      p_lead_id,
       v_normalized_phone,
       jsonb_build_object(
         'organization_id', v_lead_org_id,
@@ -140,7 +142,7 @@ BEGIN
         'synced_duplicates', v_affected_count
       )
     );
-  EXCEPTION WHEN undefined_table OR undefined_column THEN
+  EXCEPTION WHEN undefined_table OR undefined_column OR datatype_mismatch THEN
     RAISE NOTICE 'master_audit_logs not present or schema mismatch — skipping master log';
   END;
 
