@@ -10,7 +10,7 @@ import * as crypto from 'crypto';
 import { executionLogger } from '../_shared/logger';
 
 interface ProcessWebhookInput {
-  payload: Record<string, any>;
+  payload: Record<string, unknown>;
   headers: Record<string, string>;
   signature?: string;
   webhook_type: 'calcom' | 'n8n' | 'custom';
@@ -59,12 +59,14 @@ async function main() {
     let result: ProcessWebhookOutput;
 
     switch (input.webhook_type) {
-      case 'calcom':
+      case 'calcom': {
         // Processar webhook do Cal.com
-        const calPayload = input.payload;
-        const email = calPayload.attendees?.[0]?.email || calPayload.responses?.email;
-        const name = calPayload.attendees?.[0]?.name || calPayload.responses?.name;
-        const startTime = calPayload.startTime;
+        const calPayload = input.payload as Record<string, unknown>;
+        const attendees = calPayload.attendees as Array<Record<string, string>> | undefined;
+        const responses = calPayload.responses as Record<string, string> | undefined;
+        const email = attendees?.[0]?.email || responses?.email;
+        const name = attendees?.[0]?.name || responses?.name;
+        const startTime = calPayload.startTime as string | undefined;
 
         if (!email) {
           result = {
@@ -104,6 +106,7 @@ async function main() {
           response_status: 200,
         };
         break;
+      }
 
       case 'n8n':
         // Processar webhook do n8n (já tem lógica no webhook-new-lead)

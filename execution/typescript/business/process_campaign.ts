@@ -15,7 +15,7 @@ interface ProcessCampaignInput {
     email?: string;
     phone?: string;
     company?: string;
-    [key: string]: any;
+    [key: string]: unknown;
   }>;
   assignment_rules: {
     method: 'round_robin' | 'random' | 'by_capacity' | 'manual';

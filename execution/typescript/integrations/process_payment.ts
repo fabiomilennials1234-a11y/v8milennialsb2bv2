@@ -12,7 +12,7 @@ interface ProcessPaymentInput {
   event_type: string;
   customer_id: string;
   subscription_id?: string;
-  payload: Record<string, any>;
+  payload: Record<string, unknown>;
   signature?: string;
   provider: 'stripe' | 'asaas';
 }
