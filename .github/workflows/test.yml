@@ -28,6 +28,7 @@ jobs:
           VITE_INVITE_API_URL: ${{ secrets.VITE_INVITE_API_URL }}
           VITE_INTERNAL_API_KEY: ${{ secrets.VITE_INTERNAL_API_KEY }}
           VITE_META_APP_ID: ${{ secrets.VITE_META_APP_ID }}
+          VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
 
   unit-tests:
     name: Unit Tests
