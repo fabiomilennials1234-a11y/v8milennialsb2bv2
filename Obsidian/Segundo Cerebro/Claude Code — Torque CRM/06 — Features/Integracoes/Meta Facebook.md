@@ -5,7 +5,7 @@ tags:
   - torque-crm
   - integracoes
 created: 2026-04-12
-last_updated: 2026-04-12
+last_updated: 2026-04-25
 status: active
 ---
 
@@ -61,6 +61,14 @@ Integracao bidirecional Meta Ads + Messenger + Instagram DM. Lead Ads capture au
 ---
 
 ## Historico de mudancas
+
+### 2026-04-25 — Fix race condition em Lead Ads (disparos duplicados)
+
+Meta Lead Ads webhook tem retry agressivo (< 1s). Causava 2 chamadas concorrentes em `lead-webhook` → 2 leads idênticos criados em 18-60ms → workflow_executions duplicadas → mensagens WhatsApp em dobro.
+
+**Fix**: `CREATE UNIQUE INDEX idx_leads_org_phone_unique ON leads (organization_id, normalized_phone) WHERE normalized_phone IS NOT NULL`. Catch `23505` em `lead-service.ts` retry-search resolve race naturalmente.
+
+Migration: `20260919000000_merge_duplicate_leads_and_unique_index.sql`. Detalhes em [[2026-04-25]].
 
 ## Links relacionados
 
