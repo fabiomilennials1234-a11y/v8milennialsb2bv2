@@ -8,7 +8,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { getOrgTinyToken, callTinyApi, logTinyOp, getTinyErrorMessage, isTinyNoRecordsError } from "../_shared/tinyerp-utils.ts";
-import { captureError } from '../_shared/sentry.ts';
+import { captureError, withSentry } from '../_shared/sentry.ts';
 import { logRuntime } from "../_shared/logger.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -27,7 +27,7 @@ interface TinyProduct {
   situacao?: string;
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withSentry("tinyerp-sync-products", async (req) => {
   const corsHeaders = getCorsHeaders(req.headers.get("origin"));
 
   if (req.method === "OPTIONS") {
@@ -317,4 +317,4 @@ Deno.serve(async (req) => {
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
-});
+}));
