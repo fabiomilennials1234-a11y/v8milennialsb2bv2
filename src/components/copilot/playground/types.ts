@@ -3,6 +3,7 @@
  */
 
 import type { AgentTemplateType, AgentOperationMode, OutboundConfig, ActivationTriggers, AutomationActions } from "@/types/copilot";
+import type { BehaviorEnforcement, BehaviorWindow } from "@/components/copilot/BehaviorWindowsEditor";
 
 // =====================================================
 // TOOL DEFINITIONS
@@ -107,6 +108,10 @@ export interface PlaygroundData {
     end: string;
   };
 
+  // Time-Aware Behavior (até 6 janelas com comportamento por horário)
+  behaviorWindows: BehaviorWindow[];
+  behaviorEnforcement: BehaviorEnforcement;
+
   // Proactive agent
   isProactive: boolean;
   operationMode: AgentOperationMode;
@@ -151,6 +156,35 @@ export const DEFAULT_AVAILABILITY = {
   end: "18:00",
 };
 
+export function createDefaultBehaviorWindows(): BehaviorWindow[] {
+  return [
+    {
+      id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `w-${Date.now()}`,
+      name: "Horário comercial",
+      days: ["mon", "tue", "wed", "thu", "fri"],
+      start: "09:00",
+      end: "18:00",
+      behavior: "",
+    },
+    {
+      id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `w-${Date.now()}-2`,
+      name: "Fora de expediente",
+      days: ["mon", "tue", "wed", "thu", "fri", "sat", "sun"],
+      start: "18:00",
+      end: "09:00",
+      behavior: "",
+    },
+    {
+      id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `w-${Date.now()}-3`,
+      name: "Fim de semana",
+      days: ["sat", "sun"],
+      start: "09:00",
+      end: "18:00",
+      behavior: "",
+    },
+  ];
+}
+
 export const DEFAULT_ACTIVATION_TRIGGERS: ActivationTriggers = {
   required: { tags: [], origins: [], hasPhone: true, hasEmail: false },
   optional: [],
@@ -174,6 +208,8 @@ export function createDefaultPlaygroundData(): PlaygroundData {
     llmTemperatureMode: "balanceado",
     responseDelayMs: 1000,
     availability: { ...DEFAULT_AVAILABILITY },
+    behaviorWindows: createDefaultBehaviorWindows(),
+    behaviorEnforcement: "hard",
     isProactive: false,
     operationMode: "inbound",
     activationTriggers: { ...DEFAULT_ACTIVATION_TRIGGERS, required: { ...DEFAULT_ACTIVATION_TRIGGERS.required } },

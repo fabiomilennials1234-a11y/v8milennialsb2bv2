@@ -19,7 +19,12 @@ import {
   Mic,
   Plus,
   X,
+  Sparkles,
 } from "lucide-react";
+import {
+  BehaviorWindowsEditor,
+  hasFullBehaviorCoverage,
+} from "@/components/copilot/BehaviorWindowsEditor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -179,6 +184,34 @@ export function PlaygroundSettings({ data, onChange }: PlaygroundSettingsProps) 
                 </div>
               </>
             )}
+          </div>
+        )}
+      </div>
+
+      {/* ===== Time-Aware Behavior (janelas customizáveis) ===== */}
+      <div>
+        <SectionHeader
+          id="time-aware"
+          icon={Sparkles}
+          title="Comportamento por horario (Time-Aware)"
+          badge={
+            hasFullBehaviorCoverage(data.behaviorWindows)
+              ? `${data.behaviorWindows.length} janela(s) - 24/7`
+              : "Cobertura incompleta"
+          }
+        />
+        {openSections["time-aware"] && (
+          <div className="px-4 pb-4">
+            <BehaviorWindowsEditor
+              windows={data.behaviorWindows}
+              enforcement={data.behaviorEnforcement}
+              timezone={data.availability.timezone}
+              onWindowsChange={(behaviorWindows) => onChange({ behaviorWindows })}
+              onEnforcementChange={(behaviorEnforcement) =>
+                onChange({ behaviorEnforcement })
+              }
+              hideHeader
+            />
           </div>
         )}
       </div>

@@ -43,6 +43,7 @@ import {
 import { useUploadAgentDocument, useAgentDocuments, useDeleteAgentDocument } from "@/hooks/useAgentDocuments";
 
 import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
+import { hasFullBehaviorCoverage } from "@/components/copilot/BehaviorWindowsEditor";
 
 // =============================================================
 // HELPER: Build system prompt from playground data
@@ -182,7 +183,7 @@ function playgroundToAgentPayload(data: PlaygroundData) {
       } : null,
       availability: data.availability,
       behavior_windows: data.behaviorWindows ?? [],
-      behavior_enforcement: data.behaviorEnforcement ?? 'hard',
+      behavior_enforcement: data.behaviorEnforcement ?? "hard",
       response_delay_ms: data.responseDelayMs,
       llm_temperature_mode: data.llmTemperatureMode,
       can_qualify_lead: data.tools.QUALIFICAR_LEAD?.enabled ?? false,
@@ -267,6 +268,11 @@ export function CopilotPlayground() {
       llmTemperatureMode: wd.llmTemperatureMode || "balanceado",
       responseDelayMs: wd.responseDelayMs || 1000,
       availability: wd.availability || prev.availability,
+      behaviorWindows:
+        Array.isArray(wd.behaviorWindows) && wd.behaviorWindows.length > 0
+          ? wd.behaviorWindows
+          : prev.behaviorWindows,
+      behaviorEnforcement: wd.behaviorEnforcement === "soft" ? "soft" : "hard",
       isProactive: wd.operationMode !== "inbound",
       operationMode: wd.operationMode || "inbound",
       activationTriggers: wd.activationTriggers || prev.activationTriggers,
@@ -350,6 +356,12 @@ export function CopilotPlayground() {
     const totalContent = Object.values(data.promptSections).join("").trim();
     if (totalContent.length < 10) {
       toast.error("Prompt muito curto", { description: "Preencha pelo menos uma secao do prompt com instrucoes para o agente." });
+      return;
+    }
+    if (!hasFullBehaviorCoverage(data.behaviorWindows)) {
+      toast.error("Cobertura 24/7 incompleta", {
+        description: "Configure as janelas de comportamento para cobrir todos os horarios da semana.",
+      });
       return;
     }
     // firstMessageTemplate é opcional — se vazio, o copilot gera a mensagem via IA
@@ -603,8 +615,8 @@ function createWizardDataFromPlayground(data: PlaygroundData): any {
     qualification: { requiredFields: [], optionalFields: [], notes: "" },
     examples: [],
     availability: data.availability,
-    behaviorWindows: (data as any).behaviorWindows ?? [],
-    behaviorEnforcement: (data as any).behaviorEnforcement ?? 'hard',
+    behaviorWindows: data.behaviorWindows ?? [],
+    behaviorEnforcement: data.behaviorEnforcement ?? "hard",
     responseDelaySeconds: 0,
     mainObjective: objectiveText.slice(0, 200),
     objectiveComposite: { mission: objectiveText.slice(0, 200), success_criteria: "", limits: "" },

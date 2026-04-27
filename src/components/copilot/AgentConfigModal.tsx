@@ -21,6 +21,7 @@ import {
   Unlink,
   Pencil,
   Volume2,
+  Sparkles,
 } from "lucide-react";
 import {
   Dialog,
@@ -52,6 +53,13 @@ import type { CopilotAgentWithRelations, MoveRule } from "@/types/copilot";
 import { PIPE_TYPES } from "@/types/copilot";
 import { useAllPipelineStageOptions } from "@/hooks/usePipelineStages";
 import { useCustomPipelines, useCustomPipelineStages } from "@/hooks/useCustomPipelines";
+import {
+  BehaviorWindowsEditor,
+  hasFullBehaviorCoverage,
+  type BehaviorEnforcement,
+  type BehaviorWindow,
+} from "./BehaviorWindowsEditor";
+import { createDefaultBehaviorWindows } from "./playground/types";
 
 // ── Sub-componente para custom pipeline rows (hooks não podem ser chamados em .map()) ──
 
@@ -200,6 +208,10 @@ export function AgentConfigModal({
   const [moveRules, setMoveRules] = useState<MoveRule[]>([]);
   const [expandedPipes, setExpandedPipes] = useState<Record<string, boolean>>({});
   const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(null);
+  const [behaviorWindows, setBehaviorWindows] = useState<BehaviorWindow[]>([]);
+  const [behaviorEnforcement, setBehaviorEnforcement] = useState<BehaviorEnforcement>("hard");
+  const [behaviorTimezone, setBehaviorTimezone] = useState<string>("America/Sao_Paulo");
+  const [savingBehavior, setSavingBehavior] = useState(false);
 
   // Carregar dados do agente quando abrir
   useEffect(() => {
@@ -212,6 +224,19 @@ export function AgentConfigModal({
       setMoveRules((agent.move_rules as MoveRule[]) || []);
       // @ts-ignore - campo adicionado na migração
       setSelectedInstanceId(agent.whatsapp_instance_id || null);
+
+      // Time-aware behavior
+      const rawWindows = (agent as any).behavior_windows;
+      const loadedWindows: BehaviorWindow[] =
+        Array.isArray(rawWindows) && rawWindows.length > 0
+          ? (rawWindows as BehaviorWindow[])
+          : createDefaultBehaviorWindows();
+      setBehaviorWindows(loadedWindows);
+      setBehaviorEnforcement(
+        ((agent as any).behavior_enforcement === "soft" ? "soft" : "hard") as BehaviorEnforcement,
+      );
+      const tz = ((agent as any).availability?.timezone as string) || "America/Sao_Paulo";
+      setBehaviorTimezone(tz);
 
       // Expandir pipes ativos por padrão
       const expanded: Record<string, boolean> = {};
@@ -271,6 +296,32 @@ export function AgentConfigModal({
     setActiveStages((prev) => ({ ...prev, [pipe]: [] }));
   };
 
+  const handleSaveBehavior = async () => {
+    if (!agent?.id) return;
+    if (!hasFullBehaviorCoverage(behaviorWindows)) {
+      toast.error("Cobertura 24/7 incompleta", {
+        description: "Configure as janelas para cobrir todos os horarios.",
+      });
+      return;
+    }
+    setSavingBehavior(true);
+    try {
+      const { error } = await supabase
+        .from("copilot_agents")
+        .update({
+          behavior_windows: behaviorWindows as any,
+          behavior_enforcement: behaviorEnforcement as any,
+        } as any)
+        .eq("id", agent.id);
+      if (error) throw error;
+      toast.success("Comportamento por horario salvo");
+    } catch (err: any) {
+      toast.error("Erro ao salvar", { description: err?.message ?? "" });
+    } finally {
+      setSavingBehavior(false);
+    }
+  };
+
   const handleTtsSave = async (config: any) => {
     if (!agent?.id) return;
     const { error } = await supabase
@@ -314,7 +365,7 @@ export function AgentConfigModal({
         </DialogHeader>
 
         <Tabs defaultValue="overview" className="flex-1">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="overview" className="flex items-center gap-2">
               <Settings className="w-4 h-4" />
               Geral
@@ -322,6 +373,10 @@ export function AgentConfigModal({
             <TabsTrigger value="pipelines" className="flex items-center gap-2">
               <GitBranch className="w-4 h-4" />
               Funis
+            </TabsTrigger>
+            <TabsTrigger value="behavior" className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4" />
+              Comportamento
             </TabsTrigger>
             <TabsTrigger value="audio" className="gap-2">
               <Volume2 className="h-4 w-4" />
@@ -688,6 +743,41 @@ export function AgentConfigModal({
                 </CardContent>
               </Card>
             </TabsContent>
+
+          <TabsContent value="behavior" className="space-y-4 px-1">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-primary" />
+                  Comportamento por horario (Time-Aware)
+                </CardTitle>
+                <CardDescription>
+                  Defina ate 6 janelas com instrucao textual injetada no prompt no horario correspondente.
+                  Toggle global decide se janelas sem instrucao usam canned (hard) ou IA (soft).
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <BehaviorWindowsEditor
+                  windows={behaviorWindows}
+                  enforcement={behaviorEnforcement}
+                  timezone={behaviorTimezone}
+                  onWindowsChange={setBehaviorWindows}
+                  onEnforcementChange={setBehaviorEnforcement}
+                  hideHeader
+                />
+                <div className="flex justify-end pt-4 mt-4 border-t">
+                  <Button
+                    onClick={handleSaveBehavior}
+                    disabled={savingBehavior || !hasFullBehaviorCoverage(behaviorWindows)}
+                    className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                  >
+                    <Save className="w-4 h-4 mr-2" />
+                    {savingBehavior ? "Salvando..." : "Salvar comportamento"}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
           <TabsContent value="audio">
             <Card className="glass-card">
