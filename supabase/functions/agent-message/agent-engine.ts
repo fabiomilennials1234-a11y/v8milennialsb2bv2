@@ -51,6 +51,12 @@ import {
   enqueueAutomationActions as enqueueAutomationActionsExternal,
   enqueuePipelineStageUpdate as enqueuePipelineStageUpdateExternal,
 } from "./engine/decide-action.ts";
+import {
+  createConversation as createConversationExternal,
+  saveConversationContext as saveConversationContextExternal,
+  updateContextSummaryAfterTurn as updateContextSummaryAfterTurnExternal,
+  extractAndSaveMemories as extractAndSaveMemoriesExternal,
+} from "./engine/persist-response.ts";
 
 // Interface para contexto resumido da conversa
 interface ConversationContextSummary {
@@ -135,7 +141,7 @@ export class AgentEngine {
       productCatalog,
     ] = await Promise.all([
       this.resolveABVariant(leadId, capabilities.id),
-      this.loadConversation(leadId, capabilities.id).then(c => c || this.createConversation(leadId, capabilities.id)),
+      this.loadConversation(leadId, capabilities.id).then(c => c || createConversationExternal(this.supabase, this.organizationId, leadId, capabilities.id)),
       this.loadLeadData(leadId),
       this.loadConversationContext(leadId),
       this.loadDocumentSummaries(capabilities.id),
@@ -540,11 +546,21 @@ export class AgentEngine {
     console.log('[AgentEngine] Message processing complete', { parts: messageParts.length });
 
     // 13. Auto-update conversation_context_summary (item #2) — assíncrono, não bloqueia resposta
-    this.updateContextSummaryAfterTurn(leadId, nextState, userMessage, cleanMessage, conversation.turn_count + 1)
+    updateContextSummaryAfterTurnExternal(this.supabase, this.organizationId, leadId, nextState, userMessage, cleanMessage, conversation.turn_count + 1)
       .catch(e => console.warn('[AgentEngine] Context summary update failed (non-fatal):', e));
 
     // 13.5. Item #19: Extrair e salvar memórias de longo prazo (fire-and-forget)
-    this.extractAndSaveMemories(leadId, capabilities.id, conversation.id, conversation.turn_count + 1, userMessage, cleanMessage)
+    extractAndSaveMemoriesExternal({
+      supabase: this.supabase,
+      openRouter: this.openRouter,
+      organizationId: this.organizationId,
+      leadId,
+      agentId: capabilities.id,
+      conversationId: conversation.id,
+      turnCount: conversation.turn_count + 1,
+      userMessage,
+      assistantMessage: cleanMessage,
+    })
       .catch(e => console.warn('[AgentEngine] Long-term memory extraction failed (non-fatal):', e));
 
     // 14. Return Response
@@ -664,92 +680,7 @@ export class AgentEngine {
     return retrieveLongTermMemoriesExternal(this.supabase, userMessage, leadId);
   }
 
-  /**
-   * Item #19: Extrai fatos relevantes da conversa atual e salva como memórias do lead.
-   * Usa LLM para identificar informações importantes.
-   * Chamada em fire-and-forget após cada turno.
-   */
-  private async extractAndSaveMemories(
-    leadId: string,
-    agentId: string,
-    conversationId: string,
-    turnCount: number,
-    userMessage: string,
-    assistantMessage: string
-  ): Promise<void> {
-    // Extrair memórias apenas a cada 5 turnos para reduzir custo
-    if (turnCount % 5 !== 0) return;
-
-    const geminiKey = Deno.env.get('GEMINI_API_KEY');
-    if (!geminiKey) return;
-
-    const extractionPrompt = `Analise este trecho de conversa de vendas B2B e extraia APENAS fatos novos e relevantes sobre o lead.
-
-Lead disse: "${userMessage}"
-Agente respondeu: "${assistantMessage}"
-
-Retorne um JSON array com até 3 memórias no formato:
-[
-  { "memory_type": "fact|preference|pain_point|objection|context", "content": "descrição concisa do fato", "importance": 1-10 }
-]
-
-Regras:
-- Apenas fatos NOVOS que um agente de vendas precisa saber para conversas futuras
-- memory_type: fact=dado objetivo, preference=preferência/gosto, pain_point=dor/problema, objection=objeção levantada, context=contexto geral
-- importance: 1-10 (10=crítico para a venda, 1=pouco relevante)
-- content: máximo 200 chars, direto ao ponto
-- Se não há fatos novos relevantes, retorne []
-- Retorne APENAS o JSON array, sem explicações`;
-
-    try {
-      const response = await this.openRouter.chat({
-        model: 'google/gemini-3-flash-preview',
-        messages: [{ role: 'user', content: extractionPrompt }],
-        temperature: 0.1,
-        max_tokens: 400,
-      });
-
-      const raw = response.choices[0]?.message?.content || '[]';
-      const jsonMatch = raw.match(/\[[\s\S]*\]/);
-      if (!jsonMatch) return;
-
-      const extracted = JSON.parse(jsonMatch[0]) as Array<{
-        memory_type: string;
-        content: string;
-        importance: number;
-      }>;
-
-      if (!Array.isArray(extracted) || extracted.length === 0) return;
-
-      // Gerar embeddings para as memórias
-      const contents = extracted.map(m => m.content);
-      const { generateEmbeddingsBatch } = await import('../_shared/embeddings.ts');
-      const embeddings = await generateEmbeddingsBatch(contents, geminiKey);
-
-      for (let i = 0; i < extracted.length; i++) {
-        const mem = extracted[i];
-        if (!mem.content || mem.content.trim().length < 5) continue;
-
-        await (this.supabase as any)
-          .from('lead_memories')
-          .insert({
-            lead_id: leadId,
-            organization_id: this.organizationId,
-            agent_id: agentId,
-            conversation_id: conversationId,
-            turn_count: turnCount,
-            memory_type: mem.memory_type || 'fact',
-            content: mem.content.substring(0, 500),
-            importance: Math.min(10, Math.max(1, Number(mem.importance) || 5)),
-            embedding: `[${embeddings[i].join(',')}]`,
-          });
-      }
-
-      console.log(`[AgentEngine] ${extracted.length} memórias salvas para lead ${leadId}`);
-    } catch (e) {
-      console.warn('[AgentEngine] Memory extraction/save failed:', e);
-    }
-  }
+  // extractAndSaveMemories extraido para engine/persist-response.ts
 
   /**
    * Item #18: A/B Testing — resolve qual variante de prompt usar para este lead.
@@ -856,7 +787,7 @@ Regras:
       }
 
       const context = await this.extractContextFromMessages(messages);
-      await this.saveConversationContext(leadId, context);
+      await saveConversationContextExternal(this.supabase, this.organizationId, leadId, context);
       return context;
     } catch (e) {
       console.warn('[AgentEngine] loadConversationContext fallback failed:', e);
@@ -937,79 +868,7 @@ Regras:
     return context;
   }
 
-  /**
-   * Salva contexto da conversa no banco para uso futuro
-   */
-  private async saveConversationContext(leadId: string, context: ConversationContextSummary) {
-    try {
-      await this.supabase
-        .from('conversation_context_summary')
-        .upsert({
-          lead_id: leadId,
-          organization_id: this.organizationId,
-          last_topic: context.lastTopic,
-          last_intent: context.lastIntent,
-          key_points: context.keyPoints,
-          objections_raised: context.objectionsRaised,
-          questions_asked: context.questionsAsked,
-          next_action: context.nextAction,
-          qualification_data: context.qualificationData,
-          lead_temperature: context.leadTemperature,
-          engagement_score: context.engagementScore,
-          last_message_at: context.lastMessageAt,
-          message_count: context.messageCount,
-          followup_count: context.followupCount,
-          updated_at: new Date().toISOString(),
-        }, {
-          onConflict: 'lead_id',
-        });
-      console.log('[AgentEngine] Conversation context saved');
-    } catch (e) {
-      console.warn('[AgentEngine] Failed to save conversation context:', e);
-    }
-  }
-
-  /**
-   * Create Conversation
-   */
-  private async createConversation(leadId: string, agentId: string) {
-    console.log('[AgentEngine] Creating conversation for lead:', leadId, 'agent:', agentId);
-    
-    const { data, error } = await this.supabase
-      .from('conversations')
-      .insert({
-        lead_id: leadId,
-        organization_id: this.organizationId,
-        agent_id: agentId,
-        state: 'NEW_LEAD',
-        turn_count: 0,
-      })
-      .select()
-      .single();
-
-    if (error) {
-      console.error('[AgentEngine] Error creating conversation:', error);
-      // Se a tabela não existir, criar conversa em memória
-      if (error.message?.includes('does not exist') || error.code === '42P01') {
-        console.warn('[AgentEngine] Creating in-memory conversation');
-        return {
-          id: `temp_${leadId}`,
-          lead_id: leadId,
-          organization_id: this.organizationId,
-          agent_id: agentId,
-          state: 'NEW_LEAD',
-          turn_count: 0,
-          context: {},
-          short_term_memory: [],
-          long_term_memory: {},
-        };
-      }
-      throw error;
-    }
-
-    console.log('[AgentEngine] Conversation created:', data?.id);
-    return data;
-  }
+  // saveConversationContext + createConversation extraidos para engine/persist-response.ts
 
   // buildDynamicPrompt + buildDynamicTools extraídos para engine/build-prompt.ts
   // e engine/build-tools.ts. AgentEngine delega via buildDynamicPromptExternal /
@@ -1354,67 +1213,7 @@ Regras:
 
   // detectSentiment + classifyIntent extraídos para engine/utils.ts
 
-  // ── Item #2: Auto-update do context summary após cada turno ──────────────
-
-  /**
-   * Atualiza conversation_context_summary de forma incremental após cada turno.
-   * Chamado de forma assíncrona (fire-and-forget) para não bloquear a resposta.
-   */
-  private async updateContextSummaryAfterTurn(
-    leadId: string,
-    state: string,
-    userMessage: string,
-    assistantMessage: string,
-    turnCount: number
-  ): Promise<void> {
-    const intent    = classifyIntent(userMessage);
-    const sentiment = detectSentiment(userMessage);  // item #17
-
-    // Temperatura baseada no estado da conversa
-    let leadTemperature: 'cold' | 'warm' | 'hot' = 'cold';
-    const hotStates  = ['QUALIFIED', 'SCHEDULED', 'MEETING_SCHEDULED', 'CLOSED_WON'];
-    const warmStates = ['QUALIFYING', 'INTERESTED', 'NEGOTIATING', 'WAITING_FOLLOWUP'];
-    if (hotStates.includes(state))  leadTemperature = 'hot';
-    else if (warmStates.includes(state)) leadTemperature = 'warm';
-
-    // Engagement score: cresce com o número de turnos (cap em 100)
-    const engagementScore = Math.min(100, turnCount * 5);
-
-    // Próxima ação sugerida com base no estado
-    const nextActionMap: Record<string, string> = {
-      NEW_LEAD:       'Iniciar qualificação',
-      QUALIFYING:     'Continuar qualificação',
-      QUALIFIED:      'Agendar reunião',
-      SCHEDULED:      'Confirmar reunião',
-      WAITING_HUMAN:  'Transferir para atendente',
-      DISQUALIFIED:   'Arquivar lead',
-      OPT_OUT:        'Sem ação (opt-out)',
-    };
-    const nextAction = nextActionMap[state] || 'Aguardar resposta do lead';
-
-    try {
-      await this.supabase
-        .from('conversation_context_summary')
-        .upsert({
-          lead_id:          leadId,
-          organization_id:  this.organizationId,
-          last_intent:      intent,
-          sentiment:        sentiment,   // item #17
-          lead_temperature: leadTemperature,
-          engagement_score: engagementScore,
-          message_count:    turnCount,
-          last_message_at:  new Date().toISOString(),
-          next_action:      nextAction,
-          updated_at:       new Date().toISOString(),
-        }, {
-          onConflict: 'lead_id',
-        });
-
-      console.log('[AgentEngine] Context summary updated:', { leadId, intent, sentiment, leadTemperature, turnCount });
-    } catch (e) {
-      console.warn('[AgentEngine] updateContextSummaryAfterTurn failed:', e);
-    }
-  }
+  // updateContextSummaryAfterTurn extraido para engine/persist-response.ts
 
   // checkOutOfHours extraído para engine/utils.ts
 }
