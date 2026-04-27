@@ -26,7 +26,7 @@ import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2, WifiOff, UserPlus } from "lucide-react";
 import { toast } from "sonner";
-import { useToggleLeadAI, useLeadAiStatus } from "@/hooks/useLeads";
+import { useCopilotToggle } from "@/hooks/useCopilotToggle";
 import { ChatShell } from "@/components/chat/layout/ChatShell";
 import { MobileChatLayout } from "@/components/chat/layout/MobileChatLayout";
 import { useChatViewport } from "@/hooks/chat/useChatViewport";
@@ -112,23 +112,16 @@ function ChatView({
   // Image preview state (C6)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
-  // AI toggle — H3 2026-04-26: usa hook canônico (RPC toggle_lead_ai com
-  // SECURITY DEFINER, sync de duplicatas, UPSERT em phone_ai_preferences,
-  // optimistic update com rollback). Antes fazia UPDATE direto em leads e
-  // RLS bloqueava silencioso pra membros não-SDR/closer.
-  const { data: aiStatus } = useLeadAiStatus(selectedContact?.lead_id ?? null);
-  const aiDisabled = aiStatus?.ai_disabled ?? false;
-
-  const toggleLeadAi = useToggleLeadAI();
+  // Onda 2 U4 (2026-04-26): hook unificado. Phone+leadId, query key única
+  // ["copilot-toggle", orgId, normalizedPhone], realtime via MainLayout.
+  const copilotToggle = useCopilotToggle({
+    phone: phoneNumber,
+    leadId: selectedContact?.lead_id ?? null,
+  });
+  const aiDisabled = copilotToggle.aiDisabled;
   const toggleAiMutation = {
-    mutate: (checked: boolean) => {
-      if (!selectedContact?.lead_id) return;
-      toggleLeadAi.mutate(
-        { leadId: selectedContact.lead_id, disabled: !checked },
-        { onError: () => toast.error("Falha ao alterar IA") },
-      );
-    },
-    isPending: toggleLeadAi.isPending,
+    mutate: (checked: boolean) => copilotToggle.toggle(!checked),
+    isPending: copilotToggle.isPending,
   };
 
   const handleRetry = useCallback(

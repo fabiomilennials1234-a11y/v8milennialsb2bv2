@@ -3,6 +3,7 @@ import { useLocation } from "react-router-dom";
 import { TopNavigation } from "./TopNavigation";
 import { OnboardingChecklist } from "@/components/onboarding/OnboardingChecklist";
 import { cn } from "@/lib/utils";
+import { useCopilotToggleRealtime } from "@/hooks/useCopilotToggleRealtime";
 
 // Rotas onde o checklist NÃO deve aparecer
 const CHECKLIST_HIDDEN_PATTERNS = [
@@ -27,6 +28,10 @@ interface MainLayoutProps {
 
 export function MainLayout({ children }: MainLayoutProps) {
   const location = useLocation();
+
+  // Onda 2 U3: subscription único em phone_ai_preferences pra sincronizar
+  // estado do switch copilot entre todas as telas + entre usuários da mesma org.
+  useCopilotToggleRealtime();
 
   const showChecklist = !CHECKLIST_HIDDEN_PATTERNS.some((pattern) =>
     pattern.test(location.pathname),

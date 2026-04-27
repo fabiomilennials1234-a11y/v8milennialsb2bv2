@@ -22,7 +22,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
-import { useToggleLeadAI, useToggleConversationAI, useLeadAiStatus, usePhoneAiStatus } from "@/hooks/useLeads";
+import { useCopilotToggle } from "@/hooks/useCopilotToggle";
 import {
   useWhatsAppContacts,
   useWhatsAppMessages,
@@ -490,18 +490,11 @@ function ChatWindow({
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [imageCaption, setImageCaption] = useState("");
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
-  const toggleAIMutation = useToggleLeadAI();
-  const toggleConversationAIMutation = useToggleConversationAI();
-
-  // Ler ai_disabled via RPC dedicado (bypass RLS) — fonte de verdade.
-  // Quando há lead: leadAiStatus é a verdade (inclui duplicatas syncadas).
-  // Quando não há lead: phoneAiStatus lê de phone_ai_preferences com fallback
-  // para leads legados — cobre o caso de toggle antes da 1ª mensagem do contato.
-  const { data: leadAiStatus } = useLeadAiStatus(leadId);
-  const { data: phoneAiStatus } = usePhoneAiStatus(leadId ? null : phoneNumber);
-  const currentAiDisabled = leadId
-    ? (leadAiStatus?.ai_disabled ?? false)
-    : (phoneAiStatus?.ai_disabled ?? false);
+  // Onda 2 U4 (2026-04-26): hook único — phone+leadId, query key unificada,
+  // realtime via MainLayout, optimistic, rota master automática.
+  const copilotToggle = useCopilotToggle({ phone: phoneNumber, leadId });
+  const currentAiDisabled = copilotToggle.aiDisabled;
+  const toggleAIPending = copilotToggle.isPending;
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -745,28 +738,13 @@ function ChatWindow({
         onBack={onBack}
         onOpenLeadModal={onOpenLeadModal}
         onToggleAi={(checked) => {
-          if (leadId) {
-            toggleAIMutation.mutate(
-              { leadId, disabled: !checked },
-              {
-                onSuccess: () => toast.success(checked ? "IA ativada" : "IA desativada"),
-                onError: (err: unknown) => {
-                  const msg = err instanceof Error ? err.message : "Erro desconhecido";
-                  toast.error(`Erro ao alterar Copilot: ${msg}`);
-                },
-              }
-            );
+          copilotToggle.toggle(!checked);
+          // Toast de sucesso é mostrado pelo realtime; erro vem via copilotToggle.error
+          if (copilotToggle.error) {
+            const msg = copilotToggle.error instanceof Error ? copilotToggle.error.message : "Erro desconhecido";
+            toast.error(`Erro ao alterar Copilot: ${msg}`);
           } else {
-            toggleConversationAIMutation.mutate(
-              { phone: phoneNumber, disabled: !checked },
-              {
-                onSuccess: () => toast.success(checked ? "IA ativada" : "IA desativada"),
-                onError: (err: unknown) => {
-                  const msg = err instanceof Error ? err.message : "Erro desconhecido";
-                  toast.error(`Erro ao alterar Copilot: ${msg}`);
-                },
-              }
-            );
+            toast.success(checked ? "IA ativada" : "IA desativada");
           }
         }}
         onTransferToSzChatTeam={(teamName, teamId) => {
@@ -784,7 +762,7 @@ function ChatWindow({
             }
           );
         }}
-        toggleAiPending={toggleAIMutation.isPending || toggleConversationAIMutation.isPending}
+        toggleAiPending={toggleAIPending}
         transferPending={transferToSzChat.isPending}
       />
 
