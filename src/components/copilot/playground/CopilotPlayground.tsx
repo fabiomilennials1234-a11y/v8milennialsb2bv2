@@ -359,7 +359,7 @@ export function CopilotPlayground() {
 
   // Save
   const handleSave = async () => {
-    // Validation
+    // Hard validations — block save
     if (!data.name.trim()) {
       toast.error("Nome obrigatorio", { description: "Informe um nome para o agente." });
       return;
@@ -369,13 +369,14 @@ export function CopilotPlayground() {
       toast.error("Prompt muito curto", { description: "Preencha pelo menos uma secao do prompt com instrucoes para o agente." });
       return;
     }
+
+    // Soft warning — incomplete behavior windows is OK (agent responds only during configured hours)
     if (!hasFullBehaviorCoverage(data.behaviorWindows)) {
-      toast.error("Cobertura 24/7 incompleta", {
-        description: "Configure as janelas de comportamento para cobrir todos os horarios da semana.",
+      toast.warning("Cobertura de horario incompleta", {
+        description: "O agente so respondera nos horarios configurados. Voce pode ajustar isso depois em Configuracoes de horario.",
+        duration: 5000,
       });
-      return;
     }
-    // firstMessageTemplate é opcional — se vazio, o copilot gera a mensagem via IA
 
     setIsSaving(true);
 
@@ -409,6 +410,8 @@ export function CopilotPlayground() {
             }
           }
         }
+
+        navigate("/copilot");
       } else {
         // Create new agent
         const payload = playgroundToAgentPayload(data);
@@ -434,9 +437,14 @@ export function CopilotPlayground() {
             }
           }
         }
-      }
 
-      navigate("/copilot");
+        // Guide user through next steps after creation
+        toast.success("Copilot criado com sucesso!", {
+          description: "Proximos passos: 1) Ative o agente na lista, 2) Configure os funis em Configurar, 3) Vincule ao seu WhatsApp em Configuracoes.",
+          duration: 10000,
+        });
+        navigate("/copilot");
+      }
     } catch (err: any) {
       // Error handled by mutation hooks
       console.error("Save error:", err);

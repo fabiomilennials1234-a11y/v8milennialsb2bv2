@@ -51,6 +51,15 @@ Deno.serve(withSentry('agent-message', async (req) => {
       );
     }
 
+    // Validate phone before processing — malformed phone causes silent RAG failures downstream
+    if (!from || typeof from !== 'string' || from.trim().length < 8) {
+      console.warn('[agent-message] Invalid or missing phone number:', { from, organization_id });
+      return new Response(
+        JSON.stringify({ error: "Invalid phone number in 'from' field", code: "INVALID_PHONE" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
     const { lead, organizationId } = await identifyTenant(supabase, from, channel, organization_id, push_name);
 
     if (!lead || !organizationId) {
@@ -122,16 +131,20 @@ Deno.serve(withSentry('agent-message', async (req) => {
       // Decisão CTO 2026-04-26: reply cancelada NÃO entra no histórico
       // (não pode poluir memória do agente em turnos futuros).
       // Engine.processMessage já persistiu via updateConversationState — desfazemos.
-      if (evalMeta?.conversationId && !evalMeta.conversationId.startsWith('temp_') && response.message) {
+      if (evalMeta?.conversationId && !evalMeta.conversationId.startsWith('temp_')) {
         try {
           const since = new Date(Date.now() - 60_000).toISOString();
-          const { error: delErr } = await supabase
+          // Delete by message ID if available (reliable); fallback: last assistant message in window
+          const deleteQuery = supabase
             .from('conversation_messages')
             .delete()
             .eq('conversation_id', evalMeta.conversationId)
             .eq('role', 'assistant')
-            .eq('content', response.message)
             .gte('created_at', since);
+          if (evalMeta.lastAssistantMessageId) {
+            deleteQuery.eq('id', evalMeta.lastAssistantMessageId);
+          }
+          const { error: delErr } = await deleteQuery;
           if (delErr) {
             console.warn('[agent-message] Failed to delete canceled assistant message:', delErr.message);
           }
