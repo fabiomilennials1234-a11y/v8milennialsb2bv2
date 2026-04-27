@@ -3,17 +3,16 @@
  * Other tests reuse the saved state to avoid logging in every time.
  */
 
-import { test as setup, expect } from '@playwright/test';
-import path from 'path';
+import { test as setup } from '@playwright/test';
 
-const authFile = path.join(__dirname, '../../.playwright-auth/user.json');
+const authFile = '.playwright-auth/user.json';
 
 setup('authenticate', async ({ page }) => {
-  await page.goto('/login');
+  await page.goto('/auth');
 
-  // Fill login form
-  await page.getByPlaceholder(/email/i).fill(process.env.E2E_USER_EMAIL || 'admin@test.com');
-  await page.getByPlaceholder(/senha|password/i).fill(process.env.E2E_USER_PASSWORD || 'Test123!@#');
+  // Fill login form (locators robustos: id em vez de placeholder pra senha que usa bullets)
+  await page.locator('input#email').fill(process.env.E2E_USER_EMAIL || 'admin@test.com');
+  await page.locator('input#password').fill(process.env.E2E_USER_PASSWORD || 'Test123!@#');
 
   // Submit
   await page.getByRole('button', { name: /entrar|login|sign in/i }).click();
