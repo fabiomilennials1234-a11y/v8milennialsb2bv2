@@ -5,6 +5,18 @@ import { unzipSync } from "https://esm.sh/fflate@0.8.2";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { generateEmbedding, generateEmbeddingsBatch, generateMultimodalEmbedding, chunkText, formatEmbeddingForPg } from "../_shared/embeddings.ts";
 import { logRuntime } from "../_shared/logger.ts";
+import { splitPdfIntoBatches, encodeBatchAsBase64 } from "./pdf-chunking.ts";
+
+// Threshold pra acionar chunking. PDFs >= esse tamanho viram batched
+// background processing (evita WORKER_RESOURCE_LIMIT em isolate Deno).
+const PDF_CHUNK_THRESHOLD_BYTES = 5 * 1024 * 1024; // 5MB
+
+// Limite duro absoluto. PDFs maiores que isso = erro imediato.
+const PDF_MAX_BYTES = 100 * 1024 * 1024; // 100MB
+
+// Configuração do chunking
+const PDF_PAGES_PER_BATCH = 3;
+const PDF_MAX_PAGES = 100;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -320,16 +332,61 @@ serve(withSentry('process-agent-document', async (req) => {
     // ---------- DOCUMENT PATH: text extraction + chunking ----------
 
     if (isPdf || isImage) {
-      // PDFs e imagens: enviar via multimodal OpenAI GPT-4o
-      // Limite: 100MB
-      if (fileBytes.length > 100 * 1024 * 1024) {
-        const errMsg = `Arquivo muito grande para processamento automatico (${(fileBytes.length / 1024 / 1024).toFixed(1)}MB). Limite: 100MB. Reduza o tamanho do PDF ou divida em partes menores.`;
+      // Limite duro absoluto
+      if (fileBytes.length > PDF_MAX_BYTES) {
+        const errMsg = `Arquivo muito grande (${(fileBytes.length / 1024 / 1024).toFixed(1)}MB). Limite: ${PDF_MAX_BYTES / 1024 / 1024}MB. Reduza o documento ou divida em partes menores.`;
         await supabase.from("copilot_agent_documents")
           .update({ status: "error", error_message: errMsg, updated_at: new Date().toISOString() })
           .eq("id", documentId);
         return new Response(JSON.stringify({ error: errMsg }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
+      // PDFs grandes vão pra background processing com chunking por páginas.
+      // Imagens e PDFs pequenos seguem fluxo síncrono single-shot.
+      if (isPdf && fileBytes.length >= PDF_CHUNK_THRESHOLD_BYTES) {
+        console.log(`[process-agent-document] PDF grande detectado (${(fileBytes.length / 1024 / 1024).toFixed(1)}MB). Background chunking.`);
+
+        // Schedule background processing — function retorna 202 imediato,
+        // worker continua processando até completar (status=ready ou error).
+        const bgPromise = processPdfInBackground({
+          supabase,
+          supabaseUrl,
+          supabaseServiceKey,
+          openaiApiKey: OPENAI_API_KEY,
+          geminiApiKey: GEMINI_API_KEY,
+          documentId,
+          doc,
+          fileBytes,
+        }).catch((bgErr) => {
+          console.error("[process-agent-document] Background processing failed:", bgErr);
+          return supabase
+            .from("copilot_agent_documents")
+            .update({
+              status: "error",
+              error_message: `Background processing failed: ${bgErr instanceof Error ? bgErr.message : String(bgErr)}`,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", documentId);
+        });
+
+        // EdgeRuntime.waitUntil mantém o promise vivo após o return
+        if (typeof (globalThis as any).EdgeRuntime?.waitUntil === "function") {
+          (globalThis as any).EdgeRuntime.waitUntil(bgPromise);
+        }
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            status: "processing",
+            mode: "background",
+            message: "PDF grande sera processado em background. Acompanhe via status do documento.",
+            sizeMB: Number((fileBytes.length / 1024 / 1024).toFixed(1)),
+          }),
+          { status: 202, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
+      // Fluxo síncrono single-shot (PDF pequeno OU imagem)
       const base64 = encodeBase64(fileBytes);
       const dataUri = isPdf ? "application/pdf" : mime;
 
@@ -471,6 +528,232 @@ serve(withSentry('process-agent-document', async (req) => {
     );
   }
 }));
+
+/**
+ * Background processing pra PDFs grandes (≥5MB).
+ *
+ * Fluxo:
+ *   1. Split PDF em batches de 3 páginas via pdf-lib
+ *   2. Cada batch vai pro multimodal LLM (sequencial pra economizar memória)
+ *   3. Texto extraído é concatenado
+ *   4. Continua fluxo normal: summary + status=ready + chunks + embeddings
+ *
+ * Erros em batches individuais são logados mas não interrompem o todo —
+ * resto do PDF continua. Erro fatal (split falha, summary falha) marca
+ * doc.status='error' com mensagem clara.
+ */
+async function processPdfInBackground(params: {
+  supabase: ReturnType<typeof createClient>;
+  supabaseUrl: string;
+  supabaseServiceKey: string;
+  openaiApiKey: string;
+  geminiApiKey: string;
+  documentId: string;
+  doc: any;
+  fileBytes: Uint8Array;
+}): Promise<void> {
+  const {
+    supabase,
+    supabaseUrl,
+    supabaseServiceKey,
+    openaiApiKey,
+    geminiApiKey,
+    documentId,
+    doc,
+    fileBytes,
+  } = params;
+
+  const startedAt = Date.now();
+
+  // 1. Split em batches
+  let batches: Awaited<ReturnType<typeof splitPdfIntoBatches>>["batches"];
+  let totalPages: number;
+  try {
+    const splitResult = await splitPdfIntoBatches(fileBytes, {
+      pagesPerBatch: PDF_PAGES_PER_BATCH,
+      maxPages: PDF_MAX_PAGES,
+    });
+    batches = splitResult.batches;
+    totalPages = splitResult.totalPages;
+    console.log(
+      `[process-agent-document] PDF split: ${totalPages} páginas em ${batches.length} batches`,
+    );
+  } catch (splitErr) {
+    const errMsg = `Falha ao dividir PDF: ${splitErr instanceof Error ? splitErr.message : String(splitErr)}`;
+    await supabase
+      .from("copilot_agent_documents")
+      .update({ status: "error", error_message: errMsg, updated_at: new Date().toISOString() })
+      .eq("id", documentId);
+    throw splitErr;
+  }
+
+  // 2. Extrair texto de cada batch sequencialmente
+  const textParts: string[] = [];
+  let batchErrors = 0;
+
+  for (let i = 0; i < batches.length; i++) {
+    const batch = batches[i];
+    const batchLabel = `págs ${batch.pageNumbers[0]}-${batch.pageNumbers[batch.pageNumbers.length - 1]}`;
+
+    try {
+      const base64 = encodeBatchAsBase64(batch);
+      const { text, error: extractError } = await extractViaMultimodal(
+        openaiApiKey,
+        base64,
+        "application/pdf",
+        true,
+        `${doc.file_name} (${batchLabel})`,
+      );
+
+      if (text && text.length > 10) {
+        textParts.push(`--- ${batchLabel} ---\n${text}`);
+        console.log(
+          `[process-agent-document] Batch ${i + 1}/${batches.length} OK: ${text.length} chars (${batchLabel})`,
+        );
+      } else {
+        batchErrors++;
+        console.warn(
+          `[process-agent-document] Batch ${i + 1}/${batches.length} falhou (${batchLabel}): ${extractError || "texto vazio"}`,
+        );
+      }
+    } catch (batchErr) {
+      batchErrors++;
+      console.warn(
+        `[process-agent-document] Batch ${i + 1}/${batches.length} exception (${batchLabel}):`,
+        batchErr,
+      );
+    }
+  }
+
+  const textContent = textParts.join("\n\n");
+
+  if (!textContent || textContent.trim().length < 10) {
+    const errMsg = `Extracao de texto falhou em todos os ${batches.length} batches (${batchErrors} erros). PDF pode estar protegido, vazio ou ilegivel.`;
+    await supabase
+      .from("copilot_agent_documents")
+      .update({ status: "error", error_message: errMsg, updated_at: new Date().toISOString() })
+      .eq("id", documentId);
+    throw new Error(errMsg);
+  }
+
+  // 3. Sanitizar
+  const contentToSave = textContent.substring(0, 500000).replace(/\x00/g, "");
+
+  // 4. Buscar contexto do agente
+  const { data: agent } = await supabase
+    .from("copilot_agents")
+    .select("name, template_type, business_context")
+    .eq("id", doc.agent_id)
+    .single();
+
+  const businessContext = (agent?.business_context || {}) as Record<string, string>;
+  const companyName = businessContext.companyName || "a empresa";
+
+  // 5. Gerar resumo via GPT-4o-mini
+  const summaryResponse = await fetch(OPENAI_API_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${openaiApiKey}`,
+    },
+    body: JSON.stringify({
+      model: SUMMARY_MODEL,
+      messages: [
+        {
+          role: "system",
+          content: `Voce e um especialista em sumarizacao de documentos corporativos. Gere um resumo CONCISO e UTIL focando em informacoes que um agente de vendas B2B precisa: produtos, servicos, precos, condicoes, diferenciais. Max 2000 caracteres. Use bullet points. Empresa: ${companyName}. Responda APENAS com o resumo.`,
+        },
+        { role: "user", content: `Resumo deste documento:\n\n${contentToSave.substring(0, 50000)}` },
+      ],
+      temperature: 0.3,
+      max_tokens: 2000,
+    }),
+  });
+
+  let summary = "";
+  if (summaryResponse.ok) {
+    const summaryResult = await summaryResponse.json();
+    summary = summaryResult.choices?.[0]?.message?.content || "";
+  }
+
+  if (!summary || summary.trim().length < 10) {
+    await supabase
+      .from("copilot_agent_documents")
+      .update({
+        status: "error",
+        error_message: "Summary generation failed (background)",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", documentId);
+    throw new Error("Summary generation failed");
+  }
+
+  // 6. Salvar resumo + status=ready
+  await supabase
+    .from("copilot_agent_documents")
+    .update({
+      summary: summary.trim(),
+      status: "ready",
+      error_message: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", documentId);
+
+  // 7. Salvar content via REST API direta
+  try {
+    const patchRes = await fetch(
+      `${supabaseUrl}/rest/v1/copilot_agent_documents?id=eq.${documentId}`,
+      {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: supabaseServiceKey,
+          Authorization: `Bearer ${supabaseServiceKey}`,
+          Prefer: "return=minimal",
+        },
+        body: JSON.stringify({ content: contentToSave }),
+      },
+    );
+    if (!patchRes.ok) console.warn("[process-agent-document] Content save failed:", patchRes.status);
+  } catch (e) {
+    console.warn("[process-agent-document] Content save error:", e);
+  }
+
+  // 8. RAG chunks + embeddings
+  await generateAndStoreChunkEmbeddings(
+    supabase,
+    geminiApiKey,
+    documentId,
+    doc.agent_id,
+    doc.organization_id,
+    contentToSave.substring(0, 100000),
+  ).catch((e) => console.warn("[process-agent-document] Chunks failed:", e));
+
+  const elapsedMs = Date.now() - startedAt;
+  console.log(
+    `[process-agent-document] Background DONE: ${totalPages} páginas, ${batches.length} batches, ${batchErrors} erros, ${elapsedMs}ms`,
+  );
+
+  await logRuntime({
+    organizationId: doc.organization_id,
+    module: "agent",
+    action: "process_document",
+    status: "success",
+    entityType: "document",
+    entityId: documentId,
+    payloadSnapshot: {
+      agentId: doc.agent_id,
+      fileName: doc.file_name,
+      mimeType: doc.mime_type,
+      mode: "background_chunked",
+      totalPages,
+      batches: batches.length,
+      batchErrors,
+      elapsedMs,
+      textChars: contentToSave.length,
+    },
+  });
+}
 
 async function generateAndStoreChunkEmbeddings(
   supabase: ReturnType<typeof createClient>,
