@@ -1,8 +1,0 @@
-sku,parent_sku,name,type,description,base_unit,ticket,ticket_minimo,entregaveis,materiais,links,logo_url,contrato_padrao_url,contrato_minimo_url,weight,grammage,dimensions,color,size,is_active
-MRR-0001,,Software CRM,mrr,Sistema de gestão de clientes,licença,200,100,Acesso ao sistema + suporte,Manual do usuário,https://exemplo.com;https://docs.exemplo.com,,,,,,,,,sim
-PRJ-0001,,Consultoria Empresarial,projeto,Pacote de consultoria personalizada,hora,,,Relatório final + plano de ação,,,,,,,,,,,sim
-PRJ-0001-01,PRJ-0001,Pacote Básico (10h),,,,5000,3000,,,,,,,,,,,,sim
-PRJ-0001-02,PRJ-0001,Pacote Premium (40h),,,,18000,12000,,,,,,,,,,,,sim
-UNI-0001,,Material Impresso,unitario,Material impresso personalizado,unidade,,,Impressão + acabamento,,,,,,,,,,,sim
-UNI-0001-01,UNI-0001,Flyer A5 - 150g,,,,2.5,1.5,,,,,,,0.01,150,21x14.8 cm,,A5,sim
-UNI-0001-02,UNI-0001,Flyer A4 - 300g,,,,5,3,,,,,,,0.02,300,29.7x21 cm,,A4,sim

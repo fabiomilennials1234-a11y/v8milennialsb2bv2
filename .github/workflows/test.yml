@@ -7,8 +7,8 @@ on:
     branches: [main]
 
 jobs:
-  unit-tests:
-    name: Unit Tests
+  quality:
+    name: Lint & Build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,9 +17,31 @@ jobs:
           node-version: '20'
           cache: 'npm'
       - run: npm ci
+      - run: npm run lint
+      - name: Build (prod)
+        run: npm run build
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          VITE_SUPABASE_PROJECT_ID: ${{ secrets.VITE_SUPABASE_PROJECT_ID }}
+          VITE_CALENDAR_SERVICE_URL: ${{ secrets.VITE_CALENDAR_SERVICE_URL }}
+          VITE_INVITE_API_URL: ${{ secrets.VITE_INVITE_API_URL }}
+          VITE_INTERNAL_API_KEY: ${{ secrets.VITE_INTERNAL_API_KEY }}
+          VITE_META_APP_ID: ${{ secrets.VITE_META_APP_ID }}
+
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    needs: [quality]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
       - run: npm run test:unit
-      # Coverage is the regression gate — thresholds in vitest.config.ts
-      # must keep passing. If a PR drops coverage below baseline, it fails.
+      # Coverage thresholds in vitest.config.ts are the regression gate.
       - run: npm run test:coverage
       - name: Upload coverage artifact
         if: always()
@@ -32,6 +54,7 @@ jobs:
   integration-tests:
     name: Integration Tests
     runs-on: ubuntu-latest
+    needs: [quality]
     steps:
       - uses: actions/checkout@v4
       - uses: supabase/setup-cli@v1
@@ -51,6 +74,7 @@ jobs:
   e2e-tests:
     name: E2E Tests
     runs-on: ubuntu-latest
+    needs: [quality]
     steps:
       - uses: actions/checkout@v4
       - uses: supabase/setup-cli@v1
@@ -64,6 +88,10 @@ jobs:
       - run: npm ci
       - run: npx playwright install chromium --with-deps
       - run: npm run build
+        env:
+          VITE_SUPABASE_URL: http://localhost:54321
+          VITE_SUPABASE_PUBLISHABLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
+          VITE_SUPABASE_PROJECT_ID: local
       - run: npx playwright test
         env:
           SUPABASE_URL: http://localhost:54321
@@ -72,6 +100,7 @@ jobs:
   edge-function-tests:
     name: Edge Function Tests (Deno)
     runs-on: ubuntu-latest
+    needs: [quality]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
