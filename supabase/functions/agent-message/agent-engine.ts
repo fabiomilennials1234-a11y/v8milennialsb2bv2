@@ -45,6 +45,12 @@ import {
 } from "./engine/utils.ts";
 import { buildDynamicPrompt as buildDynamicPromptExternal } from "./engine/build-prompt.ts";
 import { buildDynamicTools as buildDynamicToolsExternal } from "./engine/build-tools.ts";
+import {
+  processLLMResponse as processLLMResponseExternal,
+  enqueueToolAction as enqueueToolActionExternal,
+  enqueueAutomationActions as enqueueAutomationActionsExternal,
+  enqueuePipelineStageUpdate as enqueuePipelineStageUpdateExternal,
+} from "./engine/decide-action.ts";
 
 // Interface para contexto resumido da conversa
 interface ConversationContextSummary {
@@ -300,9 +306,8 @@ export class AgentEngine {
       if (!choice?.message?.content) telemetry.content_null_turns += 1;
       if (finishReason === 'length') telemetry.truncated = true;
 
-      const { nextState: ns, actionToExecute: action, assistantMessage: msg, extraToolCalls } = await this.processLLMResponse(
-        response, conversation, capabilities
-      );
+      const { nextState: ns, actionToExecute: action, assistantMessage: msg, extraToolCalls } =
+        processLLMResponseExternal(response, conversation, this.organizationId);
       if (action?.action) telemetry.tools_called.push(action.action);
       // Multi-tool responses: log + metric. Today only the first is executed;
       // the others are dropped. This warn surfaces the case in runtime_logs.
@@ -487,7 +492,14 @@ export class AgentEngine {
           });
           executionResult = { success: true, queued: true, immediate: true };
         } else {
-          executionResult = await this.enqueueToolAction(currentAction, conversation.id, conversation.turn_count);
+          executionResult = await enqueueToolActionExternal({
+            supabase: this.supabase,
+            organizationId: this.organizationId,
+            currentLeadId: this.currentLeadId,
+            action: currentAction,
+            conversationId: conversation.id,
+            turnCount: conversation.turn_count,
+          });
         }
       } catch (enqueueError) {
         console.warn('[AgentEngine] Action enqueue failed (non-fatal):', enqueueError);
@@ -507,11 +519,23 @@ export class AgentEngine {
 
     // 11. Enqueue Pipeline Stage Update (Funil WhatsApp)
     console.log('[AgentEngine] Step 12: Enqueuing pipeline stage update...');
-    await this.enqueuePipelineStageUpdate(leadId, conversation.turn_count, actionToExecute);
+    await enqueuePipelineStageUpdateExternal(
+      this.supabase,
+      this.organizationId,
+      leadId,
+      conversation.turn_count,
+      actionToExecute,
+    );
 
     // 12. Enqueue Automation Actions (if configured)
     console.log('[AgentEngine] Step 13: Enqueuing automation actions...');
-    await this.enqueueAutomationActions(leadId, nextState, capabilities);
+    await enqueueAutomationActionsExternal(
+      this.supabase,
+      this.organizationId,
+      leadId,
+      nextState,
+      capabilities,
+    );
 
     console.log('[AgentEngine] Message processing complete', { parts: messageParts.length });
 
@@ -571,122 +595,11 @@ export class AgentEngine {
     };
   }
 
-  /**
-   * Enfileira ações automáticas baseadas no estado da conversa.
-   * A execução real acontece no worker process-ai-actions.
-   */
-  private async enqueueAutomationActions(
-    leadId: string,
-    currentState: string,
-    capabilities: any,
-  ) {
-    try {
-      const automationActions = capabilities.automation_actions;
-      if (!automationActions) {
-        console.log('[AgentEngine] No automation actions configured');
-        return;
-      }
-
-      let actionConfig = null;
-      let actionType: string | null = null;
-
-      const qualifiedStates = ['QUALIFIED', 'SCHEDULED', 'MEETING_SCHEDULED', 'CLOSED_WON'];
-      const disqualifiedStates = ['DISQUALIFIED', 'NOT_INTERESTED', 'NO_FIT', 'CLOSED_LOST'];
-      const needHumanStates = ['NEED_HUMAN', 'ESCALATED', 'COMPLEX_ISSUE', 'WAITING_HUMAN'];
-
-      if (qualifiedStates.includes(currentState)) {
-        actionConfig = automationActions.onQualify;
-        actionType = 'qualify';
-      } else if (disqualifiedStates.includes(currentState)) {
-        actionConfig = automationActions.onDisqualify;
-        actionType = 'disqualify';
-      } else if (needHumanStates.includes(currentState)) {
-        actionConfig = automationActions.onNeedHuman;
-        actionType = 'need_human';
-      }
-
-      if (!actionConfig || !actionType) {
-        console.log('[AgentEngine] No automation action matches current state:', currentState);
-        return;
-      }
-
-      const automationActionType = `automation_${actionType}` as string;
-      const idempotencyKey = `auto_${actionType}_${leadId}_${currentState}`;
-
-      console.log('[AgentEngine] Enqueuing automation action:', automationActionType);
-      await enqueueAiAction(this.supabase, {
-        organizationId: this.organizationId,
-        leadId,
-        actionType: automationActionType,
-        payload: {
-          action_type: actionType,
-          action_config: actionConfig,
-          current_state: currentState,
-        },
-        idempotencyKey,
-      });
-
-    } catch (error) {
-      console.error('[AgentEngine] Error enqueuing automation actions:', error);
-    }
-  }
-
-  /**
-   * Enfileira atualização de estágio do pipeline WhatsApp.
-   * Calcula a transição (novo→abordado, abordado→respondeu, etc.)
-   * e enfileira para o worker executar.
-   */
-  private async enqueuePipelineStageUpdate(
-    leadId: string,
-    turnCount: number,
-    actionToExecute: any
-  ) {
-    try {
-      // advance_stage será enfileirado como tool call — não duplicar
-      if (actionToExecute?.action === 'ADVANCE_STAGE') {
-        return;
-      }
-
-      const { data: lead, error: fetchError } = await this.supabase
-        .from('leads')
-        .select('pipe_whatsapp')
-        .eq('id', leadId)
-        .single();
-
-      if (fetchError) {
-        console.warn('[AgentEngine] Could not fetch lead for pipeline update:', fetchError.message);
-        return;
-      }
-
-      const currentStage = lead?.pipe_whatsapp;
-      let newStage: string | null = null;
-
-      const standardWhatsappStages = ['novo', 'abordado', 'respondeu', 'esfriou', 'agendado'];
-      const isStandardStage = standardWhatsappStages.includes(currentStage || '');
-
-      if (actionToExecute?.action === 'SCHEDULE_MEETING') {
-        newStage = 'agendado';
-      } else if (isStandardStage) {
-        if (turnCount <= 1 && currentStage === 'novo') {
-          newStage = 'abordado';
-        } else if (currentStage === 'abordado') {
-          newStage = 'respondeu';
-        }
-      }
-
-      if (newStage && newStage !== currentStage) {
-        console.log('[AgentEngine] Enqueuing pipeline stage update:', { leadId, from: currentStage, to: newStage });
-        await enqueueAiAction(this.supabase, {
-          organizationId: this.organizationId,
-          leadId,
-          actionType: 'update_pipeline_stage',
-          payload: { lead_id: leadId, new_stage: newStage, previous_stage: currentStage },
-          idempotencyKey: `pipeline_${leadId}_${newStage}`,
-        });
-      }
-    } catch (e) {
-      console.warn('[AgentEngine] Failed to enqueue pipeline stage update:', e);
-    }
+  // enqueueAutomationActions + enqueuePipelineStageUpdate extraidos para engine/decide-action.ts.
+  // processLLMResponse + enqueueToolAction idem. AgentEngine delega via *External.
+  // Wrapper publico mantido para retrocompat com tests/unit/agent-engine-fallback.test.ts.
+  async processLLMResponse(response: any, conversation: any, _capabilities?: any) {
+    return processLLMResponseExternal(response, conversation, this.organizationId);
   }
 
   /**
@@ -1303,164 +1216,7 @@ Regras:
     }
   }
 
-  /**
-   * Process LLM Response (OpenRouter/OpenAI format).
-   *
-   * Returns the FIRST actionable tool_call for inline handling (search_knowledge
-   * is processed specially by the outer loop). Any additional tool_calls are
-   * surfaced via `extraToolCalls` so the caller can enfileirá-las em paralelo
-   * em vez de descartá-las silenciosamente (era um bug: CR-3).
-   *
-   * Logs `finish_reason` and presence of text content for diagnostics.
-   */
-  private async processLLMResponse(response: any, conversation: any, capabilities: any) {
-    let assistantMessage = '';
-    let actionToExecute: { action: string; params: Record<string, unknown>; tenant_id: string } | null = null;
-    const extraToolCalls: Array<{ action: string; params: Record<string, unknown>; tenant_id: string }> = [];
-    let nextState = conversation.state;
-
-    const choice = response.choices?.[0];
-    if (!choice) {
-      throw new Error('No response from LLM');
-    }
-
-    const message = choice.message;
-    const finishReason = choice.finish_reason ?? 'unknown';
-
-    console.log('[AgentEngine] LLM response:', {
-      finish_reason: finishReason,
-      has_content: !!message?.content,
-      tool_calls_count: message?.tool_calls?.length ?? 0,
-    });
-
-    // Extrair resposta de texto
-    if (message.content) {
-      assistantMessage = message.content;
-    }
-
-    // Processar tool calls (múltiplos tratados corretamente).
-    // Estratégia: coletar tudo que tem JSON válido. Primeiro válido vira
-    // actionToExecute; os demais vão para extraToolCalls. Entradas com JSON
-    // corrompido são silenciosamente puladas (com log error) — nunca são
-    // enfileiradas com params vazios/meios-porcos, o que causaria side-effects
-    // imprevisíveis (ex: advance_stage sem stage name).
-    if (message.tool_calls && message.tool_calls.length > 0) {
-      const parsed: Array<{ toolName: string; entry: typeof actionToExecute }> = [];
-      for (const toolCall of message.tool_calls) {
-        const toolName = toolCall.function.name;
-        let toolParams: Record<string, unknown> | null = null;
-        try {
-          toolParams = JSON.parse(toolCall.function.arguments);
-        } catch (e) {
-          console.error('[AgentEngine] Error parsing tool arguments:', e, 'raw:', toolCall.function.arguments);
-          continue;
-        }
-        parsed.push({
-          toolName,
-          entry: {
-            action: this.mapToolToAction(toolName),
-            params: toolParams ?? {},
-            tenant_id: this.organizationId,
-          },
-        });
-      }
-      if (parsed.length > 0) {
-        actionToExecute = parsed[0].entry;
-        nextState = this.determineNextState(conversation.state, parsed[0].toolName);
-        for (let i = 1; i < parsed.length; i++) {
-          if (parsed[i].entry) extraToolCalls.push(parsed[i].entry!);
-        }
-      }
-    }
-
-    return { nextState, actionToExecute, assistantMessage, extraToolCalls, finishReason };
-  }
-
-  /**
-   * Map tool name to n8n action
-   */
-  /** T3B.8: delegado pra _shared/copilot/dispatcher.ts (pure function) */
-  private mapToolToAction(toolName: string): string {
-    return mapToolToActionExternal(toolName);
-  }
-
-  /**
-   * Determine next state based on action
-   */
-  /** T3B.5: delegado pra _shared/copilot/state-machine.ts (pure function) */
-  private determineNextState(currentState: string, toolName: string): string {
-    return determineNextStateExternal(currentState, toolName);
-  }
-
-  /**
-   * Enfileira uma tool call para execução assíncrona via worker.
-   * Mapeia o nome da action (UPPER_CASE) para action_type (snake_case)
-   * e gera idempotency_key baseado nos parâmetros.
-   */
-  private async enqueueToolAction(action: any, conversationId: string, turnCount?: number) {
-    const params = action.params || {};
-
-    // Mapeamento de ação para action_type na fila
-    const ACTION_MAP: Record<string, string> = {
-      'SCHEDULE_MEETING': 'schedule_meeting',
-      'CREATE_LEAD': 'create_lead',
-      'UPDATE_CRM': 'update_crm',
-      'UPDATE_LEAD': 'update_lead',
-      'TRANSFER_HUMAN': 'transfer_to_human',
-      'UPDATE_QUALIFICATION_SCORE': 'update_qualification_score',
-      'ADVANCE_STAGE': 'advance_stage',
-      'CONFIRM_MEETING': 'confirm_meeting',
-      'ADVANCE_CONFIRMATION_STAGE': 'advance_confirmation_stage',
-      'CREATE_CUSTOM_FIELD': 'create_custom_field',
-      'TRANSFER_SZ_CHAT': 'transfer_sz_chat',
-      'SEND_DOCUMENT': 'send_document',
-      'SEND_PRODUCT_MATERIAL': 'send_product_material',
-    };
-
-    const actionType = ACTION_MAP[action.action];
-
-    // SEARCH_KNOWLEDGE: handled inline via multi-turn, never enqueued
-    if (action.action === 'SEARCH_KNOWLEDGE') {
-      return { success: true, queued: false, message: 'Handled inline' };
-    }
-
-    // QUALIFY/DISQUALIFY: processados via state machine + enqueueAutomationActions
-    if (action.action === 'QUALIFY_LEAD' || action.action === 'DISQUALIFY_LEAD') {
-      console.log(`[AgentEngine] ${action.action} - será processada via state machine em enqueueAutomationActions`);
-      return { success: true, queued: false, message: `${action.action} delegada para automação` };
-    }
-
-    // UPDATE_CRM: placeholder, não enfileira
-    if (action.action === 'UPDATE_CRM') {
-      return { success: true, message: 'UPDATE_CRM - integração externa (placeholder)' };
-    }
-
-    if (!actionType) {
-      console.warn('[AgentEngine] Action não suportada para enqueue:', action.action);
-      return { success: false, error: `Ação não suportada: ${action.action}` };
-    }
-
-    // Injetar current_lead_id para create_custom_field
-    if (action.action === 'CREATE_CUSTOM_FIELD' && this.currentLeadId) {
-      params.current_lead_id = this.currentLeadId;
-    }
-
-    // Gerar idempotency_key (Onda 1 / T1.3.2: turn-based quando disponível)
-    const leadId = params.lead_id || this.currentLeadId;
-    const idempotencyKey = this.buildIdempotencyKey(actionType, leadId, params, turnCount);
-
-    const result = await enqueueAiAction(this.supabase, {
-      organizationId: this.organizationId,
-      leadId: leadId || undefined,
-      conversationId: conversationId.startsWith('temp_') ? undefined : conversationId,
-      actionType,
-      payload: params,
-      idempotencyKey,
-    });
-
-    console.log(`[AgentEngine] Action ${action.action} enqueued:`, result);
-    return { success: true, queued: result.queued, action_id: result.id };
-  }
+  // processLLMResponse + enqueueToolAction extraidos para engine/decide-action.ts
 
   /**
    * Gera chave de idempotência baseada no tipo de ação e parâmetros.
