@@ -338,6 +338,7 @@ export const LeadCard = memo(function LeadCard({
     <motion.div
       whileHover={{ scale: 1.01, y: -1 }}
       transition={{ type: "spring", stiffness: 400, damping: 30 }}
+      data-lead-id={lead.id}
       className={cn(
         "kanban-card group cursor-pointer relative",
         lead.isInactive && "opacity-60"

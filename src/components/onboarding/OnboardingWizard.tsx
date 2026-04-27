@@ -12,17 +12,45 @@ import { StepPerfilOperacao } from "./steps/StepPerfilOperacao";
 import { StepEstruturaComercial } from "./steps/StepEstruturaComercial";
 import { StepProcessoVendas } from "./steps/StepProcessoVendas";
 import { StepConfiguracaoInicial } from "./steps/StepConfiguracaoInicial";
-import { StepAtivacao } from "./steps/StepAtivacao";
+import { StepEquipe } from "./steps/StepEquipe";
+import { StepWhatsApp } from "./steps/StepWhatsApp";
+import { StepPrimeiroLead } from "./steps/StepPrimeiroLead";
 import { StepRevisao } from "./steps/StepRevisao";
 import { cn } from "@/lib/utils";
-import { ChevronLeft, Building2, Users, GitBranch, Settings, Rocket, CheckCircle } from "lucide-react";
+import { ChevronLeft, Building2, Users, GitBranch, Settings, MessageSquare, UserPlus, CheckCircle } from "lucide-react";
 import torqueLogo from "@/assets/torque-logo.png";
 import torqueLogoDark from "@/assets/torque-logo-dark.png";
 import { useTheme } from "next-themes";
 
-const STEP_KEYS = ["perfil", "estrutura", "processo", "configuracao", "ativacao", "revisao"] as const;
-const STEP_LABELS = ["Perfil", "Estrutura", "Processo", "Configuração", "Ativação", "Revisão"];
-const STEP_ICONS = [Building2, Users, GitBranch, Settings, Rocket, CheckCircle];
+// Steps 0-3: profile quiz + pipeline config (keep existing flow)
+// Steps 4-6: activation (team, whatsapp, lead) — new in-wizard actions
+// Step 7: celebration
+const STEP_KEYS = [
+  "perfil",
+  "estrutura",
+  "processo",
+  "configuracao",
+  "equipe",
+  "whatsapp",
+  "lead",
+  "pronto",
+] as const;
+
+const STEP_LABELS = [
+  "Perfil",
+  "Estrutura",
+  "Processo",
+  "Configuração",
+  "Equipe",
+  "WhatsApp",
+  "Lead",
+  "Pronto",
+];
+
+const STEP_ICONS = [Building2, Users, GitBranch, Settings, Users, MessageSquare, UserPlus, CheckCircle];
+
+// Steps that need the quiz nav buttons (prev/next)
+const QUIZ_STEPS = new Set([0, 1, 2]);
 
 export function OnboardingWizard() {
   const navigate = useNavigate();
@@ -73,7 +101,7 @@ export function OnboardingWizard() {
     setIsApplying(true);
     try {
       for (const pipe of pipelines) {
-        const slug = pipe.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+        const slug = pipe.name.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
         const { data: created, error: pipeErr } = await supabase
           .from("custom_pipelines")
           .insert({ organization_id: organizationId, name: pipe.name, slug, icon: pipe.icon, color: pipe.color, position: 0, is_active: true })
@@ -84,7 +112,7 @@ export function OnboardingWizard() {
           organization_id: organizationId,
           pipeline_id: created.id,
           name: s.name,
-          stage_key: s.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-"),
+          stage_key: s.name.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-"),
           color: s.color,
           position: i,
           is_active: true,
@@ -93,13 +121,11 @@ export function OnboardingWizard() {
         }));
         await supabase.from("custom_pipeline_stages").insert(stageRows);
       }
-      // Apply pipeline display config from quiz answers (names + visibility)
       const pipelineConfig = generatePipelineDisplayConfig(localAnswers);
       await applyPipelineDisplayConfig(supabase, organizationId, pipelineConfig);
-
       await markApplied();
-      toast.success("Sistema configurado com sucesso!");
-      setCurrentStep(4);
+      toast.success("Pipelines configurados!");
+      setCurrentStep(4); // advance to Equipe
     } catch (err) {
       console.error("Apply config error:", err);
       toast.error("Erro ao aplicar configuração. Tente novamente.");
@@ -113,7 +139,6 @@ export function OnboardingWizard() {
     if (organizationId) {
       track({ event: "onboarding_step_completed", organizationId, metadata: { step: "completed" } });
     }
-    toast.success("Tudo pronto! Bem-vindo ao Torque.", { duration: 4000 });
     navigate("/", { replace: true });
   };
 
@@ -124,8 +149,11 @@ export function OnboardingWizard() {
 
   const suggestions = useMemo(() => generateSuggestions(localAnswers), [localAnswers]);
 
+  const progressPercent = Math.round(((currentStep) / (STEP_KEYS.length - 1)) * 100);
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
+      {/* Header */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-border/30">
         <img src={isDark ? torqueLogo : torqueLogoDark} alt="Torque" className="h-6 object-contain" />
         <button onClick={handleSkip} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
@@ -133,45 +161,90 @@ export function OnboardingWizard() {
         </button>
       </div>
 
-      <div className="px-6 py-4">
-        <div className="flex items-center gap-1 max-w-xl mx-auto">
-          {STEP_KEYS.map((_, i) => {
-            const StepIcon = STEP_ICONS[i];
-            const isActive = i === currentStep;
-            const isDone = i < currentStep;
-            return (
-              <div key={i} className="flex items-center flex-1 min-w-0">
-                <div className={cn(
-                  "flex items-center gap-1.5 text-[11px] font-medium whitespace-nowrap transition-all duration-300",
-                  isActive ? "text-foreground" : isDone ? "text-primary" : "text-muted-foreground/50"
-                )}>
-                  <StepIcon className={cn("w-3.5 h-3.5 flex-shrink-0", isDone && "text-primary")} />
-                  <span className="hidden sm:inline">{STEP_LABELS[i]}</span>
+      {/* Progress */}
+      <div className="px-6 pt-4 pb-2">
+        <div className="max-w-xl mx-auto space-y-2">
+          {/* Step label row */}
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-foreground">
+              {STEP_LABELS[currentStep]}
+            </span>
+            <span className="text-xs text-muted-foreground">
+              {currentStep + 1} / {STEP_KEYS.length}
+            </span>
+          </div>
+
+          {/* Progress bar */}
+          <div className="h-1.5 w-full rounded-full bg-border/50 overflow-hidden">
+            <div
+              className="h-full rounded-full bg-primary transition-all duration-500 ease-out"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+
+          {/* Step dots */}
+          <div className="flex items-center gap-1 pt-1">
+            {STEP_KEYS.map((_, i) => {
+              const StepIcon = STEP_ICONS[i];
+              const isActive = i === currentStep;
+              const isDone = i < currentStep;
+              return (
+                <div key={i} className="flex items-center flex-1 min-w-0">
+                  <div
+                    className={cn(
+                      "flex-shrink-0 transition-all duration-300",
+                      isActive
+                        ? "w-6 h-6 rounded-full bg-primary flex items-center justify-center"
+                        : isDone
+                        ? "w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center"
+                        : "w-4 h-4 rounded-full bg-border/50"
+                    )}
+                  >
+                    {(isActive || isDone) && (
+                      <StepIcon
+                        className={cn(
+                          isActive ? "w-3 h-3 text-primary-foreground" : "w-2.5 h-2.5 text-primary"
+                        )}
+                      />
+                    )}
+                  </div>
+                  {i < STEP_KEYS.length - 1 && (
+                    <div
+                      className={cn(
+                        "h-px flex-1 mx-1 rounded-full transition-all duration-500",
+                        isDone ? "bg-primary" : "bg-border/40"
+                      )}
+                    />
+                  )}
                 </div>
-                {i < STEP_KEYS.length - 1 && (
-                  <div className={cn(
-                    "h-px flex-1 mx-2 rounded-full transition-all duration-300",
-                    isDone ? "bg-primary" : "bg-border/50"
-                  )} />
-                )}
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       </div>
 
+      {/* Step content */}
       <div className="flex-1 overflow-y-auto px-6 py-4">
         <div className="max-w-lg mx-auto">
           {currentStep === 0 && <StepPerfilOperacao answers={stepAnswers} onChange={updateStepAnswer} />}
           {currentStep === 1 && <StepEstruturaComercial answers={stepAnswers} onChange={updateStepAnswer} />}
           {currentStep === 2 && <StepProcessoVendas answers={stepAnswers} onChange={updateStepAnswer} />}
-          {currentStep === 3 && <StepConfiguracaoInicial answers={localAnswers} onApply={handleApplyConfig} isApplying={isApplying} />}
-          {currentStep === 4 && <StepAtivacao priorities={suggestions.checklistPriorities} onDefer={() => setCurrentStep(5)} />}
-          {currentStep === 5 && <StepRevisao suggestions={suggestions} onFinish={handleFinish} />}
+          {currentStep === 3 && (
+            <StepConfiguracaoInicial
+              answers={localAnswers}
+              onApply={handleApplyConfig}
+              isApplying={isApplying}
+            />
+          )}
+          {currentStep === 4 && <StepEquipe onNext={() => setCurrentStep(5)} />}
+          {currentStep === 5 && <StepWhatsApp onNext={() => setCurrentStep(6)} />}
+          {currentStep === 6 && <StepPrimeiroLead onNext={() => setCurrentStep(7)} />}
+          {currentStep === 7 && <StepRevisao suggestions={suggestions} onFinish={handleFinish} />}
         </div>
       </div>
 
-      {currentStep < 3 && (
+      {/* Bottom nav — only for quiz steps (0-2) */}
+      {QUIZ_STEPS.has(currentStep) && (
         <div className="px-6 py-4 border-t border-border/30">
           <div className="max-w-lg mx-auto flex items-center justify-between">
             <button

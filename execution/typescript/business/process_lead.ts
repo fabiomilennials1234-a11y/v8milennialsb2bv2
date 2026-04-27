@@ -93,7 +93,7 @@ async function main() {
     const normalizedName = normalizeName(input.name);
 
     // Verificar duplicatas
-    let existingLead: any = null;
+    let existingLead: Record<string, unknown> | null = null;
     let deduplicationMethod: string | null = null;
 
     // 1. Buscar por email
@@ -137,7 +137,7 @@ async function main() {
 
     if (existingLead) {
       // Unificar com lead existente
-      const updatedData: Record<string, any> = {};
+      const updatedData: Record<string, unknown> = {};
       
       if (input.phone && !existingLead.phone) updatedData.phone = input.phone;
       if (input.company && !existingLead.company) updatedData.company = input.company;

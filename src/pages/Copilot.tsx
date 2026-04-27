@@ -22,6 +22,7 @@ import {
   Settings,
   GitBranch,
   BarChart3,
+  AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -72,6 +73,7 @@ export default function Copilot() {
   const [agentToDelete, setAgentToDelete] = useState<string | null>(null);
   const [selectedAgent, setSelectedAgent] = useState<CopilotAgentWithRelations | null>(null);
   const [configModalOpen, setConfigModalOpen] = useState(false);
+  const [pendingActivation, setPendingActivation] = useState<{ id: string; name: string } | null>(null);
   const { checkLimit } = useOrgFeatures();
   const { getQuota } = useOrgQuotas();
   const copilotQuota = getQuota("max_copilot_agents");
@@ -104,6 +106,17 @@ export default function Copilot() {
     if (agentToDelete) {
       await deleteAgent.mutateAsync(agentToDelete);
       setAgentToDelete(null);
+    }
+  };
+
+  const handleToggleAgent = (agent: CopilotAgentWithRelations, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const activating = !agent.is_active;
+    const hasNoPipes = !((agent.active_pipes as string[]) || []).length;
+    if (activating && hasNoPipes) {
+      setPendingActivation({ id: agent.id, name: agent.name });
+    } else {
+      toggleAgent.mutate({ id: agent.id, isActive: activating });
     }
   };
 
@@ -273,8 +286,9 @@ export default function Copilot() {
                           </Badge>
                         ))
                       ) : (
-                        <span className="text-xs text-muted-foreground">
-                          Nenhum configurado
+                        <span className="text-xs text-amber-500 flex items-center gap-1">
+                          <AlertTriangle className="w-3 h-3" />
+                          Nenhum funil — configure antes de ativar
                         </span>
                       )}
                     </div>
@@ -297,13 +311,7 @@ export default function Copilot() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleAgent.mutate({
-                            id: agent.id,
-                            isActive: !agent.is_active,
-                          });
-                        }}
+                        onClick={(e) => handleToggleAgent(agent, e)}
                         disabled={toggleAgent.isPending}
                       >
                         <Power className="w-4 h-4 mr-2" />
@@ -393,6 +401,44 @@ export default function Copilot() {
               className="bg-destructive hover:bg-destructive/90"
             >
               Deletar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Activation without pipes — confirmation dialog */}
+      <AlertDialog
+        open={!!pendingActivation}
+        onOpenChange={() => setPendingActivation(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-amber-500" />
+              Agente sem funis configurados
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <span className="block">
+                O agente <strong>{pendingActivation?.name}</strong> ainda não tem funis configurados. Ativado assim, ele pode responder a todos os leads da organização sem roteamento.
+              </span>
+              <span className="block">
+                Recomendado: clique em <strong>Configurar</strong> e defina em quais funis o agente deve atuar antes de ativar.
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setPendingActivation(null)}>
+              Cancelar — vou configurar primeiro
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (pendingActivation) {
+                  toggleAgent.mutate({ id: pendingActivation.id, isActive: true });
+                  setPendingActivation(null);
+                }
+              }}
+            >
+              Ativar mesmo assim
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -70,3 +70,9 @@ supabase/functions/coverage.lcov
 # Storybook build output
 dist-storybook/
 storybook-static/
+
+# Python virtual environments (services/)
+services/**/venv/
+services/**/.venv/
+**/__pycache__/
+*.pyc
