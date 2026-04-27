@@ -172,8 +172,69 @@ Ver detalhes em [[Chat WhatsApp#Toggle de IA (ai_disabled)]] e [[ADR-2026-04-22-
 - **`organization_id` obrigatório** no body de `agent-message`. Modo legado de lookup cross-tenant por telefone foi removido (retorna 400).
 - **Uazapi → Copilot bridge**: `whatsapp-webhook` dispara `agent-message` fire-and-forget em cada incoming com texto. Parity com `sz-chat-webhook` e `evolution-webhook`.
 
+## Reasoning Chain (RC v1 — 2026-04-26)
+
+Agentes respondem em formato `<thinking>...</thinking><response>...</response>`. O `<thinking>` é capturado em `runtime_logs.reasoning` e correlacionado em `agent_decision_logs.reasoning_chain` — nunca chega ao lead.
+
+### Configuração por agente
+
+`copilot_agents.reasoning_mode`:
+- `'always'` (default) — toda resposta tem reasoning.
+- `'actions_only'` — só quando o turno usa tool (schedule_meeting, qualify_lead, transfer_to_human, advance_stage, send_product_material, etc).
+- `'off'` — desliga; bloco não vai pro prompt.
+
+### Fluxo
+
+1. `buildDynamicPrompt` injeta seção `# FORMATO DE RESPOSTA OBRIGATÓRIO` quando `reasoning_mode != 'off'`.
+2. LLM responde com `<thinking>...</thinking><response>...</response>`.
+3. `sanitizeAssistantMessage` (passo 0) chama `extractReasoningChain` — extrai reasoning, devolve só conteúdo de `<response>`. Defensive: se `<thinking>` abriu sem fechar, descarta tudo após (anti-vazamento).
+4. `processMessage` dispara `logRuntime({module:'copilot', action:'reasoning'})` fire-and-forget.
+5. `logDecision` recebe `opts.reasoningChain` → grava em `agent_decision_logs.reasoning_chain`.
+
+### UI
+
+Página `/master/copilot-reasoning` (Master Admin, permission `audit`) — filtros de org, agente, conversation, janela. Tabela com expand inline pro raciocínio completo.
+
+### Custo estimado
+
+- Tokens/turn: +30-50%.
+- Latência: +1-3s.
+- Mitigação: feature flag por agente; rollback hard via `UPDATE copilot_agents SET reasoning_mode='off'`.
+
+### Invariantes
+
+- Conteúdo de `<thinking>` **nunca** aparece em `conversation_messages.content`. Defensive strip + final cleanup garantem.
+- `runtime_logs.reasoning` é NULL quando `reasoning_mode='off'` ou agente não emitiu o bloco — não bloqueia turno.
+
+## Cancel-on-Disable (RC-cancel — 2026-04-26)
+
+Quando user clica no switch pra desativar o copilot mid-conversa, qualquer mensagem em-flight é cancelada. Cobre 3 janelas de delay:
+
+1. **Pré-LLM** (batch wait sz-chat-webhook): re-check pós-batch (existia).
+2. **Durante LLM** (5-30s): `agent-message` checa pós-LLM. Se desativado, delete assistant message recém-persistida + retorna `skipped: true`.
+3. **Per-chunk** (smartSplit + setTimeout): senders checam antes de cada chunk. Cancela loop.
+
+Helper: `_shared/copilot/cancellation.ts` — `isCopilotCanceled(supabase, orgId, phone)` lê `phone_ai_preferences.ai_disabled` (fonte de verdade) com fallback `leads.ai_disabled`.
+
+Senders patcheados:
+- `sendSzChatResponse` (sz-chat-webhook)
+- `outbound-sender.sendText` (BDR)
+- `followup-sender` (followups)
+- `agent-message/index.ts` pós-LLM
+
+Logs: `runtime_logs WHERE module='copilot' AND action='copilot_canceled'` com payload `{ gate, chunks_sent, chunks_total, source }`.
+
+Decisões CTO:
+- Reply cancelada NÃO entra no histórico (delete da `conversation_messages`).
+- Cancela tudo no meio (chunk N+1 não envia mesmo se chunk N saiu).
+- Liga universal (sem feature flag).
+
+NÃO coberto: `whatsapp-webhook` Uazapi reply (rota não mapeada), `send_document/send_product_material` (sem delay relevante).
+
 ## Historico de mudancas
 
+- **2026-04-26**: Cancel-on-Disable (RC-cancel) — cancela copilot mid-flight em todas as janelas de delay. Ver `07 — Changelog/2026-04-26.md` (seção RC-cancel).
+- **2026-04-26**: Reasoning Chain v1 — chain-of-thought visível pra debug, configurável por agente, default `'always'`. Ver `07 — Changelog/2026-04-26.md` (seção RC).
 - **2026-04-23**: Fallback elimination + Uazapi→Copilot bridge + tenant isolation + telemetria. Ver [[ADR-2026-04-23-copilot-fallback-elimination]].
 - **2026-04-22**: Fonte única do ai_disabled migrada para `phone_ai_preferences`. Gap temporal de envio mapeado como débito.
 - **2026-04-13**: Documentacao atualizada — wizard deprecated, Playground e o fluxo principal. Dead code mapeado.
