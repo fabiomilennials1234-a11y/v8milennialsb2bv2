@@ -16,11 +16,9 @@ import {
   loadConversationContextSummary as loadConversationContextSummaryExternal,
   getDefaultContext as getDefaultContextExternal,
   type ConversationContextSummary as ConversationContextSummaryExternal,
-} from "../_shared/copilot/context-loader.ts";
-import {
   retrieveSemanticContext as retrieveSemanticContextExternal,
   retrieveLongTermMemories as retrieveLongTermMemoriesExternal,
-} from "../_shared/copilot/rag.ts";
+} from "./engine/load-context.ts";
 import {
   determineNextState as determineNextStateExternal,
   updateConversationState as updateConversationStateExternal,
