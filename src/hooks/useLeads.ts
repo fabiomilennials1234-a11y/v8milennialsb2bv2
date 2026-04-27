@@ -6,6 +6,7 @@ import { useOrganization } from "./useOrganization";
 import { track } from "@/lib/analytics";
 import { useCanPerformActionAsync } from "@/lib/permissions";
 import { normalizePhone } from "@/lib/normalizePhone";
+import { useMasterAuth } from "./useMasterAuth";
 
 export type Lead = Tables<"leads">;
 export type LeadInsert = TablesInsert<"leads">;
@@ -530,25 +531,29 @@ export function useLeadAiStatus(leadId: string | undefined) {
 /**
  * Toggle AI disabled status for a lead
  * When disabled, the Copilot agent will not respond to messages from this lead
+ *
+ * H4 2026-04-26: rota Master Admin (cross-org) → master_set_copilot_disabled.
+ * Member normal → toggle_lead_ai (valida membership na org do lead, H1 fix).
  */
 export function useToggleLeadAI() {
   const queryClient = useQueryClient();
   const { organizationId } = useOrganization();
-  
+  const { isMaster } = useMasterAuth();
+
   return useMutation({
     mutationFn: async ({ leadId, disabled }: { leadId: string; disabled: boolean }) => {
-      if (!organizationId) {
+      if (!organizationId && !isMaster) {
         throw new Error("Cannot update lead: No organization context");
       }
 
-      // Use RPC to bypass leads RLS — any team member can toggle copilot
-      const { data, error } = await supabase.rpc("toggle_lead_ai", {
+      const rpcName = isMaster ? "master_set_copilot_disabled" : "toggle_lead_ai";
+      const { data, error } = await supabase.rpc(rpcName, {
         p_lead_id: leadId,
         p_disabled: disabled,
       });
 
       if (error) {
-        console.error("[toggleLeadAI] RPC error:", error.message, error.code, error.details);
+        console.error(`[toggleLeadAI] ${rpcName} RPC error:`, error.message, error.code, error.details);
         throw new Error(error.message || "Erro desconhecido ao alterar IA");
       }
 

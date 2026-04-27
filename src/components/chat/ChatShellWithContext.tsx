@@ -26,6 +26,7 @@ import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2, WifiOff, UserPlus } from "lucide-react";
 import { toast } from "sonner";
+import { useToggleLeadAI, useLeadAiStatus } from "@/hooks/useLeads";
 import { ChatShell } from "@/components/chat/layout/ChatShell";
 import { MobileChatLayout } from "@/components/chat/layout/MobileChatLayout";
 import { useChatViewport } from "@/hooks/chat/useChatViewport";
@@ -111,38 +112,24 @@ function ChatView({
   // Image preview state (C6)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
-  // AI toggle — lê estado atual do lead, grava via update direto
-  const { data: aiStatus } = useQuery({
-    queryKey: ["lead-ai-status", selectedContact?.lead_id],
-    queryFn: async () => {
-      if (!selectedContact?.lead_id) return null;
-      const { data } = await supabase
-        .from("leads")
-        .select("ai_disabled")
-        .eq("id", selectedContact.lead_id)
-        .single();
-      return data;
-    },
-    enabled: !!selectedContact?.lead_id,
-  });
-
+  // AI toggle — H3 2026-04-26: usa hook canônico (RPC toggle_lead_ai com
+  // SECURITY DEFINER, sync de duplicatas, UPSERT em phone_ai_preferences,
+  // optimistic update com rollback). Antes fazia UPDATE direto em leads e
+  // RLS bloqueava silencioso pra membros não-SDR/closer.
+  const { data: aiStatus } = useLeadAiStatus(selectedContact?.lead_id ?? null);
   const aiDisabled = aiStatus?.ai_disabled ?? false;
 
-  const qc = useQueryClient();
-  const toggleAiMutation = useMutation({
-    mutationFn: async (checked: boolean) => {
+  const toggleLeadAi = useToggleLeadAI();
+  const toggleAiMutation = {
+    mutate: (checked: boolean) => {
       if (!selectedContact?.lead_id) return;
-      const { error } = await supabase
-        .from("leads")
-        .update({ ai_disabled: !checked })
-        .eq("id", selectedContact.lead_id);
-      if (error) throw error;
+      toggleLeadAi.mutate(
+        { leadId: selectedContact.lead_id, disabled: !checked },
+        { onError: () => toast.error("Falha ao alterar IA") },
+      );
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["lead-ai-status", selectedContact?.lead_id] });
-    },
-    onError: () => toast.error("Falha ao alterar IA"),
-  });
+    isPending: toggleLeadAi.isPending,
+  };
 
   const handleRetry = useCallback(
     (msg: FailedMessage) => {
