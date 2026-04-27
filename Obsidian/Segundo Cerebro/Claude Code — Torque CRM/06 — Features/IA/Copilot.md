@@ -276,3 +276,64 @@ Bugs reportados pelo time ("switch não desliga", "responde mesmo desligado", "s
 - [[SZ Chat]]
 - [[Follow-ups]]
 - [[Workflow Builder]]
+
+---
+
+## Time-Aware Behavior (2026-04-26)
+
+Capa nova sobre `availability`. Agente sabe que horas é, dia da semana, e segue instrução textual diferente por janela de horário.
+
+### Schema
+- `copilot_agents.behavior_windows` JSONB `[]`
+- `copilot_agents.behavior_enforcement` text `'hard'|'soft'` (CHECK)
+
+### Janela
+```
+{ id, name, days[], start: HH:MM, end: HH:MM, behavior: text }
+```
+Até 6 janelas por agente. First-match wins. Wrap midnight suportado (end ≤ start).
+
+### Enforcement
+- **Hard** (default): janela com behavior vazio devolve canned `out_of_hours_message` — não chama LLM
+- **Soft**: sempre chama LLM com contexto temporal injetado — nunca bloqueia
+
+### Resolver
+`supabase/functions/_shared/copilot/time-context.ts` — `resolveActiveWindow(agent, now)` retorna `{ window, formatted, hasBehavior } | null`. Timezone-aware via `Intl.DateTimeFormat` (do agente em `availability.timezone`).
+
+### Prompt
+Bloco `# DISPONIBILIDADE` legacy substituído por `# CONTEXTO TEMPORAL` em `agent-engine.ts:1339`. Conteúdo:
+```
+- Agora: domingo, 27/04/2026 23:14 (America/Sao_Paulo)
+- Janela ativa: "Madrugada"
+- Comportamento esperado: tom casual, sinaliza retorno amanhã 9h
+```
+
+### Audit
+`runtime_logs.payloadSnapshot.time_context` registra `{window_id, window_name, has_behavior, enforcement}` por mensagem.
+
+### UI
+`wizard-steps/AvailabilityStep.tsx` refatorada:
+- Toggle global hard/soft (cards explicativos)
+- Lista até 6 janelas (nome + dias chips + start/end + behavior textarea)
+- Timeline 7×24 com cores por janela, gaps em vermelho
+- Validação 24/7 obrigatória — save bloqueado com gaps + lista detalhada
+- Preview "Agora seria janela X com behavior Y"
+
+### Retrocompat
+- Agente legacy (sem `behavior_windows`) → resolver retorna null → bloco DISPONIBILIDADE clássico mantido
+- Agente backfilled (janela "Padrão" 7d/24h vazia) + `enforcement='hard'` → comportamento idêntico anterior
+- 26 agentes prod backfilled automaticamente na migration
+
+### Status (sessão 2026-04-26)
+- F1 migration + backfill ✅ deploy prod
+- F2 backend (resolver + prompt + checkOutOfHours) ✅
+- F3 UI ✅
+- F4 hooks/types ✅
+- F5 semantic via prompt ✅ (F5b adiado: programmatic blocking de tools)
+- F6 audit ✅
+
+### Pendente
+- F5b: blocking de `schedule_meeting` (slot fora comercial), mensagem variável em `transfer_to_human`. Precisa mudar assinatura tool handlers.
+- Smoke E2E manual: criar janela "Madrugada" em agente real, conversar 23h, verificar resposta segue behavior + log time_context
+
+Ver: [[ADR-2026-04-26-copilot-time-aware-behavior]]

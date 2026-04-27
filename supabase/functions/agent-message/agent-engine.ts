@@ -32,6 +32,7 @@ import {
   addMessageToMemory as addMessageToMemoryExternal,
 } from "../_shared/copilot/dispatcher.ts";
 import { executeSearchKnowledge as executeSearchKnowledgeExternal } from "../_shared/copilot/search-knowledge.ts";
+import { resolveActiveWindow } from "../_shared/copilot/time-context.ts";
 
 /** Parse custom_instructions (JSON ou string legada) para { dos, donts } */
 function parseCustomInstructions(raw: string): { dos: string; donts: string } {
@@ -171,6 +172,10 @@ export class AgentEngine {
     // (LLM pode receber prompt cortado se exceder context window — sem alarme).
     const promptChars = systemPrompt.length;
     const estimatedTokens = Math.ceil(promptChars / 4);
+    const timeCtxAudit = resolveActiveWindow({
+      behavior_windows: capabilities.behavior_windows,
+      availability: capabilities.availability as { timezone?: string } | null,
+    });
     logRuntime({
       organizationId: this.organizationId,
       module: 'copilot',
@@ -183,6 +188,14 @@ export class AgentEngine {
         prompt_chars: promptChars,
         estimated_tokens: estimatedTokens,
         turn_count: conversation.turn_count,
+        time_context: timeCtxAudit
+          ? {
+              window_id: timeCtxAudit.window.id,
+              window_name: timeCtxAudit.window.name,
+              has_behavior: timeCtxAudit.hasBehavior,
+              enforcement: (capabilities.behavior_enforcement as string) || 'hard',
+            }
+          : { fallback: 'legacy_availability', enforcement: (capabilities.behavior_enforcement as string) || 'hard' },
       },
     }).catch(() => {/* non-fatal */});
 
@@ -1336,7 +1349,22 @@ Regras:
         sections.push("");
       }
 
-      if (availability.mode) {
+      // Time-Aware Behavior — janela ativa + comportamento contextual.
+      // Fallback legacy: se behavior_windows vazio, mantém bloco DISPONIBILIDADE clássico.
+      const timeContext = resolveActiveWindow(
+        { behavior_windows: capabilities.behavior_windows, availability: availability as { timezone?: string } },
+      );
+      if (timeContext) {
+        sections.push("# CONTEXTO TEMPORAL");
+        sections.push("");
+        sections.push("IMPORTANTE: Adapte sua resposta ao momento atual e ao comportamento configurado para esta janela.");
+        sections.push("");
+        sections.push(timeContext.formatted);
+        if (responseDelaySeconds && responseDelaySeconds > 0) {
+          sections.push(`- Tempo médio de resposta: ~${responseDelaySeconds}s`);
+        }
+        sections.push("");
+      } else if (availability.mode) {
         sections.push("# DISPONIBILIDADE");
         sections.push("");
         if (availability.mode === "always") {
@@ -2810,9 +2838,20 @@ Regras:
   /**
    * Verifica se o momento atual está dentro do horário de atendimento configurado.
    * Retorna mensagem de fora de horário (string) ou null (dentro do horário).
+   *
+   * Hierarquia (Time-Aware Behavior):
+   *   1. behavior_enforcement = 'soft' → null sempre (LLM responde, contexto já injetado no prompt)
+   *   2. behavior_windows definido + janela ativa com behavior preenchido → null (LLM contextual)
+   *   3. behavior_windows definido + janela ativa com behavior vazio + hard → canned legacy
+   *   4. behavior_windows definido + nenhuma janela ativa + hard → canned legacy
+   *   5. Sem behavior_windows (legacy) → comportamento original via availability JSONB
    */
   private checkOutOfHours(capabilities: any): string | null {
     try {
+      const enforcement = (capabilities.behavior_enforcement as string) || 'hard';
+      if (enforcement === 'soft') return null;
+
+      const windows = Array.isArray(capabilities.behavior_windows) ? capabilities.behavior_windows : [];
       const avail = capabilities.availability as {
         mode?: string;
         timezone?: string;
@@ -2822,7 +2861,15 @@ Regras:
         out_of_hours_message?: string;
       } | null;
 
-      // Se modo for "always" ou não configurado, sem restrição de horário
+      if (windows.length > 0) {
+        const ctx = resolveActiveWindow({ behavior_windows: windows, availability: avail });
+        if (ctx && ctx.hasBehavior) return null; // janela com instrução → LLM responde com contexto
+        // Sem janela ativa OU janela sem behavior → cai pra canned se houver
+        return avail?.out_of_hours_message ||
+          'Olá! No momento estamos fora do horário de atendimento. Retornaremos em breve.';
+      }
+
+      // Legacy fallback (agentes pré-Time-Aware): mantém comportamento original.
       if (!avail || avail.mode !== 'scheduled') return null;
 
       const tz = avail.timezone || 'America/Sao_Paulo';

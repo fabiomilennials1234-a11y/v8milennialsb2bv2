@@ -12,6 +12,7 @@ import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { evaluateCondition } from "./workflow-condition-evaluator.ts";
 import { executeWorkflowAction, type ActionResult } from "./workflow-action-handler.ts";
 import { getNextSendTime } from "./followupSchedule.ts";
+import { resolveActiveWindow, computeNextWindowStart as computeNextWindowStartLocal } from "./copilot/time-context.ts";
 import { logRuntime } from "./logger.ts";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -534,20 +535,113 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
         }
 
         case "wait_business_window": {
-          // ── Wait until inside business window, then pass through ──
+          // ── Onda 5: Time-Aware com windows[] + actions (pass | hold_until | route) ──
+          // Legacy fallback se windows[] vazio: comportamento antigo single-window hold.
           const wbw = node.data as {
             days?: string[];
             startTime?: string;
             endTime?: string;
             timezone?: string;
+            windows?: Array<{ id: string; name: string; days: string[]; start: string; end: string; action: string }>;
+            mode?: "hold" | "route" | "hybrid";
           };
+          const wbwTz = wbw.timezone || "America/Sao_Paulo";
+          const wbwWindows = Array.isArray(wbw.windows) ? wbw.windows : [];
+          const wbwNow = new Date();
 
+          if (wbwWindows.length > 0) {
+            // Novo: resolver shared
+            const ctx = resolveActiveWindow(
+              { behavior_windows: wbwWindows as any, availability: { timezone: wbwTz } },
+              wbwNow,
+            );
+
+            if (!ctx) {
+              // Nenhuma janela ativa agora → fallback hold até abrir primeira janela com action=pass
+              const passWindow = wbwWindows.find((w) => w.action === "pass");
+              const fallbackTarget = passWindow?.name ?? wbwWindows[0]?.name;
+              if (!fallbackTarget) {
+                await recordStep(supabase, executionId, node, "failed",
+                  { windows: wbwWindows },
+                  { reason: "no_window_to_resume" },
+                );
+                return { success: false, status: "failed", error: "wait_business_window: nenhuma janela configurada", stepsExecuted };
+              }
+              const nextStart = computeNextWindowStartLocal(wbwWindows, fallbackTarget, wbwTz, wbwNow);
+              const nextRunAt = (nextStart ?? new Date(wbwNow.getTime() + 60 * 60_000)).toISOString();
+              await recordStep(supabase, executionId, node, "success",
+                { windows: wbwWindows, mode: wbw.mode ?? "hold" },
+                { insideWindow: false, fallback: "hold_until_next_pass", nextRunAt, evaluatedAt: new Date().toISOString() },
+              );
+              await supabase.from("workflow_executions").update({
+                status: "running",
+                current_node_id: nodeId,
+                next_run_at: nextRunAt,
+                loop_counters: loopCounters,
+              }).eq("id", executionId);
+              return { success: true, status: "paused", stepsExecuted };
+            }
+
+            const action = String((ctx.window as any).action ?? "pass");
+
+            if (action === "pass") {
+              await recordStep(supabase, executionId, node, "success",
+                { windows: wbwWindows, mode: wbw.mode ?? "hold" },
+                { insideWindow: true, activeWindow: ctx.window.name, action, evaluatedAt: new Date().toISOString() },
+              );
+              nextNodes.push(...getNextNodes(nodeId, edgeMap));
+            } else if (action.startsWith("hold_until:")) {
+              const targetName = action.split(":")[1];
+              const nextStart = computeNextWindowStartLocal(wbwWindows, targetName, wbwTz, wbwNow);
+              if (!nextStart) {
+                await recordStep(supabase, executionId, node, "failed",
+                  { windows: wbwWindows, action },
+                  { reason: `hold_until target "${targetName}" not found` },
+                );
+                return { success: false, status: "failed", error: `wait_business_window: janela "${targetName}" não encontrada`, stepsExecuted };
+              }
+              await recordStep(supabase, executionId, node, "success",
+                { windows: wbwWindows, mode: wbw.mode ?? "hold" },
+                { insideWindow: true, activeWindow: ctx.window.name, action, holdUntil: nextStart.toISOString(), evaluatedAt: new Date().toISOString() },
+              );
+              await supabase.from("workflow_executions").update({
+                status: "running",
+                current_node_id: nodeId,
+                next_run_at: nextStart.toISOString(),
+                loop_counters: loopCounters,
+              }).eq("id", executionId);
+              return { success: true, status: "paused", stepsExecuted };
+            } else if (action.startsWith("route:")) {
+              const branchKey = action.split(":")[1];
+              const outEdges = edgeMap.get(nodeId) || [];
+              const branchTargets = outEdges.filter((e) => (e.sourceHandle ?? "") === branchKey).map((e) => e.target);
+              if (branchTargets.length === 0) {
+                await recordStep(supabase, executionId, node, "failed",
+                  { windows: wbwWindows, action },
+                  { reason: `route branch "${branchKey}" sem edge correspondente` },
+                );
+                return { success: false, status: "failed", error: `wait_business_window: edge "${branchKey}" não encontrada`, stepsExecuted };
+              }
+              await recordStep(supabase, executionId, node, "success",
+                { windows: wbwWindows, mode: wbw.mode ?? "route" },
+                { insideWindow: true, activeWindow: ctx.window.name, action, routedTo: branchTargets, evaluatedAt: new Date().toISOString() },
+              );
+              nextNodes.push(...branchTargets);
+            } else {
+              await recordStep(supabase, executionId, node, "failed",
+                { windows: wbwWindows, action },
+                { reason: `action desconhecida: ${action}` },
+              );
+              return { success: false, status: "failed", error: `wait_business_window: action "${action}" inválida`, stepsExecuted };
+            }
+            break;
+          }
+
+          // ── Legacy single-window hold (retrocompat) ──
           const wbwDays = wbw.days || ["seg", "ter", "qua", "qui", "sex"];
           const wbwStart = wbw.startTime || "08:00";
           const wbwEnd = wbw.endTime || "18:00";
-          const wbwTz = wbw.timezone || "America/Sao_Paulo";
 
-          const wbwNow = new Date();
           const wbwNextSend = getNextSendTime(
             {
               sendOnlyBusinessHours: true,
@@ -574,7 +668,6 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
               { insideWindow: false, nextRunAt: wbwNextRunAt, evaluatedAt: new Date().toISOString() },
             );
 
-            // Pause: set current_node_id to self for re-evaluation on resume
             await supabase.from("workflow_executions").update({
               status: "running",
               current_node_id: nodeId,

@@ -192,3 +192,9 @@ verify_jwt = false
 # mass-send-control: pause/resume/stop (JWT admin/master)
 [functions.mass-send-control]
 verify_jwt = false
+
+
+
+
+
+

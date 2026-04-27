@@ -9,6 +9,7 @@ import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { sanitizeString } from "./validation.ts";
 import { promoveShadowLead } from "./lead-service.ts";
 import { getValidAccessToken, logCalendarOp } from "./google-calendar-utils.ts";
+import { buildDateInTimezone, loadAgentTimeContext, resolveActiveWindow } from "./copilot/time-context.ts";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -203,7 +204,7 @@ export async function executeAiAction(
 
   switch (action_type) {
     case "schedule_meeting":
-      result = await executeScheduleMeeting(supabase, payload, organization_id);
+      result = await executeScheduleMeeting(supabase, payload, organization_id, conversation_id);
       break;
     case "create_lead":
       result = await executeCreateLead(supabase, payload, organization_id);
@@ -214,7 +215,7 @@ export async function executeAiAction(
       result = await executeUpdateLead(supabase, payload, organization_id);
       break;
     case "transfer_to_human":
-      result = await executeTransferHuman(supabase, payload);
+      result = await executeTransferHuman(supabase, payload, conversation_id);
       break;
     case "transfer_to_human_notify":
       result = await executeTransferHumanNotify(supabase, payload, organization_id, lead_id);
@@ -328,6 +329,7 @@ async function executeScheduleMeeting(
   supabase: SupabaseClient,
   params: Record<string, unknown>,
   tenantId: string,
+  conversationId: string | null,
 ): Promise<ActionResult> {
   const lead_id = params.lead_id as string;
   const preferred_date = params.preferred_date as string;
@@ -335,6 +337,28 @@ async function executeScheduleMeeting(
 
   if (!lead_id || !preferred_date) {
     return { success: false, error: "lead_id e preferred_date são obrigatórios" };
+  }
+
+  // F5b: Time-Aware validation — bloqueia slot fora de janela com behavior preenchido.
+  // Janela com behavior vazio = "off-hours window" (canned/sem instrução), não permite agendar.
+  // Apenas se agente tiver behavior_windows configurado (≥1 janela com behavior); caso contrário, pass-through.
+  if (conversationId) {
+    const ctx = await loadAgentTimeContext(supabase, conversationId);
+    const windows = ctx?.behavior_windows ?? [];
+    const anyWithBehavior = windows.some((w) => (w.behavior || "").trim().length > 0);
+    if (anyWithBehavior) {
+      const tz = ctx?.availability?.timezone || "America/Sao_Paulo";
+      const targetDate = buildDateInTimezone(preferred_date, preferred_time || "09:00", tz);
+      if (targetDate) {
+        const slotCtx = resolveActiveWindow({ behavior_windows: windows, availability: ctx?.availability ?? null }, targetDate);
+        if (!slotCtx || !slotCtx.hasBehavior) {
+          return {
+            success: false,
+            error: `Horário ${preferred_date} ${preferred_time || "09:00"} cai fora de janela comercial configurada do agente. Escolha um horário dentro de uma janela ativa.`,
+          };
+        }
+      }
+    }
   }
 
   // 1. Atualizar lead e pipe_confirmacao
@@ -588,6 +612,7 @@ async function executeUpdateQualificationScore(
 async function executeTransferHuman(
   supabase: SupabaseClient,
   params: Record<string, unknown>,
+  conversationId: string | null,
 ): Promise<ActionResult> {
   const lead_id = params.lead_id as string;
   if (!lead_id) return { success: false, error: "lead_id é obrigatório" };
@@ -607,7 +632,22 @@ async function executeTransferHuman(
     await supabase.from("conversations").update({ state: "WAITING_HUMAN" }).eq("id", conversation.id);
   }
 
-  return { success: true, message: "Conversa transferida para humano" };
+  // F5b: Time-Aware — mensagem variável por janela ativa do agente.
+  let message = "Conversa transferida para humano";
+  if (conversationId) {
+    const ctx = await loadAgentTimeContext(supabase, conversationId);
+    const windows = ctx?.behavior_windows ?? [];
+    if (windows.length > 0) {
+      const active = resolveActiveWindow({ behavior_windows: windows, availability: ctx?.availability ?? null });
+      if (active && active.hasBehavior) {
+        message = `Transferindo agora — janela ativa: "${active.window.name}"`;
+      } else {
+        message = "Transferido para humano. Time fora do horário comercial agora — retorno em horário comercial.";
+      }
+    }
+  }
+
+  return { success: true, message };
 }
 
 /**

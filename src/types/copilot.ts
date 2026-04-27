@@ -162,6 +162,15 @@ export interface CopilotWizardData {
     start: string;
     end: string;
   };
+  behaviorWindows: Array<{
+    id: string;
+    name: string;
+    days: Array<"mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun">;
+    start: string;
+    end: string;
+    behavior: string;
+  }>;
+  behaviorEnforcement: "hard" | "soft";
   responseDelaySeconds: number;
 
   // Step 13: Main Objective & Kanban Rules

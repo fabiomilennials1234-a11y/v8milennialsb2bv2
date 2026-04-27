@@ -418,3 +418,21 @@ Sessão única massiva. Tudo em prod (jsjsmuncfkbsbzqzqhfq) sem incidente.
 - Dark-first design, editorial typography, cinematic UI sensibility
 - Portuguese (BR) for user-facing content and business logic comments
 - English for technical documentation and code
+
+### D035: Time-Aware Behavior em Copilot e Workflow (2026-04-26 / 2026-04-27)
+
+Schema `copilot_agents.behavior_windows` (JSONB) + `behavior_enforcement` (hard|soft) + workflow `wait_business_window.windows[]` com ações `pass | hold_until:X | route:X`. Resolver `_shared/copilot/time-context.ts` shared entre dois sistemas (62 unit + 10 E2E).
+
+Migrations: `20260920000000_copilot_behavior_windows`, `20260921000000_workflow_wait_business_window_v2`. Backfill: 26 agentes Copilot + 2 workflows com janelas legacy preservadas (comportamento idêntico anterior).
+
+Edge functions redeployadas: `agent-message`, `process-ai-actions`, `process-workflow-executions`. Frontend: `AvailabilityStep.tsx` (timeline 7×24 + validação 24/7 obrigatória), `WaitBusinessWindowPanel.tsx` (até 6 janelas + dropdown action), `WaitBusinessWindowNode.tsx` (handles dinâmicos amber/emerald).
+
+Coverage: 62 unit + 10 E2E em prod. Ver [[ADR-2026-04-26-copilot-time-aware-behavior]] e [[ADR-2026-04-27-workflow-time-aware-window]].
+
+### L004: Migrations via Studio anti-pattern resurgiu (2026-04-26)
+
+Ao deploy Onda 4 Copilot, descobri 13 migrations órfãs em prod (Onda 1+2+3 deploys via Studio com timestamps sintéticos). Sincronizadas via `migration repair --status applied/reverted`. Lição: workflow gating no Supabase dashboard pra desabilitar SQL Editor de produção pra todos exceto admin Milennials.
+
+### L005: Shared infra requer testes pesados no primeiro consumidor (2026-04-27)
+
+`time-context.ts` virou shared entre Copilot e Workflow. Reuso só foi seguro porque primeiro consumidor (Copilot) tinha 32 unit + 5 E2E ANTES de virar shared. Regra: nunca extrair pra shared sem cobertura forte do consumidor inicial. Bug TZ no resolver afetaria simultaneamente 26 agentes IA + cron 1min batch de N workflows.

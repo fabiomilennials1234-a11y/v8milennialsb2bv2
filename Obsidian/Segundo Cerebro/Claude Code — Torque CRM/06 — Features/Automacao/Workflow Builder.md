@@ -119,3 +119,62 @@ Evento trigger (lead_created, stage_changed, cron, etc.)
 - [[Regras de Pipe]]
 - [[Copilot]]
 - [[Follow-ups]]
+
+---
+
+## wait_business_window — Time-Aware (Onda 5, 2026-04-27)
+
+Node ganhou capacidade de múltiplas janelas customizáveis com 3 ações distintas. Reusa resolver `time-context.ts` shared com Copilot.
+
+### Schema do node
+```ts
+WaitBusinessWindowNodeData = {
+  // Legacy (retrocompat fallback)
+  days?, startTime?, endTime?, timezone?
+  // Novo
+  windows?: Array<{
+    id, name, days[], start: HH:MM, end: HH:MM,
+    action: "pass" | `hold_until:${name}` | `route:${branchKey}`
+  }>;
+  mode?: "hold" | "route" | "hybrid";
+}
+```
+
+### 3 ações por janela
+- **pass**: continua pela edge default
+- **hold_until:X**: pausa execução, `next_run_at = computeNextWindowStart(X)`, re-evaluação no cron
+- **route:X**: sai pelas edges com `sourceHandle === X` (saídas múltiplas no node)
+
+### Resolução
+First-match wins. Se nenhuma janela ativa → fallback hold até primeira janela com action=pass abrir. Wrap midnight suportado (end ≤ start). Timezone-aware via `Intl.DateTimeFormat`.
+
+### Frontend
+- `WaitBusinessWindowNode.tsx` renderiza handles dinâmicos: amber por janela route + emerald default
+- `WaitBusinessWindowPanel.tsx` (sidebar): até 6 janelas, dropdown action por janela, modo global hold/route/hybrid
+- Designer arrasta edges entre handles nomeados — sourceHandle persiste como branchKey
+
+### Backfill
+Migration `20260921000000_workflow_wait_business_window_v2` migrou workflows existentes:
+- Janela "Comercial" derivada de days/startTime/endTime
+- action=pass + mode=hold
+- Mapeamento PT→EN (seg→mon, etc)
+
+2 workflows Milennials backfilled em prod. Retrocompat 100%.
+
+### Cron auto-resume
+`process-workflow-executions` cron 1min lê `workflow_executions WHERE status='running' AND next_run_at <= NOW()`. Hold_until apenas seta `next_run_at` no instante de abertura da janela alvo — herda mecanismo legacy.
+
+### Reuso vs Copilot
+| Componente | Compartilhado? |
+|------------|----------------|
+| `resolveActiveWindow` | ✅ |
+| `windowMatches` | ✅ |
+| `getDayKey/HourMinutesInTimezone` | ✅ |
+| `buildDateInTimezone` (slot futuro) | ⚠️ usado só Copilot (schedule_meeting) |
+| `computeNextWindowStart` (próxima abertura) | ⚠️ usado só Workflow |
+
+### Testes
+- 30/30 unit time-context (5 novos `computeNextWindowStart`)
+- 5/5 E2E prod (backfill, pass, hold_until, route, fallback)
+
+Ver: [[ADR-2026-04-27-workflow-time-aware-window]] e [[ADR-2026-04-26-copilot-time-aware-behavior]]

@@ -106,6 +106,21 @@ const wizardSchema = z.object({
     start: z.string().min(1, "Informe o horário de início"),
     end: z.string().min(1, "Informe o horário de fim"),
   }),
+  behaviorWindows: z
+    .array(
+      z.object({
+        id: z.string(),
+        name: z.string().min(1, "Nome obrigatório"),
+        days: z.array(z.enum(["mon", "tue", "wed", "thu", "fri", "sat", "sun"])).min(1, "Selecione ao menos um dia"),
+        start: z.string().regex(/^\d{2}:\d{2}$/, "Use formato HH:MM"),
+        end: z.string().regex(/^\d{2}:\d{2}$/, "Use formato HH:MM"),
+        behavior: z.string().default(""),
+      }),
+    )
+    .min(1, "Defina ao menos uma janela cobrindo 24/7")
+    .max(6, "Máximo de 6 janelas")
+    .default([]),
+  behaviorEnforcement: z.enum(["hard", "soft"]).default("hard"),
   responseDelaySeconds: z
     .number()
     .min(0, "Não pode ser negativo")
@@ -278,6 +293,17 @@ const BASE_DEFAULTS: CopilotWizardData = {
     start: "09:00",
     end: "18:00",
   },
+  behaviorWindows: [
+    {
+      id: "default",
+      name: "Padrão",
+      days: ["mon", "tue", "wed", "thu", "fri", "sat", "sun"],
+      start: "00:00",
+      end: "23:59",
+      behavior: "",
+    },
+  ],
+  behaviorEnforcement: "hard" as const,
   responseDelaySeconds: 8,
   mainObjective: "",
   objectiveComposite: { mission: "", success_criteria: "", limits: "" },

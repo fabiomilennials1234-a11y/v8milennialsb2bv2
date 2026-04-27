@@ -476,13 +476,42 @@ export interface GotoNodeData {
 export type AssignMode = "round_robin" | "random" | "manual";
 export type AssignTarget = "responsible" | "sdr" | "closer";
 
+/**
+ * Onda 5 — Time-Aware Workflow Window.
+ * Ação por janela:
+ *   - "pass": continua fluxo pela edge default
+ *   - "hold_until:WindowName": pausa execução até a janela de nome X abrir
+ *   - "route:branchKey": sai pela edge cujo data.windowKey === branchKey (saída múltipla)
+ */
+export type WindowAction =
+  | "pass"
+  | `hold_until:${string}`
+  | `route:${string}`;
+
+export interface WorkflowBehaviorWindow {
+  id: string;
+  name: string;
+  /** Subset of "mon"|"tue"|"wed"|"thu"|"fri"|"sat"|"sun" */
+  days: string[];
+  /** "HH:MM" */
+  start: string;
+  /** "HH:MM" */
+  end: string;
+  action: WindowAction;
+}
+
 export interface WaitBusinessWindowNodeData {
   type: "wait_business_window";
   label: string;
-  days: string[];          // ["seg","ter","qua","qui","sex"]
-  startTime: string;       // "HH:MM" e.g. "08:00"
-  endTime: string;         // "HH:MM" e.g. "18:00"
-  timezone: string;        // e.g. "America/Sao_Paulo"
+  /** Legacy (retrocompat — usado se windows[] vazio): janela única hold-only. */
+  days?: string[];
+  startTime?: string;
+  endTime?: string;
+  timezone?: string;
+  /** Onda 5: até 6 janelas customizáveis. First-match wins. */
+  windows?: WorkflowBehaviorWindow[];
+  /** "hold" — comportamento legacy single-window; "route" — branching por janela; "hybrid" — mix. */
+  mode?: "hold" | "route" | "hybrid";
   [key: string]: unknown;
 }
 
