@@ -83,6 +83,7 @@ SaaS B2B multi-tenant para gestao de leads, pipelines de vendas, campanhas e aut
 - [[ADR-2026-04-12-arquitetura-inicial]] — Snapshot das decisoes arquiteturais encontradas
 - [[ADR-2026-04-14-coverage-roadmap]] — Roadmap de cobertura de testes (4 fases)
 - [[ADR-2026-04-15-agente-security]] — Adicao do agente Security ao time (9 → 10)
+- [[ADR-2026-04-27-refactor-agent-engine-modular]] — Quebra de god modules em capabilities/fases
 
 ### 05 — Log de Contexto
 - [[2026-04-12—sessao-inicial]] — Varredura completa do projeto

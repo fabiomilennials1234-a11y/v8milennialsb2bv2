@@ -337,3 +337,69 @@ Bloco `# DISPONIBILIDADE` legacy substituído por `# CONTEXTO TEMPORAL` em `agen
 - Smoke E2E manual: criar janela "Madrugada" em agente real, conversar 23h, verificar resposta segue behavior + log time_context
 
 Ver: [[ADR-2026-04-26-copilot-time-aware-behavior]]
+
+---
+
+## Refactor modular — agent-engine + ai-action-executor (sessão 2026-04-27)
+
+Os 2 god modules do copilot foram quebrados em módulos focados por capability/fase.
+
+### Estrutura nova
+
+**Action executor** (`supabase/functions/_shared/actions/`):
+| Arquivo | Capability |
+|---|---|
+| `types.ts` | ActionRecord, ActionResult, NOOP_ACTION_TYPES |
+| `index.ts` | Dispatcher executeAiAction (switch slim) |
+| `log-history.ts` | ACTION_HISTORY_MAP + logToLeadHistory |
+| `schedule-meeting.ts` | schedule + confirm + advance_confirmation_stage |
+| `update-lead.ts` | create_lead + update_lead + create_custom_field |
+| `move-card.ts` | advance_stage + update_pipeline_stage |
+| `qualify-lead.ts` | update_qualification_score + executeAutomation |
+| `transfer-human.ts` | immediateTransferHuman + executeTransferHuman + transfer_to_human_notify + transfer_sz_chat |
+| `send-document.ts` | send_document |
+| `_helpers.ts` | upsertPipeWhatsapp + executeMoveToPipe (privados) |
+
+`_shared/ai-action-executor.ts` virou fachada (4 re-exports). 1.373 linhas → 24 linhas.
+
+**Agent engine pipeline** (`supabase/functions/agent-message/engine/`):
+| Arquivo | Fase |
+|---|---|
+| `utils.ts` | Helpers puros (parseCustomInstructions, extractTopic, calculateLeadTemperature, classifyIntent, detectSentiment, checkOutOfHours, etc) |
+| `build-prompt.ts` | buildDynamicPrompt — assembla system_prompt completo do agente |
+| `build-tools.ts` | buildDynamicTools — lista de tools por capabilities |
+| `decide-action.ts` | processLLMResponse + enqueueToolAction + enqueueAutomationActions + enqueuePipelineStageUpdate |
+| `persist-response.ts` | createConversation + saveConversationContext + updateContextSummaryAfterTurn + extractAndSaveMemories |
+| `history.ts` | getConversationHistory + getWhatsAppMessageHistory + compressHistoryIfNeeded + extractContextFromMessages + loadConversationContext |
+| `load-context.ts` | Aggregator de re-exports (`_shared/copilot/*`) |
+
+`agent-engine.ts` reduziu **2.920 → 924 linhas (-68%)**. `class AgentEngine` continua como orchestrator do `processMessage`. Cada método público delega via `*External` aliases.
+
+### Arquivos onde mexer no Copilot agora
+
+| Cenário | Ir em |
+|---|---|
+| Bug em qualificação/transfer/agendamento | `_shared/actions/<capability>.ts` |
+| Mudar prompt do agente | `agent-message/engine/build-prompt.ts` |
+| Adicionar nova tool | `agent-message/engine/build-tools.ts` |
+| Mudar como processo decisão de ação | `agent-message/engine/decide-action.ts` |
+| Mudar persistência (conversation, contexto, memórias) | `agent-message/engine/persist-response.ts` |
+| Mudar como histórico é carregado/comprimido | `agent-message/engine/history.ts` |
+| Helpers puros (intent, sentiment, etc) | `agent-message/engine/utils.ts` |
+| Orquestração geral (processMessage) | `agent-message/agent-engine.ts` |
+
+### Comportamento
+
+**Idêntico ao pré-refactor**. Strings de prompt, ordem de seções, mensagens de erro, idempotency keys, ações enfileiradas — byte-a-byte preservados.
+
+### Validação
+
+- 71 testes verdes (47 smoke + comportamento + stress, 24 pré-existentes) em 5 arquivos.
+- Deploy DEV LIVE (project `bcfadphgsibjzivtbjvc`).
+- E2E playwright 13/13 verde com user `e2e@torque.test` em dev.
+- Smoke real em dev: BLOQUEADO (24 migrations pendentes em dev — `copilot_agent_faqs`/`copilot_agent_kanban_rules` FKs faltando no schema cache).
+
+### Refs
+
+- [[ADR-2026-04-27-refactor-agent-engine-modular]]
+- [[2026-04-27-refactor-copilot-modules]]
