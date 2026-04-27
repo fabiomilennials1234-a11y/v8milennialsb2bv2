@@ -1,0 +1,201 @@
+/**
+ * Workflow Condition Evaluator
+ *
+ * Evaluates condition nodes against lead data.
+ * Supports all 21 condition operators defined in the workflow editor.
+ */
+
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+export interface ConditionParams {
+  field: string;
+  operator: string;
+  value: string;
+}
+
+interface LeadData {
+  id: string;
+  name?: string;
+  email?: string;
+  phone?: string;
+  company?: string;
+  segment?: string;
+  rating?: number;
+  qualification_score?: number;
+  pipe_whatsapp?: string;
+  origin?: string;
+  sdr_id?: string;
+  closer_id?: string;
+  responsible_id?: string;
+  urgency?: string;
+  faturamento?: string;
+  notes?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * Evaluates a condition against a lead, returning true/false.
+ */
+export async function evaluateCondition(
+  supabase: SupabaseClient,
+  leadId: string,
+  condition: ConditionParams,
+): Promise<boolean> {
+  const { field, operator, value } = condition;
+
+  // Fetch lead data
+  const { data: lead } = await supabase
+    .from("leads")
+    .select("*")
+    .eq("id", leadId)
+    .maybeSingle();
+
+  if (!lead) return false;
+  const leadData = lead as LeadData;
+
+  // Resolve field value
+  let fieldValue: unknown;
+
+  if (field.startsWith("custom.")) {
+    // Custom field: custom.campo_name
+    const customFieldName = field.substring(7);
+    fieldValue = await getCustomFieldValue(supabase, leadId, customFieldName, leadData);
+  } else if (field === "tags") {
+    // Special: tags field — returns comma-separated tag names
+    fieldValue = await getLeadTags(supabase, leadId);
+  } else if (field === "stage") {
+    fieldValue = leadData.pipe_whatsapp || "";
+  } else if (field === "score") {
+    fieldValue = leadData.qualification_score ?? 0;
+  } else {
+    fieldValue = leadData[field];
+  }
+
+  return compare(fieldValue, operator, value);
+}
+
+export function compare(fieldValue: unknown, operator: string, conditionValue: string): boolean {
+  const strField = fieldValue == null ? "" : String(fieldValue);
+  const numField = Number(fieldValue);
+  const numCondition = Number(conditionValue);
+
+  switch (operator) {
+    case "equals":
+      return strField.toLowerCase() === conditionValue.toLowerCase();
+
+    case "not_equals":
+      return strField.toLowerCase() !== conditionValue.toLowerCase();
+
+    case "contains":
+      return strField.toLowerCase().includes(conditionValue.toLowerCase());
+
+    case "not_contains":
+      return !strField.toLowerCase().includes(conditionValue.toLowerCase());
+
+    case "greater_than":
+      return !isNaN(numField) && !isNaN(numCondition) && numField > numCondition;
+
+    case "less_than":
+      return !isNaN(numField) && !isNaN(numCondition) && numField < numCondition;
+
+    case "greater_or_equal":
+      return !isNaN(numField) && !isNaN(numCondition) && numField >= numCondition;
+
+    case "less_or_equal":
+      return !isNaN(numField) && !isNaN(numCondition) && numField <= numCondition;
+
+    case "is_empty":
+      return strField.trim() === "" || fieldValue == null;
+
+    case "is_not_empty":
+      return strField.trim() !== "" && fieldValue != null;
+
+    case "has_tag":
+      // fieldValue should be comma-separated tag names
+      return strField.toLowerCase().split(",").map(t => t.trim()).includes(conditionValue.toLowerCase());
+
+    case "not_has_tag":
+      return !strField.toLowerCase().split(",").map(t => t.trim()).includes(conditionValue.toLowerCase());
+
+    case "in_stage":
+      return strField.toLowerCase() === conditionValue.toLowerCase();
+
+    case "not_in_stage":
+      return strField.toLowerCase() !== conditionValue.toLowerCase();
+
+    case "starts_with":
+      return strField.toLowerCase().startsWith(conditionValue.toLowerCase());
+
+    case "ends_with":
+      return strField.toLowerCase().endsWith(conditionValue.toLowerCase());
+
+    case "in_list": {
+      const list = conditionValue.split(",").map(v => v.trim().toLowerCase());
+      return list.includes(strField.toLowerCase());
+    }
+
+    case "not_in_list": {
+      const list = conditionValue.split(",").map(v => v.trim().toLowerCase());
+      return !list.includes(strField.toLowerCase());
+    }
+
+    case "is_true":
+      return strField === "true" || strField === "1" || fieldValue === true;
+
+    case "is_false":
+      return strField === "false" || strField === "0" || fieldValue === false || fieldValue == null;
+
+    case "regex_match":
+      try {
+        return new RegExp(conditionValue, "i").test(strField);
+      } catch {
+        return false;
+      }
+
+    default:
+      console.warn(`[workflow-condition] Unknown operator: ${operator}`);
+      return false;
+  }
+}
+
+async function getCustomFieldValue(
+  supabase: SupabaseClient,
+  leadId: string,
+  fieldName: string,
+  leadData: LeadData,
+): Promise<string> {
+  // Try to get from lead_custom_field_values
+  const orgId = leadData.organization_id as string;
+  if (!orgId) return "";
+
+  const { data: field } = await supabase
+    .from("lead_custom_fields")
+    .select("id")
+    .eq("organization_id", orgId)
+    .eq("field_name", fieldName)
+    .maybeSingle();
+
+  if (!field) return "";
+
+  const { data: val } = await supabase
+    .from("lead_custom_field_values")
+    .select("value")
+    .eq("lead_id", leadId)
+    .eq("field_id", field.id)
+    .maybeSingle();
+
+  return val?.value || "";
+}
+
+async function getLeadTags(
+  supabase: SupabaseClient,
+  leadId: string,
+): Promise<string> {
+  const { data: tags } = await supabase
+    .from("lead_tags")
+    .select("tag:tags(name)")
+    .eq("lead_id", leadId);
+
+  if (!tags || tags.length === 0) return "";
+  return tags.map((t: { tag: { name: string } | null }) => t.tag?.name || "").filter(Boolean).join(",");
+}

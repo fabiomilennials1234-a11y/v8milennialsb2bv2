@@ -1,0 +1,49 @@
+/**
+ * Integration test setup — connects to local Supabase instance.
+ *
+ * Prerequisites:
+ *   1. `supabase start` must be running
+ *   2. Local Supabase at http://localhost:54321
+ *
+ * Uses the service_role key for full access during tests.
+ */
+
+import { createClient } from '@supabase/supabase-js';
+
+const SUPABASE_URL = process.env.SUPABASE_URL || 'http://localhost:54321';
+const SUPABASE_SERVICE_KEY =
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU';
+
+export const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+
+export const TEST_ORG_ID = '00000000-0000-0000-0000-000000000001';
+export const TEST_MASTER_ID = '00000000-0000-0000-0000-000000000010';
+export const TEST_ADMIN_ID = '00000000-0000-0000-0000-000000000020';
+export const TEST_SDR_ID = '00000000-0000-0000-0000-000000000030';
+
+// Extended test IDs for RLS testing
+export const TEST_ORG_B_ID = '00000000-0000-0000-0000-000000000002';
+export const TEST_MEMBER_1_ID = '00000000-0000-0000-0000-000000000040';
+export const TEST_MEMBER_2_ID = '00000000-0000-0000-0000-000000000050';
+export const TEST_ADMIN_B_ID = '00000000-0000-0000-0000-000000000060';
+export const TEST_MEMBER_B_ID = '00000000-0000-0000-0000-000000000070';
+
+// Team member IDs
+export const TEST_TM_MASTER_ID = '00000000-0000-0000-0000-000000000110';
+export const TEST_TM_ADMIN_ID = '00000000-0000-0000-0000-000000000120';
+export const TEST_TM_MEMBER_1_ID = '00000000-0000-0000-0000-000000000140';
+export const TEST_TM_MEMBER_2_ID = '00000000-0000-0000-0000-000000000150';
+export const TEST_TM_ADMIN_B_ID = '00000000-0000-0000-0000-000000000160';
+export const TEST_TM_MEMBER_B_ID = '00000000-0000-0000-0000-000000000170';
+
+// Lead IDs
+export const TEST_LEAD_ALPHA_ID = '00000000-0000-0000-0000-000000001001';
+export const TEST_LEAD_BETA_ID = '00000000-0000-0000-0000-000000001002';
+export const TEST_LEAD_GAMMA_ID = '00000000-0000-0000-0000-000000001003';
+export const TEST_LEAD_DELTA_ID = '00000000-0000-0000-0000-000000001004';
+export const TEST_LEAD_ORGB_1_ID = '00000000-0000-0000-0000-000000002001';
+export const TEST_LEAD_ORGB_2_ID = '00000000-0000-0000-0000-000000002002';
+
+// Common password for all test users
+export const TEST_PASSWORD = 'Test123!@#';

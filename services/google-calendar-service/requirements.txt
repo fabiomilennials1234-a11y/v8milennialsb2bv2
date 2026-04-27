@@ -1,0 +1,35 @@
+# FastAPI and server
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+python-multipart>=0.0.6
+
+# Google APIs
+google-api-python-client>=2.116.0
+google-auth>=2.27.0
+google-auth-oauthlib>=1.2.0
+google-auth-httplib2>=0.2.0
+
+# Database
+supabase>=2.3.0
+asyncpg>=0.29.0
+
+# Security
+cryptography>=42.0.0
+python-jose[cryptography]>=3.3.0
+
+# Validation and settings
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+
+# HTTP client
+httpx>=0.26.0
+
+# Utilities
+python-dotenv>=1.0.0
+pytz>=2024.1
+
+# Testing
+pytest>=7.4.0
+pytest-asyncio>=0.23.0
+pytest-cov>=4.1.0
+httpx>=0.26.0

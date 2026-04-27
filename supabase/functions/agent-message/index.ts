@@ -1,0 +1,352 @@
+import { withSentry } from '../_shared/sentry.ts';
+import { logRuntime } from '../_shared/logger.ts';
+import { trackEvent } from '../_shared/track.ts';
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getCorsHeaders } from "../_shared/cors.ts";
+import { withSecurityHeaders } from "../_shared/security-headers.ts";
+import { getOrCreateLead, normalizePhoneForSearch } from "../_shared/lead-service.ts";
+import { OpenRouterClient } from "./openrouter-client.ts";
+import { AgentEngine } from "./agent-engine.ts";
+import { fireTrigger } from "../_shared/workflow-trigger.ts";
+import { isCopilotCanceled, logCopilotCancellation } from "../_shared/copilot/cancellation.ts";
+
+/**
+ * Webhook receptor de mensagens de leads
+ * Twilio/WhatsApp → /agent-message
+ */
+Deno.serve(withSentry('agent-message', async (req) => {
+  const corsHeaders = withSecurityHeaders(getCorsHeaders(req.headers.get("origin")));
+
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const supabase = createClient(supabaseUrl, supabaseKey);
+
+  const openRouterApiKey = Deno.env.get("OPENROUTER_API_KEY");
+  if (!openRouterApiKey) {
+    return new Response(JSON.stringify({ error: "OPENROUTER_API_KEY not configured" }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" }
+    });
+  }
+
+  const openRouter = new OpenRouterClient(openRouterApiKey);
+
+  try {
+    // Parse webhook de Twilio ou formato genérico
+    const body = await req.json();
+    const { from, message, channel, organization_id, push_name, incoming_message_type } = body; // from = phone number ou user_id
+
+    // 1. IDENTIFY TENANT — organization_id is REQUIRED (security boundary).
+    if (!organization_id || typeof organization_id !== 'string') {
+      return new Response(
+        JSON.stringify({
+          error: "organization_id is required in request body",
+          code: "MISSING_ORGANIZATION_ID",
+        }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    const { lead, organizationId } = await identifyTenant(supabase, from, channel, organization_id, push_name);
+
+    if (!lead || !organizationId) {
+      return new Response(JSON.stringify({ error: "Lead not found or organization not identified" }), {
+        status: 404,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
+
+    // 1.5. CHECK IF AI IS DISABLED FOR THIS LEAD (F5a 2026-04-26: canonical)
+    // Lê phone_ai_preferences (fonte de verdade) com fallback leads.ai_disabled.
+    // Antes lia só lead.ai_disabled (denormalizado) — drift se sync falhasse.
+    const initialCancel = await isCopilotCanceled(supabase, organizationId, from);
+    if (initialCancel.canceled) {
+      console.log('[agent-message] AI disabled for lead:', lead.id, 'source:', initialCancel.source);
+      return new Response(JSON.stringify({
+        skipped: true,
+        reason: "AI disabled for this lead",
+        lead_id: lead.id,
+        source: initialCancel.source,
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
+
+    // HUMAN TAKEOVER removed — copilot always responds unless
+    // ai_disabled=true or conversation state=WAITING_HUMAN.
+    // Human agents can disable AI via the toggle in the chat UI.
+
+    // 1.7. FIRE lead_replied workflow trigger (fire-and-forget)
+    fireTrigger({
+      supabase,
+      organizationId,
+      triggerType: "lead_replied",
+      leadId: lead.id,
+      context: { trigger: "lead_replied", channel, message },
+    }).catch(() => {});
+
+    // 2. ROUTE engine version (Trilha 3.B B3 feature flag)
+    // Hoje v1==v2 funcionalmente (refactor B1 transparente). Flag preparado
+    // pra A/B comparison futura quando v2 divergir.
+    const { data: orgRow } = await supabase
+      .from("organizations")
+      .select("copilot_engine_version")
+      .eq("id", organizationId)
+      .maybeSingle();
+    const engineVersion = (orgRow?.copilot_engine_version as string) ?? "v1";
+
+    // 2.5 INITIALIZE AGENT ENGINE
+    const engine = new AgentEngine(supabase, openRouter, organizationId);
+
+    // 2.5 TYPING INDICATOR — item #10 — fire-and-forget, não bloqueia
+    sendTypingIndicator(supabase, from, organizationId)
+      .catch(e => console.warn('[agent-message] Typing indicator failed (non-fatal):', e));
+
+    // 3. PROCESS MESSAGE (toda lógica está aqui)
+    const response = await engine.processMessage(lead.id, message, incoming_message_type);
+
+    // 3.1 CANCELLATION GATE pós-LLM (RC-cancel, 2026-04-26):
+    // user pode ter desligado o switch DURANTE a chamada LLM (~5-30s).
+    // Se cancelado, retornamos skipped e NÃO entregamos a resposta — caller
+    // (sz-chat-webhook etc) não dispara sendSzChatResponse.
+    const cancelCheck = await isCopilotCanceled(supabase, organizationId, from);
+    if (cancelCheck.canceled) {
+      console.log('[agent-message] Canceled mid-LLM — skipping delivery for lead:', lead.id);
+      const evalMeta = (response as any)._eval_meta;
+
+      // Decisão CTO 2026-04-26: reply cancelada NÃO entra no histórico
+      // (não pode poluir memória do agente em turnos futuros).
+      // Engine.processMessage já persistiu via updateConversationState — desfazemos.
+      if (evalMeta?.conversationId && !evalMeta.conversationId.startsWith('temp_') && response.message) {
+        try {
+          const since = new Date(Date.now() - 60_000).toISOString();
+          const { error: delErr } = await supabase
+            .from('conversation_messages')
+            .delete()
+            .eq('conversation_id', evalMeta.conversationId)
+            .eq('role', 'assistant')
+            .eq('content', response.message)
+            .gte('created_at', since);
+          if (delErr) {
+            console.warn('[agent-message] Failed to delete canceled assistant message:', delErr.message);
+          }
+        } catch (e) {
+          console.warn('[agent-message] Exception deleting canceled assistant message:', e);
+        }
+      }
+
+      logCopilotCancellation({
+        organizationId,
+        gate: "post_llm",
+        leadId: lead.id,
+        conversationId: evalMeta?.conversationId,
+        phone: from,
+        source: cancelCheck.source,
+      });
+      return new Response(JSON.stringify({
+        skipped: true,
+        reason: "ai_disabled_during_processing",
+        canceled_gate: "post_llm",
+        lead_id: lead.id,
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
+
+    // 3.5 Item #8: LLM-as-a-judge — avaliar qualidade da resposta (fire-and-forget)
+    if (response.message && (response as any)._eval_meta) {
+      const evalMeta = (response as any)._eval_meta;
+      evaluateConversation({
+        organizationId,
+        leadId: lead.id,
+        userMessage: message,
+        agentResponse: response.message,
+        conversationId: evalMeta.conversationId,
+        agentId: evalMeta.agentId,
+        turnCount: evalMeta.turnCount,
+        systemPromptExcerpt: evalMeta.systemPromptExcerpt,
+      }).catch(e => console.warn('[agent-message] Evaluation failed (non-fatal):', e));
+    }
+
+    // 4. TRACK USAGE EVENT (fire-and-forget) — inclui engine_version pra A/B telemetry
+    trackEvent({
+      organizationId,
+      eventType: "message_sent",
+      entityType: "lead",
+      entityId: lead.id,
+      metadata: { channel, action: response.action, hasMessage: !!response.message, engine_version: engineVersion },
+    }).catch(() => {});
+
+    // 5. LOG SUCCESS
+    await logRuntime({
+      organizationId,
+      module: 'copilot',
+      action: response.action || 'process_message',
+      status: 'success',
+      entityType: 'lead',
+      entityId: lead.id,
+      payloadSnapshot: { channel, action: response.action, hasMessage: !!response.message },
+    });
+
+    // 5. RETURN RESPONSE (strip internal _eval_meta before sending)
+    const { _eval_meta: _unused, ...publicResponse } = response as any;
+    return new Response(JSON.stringify(publicResponse), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" }
+    });
+
+  } catch (error) {
+    console.error('[agent-message] Error:', error);
+    await logRuntime({
+      module: 'copilot',
+      action: 'process_message',
+      status: 'error',
+      errorMessage: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
+}));
+
+/**
+ * Item #10: Typing indicator — envia presença "composing" via Evolution API
+ * antes do AgentEngine processar a mensagem, para o lead ver que está digitando.
+ */
+async function sendTypingIndicator(
+  supabase: ReturnType<typeof createClient>,
+  phone: string,
+  organizationId: string
+): Promise<void> {
+  try {
+    const { data: instance } = await supabase
+      .from("whatsapp_instances")
+      .select("*")
+      .eq("organization_id", organizationId)
+      .in("status", ["open", "connected"])
+      .limit(1)
+      .maybeSingle();
+
+    if (!instance) return;
+
+    const { getWhatsAppProvider } = await import(
+      "../_shared/whatsapp-client.ts"
+    );
+    const { normalizeBrazilianPhone } = await import(
+      "../_shared/whatsapp-dispatch.ts"
+    );
+
+    const normalizedPhone = normalizeBrazilianPhone(phone);
+    if (!normalizedPhone) return;
+
+    const provider = await getWhatsAppProvider(instance, supabase);
+    await provider.setPresence(normalizedPhone, "composing");
+  } catch {
+    // best-effort — typing indicator is non-critical
+  }
+}
+
+/**
+ * Identifica tenant baseado no phone/session
+ * Usa o serviço centralizado lead-service para busca/criação de leads
+ */
+async function identifyTenant(
+  supabase: ReturnType<typeof createClient>,
+  from: string,
+  channel: string,
+  providedOrgId?: string,
+  pushName?: string
+): Promise<{ lead: any; organizationId: string } | { lead: null; organizationId: null }> {
+  const normalizedPhone = normalizePhoneForSearch(from);
+
+  console.log('[agent-message] identifyTenant:', {
+    from,
+    normalizedPhone,
+    providedOrgId,
+    pushName
+  });
+
+  // Se organization_id foi fornecido, usar serviço centralizado
+  if (providedOrgId) {
+    const result = await getOrCreateLead(supabase, {
+      organizationId: providedOrgId,
+      phone: from,
+      pushName,
+      origin: 'whatsapp',
+    });
+
+    if (result) {
+      // Buscar ai_disabled do lead (não vem do getOrCreateLead)
+      const { data: leadExtra } = await supabase
+        .from('leads')
+        .select('ai_disabled')
+        .eq('id', result.lead.id)
+        .maybeSingle();
+
+      const lead = { ...result.lead, ai_disabled: leadExtra?.ai_disabled ?? false };
+
+      console.log('[agent-message] Lead resolved:', {
+        leadId: lead.id,
+        leadName: lead.name,
+        created: result.created,
+        source: result.source,
+        ai_disabled: lead.ai_disabled,
+      });
+      return { lead, organizationId: lead.organization_id };
+    }
+
+    console.error('[agent-message] Failed to get or create lead');
+    return { lead: null, organizationId: null };
+  }
+
+  // SECURITY: the legacy cross-tenant lookup (by phone, without
+  // organization_id) was removed. It allowed a caller with service_role to
+  // hit agent-message without an org_id and automatically bind to whatever
+  // lead existed globally for that phone — a cross-tenant boundary leak.
+  //
+  // Every legitimate caller today (sz-chat-webhook, whatsapp-webhook,
+  // evolution-webhook, internal scripts) MUST pass organization_id in the
+  // body. Callers that do not are a bug and must be fixed at the source.
+  console.error(
+    '[agent-message] organization_id MISSING in request — rejecting. Caller must send organization_id.',
+    { from, channel, normalizedPhone },
+  );
+  return { lead: null, organizationId: null };
+}
+
+/**
+ * Item #8: LLM-as-a-judge — chama a edge function de avaliação em background.
+ * Fire-and-forget: nunca bloqueia a resposta ao lead.
+ */
+async function evaluateConversation(params: {
+  organizationId: string;
+  leadId: string;
+  userMessage: string;
+  agentResponse: string;
+  conversationId: string;
+  agentId: string;
+  turnCount: number;
+  systemPromptExcerpt: string;
+}): Promise<void> {
+  // Apenas avaliar a cada 3 turnos para reduzir custo de API
+  if (params.turnCount % 3 !== 0) return;
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!supabaseUrl || !serviceKey) return;
+
+  await fetch(
+    `${supabaseUrl}/functions/v1/evaluate-agent-conversation`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${serviceKey}`,
+      },
+      body: JSON.stringify(params),
+    }
+  );
+}

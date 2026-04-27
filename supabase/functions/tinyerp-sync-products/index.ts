@@ -1,0 +1,320 @@
+/**
+ * tinyerp-sync-products
+ *
+ * Importa/sincroniza produtos do TinyERP para a tabela products do CRM.
+ * Pagina pela API de pesquisa de produtos e faz upsert via tinyerp_product_mappings.
+ */
+
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getCorsHeaders } from "../_shared/cors.ts";
+import { getOrgTinyToken, callTinyApi, logTinyOp, getTinyErrorMessage, isTinyNoRecordsError } from "../_shared/tinyerp-utils.ts";
+import { captureError } from '../_shared/sentry.ts';
+import { logRuntime } from "../_shared/logger.ts";
+
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+interface TinyProduct {
+  id: string;
+  nome: string;
+  codigo: string;
+  preco: number;
+  preco_promocional?: number;
+  unidade?: string;
+  ncm?: string;
+  gtin?: string;
+  descricao_complementar?: string;
+  situacao?: string;
+}
+
+Deno.serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req.headers.get("origin"));
+
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: corsHeaders });
+  }
+
+  try {
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: "Não autorizado" }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { persistSession: false },
+    });
+
+    const supabaseUser = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_ANON_KEY")!, {
+      auth: { persistSession: false },
+      global: { headers: { Authorization: authHeader } },
+    });
+
+    const { data: { user }, error: authError } = await supabaseUser.auth.getUser();
+    if (authError || !user) {
+      return new Response(
+        JSON.stringify({ error: "Usuário não autenticado" }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const { data: teamMember } = await supabaseAdmin
+      .from("team_members")
+      .select("organization_id")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (!teamMember?.organization_id) {
+      return new Response(
+        JSON.stringify({ error: "Usuário não vinculado a uma organização" }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const orgId = teamMember.organization_id;
+
+    const tokenData = await getOrgTinyToken(supabaseAdmin, orgId);
+    if (!tokenData) {
+      return new Response(
+        JSON.stringify({ error: "TinyERP não conectado" }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    console.log("[TinyERP Sync] Starting product sync for org:", orgId);
+
+    let page = 1;
+    let hasMore = true;
+    let itemsCreated = 0;
+    let itemsUpdated = 0;
+    let itemsFailed = 0;
+    let itemsProcessed = 0;
+    const maxPages = 50; // Safety limit
+
+    while (hasMore && page <= maxPages) {
+      const result = await callTinyApi(tokenData.token, "produtos.pesquisa.php", {
+        pesquisa: "",
+        pagina: page,
+      });
+
+      // TinyERP API v2 returns status_processamento "3" even on success (with status "OK" and data).
+      // We check for actual data presence rather than relying on status_processamento.
+      const produtos = (result.retorno.produtos as Array<{ produto: TinyProduct }>) || [];
+      const hasData = produtos.length > 0;
+
+      if (page === 1) {
+        console.log("[TinyERP Sync] Page 1 response:", {
+          status: result.retorno.status,
+          status_processamento: result.retorno.status_processamento,
+          numero_paginas: result.retorno.numero_paginas,
+          produtos_count: produtos.length,
+        });
+      }
+      const isStatusOk = result.retorno.status === "OK" || result.retorno.status === "Sucesso";
+
+      if (!hasData && !isStatusOk) {
+        // No data and not OK — real error or end of pages
+        if (page === 1 && !isTinyNoRecordsError(result)) {
+          const errorMsg = getTinyErrorMessage(result) || "Erro ao buscar produtos";
+          await logTinyOp(supabaseAdmin, {
+            organization_id: orgId,
+            operation: "product_import",
+            status: "failed",
+            error_message: errorMsg,
+            initiated_by: "user",
+          });
+          return new Response(
+            JSON.stringify({ error: errorMsg }),
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        break;
+      }
+
+      if (!hasData) {
+        // Status OK but no products on this page — we've passed the last page
+        hasMore = false;
+        break;
+      }
+
+      for (const item of produtos) {
+        const produto: TinyProduct = item.produto;
+        itemsProcessed++;
+
+        try {
+          // Check if mapping exists
+          const { data: existingMapping } = await supabaseAdmin
+            .from("tinyerp_product_mappings")
+            .select("id, product_id")
+            .eq("organization_id", orgId)
+            .eq("tiny_product_id", String(produto.id))
+            .maybeSingle();
+
+          const tinyProductId = String(produto.id);
+          const sku = produto.codigo || null;
+          const ticket = Number(produto.preco) || 0;
+
+          const productUpdateFields = {
+            name: produto.nome,
+            sku,
+            ticket,
+            base_unit: produto.unidade || "un",
+          };
+
+          if (existingMapping) {
+            // ── Update existing mapped product ──
+            const { error: updErr } = await supabaseAdmin
+              .from("products")
+              .update(productUpdateFields)
+              .eq("id", existingMapping.product_id);
+
+            if (updErr) {
+              console.error("[TinyERP Sync] Failed to update product:", updErr);
+              itemsFailed++;
+              continue;
+            }
+
+            await supabaseAdmin
+              .from("tinyerp_product_mappings")
+              .update({ last_synced_at: new Date().toISOString(), tiny_sku: sku })
+              .eq("id", existingMapping.id);
+
+            itemsUpdated++;
+          } else {
+            // ── No mapping: check if a CRM product with same SKU already exists ──
+            // (prevents unique constraint violation on idx_products_sku_org)
+            let targetProductId: string | null = null;
+
+            if (sku) {
+              const { data: existingBySku } = await supabaseAdmin
+                .from("products")
+                .select("id")
+                .eq("organization_id", orgId)
+                .eq("sku", sku)
+                .maybeSingle();
+
+              if (existingBySku) {
+                // Product exists by SKU but has no TinyERP mapping — update it
+                await supabaseAdmin
+                  .from("products")
+                  .update(productUpdateFields)
+                  .eq("id", existingBySku.id);
+
+                targetProductId = existingBySku.id;
+                itemsUpdated++;
+              }
+            }
+
+            if (!targetProductId) {
+              // Create new product
+              const { data: newProduct, error: insertError } = await supabaseAdmin
+                .from("products")
+                .insert({
+                  ...productUpdateFields,
+                  type: "unitario" as const,
+                  organization_id: orgId,
+                })
+                .select("id")
+                .single();
+
+              if (insertError || !newProduct) {
+                console.error("[TinyERP Sync] Failed to create product:", insertError);
+                itemsFailed++;
+                continue;
+              }
+
+              targetProductId = newProduct.id;
+              itemsCreated++;
+            }
+
+            // Create mapping (upsert to handle edge cases)
+            const { error: mapErr } = await supabaseAdmin
+              .from("tinyerp_product_mappings")
+              .upsert({
+                organization_id: orgId,
+                product_id: targetProductId,
+                tiny_product_id: tinyProductId,
+                tiny_sku: sku,
+                sync_direction: "from_tiny",
+                last_synced_at: new Date().toISOString(),
+              }, { onConflict: "organization_id,tiny_product_id" });
+
+            if (mapErr) {
+              console.error("[TinyERP Sync] Failed to create mapping:", mapErr);
+            }
+          }
+        } catch (err) {
+          console.error("[TinyERP Sync] Error processing product:", produto.id, err);
+          itemsFailed++;
+        }
+      }
+
+      // Check if there are more pages using numero_paginas from API response
+      const totalPages = Number(result.retorno.numero_paginas) || 1;
+      if (page >= totalPages || produtos.length < 20) {
+        hasMore = false;
+      } else {
+        page++;
+        // Rate limit: ~30 req/min → wait 2s between pages
+        await new Promise((r) => setTimeout(r, 2000));
+      }
+    }
+
+    // Update last sync timestamp
+    await supabaseAdmin
+      .from("tinyerp_connections")
+      .update({ last_product_sync_at: new Date().toISOString() })
+      .eq("organization_id", orgId);
+
+    // Log the operation
+    const status = itemsFailed > 0 && (itemsCreated > 0 || itemsUpdated > 0) ? "partial" : itemsFailed > 0 ? "failed" : "success";
+
+    await logTinyOp(supabaseAdmin, {
+      organization_id: orgId,
+      operation: "product_import",
+      status,
+      items_processed: itemsProcessed,
+      items_created: itemsCreated,
+      items_updated: itemsUpdated,
+      items_failed: itemsFailed,
+      initiated_by: "user",
+    });
+
+    console.log("[TinyERP Sync] Done:", { itemsProcessed, itemsCreated, itemsUpdated, itemsFailed });
+
+    await logRuntime({
+      organizationId: orgId,
+      module: "general",
+      action: "tinyerp_sync_products",
+      status: "success",
+      payloadSnapshot: { itemsProcessed, itemsCreated, itemsUpdated, itemsFailed },
+    });
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        items_processed: itemsProcessed,
+        items_created: itemsCreated,
+        items_updated: itemsUpdated,
+        items_failed: itemsFailed,
+      }),
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    console.error("[TinyERP Sync] Error:", errorMsg, err instanceof Error ? err.stack : "");
+    await captureError(err, { functionName: "tinyerp-sync-products" }).catch(() => {});
+    await logRuntime({
+      module: "general",
+      action: "tinyerp_sync_products",
+      status: "error",
+      errorMessage: errorMsg,
+    }).catch(() => {});
+    return new Response(
+      JSON.stringify({ error: errorMsg }),
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+});

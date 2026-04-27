@@ -1,0 +1,18 @@
+{
+  "enabledPlugins": {
+    "obsidian@obsidian-skills": true
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash(git commit*)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash scripts/obsidian-post-commit.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

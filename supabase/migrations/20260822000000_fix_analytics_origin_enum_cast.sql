@@ -1,0 +1,8 @@
+-- Fix: analytics RPCs type mismatch bugs
+-- 1. Cast leads.origin (lead_origin enum) to text when comparing with p_origin (text param)
+--    Affected: overview, commercial, financial RPCs
+-- 2. Remove ::text cast on tm.id in engagement RPC (assigned_to is uuid, not text)
+-- 3. Fix insight_bottleneck referencing non-existent vf.bottleneck_stage column in overview RPC
+--
+-- Applied directly to remote DB via supabase db query --linked
+-- Original migration files updated in place with CREATE OR REPLACE

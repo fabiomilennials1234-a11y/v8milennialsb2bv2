@@ -1,0 +1,200 @@
+project_id = "jsjsmuncfkbsbzqzqhfq"
+
+# Auth: não exigir confirmação de email para login (SDR/equipe interno).
+# Em projetos hospedados, desative em: Dashboard → Authentication → Providers → Email → "Confirm email".
+[auth.email]
+enable_confirmations = false
+
+# import-leads: autenticação via apikey; organization_id validado internamente
+[functions.import-leads]
+verify_jwt = false
+
+[functions.lead-webhook]
+verify_jwt = false
+
+[functions.webhook-new-lead]
+verify_jwt = false
+
+[functions.webhook-confirmacao]
+verify_jwt = false
+
+[functions.oraculo-comercial]
+verify_jwt = false
+
+[functions.calculate-lead-score]
+verify_jwt = false
+
+[functions.agent-message]
+verify_jwt = false
+
+# summarize-conversation: JWT validado internamente
+[functions.summarize-conversation]
+verify_jwt = false
+
+[functions.webhook-orchestrator]
+verify_jwt = false
+
+[functions.process-webhook-deliveries]
+verify_jwt = false
+
+[functions.campaign-rule-dispatch]
+verify_jwt = false
+
+# process-pipe-distribution: chamado por pg_net trigger; autenticação via x-cron-secret
+[functions.process-pipe-distribution]
+verify_jwt = false
+
+# verify_jwt = false para permitir preflight OPTIONS sem JWT; o JWT é validado dentro da função
+[functions.webhook-send-test]
+verify_jwt = false
+
+# verify_jwt = false para preflight OPTIONS; JWT validado dentro da função
+[functions.webhook-validate-url]
+verify_jwt = false
+
+# stream-media: proxy de áudio do Storage; GET sem JWT para <audio> ou fetch com token no front
+[functions.stream-media]
+verify_jwt = false
+
+# process-followup-automations: chamado por pg_cron; autenticação via x-cron-secret
+[functions.process-followup-automations]
+verify_jwt = false
+
+# google-calendar: JWT validado internamente em todas as funções
+[functions.google-calendar-callback]
+verify_jwt = false
+
+[functions.google-calendar-webhook]
+verify_jwt = false
+
+[functions.google-calendar-connect]
+verify_jwt = false
+
+[functions.google-calendar-disconnect]
+verify_jwt = false
+
+[functions.google-calendar-events]
+verify_jwt = false
+
+[functions.google-calendar-sharing]
+verify_jwt = false
+
+# tinyerp: JWT validado internamente em todas as funções
+[functions.tinyerp-sync-products]
+verify_jwt = false
+
+[functions.tinyerp-connect]
+verify_jwt = false
+
+[functions.tinyerp-disconnect]
+verify_jwt = false
+
+[functions.tinyerp-proxy]
+verify_jwt = false
+
+[functions.tinyerp-push-order]
+verify_jwt = false
+
+[functions.tinyerp-push-upsell-order]
+verify_jwt = false
+
+# tinyerp-webhook: recebe webhooks do TinyERP (sem JWT)
+[functions.tinyerp-webhook]
+verify_jwt = false
+
+# tinyerp-fetch-nfe: chamado pelo webhook e pelo frontend via service_role
+[functions.tinyerp-fetch-nfe]
+verify_jwt = false
+
+# process-workflow-executions: chamado por pg_cron e pg_net triggers; autenticação via x-cron-secret
+[functions.process-workflow-executions]
+verify_jwt = false
+
+# retry-dead-letter-jobs: chamado por pg_cron; autenticação via x-cron-secret
+[functions.retry-dead-letter-jobs]
+verify_jwt = false
+
+# process-ai-actions: chamado por pg_cron; autenticação via x-cron-secret  
+[functions.process-ai-actions]
+verify_jwt = false
+
+# pipe-rule-dispatch: chamado por pg_cron e pg_net; autenticação via x-cron-secret
+[functions.pipe-rule-dispatch]
+verify_jwt = false
+
+# process-copilot-followups: chamado por pg_cron; autenticação via x-cron-secret
+[functions.process-copilot-followups]
+verify_jwt = false
+
+# process-outbound-dispatches: chamado por pg_cron; autenticação via x-cron-secret
+[functions.process-outbound-dispatches]
+verify_jwt = false
+
+# meta-webhook: recebe webhooks do Meta (mensagens + leadgen); autenticação via HMAC SHA256
+[functions.meta-webhook]
+verify_jwt = false
+
+# meta-oauth-callback: redirect do Meta OAuth (sem JWT); valida code + state internamente
+[functions.meta-oauth-callback]
+verify_jwt = false
+
+# refresh-meta-tokens: chamado por pg_cron; autenticação via x-cron-secret
+[functions.refresh-meta-tokens]
+verify_jwt = false
+
+# list-lead-forms: autenticação via JWT do usuario (validado internamente)
+[functions.list-lead-forms]
+verify_jwt = false
+
+# send-meta-message: autenticação via JWT do usuario (validado internamente)
+[functions.send-meta-message]
+verify_jwt = false
+
+# elevenlabs-proxy: JWT validado internamente (admin check)
+[functions.elevenlabs-proxy]
+verify_jwt = false
+
+# checkout-create-payment: JWT validado internamente (user auth via Bearer token)
+[functions.checkout-create-payment]
+verify_jwt = false
+
+# checkout-provision-org: autenticação via X-Internal-Api-Key ou service_role Bearer
+[functions.checkout-provision-org]
+verify_jwt = false
+
+# asaas-webhook: autenticação via asaas-access-token header
+[functions.asaas-webhook]
+verify_jwt = false
+
+# sz-chat-webhook: recebe webhooks do SZChat (Fortics); autenticação via x-webhook-secret header
+[functions.sz-chat-webhook]
+verify_jwt = false
+
+# sz-chat-send: chamado internamente pelo webhook com service_role key; sem JWT externo
+[functions.sz-chat-send]
+verify_jwt = false
+
+# whatsapp-api-proxy: verify_jwt=false permite OPTIONS preflight; JWT validado dentro da função
+[functions.whatsapp-api-proxy]
+verify_jwt = false
+
+# whatsapp-webhook: auth via secret in path segment (Uazapi has no HMAC nor customHeaders)
+[functions.whatsapp-webhook]
+verify_jwt = false
+# mass-send-create: UI invoca com JWT (admin/master); proxy authenticated
+[functions.mass-send-create]
+verify_jwt = false
+
+# mass-send-status: polls status (JWT user OR x-cron-secret)
+[functions.mass-send-status]
+verify_jwt = false
+
+# mass-send-control: pause/resume/stop (JWT admin/master)
+[functions.mass-send-control]
+verify_jwt = false
+
+
+
+
+
+

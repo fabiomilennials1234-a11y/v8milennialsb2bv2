@@ -1,0 +1,639 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Racing+Sans+One&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer utilities {
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@layer base {
+  :root {
+    /* Torque Brand Colors — Light mode with warm personality */
+    --background: 42 25% 96%;
+    --foreground: 30 18% 16%;
+
+    --card: 42 18% 99%;
+    --card-foreground: 30 18% 16%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 30 18% 16%;
+
+    /* Primary Yellow - Torque Brand Identity */
+    --primary: 47 100% 50%;
+    --primary-foreground: 30 18% 15%;
+
+    /* Secondary - Soft Yellow */
+    --secondary: 47 40% 95%;
+    --secondary-foreground: 30 18% 20%;
+
+    /* Muted */
+    --muted: 42 18% 93%;
+    --muted-foreground: 30 10% 46%;
+
+    /* Accent - Dark Brown */
+    --accent: 36 20% 22%;
+    --accent-foreground: 45 100% 96%;
+
+    /* Destructive */
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* Success - Gamification Green */
+    --success: 142 70% 45%;
+    --success-foreground: 0 0% 100%;
+
+    /* Warning */
+    --warning: 38 92% 50%;
+    --warning-foreground: 30 18% 15%;
+
+    /* Silver — Ranking "2º lugar" / neutral accent */
+    --silver: 220 9% 55%;
+    --silver-foreground: 0 0% 100%;
+
+    --border: 40 15% 88%;
+    --input: 40 15% 88%;
+    --ring: 47 100% 50%;
+
+    /* ─── Bubble tokens ───────────────────────────────────────── */
+    --bubble-outgoing:            220 30% 88%;
+    --bubble-outgoing-foreground: 220 25% 18%;
+    --bubble-outgoing-border:     220 22% 75%;
+
+    --bubble-incoming:            42 18% 97%;
+    --bubble-incoming-foreground: 30 18% 16%;
+    --bubble-incoming-border:     40 15% 84%;
+
+    --bubble-ai:                  47 35% 90%;
+    --bubble-ai-foreground:       36 20% 18%;
+    --bubble-ai-border:           47 100% 50%;
+
+    --bubble-system:              42 15% 92%;
+    --bubble-system-foreground:   30 12% 33%;
+    --bubble-system-border:       40 12% 80%;
+
+    /* ─── Chat layout density (default: comfortable) ──────────── */
+    --chat-bubble-padding-x:    14px;
+    --chat-bubble-padding-y:    10px;
+    --chat-bubble-radius-lg:    16px;
+    --chat-bubble-radius-sm:    4px;
+    --chat-msg-gap-same-author: 4px;
+    --chat-msg-gap-different:   12px;
+    --chat-avatar-size:         40px;
+    --chat-composer-min-h:      44px;
+    --chat-list-row-height:     72px;
+
+    --radius: 0.75rem;
+
+    /* Sidebar - Dark Theme */
+    --sidebar-background: 36 20% 18%;
+    --sidebar-foreground: 45 20% 90%;
+    --sidebar-primary: 33 81% 54%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 36 15% 25%;
+    --sidebar-accent-foreground: 45 20% 95%;
+    --sidebar-border: 36 15% 25%;
+    --sidebar-ring: 33 81% 54%;
+
+    /* Chart Colors */
+    --chart-1: 47 100% 50%;
+    --chart-2: 142 70% 45%;
+    --chart-3: 36 20% 22%;
+    --chart-4: 0 84% 60%;
+    --chart-5: 200 80% 50%;
+
+    /* Custom Gradients */
+    --gradient-gold: linear-gradient(135deg, hsl(31 85% 53%) 0%, hsl(31 85% 53%) 25%, hsl(47 100% 50%) 100%);
+    --gradient-primary: linear-gradient(135deg, hsl(31 85% 53%) 0%, hsl(31 85% 53%) 25%, hsl(47 100% 50%) 100%);
+    --gradient-primary-hover: linear-gradient(135deg, hsl(31 85% 47%) 0%, hsl(31 85% 47%) 25%, hsl(47 100% 45%) 100%);
+    --gradient-success: linear-gradient(135deg, hsl(142 70% 45%) 0%, hsl(152 70% 50%) 100%);
+    --gradient-dark: linear-gradient(135deg, hsl(36 20% 18%) 0%, hsl(36 15% 25%) 100%);
+    
+    /* Shadows */
+    --shadow-sm: 0 1px 2px 0 hsl(30 18% 20% / 0.05);
+    --shadow-md: 0 4px 6px -1px hsl(30 18% 20% / 0.08), 0 2px 4px -2px hsl(30 18% 20% / 0.05);
+    --shadow-lg: 0 10px 15px -3px hsl(30 18% 20% / 0.1), 0 4px 6px -4px hsl(30 18% 20% / 0.05);
+    --shadow-gold: 0 10px 30px -10px hsl(47 100% 50% / 0.3);
+
+    /* ─── Command Palette tokens ────────────────────────────────── */
+    /* Hue neutral-cool 220° separa perceptivamente do warm 36° do chat */
+    --command-palette-bg:     0 0% 100%;
+    --command-palette-border: 220 10% 88%;
+  }
+
+  html.dark,
+  .dark {
+    color-scheme: dark;
+    --background: 36 20% 12%;
+    --foreground: 45 20% 95%;
+
+    --card: 36 20% 16%;
+    --card-foreground: 45 20% 95%;
+
+    --popover: 36 20% 16%;
+    --popover-foreground: 45 20% 95%;
+
+    --primary: 47 100% 50%;
+    --primary-foreground: 30 18% 15%;
+
+    --secondary: 36 15% 22%;
+    --secondary-foreground: 45 20% 95%;
+
+    --muted: 36 15% 22%;
+    --muted-foreground: 45 15% 70%;
+
+    --accent: 47 100% 50%;
+    --accent-foreground: 30 18% 15%;
+
+    --destructive: 0 62% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 142 70% 45%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 92% 55%;
+    --warning-foreground: 30 18% 10%;
+
+    --silver: 220 9% 70%;
+    --silver-foreground: 30 18% 10%;
+
+    --border: 36 15% 25%;
+    --input: 36 15% 25%;
+    --ring: 47 100% 50%;
+
+    /* ─── Bubble tokens (dark) ────────────────────────────────── */
+    --bubble-outgoing:            217 19% 27%;
+    --bubble-outgoing-foreground: 210 20% 94%;
+    --bubble-outgoing-border:     217 20% 38%;
+
+    --bubble-incoming:            36 18% 20%;
+    --bubble-incoming-foreground: 45 15% 88%;
+    --bubble-incoming-border:     38 14% 30%;
+
+    --bubble-ai:                  38 22% 24%;
+    --bubble-ai-foreground:       47 40% 90%;
+    --bubble-ai-border:           47 100% 50%;
+
+    --bubble-system:              36 15% 15%;
+    --bubble-system-foreground:   40 12% 56%;
+    --bubble-system-border:       38 12% 22%;
+
+    /* density vars não variam por tema — definidas só em :root */
+
+    /* ─── Command Palette tokens (dark) ─────────────────────────── */
+    --command-palette-bg:     220 15% 10%;
+    --command-palette-border: 220 10% 20%;
+
+    --sidebar-background: 36 20% 10%;
+    --sidebar-foreground: 45 20% 90%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Inter', system-ui, sans-serif;
+    /* cv11: alterna numeral "1" com serif (legível em timestamps 11:11); ss01: "a" alternativo */
+    font-feature-settings: "cv11", "ss01";
+    min-height: 100vh;
+  }
+
+  #root {
+    min-height: 100vh;
+    @apply bg-background;
+  }
+
+  /* Durante a transição de tema, só o fundo principal fica transparente (sidebar mantém a cor) */
+  body.theme-transitioning,
+  body.theme-transitioning #root,
+  body.theme-transitioning [data-layout="main"] {
+    background: transparent !important;
+  }
+
+  /* Transição suave de cor e fundo ao trocar tema (texto e fundo acompanham sem gargalo) */
+  body,
+  #root,
+  [data-layout="main"] {
+    transition: background-color 0.45s ease, color 0.45s ease;
+  }
+
+  /* Durante a transição de tema, texto e elementos da área principal acompanham a cor suavemente */
+  body.theme-transitioning [data-layout="main"],
+  body.theme-transitioning [data-layout="main"] *,
+  body.theme-transitioning [data-layout="main"] *::before,
+  body.theme-transitioning [data-layout="main"] *::after {
+    transition: color 0.45s ease, border-color 0.35s ease, background-color 0.45s ease;
+  }
+
+  h1 {
+    @apply text-2xl font-bold;
+    letter-spacing: -0.03em;
+  }
+
+  h2 {
+    @apply text-xl font-bold;
+    letter-spacing: -0.025em;
+  }
+
+  h3 {
+    @apply text-base font-semibold;
+    letter-spacing: -0.015em;
+  }
+
+  h4, h5, h6 {
+    @apply font-semibold tracking-tight;
+  }
+}
+
+@layer components {
+  /* ─── Search highlight scope ─────────────────────────────────── */
+  /* Isolado em .search-highlight-scope para não poluir <mark> global */
+  .search-highlight-scope mark {
+    background-color: hsl(var(--primary) / 0.25);
+    color: hsl(var(--foreground));
+    border-radius: 2px;
+    padding: 0 2px;
+    font-weight: inherit;   /* não bold — highlight por cor, sem reflow */
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;  /* multi-line highlight sem corte */
+  }
+
+  html.dark .search-highlight-scope mark,
+  .dark .search-highlight-scope mark {
+    background-color: hsl(var(--primary) / 0.35);
+  }
+
+  .glass-card {
+    @apply bg-card border border-border shadow-sm;
+  }
+
+  @keyframes shimmer {
+    0%, 100% { left: -100%; }
+    50% { left: 200%; }
+  }
+
+  .stat-card {
+    @apply relative bg-card rounded-lg border border-border p-4 shadow-sm overflow-hidden;
+  }
+
+  .stat-card::before {
+    content: '';
+    @apply absolute left-0 top-0 w-[3px] h-full bg-primary/50;
+  }
+
+  .stat-card-label {
+    @apply text-[11px] font-semibold uppercase text-muted-foreground;
+    letter-spacing: 0.06em;
+  }
+
+  .stat-card-value {
+    @apply text-xl font-bold tabular-nums mt-1;
+    letter-spacing: -0.02em;
+  }
+
+  .metric-card {
+    @apply bg-card rounded-lg border border-border p-5 shadow-sm transition-all duration-200 hover:shadow-md hover:-translate-y-0.5;
+  }
+
+  .kanban-column {
+    @apply bg-muted/50 rounded-xl p-4 min-h-[400px];
+  }
+
+  .kanban-card {
+    @apply relative bg-card rounded-lg p-4 shadow-sm border border-border cursor-grab active:cursor-grabbing transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 min-w-0 overflow-hidden;
+  }
+
+  /* Calor/priority accent — set via inline style: --card-accent */
+  .kanban-card::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 3px;
+    height: 100%;
+    background: var(--card-accent, hsl(var(--border)));
+    transition: background 0.2s ease;
+  }
+
+  .sidebar-item {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-lg text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-all duration-150;
+  }
+
+  .sidebar-item-active {
+    background: var(--gradient-primary);
+    @apply text-white font-medium;
+  }
+
+  /* ─── Top Navigation (premium horizontal nav) ──────────────── */
+  .topnav-header {
+    @apply flex items-center px-5 lg:px-8 h-14 bg-background border-b border-border/50 sticky top-0 z-50;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    background: hsl(var(--background) / 0.92);
+  }
+
+  .topnav-item {
+    @apply flex items-center gap-1.5 px-3 py-1.5 text-[13.5px] text-foreground/55 rounded-md cursor-pointer select-none;
+    @apply transition-all duration-150 ease-out;
+    @apply hover:text-foreground/85;
+    font-weight: 460;
+    letter-spacing: -0.01em;
+  }
+
+  .topnav-item-active {
+    @apply text-foreground;
+    font-weight: 600;
+  }
+
+  .topnav-item-locked {
+    @apply opacity-40 cursor-not-allowed;
+  }
+
+  .topnav-mais {
+    @apply text-foreground/45;
+  }
+
+  .topnav-avatar-trigger {
+    @apply flex items-center gap-1.5 p-1 rounded-lg transition-colors duration-150;
+    @apply hover:bg-muted/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring;
+  }
+
+  .topnav-popover {
+    @apply p-1.5 bg-popover border border-border/50 shadow-lg rounded-xl;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    background: hsl(var(--popover) / 0.97);
+  }
+
+  .topnav-dropdown-item {
+    @apply flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-foreground/70 cursor-pointer select-none;
+    @apply transition-all duration-100 ease-out;
+    @apply hover:bg-muted/60 hover:text-foreground;
+  }
+
+  .topnav-dropdown-item-active {
+    @apply bg-primary/10 text-foreground font-medium;
+  }
+
+  .topnav-dropdown-locked {
+    @apply opacity-40 cursor-not-allowed w-full;
+  }
+
+  /* ─── Mobile Navigation ─────────────────────────────────────── */
+  .mobile-nav-item {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-lg text-foreground/70 cursor-pointer select-none;
+    @apply transition-all duration-100 ease-out;
+    @apply hover:bg-muted/50 hover:text-foreground;
+  }
+
+  .mobile-nav-item-active {
+    @apply bg-primary/10 text-foreground font-medium;
+  }
+
+  .mobile-nav-group-label {
+    @apply flex items-center gap-2 px-3 py-2 text-[12px] font-semibold text-foreground/40 uppercase tracking-wider;
+  }
+
+  .badge-success {
+    @apply bg-success/10 text-success border-success/20;
+  }
+
+  .badge-warning {
+    @apply bg-warning/10 text-warning border-warning/20;
+  }
+
+  .badge-destructive {
+    @apply bg-destructive/10 text-destructive border-destructive/20;
+  }
+
+  .progress-bar {
+    @apply h-2 rounded-full bg-muted overflow-hidden;
+  }
+
+  .progress-fill {
+    @apply h-full rounded-full transition-all duration-500 ease-out;
+  }
+
+  .ranking-card {
+    @apply bg-card rounded-xl border border-border p-4 transition-all duration-300;
+  }
+
+  .ranking-card-winner {
+    @apply border-primary shadow-gold bg-gradient-to-r from-primary/5 to-transparent;
+  }
+}
+
+@layer utilities {
+  .gradient-gold {
+    background: var(--gradient-gold);
+  }
+
+  .gradient-primary {
+    background: var(--gradient-primary);
+  }
+
+  .gradient-primary-hover:hover {
+    background: var(--gradient-primary-hover);
+  }
+
+  .gradient-success {
+    background: var(--gradient-success);
+  }
+
+  .gradient-dark {
+    background: var(--gradient-dark);
+  }
+
+  .text-gradient-gold {
+    @apply bg-clip-text text-transparent;
+    background: var(--gradient-gold);
+  }
+
+  .text-gradient-primary {
+    background-image: var(--gradient-primary);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* V8 Racing Font */
+  .font-racing {
+    font-family: 'Racing Sans One', 'Inter', sans-serif;
+  }
+
+  .animate-pulse-success {
+    animation: pulse-success 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  @keyframes pulse-success {
+    0%, 100% {
+      opacity: 1;
+      box-shadow: 0 0 0 0 hsl(var(--success) / 0.4);
+    }
+    50% {
+      opacity: 0.9;
+      box-shadow: 0 0 20px 10px hsl(var(--success) / 0);
+    }
+  }
+
+  .animate-celebrate {
+    animation: celebrate 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  }
+
+  @keyframes celebrate {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+    100% { transform: scale(1); }
+  }
+
+  /* V8 Racing Animations */
+  .animate-engine-start {
+    animation: engine-start 0.5s ease-out;
+  }
+
+  @keyframes engine-start {
+    0% { transform: translateX(-20px); opacity: 0; }
+    50% { transform: translateX(5px); }
+    100% { transform: translateX(0); opacity: 1; }
+  }
+
+  .animate-speedometer {
+    animation: speedometer 1s ease-out;
+  }
+
+  @keyframes speedometer {
+    0% { transform: rotate(-90deg); }
+    100% { transform: rotate(0deg); }
+  }
+
+  .animate-race-in {
+    animation: race-in 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  @keyframes race-in {
+    0% { 
+      transform: translateX(-100px) scale(0.9); 
+      opacity: 0; 
+    }
+    100% { 
+      transform: translateX(0) scale(1); 
+      opacity: 1; 
+    }
+  }
+
+  .animate-checkered-flag {
+    animation: checkered-wave 2s ease-in-out infinite;
+  }
+
+  @keyframes checkered-wave {
+    0%, 100% { transform: rotate(-5deg); }
+    50% { transform: rotate(5deg); }
+  }
+
+  .animate-turbo {
+    animation: turbo-boost 0.3s ease-out;
+  }
+
+  @keyframes turbo-boost {
+    0% { transform: scale(1); filter: brightness(1); }
+    50% { transform: scale(1.05); filter: brightness(1.2); }
+    100% { transform: scale(1); filter: brightness(1); }
+  }
+
+  .animate-rev {
+    animation: engine-rev 0.15s ease-in-out;
+  }
+
+  @keyframes engine-rev {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-2px); }
+    75% { transform: translateX(2px); }
+  }
+
+  /* Checkered pattern for racing theme */
+  .checkered-pattern {
+    background-image: 
+      linear-gradient(45deg, hsl(var(--primary)) 25%, transparent 25%),
+      linear-gradient(-45deg, hsl(var(--primary)) 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, hsl(var(--primary)) 75%),
+      linear-gradient(-45deg, transparent 75%, hsl(var(--primary)) 75%);
+    background-size: 20px 20px;
+    background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+  }
+
+  /* Racing stripes */
+  .racing-stripe {
+    @apply relative overflow-hidden;
+  }
+  
+  .racing-stripe::before {
+    content: '';
+    @apply absolute top-0 left-0 w-2 h-full bg-primary opacity-20;
+  }
+  
+  .racing-stripe::after {
+    content: '';
+    @apply absolute top-0 left-4 w-1 h-full bg-primary opacity-10;
+  }
+
+  /* Route 66 vintage style */
+  .vintage-border {
+    border: 3px solid hsl(var(--primary));
+    box-shadow: 
+      inset 0 0 0 2px hsl(var(--background)),
+      inset 0 0 0 4px hsl(var(--primary) / 0.3);
+  }
+
+  /* Neon glow for rock bar style */
+  .neon-glow {
+    text-shadow: 
+      0 0 5px hsl(var(--primary)),
+      0 0 10px hsl(var(--primary)),
+      0 0 20px hsl(var(--primary) / 0.5);
+  }
+
+  .neon-glow-box {
+    box-shadow: 
+      0 0 5px hsl(var(--primary)),
+      0 0 10px hsl(var(--primary) / 0.5),
+      0 0 20px hsl(var(--primary) / 0.3);
+  }
+
+  /* Fuel gauge animation */
+  .animate-fuel-fill {
+    animation: fuel-fill 1.5s ease-out;
+  }
+
+  @keyframes fuel-fill {
+    0% { width: 0%; }
+    100% { width: var(--fuel-level, 100%); }
+  }
+
+  /* Exhaust smoke effect */
+  .exhaust-smoke {
+    animation: smoke 2s ease-out infinite;
+  }
+
+  @keyframes smoke {
+    0% { 
+      opacity: 0.8; 
+      transform: translateX(0) scale(1); 
+    }
+    100% { 
+      opacity: 0; 
+      transform: translateX(50px) scale(2); 
+    }
+  }
+}

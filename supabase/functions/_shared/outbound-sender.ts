@@ -1,0 +1,316 @@
+// deno-lint-ignore-file no-explicit-any
+/**
+ * Shared logic for sending outbound messages via the WhatsApp adapter.
+ * Used by outbound-trigger (immediate) and process-outbound-dispatches (scheduled).
+ *
+ * Provider-agnostic: resolves Evolution or Uazapi via whatsapp-client adapter.
+ *
+ * Supports:
+ * - Text message (firstMessageTemplate, humanized + smart split)
+ * - Audio voice note (pre-recorded, random from pool) via copilot_agent_audios
+ * - Configurable order: text_first or audio_first
+ */
+
+import { humanizeMessage } from "./message-humanizer.ts";
+import { sendAudioViaProvider } from "./audio-sender.ts";
+import { smartSplitMessage } from "./natural-messaging.ts";
+import {
+  resolveDispatchContext,
+  DispatchResolutionError,
+} from "./whatsapp-dispatch.ts";
+import type { WhatsAppProvider } from "./whatsapp-client.ts";
+import { isCopilotCanceled, logCopilotCancellation } from "./copilot/cancellation.ts";
+
+const AUDIO_DELAY_MS = 8000;
+
+interface DispatchRow {
+  id: string;
+  lead_id: string;
+  organization_id: string;
+  agent_id: string;
+  message_content: string;
+  lead?: { phone?: string; name?: string };
+  agent?: { whatsapp_instance_id?: string; outbound_config?: OutboundConfig };
+}
+
+interface OutboundConfig {
+  audioEnabled?: boolean;
+  audioSendOrder?: "text_first" | "audio_first";
+  [key: string]: unknown;
+}
+
+interface AudioRecord {
+  id: string;
+  public_url: string;
+  name: string;
+}
+
+export async function sendOutboundDispatch(
+  supabase: any,
+  dispatchId: string,
+  organizationId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { data: dispatch, error: fetchError } = await supabase
+      .from("outbound_dispatch_log")
+      .select(`
+        *,
+        lead:leads(phone, name),
+        agent:copilot_agents(whatsapp_instance_id, outbound_config)
+      `)
+      .eq("id", dispatchId)
+      .single();
+
+    if (fetchError || !dispatch) {
+      console.error("[outbound-sender] Dispatch not found:", fetchError);
+      return { success: false, error: "Dispatch not found" };
+    }
+
+    const row = dispatch as unknown as DispatchRow;
+
+    // Resolve provider + instance + phone via unified dispatch helper
+    let ctx;
+    try {
+      ctx = await resolveDispatchContext(supabase, {
+        organization_id: organizationId,
+        phone: row.lead?.phone,
+        preferred_instance_id: row.agent?.whatsapp_instance_id ?? null,
+      });
+    } catch (e) {
+      const err = e as DispatchResolutionError;
+      await supabase
+        .from("outbound_dispatch_log")
+        .update({ status: "failed", error_message: err.message })
+        .eq("id", dispatchId);
+      return { success: false, error: err.message };
+    }
+
+    const { provider, instance, normalizedPhone: phone } = ctx;
+
+    // Humanize
+    const humanizedContent = await humanizeMessage(row.message_content);
+
+    // Resolve audio config
+    const outboundConfig = row.agent?.outbound_config;
+    const audioEnabled = outboundConfig?.audioEnabled === true;
+    const audioSendOrder = outboundConfig?.audioSendOrder || "text_first";
+
+    let chosenAudio: AudioRecord | null = null;
+    if (audioEnabled && row.agent_id) {
+      const { data: audios } = await supabase
+        .from("copilot_agent_audios")
+        .select("id, public_url, name")
+        .eq("agent_id", row.agent_id)
+        .eq("is_active", true);
+
+      if (audios && audios.length > 0) {
+        chosenAudio = audios[Math.floor(Math.random() * audios.length)] as AudioRecord;
+      }
+    }
+
+    // ---------------------------------------------------------------
+    // Text send (with smart split + typing indicator per chunk)
+    // RC-cancel 2026-04-26: per-chunk cancellation gate.
+    // ---------------------------------------------------------------
+    const sendText = async (): Promise<{ ok: boolean; messageId?: string; canceled?: boolean; chunksSent?: number; chunksTotal?: number; error?: string }> => {
+      const { chunks, delays } = await smartSplitMessage(humanizedContent, {
+        enabled: true,
+        intensity: "natural",
+      });
+
+      let firstMessageId: string | undefined;
+      let chunksSent = 0;
+      for (let i = 0; i < chunks.length; i++) {
+        try {
+          await provider.setPresence(phone, "composing");
+        } catch {
+          /* best-effort */
+        }
+
+        if (delays[i] > 0) {
+          await new Promise((r) => setTimeout(r, delays[i]));
+        }
+
+        const cancelCheck = await isCopilotCanceled(supabase, organizationId, phone);
+        if (cancelCheck.canceled) {
+          console.log("[outbound-sender] Copilot canceled mid-flight; aborting after", chunksSent, "of", chunks.length, "chunk(s)");
+          logCopilotCancellation({
+            organizationId,
+            gate: "outbound_chunks",
+            leadId: row.lead_id,
+            phone,
+            chunksSent,
+            chunksTotal: chunks.length,
+            source: cancelCheck.source,
+          });
+          return { ok: chunksSent > 0, messageId: firstMessageId, canceled: true, chunksSent, chunksTotal: chunks.length };
+        }
+
+        try {
+          const res = await provider.sendText({
+            number: phone,
+            text: chunks[i],
+            trackSource: "copilot-outbound",
+            trackId: dispatchId,
+          });
+          if (i === 0) firstMessageId = res.message_id;
+          chunksSent++;
+        } catch (err) {
+          return { ok: false, error: (err as Error).message };
+        }
+      }
+
+      return { ok: true, messageId: firstMessageId, chunksSent, chunksTotal: chunks.length };
+    };
+
+    // ---------------------------------------------------------------
+    // Audio send (voice note PTT via adapter)
+    // ---------------------------------------------------------------
+    const sendAudio = async (): Promise<{ ok: boolean; messageId?: string; error?: string }> => {
+      if (!chosenAudio) return { ok: false, error: "No audio available" };
+      const result = await sendAudioViaProvider(
+        provider as WhatsAppProvider,
+        phone,
+        chosenAudio.public_url,
+        { trackSource: "copilot-outbound-audio", trackId: dispatchId }
+      );
+      return { ok: result.success, messageId: result.messageId, error: result.error };
+    };
+
+    // ---------------------------------------------------------------
+    // Execute in configured order
+    // ---------------------------------------------------------------
+    let textResult: { ok: boolean; messageId?: string; error?: string };
+    let audioResult: { ok: boolean; messageId?: string; error?: string } | null = null;
+
+    if (chosenAudio && audioSendOrder === "audio_first") {
+      audioResult = await sendAudio();
+      textResult = await sendText();
+    } else if (chosenAudio) {
+      textResult = await sendText();
+      if (textResult.ok) {
+        // Background — don't block dispatch loop
+        setTimeout(async () => {
+          try {
+            await sendAudio();
+          } catch (e) {
+            console.warn("[outbound-sender] Background audio send failed:", e);
+          }
+        }, AUDIO_DELAY_MS);
+      }
+    } else {
+      textResult = await sendText();
+    }
+
+    if (!textResult.ok) {
+      console.error("[outbound-sender] Failed to send text:", textResult.error);
+      await supabase
+        .from("outbound_dispatch_log")
+        .update({ status: "failed", error_message: textResult.error })
+        .eq("id", dispatchId);
+      return { success: false, error: textResult.error };
+    }
+
+    // RC-cancel: marca dispatch como canceled se cancelou mid-flight (chunks_sent > 0
+    // mas não completou). textResult.ok=true quando pelo menos 1 chunk saiu antes.
+    if (textResult.canceled) {
+      await supabase
+        .from("outbound_dispatch_log")
+        .update({
+          status: "canceled",
+          message_id: textResult.messageId ?? null,
+          sent_at: new Date().toISOString(),
+          trigger_reason: {
+            ...(dispatch.trigger_reason || {}),
+            canceled_mid_send: true,
+            chunks_sent: textResult.chunksSent,
+            chunks_total: textResult.chunksTotal,
+          },
+        })
+        .eq("id", dispatchId);
+      return { success: true };
+    }
+
+    // Update dispatch log
+    const triggerReason = dispatch.trigger_reason || {};
+    if (chosenAudio && audioResult?.ok) {
+      triggerReason.audioSent = true;
+      triggerReason.audioId = chosenAudio.id;
+      triggerReason.audioName = chosenAudio.name;
+    }
+
+    await supabase
+      .from("outbound_dispatch_log")
+      .update({
+        status: "sent",
+        message_id: textResult.messageId,
+        sent_at: new Date().toISOString(),
+        trigger_reason: triggerReason,
+      })
+      .eq("id", dispatchId);
+
+    // Pipe auto-move: novo_lead → abordado
+    await supabase.from("leads").update({ pipe_whatsapp: "abordado" }).eq("id", row.lead_id);
+
+    const { data: existingPipe } = await supabase
+      .from("pipe_whatsapp")
+      .select("id")
+      .eq("lead_id", row.lead_id)
+      .eq("organization_id", organizationId)
+      .maybeSingle();
+    if (existingPipe) {
+      await supabase.from("pipe_whatsapp").update({ status: "abordado" }).eq("id", existingPipe.id);
+    } else {
+      await supabase.from("pipe_whatsapp").insert({
+        lead_id: row.lead_id,
+        organization_id: organizationId,
+        status: "abordado",
+      });
+    }
+
+    // Register text message in whatsapp_messages history.
+    // message_id = real provider id so webhook echo UPSERT matches this row
+    // instead of creating a duplicate. sent_by_ai:true → Copilot badge in chat.
+    const outboundTextMessageId = textResult.messageId || `cp_${crypto.randomUUID()}`;
+    await supabase.from("whatsapp_messages").upsert({
+      organization_id: organizationId,
+      instance_id: instance.id,
+      message_id: outboundTextMessageId,
+      remote_jid: phone + "@s.whatsapp.net",
+      phone_number: phone,
+      direction: "outgoing",
+      message_type: "conversation",
+      content: humanizedContent,
+      timestamp: new Date().toISOString(),
+      status: "sent",
+      sent_by_ai: true,
+    }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
+
+    if (chosenAudio && audioResult?.ok) {
+      const outboundAudioMessageId = audioResult.messageId || `cp_${crypto.randomUUID()}`;
+      await supabase.from("whatsapp_messages").upsert({
+        organization_id: organizationId,
+        instance_id: instance.id,
+        message_id: outboundAudioMessageId,
+        remote_jid: phone + "@s.whatsapp.net",
+        phone_number: phone,
+        direction: "outgoing",
+        message_type: "audio",
+        content: "[Áudio]",
+        media_url: chosenAudio.public_url,
+        timestamp: new Date().toISOString(),
+        status: "sent",
+        sent_by_ai: true,
+      }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error("[outbound-sender] Error:", error);
+    await supabase
+      .from("outbound_dispatch_log")
+      .update({ status: "failed", error_message: String(error) })
+      .eq("id", dispatchId);
+    return { success: false, error: String(error) };
+  }
+}
