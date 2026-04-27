@@ -5,6 +5,7 @@ import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { findLeadByPhoneOrEmail, associateMessagesToLead, getOrCreateLead } from "../_shared/lead-service.ts";
 import { smartSplitMessage, type NaturalMessagingConfig } from "../_shared/natural-messaging.ts";
+import { isCopilotCanceled, logCopilotCancellation } from "../_shared/copilot/cancellation.ts";
 
 /**
  * SZ.chat Webhook Receiver
@@ -259,23 +260,46 @@ async function sendSzChatResponse(
   phoneNumber: string,
   message: string,
   naturalMessagingConfig?: NaturalMessagingConfig | null,
+  supabase?: ReturnType<typeof createClient>,
 ): Promise<boolean> {
+  // Cancellation gate (RC-cancel, 2026-04-26): per-chunk check antes de cada
+  // setTimeout/sendViaSzChat. Para envio se user desativou copilot mid-flight.
+  // supabase opcional pra backwards-compat — se ausente, não faz check.
+  const checkCanceled = async (): Promise<boolean> => {
+    if (!supabase) return false;
+    const r = await isCopilotCanceled(supabase, organizationId, phoneNumber);
+    return r.canceled;
+  };
+
   // Use smart split if natural messaging is enabled
   if (naturalMessagingConfig?.enabled) {
     const { chunks, delays } = await smartSplitMessage(message, naturalMessagingConfig);
     console.log("[SZ Chat Webhook] Natural messaging: sending", chunks.length, "message(s) to:", phoneNumber);
 
     let allSent = true;
+    let chunksSent = 0;
     for (let i = 0; i < chunks.length; i++) {
       const delay = delays[i] || 0;
       if (delay > 0) {
         await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+      if (await checkCanceled()) {
+        console.log("[SZ Chat Webhook] Copilot canceled mid-flight; aborting after", chunksSent, "of", chunks.length, "chunk(s)");
+        logCopilotCancellation({
+          organizationId,
+          gate: "sz_chat_chunks",
+          phone: phoneNumber,
+          chunksSent,
+          chunksTotal: chunks.length,
+        });
+        return chunksSent > 0;
       }
       const sent = await sendViaSzChat(organizationId, phoneNumber, chunks[i]);
       if (!sent) {
         allSent = false;
         console.error("[SZ Chat Webhook] Failed to send natural chunk", i + 1, "of", chunks.length);
       } else {
+        chunksSent++;
         console.log("[SZ Chat Webhook] Sent natural chunk", i + 1, "of", chunks.length, "- length:", chunks[i].length, "delay:", delay, "ms");
       }
     }
@@ -287,14 +311,28 @@ async function sendSzChatResponse(
   console.log("[SZ Chat Webhook] Sending response in", chunks.length, "message(s) to:", phoneNumber);
 
   let allSent = true;
+  let chunksSent = 0;
   for (let i = 0; i < chunks.length; i++) {
     if (i > 0) {
       await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_MESSAGES_MS));
+    }
+    if (await checkCanceled()) {
+      console.log("[SZ Chat Webhook] Copilot canceled mid-flight (fallback split); aborting after", chunksSent, "of", chunks.length);
+      logCopilotCancellation({
+        organizationId,
+        gate: "sz_chat_chunks",
+        phone: phoneNumber,
+        chunksSent,
+        chunksTotal: chunks.length,
+      });
+      return chunksSent > 0;
     }
     const sent = await sendViaSzChat(organizationId, phoneNumber, chunks[i]);
     if (!sent) {
       allSent = false;
       console.error("[SZ Chat Webhook] Failed to send chunk", i + 1, "of", chunks.length);
+    } else {
+      chunksSent++;
     }
   }
   return allSent;
@@ -550,6 +588,7 @@ async function handleClientMessage(
       phoneNumber,
       agentResult.message,
       naturalConfig,
+      supabase,
     );
 
     if (sent) {

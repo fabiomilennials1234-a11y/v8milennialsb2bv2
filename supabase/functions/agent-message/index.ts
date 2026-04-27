@@ -8,6 +8,7 @@ import { getOrCreateLead, normalizePhoneForSearch } from "../_shared/lead-servic
 import { OpenRouterClient } from "./openrouter-client.ts";
 import { AgentEngine } from "./agent-engine.ts";
 import { fireTrigger } from "../_shared/workflow-trigger.ts";
+import { isCopilotCanceled, logCopilotCancellation } from "../_shared/copilot/cancellation.ts";
 
 /**
  * Webhook receptor de mensagens de leads
@@ -104,6 +105,55 @@ Deno.serve(withSentry('agent-message', async (req) => {
 
     // 3. PROCESS MESSAGE (toda lógica está aqui)
     const response = await engine.processMessage(lead.id, message, incoming_message_type);
+
+    // 3.1 CANCELLATION GATE pós-LLM (RC-cancel, 2026-04-26):
+    // user pode ter desligado o switch DURANTE a chamada LLM (~5-30s).
+    // Se cancelado, retornamos skipped e NÃO entregamos a resposta — caller
+    // (sz-chat-webhook etc) não dispara sendSzChatResponse.
+    const cancelCheck = await isCopilotCanceled(supabase, organizationId, from);
+    if (cancelCheck.canceled) {
+      console.log('[agent-message] Canceled mid-LLM — skipping delivery for lead:', lead.id);
+      const evalMeta = (response as any)._eval_meta;
+
+      // Decisão CTO 2026-04-26: reply cancelada NÃO entra no histórico
+      // (não pode poluir memória do agente em turnos futuros).
+      // Engine.processMessage já persistiu via updateConversationState — desfazemos.
+      if (evalMeta?.conversationId && !evalMeta.conversationId.startsWith('temp_') && response.message) {
+        try {
+          const since = new Date(Date.now() - 60_000).toISOString();
+          const { error: delErr } = await supabase
+            .from('conversation_messages')
+            .delete()
+            .eq('conversation_id', evalMeta.conversationId)
+            .eq('role', 'assistant')
+            .eq('content', response.message)
+            .gte('created_at', since);
+          if (delErr) {
+            console.warn('[agent-message] Failed to delete canceled assistant message:', delErr.message);
+          }
+        } catch (e) {
+          console.warn('[agent-message] Exception deleting canceled assistant message:', e);
+        }
+      }
+
+      logCopilotCancellation({
+        organizationId,
+        gate: "post_llm",
+        leadId: lead.id,
+        conversationId: evalMeta?.conversationId,
+        phone: from,
+        source: cancelCheck.source,
+      });
+      return new Response(JSON.stringify({
+        skipped: true,
+        reason: "ai_disabled_during_processing",
+        canceled_gate: "post_llm",
+        lead_id: lead.id,
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
 
     // 3.5 Item #8: LLM-as-a-judge — avaliar qualidade da resposta (fire-and-forget)
     if (response.message && (response as any)._eval_meta) {

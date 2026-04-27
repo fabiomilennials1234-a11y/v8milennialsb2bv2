@@ -19,6 +19,7 @@ import {
   DispatchResolutionError,
 } from "./whatsapp-dispatch.ts";
 import type { WhatsAppProvider } from "./whatsapp-client.ts";
+import { isCopilotCanceled, logCopilotCancellation } from "./copilot/cancellation.ts";
 
 const AUDIO_DELAY_MS = 8000;
 
@@ -109,14 +110,16 @@ export async function sendOutboundDispatch(
 
     // ---------------------------------------------------------------
     // Text send (with smart split + typing indicator per chunk)
+    // RC-cancel 2026-04-26: per-chunk cancellation gate.
     // ---------------------------------------------------------------
-    const sendText = async (): Promise<{ ok: boolean; messageId?: string; error?: string }> => {
+    const sendText = async (): Promise<{ ok: boolean; messageId?: string; canceled?: boolean; chunksSent?: number; chunksTotal?: number; error?: string }> => {
       const { chunks, delays } = await smartSplitMessage(humanizedContent, {
         enabled: true,
         intensity: "natural",
       });
 
       let firstMessageId: string | undefined;
+      let chunksSent = 0;
       for (let i = 0; i < chunks.length; i++) {
         try {
           await provider.setPresence(phone, "composing");
@@ -128,6 +131,21 @@ export async function sendOutboundDispatch(
           await new Promise((r) => setTimeout(r, delays[i]));
         }
 
+        const cancelCheck = await isCopilotCanceled(supabase, organizationId, phone);
+        if (cancelCheck.canceled) {
+          console.log("[outbound-sender] Copilot canceled mid-flight; aborting after", chunksSent, "of", chunks.length, "chunk(s)");
+          logCopilotCancellation({
+            organizationId,
+            gate: "outbound_chunks",
+            leadId: row.lead_id,
+            phone,
+            chunksSent,
+            chunksTotal: chunks.length,
+            source: cancelCheck.source,
+          });
+          return { ok: chunksSent > 0, messageId: firstMessageId, canceled: true, chunksSent, chunksTotal: chunks.length };
+        }
+
         try {
           const res = await provider.sendText({
             number: phone,
@@ -136,12 +154,13 @@ export async function sendOutboundDispatch(
             trackId: dispatchId,
           });
           if (i === 0) firstMessageId = res.message_id;
+          chunksSent++;
         } catch (err) {
           return { ok: false, error: (err as Error).message };
         }
       }
 
-      return { ok: true, messageId: firstMessageId };
+      return { ok: true, messageId: firstMessageId, chunksSent, chunksTotal: chunks.length };
     };
 
     // ---------------------------------------------------------------
@@ -190,6 +209,26 @@ export async function sendOutboundDispatch(
         .update({ status: "failed", error_message: textResult.error })
         .eq("id", dispatchId);
       return { success: false, error: textResult.error };
+    }
+
+    // RC-cancel: marca dispatch como canceled se cancelou mid-flight (chunks_sent > 0
+    // mas não completou). textResult.ok=true quando pelo menos 1 chunk saiu antes.
+    if (textResult.canceled) {
+      await supabase
+        .from("outbound_dispatch_log")
+        .update({
+          status: "canceled",
+          message_id: textResult.messageId ?? null,
+          sent_at: new Date().toISOString(),
+          trigger_reason: {
+            ...(dispatch.trigger_reason || {}),
+            canceled_mid_send: true,
+            chunks_sent: textResult.chunksSent,
+            chunks_total: textResult.chunksTotal,
+          },
+        })
+        .eq("id", dispatchId);
+      return { success: true };
     }
 
     // Update dispatch log

@@ -13,6 +13,7 @@ import {
   resolveDispatchContext,
   DispatchResolutionError,
 } from "./whatsapp-dispatch.ts";
+import { isCopilotCanceled, logCopilotCancellation } from "./copilot/cancellation.ts";
 
 export async function sendFollowupMessage(
   supabase: any,
@@ -59,6 +60,8 @@ export async function sendFollowupMessage(
 
   let firstMessageId: string | undefined;
   let allSent = true;
+  let chunksSent = 0;
+  let canceled = false;
   for (let i = 0; i < chunks.length; i++) {
     try {
       await provider.setPresence(normalizedPhone, "composing");
@@ -70,6 +73,23 @@ export async function sendFollowupMessage(
       await new Promise((r) => setTimeout(r, delays[i]));
     }
 
+    // RC-cancel 2026-04-26: per-chunk cancellation gate.
+    const cancelCheck = await isCopilotCanceled(supabase, organizationId, normalizedPhone);
+    if (cancelCheck.canceled) {
+      console.log("[followup-sender] Copilot canceled mid-flight; aborting after", chunksSent, "of", chunks.length);
+      logCopilotCancellation({
+        organizationId,
+        gate: "followup_chunks",
+        leadId,
+        phone: normalizedPhone,
+        chunksSent,
+        chunksTotal: chunks.length,
+        source: cancelCheck.source,
+      });
+      canceled = true;
+      break;
+    }
+
     try {
       const res = await provider.sendText({
         number: normalizedPhone,
@@ -78,6 +98,7 @@ export async function sendFollowupMessage(
         trackId: ruleId,
       });
       if (i === 0) firstMessageId = res.message_id;
+      chunksSent++;
     } catch (err) {
       console.error(
         "[followup-sender] provider error on chunk",
@@ -87,6 +108,10 @@ export async function sendFollowupMessage(
       );
       allSent = false;
     }
+  }
+
+  if (canceled && chunksSent === 0) {
+    return { success: false, error: "canceled_before_send" };
   }
 
   if (!allSent) {
