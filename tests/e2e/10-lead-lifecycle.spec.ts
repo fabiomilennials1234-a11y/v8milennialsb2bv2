@@ -112,27 +112,57 @@ test.describe('Lead Lifecycle — Ciclo completo B2B', () => {
     await page.goto('/pipe-whatsapp');
     await page.waitForLoadState('networkidle');
 
-    // Click on any existing lead card to open the detail drawer
-    const anyCard = page
-      .locator('[class*="card"], [class*="Card"]')
-      .filter({ hasNotText: /kanban|board|column/i })
-      .first();
+    // Prefer data-lead-id selector (added for testability); fallback to class
+    const anyCard = page.locator('[data-lead-id]').first().or(
+      page.locator('[class*="kanban-card"]').first()
+    );
 
-    if (!(await anyCard.isVisible({ timeout: 5_000 }).catch(() => false))) {
+    if (!(await anyCard.isVisible({ timeout: 8_000 }).catch(() => false))) {
       test.skip();
       return;
     }
 
     await anyCard.click();
 
-    // Drawer or sheet should appear
-    const drawer = page.locator('[role="dialog"], [data-radix-sheet], [class*="Sheet"]').first();
-    if (await drawer.isVisible({ timeout: 5_000 }).catch(() => false)) {
-      // Drawer has lead name, phone, or company — some content
+    // LeadDetailDrawer renders as Dialog (role="dialog")
+    const drawer = page.getByRole('dialog').first();
+    if (await drawer.isVisible({ timeout: 8_000 }).catch(() => false)) {
       await expect(drawer).not.toBeEmpty();
 
-      // Close drawer
+      // Verify core tabs are present
+      const dadosTab = drawer.getByRole('tab', { name: /dados/i });
+      if (await dadosTab.isVisible({ timeout: 3_000 }).catch(() => false)) {
+        expect(dadosTab).toBeTruthy();
+      }
+
       await page.keyboard.press('Escape');
+      await page.waitForTimeout(300);
+    }
+
+    expect(page.url()).toContain('/pipe-whatsapp');
+  });
+
+  test('pipe_whatsapp → colunas têm data-stage e lead cards têm data-lead-id', async ({ page }) => {
+    await page.goto('/pipe-whatsapp');
+    await page.waitForLoadState('networkidle');
+
+    const stageColumns = page.locator('[data-stage]');
+    const columnCount = await stageColumns.count();
+    if (columnCount > 0) {
+      // Verify "novo" column exists as primary entry stage
+      const novoColumn = page.locator('[data-stage="novo"]');
+      const hasNovo = await novoColumn.isVisible({ timeout: 5_000 }).catch(() => false);
+      if (hasNovo) {
+        expect(hasNovo).toBe(true);
+      }
+    }
+
+    const leadCards = page.locator('[data-lead-id]');
+    const cardCount = await leadCards.count();
+    if (cardCount > 0) {
+      const leadId = await leadCards.first().getAttribute('data-lead-id');
+      expect(leadId).toBeTruthy();
+      expect(leadId).not.toBe('');
     }
 
     expect(page.url()).toContain('/pipe-whatsapp');

@@ -79,6 +79,7 @@ function DroppableColumn<T extends DraggableItem>({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
+      data-stage={column.id}
       className={cn(
         "kanban-column min-w-[320px] max-w-[360px] flex-shrink-0 flex flex-col transition-all duration-200",
         isOver && "ring-2 ring-primary/50 bg-primary/5",
