@@ -164,20 +164,18 @@ GRANT SELECT ON public.v_cron_job_status TO authenticated;
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 3. Register the monitoring cron job
 -- ─────────────────────────────────────────────────────────────────────────────
-DO $$
-DECLARE
-  v_base_url  text;
-  v_cron_secret text;
+DO $outer$
 BEGIN
   -- Remove existing job to allow re-run (idempotent)
-  PERFORM cron.unschedule('cron-health-monitor')
-  WHERE EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'cron-health-monitor');
+  IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'cron-health-monitor') THEN
+    PERFORM cron.unschedule('cron-health-monitor');
+  END IF;
 
   -- Run check_cron_job_health() directly via SQL (no HTTP needed)
   PERFORM cron.schedule(
     'cron-health-monitor',
     '*/5 * * * *',
-    $$SELECT public.check_cron_job_health()$$
+    $cron$SELECT public.check_cron_job_health()$cron$
   );
 END;
-$$;
+$outer$;
