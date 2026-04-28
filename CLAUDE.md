@@ -8,51 +8,108 @@ SaaS B2B multi-tenant para gestão de leads, pipelines de vendas, campanhas e au
 - **ICP**: Empresas B2B — fábricas e distribuidoras
 - **Time**: CTO (Gabriel) + 1 dev junior
 
-## Team de Agentes — Protocolo Autônomo
+## Team de Agentes — Pipeline 5 Camadas (18 agentes)
 
-**OBRIGATÓRIO**: Este projeto é desenvolvido por um time de 10 agentes especializados. Toda task, alteração, ou request passa automaticamente por esse time. Nenhuma invocação manual necessária.
+**OBRIGATÓRIO**: Toda task que envolve mudança de código segue um pipeline fixo. Conductor é entry point único. Versioner é exit point único. Pipeline:
 
-### Como funciona
+```
+CTO → Conductor → Prompt Engineer → [Dev agents em paralelo] → QA ⇄ refactor → Documenter → Versioner → push
+```
 
-1. **Toda task** → Invoque a skill `agent-conductor` para triagem e roteamento
-2. **SDD** → `tlc-spec-driven` roda para especificação e documentação (auto-sized por escopo)
-3. **Execução** → Agente(s) selecionado(s) operam com persona, regras e abordagem definidas
-4. **Documentação** → Obsidian vault é atualizado com mudanças (`06 — Features/`, `07 — Changelog/`)
+### Pipeline detalhado
+
+1. **Conductor** carrega contexto vault, diagnostica causa-raiz, define critérios de aceite, seleciona dev agents necessários e emite **brief estruturado**.
+2. **Prompt Engineer** recebe o brief, forja **prompts cirúrgicos por agente** e despacha em paralelo via Agent tool. Sequência apenas onde há dependência real (DBA antes de Backend, Security em features sensíveis).
+3. **Dev agents** executam em paralelo. Cada um devolve relatório estruturado. Não commitam, não documentam.
+4. **QA** valida critérios 1:1, suite, edge cases, áreas frágeis. APROVA → segue. REPROVA → feedback estruturado por agente → loop com Prompt Engineer (refactor) → re-QA. 3 loops sem convergência = escala ao Conductor.
+5. **Documenter** atualiza vault Obsidian (`06 — Features`, `07 — Changelog`, `04 — Decisões`, `08 — Backlog`) e `.specs/STATE.md`. Sumariza pro Versioner.
+6. **Versioner** resolve conflitos cross-agente, valida typecheck/lint/test:unit, cria branch local nova, stage seletivo, commit único Conventional + Co-Authored-By, push -u origin nova branch.
 
 ### O Time
 
+**Camada de orquestração (3):**
+
+| Agente | Função | Skill |
+|--------|--------|-------|
+| **Conductor** | Entry point — contexto + diagnóstico + brief | `agent-conductor` |
+| **Prompt Engineer** | Forja prompts paralelos, dispatch, consolidação | `agent-prompt-engineer` |
+| **Versioner** | Conflitos + branch + commit + push | `agent-versioner` |
+
+**Camada de design (2 — paralelo entre si, ambos antes do Frontend impl.):**
+
 | Agente | Domínio | Skill |
 |--------|---------|-------|
-| **Conductor** | Triagem, roteamento, orquestração | `agent-conductor` |
+| **Design** | Identidade visual, tokens HSL, motion, dark-first, tipografia editorial | `agent-design` |
+| **UX/UI** | IA, fluxos, padrões de interação, microcopy, estados, WCAG AA | `agent-ux-ui` |
+
+**Camada dev — engenharia (8 — paralelizáveis):**
+
+| Agente | Domínio | Skill |
+|--------|---------|-------|
 | **Architect** | Decisões de sistema, trade-offs, domain modeling | `agent-architect` |
-| **Backend** | Edge functions, APIs, integrações, resiliência | `agent-backend` |
-| **Frontend** | React, UI/UX, componentes, visual, performance | `agent-frontend` |
-| **DBA** | PostgreSQL, migrations, RLS, query optimization | `agent-dba` |
-| **QA** | Testes, verificação, cobertura, acessibilidade | `agent-qa` |
-| **Infra** | Deploy, CI/CD, monitoring, plataforma | `agent-infra` |
-| **Automation** | n8n, cron jobs, webhooks, event-driven, workflows | `agent-automation` |
+| **Backend** | Edge functions, APIs, RPCs, contratos internos | `agent-backend` |
+| **Frontend** | React 18, TS, shadcn, Tailwind, performance (executa specs Design+UX) | `agent-frontend` |
+| **DBA** | PostgreSQL OLTP, migrations, RLS, query optimization | `agent-dba` |
 | **AI** | Copilot, RAG, embeddings, conversations, prompts | `agent-ai` |
-| **Security** | Threat modeling, RLS review, SAST/SCA/secrets, auth hardening, LGPD. Poder de veto | `agent-security` |
+| **Automation** | n8n, pg_cron, workflows, event-driven | `agent-automation` |
+| **Integrations** | 3rd party APIs, OAuth, webhooks, provider abstractions | `agent-integrations` |
+| **Security** | Threat modeling, RLS, SAST/SCA, auth, LGPD (poder de veto) | `agent-security` |
 
-### Roteamento rápido
+**Camada operacional (3):**
 
-| Sinal na task | Agente(s) |
-|---------------|-----------|
-| `supabase/functions/`, endpoint, payload, webhook | Backend |
-| `src/components/`, `src/pages/`, UI, visual, design | Frontend |
-| `supabase/migrations/`, tabela, index, RLS, SQL | DBA |
-| Teste, coverage, verificação, QA | QA |
-| Deploy, Docker, CI/CD, env vars, monitoring | Infra |
-| n8n, cron, automação, workflow trigger | Automation |
+| Agente | Domínio | Skill |
+|--------|---------|-------|
+| **Infra** | Deploy, CI/CD, Docker, plataforma | `agent-infra` |
+| **Observability** | SRE, Sentry, SLO/SLI, alertas, runbooks, post-mortems | `agent-observability` |
+| **Data** | Métricas de produto, mat views, analytics, BI | `agent-data` |
+
+**Camada multiplicador (1):**
+
+| Agente | Domínio | Skill |
+|--------|---------|-------|
+| **DevEx** | CLI, generators, ESLint custom, type guards, onboarding | `agent-devex` |
+
+**Camada de qualidade & memória (2):**
+
+| Agente | Função | Skill |
+|--------|--------|-------|
+| **QA** | Gate de aceite + refactor loop com Prompt Engineer | `agent-qa` |
+| **Documenter** | Curadoria do Segundo Cérebro (Obsidian + .specs) | `agent-documenter` |
+
+### Roteamento — quem o Conductor seleciona
+
+| Sinal na task | Dev agent(s) primário(s) |
+|---------------|--------------------------|
+| `supabase/functions/<endpoint interno>`, RPC, contrato interno | Backend |
+| `supabase/functions/<provider externo>`, webhook 3rd party, OAuth, signature | Integrations |
+| `src/components/`, `src/pages/`, UI nova/refatorada | Design + UX/UI + Frontend |
+| Mudança visual trivial (copy, fix bug visual) | Frontend solo |
+| `supabase/migrations/`, schema OLTP, RLS, índice transacional | DBA |
+| `analytics_*`, mat view, métrica nova, dashboard | Data |
+| Sentry, alerta novo, runbook, SLO | Observability |
+| Deploy, Docker, CI/CD, env, plataforma | Infra |
+| n8n, pg_cron, workflow, event-driven | Automation |
 | Copilot, agente IA, RAG, embeddings, conversation | AI |
+| Auth, permissões, secrets, CORS, payment, PII, LGPD, OAuth, CSP, injection, XSS | Security |
+| CLI script, generator, ESLint rule, type guard, onboarding | DevEx |
 | Arquitetura, decisão cross-cutting, trade-off | Architect |
-| Auth, permissões, RLS, secrets, CORS, webhook signature, pagamento, PII, LGPD, OAuth, CSP, injection, XSS | Security |
-| Feature completa nova | Architect → DBA → Backend → Frontend → QA |
-| Feature sensível (toca auth, pagamento, PII, cross-tenant) | Architect → Security → DBA → Backend → Security → Frontend → QA → Security → Infra |
+| Feature UI completa nova | Architect + Design + UX/UI + DBA + Backend + Frontend |
+| Feature sensível (auth, pagamento, PII, cross-tenant) | Architect + Security + DBA + Backend + Frontend (gates Security antes/depois) |
+| Boundary 3rd party nova | Architect + Security + Integrations + Backend |
+| Métrica nova de produto | Data + DBA (se schema novo) + Frontend (se UI) |
 
-### Regra de ouro
+QA, Documenter e Versioner **não são selecionados** — entram fixos no fim.
 
-Não pule o Conductor. Não pule o SDD. Não declare pronto sem atualizar Obsidian.
+### Regras de ouro
+
+- Conductor é entry point. Nunca pulado. Nunca implementa.
+- Prompt Engineer é o **único** que invoca dev agents. Paralelo sempre que possível.
+- Design e UX/UI rodam **paralelo entre si**, ambos antes de Frontend implementar UI nova.
+- QA tem poder de reprovar e disparar refactor loop. 3 loops sem convergência → escala Conductor.
+- Documenter precede Versioner — vault sempre alinhado antes do commit.
+- Versioner é exit point. Branch nova + commit único + push remoto. Nunca `main`/`develop`. Nunca `--force`. Nunca `git add -A`.
+- Security tem veto em qualquer camada para tasks sensíveis.
+- Tasks puramente conversacionais ("explica X", "como funciona Y") **não disparam o pipeline** — Conductor responde direto.
 
 ## Stack
 
