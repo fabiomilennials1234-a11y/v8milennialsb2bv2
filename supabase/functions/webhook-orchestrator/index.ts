@@ -148,6 +148,25 @@ async function handleProcessLead(supabase: any, data: any, tenantId: string | nu
     }
   }
 
+  // Calendly+Typeform: janela ampliada de dedup por nome (30 dias). Calendly não
+  // envia phone — precisamos correlacionar com Typeform (que enviou phone)
+  // mesmo que o lead Typeform tenha sido criado dias antes. Email pode diferir
+  // (Typeform usa email pessoal, Calendly aceita corporativo) → fallback nome.
+  if (!existingLead && origin === "calendly" && normalizedName) {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const { data: recentLeads } = await supabase
+      .from("leads")
+      .select("*")
+      .eq("organization_id", tenantId)
+      .gte("created_at", thirtyDaysAgo.toISOString())
+      .order("created_at", { ascending: false });
+    if (recentLeads) {
+      existingLead = recentLeads.find((lead: any) => normalizeName(lead.name) === normalizedName);
+      if (existingLead) deduplicationMethod = "name_30d_calendly";
+    }
+  }
+
   // Handle existing lead (unification)
   if (existingLead) {
     const updatedData: Record<string, any> = {};
@@ -255,11 +274,43 @@ async function handleProcessLead(supabase: any, data: any, tenantId: string | nu
     };
   }
 
+  // Calendly+Typeform: fallback enrichment de phone quando Calendly cria
+  // lead novo (dedup falhou) e nao trouxe phone. Busca leads recentes da
+  // org com mesmo email OU nome normalizado nos ultimos 30 dias e copia
+  // o phone do mais recente. Evita perder o phone capturado pelo Typeform
+  // quando os webhooks chegam em ordem inesperada ou com leves diferencas
+  // de email entre as duas plataformas.
+  let enrichedPhone = phone;
+  let enrichmentSource: string | null = null;
+  if (origin === "calendly" && !enrichedPhone) {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const { data: enrichmentCandidates } = await supabase
+      .from("leads")
+      .select("phone, email, name, created_at")
+      .eq("organization_id", tenantId)
+      .not("phone", "is", null)
+      .gte("created_at", thirtyDaysAgo.toISOString())
+      .order("created_at", { ascending: false });
+
+    if (enrichmentCandidates) {
+      const match = enrichmentCandidates.find((c: any) => {
+        if (normalizedEmail && normalizeEmail(c.email) === normalizedEmail) return true;
+        if (normalizedName && normalizeName(c.name) === normalizedName) return true;
+        return false;
+      });
+      if (match?.phone) {
+        enrichedPhone = match.phone;
+        enrichmentSource = normalizeEmail(match.email) === normalizedEmail ? "email_30d" : "name_30d";
+      }
+    }
+  }
+
   // Create new lead
   const { data: lead, error: leadError } = await supabase
     .from("leads")
     .insert({
-      name, email, phone, company, origin, segment,
+      name, email, phone: enrichedPhone, company, origin, segment,
       faturamento: faturamento || null, urgency, notes,
       rating: rating ? parseInt(String(rating), 10) : 0, sdr_id,
       responsible_id: sdr_id || null,
@@ -307,6 +358,13 @@ async function handleProcessLead(supabase: any, data: any, tenantId: string | nu
       action: "Lead criado via integração",
       description: `Lead ${name} adicionado automaticamente no pipe de confirmação com reunião marcada para ${lead.compromisso_date}`,
     });
+    if (enrichmentSource) {
+      await supabase.from("lead_history").insert({
+        lead_id: lead.id,
+        action: "Lead enriquecido",
+        description: `Telefone copiado de lead anterior (${enrichmentSource}) — Calendly não envia phone. Origem: Typeform/manual prévio.`,
+      });
+    }
     return {
       success: true,
       message: "Lead criado com sucesso no pipe de confirmação",
