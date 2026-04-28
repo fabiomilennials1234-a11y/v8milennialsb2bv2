@@ -123,6 +123,9 @@ export interface PlaygroundData {
   audioEnabled: boolean;
   audioSendOrder: "text_first" | "audio_first";
 
+  // Audience filter — atende contatos sem lead pré-existente
+  attendUnknownContacts: boolean;
+
   // Tools
   tools: Record<string, PlaygroundToolState>;
 
@@ -219,6 +222,7 @@ export function createDefaultPlaygroundData(): PlaygroundData {
     outboundConfig: { ...DEFAULT_OUTBOUND_CONFIG },
     audioEnabled: false,
     audioSendOrder: "text_first",
+    attendUnknownContacts: true,
     tools: {},
     documents: [],
     links: [],

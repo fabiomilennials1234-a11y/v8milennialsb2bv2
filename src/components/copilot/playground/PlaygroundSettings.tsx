@@ -20,6 +20,7 @@ import {
   Plus,
   X,
   Sparkles,
+  Users,
 } from "lucide-react";
 import {
   BehaviorWindowsEditor,
@@ -268,6 +269,27 @@ export function PlaygroundSettings({ data, onChange }: PlaygroundSettingsProps) 
             </div>
           </div>
         )}
+      </div>
+
+      {/* ===== Audiência ===== */}
+      <div className="border-b border-border/40">
+        <div className="flex items-center justify-between px-4 py-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <Users className="w-4 h-4 text-muted-foreground shrink-0" />
+            <div className="min-w-0">
+              <p className="text-sm font-medium">Atender contatos sem lead</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                {data.attendUnknownContacts
+                  ? "IA responde qualquer número que mandar mensagem"
+                  : "IA só responde números que já são lead no sistema"}
+              </p>
+            </div>
+          </div>
+          <Switch
+            checked={data.attendUnknownContacts}
+            onCheckedChange={(v) => onChange({ attendUnknownContacts: v })}
+          />
+        </div>
       </div>
 
       {/* ===== Agente Proativo ===== */}

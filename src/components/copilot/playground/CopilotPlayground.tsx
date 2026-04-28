@@ -285,6 +285,7 @@ export function CopilotPlayground() {
       outboundConfig: wd.outboundConfig || prev.outboundConfig,
       audioEnabled: wd.outboundConfig?.audioEnabled || false,
       audioSendOrder: wd.outboundConfig?.audioSendOrder || "text_first",
+      attendUnknownContacts: wd.attendUnknownContacts ?? true,
       agentId: editId,
       tools: {
         QUALIFICAR_LEAD: toolState(wd.canQualifyLead, "QUALIFICAR_LEAD"),
@@ -685,7 +686,7 @@ function createWizardDataFromPlayground(data: PlaygroundData): any {
     canMoveCards: data.tools.MOVER_CARD?.enabled ?? false,
     maxConversationTurns: 20,
     responseDelayMs: data.responseDelayMs,
-    attendUnknownContacts: false,
+    attendUnknownContacts: data.attendUnknownContacts ?? true,
     llmTemperatureMode: data.llmTemperatureMode,
     personaDescription: "",
     skillsAndTopics: "",
