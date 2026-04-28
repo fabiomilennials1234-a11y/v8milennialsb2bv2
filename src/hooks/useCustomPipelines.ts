@@ -82,6 +82,7 @@ export interface CustomPipeEntry {
   };
   stage?: CustomPipelineStage;
   assigned_profile?: { id: string; full_name: string | null; avatar_url: string | null };
+  assigned_member?: { id: string; name: string | null; profile: { id: string; full_name: string | null; avatar_url: string | null } | null };
 }
 
 // ────────────────────────────────────────────────────────────
@@ -309,19 +310,58 @@ export function useCustomPipeEntries(pipelineId: string | undefined) {
     queryFn: async () => {
       if (!pipelineId) return [];
 
+      // FK assigned_to migrou de profiles → team_members (migration 20260918).
+      // Faz 2-hop: team_members → profiles via team_members.user_id pra manter
+      // o display name e avatar (compatibilidade com CustomPipeLeadCard).
       const { data, error } = await supabase
         .from("custom_pipe_entries")
         .select(`
           *,
           lead:leads(id, name, company, phone, email),
           stage:custom_pipeline_stages(id, name, color, stage_key, position),
-          assigned_profile:profiles!custom_pipe_entries_assigned_to_fkey(id, full_name, avatar_url)
+          assigned_member:team_members!custom_pipe_entries_assigned_to_fkey(
+            id, name, user_id
+          )
         `)
         .eq("pipeline_id", pipelineId)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-      return (data || []) as CustomPipeEntry[];
+
+      // Lookup batch dos profiles via user_id dos team_members (1 query
+      // adicional, evita relação fixa que não existe em alguns ambientes).
+      const userIds = Array.from(new Set(
+        (data || [])
+          .map((e: any) => e.assigned_member?.user_id)
+          .filter((u: any): u is string => !!u)
+      ));
+      const profilesById = new Map<string, { id: string; full_name: string | null; avatar_url: string | null }>();
+      if (userIds.length > 0) {
+        const { data: profs } = await supabase
+          .from("profiles")
+          .select("id, full_name, avatar_url")
+          .in("id", userIds);
+        for (const p of profs || []) profilesById.set(p.id, p);
+      }
+
+      // Backfill assigned_profile (legacy shape) a partir do assigned_member
+      // pra os componentes que ainda referenciam entry.assigned_profile.
+      const enriched = (data || []).map((entry: any) => {
+        const member = entry.assigned_member;
+        const prof = member?.user_id ? profilesById.get(member.user_id) : null;
+        return {
+          ...entry,
+          assigned_profile: member
+            ? {
+                id: prof?.id || member.id,
+                full_name: prof?.full_name || member.name || null,
+                avatar_url: prof?.avatar_url || null,
+              }
+            : null,
+        };
+      });
+
+      return enriched as CustomPipeEntry[];
     },
     enabled: !!pipelineId,
   });
