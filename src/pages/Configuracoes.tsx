@@ -54,14 +54,34 @@ import {
 import { useTags, useCreateTag, useUpdateTag, useDeleteTag, Tag as TagType } from "@/hooks/useTags";
 import { useIsAdmin } from "@/hooks/useUserRole";
 import { useOrganizationSettings } from "@/hooks/useOrganizationSettings";
-import { WhatsAppSettings } from "@/components/settings/WhatsAppSettings";
-import { WebhookSettings } from "@/components/settings/WebhookSettings";
-import IntegrationsCatalog from "@/components/settings/IntegrationsCatalog";
-import { HelpCenter } from "@/components/settings/help/HelpCenter";
-import { MilestonesConfig } from "@/components/settings/MilestonesConfig";
 import { useOrganization } from "@/hooks/useOrganization";
 import { toast } from "sonner";
 
+// Lazy imports — cada tab carrega só quando ativada.
+// Bundle inicial cai de ~948KB pra ~150KB.
+const WhatsAppSettings = lazy(() =>
+  import("@/components/settings/WhatsAppSettings").then((m) => ({
+    default: m.WhatsAppSettings,
+  }))
+);
+const WebhookSettings = lazy(() =>
+  import("@/components/settings/WebhookSettings").then((m) => ({
+    default: m.WebhookSettings,
+  }))
+);
+const IntegrationsCatalog = lazy(() =>
+  import("@/components/settings/IntegrationsCatalog")
+);
+const HelpCenter = lazy(() =>
+  import("@/components/settings/help/HelpCenter").then((m) => ({
+    default: m.HelpCenter,
+  }))
+);
+const MilestonesConfig = lazy(() =>
+  import("@/components/settings/MilestonesConfig").then((m) => ({
+    default: m.MilestonesConfig,
+  }))
+);
 const ApiDocsSettings = lazy(() =>
   import("@/components/settings/api-docs/ApiDocsSettings").then((m) => ({
     default: m.ApiDocsSettings,
@@ -69,9 +89,17 @@ const ApiDocsSettings = lazy(() =>
 );
 
 const colorOptions = [
-  "#F5C518", "#22C55E", "#3B82F6", "#8B5CF6", "#EF4444", 
+  "#F5C518", "#22C55E", "#3B82F6", "#8B5CF6", "#EF4444",
   "#F97316", "#EC4899", "#14B8A6", "#6366F1", "#84CC16"
 ];
+
+function TabFallback({ label }: { label: string }) {
+  return (
+    <div className="h-[400px] flex items-center justify-center text-sm text-muted-foreground">
+      Carregando {label}...
+    </div>
+  );
+}
 
 function TagsSettings() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -550,27 +578,33 @@ export default function Configuracoes() {
           </TabsContent>
 
           <TabsContent value="whatsapp">
-            <Card className="glass-card">
-              <CardContent className="pt-6">
-                <WhatsAppSettings />
-              </CardContent>
-            </Card>
+            <Suspense fallback={<TabFallback label="WhatsApp" />}>
+              <Card className="glass-card">
+                <CardContent className="pt-6">
+                  <WhatsAppSettings />
+                </CardContent>
+              </Card>
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="integracoes">
-            <IntegrationsCatalog />
+            <Suspense fallback={<TabFallback label="Integrações" />}>
+              <IntegrationsCatalog />
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="webhooks">
-            <Card className="glass-card">
-              <CardContent className="pt-6">
-                <WebhookSettings />
-              </CardContent>
-            </Card>
+            <Suspense fallback={<TabFallback label="Webhooks" />}>
+              <Card className="glass-card">
+                <CardContent className="pt-6">
+                  <WebhookSettings />
+                </CardContent>
+              </Card>
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="api">
-            <Suspense fallback={<div className="h-[600px] flex items-center justify-center text-muted-foreground">Carregando documentação...</div>}>
+            <Suspense fallback={<TabFallback label="documentação" />}>
               <ApiDocsSettings />
             </Suspense>
           </TabsContent>
@@ -584,15 +618,21 @@ export default function Configuracoes() {
           </TabsContent>
 
           <TabsContent value="ajuda">
-            <Card className="glass-card">
-              <CardContent className="pt-6">
-                <HelpCenter />
-              </CardContent>
-            </Card>
+            <Suspense fallback={<TabFallback label="Central de Ajuda" />}>
+              <Card className="glass-card">
+                <CardContent className="pt-6">
+                  <HelpCenter />
+                </CardContent>
+              </Card>
+            </Suspense>
           </TabsContent>
 
           {orgType === "outbound" && (
-            <TabsContent value="marcos"><MilestonesConfig /></TabsContent>
+            <TabsContent value="marcos">
+              <Suspense fallback={<TabFallback label="Marcos" />}>
+                <MilestonesConfig />
+              </Suspense>
+            </TabsContent>
           )}
 
         </div>
