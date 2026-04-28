@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -68,6 +69,7 @@ export function ImportCustomPipelineContent({
   const [showErrors, setShowErrors] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const queryClient = useQueryClient();
   const { parseCSV, importLeadsToCustomPipeline, resetImport, isImporting, progress, result, lastReport } = useImportLeads();
   const { data: members = [] } = useTeamMembers();
   const { data: customFields = [] } = useLeadCustomFields();
@@ -150,6 +152,13 @@ export function ImportCustomPipelineContent({
         userColumnMapping: Object.keys(fullMapping).length ? fullMapping : undefined,
         sdrId: selectedResponsibleId === "none" ? undefined : selectedResponsibleId || undefined,
       });
+      // Invalidar caches do React Query pra UI refletir os leads importados
+      // imediatamente (sem precisar refresh manual ou esperar staleTime).
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["custom_pipe_entries", pipelineId] }),
+        queryClient.invalidateQueries({ queryKey: ["custom_pipe_entries"] }),
+        queryClient.invalidateQueries({ queryKey: ["leads"] }),
+      ]);
       setStep("complete");
     } catch (error) {
       console.error("Import error:", error);

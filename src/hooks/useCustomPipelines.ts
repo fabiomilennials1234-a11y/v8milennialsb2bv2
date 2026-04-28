@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
+import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { triggerStageChangedWorkflows, triggerLeadCreatedInCustomPipeline } from "@/lib/workflowTrigger";
 import { useCanPerformActionAsync } from "@/lib/permissions";
 
@@ -299,6 +300,10 @@ export function useCustomPipelineStages(pipelineId: string | undefined) {
 
 /** Busca leads de um funil customizado com joins */
 export function useCustomPipeEntries(pipelineId: string | undefined) {
+  // Realtime: detecta INSERT/UPDATE/DELETE em custom_pipe_entries e invalida
+  // o cache. Cobre import-leads, mutations no UI, triggers do banco etc.
+  useRealtimeSubscription("custom_pipe_entries", ["custom_pipe_entries", pipelineId ?? ""]);
+
   return useQuery({
     queryKey: ["custom_pipe_entries", pipelineId],
     queryFn: async () => {
