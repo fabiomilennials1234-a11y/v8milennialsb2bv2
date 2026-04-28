@@ -60,6 +60,54 @@ Deno.serve(withSentry('agent-message', async (req) => {
       );
     }
 
+    // 1.0. AUDIENCE GATE — bloqueia contatos sem lead pre-existente quando
+    // agente default da org tem attend_unknown_contacts=false. Roda ANTES do
+    // getOrCreateLead pra nao criar lead fantasma quando filtro esta on.
+    {
+      const normalizedPhone = normalizePhoneForSearch(from);
+      if (normalizedPhone) {
+        const { data: existingLead } = await supabase
+          .from("leads")
+          .select("id")
+          .eq("organization_id", organization_id)
+          .eq("normalized_phone", normalizedPhone)
+          .maybeSingle();
+
+        if (!existingLead) {
+          // Sem lead. Busca agente default ativo da org pra ler attend_unknown_contacts.
+          const { data: defaultAgent } = await supabase
+            .from("copilot_agents")
+            .select("id, attend_unknown_contacts")
+            .eq("organization_id", organization_id)
+            .eq("is_active", true)
+            .eq("is_default", true)
+            .maybeSingle();
+
+          if (defaultAgent && defaultAgent.attend_unknown_contacts === false) {
+            await logRuntime({
+              module: "copilot",
+              action: "audience_gate_block",
+              status: "ok",
+              metadata: {
+                organization_id,
+                phone: normalizedPhone,
+                agent_id: defaultAgent.id,
+                reason: "unknown_phone_blocked",
+              },
+            });
+            return new Response(
+              JSON.stringify({
+                skipped: true,
+                reason: "unknown_phone_blocked",
+                organization_id,
+              }),
+              { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+            );
+          }
+        }
+      }
+    }
+
     const { lead, organizationId } = await identifyTenant(supabase, from, channel, organization_id, push_name);
 
     if (!lead || !organizationId) {
