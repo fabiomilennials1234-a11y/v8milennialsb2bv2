@@ -23,9 +23,12 @@
  */
 
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2, WifiOff, UserPlus } from "lucide-react";
 import { toast } from "sonner";
+import { normalizePhone } from "@/lib/normalizePhone";
+import { useResolveChatDeepLink } from "@/hooks/chat/useResolveChatDeepLink";
 import { useCopilotToggle } from "@/hooks/useCopilotToggle";
 import { ChatShell } from "@/components/chat/layout/ChatShell";
 import { MobileChatLayout } from "@/components/chat/layout/MobileChatLayout";
@@ -261,13 +264,102 @@ export function ChatShellWithContext() {
 
   const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(null);
 
-  // Auto-select primeira instância conectada ao carregar
+  // ── Deep-link (?phone=&instance=) ───────────────────────────────────────────
+  // Lê params uma vez no mount; estado pendente impede que o auto-select de
+  // instância sobrescreva a resolução do link, e impede também que múltiplos
+  // re-renders re-disparem a lógica.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialDeepLinkRef = useRef<{ phone: string | null; instance: string | null } | null>(null);
+  if (initialDeepLinkRef.current === null) {
+    initialDeepLinkRef.current = {
+      phone: searchParams.get("phone"),
+      instance: searchParams.get("instance"),
+    };
+  }
+  const deepLink = initialDeepLinkRef.current;
+  const hasDeepLinkPhone = !!deepLink.phone;
+
+  const [deepLinkProcessed, setDeepLinkProcessed] = useState(false);
+  const [pendingDeepLinkPhone, setPendingDeepLinkPhone] = useState<string | null>(null);
+
+  // Caminho rápido: instance veio na URL e está na lista permitida → seleciona.
+  // Caso contrário, ignoramos (defesa cross-tenant + restrição de membro).
+  useEffect(() => {
+    if (deepLinkProcessed) return;
+    if (!instances.length) return;
+    if (!deepLink.instance) return;
+    const allowed = instances.some((i) => i.id === deepLink.instance);
+    if (allowed) {
+      setSelectedInstanceId(deepLink.instance);
+    }
+  }, [deepLink.instance, deepLinkProcessed, instances]);
+
+  // Resolver server-side: encontra instância permitida onde existe conversa
+  // para o phone alvo. Só roda quando temos phone na URL e ainda não resolvemos.
+  const needsResolve =
+    hasDeepLinkPhone &&
+    !deepLinkProcessed &&
+    instances.length > 0 &&
+    // Se já temos instance válida do path acima, podemos pular o resolver.
+    !(deepLink.instance && instances.some((i) => i.id === deepLink.instance));
+
+  const { data: resolved, isFetched: resolveFetched } = useResolveChatDeepLink({
+    phone: deepLink.phone,
+    allowedInstances: instances,
+    enabled: needsResolve,
+  });
+
+  useEffect(() => {
+    if (deepLinkProcessed) return;
+    if (!hasDeepLinkPhone) return;
+    if (!instances.length) return;
+
+    // Caminho A: instance da URL já foi setada acima — só precisamos achar o
+    // phone real dentro dos contatos quando carregarem (handler abaixo).
+    if (deepLink.instance && instances.some((i) => i.id === deepLink.instance)) {
+      setPendingDeepLinkPhone(deepLink.phone);
+      setDeepLinkProcessed(true);
+      return;
+    }
+
+    // Caminho B: aguardando resolver server-side.
+    if (!resolveFetched) return;
+
+    if (resolved) {
+      setSelectedInstanceId(resolved.instanceId);
+      setPendingDeepLinkPhone(resolved.phoneNumber);
+    } else {
+      // Não há conversa para esse telefone em nenhuma instância permitida.
+      // Não selecionamos instância errada — UX informa o usuário.
+      toast.info("Conversa não encontrada nas instâncias disponíveis");
+    }
+    setDeepLinkProcessed(true);
+  }, [
+    deepLinkProcessed,
+    hasDeepLinkPhone,
+    deepLink.instance,
+    deepLink.phone,
+    instances,
+    resolveFetched,
+    resolved,
+  ]);
+
+  // Limpa query params depois de processar (sucesso ou desistência).
+  useEffect(() => {
+    if (!deepLinkProcessed) return;
+    if (!searchParams.get("phone") && !searchParams.get("instance")) return;
+    setSearchParams({}, { replace: true });
+  }, [deepLinkProcessed, searchParams, setSearchParams]);
+
+  // Auto-select primeira instância conectada ao carregar — só dispara se NÃO
+  // houver deep-link pendente, pra não sobrescrever a resolução.
   useEffect(() => {
     if (selectedInstanceId) return;
     if (!instances.length) return;
+    if (hasDeepLinkPhone && !deepLinkProcessed) return;
     const connected = instances.find((i) => i.status === "connected");
     setSelectedInstanceId(connected?.id ?? instances[0].id);
-  }, [instances, selectedInstanceId]);
+  }, [instances, selectedInstanceId, hasDeepLinkPhone, deepLinkProcessed]);
 
   const selectedInstance = useMemo(
     () => instances.find((i) => i.id === selectedInstanceId) ?? null,
@@ -281,6 +373,23 @@ export function ChatShellWithContext() {
 
   // ── Conversa selecionada ────────────────────────────────────────────────────
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
+
+  // Quando contatos carregam, casa pendingDeepLinkPhone pelo phone normalizado
+  // e seta selectedPhone com o phone_number canônico do contato.
+  useEffect(() => {
+    if (!pendingDeepLinkPhone) return;
+    if (!contacts.length) return;
+    const target = normalizePhone(pendingDeepLinkPhone);
+    if (!target) {
+      setPendingDeepLinkPhone(null);
+      return;
+    }
+    const match = contacts.find((c) => normalizePhone(c.phone_number) === target);
+    if (match) {
+      setSelectedPhone(match.phone_number);
+      setPendingDeepLinkPhone(null);
+    }
+  }, [contacts, pendingDeepLinkPhone]);
 
   const selectedContact = useMemo(
     () => contacts.find((c) => c.phone_number === selectedPhone) ?? null,
