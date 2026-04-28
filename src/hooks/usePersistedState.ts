@@ -54,6 +54,25 @@ function writeEntry<T>(key: string, value: T, ttlMs: number): void {
   }
 }
 
+// Same-tab cross-instance broadcast. localStorage 'storage' event only fires
+// in OTHER tabs, so we use a CustomEvent to keep every usePersistedState
+// instance with the same storageKey in sync within the same tab.
+const PERSISTED_STATE_EVENT = "v8:persisted-state-change";
+
+interface PersistedStateChangeDetail<T> {
+  key: string;
+  value: T;
+}
+
+function broadcastChange<T>(key: string, value: T): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent<PersistedStateChangeDetail<T>>(PERSISTED_STATE_EVENT, {
+      detail: { key, value },
+    }),
+  );
+}
+
 function deleteEntry(key: string): void {
   try {
     localStorage.removeItem(key);
@@ -110,6 +129,19 @@ export function usePersistedState<T>(
     }
   }, [storageKey]);
 
+  // Subscribe to same-tab broadcasts so other instances of usePersistedState
+  // with the same key stay in sync (filters, preferences, etc.).
+  useEffect(() => {
+    if (!storageKey || typeof window === "undefined") return;
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<PersistedStateChangeDetail<T>>).detail;
+      if (!detail || detail.key !== storageKey) return;
+      setStateRaw(detail.value);
+    };
+    window.addEventListener(PERSISTED_STATE_EVENT, handler);
+    return () => window.removeEventListener(PERSISTED_STATE_EVENT, handler);
+  }, [storageKey]);
+
   // Wrapped setter: updates React state + persists to localStorage atomically
   const setState: React.Dispatch<React.SetStateAction<T>> = useCallback(
     (valueOrUpdater) => {
@@ -120,6 +152,7 @@ export function usePersistedState<T>(
             : valueOrUpdater;
         if (storageKey) {
           writeEntry(storageKey, next, ttlMs);
+          broadcastChange(storageKey, next);
         }
         return next;
       });
@@ -129,7 +162,10 @@ export function usePersistedState<T>(
 
   // Removes the persisted key and resets to initial default
   const clear = useCallback(() => {
-    if (storageKey) deleteEntry(storageKey);
+    if (storageKey) {
+      deleteEntry(storageKey);
+      broadcastChange(storageKey, defaultRef.current);
+    }
     setStateRaw(defaultRef.current);
   }, [storageKey]);
 
