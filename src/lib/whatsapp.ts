@@ -43,14 +43,20 @@ export function openWhatsApp(phone: string | undefined, e?: React.MouseEvent) {
  * Hook que retorna um callback para abrir a conversa do lead diretamente
  * no chat interno do Torque (/chat-whatsapp?phone=...).
  * Substitui openWhatsApp nos contextos operacionais de lead.
+ *
+ * `instanceId` é opcional. Quando fornecido, vai como `?instance=...` e o
+ * chat usa essa instância se ela estiver na lista permitida do usuário —
+ * caso contrário ele resolve via busca segura. Se não souber a instância,
+ * deixe undefined e o chat resolve sozinho.
  */
 export function useOpenWhatsAppChat() {
   const navigate = useNavigate();
-  return useCallback((phone: string | undefined, e?: React.MouseEvent) => {
+  return useCallback((phone: string | undefined, e?: React.MouseEvent, instanceId?: string) => {
     if (e) e.stopPropagation();
     const formatted = formatPhoneForWhatsApp(phone);
-    if (formatted) {
-      navigate(`/chat-whatsapp?phone=${encodeURIComponent(formatted)}`);
-    }
+    if (!formatted) return;
+    const params = new URLSearchParams({ phone: formatted });
+    if (instanceId) params.set("instance", instanceId);
+    navigate(`/chat-whatsapp?${params.toString()}`);
   }, [navigate]);
 }
