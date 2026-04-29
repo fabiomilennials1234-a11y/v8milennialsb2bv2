@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Plus, Search, LayoutGrid, List, TrendingUp, ShoppingCart } from "lucide-react";
+import { Plus, Search, LayoutGrid, List, TrendingUp, ShoppingCart, Upload } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +11,8 @@ import { UpsellBaseList } from "@/components/upsell/UpsellBaseList";
 import { UpsellGestaoKanban } from "@/components/upsell/UpsellGestaoKanban";
 import { CreateClientModal } from "@/components/upsell/CreateClientModal";
 import { NovaVendaModal } from "@/components/upsell/NovaVendaModal";
+import { PipeSettingsDialog } from "@/components/pipelines/PipeSettingsDialog";
+import { usePipelineStages, type PipelineType } from "@/hooks/usePipelineStages";
 import { useAutoMoveUpsellClients } from "@/hooks/useAutoMoveUpsellClients";
 
 type ViewMode = "kanban" | "list";
@@ -31,6 +33,12 @@ export default function Upsell() {
   const [gestaoPotencial, setGestaoPotencial] = useState("all");
   const [novaVendaOpen, setNovaVendaOpen] = useState(false);
 
+  // Tab + Import dialog
+  const [activeTab, setActiveTab] = useState<"base" | "gestao">("base");
+  const [importOpen, setImportOpen] = useState(false);
+  const importPipeType: PipelineType = activeTab === "gestao" ? "upsell_gestao" : "upsell_base";
+  const { data: importStages = [] } = usePipelineStages(importPipeType);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -45,6 +53,10 @@ export default function Upsell() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Button onClick={() => setImportOpen(true)} variant="outline" className="gap-2">
+            <Upload className="w-4 h-4" />
+            Importar Planilha
+          </Button>
           <Button onClick={() => setNovaVendaOpen(true)} variant="outline" className="gap-2">
             <ShoppingCart className="w-4 h-4" />
             Nova Venda
@@ -56,7 +68,7 @@ export default function Upsell() {
         </div>
       </div>
 
-      <Tabs defaultValue="base" className="space-y-4">
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "base" | "gestao")} className="space-y-4">
         <TabsList>
           <TabsTrigger value="base">Tempo de Venda</TabsTrigger>
           <TabsTrigger value="gestao">Gestão</TabsTrigger>
@@ -174,6 +186,13 @@ export default function Upsell() {
 
       <CreateClientModal open={createClientOpen} onOpenChange={setCreateClientOpen} />
       <NovaVendaModal open={novaVendaOpen} onOpenChange={setNovaVendaOpen} />
+      <PipeSettingsDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        pipeType={importPipeType}
+        stages={importStages}
+        defaultTab="importar"
+      />
     </div>
   );
 }
