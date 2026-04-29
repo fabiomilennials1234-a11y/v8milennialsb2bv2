@@ -286,7 +286,7 @@ export function ChatComposer({
   return (
     <div
       className={cn(
-        "p-3 border-t border-border/60 bg-background shrink-0",
+        "p-3 border-t border-border/60 bg-background shrink-0 min-w-0",
         isDragOver && "ring-2 ring-ring ring-inset bg-muted/30",
       )}
       onDragOver={handleDragOver}

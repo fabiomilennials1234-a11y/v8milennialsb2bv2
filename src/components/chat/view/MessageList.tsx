@@ -341,8 +341,8 @@ export function MessageList({
   }, [timeline, firstUnreadIndex, unreadCount, mountTime, onImagePreview, onRetry, instanceId, enableActions]);
 
   return (
-    <div className="flex-1 min-h-0 overflow-hidden flex flex-col relative">
-      <ScrollArea ref={scrollAreaRef} className="flex-1 h-full">
+    <div className="flex-1 min-h-0 min-w-0 overflow-hidden flex flex-col relative">
+      <ScrollArea ref={scrollAreaRef} className="flex-1 h-full w-full">
         <div className="p-4 min-h-full">
           <MessagesAreaErrorBoundary>
             {isLoading ? (

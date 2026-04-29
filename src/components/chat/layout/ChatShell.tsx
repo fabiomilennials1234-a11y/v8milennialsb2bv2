@@ -153,7 +153,7 @@ export function ChatShell({
           selectedPhone ? "hidden md:flex md:flex-col" : "flex flex-col"
         }
       >
-        <div className="flex flex-col h-full min-h-0 overflow-hidden">
+        <div className="flex flex-col h-full min-h-0 min-w-0 overflow-hidden">
           {list}
         </div>
       </ResizablePanel>
@@ -167,12 +167,12 @@ export function ChatShell({
         defaultSize={hasContext ? initialSizes[1] : initialSizes[1] + initialSizes[2]}
         minSize={40}
         className={cn(
-          "flex flex-col min-h-0 overflow-hidden",
+          "flex flex-col min-h-0 min-w-0 overflow-hidden",
           // Mobile: esconde o centro quando nenhuma conversa selecionada
           !selectedPhone ? "hidden md:flex" : "flex",
         )}
       >
-        <div className="flex flex-col h-full min-h-0 overflow-hidden">
+        <div className="flex flex-col h-full min-h-0 min-w-0 overflow-hidden">
           {view}
         </div>
       </ResizablePanel>
@@ -188,9 +188,9 @@ export function ChatShell({
             minSize={23}
             maxSize={42}
             collapsible
-            className="flex flex-col min-h-0 overflow-hidden"
+            className="flex flex-col min-h-0 min-w-0 overflow-hidden"
           >
-            <div className="flex flex-col h-full min-h-0 overflow-hidden">
+            <div className="flex flex-col h-full min-h-0 min-w-0 overflow-hidden">
               {context}
             </div>
           </ResizablePanel>
