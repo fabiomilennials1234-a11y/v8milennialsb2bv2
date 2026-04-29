@@ -24,6 +24,7 @@ import { format, isToday, isYesterday } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Loader2, UserPlus } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { cn } from "@/lib/utils";
 import { ChatEmptyState } from "@/components/chat/ChatEmptyState";
 import { UnreadDivider } from "@/components/chat/UnreadDivider";
 import { ScrollToBottomFab } from "@/components/chat/ScrollToBottomFab";
@@ -342,7 +343,18 @@ export function MessageList({
 
   return (
     <div className="flex-1 min-h-0 min-w-0 overflow-hidden flex flex-col relative">
-      <ScrollArea ref={scrollAreaRef} className="flex-1 h-full w-full">
+      <ScrollArea
+        ref={scrollAreaRef}
+        className={cn(
+          "flex-1 h-full w-full",
+          // Radix Viewport injeta wrapper interno com inline `display: table; min-width: 100%`,
+          // que faz o conteúdo do chat decidir a largura — quebrando `truncate` em nomes de
+          // documento longos. Override força `display: block; min-width: 0` no wrapper.
+          "[&_[data-radix-scroll-area-viewport]>div]:!block",
+          "[&_[data-radix-scroll-area-viewport]>div]:!min-w-0",
+          "[&_[data-radix-scroll-area-viewport]>div]:w-full",
+        )}
+      >
         <div className="p-4 min-h-full">
           <MessagesAreaErrorBoundary>
             {isLoading ? (
