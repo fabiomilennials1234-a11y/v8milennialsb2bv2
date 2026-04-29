@@ -315,6 +315,11 @@ serve(withSentry('lead-webhook', async (req) => {
     const updateData: Record<string, unknown> = {};
     if (name) updateData.name = name;
     if (company !== undefined) updateData.company = company || null;
+    // Persistir email/phone quando o match foi pelo OUTRO identificador.
+    // Ex: lead achado via phone → preserva email novo do typeform.
+    // Sem isso, Calendly subsequente (sem phone) não acha pelo email e cria duplicado.
+    if (email && result.source !== "email") updateData.email = email;
+    if (phone && result.source !== "phone") updateData.phone = phone;
     // UTM fields: resolved earlier (fields.utm_* → payload.utm_* → campaign_name/id)
     if (utmCampaign) updateData.utm_campaign = utmCampaign;
     if (utmSource) updateData.utm_source = utmSource;
@@ -430,19 +435,23 @@ serve(withSentry('lead-webhook', async (req) => {
     // Adicionar tags ao lead
     if (payload.tags && payload.tags.length > 0) {
       for (const tagName of payload.tags) {
-        // Buscar ou criar tag (case-insensitive search)
+        // Buscar tag escopada por org (evita cross-tenant leak)
         let { data: tag } = await supabase
           .from("tags")
           .select("id")
+          .eq("organization_id", organizationId)
           .ilike("name", tagName)
           .maybeSingle();
 
         if (!tag) {
-          const { data: newTag } = await supabase
+          const { data: newTag, error: tagInsertError } = await supabase
             .from("tags")
-            .insert({ name: tagName, color: "#6366f1" })
+            .insert({ name: tagName, color: "#6366f1", organization_id: organizationId })
             .select()
             .single();
+          if (tagInsertError) {
+            console.error(`[lead-webhook] Failed to create tag "${tagName}":`, tagInsertError);
+          }
           tag = newTag;
         }
 
