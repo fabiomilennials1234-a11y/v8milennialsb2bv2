@@ -127,7 +127,7 @@ export function ChatHeader({
   onOpenTimeline,
 }: ChatHeaderProps) {
   return (
-    <div className="flex items-center gap-3 p-3 border-b border-border/60 bg-background shrink-0">
+    <div className="flex items-center gap-3 p-3 border-b border-border/60 bg-background shrink-0 min-w-0 overflow-hidden">
       <Button variant="ghost" size="icon" onClick={onBack} className="md:hidden shrink-0">
         <ArrowLeft className="w-5 h-5" />
       </Button>

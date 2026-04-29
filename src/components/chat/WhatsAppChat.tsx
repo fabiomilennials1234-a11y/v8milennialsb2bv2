@@ -282,14 +282,14 @@ export function MessageBubble({
       animate={animAnimate}
       transition={shouldAnimate && !prefersReduced ? { duration: 0.18, ease: "easeOut" } : undefined}
       className={cn(
-        "flex gap-2 group",
+        "flex gap-2 group min-w-0 w-full",
         isOutgoing ? "justify-end" : "justify-start",
         isFirstInGroup ? "mt-3" : "mt-0.5"
       )}
     >
       {/* Action bar — hover reveal, outgoing only appears on left; incoming on right */}
       {showActions && isOutgoing && !isEditing && (
-        <div className="self-center">
+        <div className="self-center shrink-0">
           <MessageBubbleActions
             instanceId={instanceId!}
             messageId={message.message_id!}
@@ -305,7 +305,7 @@ export function MessageBubble({
 
       <div
         className={cn(
-          "max-w-[75%] px-4 py-2.5",
+          "max-w-[75%] min-w-0 px-4 py-2.5 overflow-hidden",
           radiusClass,
           bubbleColorClass,
           isFailed && "border-destructive/40",
@@ -374,7 +374,7 @@ export function MessageBubble({
               <img
                 src={message.media_url}
                 alt="Sticker"
-                className="w-32 h-32 object-contain"
+                className="w-32 h-32 max-w-full object-contain"
               />
             )}
 
@@ -417,7 +417,7 @@ export function MessageBubble({
 
       {/* Incoming action bar — right side */}
       {showActions && !isOutgoing && !isEditing && (
-        <div className="self-center">
+        <div className="self-center shrink-0">
           <MessageBubbleActions
             instanceId={instanceId!}
             messageId={message.message_id!}

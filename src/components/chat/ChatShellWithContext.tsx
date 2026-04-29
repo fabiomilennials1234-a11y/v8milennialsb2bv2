@@ -149,7 +149,7 @@ function ChatView({
   const conversationKey = `${instanceId}:${phoneNumber}`;
 
   return (
-    <div className="flex flex-col h-full min-h-0">
+    <div className="flex flex-col h-full min-h-0 min-w-0">
       {/* C1 — Banner WAITING_HUMAN */}
       {isWaitingHuman && (
         <div
@@ -196,7 +196,7 @@ function ChatView({
         onDensityChange={onDensityChange}
       />
 
-      <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+      <div className="flex-1 min-h-0 min-w-0 overflow-hidden flex flex-col">
         {messagesLoading ? (
           <div className="flex items-center justify-center h-full">
             <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />

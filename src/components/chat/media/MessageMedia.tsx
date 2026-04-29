@@ -25,7 +25,7 @@ export function MessageImage({ src, onPreview }: MessageImageProps) {
 
   if (error) {
     return (
-      <div className="w-48 h-32 bg-muted/50 rounded flex items-center justify-center">
+      <div className="w-full max-w-[192px] h-32 bg-muted/50 rounded flex items-center justify-center">
         <FileImage className="w-8 h-8 text-muted-foreground" />
       </div>
     );
@@ -33,7 +33,7 @@ export function MessageImage({ src, onPreview }: MessageImageProps) {
 
   return (
     <div
-      className="relative cursor-pointer"
+      className="relative cursor-pointer max-w-full"
       onClick={onPreview}
       role="button"
       tabIndex={0}
@@ -41,7 +41,7 @@ export function MessageImage({ src, onPreview }: MessageImageProps) {
       onKeyDown={(e) => e.key === "Enter" && onPreview()}
     >
       {!loaded && (
-        <div className="w-48 h-32 bg-muted/50 rounded flex items-center justify-center">
+        <div className="w-full max-w-[192px] h-32 bg-muted/50 rounded flex items-center justify-center">
           <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
         </div>
       )}
@@ -49,7 +49,7 @@ export function MessageImage({ src, onPreview }: MessageImageProps) {
         src={src}
         alt="Imagem da conversa"
         className={cn(
-          "max-w-[240px] max-h-[300px] rounded object-cover",
+          "max-w-full sm:max-w-[240px] max-h-[300px] rounded object-cover",
           !loaded && "hidden",
         )}
         onLoad={() => setLoaded(true)}
@@ -70,7 +70,7 @@ export function MessageVideo({ src }: MessageVideoProps) {
 
   if (error) {
     return (
-      <div className="w-48 h-32 bg-muted/50 rounded flex flex-col items-center justify-center gap-2">
+      <div className="w-full max-w-[192px] h-32 bg-muted/50 rounded flex flex-col items-center justify-center gap-2">
         <FileVideo className="w-8 h-8 text-muted-foreground" />
         <a
           href={src}
@@ -89,7 +89,7 @@ export function MessageVideo({ src }: MessageVideoProps) {
     <video
       src={src}
       controls
-      className="max-w-[240px] max-h-[300px] rounded"
+      className="max-w-full sm:max-w-[240px] max-h-[300px] rounded"
       onError={() => setError(true)}
     >
       Seu navegador não suporta vídeos.
@@ -129,7 +129,7 @@ export function MessageDocument({ src, fileName, isOutgoing }: MessageDocumentPr
       target="_blank"
       rel="noopener noreferrer"
       className={cn(
-        "flex items-center gap-3 p-3 rounded-lg transition-colors min-w-[200px]",
+        "flex items-center gap-3 p-3 rounded-lg transition-colors w-full max-w-full min-w-0 overflow-hidden",
         isOutgoing
           ? "bg-primary-foreground/10 hover:bg-primary-foreground/20"
           : "bg-primary/10 hover:bg-primary/20",
@@ -137,17 +137,17 @@ export function MessageDocument({ src, fileName, isOutgoing }: MessageDocumentPr
     >
       <div
         className={cn(
-          "p-2 rounded",
+          "p-2 rounded shrink-0",
           isOutgoing ? "bg-primary-foreground/20" : "bg-primary/20",
         )}
       >
         {getFileIcon(displayName)}
       </div>
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0 overflow-hidden">
         <p className="text-sm font-medium truncate">{displayName}</p>
-        <p className="text-xs text-muted-foreground flex items-center gap-1">
-          <Download className="w-3 h-3" />
-          Clique para baixar
+        <p className="text-xs text-muted-foreground flex items-center gap-1 truncate">
+          <Download className="w-3 h-3 shrink-0" />
+          <span className="truncate">Clique para baixar</span>
         </p>
       </div>
     </a>

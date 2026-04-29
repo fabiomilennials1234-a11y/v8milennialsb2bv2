@@ -1,0 +1,48 @@
+---
+feature: chat-onda-2b-layout
+domain: Chat
+status: ativa
+flag: VITE_CHAT_ONDA_2B
+---
+
+# Chat Onda 2b — contrato de layout
+
+## Resumo
+Layout 3-col resizable do chat novo (`ChatShellWithContext`), ativado por `VITE_CHAT_ONDA_2B=true`. Painéis: lista (20–35%) | chat (≥40%) | contexto (23–42%, colapsável).
+
+## Contrato `min-w-0` (não quebrar)
+
+Cadeia obrigatória:
+
+| Componente | Classes obrigatórias |
+|------------|----------------------|
+| `ResizablePanel` (3 painéis) | `flex flex-col min-h-0 min-w-0 overflow-hidden` |
+| Wrapper interno de cada painel | `flex flex-col h-full min-h-0 min-w-0 overflow-hidden` |
+| `ChatView` root | `flex flex-col h-full min-h-0 min-w-0` |
+| `ChatHeader` root | `flex items-center ... shrink-0 min-w-0 overflow-hidden` |
+| Wrapper de mensagens | `flex-1 min-h-0 min-w-0 overflow-hidden` |
+| `MessageList` raiz | `flex-1 min-h-0 min-w-0 overflow-hidden flex flex-col relative` |
+| `MessageBubble` row (motion.div) | `flex gap-2 group min-w-0 w-full` + justify |
+| `MessageBubble` bolha | `max-w-[75%] min-w-0 px-4 py-2.5 overflow-hidden` |
+| `ChatComposer` root | `... shrink-0 min-w-0` |
+
+## Mídia dentro da bolha
+
+| Tipo | Largura |
+|------|---------|
+| Imagem (`MessageImage`) | `max-w-full sm:max-w-[240px] max-h-[300px]` |
+| Vídeo (`MessageVideo`) | `max-w-full sm:max-w-[240px] max-h-[300px]` |
+| Documento (`MessageDocument`) | `w-full max-w-full min-w-0 overflow-hidden` (sem `min-w` rígido) |
+| Sticker | `w-32 h-32 max-w-full` |
+| Loader/error placeholder | `w-full max-w-[192px] h-32` |
+
+## Por quê
+Em flexbox, filho cuja largura mínima intrínseca > espaço disponível força o container a expandir. Sem `min-w-0`, conteúdo intrínseco grande (documento com nome longo, mídia 240px) vaza pelo painel resizable mesmo com `overflow-hidden` no shell.
+
+## Edge cases conhecidos
+- Painel central no `minSize=40%` em viewport 1280px = ~512px → bolha 75% ≈ 384px. Mídia 240px cabe folgada. OK.
+- Zoom 150%: viewport efetivo cai para ~910px → cadeia `min-w-0` impede vazamento.
+- Densidade `compact` (CSS vars reduzem padding): truncamento mais agressivo, mas sem corte.
+
+## Histórico
+- 2026-04-29 — fix layout overflow horizontal ([changelog](../../07%20—%20Changelog/2026-04-29-chat-layout-min-w-0.md)).
