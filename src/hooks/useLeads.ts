@@ -209,6 +209,24 @@ export function useUpdateLead() {
         await supabase.from("pipe_propostas").update(responsibleUpdate).eq("lead_id", id);
       }
 
+      // Sync compromisso_date → pipe_confirmacao.meeting_date (espelho inverso).
+      // Best-effort: pode não existir entrada em pipe_confirmacao para esse lead — nesse
+      // caso UPDATE afeta 0 linhas sem erro. Nunca usar upsert/insert aqui (Security: D5).
+      // Payload literal — nunca spread; nunca tocar em status neste caminho.
+      if (safeUpdates.compromisso_date !== undefined) {
+        const { error: syncErr } = await supabase
+          .from("pipe_confirmacao")
+          .update({ meeting_date: safeUpdates.compromisso_date })
+          .eq("lead_id", id)
+          .eq("organization_id", organizationId);
+        if (syncErr) {
+          console.warn(
+            "[useUpdateLead] failed to sync compromisso_date → pipe_confirmacao.meeting_date",
+            syncErr,
+          );
+        }
+      }
+
       return data;
     },
     onSuccess: () => {

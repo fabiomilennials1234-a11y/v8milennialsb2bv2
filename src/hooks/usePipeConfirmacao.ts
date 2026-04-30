@@ -119,13 +119,44 @@ export function useCreatePipeConfirmacao() {
 
 export function useUpdatePipeConfirmacao() {
   const queryClient = useQueryClient();
+  const { organizationId } = useOrganization();
   const { data: movePermission } = useCanPerformActionAsync("move_pipe_record");
 
   return useMutation({
     mutationFn: async ({ id, leadId, assignedTo, ...updates }: PipeConfirmacaoUpdate & { id: string; leadId?: string; assignedTo?: string | null }) => {
-      if (updates.status && movePermission && !movePermission.allowed) {
-        throw new Error("Sem permissão para mover registros no pipe");
+      if (!organizationId) {
+        throw new Error("Cannot update pipe_confirmacao: No organization context");
       }
+
+      // Detecta mudança real de status: SELECT do row atual e compara com payload.
+      // Decisão server-side proxy do Security (opção B) — caller não pode bypassar
+      // omitindo `status` e move_pipe_record só é checado quando status muda de fato.
+      let isStatusChange = false;
+      if (updates.status !== undefined) {
+        const { data: current, error: selErr } = await supabase
+          .from("pipe_confirmacao")
+          .select("status")
+          .eq("id", id)
+          .single();
+        if (selErr || !current) {
+          // Não vazar diferença "não existe" vs "sem permissão"
+          throw new Error("Registro não encontrado");
+        }
+        isStatusChange = current.status !== updates.status;
+
+        if (isStatusChange) {
+          // Fail-closed em loading: enquanto movePermission ainda não chegou
+          // (`undefined`), bloqueia. Só libera com `allowed === true`.
+          if (!movePermission || !movePermission.allowed) {
+            throw new Error("Sem permissão para mover registros no pipe");
+          }
+        } else {
+          // status no payload mas igual ao atual — remove pra evitar UPDATE inútil
+          // + log de auditoria fantasma (trigger de stage_change dispara em UPDATE OF status).
+          delete updates.status;
+        }
+      }
+
       const payload = Object.fromEntries(
         Object.entries(updates).filter(([, v]) => v !== undefined)
       ) as PipeConfirmacaoUpdate;
@@ -138,13 +169,27 @@ export function useUpdatePipeConfirmacao() {
 
       if (error) throw error;
 
-      // Sync responsible_id back to leads table
-      if (leadId && updates.responsible_id !== undefined) {
-        await supabase.from("leads").update({ responsible_id: updates.responsible_id || null }).eq("id", leadId);
+      // Sync meeting_date → leads.compromisso_date (espelho).
+      // Só dispara quando meeting_date foi explicitamente passado (inclusive null = deletando reunião).
+      if (leadId && updates.meeting_date !== undefined) {
+        await supabase
+          .from("leads")
+          .update({ compromisso_date: updates.meeting_date })
+          .eq("id", leadId)
+          .eq("organization_id", organizationId);
       }
 
-      // Trigger automation if status changed
-      if (updates.status && leadId) {
+      // Sync responsible_id back to leads table
+      if (leadId && updates.responsible_id !== undefined) {
+        await supabase
+          .from("leads")
+          .update({ responsible_id: updates.responsible_id || null })
+          .eq("id", leadId)
+          .eq("organization_id", organizationId);
+      }
+
+      // Trigger automation só quando status mudou de fato
+      if (isStatusChange && updates.status && leadId) {
         await triggerFollowUpAutomation({
           leadId: leadId,
           assignedTo: assignedTo || data.responsible_id || data.sdr_id || data.closer_id,
@@ -167,6 +212,7 @@ export function useUpdatePipeConfirmacao() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["pipe_confirmacao"], refetchType: "active" });
+      queryClient.invalidateQueries({ queryKey: ["leads"], refetchType: "active" });
     },
   });
 }

@@ -216,7 +216,7 @@ export default function PipeConfirmacao() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [editingLead, setEditingLead] = useState<any>(null);
-  const [selectedItem, setSelectedItem] = useState<any>(null);
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
 
   // Reschedule modal state
   const [isRescheduleModalOpen, setIsRescheduleModalOpen] = useState(false);
@@ -550,7 +550,7 @@ export default function PipeConfirmacao() {
   const handleCardClick = (card: LeadCardData) => {
     const item = pipeData?.find(p => p.id === card.id);
     if (item) {
-      setSelectedItem(item);
+      setSelectedItemId(item.id);
       setIsDetailModalOpen(true);
     }
   };
@@ -694,10 +694,10 @@ export default function PipeConfirmacao() {
           )}
         />
       ) : (
-        <MeetingTimeline 
-          meetings={pipeData || []} 
+        <MeetingTimeline
+          meetings={pipeData || []}
           onMeetingClick={(meeting) => {
-            setSelectedItem(meeting);
+            setSelectedItemId(meeting.id);
             setIsDetailModalOpen(true);
           }}
         />
@@ -723,9 +723,9 @@ export default function PipeConfirmacao() {
       <LeadDetailDrawer
         open={isDetailModalOpen}
         onOpenChange={setIsDetailModalOpen}
-        leadId={selectedItem?.lead_id || null}
+        leadId={pipeData?.find((p) => p.id === selectedItemId)?.lead_id ?? null}
         variant="confirmacao"
-        pipeData={selectedItem}
+        pipeData={pipeData?.find((p) => p.id === selectedItemId) ?? null}
         onSuccess={refetch}
         renderFunnelContext={({ lead, pipeData, onSuccess: onCtxSuccess }) => (
           <ConfirmacaoContext lead={lead} pipeData={pipeData} onSuccess={onCtxSuccess} />

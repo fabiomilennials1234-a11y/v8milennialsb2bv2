@@ -160,7 +160,14 @@ export function ConfirmacaoContext({ lead, pipeData: item, onSuccess }: Confirma
       setIsEditingMeeting(false);
       onSuccess?.();
     } catch (error: any) {
-      toast.error(error?.message || "Erro ao atualizar reunião");
+      const msg: string = error?.message || "";
+      if (msg.includes("Sem permissão")) {
+        toast.error(
+          "Você pode editar a data sem mudar a etapa do funil. Para mover entre etapas, peça permissão a um admin.",
+        );
+      } else {
+        toast.error(msg || "Erro ao atualizar reunião");
+      }
     } finally {
       setIsSavingMeeting(false);
     }
