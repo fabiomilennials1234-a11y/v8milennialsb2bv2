@@ -72,6 +72,7 @@ const originLabels: Record<string, string> = {
   remarketing: "Remarketing",
   google_ads: "Google Ads",
   cal: "Cal.com",
+  indicacao: "Indicação",
 };
 
 const originColors: Record<string, string> = {
@@ -82,6 +83,7 @@ const originColors: Record<string, string> = {
   remarketing: "bg-orange-500/10 text-orange-600 border-orange-500/20",
   google_ads: "bg-red-500/10 text-red-600 border-red-500/20",
   cal: "bg-chart-1/10 text-chart-1 border-chart-1/20",
+  indicacao: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20",
 };
 
 // Format faturamento for display - converts snake_case values to readable format
