@@ -1,8 +1,31 @@
 # Project State
 
-**Last updated:** 2026-04-26 (Trilha 3 completa)
+**Last updated:** 2026-04-30 (meeting_date sync + move_pipe_record fail-closed)
 
 ## Decisions
+
+### D052: Fix meeting_date sync + move_pipe_record fail-closed (2026-04-30)
+
+Bug: alteração de data/hora de reunião não persistia consistentemente. 4 causa-raízes identificadas (CR-1: permissão bloqueava edição apenas-de-data; CR-2: sem sync entre `leads.compromisso_date` e `pipe_confirmacao.meeting_date`; CR-3: `selectedItem` stale após refetch; CR-4: form de Leads salvava `compromisso_date` sem propagar pro pipe).
+
+Decisões:
+- `pipe_confirmacao.meeting_date` é fonte operacional; `leads.compromisso_date` é espelho.
+- Sync client-side em hooks centrais (`useUpdatePipeConfirmacao` + `useUpdateLead`) — sem migration, sem RPC nova.
+- SELECT-then-compare antes do check `move_pipe_record` (Security override sobre Architect; opção b vs c). Fail-closed em loading.
+- `useUpdatePipeConfirmacao` agora usa `useOrganization()` + filtros `.eq("organization_id")` em syncs cross-tabela. Payload literal. Operação `update` puro.
+- `selectedItem` → `selectedItemId` com lookup derivado.
+
+Verificação Security S6: nenhum trigger DB recalcula `status` a partir de `meeting_date`. Sync de meeting_date NÃO causa escalada implícita de stage.
+
+Validação: tsc clean, lint clean, test:unit sem regressão (19 failed/2878 passed = baseline pré-patch tinha 21 failed/2876 passed). Build OK.
+
+Pendências (issues backlog): HIGH = trigger DB ou RPC SECURITY DEFINER pra fechar gap `move_pipe_record` server-side; MEDIUM = testes unit dos paths; MEDIUM = auditar fallback `allowed:true` em permissions.ts; LOW = microcopy reschedule, toast sync inverso, dedupe trigger workflow.
+
+Detalhes em [[ADR-2026-04-30-meeting-date-sync]] e `06 — Features/Vendas/Pipe Confirmacao.md`.
+
+### L006: SELECT-then-compare dentro do hook é defesa pragmática mas não substitui server-side check (2026-04-30)
+
+`useUpdatePipeConfirmacao` agora detecta mudança real de status fazendo `select` do row atual antes do `update`. Isso fecha o falso positivo (membro sem `move_pipe_record` bloqueado em edição apenas-de-data) sem virar bypass — caller malicioso não controla o que o hook lê. Mas a barreira final continua sendo client-side: qualquer caller que pule o hook (ou use service_role) pode mudar `status` direto. RLS atual em `pipe_confirmacao` valida tenant + visibilidade, não `move_pipe_record`. **Regra**: fixes client-side de permissão devem sempre vir acompanhados de issue HIGH para implementar barreira server-side equivalente (trigger ou RPC SECURITY DEFINER), senão o gap fica permanente.
 
 ### D034: Copilot fallback elimination + Uazapi bridge + tenant isolation (2026-04-23)
 
