@@ -6,7 +6,7 @@
  */
 
 import { useState, useRef, useEffect } from "react";
-import { format, isToday, isSameDay, startOfDay } from "date-fns";
+import { format, isToday, startOfDay, endOfDay } from "date-fns";
 import type { UnifiedEvent } from "./agenda-helpers";
 import {
   HOUR_HEIGHT,
@@ -110,7 +110,8 @@ export function TimeGrid({
           {/* Day columns */}
           {days.map((day) => {
             const dayStart = startOfDay(day);
-            const dayEvents = events.filter((e) => isSameDay(e.start, day));
+            const dayEnd = endOfDay(day);
+            const dayEvents = events.filter((e) => e.start < dayEnd && e.end > dayStart);
             const isCurrentDay = isToday(day);
             const layout = computeEventLayout(dayEvents);
 

@@ -318,7 +318,7 @@ Deno.serve(withSentry('meeting-webhook', async (req) => {
         return new Response(
           JSON.stringify({ success: true, meeting: existing, idempotent: true }),
           {
-            status: 201,
+            status: 200,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           },
         );
@@ -419,13 +419,13 @@ Deno.serve(withSentry('meeting-webhook', async (req) => {
           .select('*')
           .eq('organization_id', organizationId)
           .eq('external_ref', payload.external_ref)
-          .single();
+          .maybeSingle();
 
         if (existing) {
           return new Response(
             JSON.stringify({ success: true, meeting: existing, idempotent: true }),
             {
-              status: 201,
+              status: 200,
               headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             },
           );

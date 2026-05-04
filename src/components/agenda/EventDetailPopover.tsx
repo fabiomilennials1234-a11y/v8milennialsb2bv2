@@ -212,7 +212,7 @@ export function EventDetailPopover({
         )}
 
         {/* Meet / video link */}
-        {event.meetLink && (
+        {event.meetLink && /^https?:\/\//i.test(event.meetLink) && (
           <a
             href={event.meetLink}
             target="_blank"
@@ -259,7 +259,7 @@ export function EventDetailPopover({
           </a>
         )}
 
-        {event.source === "google" && event.googleHtmlLink && (
+        {event.source === "google" && event.googleHtmlLink && /^https?:\/\//i.test(event.googleHtmlLink) && (
           <a
             href={event.googleHtmlLink}
             target="_blank"

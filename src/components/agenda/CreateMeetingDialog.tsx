@@ -159,8 +159,11 @@ export function CreateMeetingDialog({
     }));
   };
 
+  const endBeforeStart =
+    !form.all_day && new Date(form.end_at) <= new Date(form.start_at);
+
   const handleSubmit = () => {
-    if (!form.title.trim()) return;
+    if (!form.title.trim() || endBeforeStart) return;
 
     const input: CreateMeetingInput = {
       title: form.title.trim(),
@@ -277,6 +280,11 @@ export function CreateMeetingDialog({
               />
             </div>
           </div>
+          {endBeforeStart && (
+            <p className="text-[11px] text-destructive">
+              Fim deve ser depois do inicio
+            </p>
+          )}
 
           {/* Location */}
           <div className="space-y-1.5">
@@ -439,7 +447,7 @@ export function CreateMeetingDialog({
             <Button
               size="sm"
               onClick={handleSubmit}
-              disabled={createMeeting.isPending || !form.title.trim()}
+              disabled={createMeeting.isPending || !form.title.trim() || endBeforeStart}
             >
               {createMeeting.isPending ? (
                 <>
