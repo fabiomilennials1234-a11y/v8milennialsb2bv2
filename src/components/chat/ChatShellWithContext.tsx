@@ -70,6 +70,7 @@ type ConversationTab = "active" | "archived";
 
 interface ChatViewProps {
   selectedContact: ChatContact | null;
+  selectedPhone: string | null;
   instanceId: string | null;
   instanceName: string;
   organizationId: string | null;
@@ -82,6 +83,7 @@ interface ChatViewProps {
 
 function ChatView({
   selectedContact,
+  selectedPhone,
   instanceId,
   instanceName,
   organizationId,
@@ -91,7 +93,7 @@ function ChatView({
   density,
   onDensityChange,
 }: ChatViewProps) {
-  const phoneNumber = selectedContact?.phone_number ?? null;
+  const phoneNumber = selectedContact?.phone_number ?? selectedPhone;
   const conversationId = selectedContact?.conversation_id ?? null;
 
   const { data: messages = [], isLoading: messagesLoading } = useWhatsAppMessages(
@@ -134,7 +136,7 @@ function ChatView({
     [retryFn],
   );
 
-  if (!selectedContact || !instanceId) {
+  if ((!selectedContact && !selectedPhone) || !instanceId) {
     return (
       <div className="flex flex-col h-full items-center justify-center gap-3 text-muted-foreground bg-muted/10">
         <WifiOff className="w-10 h-10 opacity-30" />
@@ -144,7 +146,7 @@ function ChatView({
   }
 
   const contactName =
-    selectedContact.lead_name ?? selectedContact.push_name ?? selectedContact.phone_number;
+    selectedContact?.lead_name ?? selectedContact?.push_name ?? phoneNumber ?? "";
 
   const conversationKey = `${instanceId}:${phoneNumber}`;
 
@@ -172,10 +174,10 @@ function ChatView({
       )}
 
       <ChatHeader
-        phoneNumber={selectedContact.phone_number}
+        phoneNumber={phoneNumber ?? ""}
         contactName={contactName}
-        hasLead={!!selectedContact.lead_id}
-        leadId={selectedContact.lead_id ?? undefined}
+        hasLead={!!selectedContact?.lead_id}
+        leadId={selectedContact?.lead_id ?? undefined}
         conversationId={conversationId}
         aiDisabled={aiDisabled || isHumanActive}
         isWaitingHuman={isWaitingHuman}
@@ -225,18 +227,18 @@ function ChatView({
 
       <ChatComposer
         conversationKey={conversationKey}
-        phoneNumber={selectedContact.phone_number}
+        phoneNumber={phoneNumber ?? ""}
         contactName={contactName}
         instanceName={instanceName}
         instanceId={instanceId}
-        leadId={selectedContact.lead_id ?? undefined}
+        leadId={selectedContact?.lead_id ?? undefined}
         canReply
         density={density}
         selectedContact={{
-          push_name: selectedContact.push_name ?? null,
-          lead_name: selectedContact.lead_name ?? null,
-          phone_number: selectedContact.phone_number,
-          lead_id: selectedContact.lead_id ?? null,
+          push_name: selectedContact?.push_name ?? null,
+          lead_name: selectedContact?.lead_name ?? null,
+          phone_number: phoneNumber ?? "",
+          lead_id: selectedContact?.lead_id ?? null,
         }}
       />
 
@@ -329,9 +331,11 @@ export function ChatShellWithContext() {
       setSelectedInstanceId(resolved.instanceId);
       setPendingDeepLinkPhone(resolved.phoneNumber);
     } else {
-      // Não há conversa para esse telefone em nenhuma instância permitida.
-      // Não selecionamos instância errada — UX informa o usuário.
-      toast.info("Conversa não encontrada nas instâncias disponíveis");
+      // Lead sem mensagens — selecionar instância padrão e abrir chat vazio
+      const connected = instances.find((i) => i.status === "connected");
+      setSelectedInstanceId(connected?.id ?? instances[0].id);
+      const normalized = normalizePhone(deepLink.phone);
+      if (normalized) setSelectedPhone(normalized);
     }
     setDeepLinkProcessed(true);
   }, [
@@ -556,6 +560,7 @@ export function ChatShellWithContext() {
         view={
           <ChatView
             selectedContact={selectedContact}
+            selectedPhone={selectedPhone}
             instanceId={selectedInstanceId}
             instanceName={selectedInstance?.instance_name ?? ""}
             organizationId={organizationId}
