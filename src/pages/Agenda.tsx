@@ -21,7 +21,6 @@ import {
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { motion, AnimatePresence } from "framer-motion";
-import { CalendarDays } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAgendaEvents } from "@/hooks/useAgendaEvents";
@@ -291,47 +290,6 @@ export default function Agenda() {
     setCreateInitialStart(undefined);
     setCreateOpen(true);
   }, []);
-
-  // ── Empty state ─────────────────────────────────────────────────────────────
-
-  // Show empty only when there is zero data and the page has finished loading
-  const hasInternalEvents = agendaRawEvents.length > 0;
-  const hasGoogleEvents = (googleRawEvents ?? []).length > 0;
-  const doneLoading = !agendaLoading;
-
-  if (doneLoading && !hasInternalEvents && !googleConnected) {
-    return (
-      <div className="flex-1 flex items-center justify-center p-8">
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="text-center space-y-4"
-        >
-          <div className="w-16 h-16 mx-auto rounded-2xl bg-muted/50 flex items-center justify-center">
-            <CalendarDays className="w-8 h-8 text-muted-foreground/40" />
-          </div>
-          <h2 className="text-lg font-semibold">Crie seu primeiro evento</h2>
-          <p className="text-sm text-muted-foreground max-w-xs">
-            Sua agenda esta vazia. Crie uma reuniao, follow-up ou conecte seu
-            Google Calendar em{" "}
-            <a
-              href="/configuracoes"
-              className="text-primary underline underline-offset-2"
-            >
-              Configuracoes
-            </a>
-            .
-          </p>
-          <button
-            onClick={handleNewEvent}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
-          >
-            Criar Evento
-          </button>
-        </motion.div>
-      </div>
-    );
-  }
 
   const weekDays = view === "week" ? getWeekDays(date) : [date];
 

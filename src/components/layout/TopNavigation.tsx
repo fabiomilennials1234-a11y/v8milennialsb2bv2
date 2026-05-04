@@ -125,7 +125,7 @@ const primaryNavItems: NavItemWithChildren[] = [
   { label: "Chat", icon: Zap, path: "/chat" },
   { label: "Funis", icon: GitBranch, path: "/funis", children: [] }, // children set dynamically via displayConfig
   { label: "Turbo", icon: Zap, path: "/turbo", children: turboSubItems },
-  // { label: "Agenda", icon: CalendarDays, path: "/agenda" }, // HIDDEN — reativar futuramente
+  { label: "Agenda", icon: CalendarDays, path: "/agenda" },
   { label: "Ranking", icon: Trophy, path: "/performance" },
   { label: "Comissões", icon: DollarSign, path: "/comissoes" },
 ];
@@ -142,10 +142,10 @@ const moreNavItems: NavItemWithChildren[] = [
 // All items combined for mobile
 const allNavItems: NavItemWithChildren[] = [
   { label: "Comando", icon: Gauge, path: "/" },
+  { label: "Agenda", icon: CalendarDays, path: "/agenda" },
   // HIDDEN — reativar futuramente:
   // { label: "Marketing", icon: BarChart2, path: "/marketing" },
   // { label: "Analytics", icon: BarChart3, path: "/analytics" },
-  // { label: "Agenda", icon: CalendarDays, path: "/agenda" },
   { label: "Revisão", icon: Wrench, path: "/follow-ups" },
   { label: "Chat", icon: Zap, path: "/chat" },
   { label: "Funis", icon: GitBranch, path: "/funis", children: [] }, // children set dynamically via displayConfig

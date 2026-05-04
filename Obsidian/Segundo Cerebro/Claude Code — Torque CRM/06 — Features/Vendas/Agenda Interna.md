@@ -73,3 +73,4 @@ Substitui a pagina anterior que era apenas mascara do Google Calendar.
 ## Historico
 
 - 2026-05-04 — Feature criada: migration meetings + meeting_participants + RPC get_agenda_events + edge fn meeting-webhook + hooks + refactor Agenda.tsx de monolito Google-only para agenda interna multi-fonte com componentes extraidos
+- 2026-05-04 — Agenda ativada na navegacao top (TopNavigation + Sidebar). Empty state removido — agenda sempre mostra grade mesmo sem eventos
