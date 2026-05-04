@@ -90,10 +90,10 @@ const PIPE_PATH_MAP: Record<string, string> = {
 
 const navItems: NavItemWithChildren[] = [
   { label: "Central de Comandos", icon: Gauge, path: "/" },
+  { label: "Agenda", icon: CalendarDays, path: "/agenda" },
   // HIDDEN — reativar futuramente:
   // { label: "Marketing", icon: BarChart2, path: "/marketing" },
   // { label: "Analytics", icon: BarChart3, path: "/analytics" },
-  // { label: "Agenda", icon: CalendarDays, path: "/agenda" },
   { label: "Revisão", icon: Wrench, path: "/follow-ups" },
   { label: "Checklists", icon: ListChecks, path: "/checklists" },
   { label: "Chat", icon: Zap, path: "/chat" },
