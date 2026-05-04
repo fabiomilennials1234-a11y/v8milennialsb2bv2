@@ -134,9 +134,26 @@ Deno.serve(withSentry('agent-message', async (req) => {
       });
     }
 
-    // HUMAN TAKEOVER removed — copilot always responds unless
-    // ai_disabled=true or conversation state=WAITING_HUMAN.
-    // Human agents can disable AI via the toggle in the chat UI.
+    // 1.6. AGENT ACTIVE GATE — fresh DB check (bypasses 5min LRU cache)
+    const { data: activeAgent } = await supabase
+      .from("copilot_agents")
+      .select("id")
+      .eq("organization_id", organizationId)
+      .eq("is_active", true)
+      .limit(1)
+      .maybeSingle();
+
+    if (!activeAgent) {
+      console.log('[agent-message] No active agents for org:', organizationId);
+      return new Response(JSON.stringify({
+        skipped: true,
+        reason: "no_active_agents",
+        organization_id: organizationId,
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
 
     // 1.7. FIRE lead_replied workflow trigger (fire-and-forget)
     fireTrigger({

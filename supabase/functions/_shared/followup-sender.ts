@@ -26,6 +26,7 @@ export async function sendFollowupMessage(
     instanceId: string | null;
     /** @deprecated kept for telemetry logging only; provider is resolved via instanceId */
     instanceName?: string;
+    agentId?: string;
   }
 ): Promise<{ success: boolean; error?: string }> {
   const {
@@ -36,7 +37,20 @@ export async function sendFollowupMessage(
     messageContent,
     instanceId,
     instanceName,
+    agentId,
   } = params;
+
+  if (agentId) {
+    const { data: agent } = await supabase
+      .from("copilot_agents")
+      .select("is_active")
+      .eq("id", agentId)
+      .maybeSingle();
+    if (agent && !agent.is_active) {
+      console.log("[followup-sender] Agent disabled — skipping followup for lead:", leadId);
+      return { success: false, error: "Agent disabled" };
+    }
+  }
 
   let ctx;
   try {

@@ -30,7 +30,7 @@ interface DispatchRow {
   agent_id: string;
   message_content: string;
   lead?: { phone?: string; name?: string };
-  agent?: { whatsapp_instance_id?: string; outbound_config?: OutboundConfig };
+  agent?: { whatsapp_instance_id?: string; outbound_config?: OutboundConfig; is_active?: boolean };
 }
 
 interface OutboundConfig {
@@ -56,7 +56,7 @@ export async function sendOutboundDispatch(
       .select(`
         *,
         lead:leads(phone, name),
-        agent:copilot_agents(whatsapp_instance_id, outbound_config)
+        agent:copilot_agents(whatsapp_instance_id, outbound_config, is_active)
       `)
       .eq("id", dispatchId)
       .single();
@@ -67,6 +67,15 @@ export async function sendOutboundDispatch(
     }
 
     const row = dispatch as unknown as DispatchRow;
+
+    if (row.agent && !row.agent.is_active) {
+      console.log("[outbound-sender] Agent disabled — skipping dispatch:", dispatchId);
+      await supabase
+        .from("outbound_dispatch_log")
+        .update({ status: "skipped", error_message: "Agent disabled at send time" })
+        .eq("id", dispatchId);
+      return { success: false, error: "Agent disabled" };
+    }
 
     // Resolve provider + instance + phone via unified dispatch helper
     let ctx;
