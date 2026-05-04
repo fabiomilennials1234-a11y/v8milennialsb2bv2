@@ -193,6 +193,10 @@ verify_jwt = false
 [functions.mass-send-control]
 verify_jwt = false
 
+# meeting-webhook: public API for creating meetings; auth via API key (Bearer tq_live_xxxx)
+[functions.meeting-webhook]
+verify_jwt = false
+
 
 
 

@@ -1,768 +1,74 @@
 /**
- * Página /agenda — redesenhada
+ * Pagina /agenda -- Agenda interna unificada
  *
- * Design coeso com o sistema Torque:
- * - Topbar horizontal com navegação, seletor de view e controles
- * - Grade de horas customizada (sem react-big-calendar)
- * - Eventos como cards com borda esquerda colorida por origem
- * - Popover flutuante para detalhes (sem Sheet/Modal)
- * - Indicador de hora atual animado com ponto dourado
- * - View padrão: Dia (com Semana e Mês disponíveis)
+ * Mostra eventos de 4 fontes internas (meetings, follow_ups,
+ * scheduled_messages, pipe_confirmacao) como dados primarios,
+ * com Google Calendar como overlay opcional.
+ *
+ * Componentes extraidos em src/components/agenda/ para
+ * manutenibilidade.
  */
 
-import { useState, useMemo, useRef, useEffect, useCallback } from "react";
+import { useState, useMemo, useCallback } from "react";
 import {
   format,
-  addHours,
   startOfWeek,
-  isToday,
-  isSameDay,
   addDays,
   addWeeks,
   subWeeks,
   addMonths,
-  startOfMonth,
-  endOfMonth,
   startOfDay,
-  getHours,
-  getMinutes,
-  differenceInMinutes,
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { motion, AnimatePresence } from "framer-motion";
-import {
-  CalendarDays,
-  Plus,
-  Video,
-  VideoOff,
-  ExternalLink,
-  User,
-  Clock,
-  MapPin,
-  RefreshCw,
-  ChevronLeft,
-  ChevronRight,
-  X,
-  Loader2,
-  Trash2,
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { CalendarDays } from "lucide-react";
+import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
+import { useAgendaEvents } from "@/hooks/useAgendaEvents";
+import { useDeleteMeeting } from "@/hooks/useMeetings";
 import {
   useCalendarEvents,
-  type CalendarEvent,
   useGoogleCalendarStatus,
 } from "@/hooks/useGoogleCalendar";
 import { useCalendarSharing } from "@/hooks/useGoogleCalendarSharing";
-import { useAuth } from "@/contexts/AuthContext";
-import { toast } from "sonner";
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+import type { EventSource, UnifiedEvent } from "@/components/agenda/agenda-helpers";
+import {
+  getWeekDays,
+  normalizeAgendaEvents,
+  normalizeGoogleEvents,
+} from "@/components/agenda/agenda-helpers";
+import { AgendaTopBar, type ViewType } from "@/components/agenda/AgendaTopBar";
+import { TimeGrid } from "@/components/agenda/TimeGrid";
+import { MonthView } from "@/components/agenda/MonthView";
+import {
+  EventDetailPopover,
+  type PopoverState,
+} from "@/components/agenda/EventDetailPopover";
+import { CreateMeetingDialog } from "@/components/agenda/CreateMeetingDialog";
 
-const HOUR_HEIGHT = 64; // px per hour in time grid
-const HOURS = Array.from({ length: 24 }, (_, i) => i);
-
-const ORIGIN_COLORS: Record<string, string> = {
-  google: "#4285F4",
-  calcom: "#00B4D8",
-  system: "hsl(47, 100%, 50%)",
-};
-
-const ORIGIN_LABELS: Record<string, string> = {
-  google: "Google",
-  calcom: "Cal.com",
-  system: "Sistema",
-};
+// ─── Google Calendar user colors (for shared calendars overlay) ───────────────
 
 const USER_COLORS = [
-  "hsl(47, 100%, 50%)",  // amber - próprio
-  "#10B981",              // emerald
-  "#3B82F6",              // blue
-  "#8B5CF6",              // violet
-  "#EC4899",              // pink
-  "#F97316",              // orange
-  "#06B6D4",              // cyan
+  "#4285F4",   // Google blue -- own
+  "#10B981",   // emerald
+  "#3B82F6",   // blue
+  "#8B5CF6",   // violet
+  "#EC4899",   // pink
+  "#F97316",   // orange
+  "#06B6D4",   // cyan
 ];
 
-const DAY_NAMES_SHORT = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+// ─── Available internal sources ───────────────────────────────────────────────
 
-// Google Calendar event colors (colorId → hex)
-const GOOGLE_EVENT_COLORS: Record<string, string> = {
-  "1":  "#7986CB", // Lavanda
-  "2":  "#33B679", // Sálvia
-  "3":  "#8E24AA", // Uva
-  "4":  "#E67C73", // Flamingo
-  "5":  "#F6BF26", // Banana
-  "6":  "#F4511E", // Tangerina
-  "7":  "#039BE5", // Pavão
-  "8":  "#3F51B5", // Mirtilo
-  "9":  "#0B8043", // Manjericão
-  "10": "#D50000", // Tomate
-  "11": "#616161", // Grafite
-};
+const INTERNAL_SOURCES: EventSource[] = [
+  "meeting",
+  "follow_up",
+  "scheduled_message",
+  "pipe_confirmacao",
+];
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-type ViewType = "day" | "week" | "month";
-
-interface AgendaEvent {
-  id: string;
-  title: string;
-  start: Date;
-  end: Date;
-  resource: CalendarEvent & {
-    owner_name?: string;
-    color: string;
-    calendar_owner_id?: string;
-  };
-}
-
-interface NewEventForm {
-  title: string;
-  description: string;
-  location: string;
-  start_at: string;
-  end_at: string;
-  color_id: string;   // Google Calendar colorId ("" = default)
-  with_meet: boolean; // Gerar link do Google Meet
-}
-
-interface PopoverState {
-  event: AgendaEvent;
-  x: number;
-  y: number;
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function getEventTop(event: AgendaEvent, dayStart: Date): number {
-  const minutes = differenceInMinutes(event.start, dayStart);
-  return (minutes / 60) * HOUR_HEIGHT;
-}
-
-function getEventHeight(event: AgendaEvent): number {
-  const duration = Math.max(differenceInMinutes(event.end, event.start), 30);
-  return (duration / 60) * HOUR_HEIGHT;
-}
-
-/**
- * Greedy interval-graph colouring for side-by-side overlap layout.
- * Events that don't overlap get full width; overlapping events share width equally.
- * Returns a map of eventId → { left, width } as fractions (0–1).
- */
-function computeEventLayout(events: AgendaEvent[]): Map<string, { left: number; width: number }> {
-  const result = new Map<string, { left: number; width: number }>();
-  if (events.length === 0) return result;
-
-  const sorted = [...events].sort((a, b) => a.start.getTime() - b.start.getTime());
-
-  // Group events into clusters of transitively-overlapping events
-  const clusters: AgendaEvent[][] = [];
-  let cluster: AgendaEvent[] = [];
-  let clusterMaxEnd = new Date(0);
-
-  for (const event of sorted) {
-    if (cluster.length === 0 || event.start < clusterMaxEnd) {
-      cluster.push(event);
-      if (event.end > clusterMaxEnd) clusterMaxEnd = event.end;
-    } else {
-      clusters.push(cluster);
-      cluster = [event];
-      clusterMaxEnd = event.end;
-    }
-  }
-  if (cluster.length > 0) clusters.push(cluster);
-
-  // For each cluster, assign greedy column slots (interval graph colouring)
-  for (const clusterEvents of clusters) {
-    const colEnds: Date[] = [];
-    const eventCols = new Map<string, number>();
-
-    for (const event of clusterEvents) {
-      let placed = false;
-      for (let i = 0; i < colEnds.length; i++) {
-        if (colEnds[i] <= event.start) {
-          colEnds[i] = event.end;
-          eventCols.set(event.id, i);
-          placed = true;
-          break;
-        }
-      }
-      if (!placed) {
-        eventCols.set(event.id, colEnds.length);
-        colEnds.push(event.end);
-      }
-    }
-
-    const totalCols = colEnds.length;
-    for (const event of clusterEvents) {
-      const col = eventCols.get(event.id)!;
-      result.set(event.id, { left: col / totalCols, width: 1 / totalCols });
-    }
-  }
-
-  return result;
-}
-
-function getNowTop(): number {
-  const now = new Date();
-  return (getHours(now) * 60 + getMinutes(now)) / 60 * HOUR_HEIGHT;
-}
-
-function getWeekDays(date: Date): Date[] {
-  const start = startOfWeek(date, { locale: ptBR });
-  return Array.from({ length: 7 }, (_, i) => addDays(start, i));
-}
-
-function getMonthGrid(date: Date): Date[] {
-  const gridStart = startOfWeek(startOfMonth(date), { locale: ptBR });
-  return Array.from({ length: 42 }, (_, i) => addDays(gridStart, i));
-}
-
-// ─── TimeGridEvent ─────────────────────────────────────────────────────────
-
-function TimeGridEvent({
-  event,
-  dayStart,
-  leftPct,
-  widthPct,
-  onClick,
-}: {
-  event: AgendaEvent;
-  dayStart: Date;
-  /** Left offset as a fraction of the column width (0–1) */
-  leftPct: number;
-  /** Width as a fraction of the column width (0–1) */
-  widthPct: number;
-  onClick: (e: React.MouseEvent, event: AgendaEvent) => void;
-}) {
-  const top = getEventTop(event, dayStart);
-  const height = Math.max(getEventHeight(event), 22);
-  const color = event.resource.color;
-  // 2px inset on each side so adjacent events don't touch
-  const MARGIN = 2;
-
-  return (
-    <div
-      className="absolute rounded-r-md cursor-pointer overflow-hidden transition-all duration-150 hover:brightness-110 hover:shadow-md z-10"
-      style={{
-        top: `${top}px`,
-        height: `${height}px`,
-        left: `calc(${leftPct * 100}% + ${MARGIN}px)`,
-        width: `calc(${widthPct * 100}% - ${MARGIN * 2}px)`,
-        borderLeft: `3px solid ${color}`,
-        backgroundColor: `${color}1A`,
-      }}
-      onClick={(e) => onClick(e, event)}
-    >
-      <div className="px-2 py-0.5 h-full flex flex-col justify-start overflow-hidden">
-        <p
-          className="text-[11px] font-semibold leading-tight truncate"
-          style={{ color }}
-        >
-          {event.title}
-        </p>
-        {height > 38 && (
-          <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">
-            {format(event.start, "HH:mm")} – {format(event.end, "HH:mm")}
-          </p>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ─── MonthEventPill ────────────────────────────────────────────────────────
-
-function MonthEventPill({
-  event,
-  onClick,
-}: {
-  event: AgendaEvent;
-  onClick: (e: React.MouseEvent, event: AgendaEvent) => void;
-}) {
-  const color = event.resource.color;
-  return (
-    <button
-      className="w-full text-left px-1.5 py-px rounded text-[10px] truncate leading-snug transition-all hover:brightness-110"
-      style={{
-        borderLeft: `2px solid ${color}`,
-        backgroundColor: `${color}18`,
-        color,
-      }}
-      onClick={(e) => {
-        e.stopPropagation();
-        onClick(e, event);
-      }}
-    >
-      {format(event.start, "HH:mm")} {event.title}
-    </button>
-  );
-}
-
-// ─── TimeGrid ─────────────────────────────────────────────────────────────
-
-function TimeGrid({
-  days,
-  events,
-  onEventClick,
-  onSlotClick,
-}: {
-  days: Date[];
-  events: AgendaEvent[];
-  onEventClick: (e: React.MouseEvent, event: AgendaEvent) => void;
-  onSlotClick: (day: Date, hour: number) => void;
-}) {
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const [nowTop, setNowTop] = useState(getNowTop());
-
-  // Scroll to current time on mount
-  useEffect(() => {
-    if (scrollRef.current) {
-      const target = Math.max(0, (new Date().getHours() - 2) * HOUR_HEIGHT);
-      scrollRef.current.scrollTop = target;
-    }
-  }, [days.length]); // re-scroll when switching day↔week
-
-  // Update time indicator every minute
-  useEffect(() => {
-    const interval = setInterval(() => setNowTop(getNowTop()), 60_000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const totalHeight = HOUR_HEIGHT * 24;
-
-  return (
-    <div className="flex flex-col flex-1 overflow-hidden">
-      {/* Day headers */}
-      <div
-        className="flex border-b border-border/30 shrink-0 bg-card/30"
-        style={{ paddingLeft: "52px" }}
-      >
-        {days.map((day) => {
-          const today = isToday(day);
-          return (
-            <div
-              key={day.toISOString()}
-              className="flex-1 py-3 flex flex-col items-center gap-0.5"
-            >
-              <span
-                className={`text-[10px] uppercase tracking-widest font-medium ${
-                  today ? "text-primary" : "text-muted-foreground/50"
-                }`}
-              >
-                {DAY_NAMES_SHORT[day.getDay()]}
-              </span>
-              <span
-                className={`text-sm font-semibold w-7 h-7 flex items-center justify-center rounded-full transition-colors ${
-                  today
-                    ? "bg-primary text-primary-foreground"
-                    : "text-foreground/80 hover:bg-muted"
-                }`}
-              >
-                {format(day, "d")}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Scrollable grid */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto">
-        <div className="flex relative" style={{ height: `${totalHeight}px` }}>
-          {/* Hour labels */}
-          <div className="w-[52px] shrink-0 relative select-none">
-            {HOURS.map((hour) => (
-              <div
-                key={hour}
-                className="absolute w-full flex items-start justify-end pr-2.5"
-                style={{ top: `${hour * HOUR_HEIGHT}px`, height: `${HOUR_HEIGHT}px` }}
-              >
-                {hour > 0 && (
-                  <span className="text-[10px] text-muted-foreground/40 leading-none -mt-2">
-                    {String(hour).padStart(2, "0")}:00
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
-
-          {/* Day columns */}
-          {days.map((day) => {
-            const dayStart = startOfDay(day);
-            const dayEvents = events.filter((e) => isSameDay(e.start, day));
-            const isCurrentDay = isToday(day);
-            const layout = computeEventLayout(dayEvents);
-
-            return (
-              <div
-                key={day.toISOString()}
-                className={`flex-1 relative border-l border-border/20 ${
-                  isCurrentDay ? "bg-primary/[0.015]" : ""
-                }`}
-              >
-                {/* Hour rows */}
-                {HOURS.map((hour) => (
-                  <div
-                    key={hour}
-                    className="absolute w-full border-t border-border/15 cursor-pointer hover:bg-muted/20 transition-colors"
-                    style={{
-                      top: `${hour * HOUR_HEIGHT}px`,
-                      height: `${HOUR_HEIGHT}px`,
-                    }}
-                    onClick={() => onSlotClick(day, hour)}
-                  />
-                ))}
-
-                {/* Half-hour lines */}
-                {HOURS.map((hour) => (
-                  <div
-                    key={`h-${hour}`}
-                    className="absolute w-full border-t border-border/8 pointer-events-none"
-                    style={{ top: `${hour * HOUR_HEIGHT + HOUR_HEIGHT / 2}px` }}
-                  />
-                ))}
-
-                {/* Events */}
-                {dayEvents.map((event) => {
-                  const pos = layout.get(event.id) ?? { left: 0, width: 1 };
-                  return (
-                    <TimeGridEvent
-                      key={event.id}
-                      event={event}
-                      dayStart={dayStart}
-                      leftPct={pos.left}
-                      widthPct={pos.width}
-                      onClick={onEventClick}
-                    />
-                  );
-                })}
-
-                {/* Current time indicator */}
-                {isCurrentDay && (
-                  <div
-                    className="absolute left-0 right-0 z-20 pointer-events-none flex items-center"
-                    style={{ top: `${nowTop}px` }}
-                  >
-                    <div className="w-2 h-2 rounded-full bg-primary shrink-0 -ml-1 shadow-sm" />
-                    <div className="flex-1 h-px bg-primary/50" />
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── MonthView ─────────────────────────────────────────────────────────────
-
-function MonthView({
-  date,
-  events,
-  onEventClick,
-  onSlotClick,
-}: {
-  date: Date;
-  events: AgendaEvent[];
-  onEventClick: (e: React.MouseEvent, event: AgendaEvent) => void;
-  onSlotClick: (day: Date) => void;
-}) {
-  const days = getMonthGrid(date);
-  const currentMonth = date.getMonth();
-
-  return (
-    <div className="flex-1 flex flex-col overflow-hidden">
-      {/* Day names header */}
-      <div className="grid grid-cols-7 border-b border-border/30 bg-card/30 shrink-0">
-        {DAY_NAMES_SHORT.map((name) => (
-          <div
-            key={name}
-            className="py-2.5 text-center text-[10px] uppercase tracking-widest text-muted-foreground/50 font-medium"
-          >
-            {name}
-          </div>
-        ))}
-      </div>
-
-      {/* Grid */}
-      <div
-        className="flex-1 overflow-auto"
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(7, 1fr)",
-          gridTemplateRows: "repeat(6, 1fr)",
-        }}
-      >
-        {days.map((day) => {
-          const isCurrentMonth = day.getMonth() === currentMonth;
-          const today = isToday(day);
-          const dayEvents = events.filter((e) => isSameDay(e.start, day));
-
-          return (
-            <div
-              key={day.toISOString()}
-              className={`border-b border-r border-border/15 p-1.5 overflow-hidden cursor-pointer transition-colors hover:bg-muted/20 min-h-[90px] ${
-                !isCurrentMonth ? "opacity-30" : ""
-              } ${today ? "bg-primary/[0.03]" : ""}`}
-              onClick={() => onSlotClick(day)}
-            >
-              <div className="flex items-center justify-center mb-1">
-                <span
-                  className={`text-xs font-semibold w-6 h-6 flex items-center justify-center rounded-full ${
-                    today
-                      ? "bg-primary text-primary-foreground"
-                      : "text-foreground/60"
-                  }`}
-                >
-                  {format(day, "d")}
-                </span>
-              </div>
-              <div className="space-y-px">
-                {dayEvents.slice(0, 3).map((event) => (
-                  <MonthEventPill
-                    key={event.id}
-                    event={event}
-                    onClick={onEventClick}
-                  />
-                ))}
-                {dayEvents.length > 3 && (
-                  <p className="text-[10px] text-muted-foreground/60 pl-1 pt-px">
-                    +{dayEvents.length - 3} mais
-                  </p>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-// ─── EventDetailPopover ────────────────────────────────────────────────────
-
-function EventDetailPopover({
-  state,
-  onClose,
-  onDelete,
-}: {
-  state: PopoverState;
-  onClose: () => void;
-  onDelete: (event: AgendaEvent) => Promise<void>;
-}) {
-  const { event, x, y } = state;
-  const ref = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState({ left: x + 14, top: y - 16 });
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-
-  // Adjust so it doesn't overflow viewport
-  useEffect(() => {
-    if (!ref.current) return;
-    const { width, height } = ref.current.getBoundingClientRect();
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-    let left = x + 14;
-    let top = y - 16;
-    if (left + width > vw - 16) left = x - width - 14;
-    if (top + height > vh - 16) top = vh - height - 16;
-    if (top < 8) top = 8;
-    setPos({ left, top });
-  }, [x, y]);
-
-  // Close on outside click (only when not in delete-confirm mode)
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
-    };
-    const t = setTimeout(() => document.addEventListener("mousedown", handler), 0);
-    return () => {
-      clearTimeout(t);
-      document.removeEventListener("mousedown", handler);
-    };
-  }, [onClose]);
-
-  const handleDelete = async () => {
-    setDeleting(true);
-    try {
-      await onDelete(event);
-      onClose();
-    } catch {
-      setDeleting(false);
-      setConfirmDelete(false);
-    }
-  };
-
-  const color = event.resource.color;
-
-  return (
-    <motion.div
-      ref={ref}
-      initial={{ opacity: 0, scale: 0.96, y: -4 }}
-      animate={{ opacity: 1, scale: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.96 }}
-      transition={{ duration: 0.12 }}
-      className="fixed z-50 w-72 bg-card border border-border/50 rounded-xl shadow-2xl dark:shadow-none dark:ring-1 dark:ring-border overflow-hidden"
-      style={{ left: pos.left, top: pos.top }}
-    >
-      {/* Color bar */}
-      <div className="h-[3px]" style={{ backgroundColor: color }} />
-
-      <div className="p-4 space-y-3">
-        {/* Title + actions */}
-        <div className="flex items-start justify-between gap-2">
-          <h3 className="font-semibold text-sm leading-snug flex-1 text-foreground">
-            {event.title}
-          </h3>
-          <div className="flex items-center gap-1 shrink-0 mt-0.5">
-            <button
-              onClick={() => setConfirmDelete(true)}
-              className="text-muted-foreground hover:text-destructive transition-colors rounded p-0.5"
-              title="Excluir evento"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={onClose}
-              className="text-muted-foreground hover:text-foreground transition-colors rounded p-0.5"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </div>
-
-        {/* Origin badge */}
-        <Badge
-          variant="outline"
-          className="text-[10px] h-5 px-2 capitalize"
-          style={{
-            borderColor: `${color}50`,
-            color,
-            backgroundColor: `${color}15`,
-          }}
-        >
-          {ORIGIN_LABELS[event.resource.origin] ?? event.resource.origin}
-        </Badge>
-
-        {/* Time */}
-        <div className="flex items-start gap-2 text-xs">
-          <Clock className="w-3.5 h-3.5 shrink-0 mt-0.5 text-muted-foreground" />
-          <div>
-            <p className="text-foreground/90 capitalize">
-              {format(event.start, "EEEE, d 'de' MMMM", { locale: ptBR })}
-            </p>
-            <p className="text-muted-foreground">
-              {format(event.start, "HH:mm")} – {format(event.end, "HH:mm")}
-            </p>
-          </div>
-        </div>
-
-        {/* Owner */}
-        {event.resource.owner_name && (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <User className="w-3.5 h-3.5 shrink-0" />
-            <span>{event.resource.owner_name}</span>
-          </div>
-        )}
-
-        {/* Location */}
-        {event.resource.location && (
-          <div className="flex items-start gap-2 text-xs text-muted-foreground">
-            <MapPin className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-            <span>{event.resource.location}</span>
-          </div>
-        )}
-
-        {/* Meet link */}
-        {event.resource.meet_link && (
-          <a
-            href={event.resource.meet_link}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-2 text-xs text-primary hover:text-primary/80 transition-colors"
-          >
-            <Video className="w-3.5 h-3.5 shrink-0" />
-            Entrar no Google Meet
-            <ExternalLink className="w-2.5 h-2.5" />
-          </a>
-        )}
-
-        {/* Lead link */}
-        {event.resource.lead_id && (
-          <a
-            href={`/leads?id=${event.resource.lead_id}`}
-            className="flex items-center gap-2 text-xs text-primary hover:text-primary/80 transition-colors"
-          >
-            <ExternalLink className="w-3.5 h-3.5 shrink-0" />
-            Ver lead no sistema
-          </a>
-        )}
-
-        {/* Description */}
-        {event.resource.description && (
-          <p className="text-xs text-muted-foreground bg-muted/40 rounded-lg p-2.5 leading-relaxed">
-            {event.resource.description}
-          </p>
-        )}
-
-        {/* Delete confirm — inline, no modal */}
-        <AnimatePresence>
-          {confirmDelete && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.15 }}
-              className="overflow-hidden"
-            >
-              <div className="pt-1 border-t border-border/30 space-y-2">
-                <p className="text-[11px] text-destructive font-medium">
-                  Excluir este evento do Google Calendar?
-                </p>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setConfirmDelete(false)}
-                    disabled={deleting}
-                    className="flex-1 text-[11px] py-1.5 rounded-md border border-border/50 text-muted-foreground hover:bg-muted/40 transition-colors disabled:opacity-50"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    onClick={handleDelete}
-                    disabled={deleting}
-                    className="flex-1 text-[11px] py-1.5 rounded-md bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
-                  >
-                    {deleting ? (
-                      <Loader2 className="w-3 h-3 animate-spin" />
-                    ) : (
-                      <Trash2 className="w-3 h-3" />
-                    )}
-                    Excluir
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-    </motion.div>
-  );
-}
-
-// ─── Main component ────────────────────────────────────────────────────────
+// ─── Main component ──────────────────────────────────────────────────────────
 
 export default function Agenda() {
   const { session } = useAuth();
@@ -771,81 +77,45 @@ export default function Agenda() {
   const [date, setDate] = useState(new Date());
   const [popover, setPopover] = useState<PopoverState | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [newEvent, setNewEvent] = useState<NewEventForm>({
-    title: "",
-    description: "",
-    location: "",
-    start_at: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
-    end_at: format(addHours(new Date(), 1), "yyyy-MM-dd'T'HH:mm"),
-    color_id: "",
-    with_meet: true,
-  });
+  const [createInitialStart, setCreateInitialStart] = useState<Date | undefined>();
 
-  // Calendars
-  const { data: status } = useGoogleCalendarStatus();
+  // ── Source visibility toggles ───────────────────────────────────────────────
+  const [activeSources, setActiveSources] = useState<Set<EventSource>>(
+    () => new Set<EventSource>([...INTERNAL_SOURCES, "google"]),
+  );
+
+  const toggleSource = useCallback((source: EventSource) => {
+    setActiveSources((prev) => {
+      const next = new Set(prev);
+      if (next.has(source)) next.delete(source);
+      else next.add(source);
+      return next;
+    });
+  }, []);
+
+  // ── Google Calendar overlay data ────────────────────────────────────────────
+  const { data: gcalStatus } = useGoogleCalendarStatus();
   const { data: sharingData } = useCalendarSharing();
   const ownUserId = session?.user?.id ?? "";
+  const googleConnected = !!gcalStatus?.connected;
 
-  const allCalendars = useMemo(() => {
-    const list: Array<{ id: string; name: string; color: string; isOwn: boolean }> = [];
-    if (status?.connected) {
-      list.push({ id: ownUserId, name: "Meu Calendário", color: USER_COLORS[0], isOwn: true });
+  // Build owner calendars list for normalizing Google events
+  const googleOwnerCalendars = useMemo(() => {
+    const list: Array<{ id: string; name: string; color: string }> = [];
+    if (gcalStatus?.connected) {
+      list.push({ id: ownUserId, name: "Meu Calendario", color: USER_COLORS[0] });
     }
     sharingData?.incoming?.forEach((share, idx) => {
       list.push({
         id: share.owner_id,
         name: share.owner?.name ?? "Colega",
         color: USER_COLORS[(idx + 1) % USER_COLORS.length],
-        isOwn: false,
       });
     });
     return list;
-  }, [status, sharingData, ownUserId]);
+  }, [gcalStatus, sharingData, ownUserId]);
 
-  const [activeCalendars, setActiveCalendars] = useState<Set<string>>(new Set());
-  useEffect(() => {
-    setActiveCalendars(new Set(allCalendars.map((c) => c.id)));
-  }, [allCalendars.length]);
-
-  const toggleCalendar = (id: string) => {
-    setActiveCalendars((prev) => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
-  };
-
-  // Calendars where the current user has CREATE permission (own + shared with can_create_events)
-  const createCalendarOptions = useMemo(() => {
-    const opts: Array<{ id: string; name: string; color: string }> = [];
-    if (status?.connected) {
-      opts.push({ id: ownUserId, name: "Meu Calendário", color: USER_COLORS[0] });
-    }
-    sharingData?.incoming
-      ?.filter((s) => s.can_create_events)
-      .forEach((share, idx) => {
-        opts.push({
-          id: share.owner_id,
-          name: share.owner?.name ?? "Calendário Compartilhado",
-          color: USER_COLORS[(idx + 1) % USER_COLORS.length],
-        });
-      });
-    return opts;
-  }, [status, sharingData, ownUserId]);
-
-  // True when the user can create events in at least one calendar
-  const canCreateEvents = createCalendarOptions.length > 0;
-
-  // Which calendar to create new events in (defaults to first option)
-  const [createCalendarOwnerId, setCreateCalendarOwnerId] = useState<string>("");
-  useEffect(() => {
-    if (createCalendarOptions.length > 0 && !createCalendarOwnerId) {
-      setCreateCalendarOwnerId(createCalendarOptions[0].id);
-    }
-  }, [createCalendarOptions.length]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Date range for query
+  // ── Date range for queries ──────────────────────────────────────────────────
   const { startDate, endDate } = useMemo(() => {
     if (view === "day") {
       const s = startOfDay(date);
@@ -855,86 +125,117 @@ export default function Agenda() {
       const s = startOfWeek(date, { locale: ptBR });
       return { startDate: s, endDate: addDays(s, 7) };
     }
+    // month -- pad one month each side for grid overflow
     return {
       startDate: new Date(date.getFullYear(), date.getMonth() - 1, 1),
       endDate: new Date(date.getFullYear(), date.getMonth() + 2, 0),
     };
   }, [date, view]);
 
-  const { data: eventsData, isLoading, refetch } = useCalendarEvents(startDate, endDate);
+  // ── Data: internal events (primary) ─────────────────────────────────────────
+  const {
+    data: agendaRawEvents = [],
+    isLoading: agendaLoading,
+    refetch: refetchAgenda,
+  } = useAgendaEvents(startDate, endDate);
 
-  const calendarEvents: AgendaEvent[] = useMemo(() => {
-    // Edge function returns raw Google API items where start/end are objects
-    // { dateTime: "...", timeZone: "..." } or { date: "..." } for all-day events.
-    // We need to normalize them to strings before constructing Date objects.
-    type RawEvent = Record<string, unknown> & { calendar_owner_id?: string };
-    const events = (eventsData ?? []) as RawEvent[];
+  // ── Data: Google Calendar events (optional overlay) ─────────────────────────
+  const {
+    data: googleRawEvents,
+    isLoading: googleLoading,
+    refetch: refetchGoogle,
+  } = useCalendarEvents(startDate, endDate);
 
-    return events
-      .filter((e) => {
-        const ownerId = (e.calendar_owner_id ?? ownUserId) as string;
-        const status = typeof e.status === "string" ? e.status : "";
-        return activeCalendars.has(ownerId) && status !== "cancelled";
-      })
-      .map((e) => {
-        const ownerId = (e.calendar_owner_id ?? ownUserId) as string;
-        const calInfo = allCalendars.find((c) => c.id === ownerId);
-        const origin = ((e.origin as string) ?? "google") as CalendarEvent["origin"];
-        // Prefer event-level color (set via color picker) over calendar color
-        const googleColor = e.colorId ? GOOGLE_EVENT_COLORS[e.colorId as string] : null;
-        const color = googleColor ?? calInfo?.color ?? ORIGIN_COLORS[origin] ?? USER_COLORS[0];
+  const isLoading = agendaLoading || googleLoading;
 
-        // Normalize start/end: Google API returns objects, cache returns strings
-        type DateField = { dateTime?: string; date?: string } | string | undefined;
-        const toStr = (f: DateField): string => {
-          if (!f) return "";
-          if (typeof f === "string") return f;
-          return f.dateTime ?? f.date ?? "";
-        };
-        const startStr = toStr(e.start as DateField);
-        const endStr   = toStr(e.end   as DateField) || startStr;
+  // ── Merge + filter events ───────────────────────────────────────────────────
+  const allEvents: UnifiedEvent[] = useMemo(() => {
+    const internal = normalizeAgendaEvents(agendaRawEvents);
+    const google =
+      activeSources.has("google") && googleRawEvents
+        ? normalizeGoogleEvents(
+            googleRawEvents as unknown[],
+            googleOwnerCalendars,
+            ownUserId,
+          )
+        : [];
 
-        // meet_link: normalized field (from cache) or raw Google field
-        const meetLink =
-          (e.meet_link as string | null) ??
-          (e.hangoutLink as string | null) ??
-          null;
+    // Deduplicate: if an internal meeting has a google_event_id, hide the
+    // Google overlay duplicate to avoid showing the same event twice.
+    const googleEventIds = new Set(
+      internal
+        .filter((e) => e.googleEventId)
+        .map((e) => `google-${e.googleEventId}`),
+    );
 
-        return {
-          id: e.id as string,
-          title: (e.summary as string) ?? "(sem título)",
-          start: new Date(startStr),
-          end:   new Date(endStr),
-          resource: {
-            id:          e.id as string,
-            summary:     (e.summary as string) ?? "(sem título)",
-            description: (e.description as string | null) ?? null,
-            location:    (e.location   as string | null) ?? null,
-            start:       startStr,
-            end:         endStr,
-            status:      (e.status as string) ?? "confirmed",
-            meet_link:   meetLink,
-            lead_id:     (e.lead_id    as string | null) ?? null,
-            origin,
-            html_link:          (e.htmlLink   as string | null) ?? (e.html_link as string | null) ?? null,
-            owner_name:         calInfo?.name,
-            color,
-            calendar_owner_id:  ownerId,
-          },
-        } as AgendaEvent;
-      });
-  }, [eventsData, activeCalendars, allCalendars, ownUserId]);
+    const deduped = google.filter((g) => !googleEventIds.has(g.id));
 
-  // Navigation
-  const navigate = (dir: "prev" | "next" | "today") => {
-    if (dir === "today") { setDate(new Date()); return; }
-    const d = dir === "next" ? 1 : -1;
-    if (view === "day") setDate((v) => addDays(v, d));
-    else if (view === "week") setDate((v) => (d === 1 ? addWeeks(v, 1) : subWeeks(v, 1)));
-    else setDate((v) => (d === 1 ? addMonths(v, 1) : addMonths(v, -1)));
-  };
+    return [...internal, ...deduped].filter((e) => activeSources.has(e.source));
+  }, [agendaRawEvents, googleRawEvents, activeSources, googleOwnerCalendars, ownUserId]);
 
-  // Date label
+  // ── Mutations ───────────────────────────────────────────────────────────────
+  const deleteMeeting = useDeleteMeeting();
+
+  const handleDeleteMeeting = useCallback(
+    async (meetingId: string) => {
+      await deleteMeeting.mutateAsync(meetingId);
+    },
+    [deleteMeeting],
+  );
+
+  const handleDeleteGoogleEvent = useCallback(
+    async (event: UnifiedEvent) => {
+      if (!session?.access_token) throw new Error("Nao autenticado");
+
+      const base = (
+        (import.meta.env.VITE_SUPABASE_URL as string) ?? ""
+      ).replace(/\/$/, "");
+      const rawId = event.id.replace(/^google-/, "");
+      const params = new URLSearchParams({ event_id: rawId });
+      if (event.googleCalendarOwnerId) {
+        params.set("calendar_owner_id", event.googleCalendarOwnerId);
+      }
+
+      const res = await fetch(
+        `${base}/functions/v1/google-calendar-events?${params}`,
+        {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        },
+      );
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        toast.error("Erro ao excluir evento", {
+          description:
+            (err as { message?: string }).message ?? "Tente novamente",
+        });
+        throw new Error("delete failed");
+      }
+
+      toast.success("Evento excluido");
+      refetchGoogle();
+    },
+    [session, refetchGoogle],
+  );
+
+  // ── Navigation ──────────────────────────────────────────────────────────────
+  const navigate = useCallback(
+    (dir: "prev" | "next" | "today") => {
+      if (dir === "today") {
+        setDate(new Date());
+        return;
+      }
+      const d = dir === "next" ? 1 : -1;
+      if (view === "day") setDate((v) => addDays(v, d));
+      else if (view === "week")
+        setDate((v) => (d === 1 ? addWeeks(v, 1) : subWeeks(v, 1)));
+      else setDate((v) => (d === 1 ? addMonths(v, 1) : addMonths(v, -1)));
+    },
+    [view],
+  );
+
+  // ── Date label ──────────────────────────────────────────────────────────────
   const dateLabel = useMemo(() => {
     if (view === "day")
       return format(date, "EEEE, d 'de' MMMM 'de' yyyy", { locale: ptBR });
@@ -942,102 +243,63 @@ export default function Agenda() {
       const days = getWeekDays(date);
       const [first, last] = [days[0], days[6]];
       if (first.getMonth() === last.getMonth())
-        return `${format(first, "d")} – ${format(last, "d 'de' MMMM 'de' yyyy", { locale: ptBR })}`;
-      return `${format(first, "d MMM", { locale: ptBR })} – ${format(last, "d MMM yyyy", { locale: ptBR })}`;
+        return `${format(first, "d")} - ${format(last, "d 'de' MMMM 'de' yyyy", { locale: ptBR })}`;
+      return `${format(first, "d MMM", { locale: ptBR })} - ${format(last, "d MMM yyyy", { locale: ptBR })}`;
     }
     return format(date, "MMMM 'de' yyyy", { locale: ptBR });
   }, [date, view]);
 
-  const handleEventClick = useCallback((e: React.MouseEvent, event: AgendaEvent) => {
-    e.stopPropagation();
-    setPopover({ event, x: e.clientX, y: e.clientY });
+  // ── Source toggles for the topbar ───────────────────────────────────────────
+  const sourceToggles = useMemo(() => {
+    const sources: EventSource[] = [...INTERNAL_SOURCES];
+    if (googleConnected) sources.push("google");
+    return sources.map((key) => ({
+      key,
+      active: activeSources.has(key),
+    }));
+  }, [activeSources, googleConnected]);
+
+  // ── Event handlers ──────────────────────────────────────────────────────────
+  const handleEventClick = useCallback(
+    (e: React.MouseEvent, event: UnifiedEvent) => {
+      e.stopPropagation();
+      setPopover({ event, x: e.clientX, y: e.clientY });
+    },
+    [],
+  );
+
+  const handleSlotClick = useCallback(
+    (day: Date, hour = 9) => {
+      const slotStart = new Date(
+        day.getFullYear(),
+        day.getMonth(),
+        day.getDate(),
+        hour,
+      );
+      setCreateInitialStart(slotStart);
+      setCreateOpen(true);
+    },
+    [],
+  );
+
+  const handleRefresh = useCallback(() => {
+    refetchAgenda();
+    if (googleConnected) refetchGoogle();
+  }, [refetchAgenda, refetchGoogle, googleConnected]);
+
+  const handleNewEvent = useCallback(() => {
+    setCreateInitialStart(undefined);
+    setCreateOpen(true);
   }, []);
 
-  const handleDeleteEvent = useCallback(async (event: AgendaEvent) => {
-    if (!session?.access_token) throw new Error("Não autenticado");
+  // ── Empty state ─────────────────────────────────────────────────────────────
 
-    const base = (import.meta.env.VITE_SUPABASE_URL as string ?? "").replace(/\/$/, "");
-    const params = new URLSearchParams({ event_id: event.id });
-    if (event.resource.calendar_owner_id) {
-      params.set("calendar_owner_id", event.resource.calendar_owner_id);
-    }
+  // Show empty only when there is zero data and the page has finished loading
+  const hasInternalEvents = agendaRawEvents.length > 0;
+  const hasGoogleEvents = (googleRawEvents ?? []).length > 0;
+  const doneLoading = !agendaLoading;
 
-    const res = await fetch(`${base}/functions/v1/google-calendar-events?${params}`, {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${session.access_token}` },
-    });
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      toast.error("Erro ao excluir evento", {
-        description: (err as { message?: string }).message ?? "Tente novamente",
-      });
-      throw new Error("delete failed");
-    }
-
-    toast.success("Evento excluído");
-    refetch();
-  }, [session, refetch]);
-
-  const handleSlotClick = useCallback((day: Date, hour = 9) => {
-    if (!canCreateEvents) return;
-    const slotStart = new Date(day.getFullYear(), day.getMonth(), day.getDate(), hour);
-    setNewEvent((prev) => ({
-      ...prev,
-      start_at: format(slotStart, "yyyy-MM-dd'T'HH:mm"),
-      end_at: format(addHours(slotStart, 1), "yyyy-MM-dd'T'HH:mm"),
-    }));
-    setCreateOpen(true);
-  }, [status]);
-
-  const handleCreateEvent = async () => {
-    if (!newEvent.title.trim()) { toast.error("Título é obrigatório"); return; }
-    if (!session?.access_token) { toast.error("Não autenticado"); return; }
-    setSubmitting(true);
-    try {
-      const url = `${(import.meta.env.VITE_SUPABASE_URL as string ?? "").replace(/\/$/, "")}/functions/v1/google-calendar-events`;
-      const res = await fetch(url, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          title: newEvent.title,
-          description: newEvent.description || undefined,
-          location: newEvent.location || undefined,
-          start_at: new Date(newEvent.start_at).toISOString(),
-          end_at: new Date(newEvent.end_at).toISOString(),
-          timezone: "America/Sao_Paulo",
-          color_id: newEvent.color_id || undefined,
-          with_meet: newEvent.with_meet,
-          calendar_owner_id: createCalendarOwnerId || undefined,
-        }),
-      });
-      if (!res.ok) throw new Error((await res.json()).message ?? "Erro ao criar evento");
-      const data = await res.json();
-      toast.success("Evento criado!", {
-        description: data.meet_link ? "Link do Meet gerado automaticamente." : undefined,
-      });
-      setCreateOpen(false);
-      setNewEvent({
-        title: "", description: "", location: "",
-        start_at: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
-        end_at: format(addHours(new Date(), 1), "yyyy-MM-dd'T'HH:mm"),
-        color_id: "",
-        with_meet: true,
-      });
-      refetch();
-    } catch (err) {
-      toast.error("Erro ao criar evento", { description: (err as Error).message });
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  // ── Empty state ───────────────────────────────────────────────────────────
-
-  if (!status?.connected && allCalendars.length === 0) {
+  if (doneLoading && !hasInternalEvents && !googleConnected) {
     return (
       <div className="flex-1 flex items-center justify-center p-8">
         <motion.div
@@ -1048,14 +310,24 @@ export default function Agenda() {
           <div className="w-16 h-16 mx-auto rounded-2xl bg-muted/50 flex items-center justify-center">
             <CalendarDays className="w-8 h-8 text-muted-foreground/40" />
           </div>
-          <h2 className="text-lg font-semibold">Nenhum calendário conectado</h2>
+          <h2 className="text-lg font-semibold">Crie seu primeiro evento</h2>
           <p className="text-sm text-muted-foreground max-w-xs">
-            Vá em{" "}
-            <a href="/configuracoes" className="text-primary underline underline-offset-2">
-              Configurações → Calendário
-            </a>{" "}
-            e conecte seu Google Calendar para ver seus eventos aqui.
+            Sua agenda esta vazia. Crie uma reuniao, follow-up ou conecte seu
+            Google Calendar em{" "}
+            <a
+              href="/configuracoes"
+              className="text-primary underline underline-offset-2"
+            >
+              Configuracoes
+            </a>
+            .
           </p>
+          <button
+            onClick={handleNewEvent}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+          >
+            Criar Evento
+          </button>
         </motion.div>
       </div>
     );
@@ -1063,122 +335,25 @@ export default function Agenda() {
 
   const weekDays = view === "week" ? getWeekDays(date) : [date];
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  // ── Render ──────────────────────────────────────────────────────────────────
 
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)] overflow-hidden">
+      {/* Top Bar */}
+      <AgendaTopBar
+        dateLabel={dateLabel}
+        view={view}
+        onViewChange={setView}
+        onNavigate={navigate}
+        sourceToggles={sourceToggles}
+        onToggleSource={toggleSource}
+        isLoading={isLoading}
+        onRefresh={handleRefresh}
+        onNewEvent={handleNewEvent}
+        googleConnected={googleConnected}
+      />
 
-      {/* ── Top Bar ────────────────────────────────────────────────────────── */}
-      <motion.div
-        initial={{ opacity: 0, y: -8 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="flex items-center gap-2 px-4 py-2.5 border-b border-border/30 bg-card/40 backdrop-blur-sm shrink-0 flex-wrap"
-      >
-        {/* Icon + Title */}
-        <div className="flex items-center gap-2 mr-1">
-          <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center">
-            <CalendarDays className="w-3.5 h-3.5 text-primary" />
-          </div>
-          <span className="font-semibold text-sm text-foreground/90">Agenda</span>
-        </div>
-
-        {/* Navigation */}
-        <div className="flex items-center gap-0.5">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="w-7 h-7 rounded-lg"
-            onClick={() => navigate("prev")}
-          >
-            <ChevronLeft className="w-3.5 h-3.5" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 px-2.5 text-xs rounded-lg font-medium"
-            onClick={() => navigate("today")}
-          >
-            Hoje
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="w-7 h-7 rounded-lg"
-            onClick={() => navigate("next")}
-          >
-            <ChevronRight className="w-3.5 h-3.5" />
-          </Button>
-        </div>
-
-        {/* Date label */}
-        <span className="text-sm font-medium text-foreground/70 capitalize flex-1 min-w-0 truncate">
-          {dateLabel}
-        </span>
-
-        {/* Calendar toggles */}
-        {allCalendars.length > 0 && (
-          <div className="flex items-center gap-3">
-            {allCalendars.map((cal) => (
-              <button
-                key={cal.id}
-                onClick={() => toggleCalendar(cal.id)}
-                className="flex items-center gap-1.5 text-xs transition-all duration-150"
-                style={{ opacity: activeCalendars.has(cal.id) ? 1 : 0.35 }}
-              >
-                <span
-                  className="w-2 h-2 rounded-full shrink-0"
-                  style={{ backgroundColor: cal.color }}
-                />
-                <span className="text-muted-foreground text-[11px]">
-                  {cal.isOwn ? "Você" : cal.name}
-                </span>
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* View switcher */}
-        <div className="flex items-center bg-muted/60 rounded-lg p-0.5 gap-px">
-          {(["day", "week", "month"] as ViewType[]).map((v) => (
-            <button
-              key={v}
-              onClick={() => setView(v)}
-              className={`px-2.5 py-1 text-[11px] rounded-md transition-all font-medium ${
-                view === v
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground/80"
-              }`}
-            >
-              {v === "day" ? "Dia" : v === "week" ? "Semana" : "Mês"}
-            </button>
-          ))}
-        </div>
-
-        {/* Refresh */}
-        <Button
-          variant="ghost"
-          size="icon"
-          className="w-7 h-7 rounded-lg"
-          onClick={() => refetch()}
-          disabled={isLoading}
-          title="Atualizar"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin" : ""}`} />
-        </Button>
-
-        {/* New Event */}
-        <Button
-          size="sm"
-          className="gap-1.5 h-7 text-xs rounded-lg"
-          onClick={() => setCreateOpen(true)}
-          disabled={!canCreateEvents}
-        >
-          <Plus className="w-3.5 h-3.5" />
-          Novo Evento
-        </Button>
-      </motion.div>
-
-      {/* ── Calendar body ──────────────────────────────────────────────────── */}
+      {/* Calendar body */}
       <AnimatePresence mode="wait">
         <motion.div
           key={view}
@@ -1191,14 +366,14 @@ export default function Agenda() {
           {view === "month" ? (
             <MonthView
               date={date}
-              events={calendarEvents}
+              events={allEvents}
               onEventClick={handleEventClick}
               onSlotClick={(day) => handleSlotClick(day)}
             />
           ) : (
             <TimeGrid
               days={weekDays}
-              events={calendarEvents}
+              events={allEvents}
               onEventClick={handleEventClick}
               onSlotClick={handleSlotClick}
             />
@@ -1206,180 +381,24 @@ export default function Agenda() {
         </motion.div>
       </AnimatePresence>
 
-      {/* ── Event Popover ──────────────────────────────────────────────────── */}
+      {/* Event popover */}
       <AnimatePresence>
         {popover && (
           <EventDetailPopover
             state={popover}
             onClose={() => setPopover(null)}
-            onDelete={handleDeleteEvent}
+            onDeleteMeeting={handleDeleteMeeting}
+            onDeleteGoogleEvent={handleDeleteGoogleEvent}
           />
         )}
       </AnimatePresence>
 
-      {/* ── Create Event Dialog ─────────────────────────────────────────────── */}
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-sm">
-              <div className="w-6 h-6 rounded-md bg-primary/10 flex items-center justify-center">
-                <Plus className="w-3.5 h-3.5 text-primary" />
-              </div>
-              Novo Evento
-            </DialogTitle>
-          </DialogHeader>
-
-          <div className="space-y-4 pt-1">
-            <div className="space-y-1.5">
-              <Label htmlFor="event-title" className="text-xs text-muted-foreground">
-                Título *
-              </Label>
-              <Input
-                id="event-title"
-                placeholder="Nome do evento"
-                value={newEvent.title}
-                onChange={(e) => setNewEvent((p) => ({ ...p, title: e.target.value }))}
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Início *</Label>
-                <Input
-                  type="datetime-local"
-                  value={newEvent.start_at}
-                  onChange={(e) => setNewEvent((p) => ({ ...p, start_at: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Fim *</Label>
-                <Input
-                  type="datetime-local"
-                  value={newEvent.end_at}
-                  onChange={(e) => setNewEvent((p) => ({ ...p, end_at: e.target.value }))}
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Local</Label>
-              <Input
-                placeholder="Endereço ou link"
-                value={newEvent.location}
-                onChange={(e) => setNewEvent((p) => ({ ...p, location: e.target.value }))}
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Descrição</Label>
-              <Textarea
-                placeholder="Notas sobre o evento..."
-                rows={3}
-                value={newEvent.description}
-                onChange={(e) => setNewEvent((p) => ({ ...p, description: e.target.value }))}
-              />
-            </div>
-
-            {/* Color picker */}
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Cor do Evento</Label>
-              <div className="flex flex-wrap gap-2 pt-0.5">
-                {/* Default / no color */}
-                <button
-                  type="button"
-                  onClick={() => setNewEvent((p) => ({ ...p, color_id: "" }))}
-                  title="Padrão"
-                  className={`w-5 h-5 rounded-full border-2 transition-all flex-shrink-0 ${
-                    !newEvent.color_id
-                      ? "border-foreground scale-125 shadow-sm"
-                      : "border-border/40 hover:scale-110"
-                  }`}
-                  style={{
-                    background: "conic-gradient(#aaa 0% 50%, #666 50% 100%)",
-                  }}
-                />
-                {Object.entries(GOOGLE_EVENT_COLORS).map(([id, hex]) => (
-                  <button
-                    type="button"
-                    key={id}
-                    onClick={() => setNewEvent((p) => ({ ...p, color_id: id }))}
-                    title={hex}
-                    className={`w-5 h-5 rounded-full border-2 transition-all flex-shrink-0 ${
-                      newEvent.color_id === id
-                        ? "border-foreground scale-125 shadow-sm"
-                        : "border-transparent hover:scale-110"
-                    }`}
-                    style={{ backgroundColor: hex }}
-                  />
-                ))}
-              </div>
-            </div>
-
-            {/* Calendar picker — shown when multiple options OR user has no own calendar */}
-            {(createCalendarOptions.length > 1 || !status?.connected) && createCalendarOptions.length > 0 && (
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Criar em</Label>
-                <div className="flex flex-wrap gap-2">
-                  {createCalendarOptions.map((cal) => (
-                    <button
-                      key={cal.id}
-                      type="button"
-                      onClick={() => setCreateCalendarOwnerId(cal.id)}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border transition-all ${
-                        createCalendarOwnerId === cal.id
-                          ? "border-primary bg-primary/10 text-foreground font-medium"
-                          : "border-border/40 text-muted-foreground hover:border-border hover:text-foreground"
-                      }`}
-                    >
-                      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: cal.color }} />
-                      {cal.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Google Meet toggle */}
-            <div className="flex items-center justify-between rounded-lg bg-muted/30 px-3 py-2">
-              <div className="flex items-center gap-2 text-xs">
-                {newEvent.with_meet ? (
-                  <Video className="w-3.5 h-3.5 text-primary shrink-0" />
-                ) : (
-                  <VideoOff className="w-3.5 h-3.5 text-muted-foreground/50 shrink-0" />
-                )}
-                <span className={newEvent.with_meet ? "text-foreground/80" : "text-muted-foreground/50"}>
-                  {newEvent.with_meet ? "Gerar link do Google Meet" : "Sem link do Google Meet"}
-                </span>
-              </div>
-              <Switch
-                checked={newEvent.with_meet}
-                onCheckedChange={(v) => setNewEvent((p) => ({ ...p, with_meet: v }))}
-              />
-            </div>
-
-            <div className="flex justify-end gap-2 pt-1">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCreateOpen(false)}
-                disabled={submitting}
-              >
-                Cancelar
-              </Button>
-              <Button size="sm" onClick={handleCreateEvent} disabled={submitting}>
-                {submitting ? (
-                  <>
-                    <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-                    Criando...
-                  </>
-                ) : (
-                  "Criar Evento"
-                )}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* Create meeting dialog */}
+      <CreateMeetingDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        initialStart={createInitialStart}
+      />
     </div>
   );
 }
