@@ -8,7 +8,10 @@
 import { useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
+import { useOrganization } from "@/hooks/useOrganization";
 import { toast } from "sonner";
+
+const MILENNIALS_ORG_ID = "6030520a-2ca7-477d-be89-55758e2cd808";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -43,8 +46,11 @@ export interface CadastroExternoPushResult {
 // ─── Enabled check ──────────────────────────────────────────────
 
 export function useCadastroExternoEnabled(): boolean {
-  const { hasFeature } = useOrgFeatures();
-  return hasFeature("external_cadastro");
+  const { hasFeature, isReady } = useOrgFeatures();
+  const { organizationId } = useOrganization();
+  // Org-bound integration — master bypass must not auto-enable for other orgs
+  if (!isReady) return false;
+  return hasFeature("external_cadastro") && organizationId === MILENNIALS_ORG_ID;
 }
 
 // ─── Push mutation ──────────────────────────────────────────────
