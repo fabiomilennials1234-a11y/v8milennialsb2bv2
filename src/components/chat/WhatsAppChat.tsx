@@ -1007,6 +1007,7 @@ export function WhatsAppChat() {
   const [searchQuery, setSearchQuery] = useState("");
   const [showOnlyWithLead, setShowOnlyWithLead] = useState(false);
   const [showOnlyWaitingHuman, setShowOnlyWaitingHuman] = useState(false);
+  const pendingInstanceParamRef = useRef<string | null>(null);
   const [isLeadPanelOpen, setIsLeadPanelOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"active" | "archived">("active");
   const [isInstancesModalOpen, setIsInstancesModalOpen] = useState(false);
@@ -1158,10 +1159,38 @@ export function WhatsAppChat() {
       const normalized = normalizePhoneForParam(phoneParam);
       if (normalized) {
         setSelectedPhone(normalized);
+        pendingInstanceParamRef.current = searchParams.get("instance");
         setSearchParams({}, { replace: true });
       }
     }
   }, [searchParams, setSearchParams]);
+
+  // Auto-select instance when phone is set from URL but no instance selected yet
+  useEffect(() => {
+    if (!selectedPhone) return;
+    if (selectedInstanceId) return;
+    if (instancesLoading || instances.length === 0) return;
+
+    const pending = pendingInstanceParamRef.current;
+    if (pending && instances.some((i) => i.id === pending)) {
+      setSelectedInstanceId(pending);
+      pendingInstanceParamRef.current = null;
+      return;
+    }
+    pendingInstanceParamRef.current = null;
+
+    if (instances.length === 1) {
+      setSelectedInstanceId(instances[0].id);
+    } else {
+      const storageKey = getInstanceStorageKey(teamMember?.id, teamMember?.organization_id);
+      const persistedId = storageKey ? localStorage.getItem(storageKey) : null;
+      if (persistedId && instances.some((i) => i.id === persistedId)) {
+        setSelectedInstanceId(persistedId);
+      } else {
+        setSelectedInstanceId(instances[0].id);
+      }
+    }
+  }, [selectedPhone, selectedInstanceId, instances, instancesLoading, teamMember?.id, teamMember?.organization_id]);
 
   // Ativar realtime para lista de contatos
   useWhatsAppMessagesRealtime(null);
@@ -1287,7 +1316,11 @@ export function WhatsAppChat() {
               selectedContact={selectedContact}
               selectedLeadName={selectedLead?.name}
             />
-          ) : selectedPhone ? null : (
+          ) : selectedPhone ? (
+            <div className="flex flex-col items-center justify-center h-full w-full">
+              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
             <div className="flex flex-col items-center justify-center h-full w-full text-center p-8">
               <MessageSquare className="w-10 h-10 text-muted-foreground/25 mb-3" />
               <p className="text-sm font-medium text-muted-foreground/50">

@@ -102,6 +102,7 @@ SaaS B2B multi-tenant para gestao de leads, pipelines de vendas, campanhas e aut
 - [[Pipelines Customizados]] — Funis customizados por org (permanentes e temporarios)
 - [[Funis Hub]] — Dashboard central de todos os pipes
 - [[Follow-ups]] — Tarefas de follow-up automaticas e manuais
+- [[Agenda Interna]] — Calendario interno unificado (meetings + follow-ups + msgs agendadas + confirmacao)
 - [[Produtos]] — Catalogo B2B (MRR, projeto, unitario) com variantes
 - [[Upsell]] — Modulo de pos-venda e cross-sell
 
@@ -155,6 +156,7 @@ SaaS B2B multi-tenant para gestao de leads, pipelines de vendas, campanhas e aut
 - [[2026-04-12]] — Daily note (primeiro dia)
 - [[2026-04-14]] — Coverage project fase 0 + 1
 - [[2026-04-15]] — Adicao do agente Security ao time
+- [[2026-05-04]] — Agenda interna: meetings + RPC + webhook + refactor frontend
 - `individuais/` — Notas detalhadas por mudanca significativa
 
 ### 08 — Backlog
