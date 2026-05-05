@@ -1,15 +1,8 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { Search, Plus, Zap, Loader2, Globe, Calendar, Settings2, AlertCircle, Clock } from "lucide-react";
+import { Search, Plus, Calendar, Settings2, AlertCircle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,6 +14,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { DraggableKanbanBoard, KanbanColumn } from "@/components/kanban/DraggableKanbanBoard";
+import { KanbanFilterPanel, FilterChips, type FilterSectionConfig } from "@/components/kanban/KanbanFilterPanel";
 import { TorqueLoader } from "@/components/branding/TorqueLoader";
 import { useCanPerformAction } from "@/lib/permissions";
 import { StageWorkflowsBadgeWrapper } from "@/components/kanban/StageWorkflowsBadgeWrapper";
@@ -50,29 +44,8 @@ import { toast } from "sonner";
 import { useOrganization } from "@/hooks/useOrganization";
 import { track, trackModuleVisit } from "@/lib/analytics";
 import { useLeadsWithScheduledMessages } from "@/hooks/useScheduledMessages";
+import { useTags } from "@/hooks/useTags";
 
-// Origin labels and colors mapping (origens do enum lead_origin)
-const originLabels: Record<string, { label: string; color: string }> = {
-  whatsapp: { label: "WhatsApp", color: "bg-green-500" },
-  meta_ads: { label: "Meta Ads", color: "bg-purple-500" },
-  instagram: { label: "Instagram", color: "bg-pink-500" },
-  tiktok: { label: "Tiktok", color: "bg-foreground/15" },
-  google_ads: { label: "Google Ads", color: "bg-red-500" },
-  site: { label: "Site", color: "bg-teal-500" },
-  landing_page: { label: "Landing Page", color: "bg-sky-500" },
-  remarketing: { label: "Remarketing", color: "bg-orange-500" },
-  indicacao: { label: "Indicação", color: "bg-emerald-500" },
-  evento: { label: "Evento", color: "bg-violet-500" },
-  prospeccao_ativa: { label: "Prospecção Ativa", color: "bg-orange-600" },
-  cal: { label: "Cal.com", color: "bg-blue-600" },
-  outro: { label: "Outros", color: "bg-muted-foreground/15" },
-};
-
-// Origens para filtro (enum lead_origin), em ordem de exibição
-const ALL_ORIGIN_OPTIONS = [
-  "whatsapp", "meta_ads", "instagram", "tiktok", "google_ads", "site", "landing_page",
-  "remarketing", "indicacao", "evento", "prospeccao_ativa", "cal", "outro",
-];
 
 const MONTHS_PT = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 function formatPeriodLabel(range: { startStr: string; endStr: string }): string {
@@ -84,25 +57,12 @@ function formatPeriodLabel(range: { startStr: string; endStr: string }): string 
 }
 
 
-// ---------------------------------------------------------------------------
-// Persisted filter state — scoped per org + user, TTL 24 h
-// ---------------------------------------------------------------------------
-type WhatsappFilterState = {
-  searchTerm: string;
-  filterResponsible: string;
-  filterOrigin: string;
-};
-
-const DEFAULT_WHATSAPP_FILTERS: WhatsappFilterState = {
-  searchTerm: "",
-  filterResponsible: "all",
-  filterOrigin: "all",
-};
 
 export default function PipeWhatsapp() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterResponsible, setFilterResponsible] = useState("all");
   const [filterOrigin, setFilterOrigin] = useState("all");
+  const [filterTags, setFilterTags] = useState<string[]>([]);
   const { data: leadsWithSchedule } = useLeadsWithScheduledMessages();
   const [filterScheduled, setFilterScheduled] = useState(false);
   const [isCreateLeadModalOpen, setIsCreateLeadModalOpen] = useState(false);
@@ -143,6 +103,22 @@ export default function PipeWhatsapp() {
   const { allowed: canDeleteCards } = useFeaturePermission("pipeline.delete_cards");
 
   const responsibleMembers = useResponsibleMembers();
+  const { data: orgTags = [] } = useTags();
+
+  // Build declarative sections for KanbanFilterPanel
+  const filterSections: FilterSectionConfig[] = useMemo(() => [
+    { type: "responsible", value: filterResponsible, onChange: setFilterResponsible, members: responsibleMembers },
+    { type: "origin-single", value: filterOrigin, onChange: setFilterOrigin },
+    { type: "tags", value: filterTags, onChange: setFilterTags, tags: orgTags },
+    { type: "scheduled", value: filterScheduled, onChange: setFilterScheduled },
+  ], [filterResponsible, filterOrigin, filterTags, filterScheduled, responsibleMembers, orgTags]);
+
+  const handleClearAllFilters = useCallback(() => {
+    setFilterResponsible("all");
+    setFilterOrigin("all");
+    setFilterTags([]);
+    setFilterScheduled(false);
+  }, []);
 
   // Transform pipe data to LeadCardData format
   const transformToCard = (item: any): LeadCardData => {
@@ -192,8 +168,12 @@ export default function PipeWhatsapp() {
     // Origin filter
     const matchesOrigin = filterOrigin === "all" || lead?.origin === filterOrigin;
 
+    // Tags filter (multi-select — lead must have at least one of the selected tags)
+    const matchesTags = filterTags.length === 0 ||
+      (lead?.lead_tags?.some((lt: any) => filterTags.includes(lt.tag?.id)) ?? false);
+
     const matchesScheduled = !filterScheduled || (leadsWithSchedule?.has(item.lead_id) ?? false);
-    return matchesSearch && matchesResponsible && matchesOrigin && matchesScheduled;
+    return matchesSearch && matchesResponsible && matchesOrigin && matchesTags && matchesScheduled;
   };
 
   // Converte etapas do banco para o formato do Kanban (com fallback)
@@ -226,7 +206,7 @@ export default function PipeWhatsapp() {
         items: columnItems,
       };
     });
-  }, [pipeData, pipelineStages, statusColumns, searchTerm, filterResponsible, filterOrigin, filterScheduled, leadsWithSchedule, metricsRange]);
+  }, [pipeData, pipelineStages, statusColumns, searchTerm, filterResponsible, filterOrigin, filterTags, filterScheduled, leadsWithSchedule, metricsRange]);
 
   // Count "ghost leads" — rows do pipe que o usuário enxerga mas cujo join
   // com `leads` retornou null. Indica divergência entre RLS do pipe e de
@@ -250,7 +230,7 @@ export default function PipeWhatsapp() {
     const pending = filteredData.filter(item => item.status === "novo").length;
 
     return { total, abordado, respondeu, scheduled, pending };
-  }, [pipeData, searchTerm, filterResponsible, filterOrigin, filterScheduled, leadsWithSchedule, metricsRange]);
+  }, [pipeData, searchTerm, filterResponsible, filterOrigin, filterTags, filterScheduled, leadsWithSchedule, metricsRange]);
 
   const displayStats = useMemo(() => {
     if (!metricsRange || !metricsByPeriod) return stats;
@@ -410,54 +390,26 @@ export default function PipeWhatsapp() {
       </motion.div>
 
       {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Buscar lead, empresa, telefone..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-9"
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center gap-3">
+          <div className="relative flex-1 max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Buscar lead, empresa, telefone..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+          <KanbanFilterPanel
+            sections={filterSections}
+            onClearAll={handleClearAllFilters}
           />
         </div>
-        
-        {/* Origin Filter */}
-        <Select value={filterOrigin} onValueChange={setFilterOrigin}>
-          <SelectTrigger className="w-[180px]">
-            <Globe className="w-4 h-4 mr-2" />
-            <SelectValue placeholder="Origem" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todas Origens</SelectItem>
-            {ALL_ORIGIN_OPTIONS.map(origin => (
-              <SelectItem key={origin} value={origin}>
-                {originLabels[origin]?.label || origin}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Select value={filterResponsible} onValueChange={setFilterResponsible}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Responsável" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos os responsáveis</SelectItem>
-            {responsibleMembers.map((m) => (
-              <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Button
-          variant={filterScheduled ? "default" : "outline"}
-          size="sm"
-          onClick={() => setFilterScheduled(!filterScheduled)}
-          className="gap-1.5"
-        >
-          <Clock className="w-4 h-4" />
-          Agendados
-        </Button>
+        <FilterChips
+          sections={filterSections}
+          onClearAll={handleClearAllFilters}
+        />
       </div>
 
       {/* Period filter indicator — aparece quando um período está selecionado */}

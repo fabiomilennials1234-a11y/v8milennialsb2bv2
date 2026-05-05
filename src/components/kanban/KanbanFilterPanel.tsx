@@ -9,6 +9,8 @@ import {
   Package,
   Globe,
   X,
+  AlertTriangle,
+  Columns3,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -32,8 +34,8 @@ import {
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 
-// ─── Origin labels ──────────────────────────────────────────────────────────
-const originLabels: Record<string, { label: string; color: string }> = {
+// ─── Origin labels (shared source of truth) ────��────────────────────────────
+export const originLabels: Record<string, { label: string; color: string }> = {
   whatsapp: { label: "WhatsApp", color: "bg-green-500" },
   meta_ads: { label: "Meta Ads", color: "bg-purple-500" },
   instagram: { label: "Instagram", color: "bg-pink-500" },
@@ -49,7 +51,7 @@ const originLabels: Record<string, { label: string; color: string }> = {
   outro: { label: "Outros", color: "bg-muted-foreground/15" },
 };
 
-const ALL_ORIGIN_OPTIONS = [
+export const ALL_ORIGIN_OPTIONS = [
   "whatsapp",
   "meta_ads",
   "instagram",
@@ -65,149 +67,200 @@ const ALL_ORIGIN_OPTIONS = [
   "outro",
 ];
 
-// ─── Types ──────────────────────────────────────────────────────────────────
-export interface KanbanFilterPanelFilters {
-  filterResponsible: string;
-  filterProductType: string;
-  filterPriority: string;
-  filterCalor: string;
-  filterOrigin: string[];
-  filterTags: string[];
-  filterScheduled: boolean;
-}
+// ─── Urgency options ─────────────────────────────────────────────────────────
+const URGENCY_OPTIONS = [
+  { value: "imediato", label: "Imediato" },
+  { value: "1-mes", label: "1 mês" },
+  { value: "2-3-meses", label: "2-3 meses" },
+  { value: "6-meses", label: "6+ meses" },
+];
 
-interface ResponsibleMember {
-  id: string;
-  name: string;
-}
+// ─── Section types ───────────────────���──────────────────────────────���────────
+export type FilterSectionConfig =
+  | { type: "responsible"; value: string; onChange: (v: string) => void; members: { id: string; name: string }[] }
+  | { type: "origin-single"; value: string; onChange: (v: string) => void }
+  | { type: "origin-multi"; value: string[]; onChange: (v: string[]) => void }
+  | { type: "tags"; value: string[]; onChange: (v: string[]) => void; tags: { id: string; name: string; color: string | null }[] }
+  | { type: "product-type"; value: string; onChange: (v: string) => void }
+  | { type: "calor"; value: string; onChange: (v: string) => void }
+  | { type: "priority"; value: string; onChange: (v: string) => void }
+  | { type: "urgency"; value: string; onChange: (v: string) => void }
+  | { type: "status-multi"; value: string[]; onChange: (v: string[]) => void; options: { id: string; title: string; color: string }[] }
+  | { type: "scheduled"; value: boolean; onChange: (v: boolean) => void };
 
-interface OrgTag {
-  id: string;
-  name: string;
-  color: string | null;
-}
-
-interface KanbanFilterPanelProps {
-  filters: KanbanFilterPanelFilters;
-  onFilterChange: <K extends keyof KanbanFilterPanelFilters>(
-    key: K,
-    value: KanbanFilterPanelFilters[K]
-  ) => void;
+export interface KanbanFilterPanelProps {
+  sections: FilterSectionConfig[];
   onClearAll: () => void;
-  responsibleMembers: ResponsibleMember[];
-  orgTags: OrgTag[];
 }
 
-// ─── Helper: count active filters ──────────────────────────────────────────
-export function countActiveFilters(filters: KanbanFilterPanelFilters): number {
+// ─── Helper: count active filters from sections ──────────────���───────────────
+export function countActiveFilters(sections: FilterSectionConfig[]): number {
   let count = 0;
-  if (filters.filterResponsible !== "all") count++;
-  if (filters.filterProductType !== "all") count++;
-  if (filters.filterPriority !== "all") count++;
-  if (filters.filterCalor !== "all") count++;
-  if (filters.filterOrigin.length > 0) count++;
-  if (filters.filterTags.length > 0) count++;
-  if (filters.filterScheduled) count++;
+  for (const section of sections) {
+    switch (section.type) {
+      case "responsible":
+      case "origin-single":
+      case "product-type":
+      case "calor":
+      case "priority":
+      case "urgency":
+        if (section.value !== "all") count++;
+        break;
+      case "origin-multi":
+      case "tags":
+      case "status-multi":
+        if (section.value.length > 0) count++;
+        break;
+      case "scheduled":
+        if (section.value) count++;
+        break;
+    }
+  }
   return count;
 }
 
-// ─── Helper: get filter chip labels ─────────────────────────────────────────
-export function getActiveFilterChips(
-  filters: KanbanFilterPanelFilters,
-  responsibleMembers: ResponsibleMember[],
-  orgTags: OrgTag[]
-): Array<{ key: keyof KanbanFilterPanelFilters; label: string; removeValue: any }> {
-  const chips: Array<{ key: keyof KanbanFilterPanelFilters; label: string; removeValue: any }> = [];
+// ─── Helper: generate filter chips from sections ─────────────────────────────
+export interface FilterChipData {
+  id: string;
+  label: string;
+  onRemove: () => void;
+}
 
-  if (filters.filterResponsible !== "all") {
-    const member = responsibleMembers.find((m) => m.id === filters.filterResponsible);
-    chips.push({
-      key: "filterResponsible",
-      label: `Responsável: ${member?.name || "..."}`,
-      removeValue: "all",
-    });
-  }
+export function getFilterChips(sections: FilterSectionConfig[]): FilterChipData[] {
+  const chips: FilterChipData[] = [];
 
-  if (filters.filterProductType !== "all") {
-    const typeLabel = filters.filterProductType === "mrr" ? "Recorrência" : "Projeto";
-    chips.push({
-      key: "filterProductType",
-      label: `Tipo: ${typeLabel}`,
-      removeValue: "all",
-    });
-  }
-
-  if (filters.filterCalor !== "all") {
-    const calorLabel =
-      filters.filterCalor === "hot" ? "Quente" : filters.filterCalor === "warm" ? "Morno" : "Frio";
-    chips.push({
-      key: "filterCalor",
-      label: `Calor: ${calorLabel}`,
-      removeValue: "all",
-    });
-  }
-
-  if (filters.filterPriority !== "all") {
-    const prioLabel =
-      filters.filterPriority === "high"
-        ? "Alta"
-        : filters.filterPriority === "medium"
-          ? "Média"
-          : "Baixa";
-    chips.push({
-      key: "filterPriority",
-      label: `Prioridade: ${prioLabel}`,
-      removeValue: "all",
-    });
-  }
-
-  if (filters.filterOrigin.length > 0) {
-    const labels = filters.filterOrigin
-      .map((o) => originLabels[o]?.label || o)
-      .slice(0, 2)
-      .join(", ");
-    const suffix = filters.filterOrigin.length > 2 ? ` +${filters.filterOrigin.length - 2}` : "";
-    chips.push({
-      key: "filterOrigin",
-      label: `Origem: ${labels}${suffix}`,
-      removeValue: [] as string[],
-    });
-  }
-
-  if (filters.filterTags.length > 0) {
-    const labels = filters.filterTags
-      .map((id) => orgTags.find((t) => t.id === id)?.name || "...")
-      .slice(0, 2)
-      .join(", ");
-    const suffix = filters.filterTags.length > 2 ? ` +${filters.filterTags.length - 2}` : "";
-    chips.push({
-      key: "filterTags",
-      label: `Tags: ${labels}${suffix}`,
-      removeValue: [] as string[],
-    });
-  }
-
-  if (filters.filterScheduled) {
-    chips.push({
-      key: "filterScheduled",
-      label: "Agendados",
-      removeValue: false,
-    });
+  for (const section of sections) {
+    switch (section.type) {
+      case "responsible": {
+        if (section.value !== "all") {
+          const member = section.members.find((m) => m.id === section.value);
+          chips.push({
+            id: "responsible",
+            label: `Responsável: ${member?.name || "..."}`,
+            onRemove: () => section.onChange("all"),
+          });
+        }
+        break;
+      }
+      case "origin-single": {
+        if (section.value !== "all") {
+          chips.push({
+            id: "origin-single",
+            label: `Origem: ${originLabels[section.value]?.label || section.value}`,
+            onRemove: () => section.onChange("all"),
+          });
+        }
+        break;
+      }
+      case "origin-multi": {
+        if (section.value.length > 0) {
+          const labels = section.value
+            .map((o) => originLabels[o]?.label || o)
+            .slice(0, 2)
+            .join(", ");
+          const suffix = section.value.length > 2 ? ` +${section.value.length - 2}` : "";
+          chips.push({
+            id: "origin-multi",
+            label: `Origem: ${labels}${suffix}`,
+            onRemove: () => section.onChange([]),
+          });
+        }
+        break;
+      }
+      case "tags": {
+        if (section.value.length > 0) {
+          const labels = section.value
+            .map((id) => section.tags.find((t) => t.id === id)?.name || "...")
+            .slice(0, 2)
+            .join(", ");
+          const suffix = section.value.length > 2 ? ` +${section.value.length - 2}` : "";
+          chips.push({
+            id: "tags",
+            label: `Tags: ${labels}${suffix}`,
+            onRemove: () => section.onChange([]),
+          });
+        }
+        break;
+      }
+      case "product-type": {
+        if (section.value !== "all") {
+          const typeLabel = section.value === "mrr" ? "Recorrência" : "Projeto";
+          chips.push({
+            id: "product-type",
+            label: `Tipo: ${typeLabel}`,
+            onRemove: () => section.onChange("all"),
+          });
+        }
+        break;
+      }
+      case "calor": {
+        if (section.value !== "all") {
+          const calorLabel = section.value === "hot" ? "Quente" : section.value === "warm" ? "Morno" : "Frio";
+          chips.push({
+            id: "calor",
+            label: `Calor: ${calorLabel}`,
+            onRemove: () => section.onChange("all"),
+          });
+        }
+        break;
+      }
+      case "priority": {
+        if (section.value !== "all") {
+          const prioLabel = section.value === "high" ? "Alta" : section.value === "medium" ? "Média" : "Baixa";
+          chips.push({
+            id: "priority",
+            label: `Prioridade: ${prioLabel}`,
+            onRemove: () => section.onChange("all"),
+          });
+        }
+        break;
+      }
+      case "urgency": {
+        if (section.value !== "all") {
+          const urgLabel = URGENCY_OPTIONS.find((o) => o.value === section.value)?.label || section.value;
+          chips.push({
+            id: "urgency",
+            label: `Urgência: ${urgLabel}`,
+            onRemove: () => section.onChange("all"),
+          });
+        }
+        break;
+      }
+      case "status-multi": {
+        if (section.value.length > 0) {
+          const labels = section.value
+            .map((id) => section.options.find((o) => o.id === id)?.title || "...")
+            .slice(0, 2)
+            .join(", ");
+          const suffix = section.value.length > 2 ? ` +${section.value.length - 2}` : "";
+          chips.push({
+            id: "status-multi",
+            label: `Status: ${labels}${suffix}`,
+            onRemove: () => section.onChange([]),
+          });
+        }
+        break;
+      }
+      case "scheduled": {
+        if (section.value) {
+          chips.push({
+            id: "scheduled",
+            label: "Agendados",
+            onRemove: () => section.onChange(false),
+          });
+        }
+        break;
+      }
+    }
   }
 
   return chips;
 }
 
-// ─── Component ──────────────────────────────────────────────────────────────
-export function KanbanFilterPanel({
-  filters,
-  onFilterChange,
-  onClearAll,
-  responsibleMembers,
-  orgTags,
-}: KanbanFilterPanelProps) {
+// ─── Component ───────────────────���──────────────────────────────────────────
+export function KanbanFilterPanel({ sections, onClearAll }: KanbanFilterPanelProps) {
   const [open, setOpen] = useState(false);
-  const activeCount = countActiveFilters(filters);
+  const activeCount = countActiveFilters(sections);
 
   return (
     <>
@@ -268,208 +321,12 @@ export function KanbanFilterPanel({
           {/* Filter Sections */}
           <ScrollArea className="flex-1 px-6 py-4">
             <div className="space-y-6">
-              {/* Responsável */}
-              <FilterSection icon={User} label="Responsável">
-                <Select
-                  value={filters.filterResponsible}
-                  onValueChange={(v) => onFilterChange("filterResponsible", v)}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Todos os responsáveis" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos os responsáveis</SelectItem>
-                    {responsibleMembers.map((member) => (
-                      <SelectItem key={member.id} value={member.id}>
-                        {member.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </FilterSection>
-
-              <Separator className="bg-border/50" />
-
-              {/* Origem (multi-select) */}
-              <FilterSection icon={Globe} label="Origem">
-                <div className="grid grid-cols-1 gap-1.5 max-h-[200px] overflow-y-auto pr-1">
-                  {ALL_ORIGIN_OPTIONS.map((origin) => {
-                    const meta = originLabels[origin];
-                    const checked = filters.filterOrigin.includes(origin);
-                    return (
-                      <label
-                        key={origin}
-                        className={cn(
-                          "flex items-center gap-2.5 px-2.5 py-1.5 rounded-md cursor-pointer transition-colors",
-                          "hover:bg-muted/50",
-                          checked && "bg-primary/5"
-                        )}
-                      >
-                        <Checkbox
-                          checked={checked}
-                          onCheckedChange={(c) => {
-                            const next = c
-                              ? [...filters.filterOrigin, origin]
-                              : filters.filterOrigin.filter((o) => o !== origin);
-                            onFilterChange("filterOrigin", next);
-                          }}
-                          className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
-                        />
-                        <span
-                          className={cn("h-2 w-2 rounded-full shrink-0", meta.color)}
-                        />
-                        <span className="text-sm">{meta.label}</span>
-                      </label>
-                    );
-                  })}
+              {sections.map((section, idx) => (
+                <div key={`${section.type}-${idx}`}>
+                  {idx > 0 && <Separator className="bg-border/50 mb-6" />}
+                  <SectionRenderer section={section} />
                 </div>
-              </FilterSection>
-
-              <Separator className="bg-border/50" />
-
-              {/* Tags (multi-select) */}
-              <FilterSection icon={Tag} label="Tags">
-                {orgTags.length === 0 ? (
-                  <p className="text-xs text-muted-foreground py-2">
-                    Nenhuma tag cadastrada
-                  </p>
-                ) : (
-                  <div className="grid grid-cols-1 gap-1.5 max-h-[200px] overflow-y-auto pr-1">
-                    {orgTags.map((tag) => {
-                      const checked = filters.filterTags.includes(tag.id);
-                      return (
-                        <label
-                          key={tag.id}
-                          className={cn(
-                            "flex items-center gap-2.5 px-2.5 py-1.5 rounded-md cursor-pointer transition-colors",
-                            "hover:bg-muted/50",
-                            checked && "bg-primary/5"
-                          )}
-                        >
-                          <Checkbox
-                            checked={checked}
-                            onCheckedChange={(c) => {
-                              const next = c
-                                ? [...filters.filterTags, tag.id]
-                                : filters.filterTags.filter((id) => id !== tag.id);
-                              onFilterChange("filterTags", next);
-                            }}
-                            className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
-                          />
-                          <span
-                            className="h-2.5 w-2.5 rounded-full shrink-0"
-                            style={{ backgroundColor: tag.color || "#888" }}
-                          />
-                          <span className="text-sm">{tag.name}</span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                )}
-              </FilterSection>
-
-              <Separator className="bg-border/50" />
-
-              {/* Tipo Produto */}
-              <FilterSection icon={Package} label="Tipo Produto">
-                <Select
-                  value={filters.filterProductType}
-                  onValueChange={(v) => onFilterChange("filterProductType", v)}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Todos os tipos" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos os tipos</SelectItem>
-                    <SelectItem value="mrr">Recorrência</SelectItem>
-                    <SelectItem value="projeto">Projeto</SelectItem>
-                  </SelectContent>
-                </Select>
-              </FilterSection>
-
-              <Separator className="bg-border/50" />
-
-              {/* Calor */}
-              <FilterSection icon={Flame} label="Calor">
-                <Select
-                  value={filters.filterCalor}
-                  onValueChange={(v) => onFilterChange("filterCalor", v)}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Todos" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos</SelectItem>
-                    <SelectItem value="hot">
-                      <div className="flex items-center gap-2">
-                        <Flame className="w-3 h-3 text-destructive" />
-                        Quente (7-10)
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="warm">
-                      <div className="flex items-center gap-2">
-                        <Flame className="w-3 h-3 text-chart-5" />
-                        Morno (4-6)
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="cold">
-                      <div className="flex items-center gap-2">
-                        <Flame className="w-3 h-3 text-muted-foreground" />
-                        Frio (0-3)
-                      </div>
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </FilterSection>
-
-              <Separator className="bg-border/50" />
-
-              {/* Prioridade */}
-              <FilterSection icon={Star} label="Prioridade">
-                <Select
-                  value={filters.filterPriority}
-                  onValueChange={(v) => onFilterChange("filterPriority", v)}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Todas" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todas as prioridades</SelectItem>
-                    <SelectItem value="high">
-                      <div className="flex items-center gap-2">
-                        <span className="text-chart-5">★★★</span>
-                        Alta (8-10)
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="medium">
-                      <div className="flex items-center gap-2">
-                        <span className="text-chart-5">★★</span>
-                        Média (5-7)
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="low">
-                      <div className="flex items-center gap-2">
-                        <span className="text-muted-foreground">★</span>
-                        Baixa (0-4)
-                      </div>
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </FilterSection>
-
-              <Separator className="bg-border/50" />
-
-              {/* Agendados */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <Clock className="w-4 h-4 text-muted-foreground" />
-                  <span className="text-sm font-medium">Agendados</span>
-                </div>
-                <Switch
-                  checked={filters.filterScheduled}
-                  onCheckedChange={(v) => onFilterChange("filterScheduled", v)}
-                />
-              </div>
+              ))}
             </div>
           </ScrollArea>
         </SheetContent>
@@ -478,8 +335,285 @@ export function KanbanFilterPanel({
   );
 }
 
+// ─── Section Renderer ────────────────���────────────────────────────────────────
+function SectionRenderer({ section }: { section: FilterSectionConfig }) {
+  switch (section.type) {
+    case "responsible":
+      return (
+        <FilterSectionWrapper icon={User} label="Responsável">
+          <Select value={section.value} onValueChange={section.onChange}>
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Todos os responsáveis" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os responsáveis</SelectItem>
+              {section.members.map((member) => (
+                <SelectItem key={member.id} value={member.id}>
+                  {member.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </FilterSectionWrapper>
+      );
+
+    case "origin-single":
+      return (
+        <FilterSectionWrapper icon={Globe} label="Origem">
+          <Select value={section.value} onValueChange={section.onChange}>
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Todas as origens" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas as origens</SelectItem>
+              {ALL_ORIGIN_OPTIONS.map((origin) => {
+                const meta = originLabels[origin];
+                return (
+                  <SelectItem key={origin} value={origin}>
+                    <div className="flex items-center gap-2">
+                      <span className={cn("h-2 w-2 rounded-full shrink-0", meta.color)} />
+                      {meta.label}
+                    </div>
+                  </SelectItem>
+                );
+              })}
+            </SelectContent>
+          </Select>
+        </FilterSectionWrapper>
+      );
+
+    case "origin-multi":
+      return (
+        <FilterSectionWrapper icon={Globe} label="Origem">
+          <div className="grid grid-cols-1 gap-1.5 max-h-[200px] overflow-y-auto pr-1">
+            {ALL_ORIGIN_OPTIONS.map((origin) => {
+              const meta = originLabels[origin];
+              const checked = section.value.includes(origin);
+              return (
+                <label
+                  key={origin}
+                  className={cn(
+                    "flex items-center gap-2.5 px-2.5 py-1.5 rounded-md cursor-pointer transition-colors",
+                    "hover:bg-muted/50",
+                    checked && "bg-primary/5"
+                  )}
+                >
+                  <Checkbox
+                    checked={checked}
+                    onCheckedChange={(c) => {
+                      const next = c
+                        ? [...section.value, origin]
+                        : section.value.filter((o) => o !== origin);
+                      section.onChange(next);
+                    }}
+                    className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+                  />
+                  <span className={cn("h-2 w-2 rounded-full shrink-0", meta.color)} />
+                  <span className="text-sm">{meta.label}</span>
+                </label>
+              );
+            })}
+          </div>
+        </FilterSectionWrapper>
+      );
+
+    case "tags":
+      return (
+        <FilterSectionWrapper icon={Tag} label="Tags">
+          {section.tags.length === 0 ? (
+            <p className="text-xs text-muted-foreground py-2">
+              Nenhuma tag cadastrada
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 gap-1.5 max-h-[200px] overflow-y-auto pr-1">
+              {section.tags.map((tag) => {
+                const checked = section.value.includes(tag.id);
+                return (
+                  <label
+                    key={tag.id}
+                    className={cn(
+                      "flex items-center gap-2.5 px-2.5 py-1.5 rounded-md cursor-pointer transition-colors",
+                      "hover:bg-muted/50",
+                      checked && "bg-primary/5"
+                    )}
+                  >
+                    <Checkbox
+                      checked={checked}
+                      onCheckedChange={(c) => {
+                        const next = c
+                          ? [...section.value, tag.id]
+                          : section.value.filter((id) => id !== tag.id);
+                        section.onChange(next);
+                      }}
+                      className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+                    />
+                    <span
+                      className="h-2.5 w-2.5 rounded-full shrink-0"
+                      style={{ backgroundColor: tag.color || "#888" }}
+                    />
+                    <span className="text-sm">{tag.name}</span>
+                  </label>
+                );
+              })}
+            </div>
+          )}
+        </FilterSectionWrapper>
+      );
+
+    case "product-type":
+      return (
+        <FilterSectionWrapper icon={Package} label="Tipo Produto">
+          <Select value={section.value} onValueChange={section.onChange}>
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Todos os tipos" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os tipos</SelectItem>
+              <SelectItem value="mrr">Recorrência</SelectItem>
+              <SelectItem value="projeto">Projeto</SelectItem>
+            </SelectContent>
+          </Select>
+        </FilterSectionWrapper>
+      );
+
+    case "calor":
+      return (
+        <FilterSectionWrapper icon={Flame} label="Calor">
+          <Select value={section.value} onValueChange={section.onChange}>
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Todos" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos</SelectItem>
+              <SelectItem value="hot">
+                <div className="flex items-center gap-2">
+                  <Flame className="w-3 h-3 text-destructive" />
+                  Quente (7-10)
+                </div>
+              </SelectItem>
+              <SelectItem value="warm">
+                <div className="flex items-center gap-2">
+                  <Flame className="w-3 h-3 text-chart-5" />
+                  Morno (4-6)
+                </div>
+              </SelectItem>
+              <SelectItem value="cold">
+                <div className="flex items-center gap-2">
+                  <Flame className="w-3 h-3 text-muted-foreground" />
+                  Frio (0-3)
+                </div>
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </FilterSectionWrapper>
+      );
+
+    case "priority":
+      return (
+        <FilterSectionWrapper icon={Star} label="Prioridade">
+          <Select value={section.value} onValueChange={section.onChange}>
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Todas" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas as prioridades</SelectItem>
+              <SelectItem value="high">
+                <div className="flex items-center gap-2">
+                  <span className="text-chart-5">★★★</span>
+                  Alta (8-10)
+                </div>
+              </SelectItem>
+              <SelectItem value="medium">
+                <div className="flex items-center gap-2">
+                  <span className="text-chart-5">★★</span>
+                  Média (5-7)
+                </div>
+              </SelectItem>
+              <SelectItem value="low">
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground">★</span>
+                  Baixa (0-4)
+                </div>
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </FilterSectionWrapper>
+      );
+
+    case "urgency":
+      return (
+        <FilterSectionWrapper icon={AlertTriangle} label="Urgência">
+          <Select value={section.value} onValueChange={section.onChange}>
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Todas" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas as urg��ncias</SelectItem>
+              {URGENCY_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </FilterSectionWrapper>
+      );
+
+    case "status-multi":
+      return (
+        <FilterSectionWrapper icon={Columns3} label="Status">
+          <div className="grid grid-cols-1 gap-1.5 max-h-[200px] overflow-y-auto pr-1">
+            {section.options.map((status) => {
+              const checked = section.value.includes(status.id);
+              return (
+                <label
+                  key={status.id}
+                  className={cn(
+                    "flex items-center gap-2.5 px-2.5 py-1.5 rounded-md cursor-pointer transition-colors",
+                    "hover:bg-muted/50",
+                    checked && "bg-primary/5"
+                  )}
+                >
+                  <Checkbox
+                    checked={checked}
+                    onCheckedChange={(c) => {
+                      const next = c
+                        ? [...section.value, status.id]
+                        : section.value.filter((id) => id !== status.id);
+                      section.onChange(next);
+                    }}
+                    className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+                  />
+                  <span
+                    className="h-2.5 w-2.5 rounded-full shrink-0"
+                    style={{ backgroundColor: status.color }}
+                  />
+                  <span className="text-sm">{status.title}</span>
+                </label>
+              );
+            })}
+          </div>
+        </FilterSectionWrapper>
+      );
+
+    case "scheduled":
+      return (
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <Clock className="w-4 h-4 text-muted-foreground" />
+            <span className="text-sm font-medium">Agendados</span>
+          </div>
+          <Switch
+            checked={section.value}
+            onCheckedChange={section.onChange}
+          />
+        </div>
+      );
+  }
+}
+
 // ─── Sub-component: section wrapper ─────────────────────────────────────────
-function FilterSection({
+function FilterSectionWrapper({
   icon: Icon,
   label,
   children,
@@ -499,34 +633,25 @@ function FilterSection({
   );
 }
 
-// ─── Filter Chips (inline below search) ─────────────────────────────────────
+// ─── Filter Chips (inline below search) ─────────���───────────────────────────
 export function FilterChips({
-  filters,
-  onFilterChange,
+  sections,
   onClearAll,
-  responsibleMembers,
-  orgTags,
 }: {
-  filters: KanbanFilterPanelFilters;
-  onFilterChange: <K extends keyof KanbanFilterPanelFilters>(
-    key: K,
-    value: KanbanFilterPanelFilters[K]
-  ) => void;
+  sections: FilterSectionConfig[];
   onClearAll: () => void;
-  responsibleMembers: ResponsibleMember[];
-  orgTags: OrgTag[];
 }) {
-  const chips = getActiveFilterChips(filters, responsibleMembers, orgTags);
+  const chips = getFilterChips(sections);
   if (chips.length === 0) return null;
 
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       {chips.map((chip) => (
         <Badge
-          key={chip.key}
+          key={chip.id}
           variant="secondary"
           className="gap-1 pl-2.5 pr-1.5 py-0.5 text-xs font-normal bg-muted/60 hover:bg-muted cursor-pointer group transition-colors"
-          onClick={() => onFilterChange(chip.key, chip.removeValue)}
+          onClick={chip.onRemove}
         >
           {chip.label}
           <X className="w-3 h-3 text-muted-foreground group-hover:text-destructive transition-colors" />

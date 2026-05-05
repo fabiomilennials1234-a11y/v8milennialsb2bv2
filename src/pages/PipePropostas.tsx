@@ -28,7 +28,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { DraggableKanbanBoard, KanbanColumn } from "@/components/kanban/DraggableKanbanBoard";
-import { KanbanFilterPanel, FilterChips, type KanbanFilterPanelFilters } from "@/components/kanban/KanbanFilterPanel";
+import { KanbanFilterPanel, FilterChips, type FilterSectionConfig } from "@/components/kanban/KanbanFilterPanel";
 import { TorqueLoader } from "@/components/branding/TorqueLoader";
 import { useCanPerformAction } from "@/lib/permissions";
 import { StageWorkflowsBadgeWrapper } from "@/components/kanban/StageWorkflowsBadgeWrapper";
@@ -169,14 +169,6 @@ export default function PipePropostas() {
   );
   const { data: leadsWithSchedule } = useLeadsWithScheduledMessages();
 
-  // Panel filter change handler (generic for KanbanFilterPanel)
-  const handlePanelFilterChange = useCallback(
-    <K extends keyof KanbanFilterPanelFilters>(key: K, value: KanbanFilterPanelFilters[K]) => {
-      setFilterState((f) => ({ ...f, [key]: value }));
-    },
-    [setFilterState]
-  );
-
   const handleClearAllFilters = useCallback(() => {
     setFilterState((f) => ({
       ...f,
@@ -189,17 +181,6 @@ export default function PipePropostas() {
       filterScheduled: false,
     }));
   }, [setFilterState]);
-
-  // Build filters object for KanbanFilterPanel
-  const panelFilters: KanbanFilterPanelFilters = useMemo(() => ({
-    filterResponsible,
-    filterProductType,
-    filterPriority,
-    filterCalor,
-    filterOrigin,
-    filterTags,
-    filterScheduled,
-  }), [filterResponsible, filterProductType, filterPriority, filterCalor, filterOrigin, filterTags, filterScheduled]);
 
   // ─── Filtro defensivo: para role "member" (ex-membro), pré-seleciona o próprio
   // teamMemberId na primeira visita. Cria camada extra de proteção client-side
@@ -292,6 +273,17 @@ export default function PipePropostas() {
 
   const responsibleMembers = useResponsibleMembers();
   const { data: orgTags = [] } = useTags();
+
+  // Build declarative sections for KanbanFilterPanel
+  const filterSections: FilterSectionConfig[] = useMemo(() => [
+    { type: "responsible", value: filterResponsible, onChange: (v: string) => setFilterState((f) => ({ ...f, filterResponsible: v })), members: responsibleMembers },
+    { type: "origin-multi", value: filterOrigin, onChange: (v: string[]) => setFilterState((f) => ({ ...f, filterOrigin: v })) },
+    { type: "tags", value: filterTags, onChange: (v: string[]) => setFilterState((f) => ({ ...f, filterTags: v })), tags: orgTags },
+    { type: "product-type", value: filterProductType, onChange: (v: string) => setFilterState((f) => ({ ...f, filterProductType: v })) },
+    { type: "calor", value: filterCalor, onChange: (v: string) => setFilterState((f) => ({ ...f, filterCalor: v })) },
+    { type: "priority", value: filterPriority, onChange: (v: string) => setFilterState((f) => ({ ...f, filterPriority: v })) },
+    { type: "scheduled", value: filterScheduled, onChange: (v: boolean) => setFilterState((f) => ({ ...f, filterScheduled: v })) },
+  ], [filterResponsible, filterOrigin, filterTags, filterProductType, filterCalor, filterPriority, filterScheduled, responsibleMembers, orgTags, setFilterState]);
 
   // Transform pipe data to LeadCardData format
   const transformToCard = (item: any): LeadCardData => {
@@ -1082,19 +1074,13 @@ export default function PipePropostas() {
                   />
                 </div>
                 <KanbanFilterPanel
-                  filters={panelFilters}
-                  onFilterChange={handlePanelFilterChange}
+                  sections={filterSections}
                   onClearAll={handleClearAllFilters}
-                  responsibleMembers={responsibleMembers}
-                  orgTags={orgTags}
                 />
               </div>
               <FilterChips
-                filters={panelFilters}
-                onFilterChange={handlePanelFilterChange}
+                sections={filterSections}
                 onClearAll={handleClearAllFilters}
-                responsibleMembers={responsibleMembers}
-                orgTags={orgTags}
               />
             </div>
 
