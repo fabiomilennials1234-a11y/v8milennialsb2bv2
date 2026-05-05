@@ -1,498 +1,154 @@
 # CLAUDE.md — Torque CRM
 
-## O que é
+SaaS B2B multi-tenant. Leads, pipelines, campanhas, automações IA. ~30 orgs ativas. ICP: fábricas/distribuidoras B2B. Domínio: `torquecrm.com.br`. Time: CTO (Gabriel) + 1 dev junior.
 
-SaaS B2B multi-tenant para gestão de leads, pipelines de vendas, campanhas e automações com IA. Produto da Milennials. Domínio: `torquecrm.com.br`.
+## Subagentes (3)
 
-- **~30 organizações ativas** (crescendo diariamente)
-- **ICP**: Empresas B2B — fábricas e distribuidoras
-- **Time**: CTO (Gabriel) + 1 dev junior
-
-## Team de Agentes — 3 Subagentes
-
-**OBRIGATÓRIO**: Toda task não-trivial passa pelo `arquiteto` (entry point E exit point). Pipeline minimalista, paralelizável, sem overhead de orquestração:
-
-```
-CTO → arquiteto → [design | engenheiro | ambos] → arquiteto (commit + push) → CTO
-```
-
-### Os 3 subagentes
+Pipeline: `CTO → arquiteto → [design | engenheiro | ambos] → arquiteto (commit+push) → CTO`
 
 | Subagente | Função | Skill |
 |-----------|--------|-------|
-| **arquiteto** | Entry/exit point — sanity-check + arquitetura + roteamento + commit & push em branch nova | `arquiteto` |
-| **design** | UI/UX completo — visual + interação + microcopy + motion (invoca `hm-designer`) | `design` |
-| **engenheiro** | Fullstack — TS/React/Deno + DB/RLS/RPC + tests + segurança + documentação Obsidian/`.specs` + auto-QA | `engenheiro` |
+| **arquiteto** | Entry/exit — sanity-check, arquitetura, roteamento, commit & push branch nova | `arquiteto` |
+| **design** | UI/UX completo — visual, interação, microcopy, motion (invoca `hm-designer`) | `design` |
+| **engenheiro** | Fullstack — TS/React/Deno + DB/RLS/RPC + tests + segurança + docs Obsidian/`.specs` + auto-QA | `engenheiro` |
 
-### Pipeline
+**Roteamento**: Conversacional → arquiteto direto. Visual → design→engenheiro. Bug/refactor/schema/edge-fn → engenheiro. Feature UI completa → design+engenheiro paralelo. Decisão arquitetural → só arquiteto.
 
-1. **arquiteto** recebe pedido. Faz sanity-check (vale fazer? caminho mais simples?). Desenha arquitetura quando aplicável. Despacha brief cirúrgico pro(s) subagente(s) certo(s).
-2. **design** e/ou **engenheiro** executam em paralelo quando independentes. Cada um devolve output estruturado. Engenheiro inclui auto-QA + documentação Obsidian/`.specs` antes de devolver.
-3. **arquiteto** consolida, valida `git status`/`git diff`, cria branch nova, commit Conventional + Co-Authored-By, push -u origin. Devolve URL/branch ao CTO.
-
-### Roteamento
-
-| Sinal na task | Subagente(s) |
-|---------------|-------------|
-| Pergunta conversacional ("explica X", "como funciona Y") | nenhum — arquiteto responde direto, sem commit |
-| Mudança visual (tela, componente, layout, estado visual, microcopy) | `design` → `engenheiro` (impl) → arquiteto commita |
-| Bug, refactor, schema-only, edge function, hook, RPC, RLS, integração | `engenheiro` → arquiteto commita |
-| Feature UI completa (visual + comportamento + dados) | `design` E `engenheiro` (paralelo) → arquiteto commita |
-| Decisão arquitetural pura (trade-off, modelagem, boundary nova) | só `arquiteto` (sem dispatch, sem commit a menos que altere docs/CLAUDE.md) |
-
-### Regras de ouro
-
-- **arquiteto** é entry E exit point. Nunca pulado para trabalho não-trivial. Nunca implementa código.
-- **engenheiro** cobre 5 disciplinas em seções nomeadas: Implementação + DB + Testes + Segurança + Documentação. Pula o que não aplica.
-- **design** sempre invoca skill `hm-designer` no início como baseline.
-- **Documentação** (Obsidian + `.specs/STATE.md`) é responsabilidade do engenheiro — vault sempre alinhado antes do commit.
-- **Commit + push** é responsabilidade do arquiteto — branch nova nomeada por fix/feature, commit único Conventional + Co-Authored-By, sem `git add -A`, sem `--force`, sem push em `main`/`develop`.
-- Tasks sensíveis (auth, pagamento, PII, cross-tenant, multi-tenancy, RLS) ativam seção Segurança obrigatória do `engenheiro`. Veto = bloqueia commit.
-- Default deploy: dev. Prod só com pedido explícito do CTO na sessão.
+**Regras**: arquiteto nunca implementa. engenheiro cobre Impl+DB+Tests+Security+Docs (pula o que não aplica). design invoca `hm-designer`. Commit+push = responsabilidade do arquiteto. Tasks sensíveis (auth/PII/RLS/multi-tenant) = seção Segurança obrigatória. Default: dev. Prod: só com pedido explícito.
 
 ## Stack
 
-| Camada | Tecnologia |
-|--------|-----------|
-| Frontend | React 18 + TypeScript 5.8 + Vite 5 (SWC) |
-| UI | shadcn/ui (Radix) + Tailwind 3 + Lucide icons |
-| State | TanStack Query v5 (server state) + React Context (auth/features) |
-| Forms | React Hook Form + Zod |
-| Backend | Supabase (Postgres + Auth + Edge Functions + Realtime + Storage) |
-| AI | Google Gemini (embeddings 1536d) + pgvector (RAG) |
-| Integrações | Uazapi (WhatsApp provider), Meta, Google Calendar, TinyERP, Asaas, n8n, SZ.Chat, ElevenLabs |
-| Testes | Vitest (unit/integration) + Playwright (E2E) |
-| Monitoring | Sentry |
+Frontend: React 18 + TS 5.8 + Vite 5 (SWC) | UI: shadcn/ui (Radix) + Tailwind 3 + Lucide | State: TanStack Query v5 + Context (auth/features) | Forms: RHF + Zod | Backend: Supabase (Postgres + Auth + Edge Functions + Realtime + Storage) | AI: Gemini (embeddings 1536d) + pgvector | Integrações: Uazapi, Meta, Google Calendar, TinyERP, Asaas, n8n, SZ.Chat, ElevenLabs | Testes: Vitest + Playwright | Monitoring: Sentry
 
 ## Comandos
 
 ```bash
-npm run dev              # Dev server em localhost:8080
-npm run build            # Build de produção (Vite)
-npm run build:dev        # Build modo desenvolvimento
-npm run test:unit        # Testes unitários (Vitest)
-npm run test:integration # Testes de integração (precisa Supabase local)
-npm run test:e2e         # E2E (Playwright + Chromium)
-npm run test:coverage    # Coverage dos testes unitários
+npm run dev              # localhost:8080
+npm run build            # Produção
+npm run test:unit        # Vitest
+npm run test:integration # Vitest + Supabase local
+npm run test:e2e         # Playwright
 npm run lint             # ESLint
 ```
 
-### Deploy
+Deploy edge functions: `supabase functions deploy <fn> --project-ref <ref>`
+- Prod: `jsjsmuncfkbsbzqzqhfq` | Dev: `bcfadphgsibjzivtbjvc`
+- Frontend: push main → Docker → EasyPanel (VPS Hostinger)
 
-```bash
-# Edge functions (produção)
-supabase functions deploy <nome-funcao> --project-ref jsjsmuncfkbsbzqzqhfq
-
-# Edge functions (dev)
-supabase functions deploy <nome-funcao> --project-ref bcfadphgsibjzivtbjvc
-
-# Frontend: VPS Hostinger via EasyPanel (Docker containers)
-# Push pra main → build Docker → deploy no EasyPanel
-git push origin main
-```
-
-## Ambientes
-
-| Ambiente | Supabase Project ID | Uso |
-|----------|-------------------|-----|
-| **Produção** | `jsjsmuncfkbsbzqzqhfq` | Clientes reais |
-| **Development** | `bcfadphgsibjzivtbjvc` | Testes e staging |
-
-Organization principal (Milennials): `6030520a-2ca7-477d-be89-55758e2cd808`
+Org Milennials: `6030520a-2ca7-477d-be89-55758e2cd808`
 
 ## Estrutura
 
 ```
-src/
-├── components/        # 46 categorias de componentes
-│   └── ui/            # 54 primitivos shadcn/ui
-├── hooks/             # 122+ hooks React Query
-├── pages/             # 46 páginas (lazy loaded)
-├── contexts/          # Auth, OrgFeatures, ThemeTransition
-├── lib/               # Utilitários, permissions, analytics
-├── integrations/      # Client + types Supabase
-└── types/             # Tipos globais (copilot, workflow)
-
-supabase/
-├── functions/         # 78+ edge functions (Deno)
-│   └── _shared/       # 35 módulos compartilhados
-└── migrations/        # 322 migrations SQL
+src/{components(46 cats, ui/54 primitivos), hooks(122+), pages(46 lazy), contexts, lib, integrations, types}
+supabase/{functions(78+ Deno, _shared/35 módulos), migrations(322+)}
 ```
 
 ## Arquitetura
 
-### Multi-tenancy
-Toda query filtra por `organization_id`. RLS no Postgres garante isolamento. O frontend nunca envia org_id manualmente — vem do contexto auth.
+**Multi-tenancy**: Toda query filtra `organization_id`. RLS garante isolamento. Frontend nunca envia org_id — vem do auth context.
 
-### Permissões (3 camadas)
-```
-Master Admin → Organization Admin → Feature Permissions → Role Matrix
-```
-- `useUserRole()` — role do usuário (admin/member)
-- `useCanPerformAction(action)` — checa permissão via RPC
-- `useMasterAuth()` — bypass total (admin Milennials)
+**Permissões (3 camadas)**: Master → Org Admin → Feature Permissions → Role Matrix. Hooks: `useUserRole()`, `useCanPerformAction(action)`, `useMasterAuth()`.
 
-### Pipelines (funis)
-Leads passam por pipelines configuráveis:
-- `pipe_whatsapp` — Qualificação (novo lead → abordado → respondeu → agendado)
-- `pipe_confirmacao` — Confirmação de reunião
-- `pipe_propostas` — Propostas comerciais
-- `custom_pipelines` — Funis customizados por org
+**Pipelines**: `pipe_whatsapp` (qualificação), `pipe_confirmacao` (reunião), `pipe_propostas` (fechamento), `custom_pipelines`. Stages dinâmicas em `pipeline_stages`. Lead pode estar em múltiplos pipes.
 
-Cada pipe tem stages dinâmicas em `pipeline_stages`.
+**Edge Function pattern**: `Deno.serve(withSentry('nome', handler))` + `withSecurityHeaders(getCorsHeaders(req))` + OPTIONS early return.
 
-### Edge Functions
-Padrão de toda edge function:
-```typescript
-Deno.serve(withSentry('nome', async (req) => {
-  const corsHeaders = withSecurityHeaders(getCorsHeaders(req));
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-  // ... lógica
-}));
-```
+**Realtime**: `useRealtimeSubscription(table, queryKeys)` — postgres_changes, filtro org_id, debounce 2s.
 
-### Realtime
-`useRealtimeSubscription(table, queryKeys)` — subscreve em `postgres_changes`, filtra por `organization_id`, debounce de 2s. Usado em chat, leads, pipes.
-
-### Cron Jobs (pg_cron)
-10+ jobs rodando a cada 1 minuto via pg_net → edge functions. Autenticam via `x-cron-secret` header. Principais:
-- `process-webhook-deliveries` (batch 100)
-- `process-workflow-executions` (batch 20)
-- `process-outbound-dispatches`
-- `process-ai-actions`
-- `campaign-rule-dispatch`
+**Cron (pg_cron)**: 10+ jobs/1min via pg_net → edge functions. Auth: `x-cron-secret`. Principais: webhook-deliveries, workflow-executions, outbound-dispatches, ai-actions, campaign-rule-dispatch.
 
 ## Padrões de código
 
-### Hooks (React Query)
-```typescript
-// Query
-export function useLeads() {
-  const { organizationId } = useOrganization();
-  return useQuery({
-    queryKey: ["leads", organizationId],
-    queryFn: async () => { /* supabase.from("leads").select(...) */ },
-    enabled: !!organizationId,
-  });
-}
+**Hooks**: useQuery com `queryKey: [table, orgId]`, `enabled: !!orgId`. Mutations invalidam queryKey no onSuccess.
 
-// Mutation
-export function useCreateLead() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (input) => { /* supabase.from("leads").insert(...) */ },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["leads"] }),
-  });
-}
-```
+**Tipos**: `Tables<"leads">`, `TablesInsert<"leads">`, `TablesUpdate<"leads">` de `@/integrations/supabase/types`.
 
-### Tipos do banco
-```typescript
-import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
-type Lead = Tables<"leads">;
-```
+**Imports**: Sempre `@/` alias. **Naming**: Componentes PascalCase, hooks `use*` camelCase, tabelas snake_case, env `VITE_SCREAMING_SNAKE`.
 
-### Imports
-Sempre usar alias `@/`:
-```typescript
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
-import { cn } from "@/lib/utils";
-```
-
-### Naming
-| Tipo | Convenção | Exemplo |
-|------|-----------|---------|
-| Componentes | PascalCase | `LeadCard.tsx` |
-| Hooks | camelCase com `use` | `useLeads.ts` |
-| Tabelas DB | snake_case | `lead_tags` |
-| Query keys | array camelCase | `["pipe_whatsapp", orgId]` |
-| Env vars | `VITE_SCREAMING_SNAKE` | `VITE_SUPABASE_URL` |
-
-## Áreas frágeis (atenção extra)
+## Áreas frágeis
 
 ### Copilot (agentes IA)
-Fluxo que mais gera confusão com usuários e bugs recorrentes. Ao mexer aqui, sempre:
-- Testar o fluxo completo: criar agente → configurar → ativar → conversar com lead
-- Verificar edge cases: agente sem business_context, lead sem telefone, conversation sem messages
-- Checar se a UI deixa claro o que cada config faz (muitos usuários se perdem)
+Fluxo mais frágil. Testar: criar→configurar→ativar→conversar. Edge cases: agente sem business_context, lead sem telefone, conversation sem messages.
+- UI: `src/components/copilot/` | CRUD: `src/hooks/useCopilotAgents.ts` | Backend: `supabase/functions/agent-message/`, `_shared/ai-action-executor.ts`, `outbound-trigger/`
 
-**Arquivos chave:**
-- `src/components/copilot/` — UI do copilot wizard e config
-- `src/hooks/useCopilotAgents.ts` — CRUD de agentes
-- `supabase/functions/agent-message/` — Processamento de mensagem do agente
-- `supabase/functions/_shared/ai-action-executor.ts` — Executor de ações IA
-- `supabase/functions/outbound-trigger/` — Disparo outbound do agente
-
-### WhatsApp Provider (Uazapi)
-Migração completa Evolution→Uazapi feita em 7 fases + UI em 7 sprints.
-Provider-agnostic via `WhatsAppProvider` adapter.
-
-**Arquivos chave:**
-- `supabase/functions/_shared/whatsapp-client.ts` — adapter factory
-- `supabase/functions/_shared/whatsapp-providers/` — UazapiProvider + EvolutionProvider (kill-switch)
-- `supabase/functions/whatsapp-api-proxy/` — único entry point frontend (JWT+tenant+rate limit)
-- `supabase/functions/whatsapp-webhook/` — ingress com secret no path + excludeMessages:[wasSentByApi]
-- `supabase/functions/history-sync-worker/` — cron 1min processa `history_sync_jobs`
-- `supabase/functions/mass-send-{create,status,control}/` — blast server-side via `/sender/*`
-- `src/lib/whatsappApi.ts` — client helpers pro proxy
-- `src/components/chat/actions/` — react/edit/pin/delete/markRead bubble UI
-- `src/components/chat/history-sync/` — import histórico modal+cards
-- `src/components/whatsapp-migration/` — banner + RepairingWizard (30 orgs rollout)
-- `src/components/automacoes/action-configs/MenuNodeConfig.tsx` + `PixButtonNodeConfig.tsx`
-- `src/pages/campaigns/MassSend.tsx` — dashboard blasts
-- `src/pages/master/WhatsAppMigration.tsx` — admin dashboard migração
-
-**Tabelas novas**: `whatsapp_instance_secrets` (RLS deny-all), `history_sync_jobs`, `uazapi_sender_jobs`.
-
-**RPCs**: `get_uazapi_credentials` + `set_uazapi_credentials` (ambas service_role only).
-
-**Features Uazapi-only** (Evolution lança `NotSupportedError`):
-- `sendMenu` (button/list/poll/carousel)
-- `sendPixButton` (PIX dinâmico)
-- `react`/`edit`/`pin`/`deleteForAll`/`markRead`
-- `historySync`
-- `/sender/*` mass send
-
-**Kill-switch**: `organizations.whatsapp_provider_override` força provider por org (panic button durante migração).
-
-**Envs obrigatórios em prod**:
-- `UAZAPI_BASE_URL`, `UAZAPI_ADMIN_TOKEN`, `UAZAPI_WEBHOOK_SECRET` (Supabase secrets)
-- `CRON_SECRET` (já existia)
-- `EVOLUTION_API_URL`/`KEY` — mantidos até migração 100% completa, depois unset
+### WhatsApp (Uazapi)
+Provider-agnostic via adapter. Migração Evolution→Uazapi completa.
+- Adapter: `_shared/whatsapp-client.ts` + `_shared/whatsapp-providers/` | Proxy: `whatsapp-api-proxy/` (JWT+tenant+rate limit) | Webhook: `whatsapp-webhook/` (secret path) | History: `history-sync-worker/` | Mass: `mass-send-{create,status,control}/`
+- Frontend: `src/lib/whatsappApi.ts`, `chat/actions/`, `chat/history-sync/`, `whatsapp-migration/`, `campaigns/MassSend.tsx`
+- Tabelas: `whatsapp_instance_secrets` (RLS deny-all), `history_sync_jobs`, `uazapi_sender_jobs`
+- RPCs: `get/set_uazapi_credentials` (service_role only)
+- Features Uazapi-only: sendMenu, sendPixButton, react/edit/pin/deleteForAll/markRead, historySync, /sender/* mass send
+- Kill-switch: `organizations.whatsapp_provider_override`
+- Envs prod: `UAZAPI_BASE_URL`, `UAZAPI_ADMIN_TOKEN`, `UAZAPI_WEBHOOK_SECRET`, `CRON_SECRET`
 
 ### Permissões
-Sistema de 3 camadas que tem issues recorrentes. Ao mexer:
-- Testar com role `admin`, `membro`, e `master` separadamente
-- Verificar RLS policies + `feature_permissions` + `member_feature_permissions`
-- Checar o hook `useCanPerformAction()` e o RPC `check_action_allowed`
-
-**Arquivos chave:**
-- `src/lib/permissions.ts` — Engine de permissões frontend
-- `supabase/functions/_shared/permission_engine.ts` — Engine backend
-- `src/hooks/useUserRole.ts` — Role do usuário logado
-- `tests/integration/permission-engine.test.ts` — Testes de integração
+3 camadas, issues recorrentes. Testar com admin/membro/master separadamente.
+- `src/lib/permissions.ts` | `_shared/permission_engine.ts` | `src/hooks/useUserRole.ts` | `tests/integration/permission-engine.test.ts`
 
 ## Gotchas
 
-- **JWT em edge functions**: A maioria tem `verify_jwt = false` no `config.toml`. Autenticação é feita internamente via headers customizados (`x-webhook-key`, `x-cron-secret`, Bearer token manual).
-- **Supabase types**: O arquivo `src/integrations/supabase/types.ts` (270KB) é auto-gerado. Nunca edite manualmente. Regenere com `supabase gen types typescript`.
-- **Deploy de edge functions**: `--no-verify-jwt` não é mais aceito na CLI. Use `verify_jwt = false` no `config.toml` (cuidado: `--no-verify-jwt=false` HABILITA JWT — double negative trap).
-- **pg_net**: Disponível só no Supabase, não existe no RDS Aurora. Edge functions cron dependem dele.
-- **Realtime handlers**: `onUpdate` recebe apenas campos alterados, não o row completo com joins. Dados aninhados (lead_tags, responsible) vêm do cache.
-- **Body parameters no n8n**: Valores são sempre strings. Para enviar arrays (ex: tags), use JSON body ou a edge function precisa normalizar strings → arrays.
-- **Build chunks**: Vite split manual configurado. Se adicionar dependência grande, adicione em `manualChunks` no `vite.config.ts`.
-- **Testes de integração**: Precisam de Supabase local rodando (`supabase start`). CI faz isso automaticamente.
+- JWT: maioria edge functions `verify_jwt=false` no config.toml. Auth via headers custom.
+- Types: `src/integrations/supabase/types.ts` (270KB) auto-gerado. Regen: `supabase gen types typescript --project-id <ref> > src/integrations/supabase/types.ts`
+- Deploy: `--no-verify-jwt` obsoleto. Use config.toml. Cuidado: `--no-verify-jwt=false` HABILITA JWT (double negative).
+- pg_net: só Supabase. Cron depende dele.
+- Realtime onUpdate: só campos alterados, sem joins. Dados aninhados vêm do cache.
+- n8n body params: sempre strings. Arrays → JSON body ou normalizar na edge function.
+- Vite chunks: deps grandes → adicionar em `manualChunks` do vite.config.ts.
 
 ## Webhook lead-webhook
 
-Endpoint principal de ingestão de leads. Aceita:
 ```json
-{
-  "source": "meta_ads",
-  "organization_id": "uuid",
-  "fields": { "name": "...", "phone": "...", "email": "...", "company": "..." },
-  "tags": ["Ouro"],
-  "place_in_pipe": { "pipe": "whatsapp", "stage": "novo_lead" },
-  "assigned_user_id": "uuid",
-  "update_existing_if_match": true
-}
+{"source":"meta_ads","organization_id":"uuid","fields":{"name":"...","phone":"...","email":"...","company":"..."},"tags":["Ouro"],"place_in_pipe":{"pipe":"whatsapp","stage":"novo_lead"},"assigned_user_id":"uuid","update_existing_if_match":true}
 ```
-Tags aceita: array, string JSON `'["Ouro"]'`, ou string simples `"Ouro"`. Busca case-insensitive.
+Tags: array, JSON string `'["Ouro"]'`, ou string simples. Case-insensitive.
 
-## Domínio de negócio
+## Domínio
 
-### O que é um Lead
-Toda pessoa/empresa que entra no sistema. Tem: nome, empresa, telefone, email, origem (meta_ads, whatsapp, google_ads...), rating (1-5, manual), qualification_score (0-100, automático), tags, e responsáveis (SDR, Closer, Responsible).
+**Lead**: pessoa/empresa no sistema. Campos: nome, empresa, telefone, email, origem, rating(1-5 manual), qualification_score(0-100 auto), tags, responsáveis(SDR/Closer/Responsible).
 
-### Lifecycle do Lead
-```
-Entrada (n8n/webhook/manual)
-  → pipe_whatsapp: novo → abordado → respondeu → agendado
-    → pipe_confirmacao: reuniao_marcada → confirmar_d5 → d3 → d1 → compareceu
-      → pipe_propostas: proposta_enviada → vendido/perdido
-        → upsell (pós-venda)
-```
-Um lead pode estar em MÚLTIPLOS pipes simultaneamente. Stages finais: `vendido` (positivo) ou `perdido` (negativo).
+**Lifecycle**: Entrada → pipe_whatsapp(novo→abordado→respondeu→agendado) → pipe_confirmacao(marcada→d5→d3→d1→compareceu) → pipe_propostas(enviada→vendido/perdido) → upsell. Lead em múltiplos pipes simultâneo.
 
-### Papéis no time
-- **Admin**: Gerencia org, configura workflows, acesso total dentro da org
-- **Membro**: Operador padrão, vê apenas leads atribuídos
-- **Master**: Admin Milennials, acesso cross-org (invisível para clientes)
+**Roles código**: SEMPRE `admin`, `master`, `membro`. SDR/Closer = só UI/docs.
 
-> **REGRA**: No código, roles são SEMPRE `admin`, `master`, `membro`. Nunca usar "SDR" ou "Closer" como identificador no código. SDR/Closer são conceitos de negócio — usados apenas na UI e documentação.
+**Copilot**: Agentes IA via WhatsApp. Tipos: qualificador, sdr, followup, agendador, prospectador, custom. Personalidade + capabilities + kanban rules + business context. Dados: `conversations` + `conversation_messages`.
 
-### Copilot (agentes IA)
-Agentes de IA que conversam com leads via WhatsApp. Tipos: qualificador, sdr, followup, agendador, prospectador, custom. Cada agente tem personalidade (tom, estilo, energia), capabilities (qualificar, agendar, mover cards), regras de kanban (auto-move), e contexto de negócio injetado no prompt. Conversas ficam em `conversations` + `conversation_messages`.
+**Workflows**: DAG nodes. Triggers: lead_created, stage_changed, tag_added, cron. Nodes: trigger, action, condition, delay, wait_response, split_ab, copilot, webhook_call, wait_business_window. Track: `workflow_executions`.
 
-### Workflows (automações)
-DAG de nodes executado por triggers (lead_created, stage_changed, tag_added, cron, etc.). Tipos de node: trigger, action (send_whatsapp, move_stage, add_tag, assign_responsible), condition, delay, wait_response, split_ab, copilot, webhook_call, wait_business_window. Execuções trackadas em `workflow_executions`.
+**Campanhas**: Paralelo aos pipes. Objetivo + deadline + agente IA + metas + round robin + sequence msgs.
 
-### Campanhas
-Processos paralelos aos pipes. Cada campanha tem: objetivo, deadline, agente IA, metas de time, distribuição de leads (round robin), sequence de mensagens. Lead pode estar em campanha E no pipe ao mesmo tempo.
+## Data model
 
-## Data model (tabelas principais)
+`leads` (central) | `organizations` (tenant) | `team_members` (vendas+comissões) | `pipe_whatsapp/confirmacao/propostas` | `custom_pipelines`+`custom_pipe_entries` | `pipeline_stages` | `tags`+`lead_tags` | `campanhas`+`campanha_stages` | `workflows`+`workflow_executions` | `copilot_agents` | `conversations`+`conversation_messages` | `channel_messages` | `products` | `lead_history` | `follow_ups` | `webhook_deliveries` | `subscription_plans`
 
-| Tabela | Propósito |
-|--------|----------|
-| `leads` | Entidade central — todo lead/prospect |
-| `organizations` | Tenant — isolamento multi-tenant |
-| `team_members` | Time de vendas (SDR, Closer, Admin) com comissões |
-| `pipe_whatsapp` | Pipeline de qualificação WhatsApp |
-| `pipe_confirmacao` | Pipeline de confirmação de reunião |
-| `pipe_propostas` | Pipeline de propostas/fechamento |
-| `custom_pipelines` / `custom_pipe_entries` | Pipelines customizados por org |
-| `pipeline_stages` | Stages dinâmicas de qualquer pipeline |
-| `tags` / `lead_tags` | Tags de segmentação (many-to-many) |
-| `campanhas` / `campanha_stages` | Campanhas de marketing/vendas |
-| `workflows` / `workflow_executions` | Motor de automação |
-| `copilot_agents` | Agentes IA configuráveis |
-| `conversations` / `conversation_messages` | Histórico de chat agente↔lead |
-| `channel_messages` | Mensagens multi-canal (WhatsApp, Meta, SZ.Chat) |
-| `products` | Produtos/serviços vendidos |
-| `lead_history` | Audit log de todas as ações no lead |
-| `follow_ups` | Tarefas de follow-up do time |
-| `webhook_deliveries` | Fila de webhooks com retry |
-| `subscription_plans` | Planos de assinatura |
+Relações: Lead→pipes(1:N), Lead→tags(N:N via lead_tags), Lead→responsible/sdr/closer(FKs team_members), Org→tudo(scoped), Workflow→executions→steps, Agent→conversations→messages.
 
-### Relações importantes
-- Lead → tem entradas em pipes (1:N) — um lead pode estar em vários funis
-- Lead → tem tags via `lead_tags` (N:N)
-- Lead → tem responsible, sdr, closer (3 FKs para `team_members`)
-- Organization → tem leads, team_members, workflows, campaigns (tudo org-scoped)
-- Workflow → tem executions → tem execution_steps (auditoria granular)
-- Copilot Agent → tem conversations → tem messages
+## Fluxo n8n→V8
 
-## Fluxo n8n → V8
-
-Clientes externos usam Trello como CRM básico. O padrão é:
-1. Lead entra no Trello (via Meta Ads → Make/Zapier → Trello card)
-2. n8n monitora o board Trello (`Trello Trigger`)
-3. n8n extrai dados do card (nome, telefone, empresa, faturamento via regex no `desc`)
-4. n8n classifica por faturamento → tag (Latão/Prata/Ouro/Diamante)
-5. n8n envia POST para `lead-webhook` com campos + tags + pipe placement
-
-Existem 20+ workflows n8n seguindo esse padrão (um por cliente). Cada um tem seu próprio board Trello e `assigned_user_id`.
+Trello→n8n→lead-webhook. Pattern: Meta Ads→Trello card→n8n trigger→extrai dados→classifica faturamento→tag→POST lead-webhook. 20+ workflows (1/cliente).
 
 ## Debugging
 
-### Logs de edge function
 ```bash
-# Ver logs em tempo real
-supabase functions logs <nome> --project-ref jsjsmuncfkbsbzqzqhfq
-
-# Logs também são salvos na tabela runtime_logs (via logger.ts _shared)
+supabase functions logs <fn> --project-ref <ref>     # Logs realtime
+supabase functions serve <fn> --env-file .env.local  # Local test
 ```
-
-### Testar edge function local
-```bash
-supabase functions serve <nome> --env-file .env.local
-# Depois: curl http://localhost:54321/functions/v1/<nome>
-```
-
-### Verificar dados no banco (produção)
-```bash
-# Obter service_role key
-supabase projects api-keys --project-ref jsjsmuncfkbsbzqzqhfq
-
-# Query via REST API
-curl "https://jsjsmuncfkbsbzqzqhfq.supabase.co/rest/v1/leads?select=id,name&limit=5" \
-  -H "apikey: SERVICE_KEY" -H "Authorization: Bearer SERVICE_KEY"
-```
-
-### Regenerar tipos TypeScript
-```bash
-supabase gen types typescript --project-id jsjsmuncfkbsbzqzqhfq > src/integrations/supabase/types.ts
-```
-
-## Hooks principais → tabelas
-
-| Hook | Tabela(s) | O que faz |
-|------|-----------|-----------|
-| `useLeads` | `leads` | Lista leads da org com filtros |
-| `usePipeWhatsapp` | `pipe_whatsapp` + `leads` (join) | Kanban de qualificação |
-| `usePipeConfirmacao` | `pipe_confirmacao` + `leads` | Kanban de confirmação reunião |
-| `usePipePropostas` | `pipe_propostas` + `leads` + `products` | Kanban de propostas |
-| `useCustomPipelines` | `custom_pipelines` + `custom_pipe_entries` | Funis customizados |
-| `useTeamMembers` | `team_members` | Time da org (SDRs, closers, admins) |
-| `useCopilotAgents` | `copilot_agents` + `copilot_agent_faqs` | Agentes IA |
-| `useCampanhas` | `campanhas` + `campanha_stages` | Campanhas de vendas |
-| `useWorkflows` | `workflows` | Automações |
-| `useChannelChat` | `channel_messages` + `conversations` | Chat multi-canal (realtime) |
-| `useTags` | `tags` | Tags da org |
-| `useWebhooks` | `webhook_endpoints` + `webhook_deliveries` | Webhooks configurados |
-| `useUserRole` | `team_members` + `profiles` | Role do usuário logado |
-| `useOrganization` | `organizations` | Dados da org atual |
-| `useFollowUps` | `follow_ups` | Tarefas de follow-up |
-| `useProducts` | `products` | Catálogo de produtos |
-| `useScheduledMessages` | `scheduled_user_messages` | Mensagens agendadas |
-| `useGoogleCalendar` | `google_calendar_connections` | Integração Google Calendar |
-
-## Nota para o dev junior
-
-Se você é novo no projeto e não tem muito background em banco de dados, aqui vai o essencial:
-
-- **RLS (Row Level Security)**: É como um "filtro automático" no banco. Toda query que você faz já vem filtrada pela sua organização. Você não precisa adicionar `WHERE organization_id = X` manualmente — o Postgres faz isso por você baseado no token de login.
-- **Migrations**: São arquivos SQL que alteram a estrutura do banco (criar tabela, adicionar coluna, etc.). Rodam em ordem cronológica. Nunca edite uma migration que já rodou — crie uma nova.
-- **Edge Functions**: São funções que rodam no servidor (Supabase). Pense nelas como "APIs" que o frontend ou o n8n chamam. Cada pasta em `supabase/functions/` é uma function separada.
-- **Joins no Supabase**: Quando você vê `supabase.from("pipe_whatsapp").select("*, lead:leads(name, phone)")`, isso é como um JOIN — puxa dados da tabela `leads` junto com `pipe_whatsapp`.
-- **Query Keys no React Query**: São "etiquetas" que identificam cada consulta. Quando você faz `invalidateQueries({ queryKey: ["leads"] })`, está dizendo "essa consulta ficou velha, busque de novo".
-
-## Design
-
-Dark-first. Referências: Linear, Stripe, Vercel. Tema usa CSS variables HSL. Cores em `tailwind.config.ts` via `--primary`, `--secondary`, etc. Accent gold: `hsl(47 100% 50%)`. Font: Inter. Componentes shadcn/ui com customização via `cn()` helper.
-
-Regra: se parece template genérico, reprovou. Sofisticação > segurança visual.
 
 ## Operações comuns
 
-### Criar organização nova
-Via Supabase Dashboard ou edge function `checkout-provision-org`. Precisa: nome, plano, e usuário admin vinculado.
-
-### Provisionar cliente
-1. Criar org
-2. Criar usuário admin (`create-org-user` edge function)
-3. Vincular usuário à org (`assign-user-to-org`)
-4. Configurar plano e limites
-5. Configurar instância WhatsApp (se aplicável)
-
-### Resetar dados de teste
-Deletar em ordem (por FK constraints): `lead_tags` → `pipe_*` → `leads` → `conversations`. Sempre filtrar por `organization_id`.
-
-### Adicionar edge function nova
-1. Criar pasta em `supabase/functions/<nome>/index.ts`
-2. Usar pattern padrão (Deno.serve + withSentry + CORS)
-3. Se não precisa JWT: adicionar `verify_jwt = false` no `supabase/config.toml`
-4. Deploy: `supabase functions deploy <nome> --project-ref <ref>`
-5. Se for cron: criar trigger pg_cron via migration SQL
+**Nova org**: `checkout-provision-org` → criar user (`create-org-user`) → vincular → plano → WhatsApp.
+**Reset teste**: Delete ordem FK: lead_tags → pipe_* → leads → conversations. Filtrar por org_id.
+**Nova edge function**: pasta `supabase/functions/<nome>/index.ts` → pattern padrão → config.toml se no-jwt → deploy → pg_cron se cron.
 
 ## CI/CD
 
-GitHub Actions em push para main/develop:
-1. `unit-tests` — Vitest
-2. `integration-tests` — Vitest + Supabase local
-3. `e2e-tests` — Playwright + Chromium
-4. `docker-image` — Build Docker (Node 20 + Nginx)
+Push main/develop → GitHub Actions: unit-tests → integration-tests (Supabase local) → e2e (Playwright) → docker-image (Node 20 + Nginx).
 
-## Segundo Cerebro (Obsidian)
+## Obsidian (Segundo Cerebro)
 
-O vault Obsidian em `Obsidian/Segundo Cerebro/Claude Code — Torque CRM/` é a fonte de contexto do projeto. Consulte ANTES de agir.
+Vault: `Obsidian/Segundo Cerebro/Claude Code — Torque CRM/`. Consultar ANTES de agir em features.
+- `00 — INDEX.md` (visão geral) | `06 — Features/<domínio>/` (regras negócio) | `07 — Changelog/YYYY-MM-DD.md` | `08 — Backlog/<status>/` | `04 — Decisões/`
 
-### Regras
+## Design
 
-1. **Início de sessão**: Leia `00 — INDEX.md` para visão geral e o daily note mais recente em `07 — Changelog/` para contexto do que mudou.
-2. **Antes de mexer em qualquer feature**: Leia a nota da feature em `06 — Features/<domínio>/` para entender regras de negócio, como funciona, edge cases, e histórico de mudanças.
-3. **Antes de implementar**: Cheque `08 — Backlog/em-progresso/` para ver se já existe item relacionado ao que foi pedido.
-4. **Pedido novo**: Verifique se existe nota no vault antes de explorar o codebase do zero.
-5. **Pós-commit**: O hook automático atualiza o vault. Se o hook não rodar, use `/second-brain` manualmente.
-
-### Paths
-
-| O que | Onde |
-|-------|------|
-| Índice geral | `Obsidian/Segundo Cerebro/Claude Code — Torque CRM/00 — INDEX.md` |
-| Features | `06 — Features/<domínio>/<feature>.md` |
-| Changelog diário | `07 — Changelog/YYYY-MM-DD.md` |
-| Changelog detalhado | `07 — Changelog/individuais/` |
-| Backlog | `08 — Backlog/<status>/` |
-| Decisões | `04 — Decisões/` |
+Dark-first. Refs: Linear, Stripe, Vercel. HSL CSS vars. Accent gold: `hsl(47 100% 50%)`. Font: Inter. shadcn/ui + `cn()`. Se parece template → reprovou.
