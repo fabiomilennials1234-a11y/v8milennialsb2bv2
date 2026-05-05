@@ -8,12 +8,10 @@ import {
   AlertTriangle,
   Calendar,
   CheckCircle2,
-  Filter,
   Search,
   User,
   ListTodo,
   CalendarDays,
-  ArrowUpRight,
   Archive,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -28,7 +26,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FollowUpCard } from "@/components/followups/FollowUpCard";
 import { ScheduleFollowUpModal } from "@/components/followups/ScheduleFollowUpModal";
 import { LeadDetailDrawer } from "@/components/leads/LeadDetailDrawer";
@@ -44,7 +41,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useFollowUps, useCompleteFollowUp, useArchiveFollowUp, useArchiveManyFollowUps, useDeleteFollowUp, type FollowUp } from "@/hooks/useFollowUps";
+import { useFollowUps, useCompleteFollowUp, useUpdateFollowUp, useArchiveFollowUp, useArchiveManyFollowUps, useDeleteFollowUp, type FollowUp } from "@/hooks/useFollowUps";
 import { toast } from "sonner";
 import { useTeamMembers, useCurrentTeamMember } from "@/hooks/useTeamMembers";
 import { useUserRole, useFeaturePermission } from "@/hooks/useUserRole";
@@ -96,6 +93,7 @@ export default function PipeFollowUps() {
 
   // selectedMember is NOT persisted — it has role-based auto-logic (admin vs SDR/Closer)
   const [selectedMember, setSelectedMember] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; followUpId: string } | null>(null);
   const [isDetailDrawerOpen, setIsDetailDrawerOpen] = useState(false);
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
@@ -106,7 +104,6 @@ export default function PipeFollowUps() {
     sourcePipeId?: string;
     assignedTo?: string;
   } | null>(null);
-  const [showPostCompletionPrompt, setShowPostCompletionPrompt] = useState(false);
 
   const { data: userRole } = useUserRole();
   const { data: teamMembers } = useTeamMembers();
@@ -120,6 +117,7 @@ export default function PipeFollowUps() {
       : currentTeamMember?.id ?? "all";
   const logAction = useLogLeadAction();
   const completeFollowUp = useCompleteFollowUp();
+  const updateFollowUp = useUpdateFollowUp();
   const archiveFollowUp = useArchiveFollowUp();
   const archiveManyFollowUps = useArchiveManyFollowUps();
   const deleteFollowUp = useDeleteFollowUp();
@@ -171,9 +169,9 @@ export default function PipeFollowUps() {
   const filteredFollowUps = useMemo(() => {
     if (!followUps) return [];
     if (!search) return followUps;
-    
+
     const searchLower = search.toLowerCase();
-    return followUps.filter(fup => 
+    return followUps.filter(fup =>
       fup.title.toLowerCase().includes(searchLower) ||
       fup.lead?.name?.toLowerCase().includes(searchLower) ||
       fup.lead?.company?.toLowerCase().includes(searchLower)
@@ -183,7 +181,7 @@ export default function PipeFollowUps() {
   // Group by date for display
   const groupedFollowUps = useMemo(() => {
     const groups: Record<string, FollowUp[]> = {};
-    
+
     filteredFollowUps.forEach(fup => {
       const date = format(new Date(fup.due_date), "yyyy-MM-dd");
       if (!groups[date]) {
@@ -197,30 +195,45 @@ export default function PipeFollowUps() {
       .map(([date, items]) => ({
         date,
         label: format(new Date(date), "EEEE, dd 'de' MMMM", { locale: ptBR }),
-        items: items.sort((a, b) => 
+        items: items.sort((a, b) =>
           new Date(a.due_date).getTime() - new Date(b.due_date).getTime()
         ),
       }));
   }, [filteredFollowUps]);
 
-  const handleComplete = (id: string) => {
+  const handleComplete = (id: string, notes?: string) => {
     const fup = followUps?.find(f => f.id === id);
-    completeFollowUp.mutate(id);
+    completeFollowUp.mutate({ id, completion_notes: notes });
     if (fup) {
       logAction({ leadId: fup.lead_id, action: "followup_completed", description: `Follow-up concluído: ${fup.title}` });
-      setScheduleContext({
-        leadId: fup.lead_id,
-        leadName: fup.lead?.name || "Lead",
-        sourcePipe: fup.source_pipe || undefined,
-        sourcePipeId: fup.source_pipe_id || undefined,
-        assignedTo: fup.assigned_to || undefined,
-      });
-      setShowPostCompletionPrompt(true);
     }
+    setExpandedId(null);
   };
 
   const handleArchive = (id: string) => {
     archiveFollowUp.mutate(id);
+    setExpandedId(null);
+  };
+
+  const handleReschedule = (id: string, newDate: string) => {
+    updateFollowUp.mutate({ id, due_date: newDate } as Partial<FollowUp> & { id: string });
+    toast.success("Follow-up reagendado!");
+    setExpandedId(null);
+  };
+
+  const handleScheduleNew = (leadId: string, leadName: string, sourcePipe?: string, sourcePipeId?: string, assignedTo?: string) => {
+    setScheduleContext({
+      leadId,
+      leadName,
+      sourcePipe: sourcePipe as "whatsapp" | "confirmacao" | "propostas" | undefined,
+      sourcePipeId,
+      assignedTo,
+    });
+  };
+
+  const handleOpenLead = (leadId: string) => {
+    setSelectedLeadId(leadId);
+    setIsDetailDrawerOpen(true);
   };
 
   const overdueIds = useMemo(() => {
@@ -290,8 +303,8 @@ export default function PipeFollowUps() {
           animate={{ opacity: 1, y: 0 }}
           className={cn(
             "p-4 rounded-xl border cursor-pointer transition-all",
-            dateFilter === "overdue" 
-              ? "border-destructive bg-destructive/10" 
+            dateFilter === "overdue"
+              ? "border-destructive bg-destructive/10"
               : "border-border bg-card hover:border-destructive/50"
           )}
           onClick={() => setDateFilter("overdue")}
@@ -309,8 +322,8 @@ export default function PipeFollowUps() {
           transition={{ delay: 0.1 }}
           className={cn(
             "p-4 rounded-xl border cursor-pointer transition-all",
-            dateFilter === "today" 
-              ? "border-chart-5 bg-chart-5/10" 
+            dateFilter === "today"
+              ? "border-chart-5 bg-chart-5/10"
               : "border-border bg-card hover:border-chart-5/50"
           )}
           onClick={() => setDateFilter("today")}
@@ -328,8 +341,8 @@ export default function PipeFollowUps() {
           transition={{ delay: 0.2 }}
           className={cn(
             "p-4 rounded-xl border cursor-pointer transition-all",
-            dateFilter === "upcoming" 
-              ? "border-chart-4 bg-chart-4/10" 
+            dateFilter === "upcoming"
+              ? "border-chart-4 bg-chart-4/10"
               : "border-border bg-card hover:border-chart-4/50"
           )}
           onClick={() => setDateFilter("upcoming")}
@@ -347,8 +360,8 @@ export default function PipeFollowUps() {
           transition={{ delay: 0.3 }}
           className={cn(
             "p-4 rounded-xl border cursor-pointer transition-all",
-            dateFilter === "all" 
-              ? "border-success bg-success/10" 
+            dateFilter === "all"
+              ? "border-success bg-success/10"
               : "border-border bg-card hover:border-success/50"
           )}
           onClick={() => setDateFilter("all")}
@@ -454,7 +467,7 @@ export default function PipeFollowUps() {
             <CheckCircle2 className="w-16 h-16 text-success/50 mx-auto mb-4" />
             <h3 className="text-lg font-medium">Nenhuma tarefa pendente!</h3>
             <p className="text-muted-foreground text-sm mt-1">
-              {dateFilter === "today" 
+              {dateFilter === "today"
                 ? "Você não tem follow ups para hoje"
                 : dateFilter === "overdue"
                 ? "Não há tarefas atrasadas"
@@ -480,7 +493,7 @@ export default function PipeFollowUps() {
                   </Badge>
                 </div>
 
-                <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+                <div className="space-y-2">
                   {group.items.map((followUp) => (
                     <FollowUpCard
                       key={followUp.id}
@@ -488,12 +501,11 @@ export default function PipeFollowUps() {
                       onComplete={handleComplete}
                       onArchive={handleArchive}
                       onRemove={canDeleteFollowUp ? handleOpenRemoveDialog : undefined}
-                      onClick={() => {
-                        if (followUp.lead_id) {
-                          setSelectedLeadId(followUp.lead_id);
-                          setIsDetailDrawerOpen(true);
-                        }
-                      }}
+                      onReschedule={handleReschedule}
+                      onScheduleNew={handleScheduleNew}
+                      onOpenLead={handleOpenLead}
+                      isExpanded={expandedId === followUp.id}
+                      onToggleExpand={() => setExpandedId(expandedId === followUp.id ? null : followUp.id)}
                     />
                   ))}
                 </div>
@@ -534,36 +546,8 @@ export default function PipeFollowUps() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Post-completion: offer to schedule new follow-up */}
-      <AlertDialog open={showPostCompletionPrompt} onOpenChange={setShowPostCompletionPrompt}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2">
-              <CheckCircle2 className="w-5 h-5 text-success" />
-              Follow-up concluído
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              Deseja agendar um novo follow-up para <span className="font-medium text-foreground">{scheduleContext?.leadName}</span>?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => { setShowPostCompletionPrompt(false); setScheduleContext(null); }}>
-              Pular
-            </AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                setShowPostCompletionPrompt(false);
-              }}
-              className="bg-primary text-primary-foreground hover:bg-primary/90"
-            >
-              Agendar novo follow-up
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
       {/* Schedule follow-up modal (reuses existing component) */}
-      {scheduleContext && !showPostCompletionPrompt && (
+      {scheduleContext && (
         <ScheduleFollowUpModal
           open={!!scheduleContext}
           onOpenChange={(open) => { if (!open) setScheduleContext(null); }}

@@ -116,7 +116,7 @@ export default function Revisao() {
 
   const handleComplete = (id: string, type: string) => {
     if (type === "follow-up") {
-      completeFollowUp.mutate(id);
+      completeFollowUp.mutate({ id });
     } else {
       cancelMessage.mutate(id);
     }

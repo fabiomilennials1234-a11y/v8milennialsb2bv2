@@ -229,11 +229,13 @@ export function useCompleteFollowUp() {
   const { organizationId } = useOrganization();
 
   return useMutation({
-    mutationFn: async (id: string) => {
+    mutationFn: async ({ id, completion_notes }: { id: string; completion_notes?: string }) => {
       if (!organizationId) throw new Error("Organização não disponível");
+      const updateData: Record<string, string> = { completed_at: new Date().toISOString() };
+      if (completion_notes) updateData.completion_notes = completion_notes;
       const { data, error } = await supabase
         .from("follow_ups")
-        .update({ completed_at: new Date().toISOString() })
+        .update(updateData)
         .eq("id", id)
         .eq("organization_id", organizationId)
         .select()
