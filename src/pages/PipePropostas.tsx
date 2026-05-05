@@ -2,14 +2,13 @@ import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { usePersistedState } from "@/hooks/usePersistedState";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Search, Filter, Plus, Calendar as CalendarIcon, User, Building2, Star,
-  DollarSign, Clock, Tag, Loader2, TrendingUp, Package,
+  Search, Plus, Calendar as CalendarIcon, User, Building2,
+  DollarSign, Loader2, TrendingUp, Package,
   ArrowUpRight, Percent, BarChart3, Target, Flame, MessageCircle, Settings2,
   MoreVertical, Trash2
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -29,6 +28,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { DraggableKanbanBoard, KanbanColumn } from "@/components/kanban/DraggableKanbanBoard";
+import { KanbanFilterPanel, FilterChips, type FilterSectionConfig } from "@/components/kanban/KanbanFilterPanel";
 import { TorqueLoader } from "@/components/branding/TorqueLoader";
 import { useCanPerformAction } from "@/lib/permissions";
 import { StageWorkflowsBadgeWrapper } from "@/components/kanban/StageWorkflowsBadgeWrapper";
@@ -69,6 +69,7 @@ import { useOrganization } from "@/hooks/useOrganization";
 import { track, trackModuleVisit } from "@/lib/analytics";
 import { useFeaturePermission, useIsAdmin } from "@/hooks/useUserRole";
 import { useMasterAuth } from "@/hooks/useMasterAuth";
+import { useTags } from "@/hooks/useTags";
 
 const MONTHS_PT = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 function formatPeriodLabel(range: { startStr: string; endStr: string }): string {
@@ -128,6 +129,9 @@ type PropostasFilterState = {
   filterProductType: string;
   filterPriority: string;
   filterCalor: string;
+  filterOrigin: string[];
+  filterTags: string[];
+  filterScheduled: boolean;
   viewMode: "kanban" | "analytics";
   // Marca se já aplicamos o default "me" para membros (one-shot por usuário).
   // Depois de true, respeitamos a escolha manual do usuário.
@@ -140,6 +144,9 @@ const DEFAULT_PROPOSTAS_FILTERS: PropostasFilterState = {
   filterProductType: "all",
   filterPriority: "all",
   filterCalor: "all",
+  filterOrigin: [],
+  filterTags: [],
+  filterScheduled: false,
   viewMode: "kanban",
   membroDefaultApplied: false,
 };
@@ -150,26 +157,10 @@ export default function PipePropostas() {
     DEFAULT_PROPOSTAS_FILTERS
   );
 
-  const { searchTerm, filterResponsible, filterProductType, filterPriority, filterCalor, viewMode } = filterState;
+  const { searchTerm, filterResponsible, filterProductType, filterPriority, filterCalor, filterOrigin, filterTags, filterScheduled, viewMode } = filterState;
 
   const setSearchTerm = useCallback(
     (v: string) => setFilterState((f) => ({ ...f, searchTerm: v })),
-    [setFilterState]
-  );
-  const setFilterResponsible = useCallback(
-    (v: string) => setFilterState((f) => ({ ...f, filterResponsible: v })),
-    [setFilterState]
-  );
-  const setFilterProductType = useCallback(
-    (v: string) => setFilterState((f) => ({ ...f, filterProductType: v })),
-    [setFilterState]
-  );
-  const setFilterPriority = useCallback(
-    (v: string) => setFilterState((f) => ({ ...f, filterPriority: v })),
-    [setFilterState]
-  );
-  const setFilterCalor = useCallback(
-    (v: string) => setFilterState((f) => ({ ...f, filterCalor: v })),
     [setFilterState]
   );
   const setViewMode = useCallback(
@@ -177,7 +168,19 @@ export default function PipePropostas() {
     [setFilterState]
   );
   const { data: leadsWithSchedule } = useLeadsWithScheduledMessages();
-  const [filterScheduled, setFilterScheduled] = useState(false);
+
+  const handleClearAllFilters = useCallback(() => {
+    setFilterState((f) => ({
+      ...f,
+      filterResponsible: "all",
+      filterProductType: "all",
+      filterPriority: "all",
+      filterCalor: "all",
+      filterOrigin: [],
+      filterTags: [],
+      filterScheduled: false,
+    }));
+  }, [setFilterState]);
 
   // ─── Filtro defensivo: para role "member" (ex-membro), pré-seleciona o próprio
   // teamMemberId na primeira visita. Cria camada extra de proteção client-side
@@ -269,6 +272,18 @@ export default function PipePropostas() {
   const { data: metricsByPeriod } = usePipePropostasMetrics(periodRange);
 
   const responsibleMembers = useResponsibleMembers();
+  const { data: orgTags = [] } = useTags();
+
+  // Build declarative sections for KanbanFilterPanel
+  const filterSections: FilterSectionConfig[] = useMemo(() => [
+    { type: "responsible", value: filterResponsible, onChange: (v: string) => setFilterState((f) => ({ ...f, filterResponsible: v })), members: responsibleMembers },
+    { type: "origin-multi", value: filterOrigin, onChange: (v: string[]) => setFilterState((f) => ({ ...f, filterOrigin: v })) },
+    { type: "tags", value: filterTags, onChange: (v: string[]) => setFilterState((f) => ({ ...f, filterTags: v })), tags: orgTags },
+    { type: "product-type", value: filterProductType, onChange: (v: string) => setFilterState((f) => ({ ...f, filterProductType: v })) },
+    { type: "calor", value: filterCalor, onChange: (v: string) => setFilterState((f) => ({ ...f, filterCalor: v })) },
+    { type: "priority", value: filterPriority, onChange: (v: string) => setFilterState((f) => ({ ...f, filterPriority: v })) },
+    { type: "scheduled", value: filterScheduled, onChange: (v: boolean) => setFilterState((f) => ({ ...f, filterScheduled: v })) },
+  ], [filterResponsible, filterOrigin, filterTags, filterProductType, filterCalor, filterPriority, filterScheduled, responsibleMembers, orgTags, setFilterState]);
 
   // Transform pipe data to LeadCardData format
   const transformToCard = (item: any): LeadCardData => {
@@ -346,7 +361,7 @@ export default function PipePropostas() {
           }
           return true;
         })
-        // 2. Filtros funcionais (busca, responsável, tipo, prioridade, calor)
+        // 2. Filtros funcionais (busca, responsável, tipo, prioridade, calor, origem, tags)
         .filter(item => {
           const lead = item.lead;
 
@@ -386,9 +401,16 @@ export default function PipePropostas() {
             matchesCalor = calor < 4;
           }
 
+          // Origin filter (multi-select)
+          const matchesOrigin = filterOrigin.length === 0 || filterOrigin.includes(lead?.origin || "");
+
+          // Tags filter (multi-select — lead must have at least one of the selected tags)
+          const matchesTags = filterTags.length === 0 ||
+            (lead?.lead_tags?.some((lt: any) => filterTags.includes(lt.tag?.id)) ?? false);
+
           const matchesScheduled = !filterScheduled || (leadsWithSchedule?.has(item.lead_id) ?? false);
 
-          return matchesSearch && matchesResponsible && matchesType && matchesPriority && matchesCalor && matchesScheduled;
+          return matchesSearch && matchesResponsible && matchesType && matchesPriority && matchesCalor && matchesOrigin && matchesTags && matchesScheduled;
         })
         .map(transformToCard)
         .toSorted((a, b) => {
@@ -401,7 +423,7 @@ export default function PipePropostas() {
         items: columnItems,
       };
     });
-  }, [pipeData, statusColumns, searchTerm, filterResponsible, filterProductType, filterPriority, filterCalor, filterScheduled, leadsWithSchedule, periodRange]);
+  }, [pipeData, statusColumns, searchTerm, filterResponsible, filterProductType, filterPriority, filterCalor, filterOrigin, filterTags, filterScheduled, leadsWithSchedule, periodRange]);
 
   // Count ghost leads — rows visíveis no pipe cujo join com leads é null.
   // Indica divergência entre RLS do pipe e de leads (ver GhostLeadsBanner).
@@ -1040,97 +1062,26 @@ export default function PipePropostas() {
             )}
 
             {/* Filters */}
-            <div className="flex flex-wrap gap-3 mb-6">
-              <div className="relative flex-1 min-w-[200px] max-w-sm">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  placeholder="Buscar proposta..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-9"
+            <div className="flex flex-col gap-3 mb-6">
+              <div className="flex items-center gap-3">
+                <div className="relative flex-1 min-w-[200px] max-w-sm">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar proposta..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-9"
+                  />
+                </div>
+                <KanbanFilterPanel
+                  sections={filterSections}
+                  onClearAll={handleClearAllFilters}
                 />
               </div>
-              <Select value={filterResponsible} onValueChange={setFilterResponsible}>
-                <SelectTrigger className="w-[160px]">
-                  <User className="w-4 h-4 mr-2" />
-                  <SelectValue placeholder="Responsável" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos os responsáveis</SelectItem>
-                  {responsibleMembers.map(member => (
-                    <SelectItem key={member.id} value={member.id}>{member.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={filterProductType} onValueChange={setFilterProductType}>
-                <SelectTrigger className="w-[140px]">
-                  <Tag className="w-4 h-4 mr-2" />
-                  <SelectValue placeholder="Tipo" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos Tipos</SelectItem>
-                  <SelectItem value="mrr">Recorrência</SelectItem>
-                  <SelectItem value="projeto">Projeto</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={filterCalor} onValueChange={setFilterCalor}>
-                <SelectTrigger className="w-[140px]">
-                  <Flame className="w-4 h-4 mr-2" />
-                  <SelectValue placeholder="Calor" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  <SelectItem value="hot">
-                    <div className="flex items-center gap-2">
-                      <Flame className="w-3 h-3 text-destructive" />
-                      Quente (7-10)
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="warm">
-                    <div className="flex items-center gap-2">
-                      <Flame className="w-3 h-3 text-chart-5" />
-                      Morno (4-6)
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="cold">
-                    <div className="flex items-center gap-2">
-                      <Flame className="w-3 h-3 text-muted-foreground" />
-                      Frio (0-3)
-                    </div>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={filterPriority} onValueChange={setFilterPriority}>
-                <SelectTrigger className="w-[160px]">
-                  <Star className="w-4 h-4 mr-2" />
-                  <SelectValue placeholder="Prioridade" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas Prioridades</SelectItem>
-                  <SelectItem value="high">
-                    <div className="flex items-center gap-2">
-                      <span className="text-chart-5">★★★</span>
-                      Alta (8-10)
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="medium">
-                    <div className="flex items-center gap-2">
-                      <span className="text-chart-5">★★</span>
-                      Média (5-7)
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="low">
-                    <div className="flex items-center gap-2">
-                      <span className="text-muted-foreground">★</span>
-                      Baixa (0-4)
-                    </div>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-              <Button variant={filterScheduled ? "default" : "outline"} size="sm" onClick={() => setFilterScheduled(!filterScheduled)} className="gap-1.5">
-                <Clock className="w-4 h-4" />
-                Agendados
-              </Button>
+              <FilterChips
+                sections={filterSections}
+                onClearAll={handleClearAllFilters}
+              />
             </div>
 
             {/* Kanban Board with Drag-and-Drop */}

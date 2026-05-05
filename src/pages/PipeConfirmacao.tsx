@@ -1,7 +1,8 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { usePersistedState } from "@/hooks/usePersistedState";
 import { motion } from "framer-motion";
-import { Plus, Calendar, Loader2, LayoutGrid, List, Settings2, Clock } from "lucide-react";
+import { Search, Plus, Calendar, LayoutGrid, List, Settings2, X } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -34,7 +35,7 @@ import { GhostLeadsBanner } from "@/components/pipelines/GhostLeadsBanner";
 import { LeadCard, type LeadCardData } from "@/components/leads/LeadCard";
 import { LeadDetailDrawer } from "@/components/leads/LeadDetailDrawer";
 import { ConfirmacaoContext } from "@/components/leads/funnel-contexts/ConfirmacaoContext";
-import { ConfirmacaoFilters, OriginFilter, TimeFilter, UrgencyFilter } from "@/components/confirmacao/ConfirmacaoFilters";
+import { KanbanFilterPanel, FilterChips, type FilterSectionConfig } from "@/components/kanban/KanbanFilterPanel";
 import { MeetingTimeline } from "@/components/confirmacao/MeetingTimeline";
 import { CompareceuModal } from "@/components/confirmacao/CompareceuModal";
 import { useConfirmacaoOverdueDays, isConfirmacaoOverdue } from "@/hooks/useOrganizationSettings";
@@ -43,13 +44,26 @@ import { ptBR } from "date-fns/locale";
 import { useLogLeadAction } from "@/hooks/useLogLeadAction";
 import { useCreateAcaoDoDia } from "@/hooks/useAcoesDoDia";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import { useOrganization } from "@/hooks/useOrganization";
 import { useLeadsWithScheduledMessages } from "@/hooks/useScheduledMessages";
 import { track, trackModuleVisit } from "@/lib/analytics";
 import { useFeaturePermission, useIsAdmin } from "@/hooks/useUserRole";
 import { useMasterAuth } from "@/hooks/useMasterAuth";
 
-// ConfirmacaoCardData is now LeadCardData from the unified LeadCard component
+// Filter type aliases (previously from ConfirmacaoFilters)
+type OriginFilter = "all" | "whatsapp" | "meta_ads" | "instagram" | "tiktok" | "google_ads" | "site" | "landing_page" | "remarketing" | "indicacao" | "evento" | "prospeccao_ativa" | "cal" | "outro";
+type TimeFilter = "all" | "today" | "tomorrow" | "week" | "overdue";
+type UrgencyFilter = "all" | "imediato" | "1-mes" | "2-3-meses" | "6-meses";
+
+// Time quick-filter options (inline buttons, not in Sheet)
+const timeOptions: { value: TimeFilter; label: string }[] = [
+  { value: "all", label: "Todos" },
+  { value: "today", label: "Hoje" },
+  { value: "tomorrow", label: "Amanhã" },
+  { value: "week", label: "Semana" },
+  { value: "overdue", label: "Atrasadas" },
+];
 
 const MONTHS_PT = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 function formatPeriodLabel(range: { startStr: string; endStr: string }): string {
@@ -256,6 +270,43 @@ export default function PipeConfirmacao() {
     [responsibleMembers]
   );
 
+  // Converte etapas do banco para o formato do Kanban (com fallback)
+  const statusColumns = useMemo(() => {
+    if (pipelineStages.length === 0) {
+      // Fallback para etapas padrão enquanto carrega
+      return [
+        { id: "reuniao_marcada", title: "Reunião Marcada", color: "#6366f1" },
+        { id: "confirmar_d5", title: "Confirmar D-5", color: "#8b5cf6" },
+        { id: "confirmar_d3", title: "Confirmar D-3", color: "#a855f7" },
+        { id: "confirmar_d2", title: "Confirmar D-2", color: "#f59e0b" },
+        { id: "confirmar_d1", title: "Confirmar D-1", color: "#f97316" },
+        { id: "confirmacao_no_dia", title: "Confirmação no Dia", color: "#ef4444" },
+        { id: "remarcar", title: "Remarcar 📅", color: "#f97316" },
+        { id: "compareceu", title: "Compareceu ✓", color: "#22c55e" },
+        { id: "perdido", title: "Perdido ✗", color: "#ef4444" },
+      ];
+    }
+    return stagesToColumns(pipelineStages);
+  }, [pipelineStages]);
+
+  // Build declarative sections for KanbanFilterPanel (Sheet filters)
+  const filterSections: FilterSectionConfig[] = useMemo(() => [
+    { type: "responsible", value: selectedResponsibleId, onChange: setSelectedResponsibleId, members: responsibleMembers },
+    { type: "origin-single", value: originFilter, onChange: setOriginFilter as (v: string) => void },
+    { type: "urgency", value: urgencyFilter, onChange: setUrgencyFilter as (v: string) => void },
+    { type: "status-multi", value: selectedStatuses, onChange: setSelectedStatuses, options: statusColumns },
+    { type: "scheduled", value: filterScheduled, onChange: setFilterScheduled },
+  ], [selectedResponsibleId, originFilter, urgencyFilter, selectedStatuses, filterScheduled, responsibleMembers, statusColumns, setSelectedResponsibleId, setOriginFilter, setUrgencyFilter, setSelectedStatuses]);
+
+  const handleClearAllFilters = useCallback(() => {
+    setOriginFilter("all" as OriginFilter);
+    setTimeFilter("all" as TimeFilter);
+    setUrgencyFilter("all" as UrgencyFilter);
+    setSelectedStatuses([]);
+    setSelectedResponsibleId("all");
+    setFilterScheduled(false);
+  }, [setOriginFilter, setTimeFilter, setUrgencyFilter, setSelectedStatuses, setSelectedResponsibleId]);
+
   // Auto-update statuses based on meeting dates
   const autoUpdateStatuses = useCallback(async () => {
     if (!pipeData) return;
@@ -335,25 +386,6 @@ export default function PipeConfirmacao() {
       createdAt: item.created_at,
     };
   };
-
-  // Converte etapas do banco para o formato do Kanban (com fallback)
-  const statusColumns = useMemo(() => {
-    if (pipelineStages.length === 0) {
-      // Fallback para etapas padrão enquanto carrega
-      return [
-        { id: "reuniao_marcada", title: "Reunião Marcada", color: "#6366f1" },
-        { id: "confirmar_d5", title: "Confirmar D-5", color: "#8b5cf6" },
-        { id: "confirmar_d3", title: "Confirmar D-3", color: "#a855f7" },
-        { id: "confirmar_d2", title: "Confirmar D-2", color: "#f59e0b" },
-        { id: "confirmar_d1", title: "Confirmar D-1", color: "#f97316" },
-        { id: "confirmacao_no_dia", title: "Confirmação no Dia", color: "#ef4444" },
-        { id: "remarcar", title: "Remarcar 📅", color: "#f97316" },
-        { id: "compareceu", title: "Compareceu ✓", color: "#22c55e" },
-        { id: "perdido", title: "Perdido ✗", color: "#ef4444" },
-      ];
-    }
-    return stagesToColumns(pipelineStages);
-  }, [pipelineStages]);
 
   const columns = useMemo((): KanbanColumn<LeadCardData>[] => {
     if (!pipeData) return statusColumns.map(col => ({ ...col, items: [] }));
@@ -621,27 +653,58 @@ export default function PipeConfirmacao() {
       <ConfirmacaoStats data={statsData} />
 
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-2">
-        <ConfirmacaoFilters
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
-          originFilter={originFilter}
-          onOriginFilterChange={setOriginFilter}
-          timeFilter={timeFilter}
-          onTimeFilterChange={setTimeFilter}
-          urgencyFilter={urgencyFilter}
-          onUrgencyFilterChange={setUrgencyFilter}
-          selectedStatuses={selectedStatuses}
-          onStatusesChange={setSelectedStatuses}
-          statusOptions={statusColumns}
-          teamMembers={teamMemberOptions}
-          selectedResponsibleId={selectedResponsibleId}
-          onResponsibleFilterChange={setSelectedResponsibleId}
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-col sm:flex-row gap-3">
+          {/* Search */}
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Buscar lead, empresa..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 pr-9"
+            />
+            {searchQuery && (
+              <button
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                onClick={() => setSearchQuery("")}
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+
+          {/* Quick Time Filters (inline, not in Sheet) */}
+          <div className="flex gap-2 flex-wrap">
+            {timeOptions.map((option) => (
+              <Button
+                key={option.value}
+                variant={timeFilter === option.value ? "secondary" : "ghost"}
+                size="sm"
+                onClick={() => setTimeFilter(option.value)}
+                className={cn(
+                  "transition-all",
+                  timeFilter === option.value && "ring-1 ring-primary/30"
+                )}
+              >
+                {option.value === "overdue" && timeFilter === option.value && (
+                  <span className="w-2 h-2 rounded-full bg-destructive mr-1.5 animate-pulse" />
+                )}
+                {option.label}
+              </Button>
+            ))}
+          </div>
+
+          {/* Filter Panel Button */}
+          <KanbanFilterPanel
+            sections={filterSections}
+            onClearAll={handleClearAllFilters}
+          />
+        </div>
+        <FilterChips
+          sections={filterSections}
+          onClearAll={handleClearAllFilters}
         />
-        <Button variant={filterScheduled ? "default" : "outline"} size="sm" onClick={() => setFilterScheduled(!filterScheduled)} className="gap-1.5">
-          <Clock className="w-4 h-4" />
-          Agendados
-        </Button>
       </div>
 
       {/* Period filter indicator — aparece quando um período está selecionado (apenas no kanban) */}
