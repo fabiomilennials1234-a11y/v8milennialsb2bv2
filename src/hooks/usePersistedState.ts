@@ -125,7 +125,11 @@ export function usePersistedState<T>(
     loadedKeyRef.current = storageKey;
     const persisted = readEntry<T>(storageKey);
     if (persisted !== undefined) {
-      setStateRaw(persisted);
+      // Merge with defaults so new fields added after the entry was saved get their default values
+      const merged = (typeof persisted === "object" && persisted !== null && !Array.isArray(persisted))
+        ? { ...defaultRef.current, ...persisted } as T
+        : persisted;
+      setStateRaw(merged);
     }
   }, [storageKey]);
 
