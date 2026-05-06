@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -104,6 +105,7 @@ export function ImportLeadsFunnelContent({
   const { data: members = [] } = useTeamMembers();
   const { data: products = [] } = useProducts();
   const [showErrors, setShowErrors] = useState(false);
+  const queryClient = useQueryClient();
   const { parseCSV, importLeadsToFunnel, resetImport, isImporting, progress, result, lastReport } = useImportLeads();
   const { data: customFields = [] } = useLeadCustomFields();
   const { allowed: canImport, isLoading: permLoading } = useCanPerformAction("import_leads");
@@ -186,6 +188,12 @@ export function ImportLeadsFunnelContent({
         metricsPeriodYear: metricsOpt?.year,
       });
       setStep("complete");
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["leads"] }),
+        queryClient.invalidateQueries({ queryKey: ["pipe_whatsapp"] }),
+        queryClient.invalidateQueries({ queryKey: ["pipe_confirmacao"] }),
+        queryClient.invalidateQueries({ queryKey: ["pipe_propostas"] }),
+      ]);
     } catch (error) {
       console.error("Import error:", error);
       const msg = error instanceof Error ? error.message : String(error);

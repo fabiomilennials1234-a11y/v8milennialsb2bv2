@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -77,6 +78,7 @@ export function ImportLeadsModal({
   const { parseCSV, importLeads, resetImport, isImporting, progress, result, lastReport } = useImportLeads();
   const { data: customFields = [] } = useLeadCustomFields();
   const { allowed: canImport, isLoading: permLoading } = useCanPerformAction("import_leads");
+  const queryClient = useQueryClient();
   const customFieldNames = customFields.map((f) => f.field_name);
   const allMembers = members;
 
@@ -169,6 +171,8 @@ export function ImportLeadsModal({
         Object.keys(mergedMapping).length ? mergedMapping : undefined
       );
       setStep("complete");
+      queryClient.invalidateQueries({ queryKey: ["leads"] });
+      queryClient.invalidateQueries({ queryKey: ["campanha_leads"] });
     } catch (error) {
       console.error("Import error:", error);
       const msg = error instanceof Error ? error.message : String(error);

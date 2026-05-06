@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -123,6 +124,7 @@ export function ImportUpsellClientsContent({
   const [sampleData, setSampleData] = useState<Record<string, string>[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const queryClient = useQueryClient();
   const { organizationId } = useOrganization();
   const { data: stages = [] } = usePipelineStages(pipeType);
   const { data: members = [] } = useTeamMembers();
@@ -545,6 +547,8 @@ export function ImportUpsellClientsContent({
 
       setProgress(100);
       setResult({ total: leads.length, imported, duplicates, updated, invalid });
+      queryClient.invalidateQueries({ queryKey: ["upsell_clients"] });
+      queryClient.invalidateQueries({ queryKey: ["leads"] });
       setStep("complete");
     } catch (error) {
       console.error("Import error:", error);
