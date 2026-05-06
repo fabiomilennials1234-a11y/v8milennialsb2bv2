@@ -15,7 +15,9 @@ import {
 import { EmptyState } from "@/components/shared/EmptyState";
 import { RevisionItem, type RevisionTask } from "@/components/revisao/RevisionItem";
 import { AutomationSettings } from "@/components/followups/AutomationSettings";
-import { useFollowUps, useCompleteFollowUp, useArchiveFollowUp, useDeleteFollowUp } from "@/hooks/useFollowUps";
+import { LeadDetailDrawer } from "@/components/leads/LeadDetailDrawer";
+import { ScheduleFollowUpModal } from "@/components/followups/ScheduleFollowUpModal";
+import { useFollowUps, useCompleteFollowUp, useUpdateFollowUp, useArchiveFollowUp, useDeleteFollowUp } from "@/hooks/useFollowUps";
 import { useMyScheduledMessages, useCancelScheduledMessage } from "@/hooks/useScheduledMessages";
 import { useDailyPriorities } from "@/hooks/useDailyPriorities";
 import { useTeamMembers, useCurrentTeamMember } from "@/hooks/useTeamMembers";
@@ -52,7 +54,18 @@ export default function Revisao() {
 
   const { data: priorities, totalPending: suggestionsCount } = useDailyPriorities();
 
+  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
+  const [isDetailDrawerOpen, setIsDetailDrawerOpen] = useState(false);
+  const [scheduleContext, setScheduleContext] = useState<{
+    leadId: string;
+    leadName: string;
+    sourcePipe?: "whatsapp" | "confirmacao" | "propostas";
+    sourcePipeId?: string;
+    defaultAssignedTo?: string;
+  } | null>(null);
+
   const completeFollowUp = useCompleteFollowUp();
+  const updateFollowUp = useUpdateFollowUp();
   const archiveFollowUp = useArchiveFollowUp();
   const deleteFollowUp = useDeleteFollowUp();
   const cancelMessage = useCancelScheduledMessage();
@@ -114,12 +127,37 @@ export default function Revisao() {
   const messageTasks = filteredTasks.filter((t) => t.type === "scheduled-message");
   const followUpTasks = filteredTasks.filter((t) => t.type === "follow-up");
 
-  const handleComplete = (id: string, type: string) => {
+  const handleComplete = (id: string, type: string, notes?: string) => {
     if (type === "follow-up") {
-      completeFollowUp.mutate({ id });
+      completeFollowUp.mutate({ id, completion_notes: notes });
     } else {
       cancelMessage.mutate(id);
     }
+  };
+
+  const handleReschedule = (id: string, newDate: string) => {
+    updateFollowUp.mutate({ id, due_date: newDate });
+  };
+
+  const handleOpenLead = (leadId: string) => {
+    setSelectedLeadId(leadId);
+    setIsDetailDrawerOpen(true);
+  };
+
+  const handleScheduleNew = (
+    leadId: string,
+    leadName: string,
+    sourcePipe?: string,
+    sourcePipeId?: string,
+    assignedTo?: string,
+  ) => {
+    setScheduleContext({
+      leadId,
+      leadName,
+      sourcePipe: sourcePipe as "whatsapp" | "confirmacao" | "propostas" | undefined,
+      sourcePipeId,
+      defaultAssignedTo: assignedTo,
+    });
   };
 
   const isLoading = fuLoading || smLoading;
@@ -136,10 +174,13 @@ export default function Revisao() {
           <RevisionItem
             key={`${task.type}-${task.id}`}
             task={task}
-            onComplete={(id) => handleComplete(id, task.type)}
+            onComplete={(id, notes) => handleComplete(id, task.type, notes)}
             onCancel={task.type === "scheduled-message" ? (id) => cancelMessage.mutate(id) : undefined}
             onArchive={task.type === "follow-up" ? (id) => archiveFollowUp.mutate(id) : undefined}
             onDelete={task.type === "follow-up" ? (id) => deleteFollowUp.mutate(id) : undefined}
+            onReschedule={task.type === "follow-up" ? handleReschedule : undefined}
+            onOpenLead={handleOpenLead}
+            onScheduleNew={task.type === "follow-up" ? handleScheduleNew : undefined}
             canDelete={canDelete}
           />
         ))}
@@ -319,6 +360,25 @@ export default function Revisao() {
             </div>
           </DialogContent>
         </Dialog>
+      )}
+
+      <LeadDetailDrawer
+        open={isDetailDrawerOpen}
+        onOpenChange={setIsDetailDrawerOpen}
+        leadId={selectedLeadId}
+        variant="followup"
+      />
+
+      {scheduleContext && (
+        <ScheduleFollowUpModal
+          open={!!scheduleContext}
+          onOpenChange={(open) => { if (!open) setScheduleContext(null); }}
+          leadId={scheduleContext.leadId}
+          leadName={scheduleContext.leadName}
+          sourcePipe={scheduleContext.sourcePipe}
+          sourcePipeId={scheduleContext.sourcePipeId}
+          defaultAssignedTo={scheduleContext.defaultAssignedTo}
+        />
       )}
     </div>
   );
