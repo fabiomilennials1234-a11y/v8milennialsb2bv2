@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
+import { usePersistedState } from "@/hooks/usePersistedState";
 import { motion } from "framer-motion";
 import { Search, Plus, Calendar, Settings2, AlertCircle } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -58,13 +59,55 @@ function formatPeriodLabel(range: { startStr: string; endStr: string }): string 
 
 
 
+// ---------------------------------------------------------------------------
+// Persisted filter state — scoped per org + user, TTL 24 h
+// ---------------------------------------------------------------------------
+type WhatsappFilterState = {
+  searchTerm: string;
+  filterResponsible: string;
+  filterOrigin: string;
+  filterTags: string[];
+  filterScheduled: boolean;
+};
+
+const DEFAULT_WHATSAPP_FILTERS: WhatsappFilterState = {
+  searchTerm: "",
+  filterResponsible: "all",
+  filterOrigin: "all",
+  filterTags: [],
+  filterScheduled: false,
+};
+
 export default function PipeWhatsapp() {
-  const [searchTerm, setSearchTerm] = useState("");
-  const [filterResponsible, setFilterResponsible] = useState("all");
-  const [filterOrigin, setFilterOrigin] = useState("all");
-  const [filterTags, setFilterTags] = useState<string[]>([]);
+  const [filterState, setFilterState] = usePersistedState(
+    "whatsapp",
+    DEFAULT_WHATSAPP_FILTERS
+  );
+
+  const { searchTerm, filterResponsible, filterOrigin, filterTags, filterScheduled } = filterState;
+
+  const setSearchTerm = useCallback(
+    (v: string) => setFilterState((f) => ({ ...f, searchTerm: v })),
+    [setFilterState]
+  );
+  const setFilterResponsible = useCallback(
+    (v: string) => setFilterState((f) => ({ ...f, filterResponsible: v })),
+    [setFilterState]
+  );
+  const setFilterOrigin = useCallback(
+    (v: string) => setFilterState((f) => ({ ...f, filterOrigin: v })),
+    [setFilterState]
+  );
+  const setFilterTags = useCallback(
+    (v: string[]) => setFilterState((f) => ({ ...f, filterTags: v })),
+    [setFilterState]
+  );
+  const setFilterScheduled = useCallback(
+    (v: boolean) => setFilterState((f) => ({ ...f, filterScheduled: v })),
+    [setFilterState]
+  );
+
   const { data: leadsWithSchedule } = useLeadsWithScheduledMessages();
-  const [filterScheduled, setFilterScheduled] = useState(false);
   const [isCreateLeadModalOpen, setIsCreateLeadModalOpen] = useState(false);
   const [isOpportunityModalOpen, setIsOpportunityModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -114,11 +157,14 @@ export default function PipeWhatsapp() {
   ], [filterResponsible, filterOrigin, filterTags, filterScheduled, responsibleMembers, orgTags]);
 
   const handleClearAllFilters = useCallback(() => {
-    setFilterResponsible("all");
-    setFilterOrigin("all");
-    setFilterTags([]);
-    setFilterScheduled(false);
-  }, []);
+    setFilterState((f) => ({
+      ...f,
+      filterResponsible: "all",
+      filterOrigin: "all",
+      filterTags: [],
+      filterScheduled: false,
+    }));
+  }, [setFilterState]);
 
   // Transform pipe data to LeadCardData format
   const transformToCard = (item: any): LeadCardData => {
