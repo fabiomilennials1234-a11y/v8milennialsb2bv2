@@ -136,6 +136,7 @@ export function ImportUpsellClientsContent({
   const queryClient = useQueryClient();
   const { organizationId } = useOrganization();
   const { data: stages = [] } = usePipelineStages(pipeType);
+  const { data: baseStages = [] } = usePipelineStages("upsell_base");
   const { data: members = [] } = useTeamMembers();
   const { parseCSV } = useImportLeads();
 
@@ -522,7 +523,7 @@ export function ImportUpsellClientsContent({
               responsible_id: responsibleId,
               closer_id: responsibleId,
               first_sale_at: firstSaleAt,
-              tipo_cliente_tempo: pipeType === "upsell_base" ? stageKey : "0_3m",
+              tipo_cliente_tempo: pipeType === "upsell_base" ? stageKey : (baseStages.find(s => s.position === 0)?.stage_key || baseStages[0]?.stage_key || "0-3m"),
             };
 
             if (pipeType === "upsell_gestao") {

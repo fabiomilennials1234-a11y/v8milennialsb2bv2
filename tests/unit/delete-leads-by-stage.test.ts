@@ -53,6 +53,14 @@ vi.mock('@/lib/permissions', () => ({
   useCanPerformActionAsync: () => vi.fn(),
 }));
 
+vi.mock('@/hooks/useMasterAuth', () => ({
+  useMasterAuth: () => ({ isMaster: false, isLoading: false }),
+}));
+
+vi.mock('@/hooks/useUserRole', () => ({
+  useIsAdmin: () => ({ isAdmin: false, isLoading: false }),
+}));
+
 // ─── Import after mocks ─────────────────────────────────
 import { useDeleteAllLeadsInPipe } from '@/hooks/useLeads';
 

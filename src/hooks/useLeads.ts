@@ -7,6 +7,7 @@ import { track } from "@/lib/analytics";
 import { useCanPerformActionAsync } from "@/lib/permissions";
 import { normalizePhone } from "@/lib/normalizePhone";
 import { useMasterAuth } from "./useMasterAuth";
+import { useIsAdmin } from "./useUserRole";
 
 export type Lead = Tables<"leads">;
 export type LeadInsert = TablesInsert<"leads">;
@@ -246,19 +247,23 @@ export function useUpdateLead() {
 export function useDeleteLead() {
   const queryClient = useQueryClient();
   const { organizationId } = useOrganization();
-  
+  const { isMaster } = useMasterAuth();
+  const { isAdmin } = useIsAdmin();
+
   return useMutation({
     mutationFn: async (id: string) => {
       if (!organizationId) {
         throw new Error("Cannot delete lead: No organization context");
       }
 
-      // PERMISSION: Verificar can_delete_leads antes de prosseguir
-      const { data: canDelete } = await supabase.rpc("user_has_org_permission", {
-        p_permission_key: "can_delete_leads",
-      });
-      if (canDelete !== true) {
-        throw new Error("Você não tem permissão para excluir leads");
+      // PERMISSION: Master and admin bypass org permission check (RLS still enforced)
+      if (!isMaster && !isAdmin) {
+        const { data: canDelete } = await supabase.rpc("user_has_org_permission", {
+          p_permission_key: "can_delete_leads",
+        });
+        if (canDelete !== true) {
+          throw new Error("Você não tem permissão para excluir leads");
+        }
       }
 
       // SECURITY: First verify the lead belongs to current organization
@@ -482,6 +487,8 @@ function deleteLeadsAndRelated(ids: string[]): Promise<void> {
 export function useDeleteAllLeadsInPipe(pipeType: PipeTypeForDelete) {
   const queryClient = useQueryClient();
   const { organizationId } = useOrganization();
+  const { isMaster } = useMasterAuth();
+  const { isAdmin } = useIsAdmin();
 
   return useMutation({
     mutationFn: async ({ stageId }: { stageId: string }) => {
@@ -493,12 +500,14 @@ export function useDeleteAllLeadsInPipe(pipeType: PipeTypeForDelete) {
         throw new Error("Cannot delete leads: No stage specified");
       }
 
-      // PERMISSION: Verificar can_delete_leads
-      const { data: canDelete } = await supabase.rpc("user_has_org_permission", {
-        p_permission_key: "can_delete_leads",
-      });
-      if (canDelete !== true) {
-        throw new Error("Você não tem permissão para excluir leads");
+      // PERMISSION: Master and admin bypass org permission check (RLS still enforced)
+      if (!isMaster && !isAdmin) {
+        const { data: canDelete } = await supabase.rpc("user_has_org_permission", {
+          p_permission_key: "can_delete_leads",
+        });
+        if (canDelete !== true) {
+          throw new Error("Você não tem permissão para excluir leads");
+        }
       }
 
       const ids = await fetchAllLeadIdsInPipe(organizationId, pipeType, stageId);
@@ -529,6 +538,8 @@ export function useDeleteAllLeadsInPipe(pipeType: PipeTypeForDelete) {
 export function useDeleteAllLeads() {
   const queryClient = useQueryClient();
   const { organizationId } = useOrganization();
+  const { isMaster } = useMasterAuth();
+  const { isAdmin } = useIsAdmin();
 
   return useMutation({
     mutationFn: async () => {
@@ -536,12 +547,14 @@ export function useDeleteAllLeads() {
         throw new Error("Cannot delete leads: No organization context");
       }
 
-      // PERMISSION: Verificar can_delete_leads
-      const { data: canDelete } = await supabase.rpc("user_has_org_permission", {
-        p_permission_key: "can_delete_leads",
-      });
-      if (canDelete !== true) {
-        throw new Error("Você não tem permissão para excluir leads");
+      // PERMISSION: Master and admin bypass org permission check (RLS still enforced)
+      if (!isMaster && !isAdmin) {
+        const { data: canDelete } = await supabase.rpc("user_has_org_permission", {
+          p_permission_key: "can_delete_leads",
+        });
+        if (canDelete !== true) {
+          throw new Error("Você não tem permissão para excluir leads");
+        }
       }
 
       const ids = await fetchAllLeadIdsForOrganization(organizationId);
