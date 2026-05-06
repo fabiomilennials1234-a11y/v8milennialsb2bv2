@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useCreateUpsellClient } from "@/hooks/useUpsellClients";
 import { useOrganization } from "@/hooks/useOrganization";
+import { usePipelineStages } from "@/hooks/usePipelineStages";
 import { useResponsibleMembers } from "@/hooks/useTeamMembers";
 import { useLeads } from "@/hooks/useLeads";
 import { toast } from "sonner";
@@ -21,6 +22,8 @@ export function CreateClientModal({ open, onOpenChange }: CreateClientModalProps
   const createClient = useCreateUpsellClient();
   const responsibleMembers = useResponsibleMembers();
   const { data: leads = [] } = useLeads();
+  const { data: baseStages = [] } = usePipelineStages("upsell_base");
+  const defaultBaseStageKey = baseStages.find(s => s.position === 0)?.stage_key || baseStages[0]?.stage_key || "0-3m";
 
   const [formData, setFormData] = useState({
     lead_id: "",
@@ -67,6 +70,7 @@ export function CreateClientModal({ open, onOpenChange }: CreateClientModalProps
         potencial: formData.potencial,
         responsible_id: formData.responsible_id || null,
         first_sale_at: new Date(formData.first_sale_at).toISOString(),
+        tipo_cliente_tempo: defaultBaseStageKey,
       });
       toast.success("Cliente adicionado a base");
       onOpenChange(false);
