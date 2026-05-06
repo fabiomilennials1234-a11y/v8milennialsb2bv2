@@ -32,6 +32,8 @@ import {
   RefreshCw,
   AlertTriangle,
   Table2,
+  ChevronUp,
+  ChevronDown,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -90,12 +92,18 @@ interface PreviewClient {
 
 type Step = "upload" | "select_sheet" | "map_columns" | "preview" | "importing" | "complete";
 
+interface ImportError {
+  row: number;
+  reason: string;
+}
+
 interface ImportResult {
   total: number;
   imported: number;
   duplicates: number;
   updated: number;
   invalid: number;
+  errors: ImportError[];
 }
 
 interface ImportUpsellClientsContentProps {
@@ -121,6 +129,7 @@ export function ImportUpsellClientsContent({
   const [isImporting, setIsImporting] = useState(false);
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState<ImportResult | null>(null);
+  const [showErrors, setShowErrors] = useState(false);
   const [sampleData, setSampleData] = useState<Record<string, string>[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -419,9 +428,13 @@ export function ImportUpsellClientsContent({
       let duplicates = 0;
       let updated = 0;
       let invalid = 0;
+      const errors: ImportError[] = [];
       const processedPhones = new Set<string>();
       const BATCH_SIZE = 25;
       const stagesList = stages.map((s) => ({ stage_key: s.stage_key, name: s.name }));
+
+      // Fallback: if selectedStageKey is empty, use the first stage from the list
+      const effectiveDefaultStageKey = selectedStageKey || stagesList[0]?.stage_key || "";
 
       for (let i = 0; i < leads.length; i += BATCH_SIZE) {
         const batch = leads.slice(i, i + BATCH_SIZE);
@@ -482,6 +495,7 @@ export function ImportUpsellClientsContent({
                 .single();
               if (leadError || !newLead) {
                 invalid++;
+                errors.push({ row: rowIndex + 2, reason: `Erro ao criar lead: ${leadError?.message || "resposta vazia"}` });
                 continue;
               }
               leadId = newLead.id;
@@ -495,7 +509,7 @@ export function ImportUpsellClientsContent({
 
             const potencial = resolvePotencial(potencialRaw);
             const firstSaleAt = parseDateValue(dataPrimeiraVendaRaw);
-            const stageKey = resolveStageFromName(lead.stage, stagesList, selectedStageKey);
+            const stageKey = resolveStageFromName(lead.stage, stagesList, effectiveDefaultStageKey);
 
             const clientInsert: Record<string, unknown> = {
               organization_id: organizationId,
@@ -528,8 +542,9 @@ export function ImportUpsellClientsContent({
               if (clientError.code === "23505") {
                 duplicates++;
               } else {
-                console.error("Error creating upsell client:", clientError);
+                console.error(`[ImportUpsell] Row ${rowIndex + 2} error creating upsell client:`, clientError.message, clientError.code);
                 invalid++;
+                errors.push({ row: rowIndex + 2, reason: clientError.message || "Erro ao criar cliente upsell" });
               }
             } else {
               imported++;
@@ -538,15 +553,16 @@ export function ImportUpsellClientsContent({
 
             if (formattedPhone) processedPhones.add(formattedPhone);
           } catch (err) {
-            console.error("Error processing client:", err);
+            console.error(`[ImportUpsell] Row ${rowIndex + 2} unexpected error:`, err);
             invalid++;
+            errors.push({ row: rowIndex + 2, reason: err instanceof Error ? err.message : "Erro inesperado" });
           }
         }
         setProgress(Math.round(((i + batch.length) / leads.length) * 100));
       }
 
       setProgress(100);
-      setResult({ total: leads.length, imported, duplicates, updated, invalid });
+      setResult({ total: leads.length, imported, duplicates, updated, invalid, errors });
       queryClient.invalidateQueries({ queryKey: ["upsell_clients"] });
       queryClient.invalidateQueries({ queryKey: ["leads"] });
       setStep("complete");
@@ -575,6 +591,7 @@ export function ImportUpsellClientsContent({
     setSelectedPotencial("medio");
     setProgress(0);
     setResult(null);
+    setShowErrors(false);
     onDone?.();
   };
 
@@ -961,8 +978,41 @@ export function ImportUpsellClientsContent({
               <p className="text-xs text-muted-foreground">Inválidos</p>
             </div>
           </div>
+
+          {result.errors.length > 0 && (
+            <div className="rounded-xl border border-red-200 dark:border-red-900">
+              <button
+                type="button"
+                className="w-full flex items-center justify-between p-3 text-sm font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-xl"
+                onClick={() => setShowErrors(!showErrors)}
+              >
+                <span className="flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4" />
+                  {result.errors.length} {result.errors.length === 1 ? "erro" : "erros"} encontrados
+                </span>
+                {showErrors ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </button>
+              {showErrors && (
+                <ScrollArea className="max-h-48 px-3 pb-3">
+                  <div className="space-y-1">
+                    {result.errors.map((err, i) => (
+                      <div key={i} className="text-xs text-muted-foreground flex gap-2">
+                        <span className="text-red-500 font-mono shrink-0">
+                          {err.row > 0 ? `L${err.row}` : ""}
+                        </span>
+                        <span>{err.reason}</span>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              )}
+            </div>
+          )}
+
           <p className="text-sm text-center text-muted-foreground">
-            Os clientes já estão na {pipeLabel}.
+            {result.errors.length > 0
+              ? `${result.imported} clientes entraram na ${pipeLabel}. Veja os erros acima.`
+              : `Os clientes já estão na ${pipeLabel}.`}
           </p>
           <Button className="w-full" onClick={handleClose}>
             Fechar
