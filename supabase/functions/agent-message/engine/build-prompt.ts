@@ -613,6 +613,68 @@ export async function buildDynamicPrompt(params: BuildPromptParams): Promise<str
   }
 
   // =====================================================
+  // 4.05 HISTÓRICO DE RELACIONAMENTO (vendas anteriores)
+  // =====================================================
+  const closedDeals = (leadData?.closed_deals ?? []) as Array<{
+    status: string;
+    sale_value: number | null;
+    product_type: string | null;
+    closed_at: string | null;
+    created_at: string;
+    product: { name: string } | null;
+  }>;
+  const activeProposals = (leadData?.active_proposals ?? []) as Array<{
+    status: string;
+    sale_value: number | null;
+    product_type: string | null;
+    product: { name: string } | null;
+  }>;
+  const isExistingClient = closedDeals.length > 0;
+
+  if (isExistingClient || activeProposals.length > 1) {
+    sections.push("# HISTÓRICO DE RELACIONAMENTO");
+    sections.push("");
+
+    if (isExistingClient) {
+      const totalRevenue = closedDeals.reduce((sum, d) => sum + (d.sale_value ?? 0), 0);
+      sections.push(`⚠️ ESTE LEAD JÁ É CLIENTE. Possui ${closedDeals.length} venda(s) fechada(s) (total: R$${totalRevenue.toLocaleString("pt-BR")}).`);
+      sections.push("");
+      sections.push("Vendas anteriores:");
+      for (const deal of closedDeals) {
+        const productName = deal.product?.name || deal.product_type || "Produto";
+        const value = deal.sale_value ? `R$${deal.sale_value.toLocaleString("pt-BR")}` : "valor N/A";
+        const closedDate = deal.closed_at
+          ? new Date(deal.closed_at).toLocaleDateString("pt-BR")
+          : "data N/A";
+        sections.push(`- ${productName}: ${value} (fechado em ${closedDate})`);
+      }
+      sections.push("");
+    }
+
+    if (activeProposals.length > 1) {
+      sections.push(`Propostas ativas no momento: ${activeProposals.length}`);
+      for (const prop of activeProposals) {
+        const productName = prop.product?.name || prop.product_type || "Produto";
+        const value = prop.sale_value ? `R$${prop.sale_value.toLocaleString("pt-BR")}` : "";
+        sections.push(`- ${productName} (${prop.status})${value ? ` — ${value}` : ""}`);
+      }
+      sections.push("");
+    }
+
+    sections.push("## REGRAS PARA CLIENTES EXISTENTES (PÓS-VENDA)");
+    sections.push("");
+    sections.push("IMPORTANTE — siga estas regras quando o lead já é cliente:");
+    sections.push("1. NUNCA trate como lead novo. Reconheça que já é cliente e personalize o atendimento.");
+    sections.push("2. Se entrar em contato novamente, identifique primeiro o motivo: suporte, upsell, cross-sell, renovação ou nova oportunidade.");
+    sections.push("3. NÃO mova cards de oportunidades anteriores. Se for nova venda, deve ser criada uma NOVA proposta.");
+    sections.push("4. Pergunte especificamente: 'Vi que você já é nosso cliente com [produto]. Esse novo interesse é sobre o mesmo serviço ou algo diferente?'");
+    sections.push("5. Se for upsell/cross-sell, avance direto para proposta — não refaça qualificação completa.");
+    sections.push("6. Se for suporte ou dúvida sobre produto já contratado, resolva ou transfira para o time responsável.");
+    sections.push("7. Use o histórico para criar urgência positiva: 'Como já conhece nosso trabalho com [produto anterior]...'");
+    sections.push("");
+  }
+
+  // =====================================================
   // 4.1 REGRAS DA ETAPA ATUAL (Kanban)
   // =====================================================
   const kanbanRules = capabilities?.copilot_agent_kanban_rules;

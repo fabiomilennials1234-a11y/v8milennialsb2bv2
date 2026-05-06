@@ -405,7 +405,7 @@ export async function loadLeadData(
       return null;
     }
 
-    const [customFieldsRes, upsellRes, confirmacaoRes, propostasRes, campanhaRes] = await Promise.all([
+    const [customFieldsRes, upsellRes, confirmacaoRes, propostasRes, campanhaRes, propostasHistoryRes] = await Promise.all([
       supabase
         .from("lead_custom_field_values")
         .select(`value, field:lead_custom_fields(id, field_name, field_type)`)
@@ -431,6 +431,12 @@ export async function loadLeadData(
         .eq("lead_id", leadId)
         .limit(1)
         .maybeSingle(),
+      supabase
+        .from("pipe_propostas")
+        .select("id, status, sale_value, product_type, closed_at, created_at, product:products(name)")
+        .eq("lead_id", leadId)
+        .order("created_at", { ascending: false })
+        .limit(10),
     ]);
 
     const customFields: Record<string, string> = {};
@@ -448,6 +454,20 @@ export async function loadLeadData(
     const propostasData = propostasRes.data as { status?: string; sale_value?: number; product_type?: string } | null;
     const campanhaData = campanhaRes.data as { campanha_id?: string; campanha_stages?: { name?: string } } | null;
 
+    const propostasHistory = (propostasHistoryRes.data ?? []) as Array<{
+      id: string;
+      status: string;
+      sale_value: number | null;
+      product_type: string | null;
+      closed_at: string | null;
+      created_at: string;
+      product: { name: string } | null;
+    }>;
+    const closedDeals = propostasHistory.filter((p) => p.status === "vendido");
+    const activeProposals = propostasHistory.filter(
+      (p) => p.status !== "vendido" && p.status !== "perdido",
+    );
+
     return {
       ...(lead as Record<string, unknown>),
       customFields,
@@ -463,6 +483,9 @@ export async function loadLeadData(
       propostas_product_type: propostasData?.product_type ?? null,
       campanha_stage: campanhaData?.campanha_stages?.name ?? null,
       campanha_id: campanhaData?.campanha_id ?? null,
+      closed_deals: closedDeals,
+      active_proposals: activeProposals,
+      is_existing_client: closedDeals.length > 0,
     };
   } catch (e) {
     console.error("[context-loader] loadLeadData exception:", e);
