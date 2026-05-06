@@ -4,7 +4,7 @@ tags:
   - index
   - torque-crm
 created: 2026-04-12
-last_updated: 2026-04-25
+last_updated: 2026-05-06
 status: active
 ---
 
@@ -157,6 +157,7 @@ SaaS B2B multi-tenant para gestao de leads, pipelines de vendas, campanhas e aut
 - [[2026-04-14]] — Coverage project fase 0 + 1
 - [[2026-04-15]] — Adicao do agente Security ao time
 - [[2026-05-04]] — Agenda interna: meetings + RPC + webhook + refactor frontend
+- [[2026-05-06]] — Fix delete leads com upsell FK RESTRICT + import error tracking + stage fallback
 - `individuais/` — Notas detalhadas por mudanca significativa
 
 ### 08 — Backlog
