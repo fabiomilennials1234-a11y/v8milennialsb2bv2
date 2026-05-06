@@ -50,6 +50,7 @@ import { useLeadsWithScheduledMessages } from "@/hooks/useScheduledMessages";
 import { track, trackModuleVisit } from "@/lib/analytics";
 import { useFeaturePermission, useIsAdmin } from "@/hooks/useUserRole";
 import { useMasterAuth } from "@/hooks/useMasterAuth";
+import { useTags } from "@/hooks/useTags";
 
 // Filter type aliases (previously from ConfirmacaoFilters)
 type OriginFilter = "all" | "whatsapp" | "meta_ads" | "instagram" | "tiktok" | "google_ads" | "site" | "landing_page" | "remarketing" | "indicacao" | "evento" | "prospeccao_ativa" | "cal" | "outro";
@@ -147,9 +148,9 @@ type ConfirmacaoFilterState = {
   timeFilter: TimeFilter;
   urgencyFilter: UrgencyFilter;
   selectedStatuses: string[];
+  selectedTags: string[];
   selectedResponsibleId: string;
   viewMode: "kanban" | "timeline";
-  // One-shot: aplica teamMemberId como default para membros na primeira visita.
   membroDefaultApplied?: boolean;
 };
 
@@ -159,6 +160,7 @@ const DEFAULT_CONFIRMACAO_FILTERS: ConfirmacaoFilterState = {
   timeFilter: "all",
   urgencyFilter: "all",
   selectedStatuses: [],
+  selectedTags: [],
   selectedResponsibleId: "all",
   viewMode: "kanban",
   membroDefaultApplied: false,
@@ -176,6 +178,7 @@ export default function PipeConfirmacao() {
     timeFilter,
     urgencyFilter,
     selectedStatuses,
+    selectedTags,
     selectedResponsibleId,
     viewMode,
   } = filterState;
@@ -198,6 +201,10 @@ export default function PipeConfirmacao() {
   );
   const setSelectedStatuses = useCallback(
     (v: string[]) => setFilterState((f) => ({ ...f, selectedStatuses: v })),
+    [setFilterState]
+  );
+  const setSelectedTags = useCallback(
+    (v: string[]) => setFilterState((f) => ({ ...f, selectedTags: v })),
     [setFilterState]
   );
   const setSelectedResponsibleId = useCallback(
@@ -253,6 +260,7 @@ export default function PipeConfirmacao() {
   const { data: pipelineStages = [] } = usePipelineStages("confirmacao");
   const { data: workflowCounts = {} } = useStageWorkflowCounts("confirmacao");
   const responsibleMembers = useResponsibleMembers();
+  const { data: orgTags = [] } = useTags();
   const updatePipeConfirmacao = useUpdatePipeConfirmacao();
   const { allowed: canMovePipe } = useCanPerformAction("move_pipe_record");
   const createPipeProposta = useCreatePipeProposta();
@@ -293,19 +301,21 @@ export default function PipeConfirmacao() {
   const filterSections: FilterSectionConfig[] = useMemo(() => [
     { type: "responsible", value: selectedResponsibleId, onChange: setSelectedResponsibleId, members: responsibleMembers },
     { type: "origin-single", value: originFilter, onChange: setOriginFilter as (v: string) => void },
+    { type: "tags", value: selectedTags, onChange: setSelectedTags, tags: orgTags },
     { type: "urgency", value: urgencyFilter, onChange: setUrgencyFilter as (v: string) => void },
     { type: "status-multi", value: selectedStatuses, onChange: setSelectedStatuses, options: statusColumns },
     { type: "scheduled", value: filterScheduled, onChange: setFilterScheduled },
-  ], [selectedResponsibleId, originFilter, urgencyFilter, selectedStatuses, filterScheduled, responsibleMembers, statusColumns, setSelectedResponsibleId, setOriginFilter, setUrgencyFilter, setSelectedStatuses]);
+  ], [selectedResponsibleId, originFilter, selectedTags, urgencyFilter, selectedStatuses, filterScheduled, responsibleMembers, orgTags, statusColumns, setSelectedResponsibleId, setOriginFilter, setSelectedTags, setUrgencyFilter, setSelectedStatuses]);
 
   const handleClearAllFilters = useCallback(() => {
     setOriginFilter("all" as OriginFilter);
     setTimeFilter("all" as TimeFilter);
     setUrgencyFilter("all" as UrgencyFilter);
     setSelectedStatuses([]);
+    setSelectedTags([]);
     setSelectedResponsibleId("all");
     setFilterScheduled(false);
-  }, [setOriginFilter, setTimeFilter, setUrgencyFilter, setSelectedStatuses, setSelectedResponsibleId]);
+  }, [setOriginFilter, setTimeFilter, setUrgencyFilter, setSelectedStatuses, setSelectedTags, setSelectedResponsibleId]);
 
   // Auto-update statuses based on meeting dates
   const autoUpdateStatuses = useCallback(async () => {
@@ -411,7 +421,8 @@ export default function PipeConfirmacao() {
 
           const matchesSearch = searchQuery === "" ||
             lead?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            lead?.company?.toLowerCase().includes(searchQuery.toLowerCase());
+            lead?.company?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            lead?.phone?.includes(searchQuery);
           
           let matchesOrigin = originFilter === "all" || lead?.origin === originFilter;
           
@@ -430,12 +441,21 @@ export default function PipeConfirmacao() {
 
           const matchesStatus = selectedStatuses.length === 0 || selectedStatuses.includes(item.status);
 
-          // Responsible filter
-          const matchesResponsible = selectedResponsibleId === "all" || item.responsible_id === selectedResponsibleId;
+          // Responsible filter — check pipe-level fields AND lead-level fallbacks
+          const matchesResponsible = selectedResponsibleId === "all" ||
+            item.responsible_id === selectedResponsibleId ||
+            item.sdr_id === selectedResponsibleId ||
+            item.closer_id === selectedResponsibleId ||
+            lead?.responsible_id === selectedResponsibleId ||
+            lead?.sdr_id === selectedResponsibleId ||
+            lead?.closer_id === selectedResponsibleId;
+
+          const matchesTags = selectedTags.length === 0 ||
+            (lead?.lead_tags?.some((lt: any) => selectedTags.includes(lt.tag?.id)) ?? false);
 
           const matchesScheduled = !filterScheduled || (leadsWithSchedule?.has(item.lead_id) ?? false);
 
-          return matchesSearch && matchesOrigin && matchesUrgency && matchesTime && matchesStatus && matchesResponsible && matchesScheduled;
+          return matchesSearch && matchesOrigin && matchesUrgency && matchesTime && matchesStatus && matchesResponsible && matchesTags && matchesScheduled;
         })
         // Sort by created_at — leads mais recentes primeiro
         .sort((a, b) => {
@@ -447,7 +467,7 @@ export default function PipeConfirmacao() {
 
       return { ...col, items: columnItems };
     });
-  }, [pipeData, statusColumns, searchQuery, originFilter, urgencyFilter, timeFilter, selectedStatuses, selectedResponsibleId, overdueDays, filterScheduled, leadsWithSchedule, metricsRange]);
+  }, [pipeData, statusColumns, searchQuery, originFilter, urgencyFilter, timeFilter, selectedStatuses, selectedTags, selectedResponsibleId, overdueDays, filterScheduled, leadsWithSchedule, metricsRange]);
 
   // Count ghost leads — rows visíveis no pipe cujo join com leads é null.
   // Indica divergência entre RLS do pipe e de leads (ver GhostLeadsBanner).

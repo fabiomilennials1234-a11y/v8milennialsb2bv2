@@ -284,7 +284,7 @@ export function KanbanFilterPanel({ sections, onClearAll }: KanbanFilterPanelPro
       </Button>
 
       {/* Sheet Panel */}
-      <Sheet open={open} onOpenChange={setOpen}>
+      <Sheet open={open} onOpenChange={setOpen} modal={false}>
         <SheetContent
           side="right"
           className="w-[380px] sm:max-w-[380px] p-0 flex flex-col"
@@ -345,7 +345,7 @@ function SectionRenderer({ section }: { section: FilterSectionConfig }) {
             <SelectTrigger className="w-full">
               <SelectValue placeholder="Todos os responsáveis" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="z-[60]">
               <SelectItem value="all">Todos os responsáveis</SelectItem>
               {section.members.map((member) => (
                 <SelectItem key={member.id} value={member.id}>
@@ -364,7 +364,7 @@ function SectionRenderer({ section }: { section: FilterSectionConfig }) {
             <SelectTrigger className="w-full">
               <SelectValue placeholder="Todas as origens" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="z-[60]">
               <SelectItem value="all">Todas as origens</SelectItem>
               {ALL_ORIGIN_OPTIONS.map((origin) => {
                 const meta = originLabels[origin];
@@ -467,7 +467,7 @@ function SectionRenderer({ section }: { section: FilterSectionConfig }) {
             <SelectTrigger className="w-full">
               <SelectValue placeholder="Todos os tipos" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="z-[60]">
               <SelectItem value="all">Todos os tipos</SelectItem>
               <SelectItem value="mrr">Recorrência</SelectItem>
               <SelectItem value="projeto">Projeto</SelectItem>
@@ -483,7 +483,7 @@ function SectionRenderer({ section }: { section: FilterSectionConfig }) {
             <SelectTrigger className="w-full">
               <SelectValue placeholder="Todos" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="z-[60]">
               <SelectItem value="all">Todos</SelectItem>
               <SelectItem value="hot">
                 <div className="flex items-center gap-2">
@@ -515,7 +515,7 @@ function SectionRenderer({ section }: { section: FilterSectionConfig }) {
             <SelectTrigger className="w-full">
               <SelectValue placeholder="Todas" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="z-[60]">
               <SelectItem value="all">Todas as prioridades</SelectItem>
               <SelectItem value="high">
                 <div className="flex items-center gap-2">
@@ -547,7 +547,7 @@ function SectionRenderer({ section }: { section: FilterSectionConfig }) {
             <SelectTrigger className="w-full">
               <SelectValue placeholder="Todas" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="z-[60]">
               <SelectItem value="all">Todas as urg��ncias</SelectItem>
               {URGENCY_OPTIONS.map((opt) => (
                 <SelectItem key={opt.value} value={opt.value}>

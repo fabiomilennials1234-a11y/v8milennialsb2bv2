@@ -371,13 +371,27 @@ export default function PipePropostas() {
           // Search filter
           const matchesSearch = searchTerm === "" ||
             lead?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            lead?.company?.toLowerCase().includes(searchTerm.toLowerCase());
+            lead?.company?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            lead?.phone?.includes(searchTerm);
 
-          // Responsible filter
-          const matchesResponsible = filterResponsible === "all" || item.responsible_id === filterResponsible;
+          // Responsible filter — check pipe-level fields AND lead-level fallbacks
+          const matchesResponsible = filterResponsible === "all" ||
+            item.responsible_id === filterResponsible ||
+            item.closer_id === filterResponsible ||
+            lead?.responsible_id === filterResponsible ||
+            lead?.sdr_id === filterResponsible ||
+            lead?.closer_id === filterResponsible;
 
-          // Product type filter
-          const matchesType = filterProductType === "all" || item.product_type === filterProductType;
+          // Product type filter — check items for multi-product proposals, fallback to legacy field
+          let matchesType = filterProductType === "all";
+          if (!matchesType) {
+            const items = item.items || [];
+            if (items.length > 0) {
+              matchesType = items.some((it: any) => it.product?.type === filterProductType);
+            } else {
+              matchesType = item.product_type === filterProductType || item.product?.type === filterProductType;
+            }
+          }
 
           // Priority filter based on lead rating
           const rating = lead?.rating || 0;
