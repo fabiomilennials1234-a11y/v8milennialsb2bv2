@@ -6,11 +6,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
-  useImportLeads,
   parseFilePreview,
   parseExcelSheetNames,
   parseFileToRows,
-  KNOWN_LEAD_FIELDS,
   type FilePreviewResult,
 } from "@/hooks/useImportLeads";
 import { usePipelineStages } from "@/hooks/usePipelineStages";
@@ -138,7 +136,6 @@ export function ImportUpsellClientsContent({
   const { data: stages = [] } = usePipelineStages(pipeType);
   const { data: baseStages = [] } = usePipelineStages("upsell_base");
   const { data: members = [] } = useTeamMembers();
-  const { parseCSV } = useImportLeads();
 
   const memberOptions = (members || []).map((m) => ({ id: m.id, name: m.name || "" }));
   const defaultStage = stages.find((s) => s.position === 0) || stages[0];
@@ -329,7 +326,7 @@ export function ImportUpsellClientsContent({
   /** Verifica se o campo "name" está mapeado a uma coluna do arquivo */
   const hasNameMapped = userColumnMapping["name"] != null && userColumnMapping["name"] !== "none";
 
-  /** Converte mapeamento invertido (campo→coluna) para o formato que parseCSV espera (coluna→campo) */
+  /** Converte mapeamento invertido (campo→coluna) para coluna→campo */
   const buildColToFieldMapping = (): Record<string, string> => {
     const mapping: Record<string, string> = {};
     for (const [field, col] of Object.entries(userColumnMapping)) {
@@ -340,21 +337,35 @@ export function ImportUpsellClientsContent({
     return mapping;
   };
 
+  const applyMapping = (row: Record<string, string>): Record<string, string> => {
+    const result: Record<string, string> = {};
+    for (const [field, col] of Object.entries(userColumnMapping)) {
+      if (col && col !== "none" && row[col] != null) {
+        const val = String(row[col]).trim();
+        if (val) result[field] = val;
+      }
+    }
+    return result;
+  };
+
   const handleContinueToPreview = async () => {
     if (!hasNameMapped) {
       toast.error("Mapeie pelo menos o campo Nome para continuar");
       return;
     }
     try {
-      const colToField = buildColToFieldMapping();
-      const leads = await parseCSV(file!, Object.keys(colToField).length ? colToField : undefined);
-      setTotalClients(leads.length);
+      const rows = await parseFileToRows(file!, selectedSheet || undefined);
+      const mapped = rows
+        .map((row) => applyMapping(row))
+        .filter((r) => r.name?.trim());
+
+      setTotalClients(mapped.length);
       setPreviewClients(
-        leads.slice(0, 10).map((l) => ({
-          name: l.name,
-          company: l.company,
-          phone: l.phone,
-          email: l.email,
+        mapped.slice(0, 10).map((r) => ({
+          name: r.name,
+          company: r.company,
+          phone: r.phone,
+          email: r.email,
         }))
       );
       setSelectedStageKey(defaultStage?.stage_key ?? "");
@@ -374,48 +385,30 @@ export function ImportUpsellClientsContent({
     setProgress(0);
 
     try {
-      const colToField = buildColToFieldMapping();
-      const leads = await parseCSV(file, Object.keys(colToField).length ? colToField : undefined);
+      // Single parse — correct sheet, no index mismatch
+      const allRows = await parseFileToRows(file, selectedSheet || undefined);
+      const rows = allRows
+        .map((raw, idx) => ({ m: applyMapping(raw), raw, fileRow: idx + 2 }))
+        .filter((r) => r.m.name?.trim());
 
-      if (leads.length === 0) {
+      if (rows.length === 0) {
         throw new Error("Nenhum cliente válido encontrado");
       }
 
-      // Get raw rows to extract upsell-specific fields
-      const rawRows = await parseFileToRows(file, selectedSheet || undefined);
-
-      // Build mapping for upsell fields: coluna arquivo → campo upsell
-      const upsellFieldMap: Record<string, string> = {};
-      for (const [field, col] of Object.entries(userColumnMapping)) {
-        if (col && col !== "none" && (UPSELL_EXTRA_FIELDS as readonly string[]).includes(field)) {
-          upsellFieldMap[col] = field;
-        }
-      }
-      // Also check raw column aliases for unmapped
-      if (rawRows.length > 0) {
-        const cols = Object.keys(rawRows[0]);
-        for (const col of cols) {
-          const norm = normalizeCol(col);
-          if (!upsellFieldMap[col] && UPSELL_HEADER_ALIASES[norm]) {
-            upsellFieldMap[col] = UPSELL_HEADER_ALIASES[norm];
-          }
-        }
-      }
-
-      // Check existing phones for deduplication
-      const phones = leads.filter((l) => l.phone).map((l) => formatPhone(l.phone!));
+      // Deduplication: existing leads by phone
+      const phones = rows.filter((r) => r.m.phone).map((r) => formatPhone(r.m.phone!));
       const { data: existingLeads } = await supabase
         .from("leads")
         .select("id, phone, name, company, email")
         .eq("organization_id", organizationId)
-        .in("phone", phones);
+        .in("phone", phones.length > 0 ? phones : ["__none__"]);
 
       const existingLeadsMap = new Map<string, { id: string; phone: string | null }>();
       existingLeads?.forEach((l) => {
         if (l.phone) existingLeadsMap.set(l.phone, l);
       });
 
-      // Check existing upsell clients
+      // Deduplication: existing upsell clients
       const { data: existingClients } = await supabase
         .from("upsell_clients")
         .select("id, lead_id, phone")
@@ -433,17 +426,11 @@ export function ImportUpsellClientsContent({
       const processedPhones = new Set<string>();
       const BATCH_SIZE = 25;
       const stagesList = stages.map((s) => ({ stage_key: s.stage_key, name: s.name }));
-
-      // Fallback: if selectedStageKey is empty, use the first stage from the list
       const effectiveDefaultStageKey = selectedStageKey || stagesList[0]?.stage_key || "";
 
-      for (let i = 0; i < leads.length; i += BATCH_SIZE) {
-        const batch = leads.slice(i, i + BATCH_SIZE);
-        for (let j = 0; j < batch.length; j++) {
-          const lead = batch[j];
-          const rowIndex = i + j;
-          const rawRow = rawRows[rowIndex] || {};
-
+      for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+        const batch = rows.slice(i, i + BATCH_SIZE);
+        for (const { m: lead, fileRow } of batch) {
           const formattedPhone = lead.phone ? formatPhone(lead.phone) : undefined;
           if (formattedPhone && processedPhones.has(formattedPhone)) {
             duplicates++;
@@ -454,16 +441,6 @@ export function ImportUpsellClientsContent({
             duplicates++;
             if (formattedPhone) processedPhones.add(formattedPhone);
             continue;
-          }
-
-          // Extract upsell-specific values from raw row
-          let potencialRaw: string | undefined;
-          let dataPrimeiraVendaRaw: string | undefined;
-          for (const [col, field] of Object.entries(upsellFieldMap)) {
-            const val = rawRow[col]?.trim();
-            if (!val) continue;
-            if (field === "potencial") potencialRaw = val;
-            if (field === "data_primeira_venda") dataPrimeiraVendaRaw = val;
           }
 
           try {
@@ -478,6 +455,7 @@ export function ImportUpsellClientsContent({
                 continue;
               }
             } else {
+              const ratingNum = lead.rating ? parseInt(lead.rating, 10) : 0;
               const { data: newLead, error: leadError } = await supabase
                 .from("leads")
                 .insert({
@@ -490,29 +468,32 @@ export function ImportUpsellClientsContent({
                   segment: lead.segment || null,
                   notes: lead.notes || null,
                   origin: "outro" as const,
-                  rating: lead.rating || 0,
+                  rating: isNaN(ratingNum) ? 0 : ratingNum,
                 })
                 .select("id")
                 .single();
               if (leadError || !newLead) {
                 invalid++;
-                errors.push({ row: rowIndex + 2, reason: `Erro ao criar lead: ${leadError?.message || "resposta vazia"}` });
+                errors.push({ row: fileRow, reason: `Erro ao criar lead: ${leadError?.message || "resposta vazia"}` });
                 continue;
               }
               leadId = newLead.id;
             }
 
             const responsibleId = resolveSellerToId(
-              lead.seller_name,
+              lead.vendedor,
               memberOptions,
               selectedResponsibleId === "none" ? null : selectedResponsibleId || null
             );
 
-            const potencial = resolvePotencial(potencialRaw);
-            const firstSaleAt = parseDateValue(dataPrimeiraVendaRaw);
+            const potencial = resolvePotencial(lead.potencial);
+            const firstSaleAt = parseDateValue(lead.data_primeira_venda);
             const stageKey = resolveStageFromName(lead.stage, stagesList, effectiveDefaultStageKey);
 
-            const clientInsert: Record<string, unknown> = {
+            const baseStageKey = baseStages.find((s) => s.position === 0)?.stage_key || baseStages[0]?.stage_key || "0-3m";
+            const tipoClienteTempo = pipeType === "upsell_base" ? stageKey : baseStageKey;
+
+            const clientData = {
               organization_id: organizationId,
               lead_id: leadId,
               name: lead.name,
@@ -523,13 +504,11 @@ export function ImportUpsellClientsContent({
               responsible_id: responsibleId,
               closer_id: responsibleId,
               first_sale_at: firstSaleAt,
-              tipo_cliente_tempo: pipeType === "upsell_base" ? stageKey : (baseStages.find(s => s.position === 0)?.stage_key || baseStages[0]?.stage_key || "0-3m"),
+              tipo_cliente_tempo: tipoClienteTempo,
+              ...(pipeType === "upsell_gestao"
+                ? { gestao_stage: stageKey, gestao_manual_override: true }
+                : {}),
             };
-
-            if (pipeType === "upsell_gestao") {
-              clientInsert.gestao_stage = stageKey;
-              clientInsert.gestao_manual_override = true;
-            }
 
             if (responsibleId) {
               await supabase.from("leads").update({ responsible_id: responsibleId, closer_id: responsibleId }).eq("id", leadId);
@@ -537,15 +516,15 @@ export function ImportUpsellClientsContent({
 
             const { error: clientError } = await supabase
               .from("upsell_clients")
-              .insert(clientInsert);
+              .insert(clientData);
 
             if (clientError) {
               if (clientError.code === "23505") {
                 duplicates++;
               } else {
-                console.error(`[ImportUpsell] Row ${rowIndex + 2} error creating upsell client:`, clientError.message, clientError.code);
+                console.error(`[ImportUpsell] Row ${fileRow} error:`, clientError.message, clientError.code);
                 invalid++;
-                errors.push({ row: rowIndex + 2, reason: clientError.message || "Erro ao criar cliente upsell" });
+                errors.push({ row: fileRow, reason: clientError.message || "Erro ao criar cliente upsell" });
               }
             } else {
               imported++;
@@ -554,16 +533,16 @@ export function ImportUpsellClientsContent({
 
             if (formattedPhone) processedPhones.add(formattedPhone);
           } catch (err) {
-            console.error(`[ImportUpsell] Row ${rowIndex + 2} unexpected error:`, err);
+            console.error(`[ImportUpsell] Row ${fileRow} unexpected error:`, err);
             invalid++;
-            errors.push({ row: rowIndex + 2, reason: err instanceof Error ? err.message : "Erro inesperado" });
+            errors.push({ row: fileRow, reason: err instanceof Error ? err.message : "Erro inesperado" });
           }
         }
-        setProgress(Math.round(((i + batch.length) / leads.length) * 100));
+        setProgress(Math.round(((i + batch.length) / rows.length) * 100));
       }
 
       setProgress(100);
-      setResult({ total: leads.length, imported, duplicates, updated, invalid, errors });
+      setResult({ total: rows.length, imported, duplicates, updated, invalid, errors });
       queryClient.invalidateQueries({ queryKey: ["upsell_clients"] });
       queryClient.invalidateQueries({ queryKey: ["leads"] });
       setStep("complete");
