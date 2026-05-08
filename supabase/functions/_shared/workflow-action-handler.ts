@@ -232,10 +232,27 @@ async function getWhatsAppInstance(
   supabase: SupabaseClient,
   organizationId: string,
   instanceId?: string,
+  // Etapa B: lead_id opcional. Quando flag user_write_instance_strict ON,
+  // força vínculo via responsável. OFF ⇒ comportamento legado.
+  leadId?: string | null,
 ): Promise<{ instanceId: string; instanceName: string; instance: any } | null> {
   let resolved: any = null;
 
-  if (instanceId) {
+  if (leadId) {
+    const { resolveStrictInstanceForCaller } = await import(
+      "./instance-write-guard.ts"
+    );
+    // Lança StrictWriteResolutionError se flag ON e vínculo ausente —
+    // workflow node trata como falha de action (action_result.success=false).
+    const strict = await resolveStrictInstanceForCaller(
+      supabase as unknown as Parameters<typeof resolveStrictInstanceForCaller>[0],
+      organizationId,
+      leadId,
+    );
+    if (strict) resolved = strict;
+  }
+
+  if (!resolved && instanceId) {
     const { data } = await supabase
       .from("whatsapp_instances")
       .select("*")
@@ -462,7 +479,7 @@ export async function executeWorkflowAction(ctx: ActionContext): Promise<ActionR
 // ─── Communication Handlers ─────────────────────────────────────────────────
 
 async function handleSendWhatsApp(ctx: ActionContext): Promise<ActionResult> {
-  const wa = await getWhatsAppInstance(ctx.supabase, ctx.organizationId, ctx.nodeData.whatsappInstanceId as string);
+  const wa = await getWhatsAppInstance(ctx.supabase, ctx.organizationId, ctx.nodeData.whatsappInstanceId as string, ctx.leadId);
   if (!wa) return { success: false, error: "WhatsApp instance not available" };
 
   const phone = await getLeadPhone(ctx.supabase, ctx.leadId);
@@ -504,7 +521,7 @@ async function handleSendWhatsApp(ctx: ActionContext): Promise<ActionResult> {
 }
 
 async function handleSendWhatsAppAudio(ctx: ActionContext): Promise<ActionResult> {
-  const wa = await getWhatsAppInstance(ctx.supabase, ctx.organizationId, ctx.nodeData.whatsappInstanceId as string);
+  const wa = await getWhatsAppInstance(ctx.supabase, ctx.organizationId, ctx.nodeData.whatsappInstanceId as string, ctx.leadId);
   if (!wa) return { success: false, error: "WhatsApp instance not available" };
 
   const phone = await getLeadPhone(ctx.supabase, ctx.leadId);
@@ -541,7 +558,7 @@ async function handleSendWhatsAppAudio(ctx: ActionContext): Promise<ActionResult
 }
 
 async function handleSendWhatsAppImage(ctx: ActionContext): Promise<ActionResult> {
-  const wa = await getWhatsAppInstance(ctx.supabase, ctx.organizationId, ctx.nodeData.whatsappInstanceId as string);
+  const wa = await getWhatsAppInstance(ctx.supabase, ctx.organizationId, ctx.nodeData.whatsappInstanceId as string, ctx.leadId);
   if (!wa) return { success: false, error: "WhatsApp instance not available" };
 
   const phone = await getLeadPhone(ctx.supabase, ctx.leadId);
@@ -567,7 +584,7 @@ async function handleSendWhatsAppImage(ctx: ActionContext): Promise<ActionResult
 }
 
 async function handleSendWhatsAppTemplate(ctx: ActionContext): Promise<ActionResult> {
-  const wa = await getWhatsAppInstance(ctx.supabase, ctx.organizationId, ctx.nodeData.whatsappInstanceId as string);
+  const wa = await getWhatsAppInstance(ctx.supabase, ctx.organizationId, ctx.nodeData.whatsappInstanceId as string, ctx.leadId);
   if (!wa) return { success: false, error: "WhatsApp instance not available" };
 
   const phone = await getLeadPhone(ctx.supabase, ctx.leadId);
@@ -600,7 +617,7 @@ async function handleSendWhatsAppTemplate(ctx: ActionContext): Promise<ActionRes
 // ─── Uazapi-only interactive messages ──────────────────────────────────────
 
 async function handleSendWhatsAppMenu(ctx: ActionContext): Promise<ActionResult> {
-  const wa = await getWhatsAppInstance(ctx.supabase, ctx.organizationId, ctx.nodeData.whatsappInstanceId as string);
+  const wa = await getWhatsAppInstance(ctx.supabase, ctx.organizationId, ctx.nodeData.whatsappInstanceId as string, ctx.leadId);
   if (!wa) return { success: false, error: "WhatsApp instance not available" };
 
   const phone = await getLeadPhone(ctx.supabase, ctx.leadId);
@@ -664,7 +681,7 @@ async function handleSendWhatsAppMenu(ctx: ActionContext): Promise<ActionResult>
 }
 
 async function handleSendWhatsAppPixButton(ctx: ActionContext): Promise<ActionResult> {
-  const wa = await getWhatsAppInstance(ctx.supabase, ctx.organizationId, ctx.nodeData.whatsappInstanceId as string);
+  const wa = await getWhatsAppInstance(ctx.supabase, ctx.organizationId, ctx.nodeData.whatsappInstanceId as string, ctx.leadId);
   if (!wa) return { success: false, error: "WhatsApp instance not available" };
 
   const phone = await getLeadPhone(ctx.supabase, ctx.leadId);
@@ -1161,7 +1178,7 @@ async function handleSendCampaignMessage(ctx: ActionContext): Promise<ActionResu
 
   const message = await resolveVariables(ctx.supabase, ctx.leadId, template.content || "", ctx.executionContext);
 
-  const wa = await getWhatsAppInstance(ctx.supabase, ctx.organizationId, ctx.nodeData.whatsappInstanceId as string);
+  const wa = await getWhatsAppInstance(ctx.supabase, ctx.organizationId, ctx.nodeData.whatsappInstanceId as string, ctx.leadId);
   if (!wa) return { success: false, error: "WhatsApp instance not available" };
 
   const phone = await getLeadPhone(ctx.supabase, ctx.leadId);

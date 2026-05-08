@@ -97,6 +97,9 @@ export async function executeSendDocument(
       phone: lead.phone,
       preferred_instance_id: preferredInstanceId,
       require_connected: true,
+      // Etapa B: quando flag user_write_instance_strict ON, força vínculo via
+      // responsável; OFF mantém precedência legada acima.
+      lead_id: leadId,
     });
   } catch (e) {
     const err = e as InstanceType<typeof DispatchResolutionError>;

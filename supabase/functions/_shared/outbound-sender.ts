@@ -77,13 +77,17 @@ export async function sendOutboundDispatch(
       return { success: false, error: "Agent disabled" };
     }
 
-    // Resolve provider + instance + phone via unified dispatch helper
+    // Resolve provider + instance + phone via unified dispatch helper.
+    // lead_id é propagado sempre — se a flag user_write_instance_strict
+    // estiver ON na org, força vínculo via responsible_user_id; OFF mantém
+    // precedência legada (agent.whatsapp_instance_id → primeira da org).
     let ctx;
     try {
       ctx = await resolveDispatchContext(supabase, {
         organization_id: organizationId,
         phone: row.lead?.phone,
         preferred_instance_id: row.agent?.whatsapp_instance_id ?? null,
+        lead_id: row.lead_id,
       });
     } catch (e) {
       const err = e as DispatchResolutionError;
