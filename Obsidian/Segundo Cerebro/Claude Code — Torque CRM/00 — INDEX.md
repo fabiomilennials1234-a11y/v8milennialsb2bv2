@@ -96,6 +96,8 @@ SaaS B2B multi-tenant para gestao de leads, pipelines de vendas, campanhas e aut
 - [[Mensagens Agendadas]] — Agendar envio de mensagens WhatsApp
 - [[Templates de Mensagem]] — Templates com variaveis dinamicas e slash commands
 - [[01-schema|WhatsApp Write Instance — Schema]] — Vinculo 1:1 user→instancia de escrita por org (Etapa A: schema/RPCs/RLS)
+- [[02-ui-states|WhatsApp Write Instance — UI States]] — Spec visual completa (banner, card de erro, modal admin)
+- [[03-frontend|WhatsApp Write Instance — Frontend]] — Etapa C: hook useLeadWriteInstance + ChatComposerShell + InstanceOwnerModal
 
 #### Vendas
 - [[Pipe WhatsApp]] — Kanban de qualificacao de leads (novo → agendado)

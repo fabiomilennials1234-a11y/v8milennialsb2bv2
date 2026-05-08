@@ -59,6 +59,9 @@ import {
   EditMessageInline,
 } from "@/components/chat/actions";
 import { useEditMessage, isFeatureUnavailable } from "@/hooks/useMessageActions";
+import { ChatComposerShell } from "@/components/chat/composer/ChatComposerShell";
+import { InstanceOwnerModal } from "@/components/chat/admin/InstanceOwnerModal";
+import { useLeadWriteInstance } from "@/hooks/useLeadWriteInstance";
 import { toast } from "sonner";
 import { useIsAdmin } from "@/hooks/useUserRole";
 import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
@@ -566,7 +569,10 @@ function ChatWindow({
 
   const sendMessage = useSendWhatsAppMessage();
   const sendMedia = useSendWhatsAppMedia();
+  // TODO Etapa D: deprecate after rollout — substituído por useLeadWriteInstance
   const { canReply: canReplyOnThisNumber } = useCanReplyOnInstanceByName(instanceName);
+  const { state: writeInstanceState } = useLeadWriteInstance(leadId ?? null);
+  const [isLinkInstanceOpen, setIsLinkInstanceOpen] = useState(false);
   const failedMessages = useFailedMessages(phoneNumber, instanceId);
   const retryMessage = useRetryMessage();
 
@@ -588,6 +594,7 @@ function ChatWindow({
         message: newMessage.trim(),
         instanceName,
         instanceId,
+        leadId,
       });
       setNewMessage("");
     } catch (error: any) {
@@ -667,6 +674,7 @@ function ChatWindow({
         caption: imageCaption || undefined,
         fileName: selectedImage.name,
         mimetype: selectedImage.type,
+        leadId,
       });
 
       setSelectedImage(null);
@@ -705,6 +713,7 @@ function ChatWindow({
         mediaType: "audio",
         media: base64,
         mimetype: "audio/mpeg",
+        leadId,
       });
 
       toast.success("Áudio enviado!");
@@ -847,6 +856,13 @@ function ChatWindow({
       )}
 
       {/* Input - sempre visível no rodapé (shrink-0) */}
+      <ChatComposerShell
+        leadId={leadId ?? null}
+        variant="full"
+        onAssignResponsible={onOpenLeadModal}
+        onLinkInstance={() => setIsLinkInstanceOpen(true)}
+        onChangeResponsible={onOpenLeadModal}
+        innerComposer={
       <div className="p-3 border-t border-border/60 bg-background shrink-0">
         {!canReplyOnThisNumber ? (
           <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-200">
@@ -945,6 +961,18 @@ function ChatWindow({
           </div>
         )}
       </div>
+        }
+      />
+
+      {/* Modal admin: vincular número ao responsável do lead */}
+      {leadId && writeInstanceState.status === "error" && writeInstanceState.responsibleUserId && (
+        <InstanceOwnerModal
+          open={isLinkInstanceOpen}
+          onOpenChange={setIsLinkInstanceOpen}
+          targetTeamMemberId={writeInstanceState.responsibleUserId}
+          targetTeamMemberName={writeInstanceState.responsibleName ?? null}
+        />
+      )}
 
       {/* Modal de preview de imagem */}
       <ImagePreviewModal

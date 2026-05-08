@@ -10,10 +10,15 @@ import { MessageList } from "@/components/chat/view/MessageList";
 import { ImagePreviewModal } from "@/components/chat/media/ImagePreviewModal";
 import { useWhatsAppMessages } from "@/hooks/chat/useWhatsAppMessages";
 import { useFailedMessages, useRetryMessage } from "@/hooks/chat/useWhatsAppSend";
+// TODO Etapa D: deprecate after rollout — substituído por useLeadWriteInstance
 import { useCanReplyOnInstanceByName } from "@/hooks/useWhatsAppInstanceAllowedMembers";
 import { ChatBubbleComposer } from "./ChatBubbleComposer";
 import { ChatBubblePermissionBanner } from "./ChatBubblePermissionBanner";
 import { normalizePhone } from "@/lib/normalizePhone";
+import { useLeadByPhone } from "@/hooks/useWhatsAppLeadIntegration";
+import { ChatComposerShell } from "@/components/chat/composer/ChatComposerShell";
+import { InstanceOwnerModal } from "@/components/chat/admin/InstanceOwnerModal";
+import { useLeadWriteInstance } from "@/hooks/useLeadWriteInstance";
 
 interface ChatBubbleThreadProps {
   phoneNumber: string;
@@ -35,6 +40,10 @@ export function ChatBubbleThread({
   const retryMessage = useRetryMessage();
   const { canReply } = useCanReplyOnInstanceByName(instanceName);
   const queryClient = useQueryClient();
+  const { data: lead } = useLeadByPhone(phoneNumber);
+  const leadId = lead?.id ?? null;
+  const { state: writeInstanceState } = useLeadWriteInstance(leadId);
+  const [isLinkInstanceOpen, setIsLinkInstanceOpen] = useState(false);
 
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const mountTime = useMemo(() => Date.now(), []);
@@ -83,7 +92,26 @@ export function ChatBubbleThread({
         }}
       />
 
-      {canReply ? (
+      {leadId ? (
+        <ChatComposerShell
+          leadId={leadId}
+          variant="compact"
+          onLinkInstance={() => setIsLinkInstanceOpen(true)}
+          innerComposer={
+            canReply ? (
+              <ChatBubbleComposer
+                phoneNumber={phoneNumber}
+                instanceId={instanceId}
+                instanceName={instanceName}
+                canReply
+                leadId={leadId}
+              />
+            ) : (
+              <ChatBubblePermissionBanner />
+            )
+          }
+        />
+      ) : canReply ? (
         <ChatBubbleComposer
           phoneNumber={phoneNumber}
           instanceId={instanceId}
@@ -92,6 +120,15 @@ export function ChatBubbleThread({
         />
       ) : (
         <ChatBubblePermissionBanner />
+      )}
+
+      {leadId && writeInstanceState.status === "error" && writeInstanceState.responsibleUserId && (
+        <InstanceOwnerModal
+          open={isLinkInstanceOpen}
+          onOpenChange={setIsLinkInstanceOpen}
+          targetTeamMemberId={writeInstanceState.responsibleUserId}
+          targetTeamMemberName={writeInstanceState.responsibleName ?? null}
+        />
       )}
 
       <ImagePreviewModal

@@ -170,11 +170,16 @@ export function useSendWhatsAppMessage() {
       message,
       instanceName,
       instanceId,
+      leadId,
     }: {
       phoneNumber: string;
       message: string;
       instanceName: string;
       instanceId?: string | null;
+      /** Lead vinculado à conversa. Encaminhado ao whatsapp-api-proxy quando
+       *  flag user_write_instance_strict está ON; ignorado caso contrário.
+       *  Etapa C — vínculo user↔instância de escrita. */
+      leadId?: string | null;
     }) => {
       if (!teamMember?.organization_id || !teamMember?.id) {
         throw new Error("Usuário não vinculado à equipe");
@@ -213,6 +218,10 @@ export function useSendWhatsAppMessage() {
               number: formattedNumber,
               text: message,
             },
+            // Encaminha lead_id para o proxy quando presente — backend
+            // (whatsapp-api-proxy + flag user_write_instance_strict) usa
+            // para validar vínculo. Legacy evolution-api-proxy ignora.
+            ...(leadId ? { lead_id: leadId } : {}),
           },
         });
         data = result.data;
@@ -337,6 +346,7 @@ export function useSendWhatsAppMedia() {
       caption,
       fileName,
       mimetype,
+      leadId,
     }: {
       phoneNumber: string;
       instanceName: string;
@@ -346,6 +356,8 @@ export function useSendWhatsAppMedia() {
       caption?: string;
       fileName?: string;
       mimetype?: string;
+      /** Lead vinculado à conversa — vide useSendWhatsAppMessage. */
+      leadId?: string | null;
     }) => {
       if (!teamMember?.organization_id || !teamMember?.id) {
         throw new Error("Usuário não vinculado à equipe");
@@ -413,7 +425,12 @@ export function useSendWhatsAppMedia() {
         }
 
         const result = await supabase.functions.invoke("evolution-api-proxy", {
-          body: { endpoint, method: "POST", body },
+          body: {
+            endpoint,
+            method: "POST",
+            body,
+            ...(leadId ? { lead_id: leadId } : {}),
+          },
         });
         data = result.data;
         error = result.error;

@@ -26,6 +26,8 @@ interface ChatBubbleComposerProps {
   instanceName: string;
   /** Se false, composer não renderiza — caller deve mostrar PermissionBanner. */
   canReply: boolean;
+  /** Lead vinculado à conversa — encaminhado ao backend p/ vínculo strict. */
+  leadId?: string | null;
 }
 
 export function ChatBubbleComposer({
@@ -33,6 +35,7 @@ export function ChatBubbleComposer({
   instanceId,
   instanceName,
   canReply,
+  leadId,
 }: ChatBubbleComposerProps) {
   const [text, setText] = useState("");
   const [isRecording, setIsRecording] = useState(false);
@@ -59,6 +62,7 @@ export function ChatBubbleComposer({
         message,
         instanceName,
         instanceId,
+        leadId,
       });
     } catch (err) {
       toast({
@@ -111,6 +115,7 @@ export function ChatBubbleComposer({
         media: preview.data,
         caption: captionText || undefined,
         fileName: preview.name,
+        leadId,
       });
     } catch (err) {
       toast({
@@ -137,6 +142,7 @@ export function ChatBubbleComposer({
         mediaType: "audio",
         media: dataUrl,
         fileName: `audio_${Date.now()}.mp3`,
+        leadId,
       });
     } catch (err) {
       toast({
