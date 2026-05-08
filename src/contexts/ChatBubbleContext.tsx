@@ -50,6 +50,8 @@ export interface ChatBubbleContextValue {
   isResolvingDeepLink: boolean;
   /** Flag pra UI mostrar toast "adicione telefone" quando aberto sem phone. */
   needsPhoneHint: boolean;
+  /** True quando channel realtime está em CHANNEL_ERROR ou TIMED_OUT. */
+  isReconnecting: boolean;
 
   // ações
   open: (args?: { phone?: string | null; instanceId?: string | null; leadName?: string | null }) => void;
@@ -103,7 +105,7 @@ export function ChatBubbleProvider({ children }: ChatBubbleProviderProps) {
   // (1) Singleton da thread aberta + contacts da instância selecionada.
   useWhatsAppMessagesRealtime(selectedPhone, selectedInstanceId);
   // (2) Cross-instâncias contacts (canal próprio, zero risco /chat).
-  useChatBubbleContactsRealtime(instanceIds, selectedPhone);
+  const { isReconnecting } = useChatBubbleContactsRealtime(instanceIds, selectedPhone);
 
   // ── Deep-link resolver: open({ phone }) sem instanceId ─────────────────────
   const deepLink = useResolveChatDeepLink({
@@ -322,6 +324,7 @@ export function ChatBubbleProvider({ children }: ChatBubbleProviderProps) {
       instances,
       isResolvingDeepLink: !!pendingPhoneToResolve && deepLink.isLoading,
       needsPhoneHint,
+      isReconnecting,
       open,
       close,
       toggleMinimized,
@@ -341,6 +344,7 @@ export function ChatBubbleProvider({ children }: ChatBubbleProviderProps) {
       pendingPhoneToResolve,
       deepLink.isLoading,
       needsPhoneHint,
+      isReconnecting,
       open,
       close,
       toggleMinimized,

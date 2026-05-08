@@ -16,6 +16,7 @@ import { ChatBubbleSearch } from "./ChatBubbleSearch";
 import { ChatBubbleConversationList } from "./ChatBubbleConversationList";
 import { ChatBubbleThread } from "./ChatBubbleThread";
 import { ChatBubbleEmptyState } from "./ChatBubbleEmptyState";
+import { ChatBubbleRealtimePill } from "./ChatBubbleRealtimePill";
 
 const MOBILE_BREAKPOINT = 768;
 
@@ -54,6 +55,7 @@ function PanelContent() {
     isResolvingDeepLink,
     markAsRead,
     pendingLeadName,
+    isReconnecting,
   } = useChatBubble();
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -109,6 +111,7 @@ function PanelContent() {
           onMinimize={toggleMinimized}
           onClose={close}
         />
+        <ChatBubbleRealtimePill show={isReconnecting} />
         <ChatBubbleThread
           phoneNumber={selectedPhone}
           instanceId={selectedInstanceId!}
@@ -129,6 +132,7 @@ function PanelContent() {
         onMinimize={toggleMinimized}
         onClose={close}
       />
+      <ChatBubbleRealtimePill show={isReconnecting} />
       <ChatBubbleSearch value={searchQuery} onChange={setSearchQuery} />
       {isResolvingDeepLink ? (
         <div className="flex-1 min-h-0 flex items-center justify-center px-4 text-center">

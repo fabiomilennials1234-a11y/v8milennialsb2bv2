@@ -25,7 +25,7 @@
  *   Filtro postgres-side por `organization_id` garante que payload nunca chega
  *   de outra org. RLS de whatsapp_messages cobre defesa em profundidade.
  */
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
@@ -36,14 +36,20 @@ import type { ChatContact, WhatsAppMessage } from "./types";
 
 const normalizePhone = (p: string): string => canonicalNormalizePhone(p) ?? "";
 
+export interface ChatBubbleRealtimeStatus {
+  /** True quando channel está em CHANNEL_ERROR ou TIMED_OUT (rede/Supabase down). */
+  isReconnecting: boolean;
+}
+
 export function useChatBubbleContactsRealtime(
   instanceIds: string[],
   /** Phone da conversa atualmente aberta — não incrementa unread quando recebe msg dessa conv. */
   activePhone: string | null,
-) {
+): ChatBubbleRealtimeStatus {
   const { data: teamMember } = useCurrentTeamMember();
   const organizationId = teamMember?.organization_id ?? null;
   const queryClient = useQueryClient();
+  const [isReconnecting, setIsReconnecting] = useState(false);
 
   // Refs estáveis pra acesso dentro do handler sem recriar a subscription.
   const instanceIdsRef = useRef(instanceIds);
@@ -121,13 +127,23 @@ export function useChatBubbleContactsRealtime(
           });
         },
       )
-      .subscribe();
+      .subscribe((status) => {
+        // status: 'SUBSCRIBED' | 'TIMED_OUT' | 'CHANNEL_ERROR' | 'CLOSED'
+        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          setIsReconnecting(true);
+        } else if (status === "SUBSCRIBED") {
+          setIsReconnecting(false);
+        }
+      });
 
     return () => {
+      setIsReconnecting(false);
       supabase.removeChannel(channel);
     };
     // organizationId muda raramente; instance count importa só pra short-circuit
     // (não reassina por mudança individual de instanceId — refs cobrem).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [organizationId, queryClient, instanceIds.length]);
+
+  return { isReconnecting };
 }

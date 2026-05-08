@@ -14,6 +14,7 @@
  * Tap: scale 0.96, 100ms.
  * Layout transition (pílula ↔ círculo): framer-motion `layout` 280ms.
  */
+import { memo } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { MessageCircle, X } from "lucide-react";
 import { ChatBubbleBadge } from "./ChatBubbleBadge";
@@ -24,7 +25,7 @@ interface ChatBubbleFabProps {
   onClick: () => void;
 }
 
-export function ChatBubbleFab({ isOpen, unreadTotal, onClick }: ChatBubbleFabProps) {
+function ChatBubbleFabBase({ isOpen, unreadTotal, onClick }: ChatBubbleFabProps) {
   const ariaLabel = isOpen
     ? "Fechar conversas"
     : unreadTotal > 0
@@ -131,3 +132,8 @@ export function ChatBubbleFab({ isOpen, unreadTotal, onClick }: ChatBubbleFabPro
     </motion.button>
   );
 }
+
+// memo evita re-render do FAB durante drag-and-drop do Kanban quando props
+// (isOpen, unreadTotal, onClick) não mudam. onClick vem do Provider via
+// useCallback, garantindo identidade estável.
+export const ChatBubbleFab = memo(ChatBubbleFabBase);
