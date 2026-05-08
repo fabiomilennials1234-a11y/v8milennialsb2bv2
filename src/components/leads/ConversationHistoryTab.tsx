@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Bot,
   MessageSquare,
@@ -23,7 +24,6 @@ import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
-import { EmbeddedChatWindow } from "@/components/chat/EmbeddedChatWindow";
 import ConversationNotes from "@/components/chat/ConversationNotes";
 
 interface ConversationHistoryTabProps {
@@ -59,9 +59,17 @@ const temperatureLabels: Record<string, { label: string; color: string; icon: st
 
 export function ConversationHistoryTab({ leadId, leadName, leadPhone }: ConversationHistoryTabProps) {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const { data: summary, isLoading: summaryLoading } = useConversationSummary(leadId);
   const generateSummary = useGenerateSummary();
   const [summaryExpanded, setSummaryExpanded] = useState(false);
+
+  // TODO(chat-bubble): substituir navigate por openBubble({ phone, instanceId }) quando ChatBubbleContext existir
+  // (ver Obsidian/Segundo Cerebro/.../08 — Backlog/backlog/chat-bubble-kanban-pr3-pr4.md).
+  const handleOpenChat = () => {
+    if (!leadPhone) return;
+    navigate(`/chat?phone=${encodeURIComponent(leadPhone)}`);
+  };
 
   const handleGenerateSummary = () => {
     generateSummary.mutate(
@@ -272,13 +280,19 @@ export function ConversationHistoryTab({ leadId, leadName, leadPhone }: Conversa
       {/* Internal notes panel */}
       <ConversationNotes leadId={leadId} />
 
-      {/* Embedded WhatsApp chat — takes remaining space */}
-      <div className="flex-1 min-h-0">
-        <EmbeddedChatWindow
-          leadId={leadId}
-          leadPhone={leadPhone}
-          leadName={leadName}
-        />
+      {/* CTA to open conversation in /chat — replaces the embedded chat. */}
+      <div className="flex-1 min-h-0 flex flex-col items-center justify-center px-6 py-8 text-center border-t border-border/40 bg-muted/10">
+        <MessageSquare className="w-10 h-10 text-muted-foreground/30 mb-3" />
+        <h3 className="text-sm font-medium mb-1">
+          Conversar com {leadName || "este lead"}
+        </h3>
+        <p className="text-xs text-muted-foreground max-w-xs mb-4">
+          Abra a conversa completa na aba de chat para enviar mensagens, mídias e ver o histórico.
+        </p>
+        <Button onClick={handleOpenChat} size="sm">
+          <MessageSquare className="w-3.5 h-3.5 mr-1.5" />
+          Abrir conversa no chat
+        </Button>
       </div>
     </div>
   );

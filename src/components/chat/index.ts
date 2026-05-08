@@ -12,7 +12,7 @@
 // Page / shell
 export { WhatsAppChat } from "./WhatsAppChat";
 
-// Message primitives (public contract — consumed by EmbeddedChatWindow)
+// Message primitives (public contract — used by chat components)
 export { MessageBubble } from "./WhatsAppChat";
 export { MessagesAreaErrorBoundary } from "./WhatsAppChat";
 
