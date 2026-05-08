@@ -35,6 +35,7 @@ import {
 import { useDeals, useCreateDeal, useUpdateDeal, useDeleteDeal, Deal, DealInsert } from "@/hooks/useDeals";
 import { useCompanies } from "@/hooks/useCompanies";
 import { useAuth } from "@/contexts/AuthContext";
+import { DealDetailDrawer } from "@/components/deals/DealDetailDrawer";
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -81,6 +82,7 @@ export default function Deals() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editingDeal, setEditingDeal] = useState<Deal | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Deal | null>(null);
+  const [detailId, setDetailId] = useState<string | undefined>();
 
   const form = useForm<DealFormValues>({
     resolver: zodResolver(dealSchema),
@@ -304,7 +306,7 @@ export default function Deals() {
                   {filtered.map((deal) => {
                     const company = companies.find((c) => c.id === deal.company_id);
                     return (
-                      <TableRow key={deal.id}>
+                      <TableRow key={deal.id} className="cursor-pointer" onClick={() => setDetailId(deal.id)}>
                         <TableCell className="font-medium">{deal.title}</TableCell>
                         <TableCell>
                           {company ? (
@@ -334,18 +336,18 @@ export default function Deals() {
                         <TableCell>{formatDate(deal.created_at)}</TableCell>
                         <TableCell>
                           <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
+                            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
                               <Button variant="ghost" size="icon" className="h-8 w-8">
                                 <MoreHorizontal className="h-4 w-4" />
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => openEdit(deal)}>
+                              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); openEdit(deal); }}>
                                 <Pencil className="mr-2 h-4 w-4" /> Editar
                               </DropdownMenuItem>
                               <DropdownMenuItem
                                 className="text-destructive focus:text-destructive"
-                                onClick={() => setDeleteTarget(deal)}
+                                onClick={(e) => { e.stopPropagation(); setDeleteTarget(deal); }}
                               >
                                 <Trash2 className="mr-2 h-4 w-4" /> Excluir
                               </DropdownMenuItem>
@@ -361,6 +363,13 @@ export default function Deals() {
           )}
         </TabsContent>
       </Tabs>
+
+      {/* Detail Drawer */}
+      <DealDetailDrawer
+        dealId={detailId}
+        open={!!detailId}
+        onOpenChange={(o) => !o && setDetailId(undefined)}
+      />
 
       {/* Create / Edit Sheet */}
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>

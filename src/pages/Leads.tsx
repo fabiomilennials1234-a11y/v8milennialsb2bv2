@@ -18,6 +18,7 @@ import {
   Eye,
   ChevronDown,
   FileDown,
+  History,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -54,6 +55,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useLeads, useLeadsCount, useCreateLead, useUpdateLead, useDeleteLead, LEADS_PAGE_SIZE, type Lead } from "@/hooks/useLeads";
 import { ExportLeadsModal } from "@/components/leads/ExportLeadsModal";
+import { ImportHistoryPanel } from "@/components/leads/ImportHistoryPanel";
 import { LeadDetailDrawer } from "@/components/leads/LeadDetailDrawer";
 import { useCanPerformAction } from "@/lib/permissions";
 import { useFeaturePermission } from "@/hooks/useUserRole";
@@ -68,6 +70,11 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Trash2 } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useBulkSelection } from "@/hooks/useBulkSelection";
+import { BulkActionBar } from "@/components/bulk-actions/BulkActionBar";
+import { SavedViewsDropdown } from "@/components/saved-views/SavedViewsDropdown";
+import { useSearchParams } from "react-router-dom";
 import { useTeamMembers, useCurrentTeamMember, useResponsibleMembers } from "@/hooks/useTeamMembers";
 import { useCustomPipelines, useCustomPipelineStages, useAddLeadToCustomPipe } from "@/hooks/useCustomPipelines";
 import { useAllPipelineStageOptions, getPipelineTypeName } from "@/hooks/usePipelineStages";
@@ -75,6 +82,7 @@ import { useCreatePipeWhatsapp } from "@/hooks/usePipeWhatsapp";
 import { useCreatePipeConfirmacao } from "@/hooks/usePipeConfirmacao";
 import { useCreatePipeProposta } from "@/hooks/usePipePropostas";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useOrganization } from "@/hooks/useOrganization";
@@ -196,8 +204,15 @@ export default function Leads() {
     [setFilterState]
   );
 
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [activeViewId, setActiveViewId] = useState<string | null>(searchParams.get("view"));
+  const handleActiveViewChange = useCallback((viewId: string | null) => {
+    setActiveViewId(viewId);
+    setSearchParams(viewId ? { view: viewId } : {}, { replace: true });
+  }, [setSearchParams]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isImportHistoryOpen, setIsImportHistoryOpen] = useState(false);
   const { allowed: canExport } = useCanPerformAction("export_leads");
   const { allowed: canCreateLead } = useCanPerformAction("create_lead");
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
@@ -223,6 +238,8 @@ export default function Leads() {
   const { allowed: canDeleteLead } = useFeaturePermission("leads.delete");
 
   const responsibleMembers = useResponsibleMembers();
+  const bulk = useBulkSelection();
+  const allLeadIds = useMemo(() => leads.map((l: Lead) => l.id), [leads]);
 
   // ── Pipe/funnel selection for new leads ──
   const [selectedPipe, setSelectedPipe] = useState("");
@@ -417,6 +434,9 @@ export default function Leads() {
           </p>
         </div>
 
+        <Button variant="ghost" size="icon" onClick={() => setIsImportHistoryOpen(true)} title="Histórico de importações">
+          <History className="w-4 h-4" />
+        </Button>
         <Button variant="outline" onClick={() => setIsExportModalOpen(true)} disabled={!canExport} className="gap-2">
           <FileDown className="w-4 h-4" />
           Exportar
@@ -499,6 +519,14 @@ export default function Leads() {
             <SelectItem value="low">Baixa (0-3)</SelectItem>
           </SelectContent>
         </Select>
+        <SavedViewsDropdown
+          entityType="leads"
+          currentFilters={filterState}
+          defaultFilters={DEFAULT_LEADS_FILTERS}
+          onApplyFilters={(f) => setFilterState(() => f)}
+          activeViewId={activeViewId}
+          onActiveViewChange={handleActiveViewChange}
+        />
       </div>
 
       {/* Table */}
@@ -506,6 +534,12 @@ export default function Leads() {
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-[40px]">
+                <Checkbox
+                  checked={allLeadIds.length > 0 && allLeadIds.every(id => bulk.isSelected(id))}
+                  onCheckedChange={() => bulk.selectAll(allLeadIds)}
+                />
+              </TableHead>
               <TableHead>Lead</TableHead>
               <TableHead>Contato</TableHead>
               <TableHead>Origem</TableHead>
@@ -519,20 +553,26 @@ export default function Leads() {
             {isLoading ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <TableRow key={i}>
-                  <TableCell colSpan={7}>
+                  <TableCell colSpan={8}>
                     <Skeleton className="h-10 w-full" />
                   </TableCell>
                 </TableRow>
               ))
             ) : leads.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                   Nenhum lead encontrado
                 </TableCell>
               </TableRow>
             ) : (
               leads.map((lead: Lead) => (
-                <TableRow key={lead.id} className="cursor-pointer hover:bg-muted/50" onClick={() => { setSelectedLeadId(lead.id); setIsDetailDrawerOpen(true); }}>
+                <TableRow key={lead.id} className={cn("cursor-pointer hover:bg-muted/50", bulk.isSelected(lead.id) && "bg-primary/5")} onClick={() => { setSelectedLeadId(lead.id); setIsDetailDrawerOpen(true); }}>
+                  <TableCell onClick={(e) => e.stopPropagation()}>
+                    <Checkbox
+                      checked={bulk.isSelected(lead.id)}
+                      onCheckedChange={() => bulk.toggle(lead.id)}
+                    />
+                  </TableCell>
                   <TableCell>
                     <div>
                       <p className="font-medium">{lead.name}</p>
@@ -651,6 +691,15 @@ export default function Leads() {
       </div>
 
       <ExportLeadsModal open={isExportModalOpen} onOpenChange={setIsExportModalOpen} />
+
+      <Dialog open={isImportHistoryOpen} onOpenChange={setIsImportHistoryOpen}>
+        <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Histórico de importações</DialogTitle>
+          </DialogHeader>
+          <ImportHistoryPanel />
+        </DialogContent>
+      </Dialog>
 
       {/* Lead Detail Drawer */}
       <LeadDetailDrawer
@@ -878,6 +927,9 @@ export default function Leads() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Bulk Action Bar */}
+      <BulkActionBar selectedIds={bulk.selectedIds} onClear={bulk.clearSelection} leadIds={allLeadIds} />
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>

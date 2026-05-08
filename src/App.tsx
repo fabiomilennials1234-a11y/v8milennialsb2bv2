@@ -47,6 +47,8 @@ const Leads = lazy(() => lazyRetry(() => import("./pages/Leads")));
 const Companies = lazy(() => lazyRetry(() => import("./pages/Companies")));
 const Contacts = lazy(() => lazyRetry(() => import("./pages/Contacts")));
 const Deals = lazy(() => lazyRetry(() => import("./pages/Deals")));
+const TrashPage = lazy(() => lazyRetry(() => import("./pages/Trash")));
+const Duplicates = lazy(() => lazyRetry(() => import("./pages/Duplicates")));
 const Configuracoes = lazy(() => lazyRetry(() => import("./pages/Configuracoes")));
 const TVDashboard = lazy(() => lazyRetry(() => import("./pages/TVDashboard")));
 const Campanhas = lazy(() => lazyRetry(() => import("./pages/Campanhas")));
@@ -98,6 +100,7 @@ import { MasterLayout } from "@/components/master/MasterLayout";
 // Command Palette — global ⌘K (C24)
 import { CommandPaletteProvider } from "@/components/command/CommandPaletteProvider";
 import { CommandPalette as CommandPaletteComponent } from "@/components/command/CommandPalette";
+import { GlobalShortcutsProvider } from "@/components/command/GlobalShortcutsProvider";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -406,6 +409,30 @@ function AppRoutes() {
         }
       />
       <Route
+        path="/lixeira"
+        element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <PermissionProtectedRoute featureKey="leads.view">
+                <TrashPage />
+              </PermissionProtectedRoute>
+            </LayoutWrapper>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/duplicatas"
+        element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <PermissionProtectedRoute featureKey="leads.view">
+                <Duplicates />
+              </PermissionProtectedRoute>
+            </LayoutWrapper>
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/premiacoes"
         element={<Navigate to="/performance" replace />}
       />
@@ -676,8 +703,10 @@ const App = () => {
               <AuthProvider>
                 <GlobalErrorBoundary>
                   <CommandPaletteProvider>
-                    <AppRoutes />
-                    <CommandPaletteComponent />
+                    <GlobalShortcutsProvider>
+                      <AppRoutes />
+                      <CommandPaletteComponent />
+                    </GlobalShortcutsProvider>
                   </CommandPaletteProvider>
                 </GlobalErrorBoundary>
               </AuthProvider>

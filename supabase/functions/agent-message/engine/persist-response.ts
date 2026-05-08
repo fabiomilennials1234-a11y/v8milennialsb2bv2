@@ -216,7 +216,7 @@ Regras:
 
   try {
     const response = await openRouter.chat({
-      model: "google/gemini-3-flash-preview",
+      model: "google/gemini-2.5-flash",
       messages: [{ role: "user", content: extractionPrompt }],
       temperature: 0.1,
       max_tokens: 400,

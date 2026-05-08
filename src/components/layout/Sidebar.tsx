@@ -41,6 +41,8 @@ import {
   Building2,
   Users,
   Handshake,
+  Trash2,
+  Copy,
 } from "lucide-react";
 import torqueLogo from "@/assets/torque-logo.png";
 import torqueIcon from "@/assets/torque-icon.png";
@@ -110,6 +112,8 @@ const navItems: NavItemWithChildren[] = [
   { label: "Copilot", icon: Bot, path: "/copilot" },
   { label: "Automações", icon: Workflow, path: "/automacoes" },
   { label: "Templates", icon: FileText, path: "/templates" },
+  { label: "Duplicatas", icon: Copy, path: "/duplicatas" },
+  { label: "Lixeira", icon: Trash2, path: "/lixeira" },
 ];
 
 const adminNavItems: NavItem[] = [
@@ -168,6 +172,8 @@ const SIDEBAR_VIEW_PERMISSIONS: Record<string, string> = {
   "/copilot": "copilot.view",
   "/automacoes": "workflows.view",
   "/templates": "message_templates.view",
+  "/lixeira": "leads.view",
+  "/duplicatas": "leads.view",
   "/equipe": "team.view",
   "/produtos": "products.view",
   "/configuracoes": "settings.view",

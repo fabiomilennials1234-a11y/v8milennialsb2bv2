@@ -256,7 +256,7 @@ export class AgentEngine {
     console.log('[AgentEngine] Total messages to send:', allMessages.length);
     
     // Obter modelo e temperatura do banco ou usar padrões
-    const model = capabilities.llm_model || Deno.env.get('OPENROUTER_DEFAULT_MODEL') || 'google/gemini-3-flash-preview';
+    const model = capabilities.llm_model || Deno.env.get('OPENROUTER_DEFAULT_MODEL') || 'google/gemini-2.5-flash';
     const temperatureModeMap: Record<string, number> = { criativo: 0.9, balanceado: 0.7, preciso: 0.2 };
     const temperature = temperatureModeMap[capabilities.llm_temperature_mode ?? 'balanceado'] ?? 0.7;
     console.log('[AgentEngine] Using model:', model, '| temperature:', temperature, `(${capabilities.llm_temperature_mode ?? 'balanceado'})`);
@@ -890,7 +890,7 @@ export class AgentEngine {
     ].filter(Boolean).join('\n');
 
     const systemPrompt = basePrompt + '\n' + followupInstruction;
-    const model = capabilities.llm_model || Deno.env.get('OPENROUTER_DEFAULT_MODEL') || 'google/gemini-3-flash-preview';
+    const model = capabilities.llm_model || Deno.env.get('OPENROUTER_DEFAULT_MODEL') || 'google/gemini-2.5-flash';
 
     const messages = [
       ...lastMessages,

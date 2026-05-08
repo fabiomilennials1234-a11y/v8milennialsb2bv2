@@ -67,8 +67,7 @@ import {
   type Company,
   type CompanyInsert,
 } from "@/hooks/useCompanies";
-
-// ── Constants ─────────────────────────────────────────────────────────
+import { CompanyDetailDrawer } from "@/components/companies/CompanyDetailDrawer";
 
 const SIZE_RANGES = [
   { value: "1-10", label: "1-10 funcionarios" },
@@ -102,6 +101,7 @@ export default function Companies() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editing, setEditing] = useState<Company | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Company | null>(null);
+  const [detailId, setDetailId] = useState<string | undefined>();
 
   const { data: companies, isLoading } = useCompanies(debouncedSearch);
   const createCompany = useCreateCompany();
@@ -193,7 +193,7 @@ export default function Companies() {
                   <TableRow
                     key={company.id}
                     className="cursor-pointer"
-                    onClick={() => openEdit(company)}
+                    onClick={() => setDetailId(company.id)}
                   >
                     <TableCell className="font-medium">{company.name}</TableCell>
                     <TableCell className="text-muted-foreground">
@@ -296,6 +296,13 @@ export default function Companies() {
           }
         }}
         loading={createCompany.isPending || updateCompany.isPending}
+      />
+
+      {/* Detail Drawer */}
+      <CompanyDetailDrawer
+        companyId={detailId}
+        open={!!detailId}
+        onOpenChange={(o) => !o && setDetailId(undefined)}
       />
 
       {/* Delete Confirmation */}

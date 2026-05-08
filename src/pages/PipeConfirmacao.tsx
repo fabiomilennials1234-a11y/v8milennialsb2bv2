@@ -51,6 +51,10 @@ import { track, trackModuleVisit } from "@/lib/analytics";
 import { useFeaturePermission, useIsAdmin } from "@/hooks/useUserRole";
 import { useMasterAuth } from "@/hooks/useMasterAuth";
 import { useTags } from "@/hooks/useTags";
+import { useBulkSelection } from "@/hooks/useBulkSelection";
+import { BulkActionBar } from "@/components/bulk-actions/BulkActionBar";
+import { SavedViewsDropdown } from "@/components/saved-views/SavedViewsDropdown";
+import { useSearchParams } from "react-router-dom";
 
 // Filter type aliases (previously from ConfirmacaoFilters)
 type OriginFilter = "all" | "whatsapp" | "meta_ads" | "instagram" | "tiktok" | "google_ads" | "site" | "landing_page" | "remarketing" | "indicacao" | "evento" | "prospeccao_ativa" | "cal" | "outro";
@@ -215,6 +219,12 @@ export default function PipeConfirmacao() {
     (v: "kanban" | "timeline") => setFilterState((f) => ({ ...f, viewMode: v })),
     [setFilterState]
   );
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [activeViewId, setActiveViewId] = useState<string | null>(searchParams.get("view"));
+  const handleActiveViewChange = useCallback((viewId: string | null) => {
+    setActiveViewId(viewId);
+    setSearchParams(viewId ? { view: viewId } : {}, { replace: true });
+  }, [setSearchParams]);
   const { data: leadsWithSchedule } = useLeadsWithScheduledMessages();
   const [filterScheduled, setFilterScheduled] = useState(false);
 
@@ -261,6 +271,11 @@ export default function PipeConfirmacao() {
   const { data: workflowCounts = {} } = useStageWorkflowCounts("confirmacao");
   const responsibleMembers = useResponsibleMembers();
   const { data: orgTags = [] } = useTags();
+  const bulk = useBulkSelection();
+  const allLeadIds = useMemo(() => {
+    if (!pipeData) return [];
+    return pipeData.filter(item => item.lead).map(item => item.lead_id);
+  }, [pipeData]);
   const updatePipeConfirmacao = useUpdatePipeConfirmacao();
   const { allowed: canMovePipe } = useCanPerformAction("move_pipe_record");
   const createPipeProposta = useCreatePipeProposta();
@@ -394,6 +409,7 @@ export default function PipeConfirmacao() {
         : undefined,
       meetLink: item.meet_link ?? null,
       createdAt: item.created_at,
+      stageEnteredAt: item.stage_entered_at || item.updated_at,
     };
   };
 
@@ -716,6 +732,14 @@ export default function PipeConfirmacao() {
           </div>
 
           {/* Filter Panel Button */}
+          <SavedViewsDropdown
+            entityType="pipe_confirmacao"
+            currentFilters={filterState}
+            defaultFilters={DEFAULT_CONFIRMACAO_FILTERS}
+            onApplyFilters={(f) => setFilterState(() => f)}
+            activeViewId={activeViewId}
+            onActiveViewChange={handleActiveViewChange}
+          />
           <KanbanFilterPanel
             sections={filterSections}
             onClearAll={handleClearAllFilters}
@@ -765,6 +789,12 @@ export default function PipeConfirmacao() {
             <LeadCard
               lead={card}
               variant="confirmacao"
+              selected={bulk.isSelected(card.leadId || "")}
+              onSelect={(e) => {
+                const lid = card.leadId || "";
+                if (e.shiftKey) bulk.toggleRange(lid, allLeadIds);
+                else bulk.toggle(lid);
+              }}
               onClick={() => handleCardClick(card)}
               onRemove={canDeleteCards ? () => handleOpenDeleteDialog(card.id, card.leadId || "") : undefined}
               onQuickAction={(title) => {
@@ -772,6 +802,9 @@ export default function PipeConfirmacao() {
               }}
               onCalorChange={(calor) => {
                 if (card.leadId) updateLead.mutate({ id: card.leadId, rating: calor });
+              }}
+              onInlineEdit={(field, value) => {
+                if (card.leadId) updateLead.mutate({ id: card.leadId, [field]: value });
               }}
             />
           )}
@@ -833,6 +866,9 @@ export default function PipeConfirmacao() {
         currentResponsibleId={pendingCompareceuItem?.responsible_id || pendingCompareceuItem?.sdr_id || pendingCompareceuItem?.closer_id}
         isLoading={isProcessingCompareceu}
       />
+
+      {/* Bulk Action Bar */}
+      <BulkActionBar selectedIds={bulk.selectedIds} onClear={bulk.clearSelection} leadIds={allLeadIds} />
 
       {/* Delete single lead from pipe */}
       <AlertDialog open={deleteDialog?.open} onOpenChange={(open) => !open && setDeleteDialog(null)}>

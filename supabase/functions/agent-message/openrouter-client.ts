@@ -89,7 +89,7 @@ export class OpenRouterClient {
 
     if (!response.ok) {
       const error = await response.text();
-      const fallback = 'google/gemini-3-flash-preview';
+      const fallback = 'google/gemini-2.5-flash';
 
       // If model is invalid/deprecated, retry with fallback
       if (response.status === 400 && request.model !== fallback) {

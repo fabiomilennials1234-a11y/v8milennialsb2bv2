@@ -70,6 +70,10 @@ import { track, trackModuleVisit } from "@/lib/analytics";
 import { useFeaturePermission, useIsAdmin } from "@/hooks/useUserRole";
 import { useMasterAuth } from "@/hooks/useMasterAuth";
 import { useTags } from "@/hooks/useTags";
+import { useBulkSelection } from "@/hooks/useBulkSelection";
+import { BulkActionBar } from "@/components/bulk-actions/BulkActionBar";
+import { SavedViewsDropdown } from "@/components/saved-views/SavedViewsDropdown";
+import { useSearchParams } from "react-router-dom";
 
 const MONTHS_PT = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 function formatPeriodLabel(range: { startStr: string; endStr: string }): string {
@@ -167,6 +171,12 @@ export default function PipePropostas() {
     (v: "kanban" | "analytics") => setFilterState((f) => ({ ...f, viewMode: v })),
     [setFilterState]
   );
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [activeViewId, setActiveViewId] = useState<string | null>(searchParams.get("view"));
+  const handleActiveViewChange = useCallback((viewId: string | null) => {
+    setActiveViewId(viewId);
+    setSearchParams(viewId ? { view: viewId } : {}, { replace: true });
+  }, [setSearchParams]);
   const { data: leadsWithSchedule } = useLeadsWithScheduledMessages();
 
   const handleClearAllFilters = useCallback(() => {
@@ -273,6 +283,11 @@ export default function PipePropostas() {
 
   const responsibleMembers = useResponsibleMembers();
   const { data: orgTags = [] } = useTags();
+  const bulk = useBulkSelection();
+  const allLeadIds = useMemo(() => {
+    if (!pipeData) return [];
+    return pipeData.filter(item => item.lead).map(item => item.lead_id);
+  }, [pipeData]);
 
   // Build declarative sections for KanbanFilterPanel
   const filterSections: FilterSectionConfig[] = useMemo(() => [
@@ -326,6 +341,7 @@ export default function PipePropostas() {
       leadId: lead?.id,
       products: productsForCard,
       createdAt: item.created_at,
+      stageEnteredAt: item.stage_entered_at || item.updated_at,
     };
   };
 
@@ -1087,6 +1103,14 @@ export default function PipePropostas() {
                     className="pl-9"
                   />
                 </div>
+                <SavedViewsDropdown
+                  entityType="pipe_propostas"
+                  currentFilters={filterState}
+                  defaultFilters={DEFAULT_PROPOSTAS_FILTERS}
+                  onApplyFilters={(f) => setFilterState(() => f)}
+                  activeViewId={activeViewId}
+                  onActiveViewChange={handleActiveViewChange}
+                />
                 <KanbanFilterPanel
                   sections={filterSections}
                   onClearAll={handleClearAllFilters}
@@ -1116,6 +1140,12 @@ export default function PipePropostas() {
                 <LeadCard
                   lead={card}
                   variant="propostas"
+                  selected={bulk.isSelected(card.leadId || "")}
+                  onSelect={(e) => {
+                    const lid = card.leadId || "";
+                    if (e.shiftKey) bulk.toggleRange(lid, allLeadIds);
+                    else bulk.toggle(lid);
+                  }}
                   onClick={() => {
                     const item = pipeData?.find(p => p.id === card.id);
                     if (item) {
@@ -1129,6 +1159,9 @@ export default function PipePropostas() {
                   }}
                   onCalorChange={(calor) => {
                     if (card.leadId) updateLead.mutate({ id: card.leadId, rating: calor });
+                  }}
+                  onInlineEdit={(field, value) => {
+                    if (card.leadId) updateLead.mutate({ id: card.leadId, [field]: value });
                   }}
                 />
               )}
@@ -1397,6 +1430,9 @@ export default function PipePropostas() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Bulk Action Bar */}
+      <BulkActionBar selectedIds={bulk.selectedIds} onClear={bulk.clearSelection} leadIds={allLeadIds} />
 
       {/* Delete single lead from pipe */}
       <AlertDialog open={deleteDialog?.open} onOpenChange={(open) => !open && setDeleteDialog(null)}>

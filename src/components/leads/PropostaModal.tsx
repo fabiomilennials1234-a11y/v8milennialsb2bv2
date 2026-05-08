@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/select";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
 import { useUpdatePipeProposta, PipePropostasStatus } from "@/hooks/usePipePropostas";
+import { useLossReasons } from "@/hooks/useLossReasons";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -62,9 +63,11 @@ export function PropostaModal({
       ? format(new Date(proposta.commitment_date), "yyyy-MM-dd'T'HH:mm")
       : "",
     notes: proposta?.notes || "",
+    loss_reason: proposta?.loss_reason || "",
   });
 
   const { data: teamMembers = [] } = useTeamMembers();
+  const { data: lossReasons = [] } = useLossReasons();
   const updateProposta = useUpdatePipeProposta();
 
   const activeMembers = teamMembers.filter(m => m.is_active);
@@ -83,7 +86,8 @@ export function PropostaModal({
         closer_id: formData.sale_responsible_id || null,
         commitment_date: formData.commitment_date ? new Date(formData.commitment_date).toISOString() : null,
         notes: formData.notes || null,
-        closed_at: formData.status === "vendido" ? new Date().toISOString() : null,
+        loss_reason: formData.status === "perdido" ? (formData.loss_reason || null) : null,
+        closed_at: ["vendido", "perdido"].includes(formData.status) ? new Date().toISOString() : null,
       });
       
       toast.success("Proposta atualizada!");
@@ -222,6 +226,26 @@ export function PropostaModal({
               </div>
             </div>
           </div>
+
+          {formData.status === "perdido" && (
+            <div className="grid gap-2">
+              <Label>Motivo da Perda</Label>
+              <Select
+                value={formData.loss_reason || "none"}
+                onValueChange={(v) => setFormData({ ...formData, loss_reason: v === "none" ? "" : v })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecionar motivo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Nenhum</SelectItem>
+                  {lossReasons.map((r) => (
+                    <SelectItem key={r.id} value={r.name}>{r.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           <div className="grid gap-2">
             <Label htmlFor="commitment_date">Data do Compromisso</Label>

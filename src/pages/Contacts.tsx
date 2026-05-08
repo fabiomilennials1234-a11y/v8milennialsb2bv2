@@ -44,6 +44,7 @@ import {
   type Contact, type ContactInsert,
 } from "@/hooks/useContacts";
 import { useCompanies, type Company } from "@/hooks/useCompanies";
+import { ContactDetailDrawer } from "@/components/contacts/ContactDetailDrawer";
 
 // ── Schema ────────────────────────────────────────────────────────────
 
@@ -75,6 +76,7 @@ export default function Contacts() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editing, setEditing] = useState<Contact | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Contact | null>(null);
+  const [detailId, setDetailId] = useState<string | undefined>();
 
   // Debounce search 300ms
   useEffect(() => {
@@ -214,7 +216,7 @@ export default function Contacts() {
             </TableHeader>
             <TableBody>
               {contacts.map((c) => (
-                <TableRow key={c.id} className="group">
+                <TableRow key={c.id} className="group cursor-pointer" onClick={() => setDetailId(c.id)}>
                   <TableCell className="font-medium">{c.name}</TableCell>
                   <TableCell>
                     {c.email ? (
@@ -252,7 +254,7 @@ export default function Contacts() {
                   </TableCell>
                   <TableCell>
                     <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
+                      <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
                         <Button
                           variant="ghost"
                           size="icon"
@@ -262,7 +264,7 @@ export default function Contacts() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => openEdit(c)}>
+                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); openEdit(c); }}>
                           <Pencil className="mr-2 h-4 w-4" />
                           Editar
                         </DropdownMenuItem>
@@ -276,7 +278,7 @@ export default function Contacts() {
                           </DropdownMenuItem>
                         )}
                         <DropdownMenuItem
-                          onClick={() => setDeleteTarget(c)}
+                          onClick={(e) => { e.stopPropagation(); setDeleteTarget(c); }}
                           className="text-destructive focus:text-destructive"
                         >
                           <Trash2 className="mr-2 h-4 w-4" />
@@ -291,6 +293,13 @@ export default function Contacts() {
           </Table>
         </div>
       )}
+
+      {/* Detail Drawer */}
+      <ContactDetailDrawer
+        contactId={detailId}
+        open={!!detailId}
+        onOpenChange={(o) => !o && setDetailId(undefined)}
+      />
 
       {/* Create / Edit Sheet */}
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>

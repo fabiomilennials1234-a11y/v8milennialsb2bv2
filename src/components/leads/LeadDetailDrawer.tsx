@@ -72,6 +72,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useToggleLeadAI, useUpdateLead, useDeleteLead } from "@/hooks/useLeads";
 import { useLogLeadAction } from "@/hooks/useLogLeadAction";
+import { useTrackView } from "@/hooks/useTrackView";
 import { useLeadTimeline } from "@/hooks/useLeadTimeline";
 import type { TimelineSource, TimelinePeriod } from "@/hooks/useLeadTimeline";
 import {
@@ -90,6 +91,7 @@ import { ConversationHistoryTab } from "./ConversationHistoryTab";
 import { TimelineItem } from "./TimelineItem";
 import { ScheduleFollowUpButton } from "@/components/followups/ScheduleFollowUpButton";
 import { ScheduleMessageModal } from "@/components/chat/ScheduleMessageModal";
+import { LogCallModal } from "@/components/calls/LogCallModal";
 import { ORIGIN_COLORS } from "./LeadCard";
 import { cn } from "@/lib/utils";
 import { useOpenWhatsAppChat, formatPhoneForWhatsApp } from "@/lib/whatsapp";
@@ -182,6 +184,7 @@ export const LeadDetailDrawer = memo(function LeadDetailDrawer({
   const [quickNote, setQuickNote] = useState("");
   const [isSavingNote, setIsSavingNote] = useState(false);
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
+  const [callModalOpen, setCallModalOpen] = useState(false);
 
   // ─── Lead query ─────────────────────────────────────────
   const { data: lead, isLoading } = useQuery({
@@ -210,6 +213,12 @@ export const LeadDetailDrawer = memo(function LeadDetailDrawer({
     },
     enabled: !!leadId && open,
   });
+
+  useTrackView(
+    open && leadId ? "lead" : undefined,
+    open ? (leadId ?? undefined) : undefined,
+    lead?.name,
+  );
 
   // ─── Pipeline query ─────────────────────────────────────
   const { data: pipelineData } = useQuery({
@@ -664,6 +673,7 @@ export const LeadDetailDrawer = memo(function LeadDetailDrawer({
                     />
                   )}
 
+
                   {leadId && lead?.phone && (
                     <Button
                       variant="outline"
@@ -699,6 +709,10 @@ export const LeadDetailDrawer = memo(function LeadDetailDrawer({
                           </a>
                         </DropdownMenuItem>
                       )}
+                      <DropdownMenuItem onClick={() => setCallModalOpen(true)}>
+                        <PhoneCall className="w-4 h-4 mr-2" />
+                        Registrar ligação
+                      </DropdownMenuItem>
                       {lead.phone && (
                         <DropdownMenuItem asChild>
                           <Link
@@ -1523,6 +1537,14 @@ export const LeadDetailDrawer = memo(function LeadDetailDrawer({
         phoneNumber={lead?.phone || ""}
       />
     )}
+
+    <LogCallModal
+      open={callModalOpen}
+      onOpenChange={setCallModalOpen}
+      leadId={leadId ?? undefined}
+      leadName={lead?.name}
+      phoneNumber={lead?.phone ?? undefined}
+    />
     </>
   );
 });

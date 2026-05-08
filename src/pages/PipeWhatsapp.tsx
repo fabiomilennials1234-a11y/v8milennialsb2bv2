@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { usePersistedState } from "@/hooks/usePersistedState";
 import { motion } from "framer-motion";
-import { Search, Plus, Calendar, Settings2, AlertCircle } from "lucide-react";
+import { Search, Plus, Calendar, Settings2, AlertCircle, LayoutGrid, List } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -46,6 +46,11 @@ import { useOrganization } from "@/hooks/useOrganization";
 import { track, trackModuleVisit } from "@/lib/analytics";
 import { useLeadsWithScheduledMessages } from "@/hooks/useScheduledMessages";
 import { useTags } from "@/hooks/useTags";
+import { useBulkSelection } from "@/hooks/useBulkSelection";
+import { BulkActionBar } from "@/components/bulk-actions/BulkActionBar";
+import { PipeTableView } from "@/components/kanban/PipeTableView";
+import { SavedViewsDropdown } from "@/components/saved-views/SavedViewsDropdown";
+import { useSearchParams } from "react-router-dom";
 
 
 const MONTHS_PT = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
@@ -68,6 +73,7 @@ type WhatsappFilterState = {
   filterOrigin: string;
   filterTags: string[];
   filterScheduled: boolean;
+  viewMode: "kanban" | "list";
 };
 
 const DEFAULT_WHATSAPP_FILTERS: WhatsappFilterState = {
@@ -76,6 +82,7 @@ const DEFAULT_WHATSAPP_FILTERS: WhatsappFilterState = {
   filterOrigin: "all",
   filterTags: [],
   filterScheduled: false,
+  viewMode: "kanban",
 };
 
 export default function PipeWhatsapp() {
@@ -84,7 +91,7 @@ export default function PipeWhatsapp() {
     DEFAULT_WHATSAPP_FILTERS
   );
 
-  const { searchTerm, filterResponsible, filterOrigin, filterTags, filterScheduled } = filterState;
+  const { searchTerm, filterResponsible, filterOrigin, filterTags, filterScheduled, viewMode } = filterState;
 
   const setSearchTerm = useCallback(
     (v: string) => setFilterState((f) => ({ ...f, searchTerm: v })),
@@ -106,7 +113,17 @@ export default function PipeWhatsapp() {
     (v: boolean) => setFilterState((f) => ({ ...f, filterScheduled: v })),
     [setFilterState]
   );
+  const setViewMode = useCallback(
+    (v: "kanban" | "list") => setFilterState((f) => ({ ...f, viewMode: v })),
+    [setFilterState]
+  );
 
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [activeViewId, setActiveViewId] = useState<string | null>(searchParams.get("view"));
+  const handleActiveViewChange = useCallback((viewId: string | null) => {
+    setActiveViewId(viewId);
+    setSearchParams(viewId ? { view: viewId } : {}, { replace: true });
+  }, [setSearchParams]);
   const { data: leadsWithSchedule } = useLeadsWithScheduledMessages();
   const [isCreateLeadModalOpen, setIsCreateLeadModalOpen] = useState(false);
   const [isOpportunityModalOpen, setIsOpportunityModalOpen] = useState(false);
@@ -147,6 +164,11 @@ export default function PipeWhatsapp() {
 
   const responsibleMembers = useResponsibleMembers();
   const { data: orgTags = [] } = useTags();
+  const bulk = useBulkSelection();
+  const allLeadIds = useMemo(() => {
+    if (!pipeData) return [];
+    return pipeData.filter(item => item.lead).map(item => item.lead_id);
+  }, [pipeData]);
 
   // Build declarative sections for KanbanFilterPanel
   const filterSections: FilterSectionConfig[] = useMemo(() => [
@@ -185,6 +207,7 @@ export default function PipeWhatsapp() {
       dateLabel: lead?.compromisso_date ? format(new Date(lead.compromisso_date), "dd MMM, HH:mm", { locale: ptBR }) : undefined,
       leadId: item.lead_id,
       origin: lead?.origin,
+      stageEnteredAt: item.stage_entered_at || item.updated_at,
     };
   };
 
@@ -390,6 +413,22 @@ export default function PipeWhatsapp() {
         </div>
 
         <div className="flex items-center gap-3">
+          <div className="flex items-center border rounded-lg p-1">
+            <Button
+              variant={viewMode === "kanban" ? "secondary" : "ghost"}
+              size="sm"
+              onClick={() => setViewMode("kanban")}
+            >
+              <LayoutGrid className="w-4 h-4" />
+            </Button>
+            <Button
+              variant={viewMode === "list" ? "secondary" : "ghost"}
+              size="sm"
+              onClick={() => setViewMode("list")}
+            >
+              <List className="w-4 h-4" />
+            </Button>
+          </div>
           <Button size="sm" variant="outline" onClick={() => setIsSettingsOpen(true)}>
             <Settings2 className="w-4 h-4 mr-2" />
             Configurações
@@ -447,6 +486,14 @@ export default function PipeWhatsapp() {
               className="pl-9"
             />
           </div>
+          <SavedViewsDropdown
+            entityType="pipe_whatsapp"
+            currentFilters={filterState}
+            defaultFilters={DEFAULT_WHATSAPP_FILTERS}
+            onApplyFilters={(f) => setFilterState(() => f)}
+            activeViewId={activeViewId}
+            onActiveViewChange={handleActiveViewChange}
+          />
           <KanbanFilterPanel
             sections={filterSections}
             onClearAll={handleClearAllFilters}
@@ -477,49 +524,73 @@ export default function PipeWhatsapp() {
         </div>
       )}
 
-      {/* Kanban Board with Drag-and-Drop */}
-      <DraggableKanbanBoard
-        columns={columns}
-        onStatusChange={handleStatusChange}
-        disabled={!canMovePipe}
-        onDeleteAllLeads={(stageId, stageTitle) => setStageToDelete({ id: stageId, title: stageTitle })}
-        renderColumnExtra={(col) => {
-          const allCounts = workflowCounts["__all__"] || { total: 0, active: 0 };
-          const stageCounts = workflowCounts[col.id] || { total: 0, active: 0 };
-          const merged = {
-            total: stageCounts.total + allCounts.total,
-            active: stageCounts.active + allCounts.active,
-          };
-          return (
-            <StageWorkflowsBadgeWrapper
-              pipeType="whatsapp"
-              stageKey={col.id}
-              stageName={col.title}
-              counts={merged}
+      {/* Kanban Board / List View */}
+      {viewMode === "kanban" ? (
+        <DraggableKanbanBoard
+          columns={columns}
+          onStatusChange={handleStatusChange}
+          disabled={!canMovePipe}
+          onDeleteAllLeads={(stageId, stageTitle) => setStageToDelete({ id: stageId, title: stageTitle })}
+          renderColumnExtra={(col) => {
+            const allCounts = workflowCounts["__all__"] || { total: 0, active: 0 };
+            const stageCounts = workflowCounts[col.id] || { total: 0, active: 0 };
+            const merged = {
+              total: stageCounts.total + allCounts.total,
+              active: stageCounts.active + allCounts.active,
+            };
+            return (
+              <StageWorkflowsBadgeWrapper
+                pipeType="whatsapp"
+                stageKey={col.id}
+                stageName={col.title}
+                counts={merged}
+              />
+            );
+          }}
+          renderCard={(card) => (
+            <LeadCard
+              lead={card}
+              variant="whatsapp"
+              selected={bulk.isSelected(card.leadId || "")}
+              onSelect={(e) => {
+                const lid = card.leadId || "";
+                if (e.shiftKey) bulk.toggleRange(lid, allLeadIds);
+                else bulk.toggle(lid);
+              }}
+              onClick={() => {
+                const item = pipeData?.find(p => p.id === card.id);
+                if (item) {
+                  setSelectedItem(item);
+                  setIsDetailDrawerOpen(true);
+                }
+              }}
+              onRemove={canDeleteCards ? () => handleOpenDeleteDialog(card.id, card.leadId || "") : undefined}
+              onQuickAction={(title) => {
+                createAcaoDoDia.mutate({ title, lead_id: card.leadId || undefined });
+              }}
+              onCalorChange={(calor) => {
+                if (card.leadId) updateLead.mutate({ id: card.leadId, rating: calor });
+              }}
+              onInlineEdit={(field, value) => {
+                if (card.leadId) updateLead.mutate({ id: card.leadId, [field]: value });
+              }}
             />
-          );
-        }}
-        renderCard={(card) => (
-          <LeadCard
-            lead={card}
-            variant="whatsapp"
-            onClick={() => {
-              const item = pipeData?.find(p => p.id === card.id);
-              if (item) {
-                setSelectedItem(item);
-                setIsDetailDrawerOpen(true);
-              }
-            }}
-            onRemove={canDeleteCards ? () => handleOpenDeleteDialog(card.id, card.leadId || "") : undefined}
-            onQuickAction={(title) => {
-              createAcaoDoDia.mutate({ title, lead_id: card.leadId || undefined });
-            }}
-            onCalorChange={(calor) => {
-              if (card.leadId) updateLead.mutate({ id: card.leadId, rating: calor });
-            }}
-          />
-        )}
-      />
+          )}
+        />
+      ) : (
+        <PipeTableView
+          columns={columns}
+          variant="whatsapp"
+          onRowClick={(card) => {
+            const item = pipeData?.find(p => p.id === card.id);
+            if (item) {
+              setSelectedItem(item);
+              setIsDetailDrawerOpen(true);
+            }
+          }}
+          selectedIds={bulk.selectedIds}
+        />
+      )}
 
       {/* Pipe Settings Dialog */}
       <PipeSettingsDialog
@@ -608,6 +679,9 @@ export default function PipeWhatsapp() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Bulk Action Bar */}
+      <BulkActionBar selectedIds={bulk.selectedIds} onClear={bulk.clearSelection} leadIds={allLeadIds} />
 
       {/* AddMeetingModal — opened when a lead is dragged to an "agendado" stage */}
       {meetingModal && (

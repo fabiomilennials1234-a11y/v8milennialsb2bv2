@@ -1,4 +1,4 @@
-import { memo, useState } from "react";
+import { memo, useState, useRef, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import {
   Building2,
@@ -9,6 +9,7 @@ import {
   MessageCircle,
   Target,
   Video,
+  Check,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -120,6 +121,8 @@ export interface LeadCardData extends DraggableItem {
   // Upsell
   potencial?: string | null;
   isInactive?: boolean;
+  // Aging
+  stageEnteredAt?: string | null;
 }
 
 export interface LeadCardProps {
@@ -132,11 +135,15 @@ export interface LeadCardProps {
   showProducts?: boolean;
   showMeetLink?: boolean;
   showNotes?: boolean;
+  // Selection
+  selected?: boolean;
+  onSelect?: (e: React.MouseEvent) => void;
   // Callbacks
   onClick?: () => void;
   onRemove?: () => void;
   onCalorChange?: (calor: number) => void;
   onQuickAction?: (title: string) => void;
+  onInlineEdit?: (field: string, value: string) => void;
 }
 
 // ─── Date Indicator ──────────────────────────────────────
@@ -311,14 +318,48 @@ function formatCurrency(value: number): string {
 export const LeadCard = memo(function LeadCard({
   lead,
   variant,
+  selected,
+  onSelect,
   onClick,
   onRemove,
   onCalorChange,
   onQuickAction,
+  onInlineEdit,
   ...overrides
 }: LeadCardProps) {
   const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [editingField, setEditingField] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
+  const editRef = useRef<HTMLInputElement>(null);
   const config = { ...VARIANT_CONFIG[variant], ...pickDefined(overrides) };
+
+  useEffect(() => {
+    if (editingField && editRef.current) {
+      editRef.current.focus();
+      editRef.current.select();
+    }
+  }, [editingField]);
+
+  const startEdit = useCallback((field: string, currentValue: string, e: React.MouseEvent) => {
+    if (!onInlineEdit) return;
+    e.stopPropagation();
+    setEditingField(field);
+    setEditValue(currentValue);
+  }, [onInlineEdit]);
+
+  const commitEdit = useCallback(() => {
+    if (editingField && editValue.trim() && onInlineEdit) {
+      const originalValue = editingField === "name" ? lead.name : (lead.company ?? "");
+      if (editValue.trim() !== originalValue) {
+        onInlineEdit(editingField, editValue.trim());
+      }
+    }
+    setEditingField(null);
+  }, [editingField, editValue, onInlineEdit, lead.name, lead.company]);
+
+  const cancelEdit = useCallback(() => {
+    setEditingField(null);
+  }, []);
   const origin = ORIGIN_COLORS[lead.origin || "outro"] || ORIGIN_COLORS.outro;
   const urgency = lead.urgency ? URGENCY_COLORS[lead.urgency] : null;
   const hasPhone = !!formatPhoneForWhatsApp(lead.phone ?? undefined);
@@ -341,7 +382,8 @@ export const LeadCard = memo(function LeadCard({
       data-lead-id={lead.id}
       className={cn(
         "kanban-card group cursor-pointer relative",
-        lead.isInactive && "opacity-60"
+        lead.isInactive && "opacity-60",
+        selected && "ring-2 ring-primary/50"
       )}
       style={{
         '--card-accent': lead.calor != null && lead.calor >= 8
@@ -354,11 +396,51 @@ export const LeadCard = memo(function LeadCard({
       } as React.CSSProperties}
       onClick={onClick}
     >
+      {/* ── Selection checkbox ── */}
+      {onSelect && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onSelect(e); }}
+          className={cn(
+            "absolute top-2 left-2 z-10 w-5 h-5 rounded border flex items-center justify-center transition-all",
+            selected
+              ? "bg-primary border-primary text-primary-foreground"
+              : "border-muted-foreground/40 bg-background/80 opacity-0 group-hover:opacity-100"
+          )}
+        >
+          {selected && <Check className="w-3.5 h-3.5" />}
+        </button>
+      )}
+
       {/* ── Row 1: Name + ⋮ Menu ── */}
       <div className="flex items-start justify-between gap-2 mb-0.5">
-        <h4 className="font-semibold text-[13px] leading-tight line-clamp-2 group-hover:text-primary transition-colors flex-1 min-w-0">
-          {lead.name}
-        </h4>
+        {editingField === "name" ? (
+          <input
+            ref={editRef}
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            onBlur={commitEdit}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commitEdit();
+              if (e.key === "Escape") cancelEdit();
+            }}
+            onClick={(e) => e.stopPropagation()}
+            className={cn(
+              "font-semibold text-[13px] leading-tight flex-1 min-w-0 bg-transparent border-b border-primary outline-none px-0 py-0",
+              onSelect && "pl-6"
+            )}
+          />
+        ) : (
+          <h4
+            className={cn(
+              "font-semibold text-[13px] leading-tight line-clamp-2 group-hover:text-primary transition-colors flex-1 min-w-0",
+              onSelect && "pl-6",
+              onInlineEdit && "cursor-text"
+            )}
+            onDoubleClick={(e) => startEdit("name", lead.name, e)}
+          >
+            {lead.name}
+          </h4>
+        )}
         <DropdownMenu>
           <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
             <button className="p-0.5 rounded hover:bg-muted text-muted-foreground shrink-0">
@@ -393,7 +475,27 @@ export const LeadCard = memo(function LeadCard({
       {lead.company && (
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1.5">
           <Building2 className="w-3.5 h-3.5 shrink-0 opacity-60" />
-          <span className="truncate">{lead.company}</span>
+          {editingField === "company_name" ? (
+            <input
+              ref={editRef}
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              onBlur={commitEdit}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") commitEdit();
+                if (e.key === "Escape") cancelEdit();
+              }}
+              onClick={(e) => e.stopPropagation()}
+              className="flex-1 min-w-0 bg-transparent border-b border-primary outline-none text-xs px-0 py-0"
+            />
+          ) : (
+            <span
+              className={cn("truncate", onInlineEdit && "cursor-text")}
+              onDoubleClick={(e) => startEdit("company_name", lead.company ?? "", e)}
+            >
+              {lead.company}
+            </span>
+          )}
         </div>
       )}
 
@@ -436,6 +538,20 @@ export const LeadCard = memo(function LeadCard({
             Inativo
           </Badge>
         )}
+        {lead.stageEnteredAt && (() => {
+          const days = Math.floor((Date.now() - new Date(lead.stageEnteredAt).getTime()) / 86400000);
+          if (days < 3) return null;
+          const cls = days >= 14
+            ? "bg-red-500/10 text-red-500 border-red-500/30"
+            : days >= 7
+              ? "bg-amber-500/10 text-amber-500 border-amber-500/30"
+              : "bg-blue-500/10 text-blue-500 border-blue-500/30";
+          return (
+            <Badge variant="outline" className={cn("text-[10px] px-1.5 py-0 h-[18px] font-medium", cls)}>
+              {days}d
+            </Badge>
+          );
+        })()}
         {dateIndicator && (
           <Badge variant="outline" className={cn("text-[10px] px-1.5 py-0 h-[18px] font-medium", dateIndicator.className)}>
             {dateIndicator.label}
