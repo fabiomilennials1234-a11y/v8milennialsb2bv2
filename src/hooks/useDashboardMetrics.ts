@@ -167,22 +167,22 @@ export function useConversionRates(month?: number, year?: number) {
       const meetingsMembers = teamMembers?.filter((m) => m.metric_type === "meetings") || [];
 
       const [{ data: conf1 }, { data: conf2 }] = await Promise.all([
-        supabase.from("pipe_confirmacao").select("sdr_id, closer_id, responsible_id, status").eq("organization_id", organizationId).not("metrics_period_at", "is", null).gte("metrics_period_at", startStr).lte("metrics_period_at", endStr),
-        supabase.from("pipe_confirmacao").select("sdr_id, closer_id, responsible_id, status").eq("organization_id", organizationId).is("metrics_period_at", null).gte("created_at", startStr).lte("created_at", endStr),
+        supabase.from("pipe_confirmacao").select("pre_sale_responsible_id, responsible_id, sdr_id, closer_id, status").eq("organization_id", organizationId).not("metrics_period_at", "is", null).gte("metrics_period_at", startStr).lte("metrics_period_at", endStr),
+        supabase.from("pipe_confirmacao").select("pre_sale_responsible_id, responsible_id, sdr_id, closer_id, status").eq("organization_id", organizationId).is("metrics_period_at", null).gte("created_at", startStr).lte("created_at", endStr),
       ]);
       const confirmacaoData = [...(conf1 || []), ...(conf2 || [])];
 
       // Propostas: TODOS os leads no pipe (sem filtro de período) para taxa de conversão correta
       const { data: propostasData } = await supabase
         .from("pipe_propostas")
-        .select("closer_id, responsible_id, status")
+        .select("sale_responsible_id, responsible_id, closer_id, status")
         .eq("organization_id", organizationId);
 
       // Calculate meetings conversion (reuniões marcadas -> comparecidas)
       const meetingsRates: ConversionRate[] = meetingsMembers.map((member) => {
-        const total = confirmacaoData?.filter((c) => c.responsible_id === member.id || c.sdr_id === member.id || c.closer_id === member.id).length || 0;
+        const total = confirmacaoData?.filter((c) => ((c as any).pre_sale_responsible_id || c.responsible_id || c.sdr_id) === member.id).length || 0;
         const comparecidas = confirmacaoData?.filter(
-          (c) => (c.responsible_id === member.id || c.sdr_id === member.id || c.closer_id === member.id) && c.status === "compareceu"
+          (c) => ((c as any).pre_sale_responsible_id || c.responsible_id || c.sdr_id) === member.id && c.status === "compareceu"
         ).length || 0;
         return {
           id: member.id,
@@ -195,9 +195,9 @@ export function useConversionRates(month?: number, year?: number) {
 
       // Calculate sales conversion: TODOS no pipe X vendido
       const salesRates: ConversionRate[] = salesMembers.map((member) => {
-        const total = (propostasData || []).filter((p) => p.responsible_id === member.id || p.closer_id === member.id).length;
+        const total = (propostasData || []).filter((p) => ((p as any).sale_responsible_id || p.responsible_id || p.closer_id) === member.id).length;
         const vendidas = (propostasData || []).filter(
-          (p) => (p.responsible_id === member.id || p.closer_id === member.id) && p.status === "vendido"
+          (p) => ((p as any).sale_responsible_id || p.responsible_id || p.closer_id) === member.id && p.status === "vendido"
         ).length;
         return {
           id: member.id,

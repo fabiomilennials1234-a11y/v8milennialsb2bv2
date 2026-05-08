@@ -56,7 +56,8 @@ export function PropostaModal({
     product_type: proposta?.product_type || "",
     sale_value: proposta?.sale_value || "",
     contract_duration: proposta?.contract_duration || "",
-    responsible_id: proposta?.responsible_id || proposta?.closer_id || null,
+    pre_sale_responsible_id: proposta?.pre_sale_responsible_id || proposta?.responsible_id || null,
+    sale_responsible_id: proposta?.sale_responsible_id || proposta?.closer_id || proposta?.responsible_id || null,
     commitment_date: proposta?.commitment_date 
       ? format(new Date(proposta.commitment_date), "yyyy-MM-dd'T'HH:mm")
       : "",
@@ -76,8 +77,10 @@ export function PropostaModal({
         product_type: formData.product_type as any || null,
         sale_value: formData.sale_value ? Number(formData.sale_value) : null,
         contract_duration: formData.contract_duration ? Number(formData.contract_duration) : null,
-        responsible_id: formData.responsible_id || null,
-        closer_id: formData.responsible_id || null,
+        pre_sale_responsible_id: formData.pre_sale_responsible_id || null,
+        sale_responsible_id: formData.sale_responsible_id || null,
+        responsible_id: formData.sale_responsible_id || null,
+        closer_id: formData.sale_responsible_id || null,
         commitment_date: formData.commitment_date ? new Date(formData.commitment_date).toISOString() : null,
         notes: formData.notes || null,
         closed_at: formData.status === "vendido" ? new Date().toISOString() : null,
@@ -150,11 +153,31 @@ export function PropostaModal({
                 </SelectContent>
               </Select>
             </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-2">
-              <Label>Responsável</Label>
+              <Label>Resp. Pré-Venda</Label>
               <Select
-                value={formData.responsible_id || "none"}
-                onValueChange={(v) => setFormData({ ...formData, responsible_id: v === "none" ? null : v })}
+                value={formData.pre_sale_responsible_id || "none"}
+                onValueChange={(v) => setFormData({ ...formData, pre_sale_responsible_id: v === "none" ? null : v })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecionar" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Nenhum</SelectItem>
+                  {activeMembers.map(c => (
+                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label>Resp. Venda</Label>
+              <Select
+                value={formData.sale_responsible_id || "none"}
+                onValueChange={(v) => setFormData({ ...formData, sale_responsible_id: v === "none" ? null : v })}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Selecionar" />

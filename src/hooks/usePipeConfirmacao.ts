@@ -53,15 +53,19 @@ export function usePipeConfirmacao() {
         .select(`
           *,
           lead:leads(
-            id, name, company, email, phone, rating, origin, segment, faturamento, urgency, ai_disabled, sdr_id, closer_id, responsible_id,
+            id, name, company, email, phone, rating, origin, segment, faturamento, urgency, ai_disabled, sdr_id, closer_id, responsible_id, pre_sale_responsible_id, sale_responsible_id,
             responsible:team_members!leads_responsible_id_fkey(id, name),
             sdr:team_members!leads_sdr_id_fkey(id, name),
             closer:team_members!leads_closer_id_fkey(id, name),
+            pre_sale_responsible:team_members!leads_pre_sale_responsible_id_fkey(id, name),
+            sale_responsible:team_members!leads_sale_responsible_id_fkey(id, name),
             lead_tags(tag:tags(id, name, color))
           ),
           responsible:team_members!pipe_confirmacao_responsible_id_fkey(id, name),
           sdr:team_members!pipe_confirmacao_sdr_id_fkey(id, name),
-          closer:team_members!pipe_confirmacao_closer_id_fkey(id, name)
+          closer:team_members!pipe_confirmacao_closer_id_fkey(id, name),
+          pre_sale_responsible:team_members!pipe_confirmacao_pre_sale_responsible_id_fkey(id, name),
+          sale_responsible:team_members!pipe_confirmacao_sale_responsible_id_fkey(id, name)
         `)
         .eq("organization_id", organizationId)
         .order("created_at", { ascending: false });

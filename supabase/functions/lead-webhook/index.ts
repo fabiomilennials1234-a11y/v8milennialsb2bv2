@@ -275,6 +275,8 @@ serve(withSentry('lead-webhook', async (req) => {
         insertData.sdr_id = payload.assigned_user_id;
         insertData.closer_id = payload.assigned_user_id;
         insertData.responsible_id = payload.assigned_user_id;
+        insertData.pre_sale_responsible_id = payload.assigned_user_id;
+        insertData.sale_responsible_id = payload.assigned_user_id;
       }
       const { data: newLead, error: createError } = await supabase
         .from("leads")
@@ -342,6 +344,8 @@ serve(withSentry('lead-webhook', async (req) => {
       updateData.sdr_id = payload.assigned_user_id;
       updateData.closer_id = payload.assigned_user_id;
       updateData.responsible_id = payload.assigned_user_id;
+      updateData.pre_sale_responsible_id = payload.assigned_user_id;
+      updateData.sale_responsible_id = payload.assigned_user_id;
     }
     if (payload.place_in_pipe?.meeting_date) {
       updateData.compromisso_date = payload.place_in_pipe.meeting_date;
@@ -504,7 +508,11 @@ serve(withSentry('lead-webhook', async (req) => {
             // Also update lead-level responsible_id (closer takes priority over sdr)
             const responsibleId = closerId || sdrId;
             if (responsibleId) {
-              const leadAssign: Record<string, unknown> = { responsible_id: responsibleId };
+              const leadAssign: Record<string, unknown> = {
+                responsible_id: responsibleId,
+                pre_sale_responsible_id: sdrId || responsibleId,
+                sale_responsible_id: closerId || responsibleId,
+              };
               if (sdrId) leadAssign.sdr_id = sdrId;
               if (closerId) leadAssign.closer_id = closerId;
               await supabase.from("leads").update(leadAssign).eq("id", leadId);
@@ -641,6 +649,8 @@ serve(withSentry('lead-webhook', async (req) => {
             if (sdrId) insertPayload.sdr_id = sdrId;
             if (closerId) insertPayload.closer_id = closerId;
             if (responsibleId) insertPayload.responsible_id = responsibleId;
+            insertPayload.pre_sale_responsible_id = sdrId ?? null;
+            insertPayload.sale_responsible_id = closerId ?? null;
             const { error: insertErr } = await supabase
               .from("campanha_leads")
               .insert(insertPayload);
@@ -654,6 +664,8 @@ serve(withSentry('lead-webhook', async (req) => {
               if (sdrId) leadUpdate.sdr_id = sdrId;
               if (closerId) leadUpdate.closer_id = closerId;
               if (responsibleId) leadUpdate.responsible_id = responsibleId;
+              leadUpdate.pre_sale_responsible_id = sdrId ?? null;
+              leadUpdate.sale_responsible_id = closerId ?? null;
               if (Object.keys(leadUpdate).length > 0) {
                 const { error: leadUpdateErr } = await supabase
                   .from("leads")

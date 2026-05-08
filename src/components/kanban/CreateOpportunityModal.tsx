@@ -60,7 +60,8 @@ export function CreateOpportunityModal({
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   
   const [formData, setFormData] = useState({
-    responsible_id: "",
+    pre_sale_responsible_id: "",
+    sale_responsible_id: "",
     scheduled_date: "",
     notes: "",
   });
@@ -102,7 +103,8 @@ export function CreateOpportunityModal({
         setSearchTerm("");
         setSelectedLeadId(null);
         setFormData({
-          responsible_id: "",
+          pre_sale_responsible_id: "",
+          sale_responsible_id: "",
           scheduled_date: "",
           notes: "",
         });
@@ -112,8 +114,12 @@ export function CreateOpportunityModal({
 
   // Auto-fill responsible from lead
   useEffect(() => {
-    if (selectedLead?.responsible_id && !formData.responsible_id) {
-      setFormData(prev => ({ ...prev, responsible_id: selectedLead.responsible_id || "" }));
+    if (selectedLead) {
+      setFormData(prev => ({
+        ...prev,
+        pre_sale_responsible_id: selectedLead.pre_sale_responsible_id || selectedLead.responsible_id || "",
+        sale_responsible_id: selectedLead.sale_responsible_id || "",
+      }));
     }
   }, [selectedLead]);
 
@@ -136,7 +142,9 @@ export function CreateOpportunityModal({
       await createPipeWhatsapp.mutateAsync({
         lead_id: selectedLeadId,
         status: "novo",
-        responsible_id: formData.responsible_id || null,
+        pre_sale_responsible_id: formData.pre_sale_responsible_id || null,
+        sale_responsible_id: formData.sale_responsible_id || null,
+        responsible_id: formData.pre_sale_responsible_id || null,
         scheduled_date: formData.scheduled_date ? new Date(formData.scheduled_date).toISOString() : null,
         notes: formData.notes || null,
         organization_id: organizationId,
@@ -307,22 +315,41 @@ export function CreateOpportunityModal({
 
               {/* Opportunity Form */}
               <div className="space-y-4">
-                <div className="grid gap-2">
-                  <Label>Responsável</Label>
-                  <Select
-                    value={formData.responsible_id}
-                    onValueChange={(v) => setFormData({ ...formData, responsible_id: v })}
-                  >
-                    <SelectTrigger>
-                      <User className="w-4 h-4 mr-2 text-muted-foreground" />
-                      <SelectValue placeholder="Selecionar responsável (opcional)" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {activeMembers.map(member => (
-                        <SelectItem key={member.id} value={member.id}>{member.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label>Resp. Pré-Venda</Label>
+                    <Select
+                      value={formData.pre_sale_responsible_id}
+                      onValueChange={(v) => setFormData({ ...formData, pre_sale_responsible_id: v })}
+                    >
+                      <SelectTrigger>
+                        <User className="w-4 h-4 mr-2 text-muted-foreground" />
+                        <SelectValue placeholder="Selecionar (opcional)" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {activeMembers.map(member => (
+                          <SelectItem key={member.id} value={member.id}>{member.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Resp. Venda</Label>
+                    <Select
+                      value={formData.sale_responsible_id}
+                      onValueChange={(v) => setFormData({ ...formData, sale_responsible_id: v })}
+                    >
+                      <SelectTrigger>
+                        <User className="w-4 h-4 mr-2 text-muted-foreground" />
+                        <SelectValue placeholder="Selecionar (opcional)" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {activeMembers.map(member => (
+                          <SelectItem key={member.id} value={member.id}>{member.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
 
                 <div className="grid gap-2">

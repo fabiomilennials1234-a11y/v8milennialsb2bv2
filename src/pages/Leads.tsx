@@ -114,6 +114,8 @@ interface LeadFormData {
   urgency: string;
   notes: string;
   responsible_id: string | null;
+  pre_sale_responsible_id: string | null;
+  sale_responsible_id: string | null;
   compromisso_date: string;
 }
 
@@ -129,6 +131,8 @@ const initialFormData: LeadFormData = {
   urgency: "",
   notes: "",
   responsible_id: null,
+  pre_sale_responsible_id: null,
+  sale_responsible_id: null,
   compromisso_date: "",
 };
 
@@ -292,6 +296,8 @@ export default function Leads() {
         urgency: lead.urgency || "",
         notes: lead.notes || "",
         responsible_id: lead.responsible_id,
+        pre_sale_responsible_id: lead.pre_sale_responsible_id,
+        sale_responsible_id: lead.sale_responsible_id,
         compromisso_date: lead.compromisso_date ? lead.compromisso_date.slice(0, 16) : "",
       });
     } else {
@@ -337,6 +343,8 @@ export default function Leads() {
         origin: formData.origin as any,
         faturamento: formData.faturamento || null,
         responsible_id: formData.responsible_id || null,
+        pre_sale_responsible_id: formData.pre_sale_responsible_id || null,
+        sale_responsible_id: formData.sale_responsible_id || null,
         compromisso_date: formData.compromisso_date ? new Date(formData.compromisso_date).toISOString() : null,
         organization_id: currentTeamMember.organization_id,
       };
@@ -561,13 +569,21 @@ export default function Leads() {
                     <StarRating rating={lead.rating || 0} readonly />
                   </TableCell>
                   <TableCell>
-                    {lead.responsible?.name ? (
-                      <Badge variant="outline" className="text-xs">
-                        {lead.responsible.name}
-                      </Badge>
-                    ) : (
-                      <span className="text-muted-foreground text-xs">-</span>
-                    )}
+                    <div className="flex flex-col gap-0.5">
+                      {lead.pre_sale_responsible?.name && (
+                        <Badge variant="outline" className="text-xs border-blue-500/30 text-blue-400">
+                          {lead.pre_sale_responsible.name}
+                        </Badge>
+                      )}
+                      {lead.sale_responsible?.name && (
+                        <Badge variant="outline" className="text-xs border-emerald-500/30 text-emerald-400">
+                          {lead.sale_responsible.name}
+                        </Badge>
+                      )}
+                      {!lead.pre_sale_responsible?.name && !lead.sale_responsible?.name && (
+                        <span className="text-muted-foreground text-xs">-</span>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell>
                     <span className="text-xs text-muted-foreground">
@@ -782,22 +798,41 @@ export default function Leads() {
               </div>
             </div>
 
-            <div className="grid gap-2">
-              <Label htmlFor="responsible">Responsável</Label>
-              <Select
-                value={formData.responsible_id || "none"}
-                onValueChange={(v) => setFormData({ ...formData, responsible_id: v === "none" ? null : v })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecionar Responsável" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Nenhum</SelectItem>
-                  {responsibleMembers.map(member => (
-                    <SelectItem key={member.id} value={member.id}>{member.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label>Resp. Pré-Venda</Label>
+                <Select
+                  value={formData.pre_sale_responsible_id || "none"}
+                  onValueChange={(v) => setFormData({ ...formData, pre_sale_responsible_id: v === "none" ? null : v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecionar" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Nenhum</SelectItem>
+                    {responsibleMembers.map(member => (
+                      <SelectItem key={member.id} value={member.id}>{member.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label>Resp. Venda</Label>
+                <Select
+                  value={formData.sale_responsible_id || "none"}
+                  onValueChange={(v) => setFormData({ ...formData, sale_responsible_id: v === "none" ? null : v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecionar" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Nenhum</SelectItem>
+                    {responsibleMembers.map(member => (
+                      <SelectItem key={member.id} value={member.id}>{member.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">

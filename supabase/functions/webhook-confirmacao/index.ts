@@ -91,6 +91,8 @@ Deno.serve(withSentry('webhook-confirmacao', async (req) => {
       p_sdr_id: sdr_id || null,
       p_closer_id: closer_id || null,
       p_responsible_id: closer_id || sdr_id || null,
+      p_pre_sale_responsible_id: sdr_id || null,
+      p_sale_responsible_id: closer_id || null,
       p_meeting_date: meeting_date || null,
       p_utm_source: utm_source || null,
       p_utm_medium: utm_medium || null,

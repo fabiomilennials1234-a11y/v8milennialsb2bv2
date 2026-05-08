@@ -27,6 +27,8 @@ interface LeadData {
   sdr_id?: string;
   closer_id?: string;
   responsible_id?: string;
+  pre_sale_responsible_id?: string;
+  sale_responsible_id?: string;
   urgency?: string;
   faturamento?: string;
   notes?: string;

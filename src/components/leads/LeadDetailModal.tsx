@@ -153,6 +153,8 @@ export function LeadDetailModal({ open, onOpenChange, leadId, onEdit }: LeadDeta
           responsible:team_members!leads_responsible_id_fkey(id, name),
           sdr:team_members!leads_sdr_id_fkey(id, name),
           closer:team_members!leads_closer_id_fkey(id, name),
+          pre_sale_responsible:team_members!leads_pre_sale_responsible_id_fkey(id, name),
+          sale_responsible:team_members!leads_sale_responsible_id_fkey(id, name),
           lead_tags(
             tag:tags(id, name, color)
           )

@@ -89,9 +89,9 @@ export function useTVDashboardData() {
     queryFn: () => {
       // Dashboard da central de controle: só admin vê todos; outros veem apenas seus números
       const myId = currentTeamMember?.id ?? null;
-      const propostasFiltradas = isAdmin ? (propostas ?? []) : (propostas ?? []).filter(p => (p as any).responsible_id === myId || p.closer_id === myId);
-      const confirmacoesFiltradas = isAdmin ? (confirmacoes ?? []) : (confirmacoes ?? []).filter(c => (c as any).responsible_id === myId || c.sdr_id === myId);
-      const whatsappFiltrado = isAdmin ? (whatsapp ?? []) : (whatsapp ?? []).filter(w => (w as any).responsible_id === myId || w.sdr_id === myId);
+      const propostasFiltradas = isAdmin ? (propostas ?? []) : (propostas ?? []).filter(p => (p as any).sale_responsible_id === myId || (p as any).responsible_id === myId || p.closer_id === myId);
+      const confirmacoesFiltradas = isAdmin ? (confirmacoes ?? []) : (confirmacoes ?? []).filter(c => (c as any).pre_sale_responsible_id === myId || (c as any).responsible_id === myId || c.sdr_id === myId);
+      const whatsappFiltrado = isAdmin ? (whatsapp ?? []) : (whatsapp ?? []).filter(w => (w as any).pre_sale_responsible_id === myId || (w as any).responsible_id === myId || w.sdr_id === myId);
       
       const closers = isAdmin
         ? (teamMembers?.filter(m => (m as any).metric_type === "sales" && m.is_active) || [])
@@ -167,7 +167,7 @@ export function useTVDashboardData() {
       
       // Conversion rate per closer (também: todos no pipe do closer X vendido)
       const conversaoPorCloser = closers.map(closer => {
-        const closerProposals = propostasFiltradas.filter(p => p.closer_id === closer.id);
+        const closerProposals = propostasFiltradas.filter(p => (p as any).sale_responsible_id === closer.id || p.closer_id === closer.id);
         const closerSales = closerProposals.filter(p => p.status === "vendido").length;
         const rate = closerProposals.length > 0 ? (closerSales / closerProposals.length) * 100 : 0;
         
@@ -238,7 +238,7 @@ export function useTVDashboardData() {
       const salesGoals = salesGoalsSource.map(g => {
         // Receita do mês por membro = Σ sale_value (sem × contract_duration). ADR 2026-04-24.
         const memberSales = currentMonthPropostas
-          .filter(p => (p.responsible_id || p.closer_id) === g.id)
+          .filter(p => ((p as any).sale_responsible_id || p.closer_id) === g.id)
           .reduce((sum, p) => sum + (p.sale_value || 0), 0);
         const currentValue = memberSales;
         const goalValue = g.goal || 0;
@@ -247,7 +247,7 @@ export function useTVDashboardData() {
       });
 
       const meetingsGoalsCalc = meetingsGoalsSource.map(g => {
-        const memberMeetings = currentMonthConfirmacoes.filter(c => (c.responsible_id || c.sdr_id) === g.id && c.status === "compareceu").length;
+        const memberMeetings = currentMonthConfirmacoes.filter(c => ((c as any).pre_sale_responsible_id || c.sdr_id) === g.id && c.status === "compareceu").length;
         const currentValue = memberMeetings;
         const goalValue = g.goal || 0;
         const percentage = goalValue > 0 ? Math.round((currentValue / goalValue) * 100) : 0;

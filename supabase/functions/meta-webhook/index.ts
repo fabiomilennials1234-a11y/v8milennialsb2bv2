@@ -595,6 +595,8 @@ async function processLeadgen(
           sdr_id: sdrId,
           closer_id: closerId,
           responsible_id: responsibleId,
+          pre_sale_responsible_id: sdrId,
+          sale_responsible_id: closerId,
         };
 
         const { error: clInsertErr } = await supabase.from("campanha_leads").insert(insertPayload);
@@ -606,6 +608,8 @@ async function processLeadgen(
             const leadAssign: Record<string, unknown> = { responsible_id: responsibleId };
             if (sdrId) leadAssign.sdr_id = sdrId;
             if (closerId) leadAssign.closer_id = closerId;
+            if (sdrId) leadAssign.pre_sale_responsible_id = sdrId;
+            if (closerId) leadAssign.sale_responsible_id = closerId;
             await supabase.from("leads").update(leadAssign).eq("id", newLead.id);
           }
           console.log(`[meta-webhook] Lead ${newLead.id} placed in campaign ${campaignId}, responsible: ${responsibleId}`);

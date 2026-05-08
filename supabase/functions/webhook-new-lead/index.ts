@@ -231,6 +231,7 @@ Deno.serve(withSentry('webhook-new-lead', async (req) => {
       if (urgency && !existingLead.urgency) updatedData.urgency = urgency;
       if (sdr_id && !existingLead.sdr_id) updatedData.sdr_id = sdr_id;
       if (sdr_id && !existingLead.responsible_id) updatedData.responsible_id = sdr_id;
+      if (sdr_id && !existingLead.pre_sale_responsible_id) updatedData.pre_sale_responsible_id = sdr_id;
       
       // Always update email if we found by name and new email is provided
       if (deduplicationMethod === "name_same_day" && normalizedEmail && !existingLead.email) {
@@ -385,6 +386,7 @@ Deno.serve(withSentry('webhook-new-lead', async (req) => {
       p_rating: rating ? parseInt(String(rating), 10) : 0,
       p_sdr_id: sdr_id || null,
       p_responsible_id: sdr_id || null,
+      p_pre_sale_responsible_id: sdr_id || null,
       p_compromisso_date: compromisso_date || null,
       p_utm_source: utm_source || null,
       p_utm_medium: utm_medium || null,

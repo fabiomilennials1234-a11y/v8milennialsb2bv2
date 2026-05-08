@@ -196,6 +196,8 @@ export const LeadDetailDrawer = memo(function LeadDetailDrawer({
           responsible:team_members!leads_responsible_id_fkey(id, name),
           sdr:team_members!leads_sdr_id_fkey(id, name),
           closer:team_members!leads_closer_id_fkey(id, name),
+          pre_sale_responsible:team_members!leads_pre_sale_responsible_id_fkey(id, name),
+          sale_responsible:team_members!leads_sale_responsible_id_fkey(id, name),
           lead_tags(
             tag:tags(id, name, color)
           )
@@ -281,6 +283,8 @@ export const LeadDetailDrawer = memo(function LeadDetailDrawer({
     urgency: "",
     notes: "",
     responsible_id: "" as string | null,
+    pre_sale_responsible_id: "" as string | null,
+    sale_responsible_id: "" as string | null,
   });
   const [isDirty, setIsDirty] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -300,6 +304,8 @@ export const LeadDetailDrawer = memo(function LeadDetailDrawer({
         urgency: lead.urgency || "",
         notes: lead.notes || "",
         responsible_id: lead.responsible_id || "",
+        pre_sale_responsible_id: lead.pre_sale_responsible_id || "",
+        sale_responsible_id: lead.sale_responsible_id || "",
       });
       setIsDirty(false);
       setOptimisticAiDisabled(null);
@@ -351,6 +357,44 @@ export const LeadDetailDrawer = memo(function LeadDetailDrawer({
     } catch (error: any) {
       // Revert on failure
       setFormData((prev) => ({ ...prev, responsible_id: lead.responsible_id || "" }));
+      toast.error(`Erro ao alterar responsável: ${error?.message || "Erro desconhecido"}`);
+    }
+  };
+
+  const handlePreSaleResponsibleChange = async (newId: string | null) => {
+    if (!lead) return;
+    setFormData((prev) => ({ ...prev, pre_sale_responsible_id: newId }));
+    try {
+      await updateLead.mutateAsync({
+        id: lead.id,
+        pre_sale_responsible_id: newId,
+      });
+      const name = responsibleMembers.find((m) => m.id === newId)?.name || "Nenhum";
+      logAction({ leadId: lead.id, action: "pre_sale_responsible_assigned", description: `Resp. Pré-Venda alterado para "${name}"` });
+      queryClient.invalidateQueries({ queryKey: ["lead-detail", leadId] });
+      toast.success(`Resp. Pré-Venda: "${name}"`);
+      onSuccess?.();
+    } catch (error: any) {
+      setFormData((prev) => ({ ...prev, pre_sale_responsible_id: lead.pre_sale_responsible_id || "" }));
+      toast.error(`Erro ao alterar responsável: ${error?.message || "Erro desconhecido"}`);
+    }
+  };
+
+  const handleSaleResponsibleChange = async (newId: string | null) => {
+    if (!lead) return;
+    setFormData((prev) => ({ ...prev, sale_responsible_id: newId }));
+    try {
+      await updateLead.mutateAsync({
+        id: lead.id,
+        sale_responsible_id: newId,
+      });
+      const name = responsibleMembers.find((m) => m.id === newId)?.name || "Nenhum";
+      logAction({ leadId: lead.id, action: "sale_responsible_assigned", description: `Resp. Venda alterado para "${name}"` });
+      queryClient.invalidateQueries({ queryKey: ["lead-detail", leadId] });
+      toast.success(`Resp. Venda: "${name}"`);
+      onSuccess?.();
+    } catch (error: any) {
+      setFormData((prev) => ({ ...prev, sale_responsible_id: lead.sale_responsible_id || "" }));
       toast.error(`Erro ao alterar responsável: ${error?.message || "Erro desconhecido"}`);
     }
   };
@@ -786,23 +830,55 @@ export const LeadDetailDrawer = memo(function LeadDetailDrawer({
 
                     {/* ─── Right Sidebar ─── */}
                     <div className="w-[240px] shrink-0 space-y-5">
-                      {/* RESPONSÁVEL */}
+                      {/* RESPONSÁVEL PRÉ-VENDA */}
                       <div>
-                        <h3 className="text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-2">Responsável</h3>
+                        <h3 className="text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-2">Resp. Pré-Venda</h3>
                         <Select
-                          value={formData.responsible_id || "none"}
-                          onValueChange={(v) => handleResponsibleChange(v === "none" ? null : v)}
+                          value={formData.pre_sale_responsible_id || "none"}
+                          onValueChange={(v) => handlePreSaleResponsibleChange(v === "none" ? null : v)}
                         >
                           <SelectTrigger className="h-9">
-                            {formData.responsible_id && formData.responsible_id !== "none" ? (
+                            {formData.pre_sale_responsible_id && formData.pre_sale_responsible_id !== "none" ? (
                               <div className="flex items-center gap-2">
-                                <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                                  <span className="text-[9px] font-bold text-primary">
-                                    {initials(responsibleMembers.find(m => m.id === formData.responsible_id)?.name)}
+                                <div className="w-6 h-6 rounded-full bg-blue-500/10 flex items-center justify-center shrink-0">
+                                  <span className="text-[9px] font-bold text-blue-500">
+                                    {initials(responsibleMembers.find(m => m.id === formData.pre_sale_responsible_id)?.name)}
                                   </span>
                                 </div>
                                 <span className="truncate text-sm">
-                                  {responsibleMembers.find(m => m.id === formData.responsible_id)?.name || "—"}
+                                  {responsibleMembers.find(m => m.id === formData.pre_sale_responsible_id)?.name || "—"}
+                                </span>
+                              </div>
+                            ) : (
+                              <SelectValue placeholder="Selecionar..." />
+                            )}
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">Nenhum</SelectItem>
+                            {responsibleMembers.map((m) => (
+                              <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* RESPONSÁVEL VENDA */}
+                      <div>
+                        <h3 className="text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-2">Resp. Venda</h3>
+                        <Select
+                          value={formData.sale_responsible_id || "none"}
+                          onValueChange={(v) => handleSaleResponsibleChange(v === "none" ? null : v)}
+                        >
+                          <SelectTrigger className="h-9">
+                            {formData.sale_responsible_id && formData.sale_responsible_id !== "none" ? (
+                              <div className="flex items-center gap-2">
+                                <div className="w-6 h-6 rounded-full bg-emerald-500/10 flex items-center justify-center shrink-0">
+                                  <span className="text-[9px] font-bold text-emerald-500">
+                                    {initials(responsibleMembers.find(m => m.id === formData.sale_responsible_id)?.name)}
+                                  </span>
+                                </div>
+                                <span className="truncate text-sm">
+                                  {responsibleMembers.find(m => m.id === formData.sale_responsible_id)?.name || "—"}
                                 </span>
                               </div>
                             ) : (

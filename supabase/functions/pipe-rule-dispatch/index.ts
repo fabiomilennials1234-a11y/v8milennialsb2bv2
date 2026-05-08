@@ -622,7 +622,7 @@ async function processPipeQueue(
         const pipeTable = `pipe_${pipeType}`;
         const { error: sdrErr } = await supabase
           .from(pipeTable)
-          .update({ sdr_id: sdrId, responsible_id: sdrId })
+          .update({ sdr_id: sdrId, responsible_id: sdrId, pre_sale_responsible_id: sdrId })
           .eq("id", row.pipe_record_id);
 
         if (sdrErr) {

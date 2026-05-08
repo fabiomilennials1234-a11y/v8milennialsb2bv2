@@ -173,14 +173,14 @@ Deno.serve(
     // ── 4. Assign responsible on pipe record ────────────────────────────────
     const { error: updatePipeError } = await supabase
       .from(pipeTable)
-      .update({ responsible_id: selectedMemberId, sdr_id: selectedMemberId })
+      .update({ responsible_id: selectedMemberId, sdr_id: selectedMemberId, pre_sale_responsible_id: selectedMemberId })
       .eq("id", pipeRecordId);
 
     // ── 5. Also update lead record ──────────────────────────────────────────
     if (leadId) {
       await supabase
         .from("leads")
-        .update({ responsible_id: selectedMemberId })
+        .update({ responsible_id: selectedMemberId, pre_sale_responsible_id: selectedMemberId })
         .eq("id", leadId);
     }
 

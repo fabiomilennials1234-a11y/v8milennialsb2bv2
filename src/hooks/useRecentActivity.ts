@@ -56,7 +56,9 @@ export function useRecentActivity(limit: number = 10) {
           id, status, updated_at,
           lead:leads(name, company),
           responsible:team_members!pipe_confirmacao_responsible_id_fkey(name),
-          sdr:team_members!pipe_confirmacao_sdr_id_fkey(name)
+          sdr:team_members!pipe_confirmacao_sdr_id_fkey(name),
+          pre_sale_responsible:team_members!pipe_confirmacao_pre_sale_responsible_id_fkey(name),
+          sale_responsible:team_members!pipe_confirmacao_sale_responsible_id_fkey(name)
         `)
         .eq("organization_id", organizationId)
         .eq("status", "compareceu")
@@ -76,7 +78,7 @@ export function useRecentActivity(limit: number = 10) {
           }),
           icon: "calendar",
           color: "success",
-          personName: meeting.responsible?.name || meeting.sdr?.name || meeting.lead?.name,
+          personName: meeting.pre_sale_responsible?.name || meeting.responsible?.name || meeting.sdr?.name || meeting.lead?.name,
         });
       });
 
@@ -86,7 +88,9 @@ export function useRecentActivity(limit: number = 10) {
           id, sale_value, product_type, closed_at,
           lead:leads(name, company),
           responsible:team_members!pipe_propostas_responsible_id_fkey(name),
-          closer:team_members!pipe_propostas_closer_id_fkey(name)
+          closer:team_members!pipe_propostas_closer_id_fkey(name),
+          pre_sale_responsible:team_members!pipe_propostas_pre_sale_responsible_id_fkey(name),
+          sale_responsible:team_members!pipe_propostas_sale_responsible_id_fkey(name)
         `)
         .eq("organization_id", organizationId)
         .eq("status", "vendido")
@@ -108,7 +112,7 @@ export function useRecentActivity(limit: number = 10) {
           icon: "dollar",
           color: "success",
           value,
-          personName: sale.responsible?.name || sale.closer?.name,
+          personName: sale.sale_responsible?.name || sale.responsible?.name || sale.closer?.name,
         });
       });
 

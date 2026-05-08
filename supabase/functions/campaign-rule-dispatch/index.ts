@@ -577,7 +577,7 @@ async function processCampaignQueue(
 
         const { error: sdrErr } = await supabase
           .from("campanha_leads")
-          .update({ sdr_id: sdrId, responsible_id: sdrId })
+          .update({ sdr_id: sdrId, responsible_id: sdrId, pre_sale_responsible_id: sdrId })
           .eq("id", row.campanha_lead_id);
 
         if (sdrErr) {

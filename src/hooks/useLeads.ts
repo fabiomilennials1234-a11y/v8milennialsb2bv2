@@ -83,6 +83,8 @@ export function useLeads(params: LeadsFilterParams = {}) {
           responsible:team_members!leads_responsible_id_fkey(id, name),
           sdr:team_members!leads_sdr_id_fkey(id, name),
           closer:team_members!leads_closer_id_fkey(id, name),
+          pre_sale_responsible:team_members!leads_pre_sale_responsible_id_fkey(id, name),
+          sale_responsible:team_members!leads_sale_responsible_id_fkey(id, name),
           lead_tags(
             tag:tags(id, name, color)
           )
@@ -208,6 +210,22 @@ export function useUpdateLead() {
         await supabase.from("pipe_whatsapp").update(responsibleUpdate).eq("lead_id", id);
         await supabase.from("pipe_confirmacao").update(responsibleUpdate).eq("lead_id", id);
         await supabase.from("pipe_propostas").update(responsibleUpdate).eq("lead_id", id);
+      }
+
+      // Sync pre_sale_responsible_id / sale_responsible_id to all pipe tables
+      if (safeUpdates.pre_sale_responsible_id !== undefined || safeUpdates.sale_responsible_id !== undefined) {
+        const pipeUpdate: Record<string, unknown> = {};
+        if (safeUpdates.pre_sale_responsible_id !== undefined) {
+          pipeUpdate.pre_sale_responsible_id = safeUpdates.pre_sale_responsible_id || null;
+        }
+        if (safeUpdates.sale_responsible_id !== undefined) {
+          pipeUpdate.sale_responsible_id = safeUpdates.sale_responsible_id || null;
+        }
+        if (Object.keys(pipeUpdate).length > 0) {
+          await supabase.from("pipe_whatsapp").update(pipeUpdate).eq("lead_id", id);
+          await supabase.from("pipe_confirmacao").update(pipeUpdate).eq("lead_id", id);
+          await supabase.from("pipe_propostas").update(pipeUpdate).eq("lead_id", id);
+        }
       }
 
       // Sync compromisso_date → pipe_confirmacao.meeting_date (espelho inverso).
