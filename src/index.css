@@ -433,6 +433,21 @@
   .ranking-card-winner {
     @apply border-primary shadow-gold bg-gradient-to-r from-primary/5 to-transparent;
   }
+
+  /* ─── Chat Bubble (Kanban floating widget) ─────────────────────── */
+  /* Sombra customizada do painel: dark = elevação cinematográfica;   */
+  /* light = sombra calibrada pro warm background do Torque.           */
+  .chat-bubble-panel-shadow {
+    box-shadow:
+      0 24px 60px -20px hsl(36 20% 4% / 0.55),
+      0 8px 24px -12px hsl(36 20% 4% / 0.35);
+  }
+
+  html:not(.dark) .chat-bubble-panel-shadow {
+    box-shadow:
+      0 24px 60px -20px hsl(30 18% 20% / 0.18),
+      0 8px 24px -12px hsl(30 18% 20% / 0.12);
+  }
 }
 
 @layer utilities {

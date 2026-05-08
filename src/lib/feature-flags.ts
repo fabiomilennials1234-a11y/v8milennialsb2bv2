@@ -19,4 +19,15 @@ export const featureFlags = {
    * Ativar: VITE_CHAT_ONDA_2B=true no .env ou variável de ambiente do build.
    */
   chatOnda2b: import.meta.env.VITE_CHAT_ONDA_2B === "true",
+
+  /**
+   * chatBubble — widget flutuante (FAB + painel) nas Pipe pages.
+   *
+   * Quando true E pathname starts with `/pipe`: renderiza Bubble Provider + FAB.
+   * Auto-hide em `/chat` e `/chat-whatsapp/*` (evita dual-render com ChatShell).
+   *
+   * Default dev=on, prod=off até validação manual.
+   * Ativar: VITE_CHAT_BUBBLE=true no .env ou variável de ambiente do build.
+   */
+  chatBubble: import.meta.env.VITE_CHAT_BUBBLE === "true",
 } as const;
