@@ -466,19 +466,19 @@ describe("useWhatsAppMessagesRealtime", () => {
   beforeEach(() => { vi.clearAllMocks(); });
 
   it("sets up subscription with phone number", () => {
-    const { unmount } = renderHook(() => useWhatsAppMessagesRealtime("5511999999999"), { wrapper: createWrapper() });
+    const { unmount } = renderHook(() => useWhatsAppMessagesRealtime("5511999999999", "instance-id-mock"), { wrapper: createWrapper() });
     expect(mockSupabase.channel).toHaveBeenCalled();
     unmount();
   });
 
   it("sets up subscription without phone number", () => {
-    const { unmount } = renderHook(() => useWhatsAppMessagesRealtime(null), { wrapper: createWrapper() });
+    const { unmount } = renderHook(() => useWhatsAppMessagesRealtime(null, null), { wrapper: createWrapper() });
     expect(mockSupabase.channel).toHaveBeenCalled();
     unmount();
   });
 
   it("cleans up channel on unmount", () => {
-    const { unmount } = renderHook(() => useWhatsAppMessagesRealtime("5511999999999"), { wrapper: createWrapper() });
+    const { unmount } = renderHook(() => useWhatsAppMessagesRealtime("5511999999999", "instance-id-mock"), { wrapper: createWrapper() });
     unmount();
     expect(mockSupabase.removeChannel).toHaveBeenCalled();
   });

@@ -15,14 +15,19 @@ import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
 import type { WhatsAppMessage, ChatContact } from "./types";
 import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
+import { normalizePhone as canonicalNormalizePhone } from "@/lib/normalizePhone";
+import { chatQueryKeys } from "./shared/queryKeys";
 
-const normalizePhone = (p: string): string => {
-  let c = p.replace(/\D/g, "");
-  if (!c) return p;
-  if (c.length >= 12 && c.startsWith("55")) c = c.slice(2);
-  if (c.length === 10) c = c.slice(0, 2) + "9" + c.slice(2);
-  return c;
-};
+/**
+ * Wrapper sobre o normalizePhone canônico (`@/lib/normalizePhone`) que preserva
+ * o contrato anterior (string-in / string-out) usado por matching de realtime.
+ *
+ * Diferenças do canônico:
+ *  - canônico retorna `null` para entradas vazias/inválidas; aqui convertemos
+ *    para `""` para evitar match falso-positivo (`null === null`) entre
+ *    múltiplas mensagens sem `phone_number`.
+ */
+const normalizePhone = (p: string): string => canonicalNormalizePhone(p) ?? "";
 
 /**
  * Hook para subscrição em tempo real de mensagens e contatos.
@@ -68,7 +73,7 @@ export function useWhatsAppMessagesRealtime(
 
           // ── Patch messages do chat ativo ───────────────────────────────────
           if (currentPhone && normalizePhone(messagePhone) === normalizePhone(currentPhone)) {
-            const msgQueryKey = ["whatsapp_messages", organizationId, currentPhone, currentInstanceId];
+            const msgQueryKey = chatQueryKeys.messages(organizationId, currentPhone, currentInstanceId);
 
             if (eventType === "INSERT") {
               queryClient.setQueryData<WhatsAppMessage[]>(msgQueryKey, (prev) => {
@@ -93,7 +98,7 @@ export function useWhatsAppMessagesRealtime(
 
           // ── Patch lista de contatos (sidebar) ─────────────────────────────
           if (currentInstanceId) {
-            const contactsQueryKey = ["whatsapp_contacts", organizationId, currentInstanceId];
+            const contactsQueryKey = chatQueryKeys.contacts(organizationId, currentInstanceId);
 
             if (eventType === "INSERT" || eventType === "UPDATE") {
               queryClient.setQueryData<ChatContact[]>(contactsQueryKey, (prev) => {

@@ -10,6 +10,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
 import type { WhatsAppMessage } from "./types";
+import { chatQueryKeys } from "./shared/queryKeys";
 
 /**
  * Hook para buscar mensagens de um contato específico em uma instância (inbox).
@@ -23,7 +24,7 @@ export function useWhatsAppMessages(
   const organizationId = teamMember?.organization_id;
 
   return useQuery({
-    queryKey: ["whatsapp_messages", organizationId, phoneNumber, instanceId],
+    queryKey: chatQueryKeys.messages(organizationId, phoneNumber, instanceId),
     queryFn: async () => {
       if (!organizationId || !phoneNumber || !instanceId) return [];
 
