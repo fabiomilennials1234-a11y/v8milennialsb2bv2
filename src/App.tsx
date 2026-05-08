@@ -44,6 +44,9 @@ const Performance = lazy(() => lazyRetry(() => import("./pages/Performance")));
 const Equipe = lazy(() => lazyRetry(() => import("./pages/Equipe")));
 const Comissoes = lazy(() => lazyRetry(() => import("./pages/Comissoes")));
 const Leads = lazy(() => lazyRetry(() => import("./pages/Leads")));
+const Companies = lazy(() => lazyRetry(() => import("./pages/Companies")));
+const Contacts = lazy(() => lazyRetry(() => import("./pages/Contacts")));
+const Deals = lazy(() => lazyRetry(() => import("./pages/Deals")));
 const Configuracoes = lazy(() => lazyRetry(() => import("./pages/Configuracoes")));
 const TVDashboard = lazy(() => lazyRetry(() => import("./pages/TVDashboard")));
 const Campanhas = lazy(() => lazyRetry(() => import("./pages/Campanhas")));
@@ -361,6 +364,42 @@ function AppRoutes() {
             <LayoutWrapper>
               <PermissionProtectedRoute featureKey="leads.view">
                 <Leads />
+              </PermissionProtectedRoute>
+            </LayoutWrapper>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/empresas"
+        element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <PermissionProtectedRoute featureKey="leads.view">
+                <Companies />
+              </PermissionProtectedRoute>
+            </LayoutWrapper>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/contatos"
+        element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <PermissionProtectedRoute featureKey="leads.view">
+                <Contacts />
+              </PermissionProtectedRoute>
+            </LayoutWrapper>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/negocios"
+        element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <PermissionProtectedRoute featureKey="pipeline.view">
+                <Deals />
               </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>

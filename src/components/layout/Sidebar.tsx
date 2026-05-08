@@ -38,6 +38,9 @@ import {
   Gift,
   ListChecks,
   FileText,
+  Building2,
+  Users,
+  Handshake,
 } from "lucide-react";
 import torqueLogo from "@/assets/torque-logo.png";
 import torqueIcon from "@/assets/torque-icon.png";
@@ -99,6 +102,9 @@ const navItems: NavItemWithChildren[] = [
   { label: "Chat", icon: Zap, path: "/chat" },
   { label: "Funis", icon: GitBranch, path: "/funis", children: [] }, // children set dynamically via displayConfig
   { label: "Combustível", icon: Fuel, path: "/leads" },
+  { label: "Contatos", icon: Users, path: "/contatos" },
+  { label: "Empresas", icon: Building2, path: "/empresas" },
+  { label: "Negócios", icon: Handshake, path: "/negocios" },
   { label: "Pódio", icon: Trophy, path: "/performance" },
   { label: "Comissões", icon: DollarSign, path: "/comissoes" },
   { label: "Copilot", icon: Bot, path: "/copilot" },
@@ -154,6 +160,9 @@ const SIDEBAR_VIEW_PERMISSIONS: Record<string, string> = {
   "/follow-ups": "followups.view",
   "/checklists": "checklists.view",
   "/leads": "leads.view",
+  "/contatos": "leads.view",
+  "/empresas": "leads.view",
+  "/negocios": "pipeline.view",
   "/performance": "performance.view",
   "/comissoes": "commissions.view",
   "/copilot": "copilot.view",
