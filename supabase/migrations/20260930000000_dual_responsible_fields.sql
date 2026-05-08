@@ -707,7 +707,7 @@ BEGIN
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION public.get_dashboard_metrics(UUID, DATE, DATE, UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_dashboard_metrics(UUID, TIMESTAMPTZ, TIMESTAMPTZ, UUID) TO authenticated;
 
 COMMENT ON FUNCTION public.get_dashboard_metrics IS
   'Dashboard metrics. Filters by dual responsible fields (pre_sale/sale) with fallback to legacy fields. Updated 2026-09-30 for dual-responsible support.';
