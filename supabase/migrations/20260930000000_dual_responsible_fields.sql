@@ -417,10 +417,14 @@ CREATE POLICY "leads_update_by_responsibility_and_permissions"
 -- SECTION 7: get_dashboard_metrics — filter by dual fields
 -- ============================================================================
 
+-- Drop old overloads so the new signature is the only one
+DROP FUNCTION IF EXISTS public.get_dashboard_metrics(UUID, DATE, DATE, UUID);
+DROP FUNCTION IF EXISTS public.get_dashboard_metrics(UUID, TEXT, TEXT, UUID);
+
 CREATE OR REPLACE FUNCTION public.get_dashboard_metrics(
   p_org_id          UUID,
-  p_start_date      DATE,
-  p_end_date        DATE,
+  p_start_date      TIMESTAMPTZ,
+  p_end_date        TIMESTAMPTZ,
   p_filter_member_id UUID DEFAULT NULL
 )
 RETURNS JSONB
