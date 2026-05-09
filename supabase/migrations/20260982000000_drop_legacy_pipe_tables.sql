@@ -1280,6 +1280,30 @@ $$;
 -- Section 4: Re-point Foreign Keys
 -- ============================================================================
 
+-- Clean up orphan records that reference pipe_propostas IDs not present in pipeline_entries
+-- (deduplication during migration kept only 1 entry per pipeline+lead, orphaning some items)
+DELETE FROM public.pipe_proposta_items
+WHERE pipe_proposta_id NOT IN (SELECT id FROM public.pipeline_entries);
+
+DELETE FROM public.tinyerp_order_mappings
+WHERE pipe_proposta_id NOT IN (SELECT id FROM public.pipeline_entries);
+
+UPDATE public.commissions SET pipe_proposta_id = NULL
+WHERE pipe_proposta_id IS NOT NULL
+  AND pipe_proposta_id NOT IN (SELECT id FROM public.pipeline_entries);
+
+UPDATE public.upsell_orders SET pipe_proposta_id = NULL
+WHERE pipe_proposta_id IS NOT NULL
+  AND pipe_proposta_id NOT IN (SELECT id FROM public.pipeline_entries);
+
+UPDATE public.acoes_do_dia SET proposta_id = NULL
+WHERE proposta_id IS NOT NULL
+  AND proposta_id NOT IN (SELECT id FROM public.pipeline_entries);
+
+UPDATE public.acoes_do_dia SET confirmacao_id = NULL
+WHERE confirmacao_id IS NOT NULL
+  AND confirmacao_id NOT IN (SELECT id FROM public.pipeline_entries);
+
 -- pipe_proposta_items: pipe_proposta_id -> pipeline_entries(id)
 ALTER TABLE public.pipe_proposta_items
   DROP CONSTRAINT IF EXISTS pipe_proposta_items_pipe_proposta_id_fkey;
