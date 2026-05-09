@@ -108,6 +108,7 @@ export function useCreatePipeWhatsapp() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["pipe_whatsapp"] });
+      queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
       queryClient.invalidateQueries({ queryKey: ["follow_ups"] });
     },
   });
@@ -161,6 +162,7 @@ export function useUpdatePipeWhatsapp() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["pipe_whatsapp"], refetchType: "active" });
+      queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
     },
   });
 }
@@ -179,6 +181,7 @@ export function useDeletePipeWhatsapp() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["pipe_whatsapp"] });
+      queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
       queryClient.invalidateQueries({ queryKey: ["follow_ups"] });
     },
   });

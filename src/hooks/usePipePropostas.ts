@@ -122,6 +122,7 @@ export function useCreatePipeProposta() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["pipe_propostas"], refetchType: "active" });
+      queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
       queryClient.invalidateQueries({ queryKey: ["follow_ups"], refetchType: "active" });
     },
   });
@@ -214,6 +215,7 @@ export function useUpdatePipeProposta() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["pipe_propostas"], refetchType: "active" });
+      queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
     },
   });
 }
@@ -266,6 +268,7 @@ export function useDeletePipeProposta() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["pipe_propostas"] });
+      queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
     },
   });
 }

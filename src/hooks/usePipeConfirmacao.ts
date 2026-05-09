@@ -116,6 +116,7 @@ export function useCreatePipeConfirmacao() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["pipe_confirmacao"] });
+      queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
       queryClient.invalidateQueries({ queryKey: ["follow_ups"] });
     },
   });
@@ -216,6 +217,7 @@ export function useUpdatePipeConfirmacao() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["pipe_confirmacao"], refetchType: "active" });
+      queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
       queryClient.invalidateQueries({ queryKey: ["leads"], refetchType: "active" });
     },
   });
@@ -235,6 +237,7 @@ export function useDeletePipeConfirmacao() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["pipe_confirmacao"] });
+      queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
       queryClient.invalidateQueries({ queryKey: ["follow_ups"] });
     },
   });

@@ -2,7 +2,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "./useTeamMembers";
 import { useCustomPipelines } from "./useCustomPipelines";
-import { toast } from "sonner";
 
 // ─── Types ───────────────────────────────────────────────────
 
@@ -31,7 +30,6 @@ export interface CustomPipelineStatus {
 
 export type PipelineStatus = StandardPipelineStatus | CustomPipelineStatus;
 
-// ─── Pipeline type mapping (pipeType alias → pipeline_stages.pipeline_type) ──
 const PIPE_TYPE_MAP: Record<string, string> = {
   qualificacao: "whatsapp",
   confirmacao: "confirmacao",
@@ -39,7 +37,13 @@ const PIPE_TYPE_MAP: Record<string, string> = {
   upsell: "upsell_base",
 };
 
-// ─── Main hook: fetch lead status across all pipelines ────────
+const SYSTEM_SLUG_TO_PIPE: Record<string, "qualificacao" | "confirmacao" | "propostas"> = {
+  whatsapp: "qualificacao",
+  confirmacao: "confirmacao",
+  propostas: "propostas",
+};
+
+// ─── Main hook: unified pipeline_entries query ────────
 
 export function useLeadAllPipelines(leadId: string | null) {
   const { data: teamMember } = useCurrentTeamMember();
@@ -51,60 +55,46 @@ export function useLeadAllPipelines(leadId: string | null) {
     queryFn: async (): Promise<PipelineStatus[]> => {
       if (!leadId || !orgId) return [];
 
-      // Fetch all standard pipelines + dynamic stages + custom entries in parallel
       const [
-        { data: pipeWhatsapp },
-        { data: pipeConfirmacao },
-        { data: pipePropostas },
-        { data: pipeUpsell },
+        { data: allEntries },
         { data: dynamicStages },
-        { data: customEntries },
+        { data: allPipelines },
         { data: customStagesAll },
+        { data: pipeUpsell },
       ] = await Promise.all([
-        supabase
-          .from("pipe_whatsapp")
-          .select("id, status")
+        (supabase.from as any)("pipeline_entries")
+          .select("id, pipeline_id, stage_key")
           .eq("lead_id", leadId)
-          .eq("organization_id", orgId)
-          .maybeSingle(),
-        supabase
-          .from("pipe_confirmacao")
-          .select("id, status")
-          .eq("lead_id", leadId)
-          .eq("organization_id", orgId)
-          .maybeSingle(),
-        supabase
-          .from("pipe_propostas")
-          .select("id, status")
-          .eq("lead_id", leadId)
-          .eq("organization_id", orgId)
-          .maybeSingle(),
-        supabase
-          .from("upsell")
-          .select("id, status")
-          .eq("lead_id", leadId)
-          .eq("organization_id", orgId)
-          .maybeSingle(),
+          .eq("organization_id", orgId),
         supabase
           .from("pipeline_stages")
           .select("pipeline_type, stage_key, name, color, position")
           .eq("organization_id", orgId)
           .eq("is_active", true)
           .order("position", { ascending: true }),
-        supabase
-          .from("custom_pipe_entries")
-          .select("id, pipeline_id, stage_id")
-          .eq("lead_id", leadId)
-          .eq("organization_id", orgId),
+        (supabase.from as any)("pipelines")
+          .select("id, slug, type, name, color, icon")
+          .eq("organization_id", orgId)
+          .eq("is_active", true),
         supabase
           .from("custom_pipeline_stages")
-          .select("id, pipeline_id, name, color, position")
+          .select("id, pipeline_id, name, color, position, stage_key")
           .eq("organization_id", orgId)
           .eq("is_active", true)
           .order("position", { ascending: true }),
+        // Upsell still lives in its own table (no sync trigger yet)
+        supabase
+          .from("upsell")
+          .select("id, status")
+          .eq("lead_id", leadId)
+          .eq("organization_id", orgId)
+          .maybeSingle(),
       ]);
 
-      // Build dynamic stage lists keyed by pipeline_type
+      const entries = allEntries ?? [];
+      const pipelines = (allPipelines ?? []) as { id: string; slug: string; type: string; name: string; color: string; icon: string }[];
+
+      // Build stage lookup
       const stagesByDbType = new Map<string, { id: string; label: string; color: string }[]>();
       (dynamicStages || []).forEach((s) => {
         const arr = stagesByDbType.get(s.pipeline_type) || [];
@@ -112,38 +102,49 @@ export function useLeadAllPipelines(leadId: string | null) {
         stagesByDbType.set(s.pipeline_type, arr);
       });
 
-      // Helper: get dynamic stages for a pipeType alias, with empty fallback
       const getStages = (pipeType: string) => stagesByDbType.get(PIPE_TYPE_MAP[pipeType] || pipeType) || [];
+
+      // Map pipeline_id → entry
+      const entryByPipelineId = new Map(entries.map((e: any) => [e.pipeline_id, e]));
+
+      // Map pipeline slug → pipeline
+      const pipelineBySlug = new Map(pipelines.map((p) => [p.slug, p]));
 
       const results: PipelineStatus[] = [];
 
-      // Standard pipelines — stages come from pipeline_stages (dynamic)
-      const buildStandard = (
-        pipeType: "qualificacao" | "confirmacao" | "propostas" | "upsell",
-        label: string,
-        color: string,
-        pipeEntry: { id: string; status: string } | null,
-      ): StandardPipelineStatus => {
+      // System pipelines
+      for (const [slug, pipeType] of Object.entries(SYSTEM_SLUG_TO_PIPE)) {
+        const pipeline = pipelineBySlug.get(slug);
+        const entry = pipeline ? entryByPipelineId.get(pipeline.id) : null;
         const stages = getStages(pipeType);
-        return {
+        const label = slug === "whatsapp" ? "Qualificação" : slug === "confirmacao" ? "Confirmação" : "Propostas";
+        const color = slug === "whatsapp" ? "#6366f1" : slug === "confirmacao" ? "#22c55e" : "#f59e0b";
+
+        results.push({
           type: "standard",
           pipeType,
           label,
           color,
-          pipeId: pipeEntry?.id || null,
-          currentStage: pipeEntry?.status || null,
-          currentStageLabel: stages.find((s) => s.id === pipeEntry?.status)?.label || null,
+          pipeId: entry?.id || null,
+          currentStage: entry?.stage_key || null,
+          currentStageLabel: stages.find((s) => s.id === entry?.stage_key)?.label || null,
           stages,
-        };
-      };
+        });
+      }
 
-      results.push(buildStandard("qualificacao", "Qualificação", "#6366f1", pipeWhatsapp));
-      results.push(buildStandard("confirmacao", "Confirmação", "#22c55e", pipeConfirmacao));
-      results.push(buildStandard("propostas", "Propostas", "#f59e0b", pipePropostas));
-      results.push(buildStandard("upsell", "Carteira", "#3b82f6", pipeUpsell));
+      // Upsell (still legacy — no sync trigger yet)
+      results.push({
+        type: "standard",
+        pipeType: "upsell",
+        label: "Carteira",
+        color: "#3b82f6",
+        pipeId: pipeUpsell?.id || null,
+        currentStage: pipeUpsell?.status || null,
+        currentStageLabel: getStages("upsell").find((s) => s.id === pipeUpsell?.status)?.label || null,
+        stages: getStages("upsell"),
+      });
 
       // Custom pipelines
-      const entriesMap = new Map((customEntries || []).map((e) => [e.pipeline_id, e]));
       const stagesByPipeline = new Map<string, typeof customStagesAll>();
       (customStagesAll || []).forEach((s) => {
         const arr = stagesByPipeline.get(s.pipeline_id) || [];
@@ -152,9 +153,9 @@ export function useLeadAllPipelines(leadId: string | null) {
       });
 
       for (const pipeline of customPipelines) {
-        const entry = entriesMap.get(pipeline.id);
+        const entry = entryByPipelineId.get(pipeline.id);
         const stages = (stagesByPipeline.get(pipeline.id) || []).sort((a, b) => a.position - b.position);
-        const currentStage = stages.find((s) => s.id === entry?.stage_id);
+        const currentStage = entry ? stages.find((s) => s.stage_key === entry.stage_key || s.id === entry.stage_key) : null;
 
         results.push({
           type: "custom",
@@ -163,7 +164,7 @@ export function useLeadAllPipelines(leadId: string | null) {
           pipelineColor: pipeline.color,
           pipelineIcon: pipeline.icon,
           entryId: entry?.id || null,
-          currentStageId: entry?.stage_id || null,
+          currentStageId: currentStage?.id || null,
           currentStageName: currentStage?.name || null,
           stages: stages.map((s) => ({ id: s.id, name: s.name, color: s.color, position: s.position })),
         });
@@ -176,6 +177,7 @@ export function useLeadAllPipelines(leadId: string | null) {
 }
 
 // ─── Mutation: add lead to a standard pipeline ────────────────
+// Writes to legacy tables → sync triggers push to pipeline_entries
 
 export function useAddLeadToStandardPipe() {
   const queryClient = useQueryClient();
@@ -231,6 +233,7 @@ export function useAddLeadToStandardPipe() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["lead_all_pipelines"] });
+      queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
       queryClient.invalidateQueries({ queryKey: ["pipe_whatsapp"] });
       queryClient.invalidateQueries({ queryKey: ["pipe_confirmacao"] });
       queryClient.invalidateQueries({ queryKey: ["pipe_propostas"] });
@@ -269,6 +272,7 @@ export function useMoveLeadInStandardPipe() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["lead_all_pipelines"] });
+      queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
       queryClient.invalidateQueries({ queryKey: ["pipe_whatsapp"] });
       queryClient.invalidateQueries({ queryKey: ["pipe_whatsapp_by_lead"] });
       queryClient.invalidateQueries({ queryKey: ["pipe_confirmacao"] });
@@ -302,6 +306,7 @@ export function useRemoveLeadFromStandardPipe() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["lead_all_pipelines"] });
+      queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
       queryClient.invalidateQueries({ queryKey: ["pipe_whatsapp"] });
       queryClient.invalidateQueries({ queryKey: ["pipe_whatsapp_by_lead"] });
       queryClient.invalidateQueries({ queryKey: ["pipe_confirmacao"] });
