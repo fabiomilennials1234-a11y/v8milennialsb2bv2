@@ -101,6 +101,7 @@ export interface LeadCardData extends DraggableItem {
   urgency?: string | null;
   tags?: Array<{ name: string; color: string }>;
   responsible?: string | null;
+  assignees?: string[];
   createdAt?: string | null;
   // Value fields
   faturamento?: string | number | null;
@@ -672,22 +673,35 @@ export const LeadCard = memo(function LeadCard({
         </div>
       )}
 
-      {/* ── Footer: Responsible avatar+name + Clock time ── */}
+      {/* ── Footer: Responsible avatars + Clock time ── */}
       <div className="flex items-center justify-between pt-2 border-t border-border/60 mt-auto">
-        {lead.responsible ? (
-          <div className="flex items-center gap-1.5 min-w-0">
-            <div className="w-5 h-5 rounded-full bg-primary/15 flex items-center justify-center shrink-0">
-              <span className="text-[9px] font-bold text-primary leading-none">
-                {lead.responsible.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
-              </span>
+        {(() => {
+          const names = lead.assignees?.length ? lead.assignees : lead.responsible ? [lead.responsible] : [];
+          return names.length > 0 ? (
+            <div className="flex items-center gap-1.5 min-w-0">
+              <div className="flex -space-x-1.5">
+                {names.map((name) => (
+                  <div
+                    key={name}
+                    className="w-5 h-5 rounded-full bg-primary/15 flex items-center justify-center shrink-0 ring-1 ring-background"
+                    title={name}
+                  >
+                    <span className="text-[9px] font-bold text-primary leading-none">
+                      {name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              {names.length === 1 && (
+                <span className="text-[11px] text-muted-foreground truncate max-w-[90px]">
+                  {names[0]}
+                </span>
+              )}
             </div>
-            <span className="text-[11px] text-muted-foreground truncate max-w-[90px]">
-              {lead.responsible}
-            </span>
-          </div>
-        ) : (
-          <span />
-        )}
+          ) : (
+            <span />
+          );
+        })()}
         {lead.createdAt && (
           <div className="flex items-center gap-1 text-[10px] text-muted-foreground shrink-0">
             <Clock className="w-3 h-3" />

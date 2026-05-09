@@ -399,6 +399,7 @@ export default function PipeConfirmacao() {
       rating: lead?.rating || 0,
       origin: lead?.origin || "outro",
       responsible: item.responsible?.name || item.sdr?.name || item.closer?.name || lead?.responsible?.name || lead?.sdr?.name || lead?.closer?.name,
+      assignees: [...new Set([item.responsible?.name, item.sdr?.name, item.closer?.name, item.pre_sale_responsible?.name, item.sale_responsible?.name, lead?.responsible?.name, lead?.sdr?.name, lead?.closer?.name, lead?.pre_sale_responsible?.name, lead?.sale_responsible?.name].filter(Boolean))] as string[],
       tags: lead?.lead_tags?.map((lt: any) => ({ name: lt.tag?.name, color: lt.tag?.color || "#888" })).filter((t: any) => t.name) || [],
       leadId: item.lead_id,
       faturamento: lead?.faturamento,

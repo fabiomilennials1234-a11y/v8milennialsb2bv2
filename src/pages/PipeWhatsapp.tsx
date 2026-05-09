@@ -199,6 +199,7 @@ export default function PipeWhatsapp() {
       email: lead?.email,
       rating: lead?.rating || 0,
       responsible: item.responsible?.name || item.sdr?.name || lead?.responsible?.name || lead?.sdr?.name,
+      assignees: [...new Set([item.responsible?.name, item.sdr?.name, item.pre_sale_responsible?.name, item.sale_responsible?.name, lead?.responsible?.name, lead?.sdr?.name, lead?.pre_sale_responsible?.name, lead?.sale_responsible?.name].filter(Boolean))] as string[],
       tags: lead?.lead_tags?.map((lt: any) => ({ name: lt.tag?.name, color: lt.tag?.color || "#888" })).filter((t: any) => t.name) || [],
       createdAt: item.created_at,
       faturamento: lead?.faturamento,

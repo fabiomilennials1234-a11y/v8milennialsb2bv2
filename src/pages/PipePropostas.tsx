@@ -339,6 +339,7 @@ export default function PipePropostas() {
       rating: lead?.rating || 0,
       calor: item.calor ?? 5,
       responsible: item.responsible?.name || item.closer?.name || lead?.responsible?.name || lead?.closer?.name,
+      assignees: [...new Set([item.responsible?.name, item.closer?.name, item.pre_sale_responsible?.name, item.sale_responsible?.name, lead?.responsible?.name, lead?.closer?.name, lead?.pre_sale_responsible?.name, lead?.sale_responsible?.name].filter(Boolean))] as string[],
       value: totalValue,
       valueLabel: new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 0 }).format(totalValue),
       contractDuration: item.contract_duration || 0,
