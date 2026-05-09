@@ -1,27 +1,16 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
 import { triggerFollowUpAutomation } from "./useAutoFollowUp";
 import { triggerStageChangedWorkflows } from "@/lib/workflowTrigger";
-import { useRealtimeSubscription, type RealtimeHandlers } from "./useRealtimeSubscription";
 import { useOrganization } from "./useOrganization";
 import { useCanPerformActionAsync } from "@/lib/permissions";
-
-/** Surgical realtime handlers — avoid full refetch for single-item changes */
-const realtimeHandlers: RealtimeHandlers = {
-  onUpdate: (updated, oldData) =>
-    oldData.map((item) =>
-      item.id === updated.id ? { ...item, ...updated } : item
-    ),
-  onDelete: (deleted, oldData) =>
-    oldData.filter((item) => item.id !== deleted.id),
-};
+import { usePipelineEntries, usePipelineId } from "./usePipelineEntries";
 
 export type PipeProposta = Tables<"pipe_propostas">;
 export type PipePropostaInsert = TablesInsert<"pipe_propostas">;
 export type PipePropostaUpdate = TablesUpdate<"pipe_propostas">;
 
-// Dynamic — accepts any stage_key from pipeline_stages (custom stages supported)
 export type PipePropostasStatus = string;
 
 export const statusColumns: { id: string; title: string; color: string }[] = [
@@ -36,76 +25,61 @@ export const statusColumns: { id: string; title: string; color: string }[] = [
 ];
 
 export function usePipePropostas() {
-  const { organizationId, isReady } = useOrganization();
-  useRealtimeSubscription("pipe_propostas", ["pipe_propostas"], realtimeHandlers);
-
-  return useQuery({
-    queryKey: ["pipe_propostas", organizationId],
-    queryFn: async () => {
-      if (!organizationId) {
-        return [];
-      }
-      const { data, error } = await supabase
-        .from("pipe_propostas")
-        .select(`
-          *,
-          lead:leads(
-            id, name, company, email, phone, rating, origin, segment, faturamento, ai_disabled, sdr_id, closer_id, responsible_id, pre_sale_responsible_id, sale_responsible_id,
-            responsible:team_members!leads_responsible_id_fkey(id, name),
-            sdr:team_members!leads_sdr_id_fkey(id, name),
-            closer:team_members!leads_closer_id_fkey(id, name),
-            pre_sale_responsible:team_members!leads_pre_sale_responsible_id_fkey(id, name),
-            sale_responsible:team_members!leads_sale_responsible_id_fkey(id, name),
-            lead_tags(tag:tags(id, name, color))
-          ),
-          responsible:team_members!pipe_propostas_responsible_id_fkey(id, name),
-          closer:team_members!pipe_propostas_closer_id_fkey(id, name),
-          pre_sale_responsible:team_members!pipe_propostas_pre_sale_responsible_id_fkey(id, name),
-          sale_responsible:team_members!pipe_propostas_sale_responsible_id_fkey(id, name),
-          product:products(id, name, type, ticket, ticket_minimo),
-          items:pipe_proposta_items(
-            id, product_id, sale_value, created_at,
-            product:products(id, name, type, ticket, ticket_minimo)
-          )
-        `)
-        .eq("organization_id", organizationId)
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-      return data;
-    },
-    enabled: isReady && !!organizationId,
-    staleTime: 10 * 60 * 1000, // 10 min — realtime subscription garante freshness
-  });
+  return usePipelineEntries("propostas");
 }
 
 export function useCreatePipeProposta() {
   const queryClient = useQueryClient();
   const { organizationId } = useOrganization();
+  const { data: pipelineId } = usePipelineId("propostas");
 
   return useMutation({
     mutationFn: async (item: PipePropostaInsert) => {
       if (!organizationId) {
         throw new Error("Cannot create pipe_propostas: No organization context");
       }
-      const securedItem = {
-        ...item,
-        organization_id: organizationId,
-      };
+      if (!pipelineId) {
+        throw new Error("Cannot create proposta: pipeline ID not resolved");
+      }
+
+      const metadata: Record<string, unknown> = {};
+      if (item.closer_id !== undefined) metadata.closer_id = item.closer_id;
+      if (item.responsible_id !== undefined) metadata.responsible_id = item.responsible_id;
+      if (item.pre_sale_responsible_id !== undefined) metadata.pre_sale_responsible_id = item.pre_sale_responsible_id;
+      if (item.sale_responsible_id !== undefined) metadata.sale_responsible_id = item.sale_responsible_id;
+      if (item.sale_value !== undefined) metadata.sale_value = item.sale_value;
+      if (item.product_type !== undefined) metadata.product_type = item.product_type;
+      if (item.product_id !== undefined) metadata.product_id = item.product_id;
+      if (item.calor !== undefined) metadata.calor = item.calor;
+      if (item.loss_reason_id !== undefined) metadata.loss_reason_id = item.loss_reason_id;
+      if (item.commitment_date !== undefined) metadata.commitment_date = item.commitment_date;
+      if (item.contract_duration !== undefined) metadata.contract_duration = item.contract_duration;
+      if (item.metrics_period_at !== undefined) metadata.metrics_period_at = item.metrics_period_at;
+
       const { data, error } = await supabase
-        .from("pipe_propostas")
-        .insert(securedItem)
+        .from("pipeline_entries")
+        .insert({
+          pipeline_id: pipelineId,
+          lead_id: item.lead_id!,
+          stage_key: item.status ?? "marcar_compromisso",
+          assigned_to: item.responsible_id || item.closer_id || null,
+          organization_id: organizationId,
+          metadata,
+        })
         .select()
         .single();
 
       if (error) throw error;
 
+      const stage = data.stage_key;
+      const assignedTo = (item.responsible_id || item.closer_id) as string | undefined;
+
       // Trigger automation for the initial status
       await triggerFollowUpAutomation({
         leadId: data.lead_id,
-        assignedTo: data.responsible_id || data.closer_id,
+        assignedTo: assignedTo ?? null,
         pipeType: "propostas",
-        stage: data.status,
+        stage,
         sourcePipeId: data.id,
         organizationId: data.organization_id,
       });
@@ -115,13 +89,13 @@ export function useCreatePipeProposta() {
         organizationId: data.organization_id,
         leadId: data.lead_id,
         pipeType: "propostas",
-        toStage: data.status,
+        toStage: stage,
       });
 
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["pipe_propostas"], refetchType: "active" });
+      queryClient.invalidateQueries({ queryKey: ["pipeline_entries"], refetchType: "active" });
       queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
       queryClient.invalidateQueries({ queryKey: ["follow_ups"], refetchType: "active" });
     },
@@ -131,15 +105,49 @@ export function useCreatePipeProposta() {
 export function useUpdatePipeProposta() {
   const queryClient = useQueryClient();
   const { data: movePermission } = useCanPerformActionAsync("move_pipe_record");
+  const { data: pipelineId } = usePipelineId("propostas");
 
   return useMutation({
     mutationFn: async ({ id, leadId, closerId, skip_auto_push, ...updates }: PipePropostaUpdate & { id: string; leadId?: string; closerId?: string | null; skip_auto_push?: boolean }) => {
       if (updates.status && movePermission && !movePermission.allowed) {
         throw new Error("Sem permissão para mover registros no pipe");
       }
+
+      // Fetch current entry to get existing metadata for merge
+      const { data: current, error: fetchError } = await supabase
+        .from("pipeline_entries")
+        .select("*")
+        .eq("id", id)
+        .single();
+
+      if (fetchError) throw fetchError;
+
+      const existingMeta = (current.metadata as Record<string, unknown>) ?? {};
+      const mergedMeta = { ...existingMeta };
+
+      // Merge pipe-specific fields into metadata
+      if (updates.closer_id !== undefined) mergedMeta.closer_id = updates.closer_id;
+      if (updates.responsible_id !== undefined) mergedMeta.responsible_id = updates.responsible_id;
+      if (updates.pre_sale_responsible_id !== undefined) mergedMeta.pre_sale_responsible_id = updates.pre_sale_responsible_id;
+      if (updates.sale_responsible_id !== undefined) mergedMeta.sale_responsible_id = updates.sale_responsible_id;
+      if (updates.sale_value !== undefined) mergedMeta.sale_value = updates.sale_value;
+      if (updates.product_type !== undefined) mergedMeta.product_type = updates.product_type;
+      if (updates.product_id !== undefined) mergedMeta.product_id = updates.product_id;
+      if (updates.calor !== undefined) mergedMeta.calor = updates.calor;
+      if (updates.loss_reason_id !== undefined) mergedMeta.loss_reason_id = updates.loss_reason_id;
+      if (updates.commitment_date !== undefined) mergedMeta.commitment_date = updates.commitment_date;
+      if (updates.contract_duration !== undefined) mergedMeta.contract_duration = updates.contract_duration;
+      if (updates.metrics_period_at !== undefined) mergedMeta.metrics_period_at = updates.metrics_period_at;
+
+      const entryUpdate: Record<string, unknown> = { metadata: mergedMeta };
+      if (updates.status !== undefined) entryUpdate.stage_key = updates.status;
+      if (updates.responsible_id !== undefined || updates.closer_id !== undefined) {
+        entryUpdate.assigned_to = (updates.responsible_id ?? mergedMeta.responsible_id) || (updates.closer_id ?? mergedMeta.closer_id) || null;
+      }
+
       const { data, error } = await supabase
-        .from("pipe_propostas")
-        .update(updates)
+        .from("pipeline_entries")
+        .update(entryUpdate)
         .eq("id", id)
         .select()
         .single();
@@ -193,9 +201,10 @@ export function useUpdatePipeProposta() {
 
       // Trigger automation if status changed
       if (updates.status && effectiveLeadId) {
+        const effectiveCloserId = closerId || (mergedMeta.closer_id as string | null);
         await triggerFollowUpAutomation({
           leadId: effectiveLeadId,
-          assignedTo: closerId || data.closer_id,
+          assignedTo: effectiveCloserId ?? null,
           pipeType: "propostas",
           stage: updates.status,
           sourcePipeId: data.id,
@@ -214,7 +223,7 @@ export function useUpdatePipeProposta() {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["pipe_propostas"], refetchType: "active" });
+      queryClient.invalidateQueries({ queryKey: ["pipeline_entries"], refetchType: "active" });
       queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
     },
   });
@@ -230,7 +239,7 @@ export function useDeletePipeProposta() {
       // blocks the DELETE — causing the optimistic removal to appear to succeed
       // while the record remains in the database and reappears on the next refetch.
       const { data: deleted, error } = await supabase
-        .from("pipe_propostas")
+        .from("pipeline_entries")
         .delete()
         .eq("id", id)
         .select("id");
@@ -245,13 +254,13 @@ export function useDeletePipeProposta() {
     },
     onMutate: async (id: string) => {
       // Cancel any in-flight refetches so they don't overwrite the optimistic update
-      await queryClient.cancelQueries({ queryKey: ["pipe_propostas"] });
+      await queryClient.cancelQueries({ queryKey: ["pipeline_entries"] });
 
       // Snapshot previous cache for rollback
-      const previousData = queryClient.getQueriesData({ queryKey: ["pipe_propostas"] });
+      const previousData = queryClient.getQueriesData({ queryKey: ["pipeline_entries"] });
 
       // Optimistically remove the proposal from all cached pipe_propostas queries
-      queryClient.setQueriesData({ queryKey: ["pipe_propostas"] }, (old: any) => {
+      queryClient.setQueriesData({ queryKey: ["pipeline_entries"] }, (old: any) => {
         if (!Array.isArray(old)) return old;
         return old.filter((item: any) => item.id !== id);
       });
@@ -267,7 +276,6 @@ export function useDeletePipeProposta() {
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["pipe_propostas"] });
       queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
     },
   });

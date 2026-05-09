@@ -207,7 +207,7 @@ export const ConfirmacaoCard = memo(function ConfirmacaoCard({ card, onClick, on
         
         if (error) throw error;
         
-        queryClient.invalidateQueries({ queryKey: ["pipe_confirmacao"] });
+        queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
         toast.success("✅ Reunião confirmada no dia!");
         setIsUpdating(false);
         return;
@@ -223,7 +223,7 @@ export const ConfirmacaoCard = memo(function ConfirmacaoCard({ card, onClick, on
       
       if (error) throw error;
       
-      queryClient.invalidateQueries({ queryKey: ["pipe_confirmacao"] });
+      queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
       
       if (newIsConfirmed) {
         toast.success("🔵 Reunião pré-confirmada!");

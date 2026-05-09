@@ -187,9 +187,7 @@ async function cleanupTestData(supabase: SupabaseClient, orgId: string): Promise
     "lead_history",
     "pending_ai_actions",
     "scheduled_pipe_messages",
-    "pipe_whatsapp",
-    "pipe_confirmacao",
-    "pipe_propostas",
+    "pipeline_entries",
     "campanha_leads",
     "leads",
     "team_members",
@@ -633,8 +631,10 @@ function buildActionTests(
           executionContext: {},
         });
         assert(result.success, `move_stage confirmacao failed: ${result.error}`);
-        const { data: pipe } = await supabase.from("pipe_confirmacao").select("status").eq("lead_id", leadId).maybeSingle();
-        assert(pipe?.status === "confirmado", `Expected confirmado, got ${pipe?.status}`);
+        const { data: confPipeline } = await supabase.from("pipelines").select("id").eq("organization_id", orgId).eq("slug", "confirmacao").eq("type", "system").maybeSingle();
+        assert(confPipeline?.id, "confirmacao pipeline not found");
+        const { data: confEntry } = await supabase.from("pipeline_entries").select("stage_key").eq("pipeline_id", confPipeline!.id).eq("lead_id", leadId).maybeSingle();
+        assert(confEntry?.stage_key === "confirmado", `Expected confirmado in pipeline_entries, got ${confEntry?.stage_key}`);
       },
     },
     {
@@ -647,8 +647,10 @@ function buildActionTests(
           executionContext: {},
         });
         assert(result.success, `move_stage propostas failed: ${result.error}`);
-        const { data: pipe } = await supabase.from("pipe_propostas").select("status").eq("lead_id", leadId).maybeSingle();
-        assert(pipe?.status === "negociacao", `Expected negociacao, got ${pipe?.status}`);
+        const { data: propPipeline } = await supabase.from("pipelines").select("id").eq("organization_id", orgId).eq("slug", "propostas").eq("type", "system").maybeSingle();
+        assert(propPipeline?.id, "propostas pipeline not found");
+        const { data: propEntry } = await supabase.from("pipeline_entries").select("stage_key").eq("pipeline_id", propPipeline!.id).eq("lead_id", leadId).maybeSingle();
+        assert(propEntry?.stage_key === "negociacao", `Expected negociacao in pipeline_entries, got ${propEntry?.stage_key}`);
       },
     },
     {
@@ -757,7 +759,7 @@ function buildActionTests(
       },
     },
     {
-      name: "duplicate_to_pipe — creates pipe_confirmacao record",
+      name: "duplicate_to_pipe — creates confirmacao entry",
       fn: async () => {
         const leadId = await createTestLead(supabase, orgId);
         const result = await executeWorkflowAction({
@@ -766,12 +768,14 @@ function buildActionTests(
           executionContext: {},
         });
         assert(result.success, `duplicate_to_pipe failed: ${result.error}`);
-        const { data: pipe } = await supabase.from("pipe_confirmacao").select("status").eq("lead_id", leadId).maybeSingle();
-        assert(pipe?.status === "agendado", `Expected agendado, got ${pipe?.status}`);
+        const { data: dupConfPipeline } = await supabase.from("pipelines").select("id").eq("organization_id", orgId).eq("slug", "confirmacao").eq("type", "system").maybeSingle();
+        assert(dupConfPipeline?.id, "confirmacao pipeline not found");
+        const { data: dupConfEntry } = await supabase.from("pipeline_entries").select("stage_key").eq("pipeline_id", dupConfPipeline!.id).eq("lead_id", leadId).maybeSingle();
+        assert(dupConfEntry?.stage_key === "agendado", `Expected agendado in pipeline_entries, got ${dupConfEntry?.stage_key}`);
       },
     },
     {
-      name: "duplicate_to_pipe — creates pipe_propostas record",
+      name: "duplicate_to_pipe — creates propostas entry",
       fn: async () => {
         const leadId = await createTestLead(supabase, orgId);
         const result = await executeWorkflowAction({
@@ -780,38 +784,50 @@ function buildActionTests(
           executionContext: {},
         });
         assert(result.success, `duplicate_to_pipe propostas failed: ${result.error}`);
-        const { data: pipe } = await supabase.from("pipe_propostas").select("status").eq("lead_id", leadId).maybeSingle();
-        assert(pipe?.status === "enviada", `Expected enviada, got ${pipe?.status}`);
+        const { data: dupPropPipeline } = await supabase.from("pipelines").select("id").eq("organization_id", orgId).eq("slug", "propostas").eq("type", "system").maybeSingle();
+        assert(dupPropPipeline?.id, "propostas pipeline not found");
+        const { data: dupPropEntry } = await supabase.from("pipeline_entries").select("stage_key").eq("pipeline_id", dupPropPipeline!.id).eq("lead_id", leadId).maybeSingle();
+        assert(dupPropEntry?.stage_key === "enviada", `Expected enviada in pipeline_entries, got ${dupPropEntry?.stage_key}`);
       },
     },
     {
-      name: "remove_from_pipe — removes pipe_whatsapp",
+      name: "remove_from_pipe — removes whatsapp entry",
       fn: async () => {
         const leadId = await createTestLead(supabase, orgId, { pipe_whatsapp: "novo" });
-        await supabase.from("pipe_whatsapp").insert({ lead_id: leadId, organization_id: orgId, status: "novo" });
+        // Create entry in pipeline_entries
+        const { data: waPipeline } = await supabase.from("pipelines").select("id").eq("organization_id", orgId).eq("slug", "whatsapp").eq("type", "system").maybeSingle();
+        if (waPipeline?.id) {
+          await supabase.from("pipeline_entries").insert({ pipeline_id: waPipeline.id, lead_id: leadId, organization_id: orgId, stage_key: "novo" });
+        }
         const result = await executeWorkflowAction({
           supabase, organizationId: orgId, leadId,
           nodeData: { actionType: "remove_from_pipe", pipeType: "whatsapp" },
           executionContext: {},
         });
         assert(result.success, `remove_from_pipe failed: ${result.error}`);
-        const { data: pipe } = await supabase.from("pipe_whatsapp").select("id").eq("lead_id", leadId).maybeSingle();
-        assert(!pipe, "pipe_whatsapp record should have been deleted");
+        // Verify removal from pipeline_entries
+        if (waPipeline?.id) {
+          const { data: entry } = await supabase.from("pipeline_entries").select("id").eq("pipeline_id", waPipeline.id).eq("lead_id", leadId).maybeSingle();
+          assert(!entry, "pipeline_entries record should have been deleted");
+        }
       },
     },
     {
-      name: "mark_as_lost — updates pipe_propostas to perdido",
+      name: "mark_as_lost — updates propostas to perdido",
       fn: async () => {
         const leadId = await createTestLead(supabase, orgId);
-        await supabase.from("pipe_propostas").insert({ lead_id: leadId, organization_id: orgId, status: "enviada" });
+        // Create entry in pipeline_entries for propostas
+        const { data: lostPropPipeline } = await supabase.from("pipelines").select("id").eq("organization_id", orgId).eq("slug", "propostas").eq("type", "system").maybeSingle();
+        assert(lostPropPipeline?.id, "propostas pipeline not found");
+        await supabase.from("pipeline_entries").insert({ pipeline_id: lostPropPipeline!.id, lead_id: leadId, organization_id: orgId, stage_key: "enviada" });
         const result = await executeWorkflowAction({
           supabase, organizationId: orgId, leadId,
           nodeData: { actionType: "mark_as_lost", pipeType: "propostas", lostReason: "Preço alto" },
           executionContext: {},
         });
         assert(result.success, `mark_as_lost failed: ${result.error}`);
-        const { data: pipe } = await supabase.from("pipe_propostas").select("status, lost_reason").eq("lead_id", leadId).maybeSingle();
-        assert(pipe?.status === "perdido", `Expected perdido, got ${pipe?.status}`);
+        const { data: lostEntry } = await supabase.from("pipeline_entries").select("stage_key, metadata").eq("pipeline_id", lostPropPipeline!.id).eq("lead_id", leadId).maybeSingle();
+        assert(lostEntry?.stage_key === "perdido", `Expected perdido in pipeline_entries, got ${lostEntry?.stage_key}`);
       },
     },
     {

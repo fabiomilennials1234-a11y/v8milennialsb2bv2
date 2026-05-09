@@ -251,9 +251,7 @@ export function useUpdateLead() {
     onSuccess: () => {
       // refetchType: 'active' — só refaz queries atualmente renderizadas (evita cascata de refetch em todas as páginas)
       queryClient.invalidateQueries({ queryKey: ["leads"], refetchType: 'active' });
-      queryClient.invalidateQueries({ queryKey: ["pipe_confirmacao"], refetchType: 'active' });
-      queryClient.invalidateQueries({ queryKey: ["pipe_propostas"], refetchType: 'active' });
-      queryClient.invalidateQueries({ queryKey: ["pipe_whatsapp"], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ["pipeline_entries"], refetchType: 'active' });
     },
   });
 }
@@ -311,9 +309,7 @@ export function useDeleteLead() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["leads"] });
-      queryClient.invalidateQueries({ queryKey: ["pipe_whatsapp"] });
-      queryClient.invalidateQueries({ queryKey: ["pipe_confirmacao"] });
-      queryClient.invalidateQueries({ queryKey: ["pipe_propostas"] });
+      queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
       queryClient.invalidateQueries({ queryKey: ["follow_ups"] });
       queryClient.invalidateQueries({ queryKey: ["upsell_clients"] });
       queryClient.invalidateQueries({ queryKey: ["campanha_leads"] });
@@ -536,9 +532,7 @@ export function useDeleteAllLeadsInPipe(pipeType: PipeTypeForDelete) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["leads"] });
-      queryClient.invalidateQueries({ queryKey: ["pipe_whatsapp"] });
-      queryClient.invalidateQueries({ queryKey: ["pipe_confirmacao"] });
-      queryClient.invalidateQueries({ queryKey: ["pipe_propostas"] });
+      queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
       queryClient.invalidateQueries({ queryKey: ["follow_ups"] });
       queryClient.invalidateQueries({ queryKey: ["campanha_leads"] });
       queryClient.invalidateQueries({ queryKey: ["acoes_do_dia"] });
@@ -583,9 +577,7 @@ export function useDeleteAllLeads() {
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["leads"] });
-      queryClient.invalidateQueries({ queryKey: ["pipe_whatsapp"] });
-      queryClient.invalidateQueries({ queryKey: ["pipe_confirmacao"] });
-      queryClient.invalidateQueries({ queryKey: ["pipe_propostas"] });
+      queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
       queryClient.invalidateQueries({ queryKey: ["follow_ups"] });
       queryClient.invalidateQueries({ queryKey: ["campanha_leads"] });
       queryClient.invalidateQueries({ queryKey: ["acoes_do_dia"] });
@@ -656,9 +648,7 @@ export function useToggleLeadAI() {
       // Cancelar queries em andamento para evitar sobrescrever a atualização otimista
       await queryClient.cancelQueries({ queryKey: ["lead-detail", leadId] });
       await queryClient.cancelQueries({ queryKey: ["leads"] });
-      await queryClient.cancelQueries({ queryKey: ["pipe_whatsapp"] });
-      await queryClient.cancelQueries({ queryKey: ["pipe_confirmacao"] });
-      await queryClient.cancelQueries({ queryKey: ["pipe_propostas"] });
+      await queryClient.cancelQueries({ queryKey: ["pipeline_entries"] });
       await queryClient.cancelQueries({ queryKey: ["lead_by_phone"] });
       await queryClient.cancelQueries({ queryKey: ["lead_ai_status", leadId] });
       await queryClient.cancelQueries({ queryKey: ["phone_ai_status"] });
@@ -960,7 +950,7 @@ export function useToggleConversationAI() {
 
       queryClient.invalidateQueries({ queryKey: ["lead_by_phone"], refetchType: "active" });
       queryClient.invalidateQueries({ queryKey: ["leads"], refetchType: "active" });
-      queryClient.invalidateQueries({ queryKey: ["pipe_whatsapp"], refetchType: "active" });
+      queryClient.invalidateQueries({ queryKey: ["pipeline_entries"], refetchType: "active" });
       queryClient.invalidateQueries({ queryKey: ["waiting-human-leads"], refetchType: "active" });
     },
   });

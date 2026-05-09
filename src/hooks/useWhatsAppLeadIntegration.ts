@@ -353,9 +353,7 @@ export function useCreateLeadFromWhatsApp() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["leads"] });
-      queryClient.invalidateQueries({ queryKey: ["pipe_whatsapp"] });
-      queryClient.invalidateQueries({ queryKey: ["pipe_confirmacao"] });
-      queryClient.invalidateQueries({ queryKey: ["pipe_propostas"] });
+      queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
       queryClient.invalidateQueries({ queryKey: ["campanha_leads"] });
       queryClient.invalidateQueries({ queryKey: ["custom_pipe_entries"] });
       queryClient.invalidateQueries({ queryKey: ["lead_all_pipelines"] });
@@ -432,7 +430,7 @@ export function useLinkLeadToWhatsApp() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["leads"] });
-      queryClient.invalidateQueries({ queryKey: ["pipe_whatsapp"] });
+      queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
       queryClient.invalidateQueries({ queryKey: ["pipe_whatsapp_by_lead"] });
       queryClient.invalidateQueries({ queryKey: ["whatsapp_contacts"] });
       queryClient.invalidateQueries({ queryKey: ["whatsapp_messages"] });
@@ -475,7 +473,7 @@ export function useUpdateLeadPipelineStatus() {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["pipe_whatsapp"] });
+      queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
       queryClient.invalidateQueries({ queryKey: ["pipe_whatsapp_by_lead"] });
     },
   });

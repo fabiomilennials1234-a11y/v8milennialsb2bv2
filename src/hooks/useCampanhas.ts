@@ -1480,9 +1480,7 @@ export function useExtractLeadToPipe() {
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["campanha_leads", variables.campanha_id] });
-      queryClient.invalidateQueries({ queryKey: ["pipe_whatsapp"] });
-      queryClient.invalidateQueries({ queryKey: ["pipe_confirmacao"] });
-      queryClient.invalidateQueries({ queryKey: ["pipe_propostas"] });
+      queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
       queryClient.invalidateQueries({ queryKey: ["follow_ups"] });
     },
   });

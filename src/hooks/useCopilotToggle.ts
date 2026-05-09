@@ -217,9 +217,7 @@ export function useCopilotToggleMutation() {
         queryClient.invalidateQueries({ queryKey: ["lead-detail", vars.leadId] });
       }
       queryClient.invalidateQueries({ queryKey: ["leads"] });
-      queryClient.invalidateQueries({ queryKey: ["pipe_whatsapp"] });
-      queryClient.invalidateQueries({ queryKey: ["pipe_confirmacao"] });
-      queryClient.invalidateQueries({ queryKey: ["pipe_propostas"] });
+      queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
     },
   });
 }

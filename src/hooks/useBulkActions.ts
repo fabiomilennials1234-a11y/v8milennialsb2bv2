@@ -18,9 +18,7 @@ export function useBulkMoveStage() {
       return data;
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["pipe_whatsapp"] });
-      qc.invalidateQueries({ queryKey: ["pipe_confirmacao"] });
-      qc.invalidateQueries({ queryKey: ["pipe_propostas"] });
+      qc.invalidateQueries({ queryKey: ["pipeline_entries"] });
       qc.invalidateQueries({ queryKey: ["leads"] });
     },
   });
@@ -45,9 +43,7 @@ export function useBulkAssign() {
       return data;
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["pipe_whatsapp"] });
-      qc.invalidateQueries({ queryKey: ["pipe_confirmacao"] });
-      qc.invalidateQueries({ queryKey: ["pipe_propostas"] });
+      qc.invalidateQueries({ queryKey: ["pipeline_entries"] });
       qc.invalidateQueries({ queryKey: ["leads"] });
     },
   });
@@ -70,9 +66,7 @@ export function useBulkTag() {
       return data;
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["pipe_whatsapp"] });
-      qc.invalidateQueries({ queryKey: ["pipe_confirmacao"] });
-      qc.invalidateQueries({ queryKey: ["pipe_propostas"] });
+      qc.invalidateQueries({ queryKey: ["pipeline_entries"] });
       qc.invalidateQueries({ queryKey: ["leads"] });
     },
   });
@@ -89,9 +83,7 @@ export function useBulkDelete() {
       return data;
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["pipe_whatsapp"] });
-      qc.invalidateQueries({ queryKey: ["pipe_confirmacao"] });
-      qc.invalidateQueries({ queryKey: ["pipe_propostas"] });
+      qc.invalidateQueries({ queryKey: ["pipeline_entries"] });
       qc.invalidateQueries({ queryKey: ["leads"] });
       qc.invalidateQueries({ queryKey: ["trash_leads"] });
     },

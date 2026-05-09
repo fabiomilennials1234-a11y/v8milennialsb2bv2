@@ -14,6 +14,8 @@ import { getCampaignLeadAssignment, getCampaignCloserAssignment } from "../_shar
 import { logRuntime } from "../_shared/logger.ts";
 import { isValidUUID, isValidISODate, validateArraySize, validateReferencedId } from "../_shared/validation.ts";
 import { successResponse, errorResponse } from "../_shared/response.ts";
+import { upsertPipeEntry, getPipeEntry, updatePipeEntryById } from "../_shared/pipeline-adapter.ts";
+import type { PipeSlug } from "../_shared/pipeline-adapter.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -290,14 +292,16 @@ serve(withSentry('lead-webhook', async (req) => {
       }
 
       try {
-        await supabase.from("pipe_whatsapp").insert({
-          lead_id: newLead.id,
-          status: "novo",
-          sdr_id: payload.assigned_user_id ?? null,
-          organization_id: organizationId,
+        await upsertPipeEntry(supabase, {
+          leadId: newLead.id,
+          orgId: organizationId,
+          slug: "whatsapp",
+          stageKey: "novo",
+          metadata: { sdr_id: payload.assigned_user_id ?? null },
+          assignedTo: payload.assigned_user_id ?? null,
         });
       } catch (pipeError) {
-        console.warn("[lead-webhook] pipe_whatsapp insert failed:", pipeError);
+        console.warn("[lead-webhook] pipeline_entries whatsapp insert failed:", pipeError);
       }
 
       result = { lead: newLead, created: true, source: "created" };
@@ -480,30 +484,34 @@ serve(withSentry('lead-webhook', async (req) => {
       const stageVal = stage as string;
 
       // Helper: auto-distribuir SDR/Closer após inserir novo registro no pipe
-      const autoDistributePipe = async (pipeTable: string, pipeTypeName: string) => {
+      const autoDistributePipe = async (pipeSlug: PipeSlug) => {
         try {
           const { data: sdrId } = await supabase.rpc("get_next_pipe_sdr", {
-            p_pipe_type: pipeTypeName,
+            p_pipe_type: pipeSlug,
             p_organization_id: organizationId,
           });
-          const pipeUpdate: Record<string, unknown> = {};
-          if (sdrId) pipeUpdate.sdr_id = sdrId;
+          const metadataUpdate: Record<string, unknown> = {};
+          if (sdrId) metadataUpdate.sdr_id = sdrId;
 
           let closerId: string | null = null;
-          if (pipeTypeName !== "whatsapp") {
+          if (pipeSlug !== "whatsapp") {
             const { data: cId } = await supabase.rpc("get_next_pipe_closer", {
-              p_pipe_type: pipeTypeName,
+              p_pipe_type: pipeSlug,
               p_organization_id: organizationId,
             });
             closerId = cId;
-            if (closerId) pipeUpdate.closer_id = closerId;
+            if (closerId) metadataUpdate.closer_id = closerId;
           }
 
-          if (Object.keys(pipeUpdate).length > 0) {
-            await supabase.from(pipeTable).update(pipeUpdate)
-              .eq("lead_id", leadId)
-              .eq("organization_id", organizationId);
-            console.log(`[lead-webhook] Auto-distributed in ${pipeTable}:`, pipeUpdate);
+          if (Object.keys(metadataUpdate).length > 0) {
+            const entry = await getPipeEntry(supabase, leadId, organizationId, pipeSlug);
+            if (entry) {
+              await updatePipeEntryById(supabase, entry.id, {
+                metadata: metadataUpdate,
+                assignedTo: (closerId || sdrId) ?? undefined,
+              });
+            }
+            console.log(`[lead-webhook] Auto-distributed in pipeline_entries(${pipeSlug}):`, metadataUpdate);
 
             // Also update lead-level responsible_id (closer takes priority over sdr)
             const responsibleId = closerId || sdrId;
@@ -519,73 +527,31 @@ serve(withSentry('lead-webhook', async (req) => {
             }
           }
         } catch (e) {
-          console.warn(`[lead-webhook] Auto-distribute failed for ${pipeTable}:`, e);
+          console.warn(`[lead-webhook] Auto-distribute failed for pipeline_entries(${pipeSlug}):`, e);
         }
       };
 
-      if (pipe === "whatsapp") {
-        const { data: existing } = await supabase
-          .from("pipe_whatsapp")
-          .select("id")
-          .eq("lead_id", leadId)
-          .eq("organization_id", organizationId)
-          .maybeSingle();
-        if (existing) {
-          await supabase.from("pipe_whatsapp").update({ status: stageVal }).eq("id", existing.id);
-        } else {
-          await supabase.from("pipe_whatsapp").insert({
-            lead_id: leadId,
-            organization_id: organizationId,
-            status: stageVal,
-          });
-          await autoDistributePipe("pipe_whatsapp", "whatsapp");
-        }
-        console.log("[lead-webhook] Lead placed in pipe_whatsapp stage:", stageVal);
-      } else if (pipe === "confirmacao") {
-        const { data: existing } = await supabase
-          .from("pipe_confirmacao")
-          .select("id")
-          .eq("lead_id", leadId)
-          .eq("organization_id", organizationId)
-          .maybeSingle();
-        if (existing) {
-          const updatePayload: Record<string, unknown> = { status: stageVal };
-          if (meeting_date) updatePayload.meeting_date = meeting_date;
-          await supabase.from("pipe_confirmacao").update(updatePayload).eq("id", existing.id);
-        } else {
-          const insertPayload: Record<string, unknown> = {
-            lead_id: leadId,
-            organization_id: organizationId,
-            status: stageVal,
-          };
-          if (meeting_date) insertPayload.meeting_date = meeting_date;
-          await supabase.from("pipe_confirmacao").insert(insertPayload);
-          await autoDistributePipe("pipe_confirmacao", "confirmacao");
-        }
-        console.log("[lead-webhook] Lead placed in pipe_confirmacao stage:", stageVal);
-      } else if (pipe === "propostas") {
-        const { data: existing } = await supabase
-          .from("pipe_propostas")
-          .select("id")
-          .eq("lead_id", leadId)
-          .eq("organization_id", organizationId)
-          .maybeSingle();
-        if (existing) {
-          const updatePayload: Record<string, unknown> = { status: stageVal };
-          if (meeting_date) updatePayload.meeting_date = meeting_date;
-          await supabase.from("pipe_propostas").update(updatePayload).eq("id", existing.id);
-        } else {
-          const insertPayload: Record<string, unknown> = {
-            lead_id: leadId,
-            organization_id: organizationId,
-            status: stageVal,
-          };
-          if (meeting_date) insertPayload.meeting_date = meeting_date;
-          await supabase.from("pipe_propostas").insert(insertPayload);
-          await autoDistributePipe("pipe_propostas", "propostas");
-        }
-        console.log("[lead-webhook] Lead placed in pipe_propostas stage:", stageVal);
+      const pipeSlug = pipe as PipeSlug;
+      const metadata: Record<string, unknown> = {};
+      if (meeting_date) metadata.meeting_date = meeting_date;
+
+      const existingEntry = await getPipeEntry(supabase, leadId, organizationId, pipeSlug);
+      if (existingEntry) {
+        await updatePipeEntryById(supabase, existingEntry.id, {
+          stageKey: stageVal,
+          ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
+        });
+      } else {
+        await upsertPipeEntry(supabase, {
+          leadId,
+          orgId: organizationId,
+          slug: pipeSlug,
+          stageKey: stageVal,
+          metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
+        });
+        await autoDistributePipe(pipeSlug);
       }
+      console.log(`[lead-webhook] Lead placed in pipeline_entries(${pipeSlug}) stage:`, stageVal);
     }
 
     // Colocar lead em uma campanha em etapa específica (ex: campanha de ads)

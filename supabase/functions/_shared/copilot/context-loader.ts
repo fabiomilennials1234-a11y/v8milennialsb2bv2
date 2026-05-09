@@ -15,6 +15,7 @@
  */
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getPipeEntry, getPipeEntriesByLeads, resolvePipelineId } from "../pipeline-adapter.ts";
 
 const SELECT_AGENT = "*, copilot_agent_faqs(*), copilot_agent_kanban_rules(*)";
 
@@ -100,15 +101,15 @@ export async function loadCapabilities(
       const [leadRes, upsellRes, confirmacaoRes, propostasRes, campanhaRes] = await Promise.all([
         supabase.from("leads").select("pipe_whatsapp, origin, segment").eq("id", leadId).maybeSingle(),
         supabase.from("upsell_clients").select("tipo_cliente_tempo, gestao_stage").eq("lead_id", leadId).maybeSingle(),
-        supabase.from("pipe_confirmacao").select("status").eq("lead_id", leadId).maybeSingle(),
-        supabase.from("pipe_propostas").select("status").eq("lead_id", leadId).maybeSingle(),
+        getPipeEntry(supabase, leadId, organizationId, "confirmacao"),
+        getPipeEntry(supabase, leadId, organizationId, "propostas"),
         supabase.from("campanha_leads").select("stage_id, campanha_stages(name)").eq("lead_id", leadId).limit(1).maybeSingle(),
       ]);
 
       const leadRow = leadRes.data as { pipe_whatsapp?: string; origin?: string; segment?: string } | null;
       const upsellRow = upsellRes.data as { tipo_cliente_tempo?: string; gestao_stage?: string } | null;
-      const confirmacaoRow = confirmacaoRes.data as { status?: string } | null;
-      const propostasRow = propostasRes.data as { status?: string } | null;
+      const confirmacaoRow = confirmacaoRes ? { status: confirmacaoRes.stage_key } : null;
+      const propostasRow = propostasRes ? { status: propostasRes.stage_key } : null;
       const campanhaRow = campanhaRes.data as { campanha_stages?: { name?: string } } | null;
 
       if (leadRow || upsellRow || confirmacaoRow || propostasRow || campanhaRow) {
@@ -394,6 +395,7 @@ export async function loadLeadData(
         urgency,
         notes,
         pipe_whatsapp,
+        organization_id,
         created_at,
         updated_at
       `)
@@ -405,7 +407,9 @@ export async function loadLeadData(
       return null;
     }
 
-    const [customFieldsRes, upsellRes, confirmacaoRes, propostasRes, campanhaRes, propostasHistoryRes] = await Promise.all([
+    const orgId = (lead as Record<string, unknown>).organization_id as string;
+
+    const [customFieldsRes, upsellRes, confirmacaoEntry, propostasEntry, campanhaRes] = await Promise.all([
       supabase
         .from("lead_custom_field_values")
         .select(`value, field:lead_custom_fields(id, field_name, field_type)`)
@@ -415,28 +419,14 @@ export async function loadLeadData(
         .select("tipo_cliente_tempo, gestao_stage, potencial, is_active")
         .eq("lead_id", leadId)
         .maybeSingle(),
-      supabase
-        .from("pipe_confirmacao")
-        .select("status, meeting_date, is_confirmed")
-        .eq("lead_id", leadId)
-        .maybeSingle(),
-      supabase
-        .from("pipe_propostas")
-        .select("status, sale_value, product_type")
-        .eq("lead_id", leadId)
-        .maybeSingle(),
+      getPipeEntry(supabase, leadId, orgId, "confirmacao"),
+      getPipeEntry(supabase, leadId, orgId, "propostas"),
       supabase
         .from("campanha_leads")
         .select("stage_id, campanha_id, campanha_stages(name)")
         .eq("lead_id", leadId)
         .limit(1)
         .maybeSingle(),
-      supabase
-        .from("pipe_propostas")
-        .select("id, status, sale_value, product_type, closed_at, created_at, product:products(name)")
-        .eq("lead_id", leadId)
-        .order("created_at", { ascending: false })
-        .limit(10),
     ]);
 
     const customFields: Record<string, string> = {};
@@ -450,19 +440,22 @@ export async function loadLeadData(
     }
 
     const upsellData = upsellRes.data as { tipo_cliente_tempo?: string; gestao_stage?: string; potencial?: string; is_active?: boolean } | null;
-    const confirmacaoData = confirmacaoRes.data as { status?: string; meeting_date?: string; is_confirmed?: boolean } | null;
-    const propostasData = propostasRes.data as { status?: string; sale_value?: number; product_type?: string } | null;
+    const confMeta = (confirmacaoEntry?.metadata ?? {}) as Record<string, unknown>;
+    const propMeta = (propostasEntry?.metadata ?? {}) as Record<string, unknown>;
     const campanhaData = campanhaRes.data as { campanha_id?: string; campanha_stages?: { name?: string } } | null;
 
-    const propostasHistory = (propostasHistoryRes.data ?? []) as Array<{
-      id: string;
-      status: string;
-      sale_value: number | null;
-      product_type: string | null;
-      closed_at: string | null;
-      created_at: string;
-      product: { name: string } | null;
-    }>;
+    // Single pipeline entry per lead — map to history format for backward compat
+    const propostasHistory = propostasEntry
+      ? [{
+          id: propostasEntry.id,
+          status: propostasEntry.stage_key,
+          sale_value: (propMeta.sale_value as number) ?? null,
+          product_type: (propMeta.product_type as string) ?? null,
+          closed_at: propostasEntry.closed_at,
+          created_at: propostasEntry.created_at,
+          product: null as { name: string } | null,
+        }]
+      : [];
     const closedDeals = propostasHistory.filter((p) => p.status === "vendido");
     const activeProposals = propostasHistory.filter(
       (p) => p.status !== "vendido" && p.status !== "perdido",
@@ -475,12 +468,12 @@ export async function loadLeadData(
       upsell_gestao_stage: upsellData?.gestao_stage ?? null,
       upsell_potencial: upsellData?.potencial ?? null,
       upsell_is_active: upsellData?.is_active ?? null,
-      confirmacao_status: confirmacaoData?.status ?? null,
-      confirmacao_meeting_date: confirmacaoData?.meeting_date ?? null,
-      confirmacao_is_confirmed: confirmacaoData?.is_confirmed ?? null,
-      propostas_status: propostasData?.status ?? null,
-      propostas_sale_value: propostasData?.sale_value ?? null,
-      propostas_product_type: propostasData?.product_type ?? null,
+      confirmacao_status: confirmacaoEntry?.stage_key ?? null,
+      confirmacao_meeting_date: (confMeta.meeting_date as string) ?? null,
+      confirmacao_is_confirmed: (confMeta.is_confirmed as boolean) ?? null,
+      propostas_status: propostasEntry?.stage_key ?? null,
+      propostas_sale_value: (propMeta.sale_value as number) ?? null,
+      propostas_product_type: (propMeta.product_type as string) ?? null,
       campanha_stage: campanhaData?.campanha_stages?.name ?? null,
       campanha_id: campanhaData?.campanha_id ?? null,
       closed_deals: closedDeals,

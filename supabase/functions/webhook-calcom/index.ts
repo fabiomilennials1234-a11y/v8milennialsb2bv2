@@ -9,6 +9,7 @@ import {
   rateLimitedResponse
 } from "../_shared/auth.ts";
 import { logRuntime } from "../_shared/logger.ts";
+import { upsertPipeEntry, getPipeEntry, deletePipeEntry, updatePipeEntryById } from "../_shared/pipeline-adapter.ts";
 
 // Helper function to normalize email (lowercase, trim)
 function normalizeEmail(email: string | null | undefined): string | null {
@@ -347,75 +348,61 @@ Deno.serve(withSentry('webhook-calcom', async (req) => {
       // Use effective date - existing or new
       const effectiveMeetingDate = existingCompromissoDate || startTime;
 
-      // Create or update pipe_confirmacao entry - with closer_id
-      const { data: existingConfirmacao } = await supabase
-        .from("pipe_confirmacao")
-        .select("id, meeting_date, closer_id")
-        .eq("lead_id", existingLead.id)
-        .maybeSingle();
+      // Create or update pipeline_entries(confirmacao) - with closer_id
+      const existingConfirmacao = await getPipeEntry(supabase, existingLead.id, targetOrganizationId, "confirmacao");
 
       if (existingConfirmacao) {
-        // Update pipe_confirmacao with closer if found and not already set
-        const confirmacaoUpdate: Record<string, any> = {};
-        
-        if (!existingConfirmacao.meeting_date) {
-          confirmacaoUpdate.status = "reuniao_marcada";
-          confirmacaoUpdate.meeting_date = effectiveMeetingDate;
+        const confirmacaoUpdates: { stageKey?: string; metadata?: Record<string, unknown>; assignedTo?: string | null } = {};
+        const metaUpdates: Record<string, unknown> = {};
+
+        if (!(existingConfirmacao.metadata as any)?.meeting_date) {
+          confirmacaoUpdates.stageKey = "reuniao_marcada";
+          metaUpdates.meeting_date = effectiveMeetingDate;
         }
-        
-        // Assign closer to pipe_confirmacao if found and not already set
-        if (closerId && !existingConfirmacao.closer_id) {
-          confirmacaoUpdate.closer_id = closerId;
-          console.log("Assigning closer to existing pipe_confirmacao:", closerId);
+
+        // Assign closer if found and not already set
+        if (closerId && !(existingConfirmacao.metadata as any)?.closer_id) {
+          metaUpdates.closer_id = closerId;
+          console.log("Assigning closer to existing pipeline_entries(confirmacao):", closerId);
         }
-        
-        if (Object.keys(confirmacaoUpdate).length > 0) {
-          await supabase
-            .from("pipe_confirmacao")
-            .update(confirmacaoUpdate)
-            .eq("id", existingConfirmacao.id);
+
+        if (Object.keys(metaUpdates).length > 0) confirmacaoUpdates.metadata = metaUpdates;
+
+        if (confirmacaoUpdates.stageKey || confirmacaoUpdates.metadata) {
+          await updatePipeEntryById(supabase, existingConfirmacao.id, confirmacaoUpdates);
         }
       } else {
-        // Create new pipe_confirmacao with closer_id
-        const confirmacaoInsert: Record<string, any> = {
-          lead_id: existingLead.id,
-          status: "reuniao_marcada",
-          meeting_date: effectiveMeetingDate,
-        };
-        
+        const metadata: Record<string, unknown> = { meeting_date: effectiveMeetingDate };
         if (closerId) {
-          confirmacaoInsert.closer_id = closerId;
-          console.log("Creating pipe_confirmacao with closer:", closerId);
+          metadata.closer_id = closerId;
+          console.log("Creating pipeline_entries(confirmacao) with closer:", closerId);
         }
-        
-        await supabase
-          .from("pipe_confirmacao")
-          .insert(confirmacaoInsert);
+
+        await upsertPipeEntry(supabase, {
+          leadId: existingLead.id,
+          orgId: targetOrganizationId,
+          slug: "confirmacao",
+          stageKey: "reuniao_marcada",
+          metadata,
+          assignedTo: closerId,
+        });
       }
 
-      // Check if lead is in pipe_propostas with status "compromisso_marcado"
-      // If so, keep in pipe_whatsapp (exception rule)
-      const { data: existingProposta } = await supabase
-        .from("pipe_propostas")
-        .select("id, status")
-        .eq("lead_id", existingLead.id)
-        .eq("status", "compromisso_marcado")
-        .maybeSingle();
+      // Check if lead is in pipeline_entries(propostas) with stage "compromisso_marcado"
+      // If so, keep in pipeline_entries(whatsapp) (exception rule)
+      const existingProposta = await getPipeEntry(supabase, existingLead.id, targetOrganizationId, "propostas");
 
-      if (!existingProposta) {
-        // Only remove from pipe_whatsapp if NOT in compromisso_marcado
-        const { error: deleteWhatsappError } = await supabase
-          .from("pipe_whatsapp")
-          .delete()
-          .eq("lead_id", existingLead.id);
+      if (!existingProposta || existingProposta.stage_key !== "compromisso_marcado") {
+        // Only remove from pipeline_entries(whatsapp) if NOT in compromisso_marcado
+        const deleted = await deletePipeEntry(supabase, existingLead.id, targetOrganizationId, "whatsapp");
 
-        if (deleteWhatsappError) {
-          console.log("Note: No pipe_whatsapp entry found or error removing:", deleteWhatsappError.message);
+        if (!deleted) {
+          console.log("Note: No pipeline_entries(whatsapp) entry found or error removing");
         } else {
-          console.log("Removed lead from pipe_whatsapp (qualificação)");
+          console.log("Removed lead from pipeline_entries(whatsapp) (qualificação)");
         }
       } else {
-        console.log("Lead kept in pipe_whatsapp (has compromisso_marcado in propostas)");
+        console.log("Lead kept in pipeline_entries(whatsapp) (has compromisso_marcado in propostas)");
       }
 
       // Create history entry with closer info
@@ -487,21 +474,21 @@ Deno.serve(withSentry('webhook-calcom', async (req) => {
       // Add "Cal" tag to new lead
       await addTagToLead(newLead.id, calTagId);
 
-      // Create pipe_confirmacao entry with closer_id
-      const confirmacaoInsert: Record<string, any> = {
-        lead_id: newLead.id,
-        status: "reuniao_marcada",
-        meeting_date: startTime,
-      };
-      
+      // Create pipeline_entries(confirmacao) with closer_id
+      const confirmacaoMeta: Record<string, unknown> = { meeting_date: startTime };
       if (closerId) {
-        confirmacaoInsert.closer_id = closerId;
-        console.log("Creating pipe_confirmacao for new lead with closer:", closerId);
+        confirmacaoMeta.closer_id = closerId;
+        console.log("Creating pipeline_entries(confirmacao) for new lead with closer:", closerId);
       }
-      
-      await supabase
-        .from("pipe_confirmacao")
-        .insert(confirmacaoInsert);
+
+      await upsertPipeEntry(supabase, {
+        leadId: newLead.id,
+        orgId: targetOrganizationId,
+        slug: "confirmacao",
+        stageKey: "reuniao_marcada",
+        metadata: confirmacaoMeta,
+        assignedTo: closerId,
+      });
 
       // Create history entry with closer info
       await supabase.from("lead_history").insert({

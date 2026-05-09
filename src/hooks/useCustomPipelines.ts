@@ -981,9 +981,7 @@ export function useMoveLeadInCustomPipe() {
       queryClient.invalidateQueries({ queryKey: ["custom_pipe_entries", variables.pipeline_id] });
       queryClient.invalidateQueries({ queryKey: ["custom_pipe_entries"] });
       // Invalidate standard pipe queries for cross-pipe transitions
-      queryClient.invalidateQueries({ queryKey: ["pipe_whatsapp"] });
-      queryClient.invalidateQueries({ queryKey: ["pipe_confirmacao"] });
-      queryClient.invalidateQueries({ queryKey: ["pipe_propostas"] });
+      queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
       queryClient.invalidateQueries({ queryKey: ["upsell_clients"] });
       queryClient.invalidateQueries({ queryKey: ["leads"] });
     },

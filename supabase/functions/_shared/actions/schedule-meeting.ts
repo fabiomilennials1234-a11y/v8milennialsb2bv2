@@ -1,7 +1,7 @@
 /**
  * AI Action handlers — agendamento de reuniões.
  *
- *  - executeScheduleMeeting: cria entrada em pipe_confirmacao + Google Calendar
+ *  - executeScheduleMeeting: cria entrada em pipeline_entries (confirmacao) + Google Calendar
  *  - executeConfirmMeeting: marca confirmação (pré ou no-dia)
  *  - executeAdvanceConfirmationStage: move stage no funil de confirmação
  */
@@ -16,6 +16,7 @@ import {
   getValidAccessToken,
   logCalendarOp,
 } from "../google-calendar-utils.ts";
+import { getPipeEntry, upsertPipeEntry, updatePipeEntryById } from "../pipeline-adapter.ts";
 import type { ActionResult } from "./types.ts";
 
 export async function executeScheduleMeeting(
@@ -32,9 +33,7 @@ export async function executeScheduleMeeting(
     return { success: false, error: "lead_id e preferred_date são obrigatórios" };
   }
 
-  // F5b: Time-Aware validation — bloqueia slot fora de janela com behavior preenchido.
-  // Janela com behavior vazio = "off-hours window" (canned/sem instrução), não permite agendar.
-  // Apenas se agente tiver behavior_windows configurado (≥1 janela com behavior); caso contrário, pass-through.
+  // F5b: Time-Aware validation
   if (conversationId) {
     const ctx = await loadAgentTimeContext(supabase, conversationId);
     const windows = ctx?.behavior_windows ?? [];
@@ -57,35 +56,16 @@ export async function executeScheduleMeeting(
     }
   }
 
-  // 1. Atualizar lead e pipe_confirmacao
+  // 1. Atualizar lead e pipeline entry (confirmacao)
   await supabase.from("leads").update({ compromisso_date: preferred_date }).eq("id", lead_id);
 
-  const { data: existing } = await supabase
-    .from("pipe_confirmacao")
-    .select("id")
-    .eq("lead_id", lead_id)
-    .maybeSingle();
-
-  let pipeId: string | null = existing?.id ?? null;
-
-  if (existing) {
-    await supabase
-      .from("pipe_confirmacao")
-      .update({ status: "reuniao_marcada", meeting_date: preferred_date })
-      .eq("id", existing.id);
-  } else {
-    const { data: inserted } = await supabase
-      .from("pipe_confirmacao")
-      .insert({
-        lead_id,
-        organization_id: tenantId,
-        status: "reuniao_marcada",
-        meeting_date: preferred_date,
-      })
-      .select("id")
-      .single();
-    pipeId = inserted?.id ?? null;
-  }
+  const pipeId = await upsertPipeEntry(supabase, {
+    leadId: lead_id,
+    orgId: tenantId,
+    slug: "confirmacao",
+    stageKey: "reuniao_marcada",
+    metadata: { meeting_date: preferred_date },
+  });
 
   // 2. Tentar Google Calendar (graceful degradation)
   let meetLink: string | null = null;
@@ -147,10 +127,9 @@ export async function executeScheduleMeeting(
             null;
 
           if (pipeId && meetLink) {
-            await supabase
-              .from("pipe_confirmacao")
-              .update({ meet_link: meetLink })
-              .eq("id", pipeId);
+            await updatePipeEntryById(supabase, pipeId, {
+              metadata: { meet_link: meetLink },
+            });
           }
 
           await logCalendarOp(supabase, {
@@ -194,29 +173,27 @@ export async function executeScheduleMeeting(
 export async function executeConfirmMeeting(
   supabase: SupabaseClient,
   params: Record<string, unknown>,
+  tenantId: string,
 ): Promise<ActionResult> {
   const lead_id = params.lead_id as string;
   const confirmationType = (params.confirmation_type as string) || "pre_confirmed";
 
   if (!lead_id) return { success: false, error: "lead_id é obrigatório" };
 
-  const { data: existing } = await supabase
-    .from("pipe_confirmacao")
-    .select("id, status")
-    .eq("lead_id", lead_id)
-    .maybeSingle();
+  const existing = await getPipeEntry(supabase, lead_id, tenantId, "confirmacao");
 
   if (!existing) {
     return { success: false, error: "Lead não encontrado no pipe de confirmação" };
   }
 
-  await supabase.from("pipe_confirmacao").update({ is_confirmed: true }).eq("id", existing.id);
+  await updatePipeEntryById(supabase, existing.id, {
+    metadata: { is_confirmed: true },
+  });
 
   if (confirmationType === "confirmed") {
-    await supabase
-      .from("pipe_confirmacao")
-      .update({ status: "confirmacao_no_dia" })
-      .eq("id", existing.id);
+    await updatePipeEntryById(supabase, existing.id, {
+      stageKey: "confirmacao_no_dia",
+    });
     return {
       success: true,
       message: "Reunião confirmada no dia",
@@ -273,17 +250,13 @@ export async function executeAdvanceConfirmationStage(
   const finalStage =
     stageKeys.find((k: string) => k.toLowerCase() === normalizedStage) || normalizedStage;
 
-  const { data: existing } = await supabase
-    .from("pipe_confirmacao")
-    .select("id")
-    .eq("lead_id", lead_id)
-    .maybeSingle();
+  const existing = await getPipeEntry(supabase, lead_id, tenantId, "confirmacao");
 
   if (!existing) {
     return { success: false, error: "Lead não encontrado no pipe de confirmação" };
   }
 
-  await supabase.from("pipe_confirmacao").update({ status: finalStage }).eq("id", existing.id);
+  await updatePipeEntryById(supabase, existing.id, { stageKey: finalStage });
 
   return {
     success: true,

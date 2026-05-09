@@ -9,6 +9,8 @@
  */
 
 import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { upsertPipeEntry } from "./pipeline-adapter.ts";
+import type { PipeSlug } from "./pipeline-adapter.ts";
 
 /**
  * Result from getOrCreateLead operation
@@ -318,22 +320,23 @@ export async function getOrCreateLead(
 
   console.log("[lead-service] New lead created:", newLead.id);
 
-  // Create pipe_whatsapp entry for new leads (organization_id required for RLS visibility)
+  // Create pipeline entry for new leads
   // Shadow leads não entram em pipe até serem promovidos
   if (!isShadow) {
     try {
-      await supabase.from("pipe_whatsapp").insert({
-        lead_id: newLead.id,
-        status: "novo",
-        sdr_id: sdrId || null,
-        organization_id: organizationId,
+      await upsertPipeEntry(supabase, {
+        leadId: newLead.id,
+        orgId: organizationId,
+        slug: "whatsapp",
+        stageKey: "novo",
+        metadata: sdrId ? { sdr_id: sdrId } : {},
+        assignedTo: sdrId || null,
       });
     } catch (pipeError) {
-      console.warn("[lead-service] Error creating pipe_whatsapp entry:", pipeError);
-      // Don't fail the whole operation if pipe creation fails
+      console.warn("[lead-service] Error creating pipeline entry:", pipeError);
     }
   } else {
-    console.log("[lead-service] Shadow lead created, skipping pipe_whatsapp entry");
+    console.log("[lead-service] Shadow lead created, skipping pipeline entry");
   }
 
   return { lead: newLead, created: true, source: "created" };
@@ -470,29 +473,17 @@ export async function promoveShadowLead(
       return false;
     }
 
-    // 3. Inserir no pipe correto
-    const pipeType = destination.pipe || "whatsapp";
+    // 3. Inserir no pipeline unificado
+    const pipeType = (destination.pipe || "whatsapp") as PipeSlug;
 
-    if (pipeType === "confirmacao") {
-      await supabase.from("pipe_confirmacao").insert({
-        lead_id: leadId,
-        organization_id: organizationId,
-        status: destination.stage,
-      });
-    } else if (pipeType === "propostas") {
-      await supabase.from("pipe_propostas").insert({
-        lead_id: leadId,
-        organization_id: organizationId,
-        status: destination.stage,
-      });
-    } else {
-      await supabase.from("pipe_whatsapp").insert({
-        lead_id: leadId,
-        organization_id: organizationId,
-        status: destination.stage,
-        sdr_id: sdrId || null,
-      });
-    }
+    await upsertPipeEntry(supabase, {
+      leadId,
+      orgId: organizationId,
+      slug: pipeType,
+      stageKey: destination.stage,
+      metadata: sdrId ? { sdr_id: sdrId } : {},
+      assignedTo: sdrId || null,
+    });
 
     console.log("[lead-service] Shadow lead promoted:", {
       leadId,

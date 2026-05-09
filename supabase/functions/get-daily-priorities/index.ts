@@ -16,6 +16,7 @@ import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { requireAuth, AuthError, authErrorResponse } from "../_shared/user-auth.ts";
 import { logRuntime } from "../_shared/logger.ts";
+import { resolvePipelineId } from "../_shared/pipeline-adapter.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -53,26 +54,57 @@ Deno.serve(
       const twoDaysAgo = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString();
       const todayEnd = now.toISOString();
 
-      // ── Step 1: Get pipe records + follow-ups in parallel ──
+      // ── Step 1: Resolve pipeline IDs + get entries + follow-ups in parallel ──
+      const [waId, confId, propId] = await Promise.all([
+        resolvePipelineId(supabase, orgId, "whatsapp"),
+        resolvePipelineId(supabase, orgId, "confirmacao"),
+        resolvePipelineId(supabase, orgId, "propostas"),
+      ]);
+
+      const pipeQueries: Promise<{ data: any[] | null }>[] = [];
+
+      // pipeline_entries: assigned_to = teamMemberId, filter out terminal stages
+      if (waId) {
+        pipeQueries.push(
+          supabase
+            .from("pipeline_entries")
+            .select("lead_id, stage_key")
+            .eq("pipeline_id", waId)
+            .eq("assigned_to", teamMemberId)
+            .not("stage_key", "in", "(compareceu)"),
+        );
+      } else {
+        pipeQueries.push(Promise.resolve({ data: [] }));
+      }
+
+      if (confId) {
+        pipeQueries.push(
+          supabase
+            .from("pipeline_entries")
+            .select("lead_id, stage_key")
+            .eq("pipeline_id", confId)
+            .eq("assigned_to", teamMemberId)
+            .not("stage_key", "in", "(compareceu,perdido)"),
+        );
+      } else {
+        pipeQueries.push(Promise.resolve({ data: [] }));
+      }
+
+      if (propId) {
+        pipeQueries.push(
+          supabase
+            .from("pipeline_entries")
+            .select("lead_id, stage_key")
+            .eq("pipeline_id", propId)
+            .eq("assigned_to", teamMemberId)
+            .not("stage_key", "in", "(vendido,perdido)"),
+        );
+      } else {
+        pipeQueries.push(Promise.resolve({ data: [] }));
+      }
+
       const [pipeWA, pipeConf, pipeProp, followUpsRes] = await Promise.all([
-        supabase
-          .from("pipe_whatsapp")
-          .select("lead_id, status")
-          .eq("organization_id", orgId)
-          .eq("responsible_id", teamMemberId)
-          .not("status", "in", "(compareceu)"),
-        supabase
-          .from("pipe_confirmacao")
-          .select("lead_id, status")
-          .eq("organization_id", orgId)
-          .eq("responsible_id", teamMemberId)
-          .not("status", "in", "(compareceu,perdido)"),
-        supabase
-          .from("pipe_propostas")
-          .select("lead_id, status")
-          .eq("organization_id", orgId)
-          .eq("responsible_id", teamMemberId)
-          .not("status", "in", "(vendido,perdido)"),
+        ...pipeQueries,
         supabase
           .from("follow_ups")
           .select("id, title, description, due_date, priority, source_pipe, lead:leads(id, name, company, phone)")
@@ -90,16 +122,16 @@ Deno.serve(
       const pipeLeadMap = new Map<string, PipeInfo>();
 
       for (const r of pipeWA.data || []) {
-        pipeLeadMap.set(r.lead_id, { pipe: "whatsapp", status: r.status });
+        pipeLeadMap.set(r.lead_id, { pipe: "whatsapp", status: r.stage_key });
       }
       for (const r of pipeConf.data || []) {
         if (!pipeLeadMap.has(r.lead_id)) {
-          pipeLeadMap.set(r.lead_id, { pipe: "confirmacao", status: r.status });
+          pipeLeadMap.set(r.lead_id, { pipe: "confirmacao", status: r.stage_key });
         }
       }
       for (const r of pipeProp.data || []) {
         if (!pipeLeadMap.has(r.lead_id)) {
-          pipeLeadMap.set(r.lead_id, { pipe: "propostas", status: r.status });
+          pipeLeadMap.set(r.lead_id, { pipe: "propostas", status: r.stage_key });
         }
       }
 

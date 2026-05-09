@@ -21,6 +21,7 @@ import { withSentry } from "../_shared/sentry.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { trackEvent } from "../_shared/track.ts";
+import { upsertPipeEntry } from "../_shared/pipeline-adapter.ts";
 
 // ─── Types ───────────────────────────────────────────────
 
@@ -778,14 +779,15 @@ async function importToFunnel(
           await supabase.from("leads").update(leadUpdates).eq("id", leadId);
         }
 
-        // Insert into pipeline-specific table
+        // Insert into pipeline via adapter
         if (destination === "qualificacao") {
-          await supabase.from("pipe_whatsapp").insert({
-            lead_id: leadId,
-            status: stageKeyForLead,
-            organization_id: organizationId,
-            sdr_id: sdrIdForLead,
-            responsible_id: sdrIdForLead,
+          await upsertPipeEntry(supabase, {
+            leadId,
+            orgId: organizationId,
+            slug: "whatsapp",
+            stageKey: stageKeyForLead,
+            metadata: { sdr_id: sdrIdForLead, responsible_id: sdrIdForLead },
+            assignedTo: sdrIdForLead,
           });
         } else if (destination === "propostas") {
           const productNamesRaw = (lead.product_name || "").trim();
@@ -800,37 +802,40 @@ async function importToFunnel(
           const firstProductId = productIds.length > 0 ? productIds[0] : null;
           const totalValue = lead.valor_proposta ?? null;
 
-          const propostaInsert: Record<string, unknown> = {
-            lead_id: leadId,
-            status: stageKeyForLead,
-            organization_id: organizationId,
+          const propostaMetadata: Record<string, unknown> = {
             closer_id: closerIdForLead,
             responsible_id: closerIdForLead,
             sale_value: totalValue,
             calor: lead.calor ?? null,
             commitment_date: lead.commitment_date ?? null,
             contract_duration: lead.contract_duration ?? null,
-            notes: lead.pipe_notes ?? null,
             product_id: firstProductId,
           };
-          if (metricsPeriodAt != null) propostaInsert.metrics_period_at = metricsPeriodAt;
+          if (metricsPeriodAt != null) propostaMetadata.metrics_period_at = metricsPeriodAt;
 
-          const { data: newProposta, error: propostaError } = await supabase
-            .from("pipe_propostas").insert(propostaInsert).select("id").single();
+          const propostaEntryId = await upsertPipeEntry(supabase, {
+            leadId,
+            orgId: organizationId,
+            slug: "propostas",
+            stageKey: stageKeyForLead,
+            metadata: propostaMetadata,
+            assignedTo: closerIdForLead,
+            notes: lead.pipe_notes ?? null,
+          });
 
-          if (propostaError) {
+          if (!propostaEntryId) {
             report.rejected++;
-            report.errors.push({ row: rowIndex + 1, reason: `Erro ao inserir proposta: ${propostaError.message}` });
+            report.errors.push({ row: rowIndex + 1, reason: "Erro ao inserir proposta via pipeline_entries" });
             continue;
           }
 
-          // Insert product items
+          // Insert product items (still uses pipe_proposta_items with entry id)
           if (productIds.length > 0) {
             const n = productIds.length;
             const valuePerItem = totalValue != null && n > 0 ? Math.floor(totalValue / n) : null;
             const remainder = totalValue != null && n > 0 ? totalValue - (valuePerItem ?? 0) * n : 0;
             const itemsToInsert = productIds.map((product_id, index) => ({
-              pipe_proposta_id: newProposta.id,
+              pipe_proposta_id: propostaEntryId,
               product_id,
               sale_value: totalValue != null && valuePerItem != null
                 ? (index < n - 1 ? valuePerItem : valuePerItem + remainder)
@@ -840,17 +845,21 @@ async function importToFunnel(
           }
         } else {
           // confirmacao
-          const confirmacaoInsert: Record<string, unknown> = {
-            lead_id: leadId,
-            status: stageKeyForLead,
-            organization_id: organizationId,
+          const confirmacaoMetadata: Record<string, unknown> = {
             sdr_id: sdrIdForLead,
             closer_id: closerIdForLead,
             meeting_date: lead.commitment_date ?? null,
-            notes: lead.pipe_notes ?? null,
           };
-          if (metricsPeriodAt != null) confirmacaoInsert.metrics_period_at = metricsPeriodAt;
-          await supabase.from("pipe_confirmacao").insert(confirmacaoInsert);
+          if (metricsPeriodAt != null) confirmacaoMetadata.metrics_period_at = metricsPeriodAt;
+          await upsertPipeEntry(supabase, {
+            leadId,
+            orgId: organizationId,
+            slug: "confirmacao",
+            stageKey: stageKeyForLead,
+            metadata: confirmacaoMetadata,
+            assignedTo: closerIdForLead || sdrIdForLead,
+            notes: lead.pipe_notes ?? null,
+          });
         }
 
         if (formattedPhone) processedPhones.add(formattedPhone);

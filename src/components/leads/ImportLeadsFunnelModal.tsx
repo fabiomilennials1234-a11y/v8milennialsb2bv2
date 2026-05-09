@@ -190,9 +190,7 @@ export function ImportLeadsFunnelContent({
       setStep("complete");
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["leads"] }),
-        queryClient.invalidateQueries({ queryKey: ["pipe_whatsapp"] }),
-        queryClient.invalidateQueries({ queryKey: ["pipe_confirmacao"] }),
-        queryClient.invalidateQueries({ queryKey: ["pipe_propostas"] }),
+        queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] }),
       ]);
     } catch (error) {
       console.error("Import error:", error);

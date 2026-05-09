@@ -1,27 +1,16 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
 import { triggerFollowUpAutomation } from "./useAutoFollowUp";
 import { triggerStageChangedWorkflows } from "@/lib/workflowTrigger";
-import { useRealtimeSubscription, type RealtimeHandlers } from "./useRealtimeSubscription";
 import { useOrganization } from "./useOrganization";
 import { useCanPerformActionAsync } from "@/lib/permissions";
-
-/** Surgical realtime handlers — avoid full refetch for single-item changes */
-const realtimeHandlers: RealtimeHandlers = {
-  onUpdate: (updated, oldData) =>
-    oldData.map((item) =>
-      item.id === updated.id ? { ...item, ...updated } : item
-    ),
-  onDelete: (deleted, oldData) =>
-    oldData.filter((item) => item.id !== deleted.id),
-};
+import { usePipelineEntries, usePipelineId } from "./usePipelineEntries";
 
 export type PipeWhatsapp = Tables<"pipe_whatsapp">;
 export type PipeWhatsappInsert = TablesInsert<"pipe_whatsapp">;
 export type PipeWhatsappUpdate = TablesUpdate<"pipe_whatsapp">;
 
-// Dynamic — accepts any stage_key from pipeline_stages (custom stages supported)
 export type PipeWhatsappStatus = string;
 
 export const statusColumns: { id: string; title: string; color: string }[] = [
@@ -33,73 +22,54 @@ export const statusColumns: { id: string; title: string; color: string }[] = [
 ];
 
 export function usePipeWhatsapp() {
-  const { organizationId, isReady } = useOrganization();
-  useRealtimeSubscription("pipe_whatsapp", ["pipe_whatsapp"], realtimeHandlers);
-
-  return useQuery({
-    queryKey: ["pipe_whatsapp", organizationId],
-    queryFn: async ({ signal }) => {
-      if (!organizationId) {
-        return [];
-      }
-      const { data, error } = await supabase
-        .from("pipe_whatsapp")
-        .select(`
-          *,
-          lead:leads(
-            id, name, company, email, phone, rating, origin, segment, faturamento, urgency, notes, compromisso_date, ai_disabled, sdr_id, closer_id, responsible_id, pre_sale_responsible_id, sale_responsible_id,
-            responsible:team_members!leads_responsible_id_fkey(id, name),
-            sdr:team_members!leads_sdr_id_fkey(id, name),
-            closer:team_members!leads_closer_id_fkey(id, name),
-            pre_sale_responsible:team_members!leads_pre_sale_responsible_id_fkey(id, name),
-            sale_responsible:team_members!leads_sale_responsible_id_fkey(id, name),
-            lead_tags(tag:tags(id, name, color))
-          ),
-          responsible:team_members!pipe_whatsapp_responsible_id_fkey(id, name),
-          sdr:team_members!pipe_whatsapp_sdr_id_fkey(id, name),
-          pre_sale_responsible:team_members!pipe_whatsapp_pre_sale_responsible_id_fkey(id, name),
-          sale_responsible:team_members!pipe_whatsapp_sale_responsible_id_fkey(id, name)
-        `)
-        .eq("organization_id", organizationId)
-        .order("created_at", { ascending: false })
-        .abortSignal(signal);
-
-      if (error) throw error;
-      return data;
-    },
-    enabled: isReady && !!organizationId,
-    retry: 1,
-    staleTime: 10 * 60 * 1000, // 10 min — realtime subscription garante freshness
-  });
+  return usePipelineEntries("whatsapp");
 }
 
 export function useCreatePipeWhatsapp() {
   const queryClient = useQueryClient();
   const { organizationId } = useOrganization();
+  const { data: pipelineId } = usePipelineId("whatsapp");
 
   return useMutation({
     mutationFn: async (item: PipeWhatsappInsert) => {
       if (!organizationId) {
         throw new Error("Cannot create pipe_whatsapp: No organization context");
       }
-      const securedItem = {
-        ...item,
-        organization_id: organizationId,
-      };
+      if (!pipelineId) {
+        throw new Error("Cannot create pipe_whatsapp: Pipeline ID not resolved");
+      }
+
+      const metadata: Record<string, unknown> = {};
+      if (item.sdr_id !== undefined) metadata.sdr_id = item.sdr_id;
+      if (item.responsible_id !== undefined) metadata.responsible_id = item.responsible_id;
+      if (item.pre_sale_responsible_id !== undefined) metadata.pre_sale_responsible_id = item.pre_sale_responsible_id;
+      if (item.sale_responsible_id !== undefined) metadata.sale_responsible_id = item.sale_responsible_id;
+      if ((item as any).scheduled_date !== undefined) metadata.scheduled_date = (item as any).scheduled_date;
+
       const { data, error } = await supabase
-        .from("pipe_whatsapp")
-        .insert(securedItem)
+        .from("pipeline_entries")
+        .insert({
+          pipeline_id: pipelineId,
+          lead_id: item.lead_id!,
+          stage_key: item.status ?? "novo",
+          assigned_to: item.responsible_id ?? item.sdr_id ?? null,
+          notes: item.notes ?? null,
+          metadata,
+          organization_id: organizationId,
+        })
         .select()
         .single();
 
       if (error) throw error;
 
+      const meta = (data.metadata as Record<string, any>) ?? {};
+
       // Trigger automation for the initial status
       await triggerFollowUpAutomation({
         leadId: data.lead_id,
-        assignedTo: data.sdr_id,
+        assignedTo: meta.sdr_id ?? item.sdr_id ?? null,
         pipeType: "whatsapp",
-        stage: data.status,
+        stage: data.stage_key,
         sourcePipeId: data.id,
         organizationId: data.organization_id,
       });
@@ -107,7 +77,6 @@ export function useCreatePipeWhatsapp() {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["pipe_whatsapp"] });
       queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
       queryClient.invalidateQueries({ queryKey: ["follow_ups"] });
     },
@@ -123,9 +92,44 @@ export function useUpdatePipeWhatsapp() {
       if (updates.status && movePermission && !movePermission.allowed) {
         throw new Error("Sem permissão para mover registros no pipe");
       }
+
+      // Fetch current entry to merge metadata
+      const { data: current, error: fetchError } = await supabase
+        .from("pipeline_entries")
+        .select("metadata, lead_id, organization_id")
+        .eq("id", id)
+        .single();
+
+      if (fetchError) throw fetchError;
+
+      const currentMetadata = (current.metadata as Record<string, any>) ?? {};
+      const newMetadata: Record<string, unknown> = {};
+      if (updates.sdr_id !== undefined) newMetadata.sdr_id = updates.sdr_id;
+      if (updates.responsible_id !== undefined) newMetadata.responsible_id = updates.responsible_id;
+      if (updates.pre_sale_responsible_id !== undefined) newMetadata.pre_sale_responsible_id = updates.pre_sale_responsible_id;
+      if (updates.sale_responsible_id !== undefined) newMetadata.sale_responsible_id = updates.sale_responsible_id;
+      if ((updates as any).scheduled_date !== undefined) newMetadata.scheduled_date = (updates as any).scheduled_date;
+
+      const mergedMetadata = { ...currentMetadata, ...newMetadata };
+
+      const updatePayload: Record<string, unknown> = {
+        metadata: mergedMetadata,
+      };
+      if (updates.status !== undefined) {
+        updatePayload.stage_key = updates.status;
+      }
+      if (updates.notes !== undefined) {
+        updatePayload.notes = updates.notes;
+      }
+      // Compute assigned_to from the merged result
+      const assignedTo = mergedMetadata.responsible_id ?? mergedMetadata.sdr_id ?? null;
+      if (updates.responsible_id !== undefined || updates.sdr_id !== undefined) {
+        updatePayload.assigned_to = assignedTo;
+      }
+
       const { data, error } = await supabase
-        .from("pipe_whatsapp")
-        .update(updates)
+        .from("pipeline_entries")
+        .update(updatePayload)
         .eq("id", id)
         .select()
         .single();
@@ -140,9 +144,11 @@ export function useUpdatePipeWhatsapp() {
 
       // Trigger automation if status changed
       if (updates.status && effectiveLeadId) {
+        const meta = (data.metadata as Record<string, any>) ?? {};
+
         await triggerFollowUpAutomation({
           leadId: effectiveLeadId,
-          assignedTo: sdrId || data.sdr_id,
+          assignedTo: sdrId || meta.sdr_id || null,
           pipeType: "whatsapp",
           stage: updates.status,
           sourcePipeId: data.id,
@@ -161,7 +167,7 @@ export function useUpdatePipeWhatsapp() {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["pipe_whatsapp"], refetchType: "active" });
+      queryClient.invalidateQueries({ queryKey: ["pipeline_entries"], refetchType: "active" });
       queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
     },
   });
@@ -169,18 +175,17 @@ export function useUpdatePipeWhatsapp() {
 
 export function useDeletePipeWhatsapp() {
   const queryClient = useQueryClient();
-  
+
   return useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase
-        .from("pipe_whatsapp")
+        .from("pipeline_entries")
         .delete()
         .eq("id", id);
-      
+
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["pipe_whatsapp"] });
       queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
       queryClient.invalidateQueries({ queryKey: ["follow_ups"] });
     },

@@ -20,6 +20,7 @@ import { trackEvent } from "../_shared/track.ts";
 import { startJob, finishJob, failJob } from "../_shared/job-tracker.ts";
 import { executeWorkflow } from "../_shared/workflow-executor.ts";
 import { fireTrigger, processCronTriggers, matchesTriggerConfig } from "../_shared/workflow-trigger.ts";
+import { resolvePipelineId } from "../_shared/pipeline-adapter.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -360,16 +361,29 @@ async function processPeriodicTriggers(
         const windowStart = new Date().toISOString();
         const windowEnd = new Date(Date.now() + hoursBefore * 3_600_000).toISOString();
 
-        const { data: unconfirmed } = await supabase
-          .from("pipe_confirmacao")
-          .select("lead_id")
-          .eq("organization_id", wf.organization_id)
-          .or("is_confirmed.is.null,is_confirmed.eq.false")
-          .gte("meeting_date", windowStart)
-          .lte("meeting_date", windowEnd)
-          .limit(50);
+        // Resolve confirmacao pipeline id for this org
+        const confirmacaoPipelineId = await resolvePipelineId(supabase, wf.organization_id, "confirmacao");
+        if (!confirmacaoPipelineId) continue;
 
-        if (unconfirmed?.length) {
+        // Query pipeline_entries for unconfirmed meetings
+        // meeting_date and is_confirmed are stored in metadata
+        const { data: entries } = await supabase
+          .from("pipeline_entries")
+          .select("lead_id, metadata")
+          .eq("pipeline_id", confirmacaoPipelineId)
+          .limit(200);
+
+        // Filter in-memory for meeting window + not confirmed
+        const unconfirmed = (entries || []).filter((e: any) => {
+          const meta = (e.metadata || {}) as Record<string, unknown>;
+          const meetingDate = meta.meeting_date as string | undefined;
+          const isConfirmed = meta.is_confirmed as boolean | undefined;
+          if (!meetingDate) return false;
+          if (isConfirmed === true) return false;
+          return meetingDate >= windowStart && meetingDate <= windowEnd;
+        });
+
+        if (unconfirmed.length > 0) {
           for (const row of unconfirmed) {
             const { count: existingCount } = await supabase
               .from("workflow_executions")

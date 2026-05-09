@@ -7,6 +7,7 @@ import { normalizePhoneForSearch } from "../_shared/lead-service.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { fireTrigger } from "../_shared/workflow-trigger.ts";
 import { successResponse, errorResponse } from "../_shared/response.ts";
+import { upsertPipeEntry, getPipeEntry, deletePipeEntry, updatePipeEntryById } from "../_shared/pipeline-adapter.ts";
 
 // Helper function to normalize email (lowercase, trim)
 function normalizeEmail(email: string | null | undefined): string | null {
@@ -289,50 +290,37 @@ Deno.serve(withSentry('webhook-new-lead', async (req) => {
       const effectiveCompromissoDate = existingLead.compromisso_date || newCompromissoDate;
       
       if (effectiveCompromissoDate) {
-        // Check if already in pipe_confirmacao
-        const { data: existingConfirmacao } = await supabase
-          .from("pipe_confirmacao")
-          .select("id")
-          .eq("lead_id", existingLead.id)
-          .single();
+        const orgId = existingLead.organization_id || organization_id;
+
+        // Check if already in pipeline_entries(confirmacao)
+        const existingConfirmacao = await getPipeEntry(supabase, existingLead.id, orgId, "confirmacao");
 
         if (existingConfirmacao) {
-          // Update existing pipe_confirmacao
-          await supabase
-            .from("pipe_confirmacao")
-            .update({
-              status: "reuniao_marcada",
-              meeting_date: newCompromissoDate,
-            })
-            .eq("id", existingConfirmacao.id);
+          await updatePipeEntryById(supabase, existingConfirmacao.id, {
+            stageKey: "reuniao_marcada",
+            metadata: { meeting_date: newCompromissoDate },
+          });
         } else {
-          // Create new pipe_confirmacao entry
-          await supabase
-            .from("pipe_confirmacao")
-            .insert({
-              organization_id: existingLead.organization_id || organization_id,
-              lead_id: existingLead.id,
-              status: "reuniao_marcada",
+          await upsertPipeEntry(supabase, {
+            leadId: existingLead.id,
+            orgId,
+            slug: "confirmacao",
+            stageKey: "reuniao_marcada",
+            metadata: {
               sdr_id: sdr_id || existingLead.sdr_id || null,
               meeting_date: newCompromissoDate,
-            });
+            },
+            assignedTo: sdr_id || existingLead.sdr_id || null,
+          });
         }
 
-        // Check if lead is in pipe_propostas with status "compromisso_marcado"
-        // If so, keep in pipe_whatsapp (exception rule)
-        const { data: existingProposta } = await supabase
-          .from("pipe_propostas")
-          .select("id, status")
-          .eq("lead_id", existingLead.id)
-          .eq("status", "compromisso_marcado")
-          .maybeSingle();
+        // Check if lead is in pipeline_entries(propostas) with stage "compromisso_marcado"
+        // If so, keep in pipeline_entries(whatsapp) (exception rule)
+        const existingProposta = await getPipeEntry(supabase, existingLead.id, orgId, "propostas");
 
-        if (!existingProposta) {
-          // Only remove from pipe_whatsapp if NOT in compromisso_marcado
-          await supabase
-            .from("pipe_whatsapp")
-            .delete()
-            .eq("lead_id", existingLead.id);
+        if (!existingProposta || existingProposta.stage_key !== "compromisso_marcado") {
+          // Only remove from pipeline_entries(whatsapp) if NOT in compromisso_marcado
+          await deletePipeEntry(supabase, existingLead.id, orgId, "whatsapp");
         }
       }
 

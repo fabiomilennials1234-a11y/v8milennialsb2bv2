@@ -1,27 +1,16 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
 import { triggerFollowUpAutomation } from "./useAutoFollowUp";
 import { triggerStageChangedWorkflows } from "@/lib/workflowTrigger";
-import { useRealtimeSubscription, type RealtimeHandlers } from "./useRealtimeSubscription";
 import { useOrganization } from "./useOrganization";
 import { useCanPerformActionAsync } from "@/lib/permissions";
-
-/** Surgical realtime handlers — avoid full refetch for single-item changes */
-const realtimeHandlers: RealtimeHandlers = {
-  onUpdate: (updated, oldData) =>
-    oldData.map((item) =>
-      item.id === updated.id ? { ...item, ...updated } : item
-    ),
-  onDelete: (deleted, oldData) =>
-    oldData.filter((item) => item.id !== deleted.id),
-};
+import { usePipelineEntries, usePipelineId } from "./usePipelineEntries";
 
 export type PipeConfirmacao = Tables<"pipe_confirmacao">;
 export type PipeConfirmacaoInsert = TablesInsert<"pipe_confirmacao">;
 export type PipeConfirmacaoUpdate = TablesUpdate<"pipe_confirmacao">;
 
-// Dynamic — accepts any stage_key from pipeline_stages (custom stages supported)
 export type PipeConfirmacaoStatus = string;
 
 // Visual Kanban columns - pre_confirmada and confirmada_no_dia are NOT shown as columns
@@ -39,83 +28,68 @@ export const statusColumns: { id: string; title: string; color: string }[] = [
 ];
 
 export function usePipeConfirmacao() {
-  const { organizationId, isReady } = useOrganization();
-  useRealtimeSubscription("pipe_confirmacao", ["pipe_confirmacao"], realtimeHandlers);
-
-  return useQuery({
-    queryKey: ["pipe_confirmacao", organizationId],
-    queryFn: async () => {
-      if (!organizationId) {
-        return [];
-      }
-      const { data, error } = await supabase
-        .from("pipe_confirmacao")
-        .select(`
-          *,
-          lead:leads(
-            id, name, company, email, phone, rating, origin, segment, faturamento, urgency, ai_disabled, sdr_id, closer_id, responsible_id, pre_sale_responsible_id, sale_responsible_id,
-            responsible:team_members!leads_responsible_id_fkey(id, name),
-            sdr:team_members!leads_sdr_id_fkey(id, name),
-            closer:team_members!leads_closer_id_fkey(id, name),
-            pre_sale_responsible:team_members!leads_pre_sale_responsible_id_fkey(id, name),
-            sale_responsible:team_members!leads_sale_responsible_id_fkey(id, name),
-            lead_tags(tag:tags(id, name, color))
-          ),
-          responsible:team_members!pipe_confirmacao_responsible_id_fkey(id, name),
-          sdr:team_members!pipe_confirmacao_sdr_id_fkey(id, name),
-          closer:team_members!pipe_confirmacao_closer_id_fkey(id, name),
-          pre_sale_responsible:team_members!pipe_confirmacao_pre_sale_responsible_id_fkey(id, name),
-          sale_responsible:team_members!pipe_confirmacao_sale_responsible_id_fkey(id, name)
-        `)
-        .eq("organization_id", organizationId)
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-      return data;
-    },
-    enabled: isReady && !!organizationId,
-    staleTime: 10 * 60 * 1000, // 10 min — realtime subscription garante freshness
-  });
+  return usePipelineEntries("confirmacao");
 }
 
 export function useCreatePipeConfirmacao() {
   const queryClient = useQueryClient();
   const { organizationId } = useOrganization();
+  const { data: pipelineId } = usePipelineId("confirmacao");
 
   return useMutation({
     mutationFn: async (item: PipeConfirmacaoInsert) => {
       if (!organizationId) {
         throw new Error("Cannot create pipe_confirmacao: No organization context");
       }
-      const securedItem = {
-        ...item,
-        organization_id: organizationId,
+      if (!pipelineId) {
+        throw new Error("Pipeline 'confirmacao' not found for this organization");
+      }
+
+      const { lead_id, status, organization_id, sdr_id, closer_id, responsible_id, pre_sale_responsible_id, sale_responsible_id, meeting_date, meet_link, is_confirmed, metrics_period_at, ...rest } = item;
+
+      const metadata = {
+        ...(sdr_id !== undefined && { sdr_id }),
+        ...(closer_id !== undefined && { closer_id }),
+        ...(responsible_id !== undefined && { responsible_id }),
+        ...(pre_sale_responsible_id !== undefined && { pre_sale_responsible_id }),
+        ...(sale_responsible_id !== undefined && { sale_responsible_id }),
+        ...(meeting_date !== undefined && { meeting_date }),
+        ...(meet_link !== undefined && { meet_link }),
+        ...(is_confirmed !== undefined && { is_confirmed }),
+        ...(metrics_period_at !== undefined && { metrics_period_at }),
       };
+
       const { data, error } = await supabase
-        .from("pipe_confirmacao")
-        .insert(securedItem)
+        .from("pipeline_entries")
+        .insert({
+          pipeline_id: pipelineId,
+          lead_id: lead_id!,
+          stage_key: status || "reuniao_marcada",
+          assigned_to: responsible_id || sdr_id || closer_id || null,
+          metadata,
+          organization_id: organizationId,
+        })
         .select()
         .single();
 
       if (error) throw error;
 
-      // Trigger automation for the initial status
+      // Trigger automation for the initial status — use input values for assignedTo
       await triggerFollowUpAutomation({
         leadId: data.lead_id,
-        assignedTo: data.responsible_id || data.sdr_id || data.closer_id,
+        assignedTo: responsible_id || sdr_id || closer_id,
         pipeType: "confirmacao",
-        stage: data.status,
+        stage: data.stage_key,
         sourcePipeId: data.id,
         organizationId: data.organization_id,
       });
 
-      // stage_changed workflows are fired by the PG trigger on pipe_confirmacao
+      // stage_changed workflows are fired by the PG trigger on pipeline_entries
       // (via pg_net → process-workflow-executions). No need to fire from frontend.
 
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["pipe_confirmacao"] });
       queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
       queryClient.invalidateQueries({ queryKey: ["follow_ups"] });
     },
@@ -126,6 +100,7 @@ export function useUpdatePipeConfirmacao() {
   const queryClient = useQueryClient();
   const { organizationId } = useOrganization();
   const { data: movePermission } = useCanPerformActionAsync("move_pipe_record");
+  const { data: pipelineId } = usePipelineId("confirmacao");
 
   return useMutation({
     mutationFn: async ({ id, leadId, assignedTo, ...updates }: PipeConfirmacaoUpdate & { id: string; leadId?: string; assignedTo?: string | null }) => {
@@ -139,15 +114,15 @@ export function useUpdatePipeConfirmacao() {
       let isStatusChange = false;
       if (updates.status !== undefined) {
         const { data: current, error: selErr } = await supabase
-          .from("pipe_confirmacao")
-          .select("status")
+          .from("pipeline_entries")
+          .select("stage_key")
           .eq("id", id)
           .single();
         if (selErr || !current) {
           // Não vazar diferença "não existe" vs "sem permissão"
           throw new Error("Registro não encontrado");
         }
-        isStatusChange = current.status !== updates.status;
+        isStatusChange = current.stage_key !== updates.status;
 
         if (isStatusChange) {
           // Fail-closed em loading: enquanto movePermission ainda não chegou
@@ -157,16 +132,59 @@ export function useUpdatePipeConfirmacao() {
           }
         } else {
           // status no payload mas igual ao atual — remove pra evitar UPDATE inútil
-          // + log de auditoria fantasma (trigger de stage_change dispara em UPDATE OF status).
+          // + log de auditoria fantasma (trigger de stage_change dispara em UPDATE OF stage_key).
           delete updates.status;
         }
       }
 
-      const payload = Object.fromEntries(
-        Object.entries(updates).filter(([, v]) => v !== undefined)
-      ) as PipeConfirmacaoUpdate;
+      // Fetch current entry to get existing metadata for merge
+      const { data: currentEntry, error: fetchErr } = await supabase
+        .from("pipeline_entries")
+        .select("metadata")
+        .eq("id", id)
+        .single();
+      if (fetchErr || !currentEntry) {
+        throw new Error("Registro não encontrado");
+      }
+
+      const existingMetadata = (currentEntry.metadata as Record<string, unknown>) || {};
+
+      // Extract metadata fields from updates, keep non-metadata fields separate
+      const { status, sdr_id, closer_id, responsible_id, pre_sale_responsible_id, sale_responsible_id, meeting_date, meet_link, is_confirmed, metrics_period_at, ...nonMetaUpdates } = updates;
+
+      const metadataUpdates: Record<string, unknown> = {};
+      if (sdr_id !== undefined) metadataUpdates.sdr_id = sdr_id;
+      if (closer_id !== undefined) metadataUpdates.closer_id = closer_id;
+      if (responsible_id !== undefined) metadataUpdates.responsible_id = responsible_id;
+      if (pre_sale_responsible_id !== undefined) metadataUpdates.pre_sale_responsible_id = pre_sale_responsible_id;
+      if (sale_responsible_id !== undefined) metadataUpdates.sale_responsible_id = sale_responsible_id;
+      if (meeting_date !== undefined) metadataUpdates.meeting_date = meeting_date;
+      if (meet_link !== undefined) metadataUpdates.meet_link = meet_link;
+      if (is_confirmed !== undefined) metadataUpdates.is_confirmed = is_confirmed;
+      if (metrics_period_at !== undefined) metadataUpdates.metrics_period_at = metrics_period_at;
+
+      const mergedMetadata = { ...existingMetadata, ...metadataUpdates };
+
+      const payload: Record<string, unknown> = {};
+      if (status !== undefined) payload.stage_key = status;
+      if (Object.keys(metadataUpdates).length > 0) payload.metadata = mergedMetadata;
+      if (responsible_id !== undefined || sdr_id !== undefined || closer_id !== undefined) {
+        payload.assigned_to = responsible_id || sdr_id || closer_id || null;
+      }
+
+      // Only update if there's something to update
+      if (Object.keys(payload).length === 0) {
+        // Nothing changed — return current entry
+        const { data: unchanged } = await supabase
+          .from("pipeline_entries")
+          .select()
+          .eq("id", id)
+          .single();
+        return unchanged;
+      }
+
       const { data, error } = await supabase
-        .from("pipe_confirmacao")
+        .from("pipeline_entries")
         .update(payload)
         .eq("id", id)
         .select()
@@ -195,9 +213,10 @@ export function useUpdatePipeConfirmacao() {
 
       // Trigger automation só quando status mudou de fato
       if (isStatusChange && updates.status && leadId) {
+        const meta = (data.metadata as Record<string, unknown>) || {};
         await triggerFollowUpAutomation({
           leadId: leadId,
-          assignedTo: assignedTo || data.responsible_id || data.sdr_id || data.closer_id,
+          assignedTo: assignedTo || (meta.responsible_id as string) || (meta.sdr_id as string) || (meta.closer_id as string),
           pipeType: "confirmacao",
           stage: updates.status,
           sourcePipeId: data.id,
@@ -216,7 +235,7 @@ export function useUpdatePipeConfirmacao() {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["pipe_confirmacao"], refetchType: "active" });
+      queryClient.invalidateQueries({ queryKey: ["pipeline_entries"], refetchType: "active" });
       queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
       queryClient.invalidateQueries({ queryKey: ["leads"], refetchType: "active" });
     },
@@ -225,18 +244,17 @@ export function useUpdatePipeConfirmacao() {
 
 export function useDeletePipeConfirmacao() {
   const queryClient = useQueryClient();
-  
+
   return useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase
-        .from("pipe_confirmacao")
+        .from("pipeline_entries")
         .delete()
         .eq("id", id);
-      
+
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["pipe_confirmacao"] });
       queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
       queryClient.invalidateQueries({ queryKey: ["follow_ups"] });
     },

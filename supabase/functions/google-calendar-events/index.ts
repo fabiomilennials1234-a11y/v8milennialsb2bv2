@@ -25,6 +25,7 @@ import {
 } from "../_shared/google-calendar-utils.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { withSentry } from '../_shared/sentry.ts';
+import { getPipeEntry, upsertPipeEntry, updatePipeEntryById } from "../_shared/pipeline-adapter.ts";
 
 const SUPABASE_URL              = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -122,18 +123,41 @@ async function upsertEventCache(
   );
 }
 
-// ─── Atualiza meet_link no pipe_confirmacao ───────────────────────────────────
+// ─── Atualiza meet_link no pipeline_entries (confirmacao) ─────────────────────
 
 async function saveMeetLinkToPipe(
   supabase: SupabaseClient,
   pipeConfirmacaoId: string,
-  meetLink: string | null
+  meetLink: string | null,
+  leadId?: string,
+  orgId?: string,
 ): Promise<void> {
-  if (!pipeConfirmacaoId || !meetLink) return;
-  await supabase
-    .from("pipe_confirmacao")
-    .update({ meet_link: meetLink })
-    .eq("id", pipeConfirmacaoId);
+  if (!meetLink) return;
+  // If we have leadId + orgId, use the pipeline adapter (preferred path)
+  if (leadId && orgId) {
+    const existing = await getPipeEntry(supabase, leadId, orgId, "confirmacao");
+    if (existing) {
+      // Only update metadata, preserve current stage
+      await updatePipeEntryById(supabase, existing.id, {
+        metadata: { meet_link: meetLink },
+      });
+    } else {
+      await upsertPipeEntry(supabase, {
+        leadId,
+        orgId,
+        slug: "confirmacao",
+        stageKey: "reuniao_marcada",
+        metadata: { meet_link: meetLink },
+      });
+    }
+    return;
+  }
+  // Fallback: update by entry ID directly
+  if (pipeConfirmacaoId) {
+    await updatePipeEntryById(supabase, pipeConfirmacaoId, {
+      metadata: { meet_link: meetLink },
+    });
+  }
 }
 
 // ─── Auth helper ─────────────────────────────────────────────────────────────
@@ -375,9 +399,15 @@ Deno.serve(withSentry('google-calendar-events', async (req) => {
           .eq("id", createdEvent.id);
       }
 
-      // Salva meet_link no pipe_confirmacao
-      if (payload.pipe_confirmacao_id && meetLink) {
-        await saveMeetLinkToPipe(supabase, payload.pipe_confirmacao_id, meetLink);
+      // Salva meet_link no pipeline_entries (confirmacao)
+      if (meetLink && (payload.pipe_confirmacao_id || payload.lead_id)) {
+        await saveMeetLinkToPipe(
+          supabase,
+          payload.pipe_confirmacao_id ?? "",
+          meetLink,
+          payload.lead_id,
+          orgId,
+        );
       }
 
       await logCalendarOp(supabase, {

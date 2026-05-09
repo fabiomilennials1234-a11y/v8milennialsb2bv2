@@ -234,9 +234,6 @@ export function useAddLeadToStandardPipe() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["lead_all_pipelines"] });
       queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
-      queryClient.invalidateQueries({ queryKey: ["pipe_whatsapp"] });
-      queryClient.invalidateQueries({ queryKey: ["pipe_confirmacao"] });
-      queryClient.invalidateQueries({ queryKey: ["pipe_propostas"] });
       queryClient.invalidateQueries({ queryKey: ["upsell"] });
     },
   });
@@ -273,10 +270,8 @@ export function useMoveLeadInStandardPipe() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["lead_all_pipelines"] });
       queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
-      queryClient.invalidateQueries({ queryKey: ["pipe_whatsapp"] });
       queryClient.invalidateQueries({ queryKey: ["pipe_whatsapp_by_lead"] });
-      queryClient.invalidateQueries({ queryKey: ["pipe_confirmacao"] });
-      queryClient.invalidateQueries({ queryKey: ["pipe_propostas"] });
+      queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
       queryClient.invalidateQueries({ queryKey: ["upsell"] });
     },
   });
@@ -307,10 +302,8 @@ export function useRemoveLeadFromStandardPipe() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["lead_all_pipelines"] });
       queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
-      queryClient.invalidateQueries({ queryKey: ["pipe_whatsapp"] });
       queryClient.invalidateQueries({ queryKey: ["pipe_whatsapp_by_lead"] });
-      queryClient.invalidateQueries({ queryKey: ["pipe_confirmacao"] });
-      queryClient.invalidateQueries({ queryKey: ["pipe_propostas"] });
+      queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
       queryClient.invalidateQueries({ queryKey: ["upsell"] });
     },
   });

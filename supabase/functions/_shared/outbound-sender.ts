@@ -13,6 +13,7 @@
 
 import { humanizeMessage } from "./message-humanizer.ts";
 import { sendAudioViaProvider } from "./audio-sender.ts";
+import { upsertPipeEntry } from "./pipeline-adapter.ts";
 import { smartSplitMessage } from "./natural-messaging.ts";
 import {
   resolveDispatchContext,
@@ -261,21 +262,12 @@ export async function sendOutboundDispatch(
     // Pipe auto-move: novo_lead → abordado
     await supabase.from("leads").update({ pipe_whatsapp: "abordado" }).eq("id", row.lead_id);
 
-    const { data: existingPipe } = await supabase
-      .from("pipe_whatsapp")
-      .select("id")
-      .eq("lead_id", row.lead_id)
-      .eq("organization_id", organizationId)
-      .maybeSingle();
-    if (existingPipe) {
-      await supabase.from("pipe_whatsapp").update({ status: "abordado" }).eq("id", existingPipe.id);
-    } else {
-      await supabase.from("pipe_whatsapp").insert({
-        lead_id: row.lead_id,
-        organization_id: organizationId,
-        status: "abordado",
-      });
-    }
+    await upsertPipeEntry(supabase, {
+      leadId: row.lead_id,
+      orgId: organizationId,
+      slug: "whatsapp",
+      stageKey: "abordado",
+    });
 
     // Register text message in whatsapp_messages history.
     // message_id = real provider id so webhook echo UPSERT matches this row

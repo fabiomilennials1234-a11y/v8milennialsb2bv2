@@ -206,23 +206,58 @@ async function fetchLostDeals(
   startDate: string,
   endDate: string,
 ): Promise<string> {
-  const { data: lostDeals } = await supabase
-    .from("pipe_propostas")
-    .select(`
-      id, status, sale_value, loss_reason, closed_at, created_at,
-      lead:leads(name, company, segment),
-      closer:team_members!pipe_propostas_closer_id_fkey(name)
-    `)
+  // Query pipeline_entries for propostas with stage_key "perdido"
+  const { data: pipelines } = await supabase
+    .from("pipelines")
+    .select("id")
     .eq("organization_id", organizationId)
-    .eq("status", "perdido")
+    .eq("slug", "propostas")
+    .eq("type", "system")
+    .maybeSingle();
+
+  if (!pipelines?.id) {
+    return "\nNEGÓCIOS PERDIDOS: Nenhum registro no período.";
+  }
+
+  const { data: lostEntries } = await supabase
+    .from("pipeline_entries")
+    .select("id, lead_id, stage_key, metadata, closed_at, created_at")
+    .eq("pipeline_id", pipelines.id)
+    .eq("stage_key", "perdido")
     .gte("closed_at", startDate)
     .lte("closed_at", endDate)
     .order("closed_at", { ascending: false })
     .limit(10);
 
-  if (!lostDeals || lostDeals.length === 0) {
+  if (!lostEntries || lostEntries.length === 0) {
     return "\nNEGÓCIOS PERDIDOS: Nenhum registro no período.";
   }
+
+  // Fetch leads + closers in batch
+  const leadIds = lostEntries.map((e: any) => e.lead_id).filter(Boolean);
+  const { data: leads } = leadIds.length > 0
+    ? await supabase.from("leads").select("id, name, company, segment").in("id", leadIds)
+    : { data: [] };
+  const leadsMap = new Map((leads || []).map((l: any) => [l.id, l]));
+
+  const closerIds = lostEntries
+    .map((e: any) => (e.metadata as Record<string, unknown>)?.closer_id)
+    .filter(Boolean);
+  const { data: closers } = closerIds.length > 0
+    ? await supabase.from("team_members").select("id, name").in("id", closerIds)
+    : { data: [] };
+  const closersMap = new Map((closers || []).map((c: any) => [c.id, c]));
+
+  // Build output
+  const lostDeals = lostEntries.map((e: any) => {
+    const meta = (e.metadata || {}) as Record<string, unknown>;
+    return {
+      sale_value: meta.sale_value as number || 0,
+      loss_reason: meta.loss_reason as string || null,
+      lead: leadsMap.get(e.lead_id) || null,
+      closer: closersMap.get(meta.closer_id as string) || null,
+    };
+  });
 
   const totalLostValue = lostDeals.reduce((sum: number, d: any) => sum + (d.sale_value || 0), 0);
   const reasons = new Map<string, number>();

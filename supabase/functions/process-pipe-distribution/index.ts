@@ -15,11 +15,13 @@ import { logRuntime } from "../_shared/logger.ts";
 import { trackEvent } from "../_shared/track.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { updatePipeEntryById } from "../_shared/pipeline-adapter.ts";
+import type { PipeSlug } from "../_shared/pipeline-adapter.ts";
 
-const PIPE_TABLES: Record<string, string> = {
-  whatsapp: "pipe_whatsapp",
-  confirmacao: "pipe_confirmacao",
-  propostas: "pipe_propostas",
+const VALID_PIPE_SLUGS: Record<string, PipeSlug> = {
+  whatsapp: "whatsapp",
+  confirmacao: "confirmacao",
+  propostas: "propostas",
 };
 
 const TERMINAL_STATUSES = ["vendido", "perdido", "cancelado"];
@@ -69,8 +71,8 @@ Deno.serve(
       );
     }
 
-    const pipeTable = PIPE_TABLES[pipeType];
-    if (!pipeTable) {
+    const pipeSlug = VALID_PIPE_SLUGS[pipeType];
+    if (!pipeSlug) {
       return new Response(
         JSON.stringify({ error: `Unknown pipe_type: ${pipeType}` }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
@@ -91,7 +93,7 @@ Deno.serve(
         module: "pipe_distribution",
         action: "auto_distribute",
         status: "skipped",
-        entityType: pipeTable,
+        entityType: "pipeline_entries",
         entityId: pipeRecordId,
         payloadSnapshot: {
           pipeType,
@@ -101,14 +103,16 @@ Deno.serve(
       return json(corsHeaders, { distributed: false, reason: "no_active_rule" });
     }
 
-    // ── 2. Check if already assigned ────────────────────────────────────────
+    // ── 2. Check if already assigned (via pipeline_entries) ────────────────
     const { data: pipeRecord } = await supabase
-      .from(pipeTable)
-      .select("responsible_id")
+      .from("pipeline_entries")
+      .select("assigned_to, metadata")
       .eq("id", pipeRecordId)
       .maybeSingle();
 
-    if (pipeRecord?.responsible_id) {
+    const existingAssignment = pipeRecord?.assigned_to ||
+      (pipeRecord?.metadata as Record<string, unknown>)?.responsible_id;
+    if (existingAssignment) {
       return json(corsHeaders, { distributed: false, reason: "already_assigned" });
     }
 
@@ -135,7 +139,7 @@ Deno.serve(
           module: "pipe_distribution",
           action: "auto_distribute",
           status: "skipped",
-          entityType: pipeTable,
+          entityType: "pipeline_entries",
           entityId: pipeRecordId,
           payloadSnapshot: { pipeType, reason: "empty_pool" },
         });
@@ -163,18 +167,22 @@ Deno.serve(
         module: "pipe_distribution",
         action: "auto_distribute",
         status: "skipped",
-        entityType: pipeTable,
+        entityType: "pipeline_entries",
         entityId: pipeRecordId,
         payloadSnapshot: { pipeType, mode: rule.sdr_mode, reason: "no_member_resolved" },
       });
       return json(corsHeaders, { distributed: false, reason: "no_member_resolved" });
     }
 
-    // ── 4. Assign responsible on pipe record ────────────────────────────────
-    const { error: updatePipeError } = await supabase
-      .from(pipeTable)
-      .update({ responsible_id: selectedMemberId, sdr_id: selectedMemberId, pre_sale_responsible_id: selectedMemberId })
-      .eq("id", pipeRecordId);
+    // ── 4. Assign responsible on pipeline_entries record ────────────────────
+    const updateSuccess = await updatePipeEntryById(supabase, pipeRecordId, {
+      assignedTo: selectedMemberId,
+      metadata: {
+        responsible_id: selectedMemberId,
+        sdr_id: selectedMemberId,
+        pre_sale_responsible_id: selectedMemberId,
+      },
+    });
 
     // ── 5. Also update lead record ──────────────────────────────────────────
     if (leadId) {
@@ -189,8 +197,8 @@ Deno.serve(
       organizationId,
       module: "pipe_distribution",
       action: "auto_distribute",
-      status: updatePipeError ? "error" : "success",
-      entityType: pipeTable,
+      status: updateSuccess ? "success" : "error",
+      entityType: "pipeline_entries",
       entityId: pipeRecordId,
       payloadSnapshot: {
         pipeType,
@@ -198,13 +206,13 @@ Deno.serve(
         selectedMemberId,
         leadId: leadId ?? null,
       },
-      errorMessage: updatePipeError?.message,
+      errorMessage: updateSuccess ? undefined : "Failed to update pipeline entry",
     });
 
     await trackEvent({
       organizationId,
       eventType: "automation_triggered",
-      entityType: pipeTable,
+      entityType: "pipeline_entries",
       entityId: pipeRecordId,
       metadata: {
         action: "auto_distribute",

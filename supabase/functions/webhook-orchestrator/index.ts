@@ -5,6 +5,7 @@ import { validateLeadInput, sanitizeString, isValidUUID, isValidISODate } from "
 import { enqueueWebhookDeliveries } from "../_shared/webhook-utils.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { successResponse, errorResponse } from "../_shared/response.ts";
+import { upsertPipeEntry, getPipeEntry, deletePipeEntry, updatePipeEntryById } from "../_shared/pipeline-adapter.ts";
 
 // Helper functions (reutilizadas do webhook-new-lead)
 function normalizeEmail(email: string | null | undefined): string | null {
@@ -190,32 +191,28 @@ async function handleProcessLead(supabase: any, data: any, tenantId: string | nu
 
     const effectiveCompromissoDate = existingLead.compromisso_date || newCompromissoDate;
     if (effectiveCompromissoDate) {
-      const { data: existingConfirmacao } = await supabase
-        .from("pipe_confirmacao")
-        .select("id")
-        .eq("lead_id", existingLead.id)
-        .single();
+      const existingConfirmacao = await getPipeEntry(supabase, existingLead.id, tenantId!, "confirmacao");
       if (existingConfirmacao) {
-        await supabase.from("pipe_confirmacao").update({
-          status: "reuniao_marcada",
-          meeting_date: newCompromissoDate,
-        }).eq("id", existingConfirmacao.id);
+        await updatePipeEntryById(supabase, existingConfirmacao.id, {
+          stageKey: "reuniao_marcada",
+          metadata: { meeting_date: newCompromissoDate },
+        });
       } else {
-        await supabase.from("pipe_confirmacao").insert({
-          lead_id: existingLead.id,
-          status: "reuniao_marcada",
-          sdr_id: sdr_id || existingLead.sdr_id || null,
-          meeting_date: newCompromissoDate,
+        await upsertPipeEntry(supabase, {
+          leadId: existingLead.id,
+          orgId: tenantId!,
+          slug: "confirmacao",
+          stageKey: "reuniao_marcada",
+          metadata: {
+            sdr_id: sdr_id || existingLead.sdr_id || null,
+            meeting_date: newCompromissoDate,
+          },
+          assignedTo: sdr_id || existingLead.sdr_id || null,
         });
       }
-      const { data: existingProposta } = await supabase
-        .from("pipe_propostas")
-        .select("id, status")
-        .eq("lead_id", existingLead.id)
-        .eq("status", "compromisso_marcado")
-        .maybeSingle();
-      if (!existingProposta) {
-        await supabase.from("pipe_whatsapp").delete().eq("lead_id", existingLead.id);
+      const existingProposta = await getPipeEntry(supabase, existingLead.id, tenantId!, "propostas");
+      if (!existingProposta || existingProposta.stage_key !== "compromisso_marcado") {
+        await deletePipeEntry(supabase, existingLead.id, tenantId!, "whatsapp");
       }
     }
 
@@ -296,11 +293,16 @@ async function handleProcessLead(supabase: any, data: any, tenantId: string | nu
   }
 
   if (lead.compromisso_date) {
-    await supabase.from("pipe_confirmacao").insert({
-      lead_id: lead.id,
-      status: "reuniao_marcada",
-      sdr_id: sdr_id || null,
-      meeting_date: lead.compromisso_date,
+    await upsertPipeEntry(supabase, {
+      leadId: lead.id,
+      orgId: tenantId!,
+      slug: "confirmacao",
+      stageKey: "reuniao_marcada",
+      metadata: {
+        sdr_id: sdr_id || null,
+        meeting_date: lead.compromisso_date,
+      },
+      assignedTo: sdr_id || null,
     });
     await supabase.from("lead_history").insert({
       lead_id: lead.id,
@@ -315,10 +317,13 @@ async function handleProcessLead(supabase: any, data: any, tenantId: string | nu
     };
   }
 
-  await supabase.from("pipe_whatsapp").insert({
-    lead_id: lead.id,
-    status: "novo",
-    sdr_id,
+  await upsertPipeEntry(supabase, {
+    leadId: lead.id,
+    orgId: tenantId!,
+    slug: "whatsapp",
+    stageKey: "novo",
+    metadata: { sdr_id },
+    assignedTo: sdr_id || null,
   });
   await supabase.from("lead_history").insert({
     lead_id: lead.id,
@@ -352,24 +357,28 @@ async function handleScheduleMeeting(supabase: any, data: any, tenantId: string 
     return { success: false, error: "Erro ao atualizar lead", details: updateError.message };
   }
 
-  // Criar/atualizar pipe_confirmacao
-  const { data: existingConfirmacao } = await supabase
-    .from("pipe_confirmacao")
-    .select("id")
-    .eq("lead_id", lead_id)
-    .maybeSingle();
+  // Criar/atualizar pipeline_entries(confirmacao)
+  // Note: tenantId may be null in handleScheduleMeeting — fall back to lead's org
+  const { data: leadRow } = await supabase.from("leads").select("organization_id").eq("id", lead_id).single();
+  const scheduleOrgId = tenantId || leadRow?.organization_id;
 
-  if (existingConfirmacao) {
-    await supabase.from("pipe_confirmacao").update({
-      status: "reuniao_marcada",
-      meeting_date: preferred_date,
-    }).eq("id", existingConfirmacao.id);
-  } else {
-    await supabase.from("pipe_confirmacao").insert({
-      lead_id,
-      status: "reuniao_marcada",
-      meeting_date: preferred_date,
-    });
+  if (scheduleOrgId) {
+    const existingConfirmacao = await getPipeEntry(supabase, lead_id, scheduleOrgId, "confirmacao");
+
+    if (existingConfirmacao) {
+      await updatePipeEntryById(supabase, existingConfirmacao.id, {
+        stageKey: "reuniao_marcada",
+        metadata: { meeting_date: preferred_date },
+      });
+    } else {
+      await upsertPipeEntry(supabase, {
+        leadId: lead_id,
+        orgId: scheduleOrgId,
+        slug: "confirmacao",
+        stageKey: "reuniao_marcada",
+        metadata: { meeting_date: preferred_date },
+      });
+    }
   }
 
   return {

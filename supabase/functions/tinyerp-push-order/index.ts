@@ -93,29 +93,46 @@ Deno.serve(withSentry('tinyerp-push-order', async (req) => {
       );
     }
 
-    // Load proposta with lead and items
-    // Tables/columns: pipe_propostas(sale_value, notes), leads(name, company, email, phone, faturamento, segment),
-    // pipe_proposta_items(quantity, unit_price, sale_value, product_id), products(name, sku)
-    const { data: proposta, error: propostaError } = await supabaseAdmin
-      .from("pipe_propostas")
-      .select(`
-        id, sale_value, notes,
-        lead:leads(id, name, company, email, phone, faturamento, segment),
-        items:pipe_proposta_items(id, quantity, unit_price, sale_value, product_id, product:products(id, name, sku))
-      `)
+    // Load proposta from pipeline_entries
+    const { data: pipeEntry, error: pipeError } = await supabaseAdmin
+      .from("pipeline_entries")
+      .select("id, lead_id, metadata, notes")
       .eq("id", pipe_proposta_id)
-      .single();
+      .maybeSingle();
 
-    if (propostaError || !proposta) {
-      console.error("[TinyERP Push] Proposta query error:", propostaError);
+    if (!pipeEntry) {
+      console.error("[TinyERP Push] Proposta not found:", pipe_proposta_id);
       return new Response(
         JSON.stringify({ error: "Proposta não encontrada" }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const lead = proposta.lead as Record<string, unknown> | null;
-    const items = (proposta.items || []) as Array<Record<string, unknown>>;
+    const entryMeta = (pipeEntry.metadata || {}) as Record<string, unknown>;
+    const proposta = {
+      id: pipeEntry.id,
+      sale_value: entryMeta.sale_value ?? null,
+      notes: pipeEntry.notes ?? (entryMeta.notes as string | null) ?? null,
+    };
+    const resolvedLeadId = pipeEntry.lead_id;
+
+    // Fetch lead data
+    let lead: Record<string, unknown> | null = null;
+    if (resolvedLeadId) {
+      const { data: leadRow } = await supabaseAdmin
+        .from("leads")
+        .select("id, name, company, email, phone, faturamento, segment")
+        .eq("id", resolvedLeadId)
+        .single();
+      lead = leadRow as Record<string, unknown> | null;
+    }
+
+    // Fetch proposta items
+    const { data: itemsRaw } = await supabaseAdmin
+      .from("pipe_proposta_items")
+      .select("id, quantity, unit_price, sale_value, product_id, product:products(id, name, sku)")
+      .eq("pipe_proposta_id", pipe_proposta_id);
+    const items = (itemsRaw || []) as Array<Record<string, unknown>>;
 
     if (items.length === 0) {
       return new Response(

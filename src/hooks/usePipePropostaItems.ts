@@ -68,7 +68,7 @@ export function useCreatePipePropostaItem() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["pipe_proposta_items", data.pipe_proposta_id] });
-      queryClient.invalidateQueries({ queryKey: ["pipe_propostas"] });
+      queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
     },
   });
 }
@@ -94,7 +94,7 @@ export function useCreateManyPipePropostaItems() {
     onSuccess: (data) => {
       if (data.length > 0) {
         queryClient.invalidateQueries({ queryKey: ["pipe_proposta_items", data[0].pipe_proposta_id] });
-        queryClient.invalidateQueries({ queryKey: ["pipe_propostas"] });
+        queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
       }
     },
   });
@@ -120,7 +120,7 @@ export function useUpdatePipePropostaItem() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["pipe_proposta_items", data.pipe_proposta_id] });
-      queryClient.invalidateQueries({ queryKey: ["pipe_propostas"] });
+      queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
     },
   });
 }
@@ -140,7 +140,7 @@ export function useDeletePipePropostaItem() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["pipe_proposta_items", data.propostaId] });
-      queryClient.invalidateQueries({ queryKey: ["pipe_propostas"] });
+      queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
     },
   });
 }

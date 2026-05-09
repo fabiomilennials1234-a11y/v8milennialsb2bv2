@@ -2,6 +2,7 @@ import { withSentry } from '../_shared/sentry.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.89.0";
 import { logRuntime } from "../_shared/logger.ts";
+import { getPipeEntriesByLeads } from "../_shared/pipeline-adapter.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -20,6 +21,7 @@ interface LeadData {
   created_at: string;
   phone: string | null;
   email: string | null;
+  organization_id: string;
 }
 
 interface PipeData {
@@ -57,7 +59,7 @@ serve(withSentry('calculate-lead-score', async (req) => {
     // Get leads to process
     let leadsQuery = supabase
       .from("leads")
-      .select("id, name, company, origin, faturamento, urgency, segment, rating, created_at, phone, email");
+      .select("id, name, company, origin, faturamento, urgency, segment, rating, created_at, phone, email, organization_id");
 
     if (lead_id) {
       leadsQuery = leadsQuery.eq("id", lead_id);
@@ -88,31 +90,45 @@ serve(withSentry('calculate-lead-score', async (req) => {
 
     const results = [];
 
-    // Batch queries: fetch all pipe/history data in 4 parallel queries instead of 4 per lead
+    // Batch queries: fetch all pipe/history data via pipeline adapter
     const leadIds = (leads as LeadData[]).map(l => l.id);
 
-    const [allWhatsapp, allConfirmacao, allPropostas, allHistory] = await Promise.all([
-      supabase.from("pipe_whatsapp").select("lead_id, status").in("lead_id", leadIds),
-      supabase.from("pipe_confirmacao").select("lead_id, status, meeting_date").in("lead_id", leadIds),
-      supabase.from("pipe_propostas").select("lead_id, status, calor").in("lead_id", leadIds),
-      supabase.from("lead_history").select("lead_id, id, created_at").in("lead_id", leadIds).order("created_at", { ascending: false }),
-    ]);
-
-    // Build lookup Maps for O(1) access inside the loop
-    const whatsappMap = new Map<string, { status: string }>();
-    for (const row of allWhatsapp.data || []) {
-      if (!whatsappMap.has(row.lead_id)) whatsappMap.set(row.lead_id, row);
+    // Group leads by org for adapter calls (adapter requires orgId)
+    const orgLeadIds = new Map<string, string[]>();
+    for (const lead of leads as LeadData[]) {
+      const ids = orgLeadIds.get(lead.organization_id) || [];
+      ids.push(lead.id);
+      orgLeadIds.set(lead.organization_id, ids);
     }
 
-    const confirmacaoMap = new Map<string, { status: string; meeting_date: string }>();
-    for (const row of allConfirmacao.data || []) {
-      if (!confirmacaoMap.has(row.lead_id)) confirmacaoMap.set(row.lead_id, row);
+    // Fetch pipeline entries per org in parallel, then merge into lookup maps
+    const whatsappMap = new Map<string, { stage_key: string; metadata: Record<string, unknown> }>();
+    const confirmacaoMap = new Map<string, { stage_key: string; metadata: Record<string, unknown> }>();
+    const propostaMap = new Map<string, { stage_key: string; metadata: Record<string, unknown> }>();
+
+    const pipePromises: Promise<void>[] = [];
+    for (const [orgId, ids] of orgLeadIds) {
+      pipePromises.push(
+        Promise.all([
+          getPipeEntriesByLeads(supabase, ids, orgId, "whatsapp"),
+          getPipeEntriesByLeads(supabase, ids, orgId, "confirmacao"),
+          getPipeEntriesByLeads(supabase, ids, orgId, "propostas"),
+        ]).then(([wa, conf, prop]) => {
+          for (const e of wa) {
+            if (!whatsappMap.has(e.lead_id)) whatsappMap.set(e.lead_id, e);
+          }
+          for (const e of conf) {
+            if (!confirmacaoMap.has(e.lead_id)) confirmacaoMap.set(e.lead_id, e);
+          }
+          for (const e of prop) {
+            if (!propostaMap.has(e.lead_id)) propostaMap.set(e.lead_id, e);
+          }
+        }),
+      );
     }
 
-    const propostaMap = new Map<string, { status: string; calor: number }>();
-    for (const row of allPropostas.data || []) {
-      if (!propostaMap.has(row.lead_id)) propostaMap.set(row.lead_id, row);
-    }
+    const allHistory = await supabase.from("lead_history").select("lead_id, id, created_at").in("lead_id", leadIds).order("created_at", { ascending: false });
+    await Promise.all(pipePromises);
 
     // Group history entries by lead_id (already ordered by created_at desc from query)
     const historyMap = new Map<string, { id: string; created_at: string }[]>();
@@ -129,11 +145,11 @@ serve(withSentry('calculate-lead-score', async (req) => {
       const historyEntries = historyMap.get(lead.id) || [];
 
       const pipeData: PipeData = {
-        whatsapp_status: whatsappData?.status,
-        confirmacao_status: confirmacaoData?.status,
-        proposta_status: propostaData?.status,
-        meeting_date: confirmacaoData?.meeting_date,
-        calor: propostaData?.calor,
+        whatsapp_status: whatsappData?.stage_key,
+        confirmacao_status: confirmacaoData?.stage_key,
+        proposta_status: propostaData?.stage_key,
+        meeting_date: confirmacaoData?.metadata?.meeting_date as string | undefined,
+        calor: propostaData?.metadata?.calor as number | undefined,
       };
 
       const historyData: HistoryData = {

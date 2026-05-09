@@ -10,6 +10,7 @@ import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { sendAudioViaProvider } from "./audio-sender.ts";
 import { getWhatsAppProvider } from "./whatsapp-client.ts";
 import { getTimeBasedVariables } from "./time-variables.ts";
+import { getPipeEntry, upsertPipeEntry, updatePipeEntryById, deletePipeEntry } from "./pipeline-adapter.ts";
 
 export interface ActionResult {
   success: boolean;
@@ -128,27 +129,19 @@ async function resolveVariables(
     vars.nome_empresa_crm = org?.name || "";
   }
 
-  // Data da reunião (pipe_confirmacao.meeting_date)
+  // Data da reunião (pipeline_entries confirmacao → metadata.meeting_date)
   if (template.includes("{{data_reuniao}}")) {
-    const { data: conf } = await supabase
-      .from("pipe_confirmacao")
-      .select("meeting_date")
-      .eq("lead_id", leadId)
-      .maybeSingle();
-    const rawDate = (conf as { meeting_date?: string } | null)?.meeting_date;
+    const confEntry = await getPipeEntry(supabase, leadId, lead.organization_id, "confirmacao");
+    const rawDate = (confEntry?.metadata as Record<string, unknown>)?.meeting_date as string | undefined;
     vars.data_reuniao = rawDate
       ? new Date(rawDate).toLocaleDateString("pt-BR")
       : "";
   }
 
-  // Valor da proposta (pipe_propostas.sale_value)
+  // Valor da proposta (pipeline_entries propostas → metadata.sale_value)
   if (template.includes("{{valor_proposta}}")) {
-    const { data: prop } = await supabase
-      .from("pipe_propostas")
-      .select("sale_value")
-      .eq("lead_id", leadId)
-      .maybeSingle();
-    const saleValue = (prop as { sale_value?: number } | null)?.sale_value;
+    const propEntry = await getPipeEntry(supabase, leadId, lead.organization_id, "propostas");
+    const saleValue = (propEntry?.metadata as Record<string, unknown>)?.sale_value as number | undefined;
     vars.valor_proposta = saleValue != null
       ? new Intl.NumberFormat("pt-BR", {
           style: "currency",
@@ -774,40 +767,21 @@ async function handleMoveStage(ctx: ActionContext): Promise<ActionResult> {
   switch (pipeType) {
     case "whatsapp": {
       await ctx.supabase.from("leads").update({ pipe_whatsapp: targetStage }).eq("id", ctx.leadId);
-      // Upsert pipe_whatsapp
-      const { data: existing } = await ctx.supabase
-        .from("pipe_whatsapp").select("id").eq("lead_id", ctx.leadId).maybeSingle();
-      if (existing) {
-        await ctx.supabase.from("pipe_whatsapp").update({ status: targetStage }).eq("id", existing.id);
-      } else {
-        await ctx.supabase.from("pipe_whatsapp").insert({
-          lead_id: ctx.leadId, organization_id: ctx.organizationId, status: targetStage,
-        });
-      }
+      await upsertPipeEntry(ctx.supabase, {
+        leadId: ctx.leadId, orgId: ctx.organizationId, slug: "whatsapp", stageKey: targetStage,
+      });
       break;
     }
     case "confirmacao": {
-      const { data: existing } = await ctx.supabase
-        .from("pipe_confirmacao").select("id").eq("lead_id", ctx.leadId).maybeSingle();
-      if (existing) {
-        await ctx.supabase.from("pipe_confirmacao").update({ status: targetStage }).eq("id", existing.id);
-      } else {
-        await ctx.supabase.from("pipe_confirmacao").insert({
-          lead_id: ctx.leadId, organization_id: ctx.organizationId, status: targetStage,
-        });
-      }
+      await upsertPipeEntry(ctx.supabase, {
+        leadId: ctx.leadId, orgId: ctx.organizationId, slug: "confirmacao", stageKey: targetStage,
+      });
       break;
     }
     case "propostas": {
-      const { data: existing } = await ctx.supabase
-        .from("pipe_propostas").select("id").eq("lead_id", ctx.leadId).maybeSingle();
-      if (existing) {
-        await ctx.supabase.from("pipe_propostas").update({ status: targetStage }).eq("id", existing.id);
-      } else {
-        await ctx.supabase.from("pipe_propostas").insert({
-          lead_id: ctx.leadId, organization_id: ctx.organizationId, status: targetStage,
-        });
-      }
+      await upsertPipeEntry(ctx.supabase, {
+        leadId: ctx.leadId, orgId: ctx.organizationId, slug: "propostas", stageKey: targetStage,
+      });
       break;
     }
     case "upsell_base":
@@ -879,19 +853,13 @@ async function handleMoveStage(ctx: ActionContext): Promise<ActionResult> {
           // Transition to standard pipeline — reuse handleMoveStage logic
           const transitionPipe = stageRow.target_pipe_type;
           const transitionStage = stageRow.target_stage_key;
-          if (transitionPipe === "whatsapp") {
-            await ctx.supabase.from("leads").update({ pipe_whatsapp: transitionStage }).eq("id", ctx.leadId);
-            const { data: pw } = await ctx.supabase.from("pipe_whatsapp").select("id").eq("lead_id", ctx.leadId).maybeSingle();
-            if (pw) { await ctx.supabase.from("pipe_whatsapp").update({ status: transitionStage }).eq("id", pw.id); }
-            else { await ctx.supabase.from("pipe_whatsapp").insert({ lead_id: ctx.leadId, organization_id: ctx.organizationId, status: transitionStage }); }
-          } else if (transitionPipe === "confirmacao") {
-            const { data: pc } = await ctx.supabase.from("pipe_confirmacao").select("id").eq("lead_id", ctx.leadId).maybeSingle();
-            if (pc) { await ctx.supabase.from("pipe_confirmacao").update({ status: transitionStage }).eq("id", pc.id); }
-            else { await ctx.supabase.from("pipe_confirmacao").insert({ lead_id: ctx.leadId, organization_id: ctx.organizationId, status: transitionStage }); }
-          } else if (transitionPipe === "propostas") {
-            const { data: pp } = await ctx.supabase.from("pipe_propostas").select("id").eq("lead_id", ctx.leadId).maybeSingle();
-            if (pp) { await ctx.supabase.from("pipe_propostas").update({ status: transitionStage }).eq("id", pp.id); }
-            else { await ctx.supabase.from("pipe_propostas").insert({ lead_id: ctx.leadId, organization_id: ctx.organizationId, status: transitionStage }); }
+          if (transitionPipe === "whatsapp" || transitionPipe === "confirmacao" || transitionPipe === "propostas") {
+            if (transitionPipe === "whatsapp") {
+              await ctx.supabase.from("leads").update({ pipe_whatsapp: transitionStage }).eq("id", ctx.leadId);
+            }
+            await upsertPipeEntry(ctx.supabase, {
+              leadId: ctx.leadId, orgId: ctx.organizationId, slug: transitionPipe, stageKey: transitionStage,
+            });
           } else if (transitionPipe === "upsell_base") {
             await ctx.supabase.from("upsell_clients").update({ tipo_cliente_tempo: transitionStage }).eq("lead_id", ctx.leadId);
           } else if (transitionPipe === "upsell_gestao") {
@@ -1015,30 +983,14 @@ async function handleDuplicateToPipe(ctx: ActionContext): Promise<ActionResult> 
 
   if (!lead) return { success: false, error: "Lead not found" };
 
-  switch (targetPipeType) {
-    case "confirmacao": {
-      const { data: existing } = await ctx.supabase
-        .from("pipe_confirmacao").select("id").eq("lead_id", ctx.leadId).maybeSingle();
-      if (!existing) {
-        await ctx.supabase.from("pipe_confirmacao").insert({
-          lead_id: ctx.leadId, organization_id: ctx.organizationId, status: targetPipeStage,
-        });
-      }
-      break;
-    }
-    case "propostas": {
-      const { data: existing } = await ctx.supabase
-        .from("pipe_propostas").select("id").eq("lead_id", ctx.leadId).maybeSingle();
-      if (!existing) {
-        await ctx.supabase.from("pipe_propostas").insert({
-          lead_id: ctx.leadId, organization_id: ctx.organizationId, status: targetPipeStage,
-        });
-      }
-      break;
-    }
-    default:
-      // For whatsapp pipe, just update stage
+  if (targetPipeType === "whatsapp" || targetPipeType === "confirmacao" || targetPipeType === "propostas") {
+    await upsertPipeEntry(ctx.supabase, {
+      leadId: ctx.leadId, orgId: ctx.organizationId,
+      slug: targetPipeType, stageKey: targetPipeStage,
+    });
+    if (targetPipeType === "whatsapp") {
       await ctx.supabase.from("leads").update({ pipe_whatsapp: targetPipeStage }).eq("id", ctx.leadId);
+    }
   }
 
   return { success: true, message: `Duplicated to ${targetPipeType}/${targetPipeStage}` };
@@ -1047,17 +999,11 @@ async function handleDuplicateToPipe(ctx: ActionContext): Promise<ActionResult> 
 async function handleRemoveFromPipe(ctx: ActionContext): Promise<ActionResult> {
   const pipeType = ctx.nodeData.pipeType as string || "whatsapp";
 
-  switch (pipeType) {
-    case "whatsapp":
-      await ctx.supabase.from("pipe_whatsapp").delete().eq("lead_id", ctx.leadId);
+  if (pipeType === "whatsapp" || pipeType === "confirmacao" || pipeType === "propostas") {
+    await deletePipeEntry(ctx.supabase, ctx.leadId, ctx.organizationId, pipeType);
+    if (pipeType === "whatsapp") {
       await ctx.supabase.from("leads").update({ pipe_whatsapp: null }).eq("id", ctx.leadId);
-      break;
-    case "confirmacao":
-      await ctx.supabase.from("pipe_confirmacao").delete().eq("lead_id", ctx.leadId);
-      break;
-    case "propostas":
-      await ctx.supabase.from("pipe_propostas").delete().eq("lead_id", ctx.leadId);
-      break;
+    }
   }
 
   return { success: true, message: `Removed from ${pipeType}` };
@@ -1067,10 +1013,12 @@ async function handleMarkAsLost(ctx: ActionContext): Promise<ActionResult> {
   const pipeType = ctx.nodeData.pipeType as string || "propostas";
   const reason = ctx.nodeData.lostReason as string || "";
 
-  if (pipeType === "propostas") {
-    await ctx.supabase.from("pipe_propostas")
-      .update({ status: "perdido", lost_reason: reason })
-      .eq("lead_id", ctx.leadId);
+  if (pipeType === "propostas" || pipeType === "whatsapp" || pipeType === "confirmacao") {
+    const entry = await getPipeEntry(ctx.supabase, ctx.leadId, ctx.organizationId, pipeType as "propostas" | "whatsapp" | "confirmacao");
+    if (entry) {
+      const metaUpdate = pipeType === "propostas" ? { loss_reason_id: reason } : {};
+      await updatePipeEntryById(ctx.supabase, entry.id, { stageKey: "perdido", metadata: metaUpdate });
+    }
   }
 
   await logToHistory(ctx.supabase, ctx.leadId, ctx.organizationId, "marked_lost",

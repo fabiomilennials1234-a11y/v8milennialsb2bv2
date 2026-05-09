@@ -26,6 +26,7 @@ import {
 } from "../_shared/google-calendar-utils.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { withSentry } from '../_shared/sentry.ts';
+import { getPipeEntry, upsertPipeEntry, updatePipeEntryById } from "../_shared/pipeline-adapter.ts";
 
 const SUPABASE_URL              = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -259,14 +260,22 @@ async function processEvent(
     return;
   }
 
-  // Atualiza meet_link no pipe_confirmacao se houver
+  // Atualiza meet_link no pipeline_entries (confirmacao) se houver
   if (meetLink) {
-    await supabase
-      .from("pipe_confirmacao")
-      .update({ meet_link: meetLink })
-      .eq("lead_id", leadId)
-      .order("created_at", { ascending: false })
-      .limit(1);
+    const existing = await getPipeEntry(supabase, leadId, orgId, "confirmacao");
+    if (existing) {
+      await updatePipeEntryById(supabase, existing.id, {
+        metadata: { meet_link: meetLink },
+      });
+    } else {
+      await upsertPipeEntry(supabase, {
+        leadId,
+        orgId,
+        slug: "confirmacao",
+        stageKey: "reuniao_marcada",
+        metadata: { meet_link: meetLink },
+      });
+    }
   }
 
   await logCalendarOp(supabase, {

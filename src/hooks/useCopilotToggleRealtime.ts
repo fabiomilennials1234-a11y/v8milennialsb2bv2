@@ -74,9 +74,7 @@ export function useCopilotToggleRealtime() {
           queryClient.invalidateQueries({ queryKey: ["lead-ai-status"] });
           queryClient.invalidateQueries({ queryKey: ["lead-detail"] });
           queryClient.invalidateQueries({ queryKey: ["leads"] });
-          queryClient.invalidateQueries({ queryKey: ["pipe_whatsapp"] });
-          queryClient.invalidateQueries({ queryKey: ["pipe_confirmacao"] });
-          queryClient.invalidateQueries({ queryKey: ["pipe_propostas"] });
+          queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
         },
       )
       .subscribe();

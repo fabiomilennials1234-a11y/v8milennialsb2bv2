@@ -1,5 +1,6 @@
 import { withSentry } from '../_shared/sentry.ts';
 import { getTimeBasedVariables as getTimeVars } from '../_shared/time-variables.ts';
+import { getPipeEntriesByLeads } from "../_shared/pipeline-adapter.ts";
 /**
  * Worker: Processa regras de follow-up do Copilot (no_response)
  *
@@ -142,8 +143,8 @@ Deno.serve(withSentry('process-copilot-followups', async (req) => {
     const candidateSlice = candidates.slice(0, BATCH_PER_RULE);
     const leadIds = candidateSlice.map((c: any) => c.lead_id);
 
-    // Batch: buscar todos os leads e contagens de execução de uma vez
-    const [{ data: allLeads }, { data: execRows }] = await Promise.all([
+    // Batch: buscar todos os leads, pipe entries e contagens de execução de uma vez
+    const [{ data: allLeads }, { data: execRows }, confEntries, propEntries] = await Promise.all([
       supabase
         .from("leads")
         .select(`
@@ -158,8 +159,6 @@ Deno.serve(withSentry('process-copilot-followups', async (req) => {
           ai_disabled,
           lead_tags(tag:tags(name)),
           upsell_clients(tipo_cliente_tempo, gestao_stage),
-          pipe_confirmacao(status),
-          pipe_propostas(status),
           campanha_leads(stage_id, campanha_stages(name))
         `)
         .in("id", leadIds),
@@ -168,9 +167,22 @@ Deno.serve(withSentry('process-copilot-followups', async (req) => {
         .select("lead_id")
         .eq("rule_id", rule.id)
         .in("lead_id", leadIds),
+      getPipeEntriesByLeads(supabase, leadIds, orgId, "confirmacao"),
+      getPipeEntriesByLeads(supabase, leadIds, orgId, "propostas"),
     ]);
 
-    const leadMap = new Map((allLeads || []).map((l: any) => [l.id, l]));
+    // Build lookup maps for pipe entries
+    const confByLead = new Map(confEntries.map(e => [e.lead_id, { status: e.stage_key }]));
+    const propByLead = new Map(propEntries.map(e => [e.lead_id, { status: e.stage_key }]));
+
+    // Attach pipe data to leads for downstream filter compatibility
+    const allLeadsWithPipes = (allLeads || []).map((l: any) => ({
+      ...l,
+      pipe_confirmacao: confByLead.get(l.id) ? [confByLead.get(l.id)] : [],
+      pipe_propostas: propByLead.get(l.id) ? [propByLead.get(l.id)] : [],
+    }));
+
+    const leadMap = new Map(allLeadsWithPipes.map((l: any) => [l.id, l]));
     const execCountMap = new Map<string, number>();
     for (const row of execRows || []) {
       execCountMap.set(row.lead_id, (execCountMap.get(row.lead_id) || 0) + 1);

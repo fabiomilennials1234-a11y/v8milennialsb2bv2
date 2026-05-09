@@ -23,6 +23,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { withSentry } from "../_shared/sentry.ts";
 import { logRuntime } from "../_shared/logger.ts";
+import { upsertPipeEntry } from "../_shared/pipeline-adapter.ts";
 
 // ============================================================================
 // Config
@@ -322,10 +323,13 @@ async function handlePaymentResponseEvent(
       : null;
 
     if (targetLeadId) {
-      await supabase
-        .from("pipe_propostas")
-        .update({ status: "pago", paid_at: new Date().toISOString() })
-        .eq("lead_id", targetLeadId);
+      await upsertPipeEntry(supabase, {
+        leadId: targetLeadId,
+        orgId: instance.organization_id,
+        slug: "propostas",
+        stageKey: "pago",
+        metadata: { paid_at: new Date().toISOString() },
+      });
 
       await supabase.from("lead_history").insert({
         organization_id: instance.organization_id,
