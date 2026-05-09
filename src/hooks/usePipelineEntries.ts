@@ -32,13 +32,14 @@ export function usePipelineId(slug: PipelineType) {
     queryKey: ["pipeline_id", slug, organizationId],
     queryFn: async () => {
       if (!organizationId) return null;
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("pipelines")
         .select("id")
         .eq("organization_id", organizationId)
         .eq("slug", slug)
         .eq("type", "system")
         .single();
+      if (error) throw error;
       return data?.id ?? null;
     },
     enabled: isReady && !!organizationId,
@@ -83,10 +84,10 @@ export function usePipelineEntries(slug: PipelineType) {
   const { organizationId, isReady } = useOrganization();
   const { data: pipelineId } = usePipelineId(slug);
 
-  useRealtimeSubscription("pipeline_entries", ["pipeline_entries", slug], realtimeHandlers);
+  useRealtimeSubscription("pipeline_entries", ["pipeline_entries", slug, organizationId], realtimeHandlers);
 
   return useQuery({
-    queryKey: ["pipeline_entries", slug, organizationId],
+    queryKey: ["pipeline_entries", slug, organizationId, pipelineId],
     queryFn: async ({ signal }) => {
       if (!organizationId || !pipelineId) return [];
 
