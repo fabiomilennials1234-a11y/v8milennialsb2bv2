@@ -7,12 +7,16 @@ import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/hooks/useOrganization";
 import { toast } from "sonner";
 
+export type MediaType = "text" | "image" | "audio" | "video" | "document";
+
 export interface MessageTemplate {
   id: string;
   organization_id: string;
   command: string;
   display_name: string;
   body: string;
+  media_url: string | null;
+  media_type: MediaType;
   created_by: string;
   updated_at: string;
   created_at: string;
@@ -49,6 +53,8 @@ export function useCreateMessageTemplate() {
       command: string;
       display_name: string;
       body: string;
+      media_url?: string | null;
+      media_type?: MediaType;
     }) => {
       const {
         data: { user },
@@ -60,6 +66,8 @@ export function useCreateMessageTemplate() {
         command: payload.command.toLowerCase().trim(),
         display_name: payload.display_name.trim(),
         body: payload.body,
+        media_url: payload.media_url ?? null,
+        media_type: payload.media_type ?? "text",
         created_by: user.id,
       } as any);
       if (error) throw error;
@@ -87,6 +95,8 @@ export function useUpdateMessageTemplate() {
       command: string;
       display_name: string;
       body: string;
+      media_url?: string | null;
+      media_type?: MediaType;
     }) => {
       const { error } = await supabase
         .from("message_templates")
@@ -94,6 +104,8 @@ export function useUpdateMessageTemplate() {
           command: payload.command.toLowerCase().trim(),
           display_name: payload.display_name.trim(),
           body: payload.body,
+          media_url: payload.media_url ?? null,
+          media_type: payload.media_type ?? "text",
         } as any)
         .eq("id", payload.id);
       if (error) throw error;

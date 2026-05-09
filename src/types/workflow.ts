@@ -84,6 +84,8 @@ export type WorkflowActionType =
   | "notify_team_member"
   // Follow-up
   | "create_followup"
+  // Checklists
+  | "apply_checklist"
   // Copilot / IA
   | "generate_ai_message"
   | "summarize_conversation"
@@ -339,6 +341,9 @@ export interface ActionNodeData {
   assigneeId?: string;
   assigneeName?: string;
   assignMode?: "specific" | "round_robin";
+  // Checklist
+  checklistTemplateId?: string;
+  checklistTemplateName?: string;
   // IA
   aiAgentId?: string;
   aiAgentName?: string;
@@ -697,6 +702,8 @@ export const ACTION_LABELS: Record<WorkflowActionType, string> = {
   notify_team_member: "Notificar Membro da Equipe",
   // Follow-up
   create_followup: "Criar Follow-up",
+  // Checklists
+  apply_checklist: "Aplicar Checklist",
   // IA
   generate_ai_message: "Gerar Mensagem com IA",
   summarize_conversation: "Resumir Conversa (IA)",
@@ -787,6 +794,7 @@ export const ACTION_CATEGORIES: ActionCategory[] = [
       "duplicate_to_pipe",
       "remove_from_pipe",
       "mark_as_lost",
+      "apply_checklist",
     ],
   },
   {

@@ -18,6 +18,8 @@ import { LeadTabInfo } from "@/components/lead/tabs/LeadTabInfo";
 import { LeadTabPipe } from "@/components/lead/tabs/LeadTabPipe";
 import { LeadTabCampanhas } from "@/components/lead/tabs/LeadTabCampanhas";
 import { LeadCreateForm } from "@/components/lead/create/LeadCreateForm";
+import { LeadChecklistSection } from "@/components/leads/LeadChecklistSection";
+import { LeadContactsSection } from "@/components/leads/LeadContactsSection";
 import { useLeadByPhone } from "@/hooks/useWhatsAppLeadIntegration";
 import { useLeadAllPipelines } from "@/hooks/useLeadAllPipelines";
 import { useLeadForm } from "@/hooks/lead/useLeadForm";
@@ -86,7 +88,7 @@ export function LeadDetailContent({
           </TabsList>
 
           <div className="flex-1 overflow-y-auto mt-4 px-6 pb-4">
-            <TabsContent value="info" className="mt-0">
+            <TabsContent value="info" className="mt-0 space-y-5">
               <LeadTabInfo
                 leadId={lead.id}
                 formData={formData}
@@ -101,6 +103,10 @@ export function LeadDetailContent({
                 sdr={lead.sdr as { id: string; name: string } | null}
                 closer={lead.closer as { id: string; name: string } | null}
               />
+              <div className="border-t pt-4 space-y-4">
+                <LeadChecklistSection leadId={lead.id} />
+                <LeadContactsSection leadId={lead.id} compact />
+              </div>
             </TabsContent>
 
             <TabsContent value="pipeline" className="mt-0">

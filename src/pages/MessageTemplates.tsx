@@ -12,6 +12,13 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Plus,
   Search,
   Pencil,
@@ -19,6 +26,12 @@ import {
   FileText,
   Eye,
   Loader2,
+  Image,
+  Mic,
+  Video,
+  File,
+  Upload,
+  X,
 } from "lucide-react";
 import {
   useMessageTemplates,
@@ -26,6 +39,7 @@ import {
   useUpdateMessageTemplate,
   useDeleteMessageTemplate,
   type MessageTemplate,
+  type MediaType,
 } from "@/hooks/useMessageTemplates";
 import {
   TEMPLATE_VARIABLES,
@@ -33,6 +47,23 @@ import {
   PREVIEW_LEAD,
   PREVIEW_ATTENDANT,
 } from "@/lib/template-variables";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+
+const MEDIA_TYPE_CONFIG: Record<Exclude<MediaType, "text">, { label: string; icon: typeof Image; accept: string }> = {
+  image: { label: "Imagem", icon: Image, accept: "image/jpeg,image/png,image/webp,image/gif" },
+  audio: { label: "Áudio", icon: Mic, accept: "audio/mpeg,audio/ogg,audio/wav,audio/mp4" },
+  video: { label: "Vídeo", icon: Video, accept: "video/mp4,video/webm" },
+  document: { label: "Documento", icon: File, accept: "application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" },
+};
+
+const MEDIA_ICON: Record<MediaType, typeof FileText> = {
+  text: FileText,
+  image: Image,
+  audio: Mic,
+  video: Video,
+  document: File,
+};
 
 const COMMAND_REGEX = /^[a-z0-9][a-z0-9-]*$/;
 
@@ -58,8 +89,12 @@ export default function MessageTemplates() {
   const [displayName, setDisplayName] = useState("");
   const [body, setBody] = useState("");
   const [commandError, setCommandError] = useState("");
+  const [mediaType, setMediaType] = useState<MediaType>("text");
+  const [mediaUrl, setMediaUrl] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const filtered = (templates ?? []).filter((t) => {
     const q = search.toLowerCase();
@@ -74,6 +109,8 @@ export default function MessageTemplates() {
     setDisplayName("");
     setBody("");
     setCommandError("");
+    setMediaType("text");
+    setMediaUrl(null);
     setEditing(null);
   }, []);
 
@@ -87,6 +124,8 @@ export default function MessageTemplates() {
     setCommand(t.command);
     setDisplayName(t.display_name);
     setBody(t.body);
+    setMediaType(t.media_type ?? "text");
+    setMediaUrl(t.media_url ?? null);
     setCommandError("");
     setModalOpen(true);
   }, []);
@@ -128,11 +167,39 @@ export default function MessageTemplates() {
     [body],
   );
 
+  const handleFileUpload = useCallback(async (file: File) => {
+    setUploading(true);
+    try {
+      const ext = file.name.split(".").pop() ?? "bin";
+      const path = `templates/${crypto.randomUUID()}.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from("media")
+        .upload(path, file, { contentType: file.type, upsert: false });
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage.from("media").getPublicUrl(path);
+      setMediaUrl(urlData.publicUrl);
+      toast.success("Arquivo enviado");
+    } catch (err: any) {
+      toast.error(err.message || "Erro no upload");
+    } finally {
+      setUploading(false);
+    }
+  }, []);
+
   const handleSave = useCallback(async () => {
-    if (!command || !displayName || !body) return;
+    if (!command || !displayName) return;
+    if (mediaType === "text" && !body) return;
+    if (mediaType !== "text" && !mediaUrl && !body) return;
     if (commandError) return;
 
-    const payload = { command, display_name: displayName, body };
+    const payload = {
+      command,
+      display_name: displayName,
+      body,
+      media_url: mediaType !== "text" ? mediaUrl : null,
+      media_type: mediaType,
+    };
 
     if (editing) {
       await updateMutation.mutateAsync({ id: editing.id, ...payload });
@@ -147,6 +214,8 @@ export default function MessageTemplates() {
     displayName,
     body,
     commandError,
+    mediaType,
+    mediaUrl,
     editing,
     createMutation,
     updateMutation,
@@ -165,7 +234,7 @@ export default function MessageTemplates() {
     [deleteMutation],
   );
 
-  const isSaving = createMutation.isPending || updateMutation.isPending;
+  const isSaving = createMutation.isPending || updateMutation.isPending || uploading;
   const preview = resolveVariables(body, PREVIEW_LEAD, PREVIEW_ATTENDANT);
 
   return (
@@ -243,6 +312,17 @@ export default function MessageTemplates() {
                 </div>
               </div>
               <p className="text-sm font-medium">{t.display_name}</p>
+              {t.media_type && t.media_type !== "text" && (
+                <div className="flex items-center gap-1.5">
+                  {(() => { const Icon = MEDIA_ICON[t.media_type] ?? FileText; return <Icon className="h-3.5 w-3.5 text-primary" />; })()}
+                  <span className="text-xs text-primary font-medium">
+                    {MEDIA_TYPE_CONFIG[t.media_type as keyof typeof MEDIA_TYPE_CONFIG]?.label ?? t.media_type}
+                  </span>
+                  {t.media_type === "image" && t.media_url && (
+                    <img src={t.media_url} alt="" className="h-10 w-10 rounded object-cover ml-auto" />
+                  )}
+                </div>
+              )}
               <p className="text-sm text-muted-foreground line-clamp-2">
                 {t.body}
               </p>
@@ -312,16 +392,107 @@ export default function MessageTemplates() {
               />
             </div>
 
+            {/* Media Type */}
+            <div className="space-y-2">
+              <Label>Tipo de conteúdo</Label>
+              <div className="grid grid-cols-5 gap-1.5">
+                {(["text", "image", "audio", "video", "document"] as MediaType[]).map((type) => {
+                  const Icon = MEDIA_ICON[type];
+                  const label = type === "text" ? "Texto" : MEDIA_TYPE_CONFIG[type as keyof typeof MEDIA_TYPE_CONFIG]?.label ?? type;
+                  return (
+                    <button
+                      key={type}
+                      type="button"
+                      onClick={() => { setMediaType(type); if (type === "text") { setMediaUrl(null); } }}
+                      className={`flex flex-col items-center gap-1 p-2 rounded-lg border text-xs font-medium transition-colors ${
+                        mediaType === type
+                          ? "bg-primary/10 text-primary border-primary/50"
+                          : "bg-muted/30 text-muted-foreground border-border hover:bg-muted/50"
+                      }`}
+                    >
+                      <Icon className="h-4 w-4" />
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Media Upload */}
+            {mediaType !== "text" && (
+              <div className="space-y-2">
+                <Label>Arquivo</Label>
+                {mediaUrl ? (
+                  <div className="flex items-center gap-3 p-3 rounded-lg border bg-muted/30">
+                    {mediaType === "image" && (
+                      <img src={mediaUrl} alt="" className="h-16 w-16 rounded object-cover" />
+                    )}
+                    {mediaType === "audio" && (
+                      <audio controls src={mediaUrl} className="h-8 flex-1" />
+                    )}
+                    {mediaType === "video" && (
+                      <video controls src={mediaUrl} className="h-20 rounded" />
+                    )}
+                    {mediaType === "document" && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <File className="h-5 w-5 text-muted-foreground" />
+                        <span className="truncate max-w-[200px]">{mediaUrl.split("/").pop()}</span>
+                      </div>
+                    )}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 ml-auto shrink-0"
+                      onClick={() => setMediaUrl(null)}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                ) : (
+                  <div
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex flex-col items-center gap-2 p-6 rounded-lg border-2 border-dashed border-border hover:border-primary/50 cursor-pointer transition-colors"
+                  >
+                    {uploading ? (
+                      <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                    ) : (
+                      <Upload className="h-6 w-6 text-muted-foreground" />
+                    )}
+                    <span className="text-sm text-muted-foreground">
+                      {uploading ? "Enviando..." : "Clique para enviar arquivo"}
+                    </span>
+                  </div>
+                )}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  className="hidden"
+                  accept={MEDIA_TYPE_CONFIG[mediaType as keyof typeof MEDIA_TYPE_CONFIG]?.accept ?? "*/*"}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleFileUpload(file);
+                    e.target.value = "";
+                  }}
+                />
+              </div>
+            )}
+
             {/* Body */}
             <div className="space-y-2">
-              <Label htmlFor="tpl-body">Corpo da mensagem</Label>
+              <Label htmlFor="tpl-body">
+                {mediaType === "text" ? "Corpo da mensagem" : "Legenda (opcional)"}
+              </Label>
               <Textarea
                 id="tpl-body"
                 ref={textareaRef}
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
-                rows={5}
-                placeholder="Olá {nome}, tudo bem? Aqui é {atendente} da {empresa}..."
+                rows={mediaType === "text" ? 5 : 3}
+                placeholder={mediaType === "text"
+                  ? "Olá {nome}, tudo bem? Aqui é {atendente} da {empresa}..."
+                  : "Legenda do arquivo..."
+                }
               />
             </div>
 
@@ -370,7 +541,9 @@ export default function MessageTemplates() {
             <Button
               onClick={handleSave}
               disabled={
-                isSaving || !command || !displayName || !body || !!commandError
+                isSaving || !command || !displayName || !!commandError ||
+                (mediaType === "text" && !body) ||
+                (mediaType !== "text" && !mediaUrl && !body)
               }
             >
               {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

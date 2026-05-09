@@ -23,6 +23,7 @@ import {
   Timer,
   Key,
   FlaskConical,
+  ClipboardList,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -113,6 +114,11 @@ const SandboxPanel = lazy(() =>
 const ApprovalRulesConfig = lazy(() =>
   import("@/components/approvals/ApprovalRulesConfig").then((m) => ({
     default: m.ApprovalRulesConfig,
+  }))
+);
+const ChecklistTemplatesManager = lazy(() =>
+  import("@/components/checklists/ChecklistTemplatesManager").then((m) => ({
+    default: m.ChecklistTemplatesManager,
   }))
 );
 
@@ -530,7 +536,7 @@ function GeneralSettings() {
 
 export default function Configuracoes() {
   const { orgType } = useOrganization();
-  const totalTabs = orgType === "outbound" ? 14 : 13;
+  const totalTabs = orgType === "outbound" ? 15 : 14;
 
   return (
     <div className="space-y-6">
@@ -594,6 +600,10 @@ export default function Configuracoes() {
           <TabsTrigger value="sandbox" className="gap-2">
             <FlaskConical className="w-4 h-4" />
             Sandbox
+          </TabsTrigger>
+          <TabsTrigger value="checklists" className="gap-2">
+            <ClipboardList className="w-4 h-4" />
+            Checklists
           </TabsTrigger>
           <TabsTrigger value="general" className="gap-2">
             <Settings className="w-4 h-4" />
@@ -702,6 +712,16 @@ export default function Configuracoes() {
               <Card className="glass-card">
                 <CardContent className="pt-6">
                   <SandboxPanel />
+                </CardContent>
+              </Card>
+            </Suspense>
+          </TabsContent>
+
+          <TabsContent value="checklists">
+            <Suspense fallback={<TabFallback label="Checklists" />}>
+              <Card className="glass-card">
+                <CardContent className="pt-6">
+                  <ChecklistTemplatesManager />
                 </CardContent>
               </Card>
             </Suspense>

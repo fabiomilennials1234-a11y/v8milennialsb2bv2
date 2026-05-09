@@ -98,6 +98,8 @@ import { EmailComposer } from "@/components/email/EmailComposer";
 import { SmsSendDialog } from "@/components/sms/SmsSendDialog";
 import { AiEmailWriter } from "@/components/ai/AiEmailWriter";
 import { ORIGIN_COLORS } from "./LeadCard";
+import { LeadChecklistSection } from "./LeadChecklistSection";
+import { LeadContactsSection } from "./LeadContactsSection";
 import { cn } from "@/lib/utils";
 import { useOpenWhatsAppChat, formatPhoneForWhatsApp } from "@/lib/whatsapp";
 import { format, formatDistanceToNow } from "date-fns";
@@ -1028,6 +1030,12 @@ export const LeadDetailDrawer = memo(function LeadDetailDrawer({
                           </Button>
                         </div>
                       </div>
+
+                      {/* CHECKLISTS */}
+                      {lead?.id && <LeadChecklistSection leadId={lead.id} />}
+
+                      {/* CONTATOS */}
+                      {lead?.id && <LeadContactsSection leadId={lead.id} />}
 
                       {/* SEGMENTO */}
                       <div>

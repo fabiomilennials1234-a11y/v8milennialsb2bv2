@@ -44,8 +44,6 @@ const Performance = lazy(() => lazyRetry(() => import("./pages/Performance")));
 const Equipe = lazy(() => lazyRetry(() => import("./pages/Equipe")));
 const Comissoes = lazy(() => lazyRetry(() => import("./pages/Comissoes")));
 const Leads = lazy(() => lazyRetry(() => import("./pages/Leads")));
-const Companies = lazy(() => lazyRetry(() => import("./pages/Companies")));
-const Contacts = lazy(() => lazyRetry(() => import("./pages/Contacts")));
 
 const TrashPage = lazy(() => lazyRetry(() => import("./pages/Trash")));
 const Duplicates = lazy(() => lazyRetry(() => import("./pages/Duplicates")));
@@ -71,7 +69,6 @@ const Automacoes = lazy(() => lazyRetry(() => import("./pages/Automacoes")));
 const AutomacoesEditor = lazy(() => lazyRetry(() => import("./pages/AutomacoesEditor")));
 const AutomacoesExecucoes = lazy(() => lazyRetry(() => import("./pages/AutomacoesExecucoes")));
 
-const Reports = lazy(() => lazyRetry(() => import("./pages/Reports")));
 
 const NotFound = lazy(() => lazyRetry(() => import("./pages/NotFound")));
 const Landing = lazy(() => lazyRetry(() => import("./pages/Landing")));
@@ -376,30 +373,6 @@ function AppRoutes() {
         }
       />
       <Route
-        path="/empresas"
-        element={
-          <ProtectedRoute>
-            <LayoutWrapper>
-              <PermissionProtectedRoute featureKey="leads.view">
-                <Companies />
-              </PermissionProtectedRoute>
-            </LayoutWrapper>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/contatos"
-        element={
-          <ProtectedRoute>
-            <LayoutWrapper>
-              <PermissionProtectedRoute featureKey="leads.view">
-                <Contacts />
-              </PermissionProtectedRoute>
-            </LayoutWrapper>
-          </ProtectedRoute>
-        }
-      />
-      <Route
         path="/lixeira"
         element={
           <ProtectedRoute>
@@ -645,16 +618,6 @@ function AppRoutes() {
           <ProtectedRoute>
             <LayoutWrapper>
               <MessageTemplates />
-            </LayoutWrapper>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/relatorios"
-        element={
-          <ProtectedRoute>
-            <LayoutWrapper>
-              <Reports />
             </LayoutWrapper>
           </ProtectedRoute>
         }

@@ -39,6 +39,7 @@ import { useTags } from "@/hooks/useTags";
 import { CampaignSelectorField } from "./CampaignSelectorField";
 import { CampaignStageSelectorField } from "./CampaignStageSelectorField";
 import { CampaignTemplateSelectorField } from "./CampaignTemplateSelectorField";
+import { useChecklistTemplates } from "@/hooks/useChecklistTemplates";
 
 function AssignResponsibleConfig({
   data,
@@ -96,6 +97,46 @@ function AssignResponsibleConfig({
         </div>
       )}
     </>
+  );
+}
+
+function ApplyChecklistConfig({
+  data,
+  onUpdate,
+}: {
+  data: ActionNodeData;
+  onUpdate: (updates: Partial<ActionNodeData>) => void;
+}) {
+  const { data: templates = [], isLoading } = useChecklistTemplates();
+
+  return (
+    <div className="space-y-2">
+      <Label>Template de Checklist</Label>
+      <Select
+        value={data.checklistTemplateId || ""}
+        onValueChange={(v) => {
+          const tpl = templates.find((t) => t.id === v);
+          onUpdate({
+            checklistTemplateId: v,
+            checklistTemplateName: tpl?.title || "",
+          });
+        }}
+      >
+        <SelectTrigger>
+          <SelectValue placeholder={isLoading ? "Carregando..." : "Selecione o template"} />
+        </SelectTrigger>
+        <SelectContent>
+          {templates.map((t) => (
+            <SelectItem key={t.id} value={t.id}>
+              {t.title} ({t.total_items} itens)
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <p className="text-xs text-muted-foreground">
+        Cria uma cópia do checklist no lead quando o workflow executar.
+      </p>
+    </div>
   );
 }
 
@@ -711,6 +752,10 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
             qualificação. O resultado fica disponível nas condições seguintes.
           </p>
         </div>
+      )}
+
+      {at === "apply_checklist" && (
+        <ApplyChecklistConfig data={data} onUpdate={onUpdate} />
       )}
     </div>
   );
