@@ -96,11 +96,6 @@ const SlaConfigPanel = lazy(() =>
     default: m.SlaConfigPanel,
   }))
 );
-const LgpdPanel = lazy(() =>
-  import("@/components/settings/LgpdPanel").then((m) => ({
-    default: m.LgpdPanel,
-  }))
-);
 const ApiKeysPanel = lazy(() =>
   import("@/components/settings/ApiKeysPanel").then((m) => ({
     default: m.ApiKeysPanel,
@@ -109,11 +104,6 @@ const ApiKeysPanel = lazy(() =>
 const SandboxPanel = lazy(() =>
   import("@/components/settings/SandboxPanel").then((m) => ({
     default: m.SandboxPanel,
-  }))
-);
-const ApprovalRulesConfig = lazy(() =>
-  import("@/components/approvals/ApprovalRulesConfig").then((m) => ({
-    default: m.ApprovalRulesConfig,
   }))
 );
 const ChecklistTemplatesManager = lazy(() =>
@@ -536,8 +526,6 @@ function GeneralSettings() {
 
 export default function Configuracoes() {
   const { orgType } = useOrganization();
-  const totalTabs = orgType === "outbound" ? 15 : 14;
-
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -556,7 +544,7 @@ export default function Configuracoes() {
       </div>
 
       <Tabs defaultValue="tags" className="w-full">
-        <TabsList className={`grid w-full max-w-5xl`} style={{ gridTemplateColumns: `repeat(${totalTabs}, minmax(0, 1fr))` }}>
+        <TabsList className="flex flex-wrap gap-1 h-auto p-1 w-full max-w-5xl">
           <TabsTrigger value="tags" className="gap-2">
             <Tag className="w-4 h-4" />
             Tags
@@ -584,14 +572,6 @@ export default function Configuracoes() {
           <TabsTrigger value="sla" className="gap-2">
             <Timer className="w-4 h-4" />
             SLA
-          </TabsTrigger>
-          <TabsTrigger value="aprovacoes" className="gap-2">
-            <Shield className="w-4 h-4" />
-            Aprovacoes
-          </TabsTrigger>
-          <TabsTrigger value="lgpd" className="gap-2">
-            <Shield className="w-4 h-4" />
-            LGPD
           </TabsTrigger>
           <TabsTrigger value="api-keys" className="gap-2">
             <Key className="w-4 h-4" />
@@ -677,25 +657,6 @@ export default function Configuracoes() {
             </Suspense>
           </TabsContent>
 
-          <TabsContent value="aprovacoes">
-            <Suspense fallback={<TabFallback label="Aprovacoes" />}>
-              <Card className="glass-card">
-                <CardContent className="pt-6">
-                  <ApprovalRulesConfig />
-                </CardContent>
-              </Card>
-            </Suspense>
-          </TabsContent>
-
-          <TabsContent value="lgpd">
-            <Suspense fallback={<TabFallback label="LGPD" />}>
-              <Card className="glass-card">
-                <CardContent className="pt-6">
-                  <LgpdPanel />
-                </CardContent>
-              </Card>
-            </Suspense>
-          </TabsContent>
 
           <TabsContent value="api-keys">
             <Suspense fallback={<TabFallback label="API Keys" />}>
