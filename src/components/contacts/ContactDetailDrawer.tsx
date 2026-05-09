@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   Sheet,
   SheetContent,
@@ -20,12 +21,19 @@ import {
   Calendar,
   DollarSign,
   X,
+  Sparkles,
+  MessageSquare,
+  Send,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useContact, useContactDeals } from "@/hooks/useContacts";
 import { useCompany } from "@/hooks/useCompanies";
 import { ActivityTimeline } from "@/components/activities/ActivityTimeline";
+import { EmailComposer } from "@/components/email/EmailComposer";
+import { SmsSendDialog } from "@/components/sms/SmsSendDialog";
+import { AiEmailWriter } from "@/components/ai/AiEmailWriter";
+import { useEnrichmentRequests, useRequestEnrichment } from "@/hooks/useEnrichment";
 import { cn } from "@/lib/utils";
 
 // ── Types ─────────────────────────────────────────────────────────────
@@ -71,6 +79,14 @@ export function ContactDetailDrawer({
   const { data: contact, isLoading } = useContact(contactId);
   const { data: deals = [] } = useContactDeals(contactId);
   const { data: company } = useCompany(contact?.company_id ?? undefined);
+  const { data: enrichments = [] } = useEnrichmentRequests({ contactId });
+  const requestEnrichment = useRequestEnrichment();
+  const [emailComposerOpen, setEmailComposerOpen] = useState(false);
+  const [smsDialogOpen, setSmsDialogOpen] = useState(false);
+  const [emailWriterOpen, setEmailWriterOpen] = useState(false);
+
+  const latestEnrichment = enrichments[0] ?? null;
+  const enrichmentResult = latestEnrichment?.status === "completed" ? latestEnrichment.result : null;
 
   if (!open) return null;
 
@@ -108,6 +124,55 @@ export function ContactDetailDrawer({
                 </div>
               </div>
             </SheetHeader>
+
+            {/* ── Action buttons ─────────────────── */}
+            <div className="px-6 pt-3 flex items-center gap-2 shrink-0">
+              {contact.email && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() => setEmailComposerOpen(true)}
+                >
+                  <Mail className="w-3.5 h-3.5" />
+                  Enviar email
+                </Button>
+              )}
+              {contact.phone && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() => setSmsDialogOpen(true)}
+                >
+                  <MessageSquare className="w-3.5 h-3.5" />
+                  Enviar SMS
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => setEmailWriterOpen(true)}
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                Email com IA
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => requestEnrichment.mutate({ contactId })}
+                disabled={requestEnrichment.isPending || latestEnrichment?.status === "pending" || latestEnrichment?.status === "processing"}
+              >
+                {requestEnrichment.isPending ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Sparkles className="w-3.5 h-3.5" />
+                )}
+                Enriquecer
+              </Button>
+            </div>
 
             {/* ── Tabs ───────────────────────────── */}
             <Tabs defaultValue="detalhes" className="flex-1 flex flex-col min-h-0">
@@ -231,9 +296,91 @@ export function ContactDetailDrawer({
                 <ActivityTimeline contactId={contactId} showCreateForm />
               </TabsContent>
             </Tabs>
+
+            {/* ── Inline Email Composer ─────────── */}
+            {emailComposerOpen && contact.email && (
+              <div className="px-6 pb-4">
+                <EmailComposer
+                  defaultTo={contact.email}
+                  contactId={contactId}
+                  compact
+                  onClose={() => setEmailComposerOpen(false)}
+                  onSent={() => setEmailComposerOpen(false)}
+                />
+              </div>
+            )}
+
+            {/* ── Enrichment Results ───────────── */}
+            {enrichmentResult && (
+              <div className="px-6 pb-4">
+                <Separator className="mb-4" />
+                <h3 className="text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-3 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  Dados Enriquecidos
+                </h3>
+                <div className="space-y-2">
+                  {enrichmentResult.headline && (
+                    <div className="flex items-center gap-3 p-3 rounded-lg bg-muted">
+                      <Briefcase className="w-4 h-4 text-muted-foreground shrink-0" />
+                      <span className="text-sm">{enrichmentResult.headline}</span>
+                    </div>
+                  )}
+                  {enrichmentResult.location && (
+                    <div className="flex items-center gap-3 p-3 rounded-lg bg-muted">
+                      <Building2 className="w-4 h-4 text-muted-foreground shrink-0" />
+                      <span className="text-sm">{enrichmentResult.location}</span>
+                    </div>
+                  )}
+                  {enrichmentResult.summary && (
+                    <div className="p-3 rounded-lg bg-muted">
+                      <p className="text-sm text-muted-foreground">{enrichmentResult.summary}</p>
+                    </div>
+                  )}
+                  {enrichmentResult.linkedin_url && (
+                    <a
+                      href={enrichmentResult.linkedin_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-3 p-3 rounded-lg bg-muted hover:bg-muted/80 transition-colors group"
+                    >
+                      <Linkedin className="w-4 h-4 text-[#0A66C2] shrink-0" />
+                      <span className="text-sm truncate flex-1">LinkedIn</span>
+                      <ExternalLink className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                    </a>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {latestEnrichment && (latestEnrichment.status === "pending" || latestEnrichment.status === "processing") && (
+              <div className="px-6 pb-4">
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50 border border-dashed">
+                  <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                  <span className="text-xs text-muted-foreground">
+                    Enriquecimento em andamento...
+                  </span>
+                </div>
+              </div>
+            )}
           </>
         )}
       </SheetContent>
+
+      {/* ── SMS Dialog ──────────────────────── */}
+      {contact?.phone && (
+        <SmsSendDialog
+          open={smsDialogOpen}
+          onOpenChange={setSmsDialogOpen}
+          leadName={contact?.name}
+          phoneNumber={contact.phone}
+        />
+      )}
+
+      <AiEmailWriter
+        open={emailWriterOpen}
+        onOpenChange={setEmailWriterOpen}
+        leadName={contact?.name}
+      />
     </Sheet>
   );
 }

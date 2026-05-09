@@ -39,6 +39,15 @@ import {
   MoreHorizontal,
   Sun,
   Moon,
+  Users,
+  Building2,
+  Handshake,
+  ListChecks,
+  FileText,
+  Copy,
+  Trash2,
+  Inbox,
+  Swords,
 } from "lucide-react";
 import torqueLogo from "@/assets/torque-logo.png";
 import torqueLogoDark from "@/assets/torque-logo-dark.png";
@@ -132,27 +141,41 @@ const primaryNavItems: NavItemWithChildren[] = [
 
 // Secondary items — go inside "Mais" overflow menu
 const moreNavItems: NavItemWithChildren[] = [
-  // HIDDEN — reativar futuramente:
-  // { label: "Marketing", icon: BarChart2, path: "/marketing" },
-  // { label: "Analytics", icon: BarChart3, path: "/analytics" },
+  { label: "Caixa de Entrada", icon: Inbox, path: "/inbox" },
   { label: "Revisão", icon: Wrench, path: "/follow-ups" },
   { label: "Combustível", icon: Fuel, path: "/leads" },
+  { label: "Contatos", icon: Users, path: "/contatos" },
+  { label: "Empresas", icon: Building2, path: "/empresas" },
+  { label: "Negócios", icon: Handshake, path: "/negocios" },
+  { label: "Checklists", icon: ListChecks, path: "/checklists" },
+  { label: "Relatórios", icon: BarChart3, path: "/relatorios" },
+  { label: "Concorrentes", icon: Swords, path: "/concorrentes" },
+  { label: "Templates", icon: FileText, path: "/templates" },
+  { label: "Duplicatas", icon: Copy, path: "/duplicatas" },
+  { label: "Lixeira", icon: Trash2, path: "/lixeira" },
 ];
 
 // All items combined for mobile
 const allNavItems: NavItemWithChildren[] = [
   { label: "Comando", icon: Gauge, path: "/" },
+  { label: "Caixa de Entrada", icon: Inbox, path: "/inbox" },
   { label: "Agenda", icon: CalendarDays, path: "/agenda" },
-  // HIDDEN — reativar futuramente:
-  // { label: "Marketing", icon: BarChart2, path: "/marketing" },
-  // { label: "Analytics", icon: BarChart3, path: "/analytics" },
   { label: "Revisão", icon: Wrench, path: "/follow-ups" },
   { label: "Chat", icon: Zap, path: "/chat" },
-  { label: "Funis", icon: GitBranch, path: "/funis", children: [] }, // children set dynamically via displayConfig
+  { label: "Funis", icon: GitBranch, path: "/funis", children: [] },
   { label: "Combustível", icon: Fuel, path: "/leads" },
+  { label: "Contatos", icon: Users, path: "/contatos" },
+  { label: "Empresas", icon: Building2, path: "/empresas" },
+  { label: "Negócios", icon: Handshake, path: "/negocios" },
   { label: "Ranking", icon: Trophy, path: "/performance" },
   { label: "Comissões", icon: DollarSign, path: "/comissoes" },
   { label: "Turbo", icon: Zap, path: "/turbo", children: turboSubItems },
+  { label: "Relatórios", icon: BarChart3, path: "/relatorios" },
+  { label: "Concorrentes", icon: Swords, path: "/concorrentes" },
+  { label: "Checklists", icon: ListChecks, path: "/checklists" },
+  { label: "Templates", icon: FileText, path: "/templates" },
+  { label: "Duplicatas", icon: Copy, path: "/duplicatas" },
+  { label: "Lixeira", icon: Trash2, path: "/lixeira" },
 ];
 
 const adminNavItems: NavItem[] = [
@@ -191,6 +214,7 @@ const CUSTOM_PIPE_ICON_MAP: Record<string, React.ElementType> = {
 };
 
 const NAV_VIEW_PERMISSIONS: Record<string, string> = {
+  "/inbox": "whatsapp.view",
   "/campanhas": "campaigns.view",
   "/marketing": "marketing.view",
   "/chat": "whatsapp.view",
@@ -201,6 +225,13 @@ const NAV_VIEW_PERMISSIONS: Record<string, string> = {
   "/agenda": "agenda.view",
   "/follow-ups": "followups.view",
   "/leads": "leads.view",
+  "/contatos": "leads.view",
+  "/empresas": "leads.view",
+  "/negocios": "pipeline.view",
+  "/checklists": "checklists.view",
+  "/templates": "message_templates.view",
+  "/duplicatas": "leads.view",
+  "/lixeira": "leads.view",
   "/performance": "performance.view",
   "/comissoes": "commissions.view",
   "/copilot": "copilot.view",

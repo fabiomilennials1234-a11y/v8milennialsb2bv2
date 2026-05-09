@@ -7,6 +7,12 @@ import { toast } from "sonner";
 import { WorkflowCanvas } from "@/components/automacoes/WorkflowCanvas";
 import { WorkflowToolbar } from "@/components/automacoes/WorkflowToolbar";
 import { WorkflowSidebar } from "@/components/automacoes/WorkflowSidebar";
+import { WorkflowAnalytics } from "@/components/automacoes/WorkflowAnalytics";
+import { EnrollmentCriteria, EMPTY_ENROLLMENT } from "@/components/automacoes/EnrollmentCriteria";
+import { ReenrollmentConfig, DEFAULT_REENROLLMENT } from "@/components/automacoes/ReenrollmentConfig";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   useWorkflow,
   useCreateWorkflow,
@@ -120,6 +126,9 @@ export default function AutomacoesEditor() {
   const [isActive, setIsActive] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [initialized, setInitialized] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [enrollment, setEnrollment] = useState(EMPTY_ENROLLMENT);
+  const [reenrollment, setReenrollment] = useState(DEFAULT_REENROLLMENT);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<WorkflowNode>([DEFAULT_TRIGGER_NODE]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<WorkflowEdge>([]);
@@ -138,6 +147,22 @@ export default function AutomacoesEditor() {
           return num > max ? num : max;
         }, 0);
         nodeIdCounter = maxId + 1;
+      }
+      // Load enrollment/reenrollment from DB columns
+      const wf = workflow as any;
+      if (wf.enrollment_criteria && typeof wf.enrollment_criteria === "object") {
+        setEnrollment({
+          enabled: wf.enrollment_criteria.enabled ?? false,
+          match_all: wf.enrollment_criteria.match_all ?? true,
+          conditions: wf.enrollment_criteria.conditions ?? [],
+        });
+      }
+      if (wf.re_enrollment_enabled != null) {
+        setReenrollment({
+          enabled: wf.re_enrollment_enabled ?? false,
+          cooldown_days: wf.re_enrollment_cooldown_days ?? 30,
+          max_times: wf.re_enrollment_max_times ?? 1,
+        });
       }
       setInitialized(true);
     }
@@ -254,6 +279,14 @@ export default function AutomacoesEditor() {
     const triggerData = triggerNode.data as unknown as TriggerNodeData;
     const definition = { nodes, edges };
 
+    // Build extra fields for enrollment/reenrollment
+    const extraFields = {
+      enrollment_criteria: enrollment,
+      re_enrollment_enabled: reenrollment.enabled,
+      re_enrollment_cooldown_days: reenrollment.cooldown_days,
+      re_enrollment_max_times: reenrollment.max_times,
+    };
+
     try {
       if (isNew) {
         const result = await createWorkflow.mutateAsync({
@@ -262,7 +295,8 @@ export default function AutomacoesEditor() {
           trigger_type: triggerData.triggerType,
           trigger_config: triggerData.config,
           definition,
-        });
+          ...extraFields,
+        } as any);
         toast.success("Workflow criado!");
         navigate(`/automacoes/${result.id}`, { replace: true });
       } else {
@@ -273,13 +307,14 @@ export default function AutomacoesEditor() {
           trigger_type: triggerData.triggerType,
           trigger_config: triggerData.config,
           definition,
-        });
+          ...extraFields,
+        } as any);
         toast.success("Workflow salvo!");
       }
     } catch (err: any) {
       toast.error(err.message || "Erro ao salvar workflow");
     }
-  }, [name, isActive, nodes, edges, isNew, id, createWorkflow, updateWorkflow, navigate]);
+  }, [name, isActive, nodes, edges, isNew, id, createWorkflow, updateWorkflow, navigate, enrollment, reenrollment]);
 
   const selectedNode = selectedNodeId
     ? nodes.find((n) => n.id === selectedNodeId) || null
@@ -308,6 +343,7 @@ export default function AutomacoesEditor() {
         isNew={isNew}
         workflowId={id}
         onExport={!isNew && workflow ? () => handleExport(workflow) : undefined}
+        onOpenSettings={() => setSettingsOpen(true)}
       />
 
       <div className="flex flex-1 overflow-hidden">
@@ -331,6 +367,48 @@ export default function AutomacoesEditor() {
           allNodes={nodes as any}
         />
       </div>
+
+      {/* Workflow Settings Sheet — enrollment + reenrollment + analytics */}
+      <Sheet open={settingsOpen} onOpenChange={setSettingsOpen}>
+        <SheetContent className="sm:max-w-lg p-0 flex flex-col">
+          <SheetHeader className="px-6 pt-6 pb-4 border-b border-border/50">
+            <SheetTitle>Configuracoes do workflow</SheetTitle>
+          </SheetHeader>
+          <Tabs defaultValue="enrollment" className="flex-1 flex flex-col overflow-hidden">
+            <TabsList className="mx-6 mt-3 w-auto justify-start bg-muted/50">
+              <TabsTrigger value="enrollment">Inscricao</TabsTrigger>
+              <TabsTrigger value="reenrollment">Re-inscricao</TabsTrigger>
+              {!isNew && id && <TabsTrigger value="analytics">Analytics</TabsTrigger>}
+            </TabsList>
+
+            <TabsContent value="enrollment" className="flex-1 overflow-hidden mt-0">
+              <ScrollArea className="h-full">
+                <div className="px-6 py-4">
+                  <EnrollmentCriteria value={enrollment} onChange={setEnrollment} />
+                </div>
+              </ScrollArea>
+            </TabsContent>
+
+            <TabsContent value="reenrollment" className="flex-1 overflow-hidden mt-0">
+              <ScrollArea className="h-full">
+                <div className="px-6 py-4">
+                  <ReenrollmentConfig value={reenrollment} onChange={setReenrollment} />
+                </div>
+              </ScrollArea>
+            </TabsContent>
+
+            {!isNew && id && (
+              <TabsContent value="analytics" className="flex-1 overflow-hidden mt-0">
+                <ScrollArea className="h-full">
+                  <div className="px-6 py-4">
+                    <WorkflowAnalytics workflowId={id} />
+                  </div>
+                </ScrollArea>
+              </TabsContent>
+            )}
+          </Tabs>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

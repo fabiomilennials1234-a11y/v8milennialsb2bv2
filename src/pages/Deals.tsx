@@ -36,6 +36,9 @@ import { useDeals, useCreateDeal, useUpdateDeal, useDeleteDeal, Deal, DealInsert
 import { useCompanies } from "@/hooks/useCompanies";
 import { useAuth } from "@/contexts/AuthContext";
 import { DealDetailDrawer } from "@/components/deals/DealDetailDrawer";
+import { ForecastWidget } from "@/components/deals/ForecastWidget";
+import { CurrencyInput } from "@/components/shared/CurrencyInput";
+import { PendingApprovals } from "@/components/approvals/PendingApprovals";
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -59,6 +62,7 @@ const isThisMonth = (iso: string | null) => {
 const dealSchema = z.object({
   title: z.string().min(1, "Titulo obrigatorio"),
   value: z.coerce.number().min(0).nullable().default(null),
+  currency: z.string().default("BRL"),
   company_id: z.string().nullable().default(null),
   probability: z.coerce.number().min(0).max(100).nullable().default(null),
   expected_close_date: z.string().nullable().default(null),
@@ -128,7 +132,7 @@ export default function Deals() {
 
   function openCreate() {
     setEditingDeal(null);
-    form.reset({ title: "", value: null, company_id: null, probability: null, expected_close_date: null, notes: null });
+    form.reset({ title: "", value: null, currency: "BRL", company_id: null, probability: null, expected_close_date: null, notes: null });
     setSheetOpen(true);
   }
 
@@ -137,6 +141,7 @@ export default function Deals() {
     form.reset({
       title: deal.title,
       value: deal.value,
+      currency: deal.currency || "BRL",
       company_id: deal.company_id,
       probability: deal.probability,
       expected_close_date: deal.expected_close_date,
@@ -158,7 +163,7 @@ export default function Deals() {
           probability: values.probability,
           expected_close_date: values.expected_close_date,
           notes: values.notes,
-          currency: "BRL",
+          currency: values.currency,
           pipeline_id: null,
           stage_id: null,
           owner_id: null,
@@ -216,6 +221,9 @@ export default function Deals() {
         </Button>
       </div>
 
+      {/* Forecast */}
+      <ForecastWidget />
+
       {/* Metrics */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
@@ -255,6 +263,9 @@ export default function Deals() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Pending Approvals */}
+      <PendingApprovals />
 
       {/* Search + Tabs */}
       <div className="flex items-center gap-3">
@@ -391,8 +402,14 @@ export default function Deals() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="value">Valor (R$)</Label>
-              <Input id="value" type="number" step="0.01" min="0" {...form.register("value")} />
+              <Label>Valor</Label>
+              <CurrencyInput
+                value={form.watch("value")}
+                currency={form.watch("currency") ?? "BRL"}
+                onValueChange={(v) => form.setValue("value", v)}
+                onCurrencyChange={(c) => form.setValue("currency", c)}
+                showConversion={form.watch("currency") !== "BRL" ? "BRL" : undefined}
+              />
             </div>
 
             <div className="space-y-2">

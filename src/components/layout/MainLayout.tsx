@@ -1,7 +1,9 @@
-import { ReactNode } from "react";
-import { useLocation } from "react-router-dom";
+import { ReactNode, useState, useCallback } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { TopNavigation } from "./TopNavigation";
 import { OnboardingChecklist } from "@/components/onboarding/OnboardingChecklist";
+import { KeyboardShortcutsHelp } from "@/components/shared/KeyboardShortcutsHelp";
+import { useGlobalShortcuts, type Shortcut } from "@/hooks/useKeyboardShortcuts";
 import { cn } from "@/lib/utils";
 import { useCopilotToggleRealtime } from "@/hooks/useCopilotToggleRealtime";
 
@@ -28,10 +30,25 @@ interface MainLayoutProps {
 
 export function MainLayout({ children }: MainLayoutProps) {
   const location = useLocation();
+  const navigate = useNavigate();
+  const [shortcutsHelpOpen, setShortcutsHelpOpen] = useState(false);
 
   // Onda 2 U3: subscription único em phone_ai_preferences pra sincronizar
   // estado do switch copilot entre todas as telas + entre usuários da mesma org.
   useCopilotToggleRealtime();
+
+  const toggleHelp = useCallback(() => setShortcutsHelpOpen((v) => !v), []);
+
+  const globalShortcuts = useGlobalShortcuts({
+    onNewLead: () => {
+      // Dispatch custom event that pages can listen to
+      window.dispatchEvent(new CustomEvent("v8:shortcut:new-lead"));
+    },
+    onGoDashboard: () => navigate("/dashboard"),
+    onGoChat: () => navigate("/chat"),
+    onGoFunis: () => navigate("/funis"),
+    onShowHelp: toggleHelp,
+  });
 
   const showChecklist = !CHECKLIST_HIDDEN_PATTERNS.some((pattern) =>
     pattern.test(location.pathname),
@@ -72,6 +89,12 @@ export function MainLayout({ children }: MainLayoutProps) {
           {children}
         </div>
       </main>
+
+      <KeyboardShortcutsHelp
+        open={shortcutsHelpOpen}
+        onOpenChange={setShortcutsHelpOpen}
+        shortcuts={globalShortcuts}
+      />
     </div>
   );
 }

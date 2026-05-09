@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
+import { Separator } from "@/components/ui/separator";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -36,6 +37,7 @@ import { toast } from "sonner";
 import { useFeaturePermission } from "@/hooks/useUserRole";
 import { useExportWorkflow, useImportWorkflow } from "@/hooks/useWorkflowPortability";
 import { WorkflowImportDialog } from "@/components/automacoes/WorkflowImportDialog";
+import { WorkflowTemplates } from "@/components/automacoes/WorkflowTemplates";
 import { TRIGGER_LABELS } from "@/types/workflow";
 import type { Workflow as WorkflowType } from "@/types/workflow";
 import { formatDistanceToNow } from "date-fns";
@@ -211,6 +213,11 @@ export default function Automacoes() {
           </Button>
         </div>
       </div>
+
+      {/* Templates */}
+      <WorkflowTemplates />
+
+      <Separator className="my-6" />
 
       {isLoading ? (
         <div className="flex items-center justify-center h-64">

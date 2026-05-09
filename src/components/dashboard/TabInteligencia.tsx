@@ -10,6 +10,10 @@ import { useTeamGoals, useIndividualGoals } from "@/hooks/useGoals";
 import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { WinLossAnalysis } from "@/components/analytics/WinLossAnalysis";
+import { AnalyticsErrorBoundary } from "@/components/analytics/AnalyticsErrorBoundary";
+import { NextBestActionsPanel } from "@/components/ai/NextBestActionsPanel";
+import { DealsAtRiskPanel } from "@/components/deals/DealsAtRiskPanel";
 
 interface TabInteligenciaProps {
   month: number;
@@ -56,6 +60,24 @@ function TabInteligenciaBase({ month, year, isAdmin }: TabInteligenciaProps) {
 
   return (
     <div className="space-y-6">
+      {/* Row 0: AI Next-Best Actions + Deals at Risk */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.05 }}
+        >
+          <NextBestActionsPanel limit={5} compact />
+        </motion.div>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.08 }}
+        >
+          <DealsAtRiskPanel />
+        </motion.div>
+      </div>
+
       {/* Row 1: Metas detalhadas */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Meta do Time */}
@@ -218,7 +240,18 @@ function TabInteligenciaBase({ month, year, isAdmin }: TabInteligenciaProps) {
         <SegmentBenchmark month={month} year={year} />
       </motion.div>
 
-      {/* Row 4: Gráfico semanal */}
+      {/* Row 4: Win/Loss Analysis */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.35 }}
+      >
+        <AnalyticsErrorBoundary>
+          <WinLossAnalysis />
+        </AnalyticsErrorBoundary>
+      </motion.div>
+
+      {/* Row 5: Gráfico semanal */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}

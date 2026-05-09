@@ -31,6 +31,9 @@ import { useDeal, useDealContacts } from "@/hooks/useDeals";
 import { useCompany } from "@/hooks/useCompanies";
 import { supabase } from "@/integrations/supabase/client";
 import { ActivityTimeline } from "@/components/activities/ActivityTimeline";
+import { DealInsightsCard } from "@/components/deals/DealInsightsCard";
+import { DealItemsEditor } from "@/components/deals/DealItemsEditor";
+import { QuoteBuilder } from "@/components/deals/QuoteBuilder";
 
 // ── Types ─────────────────────────────────────────────────────────────
 
@@ -139,8 +142,11 @@ export function DealDetailDrawer({ dealId, open, onOpenChange }: DealDetailDrawe
 
             {/* Tabs */}
             <Tabs defaultValue="detalhes" className="flex-1 flex flex-col overflow-hidden">
-              <TabsList className="mx-6 mt-3 w-auto justify-start bg-muted/50">
+              <TabsList className="mx-6 mt-3 w-auto justify-start bg-muted/50 flex-wrap">
                 <TabsTrigger value="detalhes">Detalhes</TabsTrigger>
+                <TabsTrigger value="itens">Itens</TabsTrigger>
+                <TabsTrigger value="propostas">Propostas</TabsTrigger>
+                <TabsTrigger value="insights">Insights</TabsTrigger>
                 <TabsTrigger value="atividades">Atividades</TabsTrigger>
               </TabsList>
 
@@ -251,6 +257,35 @@ export function DealDetailDrawer({ dealId, open, onOpenChange }: DealDetailDrawe
                         </div>
                       )}
                     </div>
+                  </div>
+                </ScrollArea>
+              </TabsContent>
+
+              {/* Tab: Itens */}
+              <TabsContent value="itens" className="flex-1 overflow-hidden mt-0">
+                <ScrollArea className="h-full">
+                  <div className="px-6 py-4">
+                    {dealId && <DealItemsEditor dealId={dealId} />}
+                  </div>
+                </ScrollArea>
+              </TabsContent>
+
+              {/* Tab: Propostas */}
+              <TabsContent value="propostas" className="flex-1 overflow-hidden mt-0">
+                <ScrollArea className="h-full">
+                  <div className="px-6 py-4">
+                    {dealId && (
+                      <QuoteBuilder dealId={dealId} dealTitle={deal.title} />
+                    )}
+                  </div>
+                </ScrollArea>
+              </TabsContent>
+
+              {/* Tab: Insights */}
+              <TabsContent value="insights" className="flex-1 overflow-hidden mt-0">
+                <ScrollArea className="h-full">
+                  <div className="px-6 py-4">
+                    <DealInsightsCard dealId={dealId ?? null} />
                   </div>
                 </ScrollArea>
               </TabsContent>

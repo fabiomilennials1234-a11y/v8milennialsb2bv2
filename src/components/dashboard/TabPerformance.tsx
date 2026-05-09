@@ -7,6 +7,9 @@ import { ProductRanking } from "./ProductRanking";
 import { PerformanceChart } from "./PerformanceChart";
 import { ActivityFeed } from "./ActivityFeed";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PipelineVelocity } from "@/components/analytics/PipelineVelocity";
+import { ActivityMetrics } from "@/components/analytics/ActivityMetrics";
+import { AnalyticsErrorBoundary } from "@/components/analytics/AnalyticsErrorBoundary";
 
 interface TabPerformanceProps {
   month: number;
@@ -43,7 +46,29 @@ function TabPerformanceBase({ month, year }: TabPerformanceProps) {
         <ProductRanking month={month} year={year} />
       </motion.div>
 
-      {/* Row 4: Gráfico diário + Atividades */}
+      {/* Row 4: Pipeline Velocity + Activity Metrics */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.35 }}
+        >
+          <AnalyticsErrorBoundary>
+            <PipelineVelocity />
+          </AnalyticsErrorBoundary>
+        </motion.div>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.38 }}
+        >
+          <AnalyticsErrorBoundary>
+            <ActivityMetrics />
+          </AnalyticsErrorBoundary>
+        </motion.div>
+      </div>
+
+      {/* Row 5: Gráfico diário + Atividades */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         <motion.div
           initial={{ opacity: 0, y: 20 }}

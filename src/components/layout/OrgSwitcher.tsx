@@ -1,4 +1,4 @@
-import { Building2, ChevronDown, Check, Loader2, Shield } from "lucide-react";
+import { Building2, ChevronDown, Check, Loader2, Shield, FlaskConical } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
@@ -42,6 +42,12 @@ export function OrgSwitcher() {
               <span className="truncate text-sm font-medium">
                 {currentOrg?.name ?? "Selecionar org..."}
               </span>
+              {currentOrg?.name?.includes("[Sandbox]") && (
+                <Badge variant="outline" className="text-[9px] px-1 py-0 border-amber-500/50 text-amber-600 gap-0.5">
+                  <FlaskConical className="w-2.5 h-2.5" />
+                  SANDBOX
+                </Badge>
+              )}
               {isMaster && (
                 <Badge variant="outline" className="text-[9px] px-1 py-0 border-yellow-500/50 text-yellow-600">
                   SHADOW
@@ -66,6 +72,11 @@ export function OrgSwitcher() {
                   <span className="truncate">{org.name}</span>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
+                  {org.name?.includes("[Sandbox]") && (
+                    <Badge variant="outline" className="text-[9px] px-1 py-0 border-amber-500/50 text-amber-600">
+                      SBX
+                    </Badge>
+                  )}
                   {org.org_type === "outbound" && (
                     <Badge variant="secondary" className="text-[10px] px-1 py-0">
                       OUT

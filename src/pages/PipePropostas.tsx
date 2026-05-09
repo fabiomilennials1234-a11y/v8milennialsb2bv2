@@ -73,6 +73,7 @@ import { useTags } from "@/hooks/useTags";
 import { useBulkSelection } from "@/hooks/useBulkSelection";
 import { BulkActionBar } from "@/components/bulk-actions/BulkActionBar";
 import { SavedViewsDropdown } from "@/components/saved-views/SavedViewsDropdown";
+import { useLossReasons } from "@/hooks/useLossReasons";
 import { useSearchParams } from "react-router-dom";
 
 const MONTHS_PT = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
@@ -113,9 +114,10 @@ function isPropostaInPeriod(
 }
 
 // ---------------------------------------------------------------------------
-// Loss reasons for "perdido" status
+// Loss reasons: loaded from DB per org (useLossReasons)
+// Hardcoded fallback only used while DB data is loading.
 // ---------------------------------------------------------------------------
-const LOSS_REASONS = [
+const LOSS_REASONS_FALLBACK = [
   { value: "sem_budget", label: "Sem budget" },
   { value: "concorrencia", label: "Concorrência" },
   { value: "timing", label: "Timing errado" },
@@ -283,6 +285,13 @@ export default function PipePropostas() {
 
   const responsibleMembers = useResponsibleMembers();
   const { data: orgTags = [] } = useTags();
+  const { data: dbLossReasons } = useLossReasons();
+  const lossReasons = useMemo(() => {
+    if (dbLossReasons && dbLossReasons.length > 0) {
+      return dbLossReasons.map((r) => ({ value: r.id, label: r.name }));
+    }
+    return LOSS_REASONS_FALLBACK;
+  }, [dbLossReasons]);
   const bulk = useBulkSelection();
   const allLeadIds = useMemo(() => {
     if (!pipeData) return [];
@@ -1411,7 +1420,7 @@ export default function PipePropostas() {
                 <SelectValue placeholder="Selecionar motivo (opcional)" />
               </SelectTrigger>
               <SelectContent>
-                {LOSS_REASONS.map((r) => (
+                {lossReasons.map((r) => (
                   <SelectItem key={r.value} value={r.value}>
                     {r.label}
                   </SelectItem>

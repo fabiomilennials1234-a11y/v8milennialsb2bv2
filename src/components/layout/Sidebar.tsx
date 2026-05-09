@@ -112,6 +112,7 @@ const navItems: NavItemWithChildren[] = [
   { label: "Copilot", icon: Bot, path: "/copilot" },
   { label: "Automações", icon: Workflow, path: "/automacoes" },
   { label: "Templates", icon: FileText, path: "/templates" },
+  { label: "Relatórios", icon: BarChart3, path: "/relatorios" },
   { label: "Duplicatas", icon: Copy, path: "/duplicatas" },
   { label: "Lixeira", icon: Trash2, path: "/lixeira" },
 ];

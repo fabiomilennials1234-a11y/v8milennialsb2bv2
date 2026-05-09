@@ -23,6 +23,10 @@ import { HealthScoreRing, calculateHealthScore } from "@/components/analytics/He
 import { InsightCard } from "@/components/analytics/InsightCard";
 import { UnifiedFunnel } from "@/components/analytics/UnifiedFunnel";
 import { AnalyticsFilters } from "@/components/analytics/AnalyticsFilters";
+import { FunnelConversion } from "@/components/analytics/FunnelConversion";
+import { SalesCycleChart } from "@/components/analytics/SalesCycleChart";
+import { RevenueAttribution } from "@/components/analytics/RevenueAttribution";
+import { CohortAnalysis } from "@/components/analytics/CohortAnalysis";
 import { useOrganization } from "@/hooks/useOrganization";
 import { useAnalyticsOverview } from "@/hooks/useAnalyticsOverview";
 import { useAnalyticsEngajamento } from "@/hooks/useAnalyticsEngajamento";
@@ -260,6 +264,16 @@ export function TabAnalyticsV2() {
           steps={funnelSteps}
         />
       )}
+
+      {/* ─── WAVE 3 — CONVERSION, CYCLE, REVENUE, COHORT ────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <FunnelConversion />
+        <SalesCycleChart />
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <RevenueAttribution />
+        <CohortAnalysis />
+      </div>
 
       {/* ─── DEEP-DIVE SECTIONS ───────────────────────────────────────────────── */}
 

@@ -43,6 +43,7 @@ import {
   Send,
   PhoneCall,
   Target,
+  Edit2,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -89,9 +90,13 @@ import {
 } from "@/components/ui/popover";
 import { ConversationHistoryTab } from "./ConversationHistoryTab";
 import { TimelineItem } from "./TimelineItem";
+import { FieldChangelogTimeline } from "./FieldChangelogTimeline";
 import { ScheduleFollowUpButton } from "@/components/followups/ScheduleFollowUpButton";
 import { ScheduleMessageModal } from "@/components/chat/ScheduleMessageModal";
 import { LogCallModal } from "@/components/calls/LogCallModal";
+import { EmailComposer } from "@/components/email/EmailComposer";
+import { SmsSendDialog } from "@/components/sms/SmsSendDialog";
+import { AiEmailWriter } from "@/components/ai/AiEmailWriter";
 import { ORIGIN_COLORS } from "./LeadCard";
 import { cn } from "@/lib/utils";
 import { useOpenWhatsAppChat, formatPhoneForWhatsApp } from "@/lib/whatsapp";
@@ -185,6 +190,9 @@ export const LeadDetailDrawer = memo(function LeadDetailDrawer({
   const [isSavingNote, setIsSavingNote] = useState(false);
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
   const [callModalOpen, setCallModalOpen] = useState(false);
+  const [emailWriterOpen, setEmailWriterOpen] = useState(false);
+  const [emailComposerOpen, setEmailComposerOpen] = useState(false);
+  const [smsDialogOpen, setSmsDialogOpen] = useState(false);
 
   // ─── Lead query ─────────────────────────────────────────
   const { data: lead, isLoading } = useQuery({
@@ -713,6 +721,10 @@ export const LeadDetailDrawer = memo(function LeadDetailDrawer({
                         <PhoneCall className="w-4 h-4 mr-2" />
                         Registrar ligação
                       </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setEmailWriterOpen(true)}>
+                        <Mail className="w-4 h-4 mr-2" />
+                        Redigir email com IA
+                      </DropdownMenuItem>
                       {lead.phone && (
                         <DropdownMenuItem asChild>
                           <Link
@@ -722,6 +734,18 @@ export const LeadDetailDrawer = memo(function LeadDetailDrawer({
                             <Send className="w-4 h-4 mr-2" />
                             Enviar mensagem
                           </Link>
+                        </DropdownMenuItem>
+                      )}
+                      {lead.email && (
+                        <DropdownMenuItem onClick={() => setEmailComposerOpen(true)}>
+                          <Mail className="w-4 h-4 mr-2" />
+                          Enviar email
+                        </DropdownMenuItem>
+                      )}
+                      {lead.phone && (
+                        <DropdownMenuItem onClick={() => setSmsDialogOpen(true)}>
+                          <Phone className="w-4 h-4 mr-2" />
+                          Enviar SMS
                         </DropdownMenuItem>
                       )}
                     </DropdownMenuContent>
@@ -805,6 +829,20 @@ export const LeadDetailDrawer = memo(function LeadDetailDrawer({
                           rows={3}
                         />
                       </div>
+
+                      {/* EMAIL COMPOSER — inline when open */}
+                      {emailComposerOpen && (
+                        <div>
+                          <h3 className="text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-3">Enviar Email</h3>
+                          <EmailComposer
+                            defaultTo={lead.email || ""}
+                            leadId={lead.id}
+                            compact
+                            onClose={() => setEmailComposerOpen(false)}
+                            onSent={() => setEmailComposerOpen(false)}
+                          />
+                        </div>
+                      )}
 
                       {/* HISTÓRICO RECENTE — last 3 events */}
                       <div>
@@ -1312,6 +1350,17 @@ export const LeadDetailDrawer = memo(function LeadDetailDrawer({
                       </p>
                     </div>
                   )}
+
+                  {/* Field-level changelog */}
+                  {leadId && (
+                    <div className="mt-6 pt-4 border-t border-border">
+                      <h3 className="text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-3 flex items-center gap-1.5">
+                        <Edit2 className="w-3.5 h-3.5" />
+                        Alteracoes de campos
+                      </h3>
+                      <FieldChangelogTimeline leadId={leadId} limit={20} />
+                    </div>
+                  )}
                 </TabsContent>
 
                 {/* ─── Tab 3: Contexto do funil ────────── */}
@@ -1544,6 +1593,23 @@ export const LeadDetailDrawer = memo(function LeadDetailDrawer({
       leadId={leadId ?? undefined}
       leadName={lead?.name}
       phoneNumber={lead?.phone ?? undefined}
+    />
+
+    {lead?.phone && (
+      <SmsSendDialog
+        open={smsDialogOpen}
+        onOpenChange={setSmsDialogOpen}
+        leadId={leadId ?? undefined}
+        leadName={lead?.name}
+        phoneNumber={lead.phone}
+      />
+    )}
+
+    <AiEmailWriter
+      open={emailWriterOpen}
+      onOpenChange={setEmailWriterOpen}
+      leadId={leadId ?? undefined}
+      leadName={lead?.name}
     />
     </>
   );

@@ -70,6 +70,9 @@ const MessageTemplates = lazy(() => lazyRetry(() => import("./pages/MessageTempl
 const Automacoes = lazy(() => lazyRetry(() => import("./pages/Automacoes")));
 const AutomacoesEditor = lazy(() => lazyRetry(() => import("./pages/AutomacoesEditor")));
 const AutomacoesExecucoes = lazy(() => lazyRetry(() => import("./pages/AutomacoesExecucoes")));
+const UnifiedInbox = lazy(() => lazyRetry(() => import("./pages/UnifiedInbox")));
+const Reports = lazy(() => lazyRetry(() => import("./pages/Reports")));
+const CompetitorsPage = lazy(() => lazyRetry(() => import("./pages/Competitors")));
 const NotFound = lazy(() => lazyRetry(() => import("./pages/NotFound")));
 const Landing = lazy(() => lazyRetry(() => import("./pages/Landing")));
 const Signup = lazy(() => lazyRetry(() => import("./pages/Signup")));
@@ -654,6 +657,38 @@ function AppRoutes() {
           <ProtectedRoute>
             <LayoutWrapper>
               <MessageTemplates />
+            </LayoutWrapper>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/inbox"
+        element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <PermissionProtectedRoute featureKey="whatsapp.view">
+                <UnifiedInbox />
+              </PermissionProtectedRoute>
+            </LayoutWrapper>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/relatorios"
+        element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <Reports />
+            </LayoutWrapper>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/concorrentes"
+        element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <CompetitorsPage />
             </LayoutWrapper>
           </ProtectedRoute>
         }

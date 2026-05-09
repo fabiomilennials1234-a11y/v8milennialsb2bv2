@@ -30,6 +30,7 @@ import {
   Download,
   CalendarClock,
   UserRoundPlus,
+  Settings2,
 } from "lucide-react";
 import type { WorkflowNodeType } from "@/types/workflow";
 
@@ -44,6 +45,7 @@ interface WorkflowToolbarProps {
   isNew: boolean;
   workflowId?: string;
   onExport?: () => void;
+  onOpenSettings?: () => void;
 }
 
 interface NodeOption {
@@ -103,6 +105,7 @@ export function WorkflowToolbar({
   isNew,
   workflowId,
   onExport,
+  onOpenSettings,
 }: WorkflowToolbarProps) {
   const navigate = useNavigate();
 
@@ -160,6 +163,14 @@ export function WorkflowToolbar({
             ))}
           </DropdownMenuContent>
         </DropdownMenu>
+
+        {/* Settings (enrollment, reenrollment) */}
+        {onOpenSettings && (
+          <Button variant="outline" size="sm" onClick={onOpenSettings}>
+            <Settings2 className="w-4 h-4 mr-1" />
+            Config
+          </Button>
+        )}
 
         {/* Export */}
         {!isNew && onExport && (

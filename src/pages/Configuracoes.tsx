@@ -20,6 +20,9 @@ import {
   HelpCircle,
   Plug,
   Code,
+  Timer,
+  Key,
+  FlaskConical,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -85,6 +88,31 @@ const MilestonesConfig = lazy(() =>
 const ApiDocsSettings = lazy(() =>
   import("@/components/settings/api-docs/ApiDocsSettings").then((m) => ({
     default: m.ApiDocsSettings,
+  }))
+);
+const SlaConfigPanel = lazy(() =>
+  import("@/components/settings/SlaConfigPanel").then((m) => ({
+    default: m.SlaConfigPanel,
+  }))
+);
+const LgpdPanel = lazy(() =>
+  import("@/components/settings/LgpdPanel").then((m) => ({
+    default: m.LgpdPanel,
+  }))
+);
+const ApiKeysPanel = lazy(() =>
+  import("@/components/settings/ApiKeysPanel").then((m) => ({
+    default: m.ApiKeysPanel,
+  }))
+);
+const SandboxPanel = lazy(() =>
+  import("@/components/settings/SandboxPanel").then((m) => ({
+    default: m.SandboxPanel,
+  }))
+);
+const ApprovalRulesConfig = lazy(() =>
+  import("@/components/approvals/ApprovalRulesConfig").then((m) => ({
+    default: m.ApprovalRulesConfig,
   }))
 );
 
@@ -502,7 +530,7 @@ function GeneralSettings() {
 
 export default function Configuracoes() {
   const { orgType } = useOrganization();
-  const totalTabs = orgType === "outbound" ? 9 : 8;
+  const totalTabs = orgType === "outbound" ? 14 : 13;
 
   return (
     <div className="space-y-6">
@@ -546,6 +574,26 @@ export default function Configuracoes() {
           <TabsTrigger value="api" className="gap-2">
             <Code className="w-4 h-4" />
             API
+          </TabsTrigger>
+          <TabsTrigger value="sla" className="gap-2">
+            <Timer className="w-4 h-4" />
+            SLA
+          </TabsTrigger>
+          <TabsTrigger value="aprovacoes" className="gap-2">
+            <Shield className="w-4 h-4" />
+            Aprovacoes
+          </TabsTrigger>
+          <TabsTrigger value="lgpd" className="gap-2">
+            <Shield className="w-4 h-4" />
+            LGPD
+          </TabsTrigger>
+          <TabsTrigger value="api-keys" className="gap-2">
+            <Key className="w-4 h-4" />
+            API Keys
+          </TabsTrigger>
+          <TabsTrigger value="sandbox" className="gap-2">
+            <FlaskConical className="w-4 h-4" />
+            Sandbox
           </TabsTrigger>
           <TabsTrigger value="general" className="gap-2">
             <Settings className="w-4 h-4" />
@@ -606,6 +654,56 @@ export default function Configuracoes() {
           <TabsContent value="api">
             <Suspense fallback={<TabFallback label="documentação" />}>
               <ApiDocsSettings />
+            </Suspense>
+          </TabsContent>
+
+          <TabsContent value="sla">
+            <Suspense fallback={<TabFallback label="SLA" />}>
+              <Card className="glass-card">
+                <CardContent className="pt-6">
+                  <SlaConfigPanel />
+                </CardContent>
+              </Card>
+            </Suspense>
+          </TabsContent>
+
+          <TabsContent value="aprovacoes">
+            <Suspense fallback={<TabFallback label="Aprovacoes" />}>
+              <Card className="glass-card">
+                <CardContent className="pt-6">
+                  <ApprovalRulesConfig />
+                </CardContent>
+              </Card>
+            </Suspense>
+          </TabsContent>
+
+          <TabsContent value="lgpd">
+            <Suspense fallback={<TabFallback label="LGPD" />}>
+              <Card className="glass-card">
+                <CardContent className="pt-6">
+                  <LgpdPanel />
+                </CardContent>
+              </Card>
+            </Suspense>
+          </TabsContent>
+
+          <TabsContent value="api-keys">
+            <Suspense fallback={<TabFallback label="API Keys" />}>
+              <Card className="glass-card">
+                <CardContent className="pt-6">
+                  <ApiKeysPanel />
+                </CardContent>
+              </Card>
+            </Suspense>
+          </TabsContent>
+
+          <TabsContent value="sandbox">
+            <Suspense fallback={<TabFallback label="Sandbox" />}>
+              <Card className="glass-card">
+                <CardContent className="pt-6">
+                  <SandboxPanel />
+                </CardContent>
+              </Card>
             </Suspense>
           </TabsContent>
 
