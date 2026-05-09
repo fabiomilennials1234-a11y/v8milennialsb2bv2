@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
+import type { Tables } from "@/integrations/supabase/types";
 import { triggerFollowUpAutomation } from "./useAutoFollowUp";
 import { triggerStageChangedWorkflows } from "@/lib/workflowTrigger";
 import { useOrganization } from "./useOrganization";
@@ -8,8 +8,8 @@ import { useCanPerformActionAsync } from "@/lib/permissions";
 import { usePipelineEntries, usePipelineId } from "./usePipelineEntries";
 
 export type PipeWhatsapp = Tables<"pipe_whatsapp">;
-export type PipeWhatsappInsert = TablesInsert<"pipe_whatsapp">;
-export type PipeWhatsappUpdate = TablesUpdate<"pipe_whatsapp">;
+export type PipeWhatsappInsert = Partial<PipeWhatsapp> & { lead_id: string };
+export type PipeWhatsappUpdate = Partial<PipeWhatsapp>;
 
 export type PipeWhatsappStatus = string;
 

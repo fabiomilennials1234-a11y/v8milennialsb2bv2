@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
+import type { Tables } from "@/integrations/supabase/types";
 import { triggerFollowUpAutomation } from "./useAutoFollowUp";
 import { triggerStageChangedWorkflows } from "@/lib/workflowTrigger";
 import { useOrganization } from "./useOrganization";
@@ -8,8 +8,8 @@ import { useCanPerformActionAsync } from "@/lib/permissions";
 import { usePipelineEntries, usePipelineId } from "./usePipelineEntries";
 
 export type PipeConfirmacao = Tables<"pipe_confirmacao">;
-export type PipeConfirmacaoInsert = TablesInsert<"pipe_confirmacao">;
-export type PipeConfirmacaoUpdate = TablesUpdate<"pipe_confirmacao">;
+export type PipeConfirmacaoInsert = Partial<PipeConfirmacao> & { lead_id: string };
+export type PipeConfirmacaoUpdate = Partial<PipeConfirmacao>;
 
 export type PipeConfirmacaoStatus = string;
 

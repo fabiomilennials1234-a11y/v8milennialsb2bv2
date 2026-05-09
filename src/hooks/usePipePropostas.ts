@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
+import type { Tables } from "@/integrations/supabase/types";
 import { triggerFollowUpAutomation } from "./useAutoFollowUp";
 import { triggerStageChangedWorkflows } from "@/lib/workflowTrigger";
 import { useOrganization } from "./useOrganization";
@@ -8,8 +8,8 @@ import { useCanPerformActionAsync } from "@/lib/permissions";
 import { usePipelineEntries, usePipelineId } from "./usePipelineEntries";
 
 export type PipeProposta = Tables<"pipe_propostas">;
-export type PipePropostaInsert = TablesInsert<"pipe_propostas">;
-export type PipePropostaUpdate = TablesUpdate<"pipe_propostas">;
+export type PipePropostaInsert = Partial<PipeProposta> & { lead_id: string };
+export type PipePropostaUpdate = Partial<PipeProposta>;
 
 export type PipePropostasStatus = string;
 
