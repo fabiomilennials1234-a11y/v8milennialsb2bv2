@@ -20,6 +20,7 @@ DECLARE
   v_pipeline_id UUID;
   v_slug TEXT;
   v_metadata JSONB := '{}';
+  v_org_id UUID;
 BEGIN
   -- Determine slug from trigger table
   v_slug := CASE TG_TABLE_NAME
@@ -28,19 +29,25 @@ BEGIN
     WHEN 'pipe_propostas' THEN 'propostas'
   END;
 
+  IF TG_OP = 'DELETE' THEN
+    v_org_id := OLD.organization_id;
+  ELSE
+    v_org_id := NEW.organization_id;
+  END IF;
+
   IF v_slug IS NULL THEN
-    RETURN COALESCE(NEW, OLD);
+    IF TG_OP = 'DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
   END IF;
 
   -- Resolve pipeline_id
   SELECT id INTO v_pipeline_id
   FROM public.pipelines
-  WHERE organization_id = COALESCE(NEW, OLD).organization_id
+  WHERE organization_id = v_org_id
     AND slug = v_slug
     AND type = 'system';
 
   IF v_pipeline_id IS NULL THEN
-    RETURN COALESCE(NEW, OLD);
+    IF TG_OP = 'DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
   END IF;
 
   -- DELETE
@@ -87,7 +94,9 @@ BEGIN
     ));
   END IF;
 
-  -- UPSERT into pipeline_entries
+  -- Delete any existing entry for this legacy record, then upsert by (pipeline, lead)
+  DELETE FROM public.pipeline_entries WHERE id = NEW.id;
+
   INSERT INTO public.pipeline_entries (
     id, organization_id, pipeline_id, lead_id, stage_key,
     assigned_to, notes, metadata,
@@ -103,12 +112,13 @@ BEGIN
     NEW.notes,
     v_metadata,
     NEW.created_at,
-    COALESCE(NEW.stage_entered_at, NEW.updated_at),
+    NEW.updated_at,
     CASE WHEN TG_TABLE_NAME = 'pipe_propostas' THEN NEW.closed_at ELSE NULL END,
     NEW.created_at,
     NEW.updated_at
   )
-  ON CONFLICT (id) DO UPDATE SET
+  ON CONFLICT (pipeline_id, lead_id) DO UPDATE SET
+    id = EXCLUDED.id,
     stage_key = EXCLUDED.stage_key,
     assigned_to = EXCLUDED.assigned_to,
     notes = EXCLUDED.notes,
@@ -199,9 +209,183 @@ CREATE TRIGGER trg_sync_custom_pipe_to_entries
   FOR EACH ROW EXECUTE FUNCTION public.sync_custom_pipe_to_entries();
 
 -- ============================================================================
--- 4. Run initial data migration (idempotent)
+-- 4. Fix migrate_pipe_entries: stage_entered_at does not exist on pipe tables
 -- ============================================================================
 
+CREATE OR REPLACE FUNCTION public.migrate_pipe_entries(p_batch_size INT DEFAULT 1000)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_org RECORD;
+  v_pipe_wpp_id UUID;
+  v_pipe_conf_id UUID;
+  v_pipe_prop_id UUID;
+  v_wpp_count INT := 0;
+  v_conf_count INT := 0;
+  v_prop_count INT := 0;
+  v_custom_count INT := 0;
+  v_batch INT;
+BEGIN
+  FOR v_org IN SELECT id FROM public.organizations LOOP
+
+    SELECT id INTO v_pipe_wpp_id
+    FROM public.pipelines
+    WHERE organization_id = v_org.id AND slug = 'whatsapp' AND type = 'system';
+
+    SELECT id INTO v_pipe_conf_id
+    FROM public.pipelines
+    WHERE organization_id = v_org.id AND slug = 'confirmacao' AND type = 'system';
+
+    SELECT id INTO v_pipe_prop_id
+    FROM public.pipelines
+    WHERE organization_id = v_org.id AND slug = 'propostas' AND type = 'system';
+
+    IF v_pipe_wpp_id IS NULL OR v_pipe_conf_id IS NULL OR v_pipe_prop_id IS NULL THEN
+      CONTINUE;
+    END IF;
+
+    WITH deduped_wpp AS (
+      SELECT DISTINCT ON (pw.lead_id)
+        pw.id, pw.organization_id, pw.lead_id, pw.status,
+        COALESCE(pw.responsible_id, pw.sdr_id) AS assigned_to,
+        pw.notes,
+        jsonb_strip_nulls(jsonb_build_object('scheduled_date', pw.scheduled_date)) AS metadata,
+        pw.created_at, pw.updated_at
+      FROM public.pipe_whatsapp pw
+      WHERE pw.organization_id = v_org.id
+        AND NOT EXISTS (SELECT 1 FROM public.pipeline_entries pe WHERE pe.id = pw.id)
+      ORDER BY pw.lead_id, pw.updated_at DESC
+      LIMIT p_batch_size
+    ), inserted AS (
+      INSERT INTO public.pipeline_entries (
+        id, organization_id, pipeline_id, lead_id, stage_key,
+        assigned_to, notes, metadata, entered_at, stage_changed_at, created_at, updated_at
+      )
+      SELECT d.id, d.organization_id, v_pipe_wpp_id, d.lead_id, d.status,
+        d.assigned_to, d.notes, d.metadata,
+        d.created_at, d.updated_at, d.created_at, d.updated_at
+      FROM deduped_wpp d
+      WHERE NOT EXISTS (
+        SELECT 1 FROM public.pipeline_entries pe
+        WHERE pe.pipeline_id = v_pipe_wpp_id AND pe.lead_id = d.lead_id
+      )
+      RETURNING 1
+    )
+    SELECT COUNT(*) INTO v_batch FROM inserted;
+    v_wpp_count := v_wpp_count + v_batch;
+
+    WITH deduped_conf AS (
+      SELECT DISTINCT ON (pc.lead_id)
+        pc.id, pc.organization_id, pc.lead_id, pc.status,
+        COALESCE(pc.responsible_id, pc.sdr_id, pc.closer_id) AS assigned_to,
+        pc.notes,
+        jsonb_strip_nulls(jsonb_build_object(
+          'meeting_date', pc.meeting_date,
+          'meet_link', pc.meet_link,
+          'is_confirmed', pc.is_confirmed,
+          'metrics_period_at', pc.metrics_period_at
+        )) AS metadata,
+        pc.created_at, pc.updated_at
+      FROM public.pipe_confirmacao pc
+      WHERE pc.organization_id = v_org.id
+        AND NOT EXISTS (SELECT 1 FROM public.pipeline_entries pe WHERE pe.id = pc.id)
+      ORDER BY pc.lead_id, pc.updated_at DESC
+      LIMIT p_batch_size
+    ), inserted AS (
+      INSERT INTO public.pipeline_entries (
+        id, organization_id, pipeline_id, lead_id, stage_key,
+        assigned_to, notes, metadata, entered_at, stage_changed_at, created_at, updated_at
+      )
+      SELECT d.id, d.organization_id, v_pipe_conf_id, d.lead_id, d.status,
+        d.assigned_to, d.notes, d.metadata,
+        d.created_at, d.updated_at, d.created_at, d.updated_at
+      FROM deduped_conf d
+      WHERE NOT EXISTS (
+        SELECT 1 FROM public.pipeline_entries pe
+        WHERE pe.pipeline_id = v_pipe_conf_id AND pe.lead_id = d.lead_id
+      )
+      RETURNING 1
+    )
+    SELECT COUNT(*) INTO v_batch FROM inserted;
+    v_conf_count := v_conf_count + v_batch;
+
+    WITH deduped_prop AS (
+      SELECT DISTINCT ON (pp.lead_id)
+        pp.id, pp.organization_id, pp.lead_id, pp.status,
+        COALESCE(pp.responsible_id, pp.closer_id) AS assigned_to,
+        pp.notes,
+        jsonb_strip_nulls(jsonb_build_object(
+          'sale_value', pp.sale_value,
+          'product_type', pp.product_type,
+          'calor', pp.calor,
+          'loss_reason_id', pp.loss_reason_id,
+          'commitment_date', pp.commitment_date,
+          'contract_duration', pp.contract_duration,
+          'metrics_period_at', pp.metrics_period_at
+        )) AS metadata,
+        pp.created_at, pp.updated_at, pp.closed_at
+      FROM public.pipe_propostas pp
+      WHERE pp.organization_id = v_org.id
+        AND NOT EXISTS (SELECT 1 FROM public.pipeline_entries pe WHERE pe.id = pp.id)
+      ORDER BY pp.lead_id, pp.updated_at DESC
+      LIMIT p_batch_size
+    ), inserted AS (
+      INSERT INTO public.pipeline_entries (
+        id, organization_id, pipeline_id, lead_id, stage_key,
+        assigned_to, notes, metadata, entered_at, stage_changed_at,
+        closed_at, created_at, updated_at
+      )
+      SELECT d.id, d.organization_id, v_pipe_prop_id, d.lead_id, d.status,
+        d.assigned_to, d.notes, d.metadata,
+        d.created_at, d.updated_at,
+        d.closed_at, d.created_at, d.updated_at
+      FROM deduped_prop d
+      WHERE NOT EXISTS (
+        SELECT 1 FROM public.pipeline_entries pe
+        WHERE pe.pipeline_id = v_pipe_prop_id AND pe.lead_id = d.lead_id
+      )
+      RETURNING 1
+    )
+    SELECT COUNT(*) INTO v_batch FROM inserted;
+    v_prop_count := v_prop_count + v_batch;
+
+    WITH inserted AS (
+      INSERT INTO public.pipeline_entries (
+        id, organization_id, pipeline_id, lead_id, stage_key,
+        assigned_to, notes, entered_at, stage_changed_at, created_at, updated_at
+      )
+      SELECT
+        cpe.id, cpe.organization_id, cpe.pipeline_id, cpe.lead_id,
+        COALESCE(cps.stage_key, 'unknown'),
+        cpe.assigned_to,
+        cpe.notes,
+        cpe.entered_at, cpe.stage_changed_at,
+        cpe.created_at, cpe.updated_at
+      FROM public.custom_pipe_entries cpe
+      LEFT JOIN public.custom_pipeline_stages cps ON cps.id = cpe.stage_id
+      WHERE cpe.organization_id = v_org.id
+        AND NOT EXISTS (SELECT 1 FROM public.pipeline_entries pe WHERE pe.id = cpe.id)
+      LIMIT p_batch_size
+      RETURNING 1
+    )
+    SELECT COUNT(*) INTO v_batch FROM inserted;
+    v_custom_count := v_custom_count + v_batch;
+
+  END LOOP;
+
+  RETURN jsonb_build_object(
+    'whatsapp_count', v_wpp_count,
+    'confirmacao_count', v_conf_count,
+    'propostas_count', v_prop_count,
+    'custom_count', v_custom_count
+  );
+END;
+$$;
+
+-- Run initial data migration (idempotent)
 SELECT public.migrate_pipe_entries(10000);
 
 -- ============================================================================

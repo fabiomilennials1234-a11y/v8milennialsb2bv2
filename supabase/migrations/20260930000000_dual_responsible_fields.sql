@@ -26,6 +26,59 @@
 -- Idempotent: uses IF NOT EXISTS / DROP … IF EXISTS throughout.
 -- ============================================================================
 
+-- PRE-FIX: trigger fn_track_lead_field_changes references columns that
+-- don't exist on leads (company_name, status, expected_value, city, state, position).
+-- Fix before any UPDATE on leads.
+CREATE OR REPLACE FUNCTION fn_track_lead_field_changes()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_field text;
+  v_tracked_fields text[] := ARRAY[
+    'name', 'company', 'email', 'phone', 'origin',
+    'rating', 'qualification_score',
+    'responsible_id', 'sdr_id', 'closer_id',
+    'ai_disabled', 'notes', 'segment'
+  ];
+  v_old_val text;
+  v_new_val text;
+  v_changes jsonb := '{}'::jsonb;
+BEGIN
+  FOREACH v_field IN ARRAY v_tracked_fields
+  LOOP
+    EXECUTE format('SELECT ($1).%I::text, ($2).%I::text', v_field, v_field)
+      INTO v_old_val, v_new_val
+      USING OLD, NEW;
+
+    IF v_old_val IS DISTINCT FROM v_new_val THEN
+      INSERT INTO field_changes (organization_id, entity_type, entity_id, field_name, old_value, new_value, changed_by)
+      VALUES (NEW.organization_id, 'lead', NEW.id, v_field, v_old_val, v_new_val, auth.uid());
+
+      v_changes := v_changes || jsonb_build_object(
+        v_field, jsonb_build_object('from', v_old_val, 'to', v_new_val)
+      );
+    END IF;
+  END LOOP;
+
+  IF v_changes != '{}'::jsonb THEN
+    INSERT INTO lead_history (lead_id, organization_id, action, description, source, metadata, created_by)
+    VALUES (
+      NEW.id,
+      NEW.organization_id,
+      'field_updated',
+      'Campos atualizados',
+      'system',
+      jsonb_build_object('changes', v_changes),
+      auth.uid()
+    );
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
 BEGIN;
 
 -- ============================================================================

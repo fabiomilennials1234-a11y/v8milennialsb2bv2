@@ -35,11 +35,10 @@ AS $$
 DECLARE
   v_field text;
   v_tracked_fields text[] := ARRAY[
-    'name', 'company_name', 'email', 'phone', 'origin',
-    'rating', 'qualification_score', 'status',
+    'name', 'company', 'email', 'phone', 'origin',
+    'rating', 'qualification_score',
     'responsible_id', 'sdr_id', 'closer_id',
-    'ai_disabled', 'notes', 'expected_value',
-    'city', 'state', 'segment', 'position'
+    'ai_disabled', 'notes', 'segment'
   ];
   v_old_val text;
   v_new_val text;
