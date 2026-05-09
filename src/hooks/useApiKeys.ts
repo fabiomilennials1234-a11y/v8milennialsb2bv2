@@ -17,8 +17,8 @@ export interface ApiKey {
 }
 
 export function useApiKeys() {
-  const { organization } = useOrganization();
-  const orgId = organization?.id;
+  const { organizationId } = useOrganization();
+  const orgId = organizationId;
 
   return useQuery<ApiKey[]>({
     queryKey: ["api-keys", orgId],
@@ -36,7 +36,7 @@ export function useApiKeys() {
 
 export function useCreateApiKey() {
   const queryClient = useQueryClient();
-  const { organization } = useOrganization();
+  const { organizationId } = useOrganization();
   const { user } = useAuth();
 
   return useMutation({
@@ -56,7 +56,7 @@ export function useCreateApiKey() {
 
       const { data, error } = await (supabase.from as any)("api_keys")
         .insert({
-          organization_id: organization!.id,
+          organization_id: organizationId!,
           name: input.name,
           key_hash: keyHash,
           key_prefix: prefix,

@@ -34,7 +34,7 @@ export function useLeadConsents(leadId: string | null) {
 
 export function useRecordConsent() {
   const queryClient = useQueryClient();
-  const { organization } = useOrganization();
+  const { organizationId } = useOrganization();
 
   return useMutation({
     mutationFn: async (input: {
@@ -47,7 +47,7 @@ export function useRecordConsent() {
     }) => {
       const { data, error } = await (supabase.from as any)("consent_records")
         .insert({
-          organization_id: organization!.id,
+          organization_id: organizationId!,
           lead_id: input.lead_id ?? null,
           contact_email: input.contact_email ?? null,
           contact_phone: input.contact_phone ?? null,

@@ -35,7 +35,6 @@ interface ReportBuilderProps {
 
 const ENTITY_OPTIONS: { value: EntityType; label: string }[] = [
   { value: "leads", label: "Leads" },
-  { value: "deals", label: "Negócios" },
   { value: "contacts", label: "Contatos" },
   { value: "activities", label: "Atividades" },
   { value: "pipelines", label: "Pipelines" },
@@ -71,13 +70,6 @@ const FIELD_OPTIONS: Record<EntityType, { value: string; label: string }[]> = {
     { value: "responsible_id", label: "Responsável" },
     { value: "sdr_id", label: "SDR" },
     { value: "closer_id", label: "Closer" },
-  ],
-  deals: [
-    { value: "status", label: "Status" },
-    { value: "sale_value", label: "Valor" },
-    { value: "loss_reason", label: "Motivo de Perda" },
-    { value: "created_at", label: "Data de Criação" },
-    { value: "responsible_id", label: "Responsável" },
   ],
   contacts: [
     { value: "company", label: "Empresa" },

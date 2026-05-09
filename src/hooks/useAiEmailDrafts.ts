@@ -17,7 +17,7 @@ export interface AiEmailDraft {
 }
 
 export function useGenerateEmailDraft() {
-  const { organization } = useOrganization();
+  const { organizationId } = useOrganization();
   const { user } = useAuth();
 
   return useMutation({
@@ -30,7 +30,7 @@ export function useGenerateEmailDraft() {
     }) => {
       const { data, error } = await (supabase.from as any)("ai_email_drafts")
         .insert({
-          organization_id: organization!.id,
+          organization_id: organizationId!,
           deal_id: input.deal_id ?? null,
           lead_id: input.lead_id ?? null,
           style: input.style,

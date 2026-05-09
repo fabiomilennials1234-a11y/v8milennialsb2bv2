@@ -15,8 +15,8 @@ export interface EnrichmentRequest {
 }
 
 export function useEnrichmentRequests(opts?: { contactId?: string; leadId?: string }) {
-  const { organization } = useOrganization();
-  const orgId = organization?.id;
+  const { organizationId } = useOrganization();
+  const orgId = organizationId;
 
   return useQuery<EnrichmentRequest[]>({
     queryKey: ["enrichment-requests", orgId, opts?.contactId, opts?.leadId],
@@ -40,7 +40,7 @@ export function useEnrichmentRequests(opts?: { contactId?: string; leadId?: stri
 
 export function useRequestEnrichment() {
   const queryClient = useQueryClient();
-  const { organization } = useOrganization();
+  const { organizationId } = useOrganization();
 
   return useMutation({
     mutationFn: async (payload: {
@@ -50,7 +50,7 @@ export function useRequestEnrichment() {
     }) => {
       const { data, error } = await (supabase.from as any)("enrichment_requests")
         .insert({
-          organization_id: organization!.id,
+          organization_id: organizationId!,
           contact_id: payload.contactId ?? null,
           lead_id: payload.leadId ?? null,
           provider: payload.provider ?? "linkedin",

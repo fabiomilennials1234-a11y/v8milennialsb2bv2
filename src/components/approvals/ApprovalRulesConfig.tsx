@@ -25,7 +25,7 @@ interface ConditionRow {
 }
 
 const CONDITION_FIELDS = [
-  { value: "deal_value", label: "Valor do negocio" },
+  { value: "sale_value", label: "Valor da venda" },
   { value: "discount_percent", label: "Desconto (%)" },
   { value: "quote_total", label: "Total da proposta" },
 ];
@@ -46,16 +46,16 @@ export function ApprovalRulesConfig() {
 
   const [form, setForm] = useState({
     name: "",
-    entity_type: "deal" as string,
-    conditions: [{ field: "deal_value", operator: "greater_than", value: "" }] as ConditionRow[],
+    entity_type: "lead" as string,
+    conditions: [{ field: "sale_value", operator: "greater_than", value: "" }] as ConditionRow[],
     auto_reject_hours: "",
   });
 
   function resetForm() {
     setForm({
       name: "",
-      entity_type: "deal",
-      conditions: [{ field: "deal_value", operator: "greater_than", value: "" }],
+      entity_type: "lead",
+      conditions: [{ field: "sale_value", operator: "greater_than", value: "" }],
       auto_reject_hours: "",
     });
   }
@@ -63,7 +63,7 @@ export function ApprovalRulesConfig() {
   function addCondition() {
     setForm({
       ...form,
-      conditions: [...form.conditions, { field: "deal_value", operator: "greater_than", value: "" }],
+      conditions: [...form.conditions, { field: "sale_value", operator: "greater_than", value: "" }],
     });
   }
 
@@ -228,7 +228,7 @@ export function ApprovalRulesConfig() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="deal">Negocio</SelectItem>
+                  <SelectItem value="lead">Lead</SelectItem>
                   <SelectItem value="quote">Proposta</SelectItem>
                   <SelectItem value="discount">Desconto</SelectItem>
                 </SelectContent>

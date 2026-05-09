@@ -46,7 +46,7 @@ const Comissoes = lazy(() => lazyRetry(() => import("./pages/Comissoes")));
 const Leads = lazy(() => lazyRetry(() => import("./pages/Leads")));
 const Companies = lazy(() => lazyRetry(() => import("./pages/Companies")));
 const Contacts = lazy(() => lazyRetry(() => import("./pages/Contacts")));
-const Deals = lazy(() => lazyRetry(() => import("./pages/Deals")));
+
 const TrashPage = lazy(() => lazyRetry(() => import("./pages/Trash")));
 const Duplicates = lazy(() => lazyRetry(() => import("./pages/Duplicates")));
 const Configuracoes = lazy(() => lazyRetry(() => import("./pages/Configuracoes")));
@@ -70,9 +70,9 @@ const MessageTemplates = lazy(() => lazyRetry(() => import("./pages/MessageTempl
 const Automacoes = lazy(() => lazyRetry(() => import("./pages/Automacoes")));
 const AutomacoesEditor = lazy(() => lazyRetry(() => import("./pages/AutomacoesEditor")));
 const AutomacoesExecucoes = lazy(() => lazyRetry(() => import("./pages/AutomacoesExecucoes")));
-const UnifiedInbox = lazy(() => lazyRetry(() => import("./pages/UnifiedInbox")));
+
 const Reports = lazy(() => lazyRetry(() => import("./pages/Reports")));
-const CompetitorsPage = lazy(() => lazyRetry(() => import("./pages/Competitors")));
+
 const NotFound = lazy(() => lazyRetry(() => import("./pages/NotFound")));
 const Landing = lazy(() => lazyRetry(() => import("./pages/Landing")));
 const Signup = lazy(() => lazyRetry(() => import("./pages/Signup")));
@@ -400,18 +400,6 @@ function AppRoutes() {
         }
       />
       <Route
-        path="/negocios"
-        element={
-          <ProtectedRoute>
-            <LayoutWrapper>
-              <PermissionProtectedRoute featureKey="pipeline.view">
-                <Deals />
-              </PermissionProtectedRoute>
-            </LayoutWrapper>
-          </ProtectedRoute>
-        }
-      />
-      <Route
         path="/lixeira"
         element={
           <ProtectedRoute>
@@ -662,33 +650,11 @@ function AppRoutes() {
         }
       />
       <Route
-        path="/inbox"
-        element={
-          <ProtectedRoute>
-            <LayoutWrapper>
-              <PermissionProtectedRoute featureKey="whatsapp.view">
-                <UnifiedInbox />
-              </PermissionProtectedRoute>
-            </LayoutWrapper>
-          </ProtectedRoute>
-        }
-      />
-      <Route
         path="/relatorios"
         element={
           <ProtectedRoute>
             <LayoutWrapper>
               <Reports />
-            </LayoutWrapper>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/concorrentes"
-        element={
-          <ProtectedRoute>
-            <LayoutWrapper>
-              <CompetitorsPage />
             </LayoutWrapper>
           </ProtectedRoute>
         }

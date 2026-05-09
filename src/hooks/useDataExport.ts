@@ -19,8 +19,8 @@ export interface DataExportRequest {
 }
 
 export function useDataExportRequests() {
-  const { organization } = useOrganization();
-  const orgId = organization?.id;
+  const { organizationId } = useOrganization();
+  const orgId = organizationId;
 
   return useQuery<DataExportRequest[]>({
     queryKey: ["data-export-requests", orgId],
@@ -38,7 +38,7 @@ export function useDataExportRequests() {
 
 export function useRequestDataExport() {
   const queryClient = useQueryClient();
-  const { organization } = useOrganization();
+  const { organizationId } = useOrganization();
   const { user } = useAuth();
 
   return useMutation({
@@ -49,7 +49,7 @@ export function useRequestDataExport() {
     }) => {
       const { data, error } = await (supabase.from as any)("data_export_requests")
         .insert({
-          organization_id: organization!.id,
+          organization_id: organizationId!,
           requested_by: user!.id,
           lead_id: input.lead_id ?? null,
           contact_email: input.contact_email ?? null,

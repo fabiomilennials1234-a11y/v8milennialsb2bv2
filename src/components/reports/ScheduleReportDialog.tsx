@@ -53,7 +53,7 @@ export function ScheduleReportDialog({
   reportId,
   reportName,
 }: ScheduleReportDialogProps) {
-  const { organization } = useOrganization();
+  const { organizationId } = useOrganization();
   const queryClient = useQueryClient();
 
   const [frequency, setFrequency] = useState<Frequency>("weekly");
@@ -87,7 +87,7 @@ export function ScheduleReportDialog({
     mutationFn: async () => {
       const payload: Record<string, unknown> = {
         report_id: reportId,
-        organization_id: organization!.id,
+        organization_id: organizationId!,
         frequency,
         hour: Number(hour),
         timezone: "America/Sao_Paulo",

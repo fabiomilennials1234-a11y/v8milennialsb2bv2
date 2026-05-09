@@ -6,7 +6,6 @@ import {
   Mail,
   MapPin,
   Users,
-  Briefcase,
   ExternalLink,
   DollarSign,
   Loader2,
@@ -23,8 +22,6 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useCompany, useCompanyContacts } from "@/hooks/useCompanies";
-import { useDeals } from "@/hooks/useDeals";
-import type { Deal } from "@/hooks/useDeals";
 import { cn } from "@/lib/utils";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -53,12 +50,6 @@ function healthColor(score: number | null | undefined) {
   return { text: "text-red-500", bg: "bg-red-500" };
 }
 
-function dealStatusBadge(deal: Deal) {
-  if (deal.won === true) return { label: "Ganho", cls: "bg-emerald-500/10 text-emerald-500 border-emerald-500/30" };
-  if (deal.won === false) return { label: "Perdido", cls: "bg-red-500/10 text-red-500 border-red-500/30" };
-  return { label: "Aberto", cls: "bg-amber-500/10 text-amber-500 border-amber-500/30" };
-}
-
 function initials(name: string | undefined) {
   return (name || "?")
     .split(" ")
@@ -77,8 +68,6 @@ export function CompanyDetailDrawer({
 }: CompanyDetailDrawerProps) {
   const { data: company, isLoading } = useCompany(open ? companyId : undefined);
   const { data: contacts = [] } = useCompanyContacts(open ? companyId : undefined);
-  const { data: deals = [] } = useDeals(open && companyId ? { companyId } : undefined);
-
   const hc = useMemo(() => healthColor(company?.health_score), [company?.health_score]);
 
   if (!open) return null;
@@ -193,42 +182,6 @@ export function CompanyDetailDrawer({
                     </div>
                   )}
 
-                  {/* Deals section */}
-                  <div className="space-y-3">
-                    <h3 className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">
-                      {deals.length} {deals.length === 1 ? "negocio" : "negocios"}
-                    </h3>
-                    {deals.length === 0 ? (
-                      <p className="text-sm text-muted-foreground py-2">
-                        Nenhum negocio vinculado.
-                      </p>
-                    ) : (
-                      <div className="space-y-2">
-                        {deals.map((deal) => {
-                          const status = dealStatusBadge(deal);
-                          return (
-                            <div
-                              key={deal.id}
-                              className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 border border-border/50"
-                            >
-                              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                                <Briefcase className="w-4 h-4 text-primary" />
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium truncate">{deal.title}</p>
-                                <p className="text-xs text-muted-foreground">
-                                  {fmtCurrency(deal.value)}
-                                </p>
-                              </div>
-                              <Badge variant="outline" className={cn("text-xs shrink-0", status.cls)}>
-                                {status.label}
-                              </Badge>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
                 </TabsContent>
 
                 {/* Tab 2: Contatos */}

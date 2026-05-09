@@ -26,8 +26,8 @@ export interface SmsTemplate {
 }
 
 export function useSmsMessages(leadId?: string, limit = 30) {
-  const { organization } = useOrganization();
-  const orgId = organization?.id;
+  const { organizationId } = useOrganization();
+  const orgId = organizationId;
 
   return useQuery<SmsMessage[]>({
     queryKey: ["sms-messages", orgId, leadId, limit],
@@ -49,8 +49,8 @@ export function useSmsMessages(leadId?: string, limit = 30) {
 }
 
 export function useSmsTemplates() {
-  const { organization } = useOrganization();
-  const orgId = organization?.id;
+  const { organizationId } = useOrganization();
+  const orgId = organizationId;
 
   return useQuery<SmsTemplate[]>({
     queryKey: ["sms-templates", orgId],
@@ -100,13 +100,13 @@ export function useSendSms() {
 
 export function useCreateSmsTemplate() {
   const queryClient = useQueryClient();
-  const { organization } = useOrganization();
+  const { organizationId } = useOrganization();
 
   return useMutation({
     mutationFn: async (input: { name: string; body: string; variables?: string[]; category?: string }) => {
       const { data, error } = await (supabase.from as any)("sms_templates")
         .insert({
-          organization_id: organization!.id,
+          organization_id: organizationId!,
           name: input.name,
           body: input.body,
           variables: input.variables ?? [],

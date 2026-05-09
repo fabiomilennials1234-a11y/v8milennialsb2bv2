@@ -32,8 +32,8 @@ export const OUTCOME_LABELS: Record<CallOutcome, string> = {
 };
 
 export function useCallLogs(leadId?: string, limit = 20) {
-  const { organization } = useOrganization();
-  const orgId = organization?.id;
+  const { organizationId } = useOrganization();
+  const orgId = organizationId;
 
   return useQuery<CallLog[]>({
     queryKey: ["call-logs", orgId, leadId, limit],
@@ -66,13 +66,13 @@ export interface LogCallInput {
 export function useLogCall() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
-  const { organization } = useOrganization();
+  const { organizationId } = useOrganization();
 
   return useMutation({
     mutationFn: async (input: LogCallInput) => {
       const { data, error } = await (supabase.from as any)("call_logs")
         .insert({
-          organization_id: organization!.id,
+          organization_id: organizationId!,
           user_id: user!.id,
           lead_id: input.lead_id ?? null,
           direction: input.direction,

@@ -30,10 +30,10 @@ import { useOrganization } from "@/hooks/useOrganization";
 
 export function SandboxPanel() {
   const createSandbox = useCreateSandbox();
-  const { organization } = useOrganization();
+  const { organizationId } = useOrganization();
   const [confirmOpen, setConfirmOpen] = useState(false);
 
-  const isSandbox = organization?.name?.includes("[Sandbox]") ?? false;
+  const isSandbox = false;
 
   const handleCreate = async () => {
     setConfirmOpen(false);

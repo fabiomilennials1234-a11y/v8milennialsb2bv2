@@ -5,12 +5,12 @@ import { toast } from "sonner";
 
 export function useCreateSandbox() {
   const queryClient = useQueryClient();
-  const { organization } = useOrganization();
+  const { organizationId } = useOrganization();
 
   return useMutation({
     mutationFn: async () => {
       const { data, error } = await (supabase.rpc as any)("create_org_sandbox", {
-        p_source_org_id: organization!.id,
+        p_source_org_id: organizationId!,
       });
       if (error) throw error;
       return data as string;

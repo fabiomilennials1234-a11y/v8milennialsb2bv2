@@ -13,7 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { WinLossAnalysis } from "@/components/analytics/WinLossAnalysis";
 import { AnalyticsErrorBoundary } from "@/components/analytics/AnalyticsErrorBoundary";
 import { NextBestActionsPanel } from "@/components/ai/NextBestActionsPanel";
-import { DealsAtRiskPanel } from "@/components/deals/DealsAtRiskPanel";
+
 
 interface TabInteligenciaProps {
   month: number;
@@ -60,23 +60,14 @@ function TabInteligenciaBase({ month, year, isAdmin }: TabInteligenciaProps) {
 
   return (
     <div className="space-y-6">
-      {/* Row 0: AI Next-Best Actions + Deals at Risk */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.05 }}
-        >
-          <NextBestActionsPanel limit={5} compact />
-        </motion.div>
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.08 }}
-        >
-          <DealsAtRiskPanel />
-        </motion.div>
-      </div>
+      {/* Row 0: AI Next-Best Actions */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.05 }}
+      >
+        <NextBestActionsPanel limit={5} compact />
+      </motion.div>
 
       {/* Row 1: Metas detalhadas */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

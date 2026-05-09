@@ -19,7 +19,6 @@ import {
   ExternalLink,
   Loader2,
   Calendar,
-  DollarSign,
   X,
   Sparkles,
   MessageSquare,
@@ -27,7 +26,7 @@ import {
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { useContact, useContactDeals } from "@/hooks/useContacts";
+import { useContact } from "@/hooks/useContacts";
 import { useCompany } from "@/hooks/useCompanies";
 import { ActivityTimeline } from "@/components/activities/ActivityTimeline";
 import { EmailComposer } from "@/components/email/EmailComposer";
@@ -63,12 +62,6 @@ const fmtBRL = (value: number | null | undefined) => {
   }).format(value);
 };
 
-const DEAL_STATUS_MAP: Record<string, { label: string; className: string }> = {
-  open: { label: "Aberto", className: "bg-blue-500/10 text-blue-500 border-blue-500/20" },
-  won: { label: "Ganho", className: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" },
-  lost: { label: "Perdido", className: "bg-red-500/10 text-red-500 border-red-500/20" },
-};
-
 // ── Component ─────────────────────────────────────────────────────────
 
 export function ContactDetailDrawer({
@@ -77,7 +70,6 @@ export function ContactDetailDrawer({
   onOpenChange,
 }: ContactDetailDrawerProps) {
   const { data: contact, isLoading } = useContact(contactId);
-  const { data: deals = [] } = useContactDeals(contactId);
   const { data: company } = useCompany(contact?.company_id ?? undefined);
   const { data: enrichments = [] } = useEnrichmentRequests({ contactId });
   const requestEnrichment = useRequestEnrichment();
@@ -248,47 +240,6 @@ export function ContactDetailDrawer({
                   </div>
                 </div>
 
-                {/* Deals */}
-                <Separator />
-                <div>
-                  <h3 className="text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-3">
-                    Negocios ({deals.length})
-                  </h3>
-
-                  {deals.length === 0 ? (
-                    <p className="text-sm text-muted-foreground py-2">
-                      Nenhum negocio vinculado.
-                    </p>
-                  ) : (
-                    <div className="space-y-2">
-                      {deals.map((deal: any) => {
-                        const status = DEAL_STATUS_MAP[deal.status] ?? DEAL_STATUS_MAP.open;
-                        return (
-                          <div
-                            key={deal.id}
-                            className="flex items-center gap-3 p-3 rounded-lg bg-muted"
-                          >
-                            <DollarSign className="w-4 h-4 text-muted-foreground shrink-0" />
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium truncate">
-                                {deal.title || "Sem titulo"}
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                {fmtBRL(deal.value)}
-                              </p>
-                            </div>
-                            <Badge
-                              variant="outline"
-                              className={cn("text-xs shrink-0", status.className)}
-                            >
-                              {status.label}
-                            </Badge>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
               </TabsContent>
 
               {/* ── Tab 2: Atividades ──────────── */}

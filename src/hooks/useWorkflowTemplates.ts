@@ -36,7 +36,7 @@ export function useWorkflowTemplates(category?: string) {
 
 export function useCloneWorkflowTemplate() {
   const queryClient = useQueryClient();
-  const { organization } = useOrganization();
+  const { organizationId } = useOrganization();
 
   return useMutation({
     mutationFn: async (templateId: string) => {
@@ -49,7 +49,7 @@ export function useCloneWorkflowTemplate() {
       const { data, error } = await supabase
         .from("workflows")
         .insert({
-          organization_id: organization!.id,
+          organization_id: organizationId!,
           name: `${template.name} (cópia)`,
           definition: template.definition,
           is_active: false,

@@ -25,8 +25,8 @@ export interface Email {
 }
 
 export function useEmails(opts?: { leadId?: string; contactId?: string; limit?: number }) {
-  const { organization } = useOrganization();
-  const orgId = organization?.id;
+  const { organizationId } = useOrganization();
+  const orgId = organizationId;
 
   return useQuery<Email[]>({
     queryKey: ["emails", orgId, opts?.leadId, opts?.contactId, opts?.limit],
@@ -64,7 +64,7 @@ export function useEmailThread(threadId: string | null) {
 
 export function useSendEmail() {
   const queryClient = useQueryClient();
-  const { organization } = useOrganization();
+  const { organizationId } = useOrganization();
 
   return useMutation({
     mutationFn: async (payload: {

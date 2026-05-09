@@ -173,32 +173,3 @@ export function useDeleteContact() {
   });
 }
 
-export function useContactDeals(contactId: string | undefined) {
-  const { organizationId, isReady } = useOrganization();
-
-  return useQuery({
-    queryKey: ["contacts", organizationId, "deals", contactId],
-    queryFn: async () => {
-      if (!organizationId || !contactId) return [];
-
-      const { data: junctions, error: jErr } = await (supabase.from as any)("deal_contacts")
-        .select("deal_id")
-        .eq("contact_id", contactId);
-
-      if (jErr) throw jErr;
-      if (!junctions?.length) return [];
-
-      const dealIds = (junctions as { deal_id: string }[]).map((j) => j.deal_id);
-
-      const { data, error } = await (supabase.from as any)("deals")
-        .select("*")
-        .in("id", dealIds)
-        .eq("organization_id", organizationId);
-
-      if (error) throw error;
-      return data ?? [];
-    },
-    enabled: isReady && !!contactId,
-    staleTime: STALE_TIME,
-  });
-}

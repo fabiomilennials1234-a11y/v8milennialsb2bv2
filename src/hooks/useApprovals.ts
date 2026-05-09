@@ -29,8 +29,8 @@ export interface ApprovalRequest {
 }
 
 export function useApprovalRules() {
-  const { organization } = useOrganization();
-  const orgId = organization?.id;
+  const { organizationId } = useOrganization();
+  const orgId = organizationId;
 
   return useQuery<ApprovalRule[]>({
     queryKey: ["approval-rules", orgId],
@@ -47,8 +47,8 @@ export function useApprovalRules() {
 }
 
 export function usePendingApprovals() {
-  const { organization } = useOrganization();
-  const orgId = organization?.id;
+  const { organizationId } = useOrganization();
+  const orgId = organizationId;
 
   return useQuery<ApprovalRequest[]>({
     queryKey: ["pending-approvals", orgId],
@@ -67,14 +67,14 @@ export function usePendingApprovals() {
 
 export function useRequestApproval() {
   const queryClient = useQueryClient();
-  const { organization } = useOrganization();
+  const { organizationId } = useOrganization();
   const { user } = useAuth();
 
   return useMutation({
     mutationFn: async (input: { rule_id: string; entity_type: string; entity_id: string }) => {
       const { data, error } = await (supabase.from as any)("approval_requests")
         .insert({
-          organization_id: organization!.id,
+          organization_id: organizationId!,
           requested_by: user!.id,
           ...input,
         })

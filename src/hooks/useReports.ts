@@ -5,7 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
 export type ChartType = "bar" | "line" | "pie" | "table" | "number" | "funnel" | "area";
-export type EntityType = "leads" | "deals" | "contacts" | "activities" | "pipelines";
+export type EntityType = "leads" | "contacts" | "activities" | "pipelines";
 
 export interface Report {
   id: string;
@@ -27,8 +27,8 @@ export interface Report {
 }
 
 export function useReports() {
-  const { organization } = useOrganization();
-  const orgId = organization?.id;
+  const { organizationId } = useOrganization();
+  const orgId = organizationId;
 
   return useQuery<Report[]>({
     queryKey: ["reports", orgId],
@@ -75,15 +75,18 @@ export type ReportInsert = {
 
 export function useCreateReport() {
   const queryClient = useQueryClient();
-  const { organization } = useOrganization();
+  const { organizationId } = useOrganization();
   const { user } = useAuth();
 
   return useMutation({
     mutationFn: async (input: ReportInsert) => {
+      if (!organizationId || !user?.id) {
+        throw new Error(`Missing context: org=${organizationId}, user=${user?.id}`);
+      }
       const { data, error } = await (supabase.from as any)("reports")
         .insert({
-          organization_id: organization!.id,
-          owner_id: user!.id,
+          organization_id: organizationId,
+          owner_id: user.id,
           ...input,
         })
         .select("id")
@@ -94,6 +97,10 @@ export function useCreateReport() {
     onSuccess: () => {
       toast.success("Relatório criado");
       queryClient.invalidateQueries({ queryKey: ["reports"] });
+    },
+    onError: (err) => {
+      console.error("[useCreateReport] mutation error:", err);
+      toast.error(`Erro ao criar relatório: ${err.message}`);
     },
   });
 }

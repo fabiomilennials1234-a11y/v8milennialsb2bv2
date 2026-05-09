@@ -52,7 +52,6 @@ const CHART_ICONS: Record<ChartType, typeof BarChart3> = {
 
 const ENTITY_LABELS: Record<string, string> = {
   leads: "Leads",
-  deals: "Negócios",
   contacts: "Contatos",
   activities: "Atividades",
   pipelines: "Pipelines",
