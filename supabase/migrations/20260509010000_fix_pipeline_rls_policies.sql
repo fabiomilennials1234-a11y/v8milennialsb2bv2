@@ -8,6 +8,7 @@ DROP POLICY IF EXISTS pipeline_entries_select ON pipeline_entries;
 DROP POLICY IF EXISTS pipeline_entries_insert ON pipeline_entries;
 DROP POLICY IF EXISTS pipeline_entries_update ON pipeline_entries;
 DROP POLICY IF EXISTS pipeline_entries_delete ON pipeline_entries;
+DROP POLICY IF EXISTS master_select_all_pipeline_entries ON pipeline_entries;
 
 CREATE POLICY master_select_all_pipeline_entries ON pipeline_entries
   FOR SELECT USING (is_master_user());
@@ -52,6 +53,7 @@ DROP POLICY IF EXISTS pipelines_select ON pipelines;
 DROP POLICY IF EXISTS pipelines_insert ON pipelines;
 DROP POLICY IF EXISTS pipelines_update ON pipelines;
 DROP POLICY IF EXISTS pipelines_delete ON pipelines;
+DROP POLICY IF EXISTS master_all_pipelines ON pipelines;
 
 CREATE POLICY master_all_pipelines ON pipelines
   FOR ALL USING (is_master_user());
