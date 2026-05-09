@@ -12,9 +12,9 @@ export default function ChecklistPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Checklists</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Templates de Checklist</h1>
           <p className="text-muted-foreground text-sm mt-1">
-            Organize suas tarefas em listas de verificação
+            Crie templates para vincular a leads via card ou automação
           </p>
         </div>
         <CreateChecklistDialog />
@@ -33,9 +33,9 @@ export default function ChecklistPage() {
           className="text-center py-16"
         >
           <ListChecks className="w-12 h-12 text-muted-foreground/50 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-muted-foreground">Nenhum checklist ainda</h3>
+          <h3 className="text-lg font-medium text-muted-foreground">Nenhum template ainda</h3>
           <p className="text-sm text-muted-foreground/70 mt-1">
-            Crie seu primeiro checklist para organizar suas tarefas
+            Crie seu primeiro template de checklist
           </p>
         </motion.div>
       ) : (

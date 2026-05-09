@@ -14,6 +14,8 @@ CREATE TABLE IF NOT EXISTS public.message_templates (
   command          TEXT        NOT NULL,
   display_name     TEXT        NOT NULL,
   body             TEXT        NOT NULL,
+  media_url        TEXT,
+  media_type       TEXT        DEFAULT 'text' CHECK (media_type IN ('text', 'image', 'video', 'audio', 'document')),
   created_by       UUID        REFERENCES auth.users(id) ON DELETE SET NULL,
   updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),

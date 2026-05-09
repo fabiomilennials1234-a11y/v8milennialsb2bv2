@@ -1,7 +1,6 @@
 import { memo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronDown, ChevronRight, Plus, Trash2, Pencil, Building2 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { ChevronDown, ChevronRight, Plus, Trash2, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
@@ -105,13 +104,6 @@ export const ChecklistCard = memo(function ChecklistCard({ checklist }: Checklis
                 />
               ) : (
                 <h3 className="font-semibold text-sm truncate">{checklist.title}</h3>
-              )}
-
-              {checklist.lead && (
-                <Badge variant="outline" className="text-xs gap-1 flex-shrink-0">
-                  <Building2 className="w-3 h-3" />
-                  {checklist.lead.name}
-                </Badge>
               )}
             </div>
 

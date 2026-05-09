@@ -16,7 +16,6 @@ export type ChecklistItemUpdate = TablesUpdate<"checklist_items">;
 export interface ChecklistWithCounts extends Checklist {
   total_items: number;
   completed_items: number;
-  lead?: { id: string; name: string } | null;
 }
 
 // ─── Queries ─────────────────────────────────────────────
@@ -32,8 +31,9 @@ export function useChecklists() {
 
       const { data, error } = await supabase
         .from("checklists")
-        .select(`*, lead:leads(id, name), checklist_items(id, is_completed)`)
+        .select(`*, checklist_items(id, is_completed)`)
         .eq("organization_id", organizationId)
+        .is("lead_id", null)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
@@ -45,7 +45,6 @@ export function useChecklists() {
           checklist_items: undefined,
           total_items: items.length,
           completed_items: items.filter((i: any) => i.is_completed).length,
-          lead: c.lead ?? null,
         };
       });
     },
