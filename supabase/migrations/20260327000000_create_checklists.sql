@@ -2,7 +2,7 @@
 CREATE TABLE public.checklists (
   id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
   organization_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
-  created_by UUID NOT NULL REFERENCES public.team_members(id) ON DELETE SET NULL,
+  created_by UUID REFERENCES public.team_members(id) ON DELETE SET NULL,
   title TEXT NOT NULL,
   description TEXT,
   lead_id UUID REFERENCES public.leads(id) ON DELETE SET NULL,

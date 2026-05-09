@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "./useOrganization";
+import { isVirtualTeamMember } from "./useTeamMembers";
 import { useRealtimeSubscription } from "./useRealtimeSubscription";
 import { toast } from "sonner";
 import type { ChecklistWithCounts } from "./useChecklists";
@@ -46,7 +47,7 @@ export function useApplyChecklistTemplate() {
 
   return useMutation({
     mutationFn: async ({ templateId, leadId }: { templateId: string; leadId: string }) => {
-      if (!organizationId || !teamMemberId) throw new Error("Organização não disponível");
+      if (!organizationId) throw new Error("Organização não disponível");
 
       const { data: template, error: tErr } = await supabase
         .from("checklists")
@@ -68,7 +69,7 @@ export function useApplyChecklistTemplate() {
         .from("checklists")
         .insert({
           organization_id: organizationId,
-          created_by: teamMemberId,
+          created_by: teamMemberId && !isVirtualTeamMember(teamMemberId) ? teamMemberId : null,
           title: template.title,
           description: template.description,
           lead_id: leadId,
