@@ -112,15 +112,15 @@ export function usePipelineEntries(slug: PipelineType) {
           supabase
             .from("pipe_proposta_items")
             .select("*, product:products(id, name, type, ticket, ticket_minimo)")
-            .in("proposta_id", entryIds),
+            .in("pipe_proposta_id", entryIds),
         ]);
 
         const productsMap = new Map((productsRes.data ?? []).map((p: any) => [p.id, p]));
         const itemsByProposta = new Map<string, any[]>();
         for (const item of (itemsRes.data ?? [])) {
-          const arr = itemsByProposta.get(item.proposta_id) ?? [];
+          const arr = itemsByProposta.get(item.pipe_proposta_id) ?? [];
           arr.push(item);
-          itemsByProposta.set(item.proposta_id, arr);
+          itemsByProposta.set(item.pipe_proposta_id, arr);
         }
 
         return entries.map((entry: any) => ({

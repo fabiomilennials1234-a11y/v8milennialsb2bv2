@@ -51,17 +51,22 @@ export function useRecentActivity(limit: number = 10) {
       });
 
       const { data: meetings } = await supabase
-        .from("pipe_confirmacao")
+        .from("pipeline_entries")
         .select(`
-          id, status, updated_at,
-          lead:leads(name, company),
-          responsible:team_members!pipe_confirmacao_responsible_id_fkey(name),
-          sdr:team_members!pipe_confirmacao_sdr_id_fkey(name),
-          pre_sale_responsible:team_members!pipe_confirmacao_pre_sale_responsible_id_fkey(name),
-          sale_responsible:team_members!pipe_confirmacao_sale_responsible_id_fkey(name)
+          id, stage_key, updated_at,
+          lead:leads!pipeline_entries_lead_id_fkey(
+            name, company,
+            responsible:team_members!leads_responsible_id_fkey(name),
+            sdr:team_members!leads_sdr_id_fkey(name),
+            pre_sale_responsible:team_members!leads_pre_sale_responsible_id_fkey(name),
+            sale_responsible:team_members!leads_sale_responsible_id_fkey(name)
+          ),
+          pipeline:pipelines!inner(slug)
         `)
         .eq("organization_id", organizationId)
-        .eq("status", "compareceu")
+        .eq("pipeline.slug", "confirmacao")
+        .eq("pipeline.type", "system")
+        .eq("stage_key", "compareceu")
         .order("updated_at", { ascending: false })
         .limit(5);
 
@@ -70,7 +75,7 @@ export function useRecentActivity(limit: number = 10) {
           id: `meeting-${meeting.id}`,
           type: "meeting",
           title: "Reunião realizada",
-          description: `${meeting.lead?.name}${(meeting.responsible?.name || meeting.sdr?.name) ? ` com ${meeting.responsible?.name || meeting.sdr?.name}` : ""}`,
+          description: `${meeting.lead?.name}${(meeting.lead?.responsible?.name || meeting.lead?.sdr?.name) ? ` com ${meeting.lead?.responsible?.name || meeting.lead?.sdr?.name}` : ""}`,
           timestamp: meeting.updated_at,
           relativeTime: formatDistanceToNow(new Date(meeting.updated_at), {
             addSuffix: true,
@@ -78,32 +83,38 @@ export function useRecentActivity(limit: number = 10) {
           }),
           icon: "calendar",
           color: "success",
-          personName: meeting.pre_sale_responsible?.name || meeting.responsible?.name || meeting.sdr?.name || meeting.lead?.name,
+          personName: meeting.lead?.pre_sale_responsible?.name || meeting.lead?.responsible?.name || meeting.lead?.sdr?.name || meeting.lead?.name,
         });
       });
 
       const { data: sales } = await supabase
-        .from("pipe_propostas")
+        .from("pipeline_entries")
         .select(`
-          id, sale_value, product_type, closed_at,
-          lead:leads(name, company),
-          responsible:team_members!pipe_propostas_responsible_id_fkey(name),
-          closer:team_members!pipe_propostas_closer_id_fkey(name),
-          pre_sale_responsible:team_members!pipe_propostas_pre_sale_responsible_id_fkey(name),
-          sale_responsible:team_members!pipe_propostas_sale_responsible_id_fkey(name)
+          id, stage_key, metadata, closed_at,
+          lead:leads!pipeline_entries_lead_id_fkey(
+            name, company,
+            responsible:team_members!leads_responsible_id_fkey(name),
+            closer:team_members!leads_closer_id_fkey(name),
+            pre_sale_responsible:team_members!leads_pre_sale_responsible_id_fkey(name),
+            sale_responsible:team_members!leads_sale_responsible_id_fkey(name)
+          ),
+          pipeline:pipelines!inner(slug)
         `)
         .eq("organization_id", organizationId)
-        .eq("status", "vendido")
+        .eq("pipeline.slug", "propostas")
+        .eq("pipeline.type", "system")
+        .eq("stage_key", "vendido")
         .order("closed_at", { ascending: false })
         .limit(5);
 
       sales?.forEach((sale: any) => {
-        const value = Number(sale.sale_value) || 0;
+        const meta = (sale.metadata ?? {}) as Record<string, unknown>;
+        const value = Number(meta.sale_value) || 0;
         activities.push({
           id: `sale-${sale.id}`,
           type: "sale",
           title: "Venda fechada! 🎉",
-          description: `${sale.lead?.name} - R$ ${value.toLocaleString("pt-BR")}${(sale.responsible?.name || sale.closer?.name) ? ` por ${sale.responsible?.name || sale.closer?.name}` : ""}`,
+          description: `${sale.lead?.name} - R$ ${value.toLocaleString("pt-BR")}${(sale.lead?.responsible?.name || sale.lead?.closer?.name) ? ` por ${sale.lead?.responsible?.name || sale.lead?.closer?.name}` : ""}`,
           timestamp: sale.closed_at,
           relativeTime: formatDistanceToNow(new Date(sale.closed_at), {
             addSuffix: true,
@@ -112,18 +123,21 @@ export function useRecentActivity(limit: number = 10) {
           icon: "dollar",
           color: "success",
           value,
-          personName: sale.sale_responsible?.name || sale.responsible?.name || sale.closer?.name,
+          personName: sale.lead?.sale_responsible?.name || sale.lead?.responsible?.name || sale.lead?.closer?.name,
         });
       });
 
       const { data: lost } = await supabase
-        .from("pipe_propostas")
+        .from("pipeline_entries")
         .select(`
           id, updated_at,
-          lead:leads(name, company)
+          lead:leads!pipeline_entries_lead_id_fkey(name, company),
+          pipeline:pipelines!inner(slug)
         `)
         .eq("organization_id", organizationId)
-        .eq("status", "perdido")
+        .eq("pipeline.slug", "propostas")
+        .eq("pipeline.type", "system")
+        .eq("stage_key", "perdido")
         .order("updated_at", { ascending: false })
         .limit(3);
 
