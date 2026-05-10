@@ -169,7 +169,8 @@ export interface WhatsAppProvider {
  */
 export async function getWhatsAppProvider(
   instance: WhatsAppInstance,
-  supabaseAdmin: SupabaseClient
+  supabaseAdmin: SupabaseClient,
+  options?: { bootstrap?: boolean }
 ): Promise<WhatsAppProvider> {
   // Sprint 3 S3.2 — kill-switch: organizations.whatsapp_provider_override
   // takes precedence over instance.provider. Used as panic button during
@@ -205,6 +206,20 @@ export async function getWhatsAppProvider(
     const adminToken = (Deno as any).env.get("UAZAPI_ADMIN_TOKEN");
     if (!baseUrl || !adminToken) {
       throw new Error("UAZAPI_BASE_URL / UAZAPI_ADMIN_TOKEN not set");
+    }
+
+    // Bootstrap mode: new instance with no credentials yet (createInstance flow).
+    // Uses adminToken only — per-instance token is persisted by createInstance.
+    if (options?.bootstrap) {
+      const { UazapiProvider } = await import("./whatsapp-providers/uazapi-provider.ts");
+      return new UazapiProvider({
+        baseUrl,
+        token: "",
+        adminToken,
+        instanceId: instance.id,
+        organizationId: instance.organization_id,
+        supabaseAdmin,
+      });
     }
 
     const { data, error } = await supabaseAdmin.rpc("get_uazapi_credentials", {

@@ -24,7 +24,6 @@ import {
   getWhatsAppProvider,
   type WhatsAppInstance,
 } from "../_shared/whatsapp-client.ts";
-import { EvolutionProvider } from "../_shared/whatsapp-providers/evolution-provider.ts";
 
 // ---------------------------------------------------------------------------
 // Rate limit state (in-memory, per org)
@@ -207,6 +206,25 @@ Deno.serve(
           );
         }
 
+        // Resolve provider: org override > payload > default uazapi
+        let targetProvider: "uazapi" | "evolution" = "uazapi";
+        try {
+          const { data: org } = await supabaseAdmin
+            .from("organizations")
+            .select("whatsapp_provider_override")
+            .eq("id", callerOrgId)
+            .maybeSingle();
+          const override = (org as any)?.whatsapp_provider_override as
+            | "uazapi"
+            | "evolution"
+            | null;
+          if (override === "uazapi" || override === "evolution") {
+            targetProvider = override;
+          }
+        } catch {
+          // Fall back to default (uazapi)
+        }
+
         const webhookBaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
         const webhookSecret = Deno.env.get("UAZAPI_WEBHOOK_SECRET") ?? "";
 
@@ -216,7 +234,7 @@ Deno.serve(
           .insert({
             organization_id: callerOrgId,
             instance_name: instanceName,
-            provider: "evolution",
+            provider: targetProvider,
             status: "connecting",
           })
           .select("*")
@@ -230,10 +248,8 @@ Deno.serve(
 
         const instance = newRow as WhatsAppInstance;
 
-        // Evolution provider needs no per-instance credentials — uses global
-        // EVOLUTION_API_KEY. Construct directly; factory would still work
-        // for Evolution but we mirror createInstance bootstrap pattern.
-        const provider = new EvolutionProvider(instance);
+        // Bootstrap: new instance has no credentials yet — factory skips credential lookup
+        const provider = await getWhatsAppProvider(instance, supabaseAdmin, { bootstrap: true });
 
         let result;
         try {
