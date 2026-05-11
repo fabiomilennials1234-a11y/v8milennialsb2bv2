@@ -166,13 +166,13 @@ Se retornar rows → conflito. Atribuição manual via `set_instance_owner` RPC.
 ### 3.1 Ligar flag para uma org
 
 ```sql
-INSERT INTO organization_features (organization_id, feature_key, is_enabled, updated_at, created_at)
-VALUES (':org_id', 'user_write_instance_strict', true, now(), now())
+INSERT INTO organization_features (organization_id, feature_key, enabled, created_at)
+VALUES (':org_id', 'user_write_instance_strict', true, now())
 ON CONFLICT (organization_id, feature_key) DO UPDATE
-SET is_enabled = true, updated_at = now();
+SET enabled = true;
 ```
 
-⚠️ Confirmar nome da coluna: `is_enabled` (visto em [instance-write-guard.ts:257](../../../supabase/functions/_shared/instance-write-guard.ts#L257)). Não `enabled`.
+Coluna real é `enabled` (não `is_enabled`). Confirmado via `information_schema.columns` em DEV: `id, organization_id, feature_key, enabled, override_reason, overridden_by, overridden_at, expires_at, created_at` (sem `updated_at` — retirado da lista). Backend lê `enabled` + respeita `expires_at` ([instance-write-guard.ts](../../../supabase/functions/_shared/instance-write-guard.ts) atualizado).
 
 Cache backend = 30s, frontend = 60s. **Aguardar 90s** para efeito propagar.
 
@@ -180,10 +180,12 @@ Cache backend = 30s, frontend = 60s. **Aguardar 90s** para efeito propagar.
 
 ```sql
 UPDATE organization_features
-SET is_enabled = false, updated_at = now()
+SET enabled = false
 WHERE organization_id = ':org_id'
   AND feature_key = 'user_write_instance_strict';
 ```
+
+Alternativa: `DELETE FROM organization_features WHERE organization_id = ':org_id' AND feature_key = 'user_write_instance_strict';` — remove override e cai pra default global (`feature_flags.default_enabled`).
 
 ---
 

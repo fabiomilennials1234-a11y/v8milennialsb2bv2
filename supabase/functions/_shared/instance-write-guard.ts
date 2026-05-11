@@ -251,16 +251,23 @@ export async function isStrictWriteEnabled(
   let enabled = false;
 
   try {
-    // Override por organização (se existir e for true|false explícito)
+    // Override por organização (coluna real é `enabled`, não `is_enabled`).
+    // Respeita expires_at: override expirado → cai pra default global.
     const { data: orgFeature } = await client
       .from("organization_features")
-      .select("is_enabled")
+      .select("enabled, expires_at")
       .eq("organization_id", organizationId)
       .eq("feature_key", "user_write_instance_strict")
       .maybeSingle();
 
-    if (orgFeature && typeof orgFeature.is_enabled === "boolean") {
-      enabled = orgFeature.is_enabled;
+    const overrideValid =
+      orgFeature &&
+      typeof orgFeature.enabled === "boolean" &&
+      (!orgFeature.expires_at ||
+        new Date(orgFeature.expires_at).getTime() > now);
+
+    if (overrideValid) {
+      enabled = Boolean(orgFeature.enabled);
     } else {
       // Default global
       const { data: flag } = await client
