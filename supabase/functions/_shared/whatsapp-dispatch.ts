@@ -13,6 +13,14 @@
  *   connected instance of the org)
  * - Phone normalization (Brazilian 55 prefix)
  * - Provider factory with error wrapping
+ *
+ * ─── Bifurcação por flag user_write_instance_strict (Etapa B) ───────────────
+ * Quando o caller informa `lead_id` E a flag está ATIVA na organização,
+ * `resolveDispatchContext` resolve a instância via instance-write-guard
+ * (vínculo responsável→instância). Em caso de erro propaga
+ * `DispatchResolutionError` com code `lead_no_instance` etc — NÃO faz fallback
+ * para a primeira instância da org. Quando a flag está OFF ou `lead_id` é
+ * omitido, o comportamento legado é preservado byte-a-byte.
  */
 
 import {
@@ -20,6 +28,11 @@ import {
   type WhatsAppInstance,
   type WhatsAppProvider,
 } from "./whatsapp-client.ts";
+import {
+  isStrictWriteEnabled,
+  resolveLeadWriteInstance,
+  type WriteInstanceErrorCode,
+} from "./instance-write-guard.ts";
 
 export type ResolveOptions = {
   /** Preferred instance id from agent.whatsapp_instance_id */
@@ -35,16 +48,44 @@ export type ResolvedDispatchContext = {
   normalizedPhone: string;
 };
 
+export type DispatchResolutionErrorCode =
+  | "missing_phone"
+  | "no_instance"
+  | "provider_init_failed"
+  // Strict-write outcomes (flag user_write_instance_strict ON)
+  | "lead_not_found"
+  | "lead_no_responsible"
+  | "lead_no_instance"
+  | "lead_instance_inactive";
+
 export class DispatchResolutionError extends Error {
   override readonly name = "DispatchResolutionError";
   constructor(
-    public readonly code:
-      | "missing_phone"
-      | "no_instance"
-      | "provider_init_failed",
+    public readonly code: DispatchResolutionErrorCode,
     message: string
   ) {
     super(message);
+  }
+}
+
+/**
+ * Mapeia error_code do instance-write-guard para code do DispatchResolutionError.
+ * Mantido como função local para preservar contrato público.
+ */
+function mapWriteGuardError(
+  code: WriteInstanceErrorCode | undefined,
+): DispatchResolutionErrorCode {
+  switch (code) {
+    case "LEAD_NOT_FOUND":
+      return "lead_not_found";
+    case "NO_RESPONSIBLE":
+      return "lead_no_responsible";
+    case "NO_INSTANCE":
+      return "lead_no_instance";
+    case "INSTANCE_INACTIVE":
+      return "lead_instance_inactive";
+    default:
+      return "no_instance";
   }
 }
 
@@ -99,6 +140,15 @@ export async function resolveInstance(
 /**
  * Resolve instance + provider + normalized phone in one call.
  * Throws DispatchResolutionError with actionable code on failure.
+ *
+ * Strict-write flag (Etapa B):
+ *   - Quando `lead_id` é informado E feature flag `user_write_instance_strict`
+ *     está ON na org, resolve a instância via responsible_user_id (RPC
+ *     get_lead_write_instance). Erros NÃO caem para a primeira instância da
+ *     org; propagam como DispatchResolutionError com code específico.
+ *   - Quando flag OFF ou `lead_id` ausente, comportamento legado: precedência
+ *     `preferred_instance_id` → primeira instância da org (filtro
+ *     status=open|connected quando require_connected=true).
  */
 export async function resolveDispatchContext(
   supabaseAdmin: any,
@@ -107,6 +157,13 @@ export async function resolveDispatchContext(
     phone: string | null | undefined;
     preferred_instance_id?: string | null;
     require_connected?: boolean;
+    /**
+     * Optional. Quando informado E a flag user_write_instance_strict está ON
+     * na org, força resolução pelo vínculo responsável→instância. Caller
+     * propaga o lead_id sempre que conhecido — ignorado de forma transparente
+     * quando flag OFF.
+     */
+    lead_id?: string | null;
   }
 ): Promise<ResolvedDispatchContext> {
   const normalizedPhone = normalizeBrazilianPhone(input.phone);
@@ -114,10 +171,42 @@ export async function resolveDispatchContext(
     throw new DispatchResolutionError("missing_phone", "Lead has no phone");
   }
 
-  const instance = await resolveInstance(supabaseAdmin, input.organization_id, {
-    preferredInstanceId: input.preferred_instance_id,
-    requireConnected: input.require_connected,
-  });
+  let instance: WhatsAppInstance | null = null;
+
+  // ── Caminho ESTRITO: flag ON e lead_id presente ─────────────────────────
+  if (input.lead_id) {
+    const strict = await isStrictWriteEnabled(supabaseAdmin, input.organization_id);
+    if (strict) {
+      const result = await resolveLeadWriteInstance(supabaseAdmin, input.lead_id);
+      if (!result.ok || !result.instance) {
+        throw new DispatchResolutionError(
+          mapWriteGuardError(result.errorCode),
+          `Strict write failed: ${result.errorCode ?? "unknown"}`,
+        );
+      }
+      // Carrega o row completo de whatsapp_instances (provider precisa de tudo)
+      const { data: full } = await supabaseAdmin
+        .from("whatsapp_instances")
+        .select("*")
+        .eq("id", result.instance.instanceId)
+        .maybeSingle();
+      if (!full) {
+        throw new DispatchResolutionError(
+          "lead_no_instance",
+          "Strict write resolved instance not loadable",
+        );
+      }
+      instance = full as WhatsAppInstance;
+    }
+  }
+
+  // ── Caminho LEGADO: flag OFF ou lead_id ausente ─────────────────────────
+  if (!instance) {
+    instance = await resolveInstance(supabaseAdmin, input.organization_id, {
+      preferredInstanceId: input.preferred_instance_id,
+      requireConnected: input.require_connected,
+    });
+  }
 
   if (!instance) {
     throw new DispatchResolutionError(

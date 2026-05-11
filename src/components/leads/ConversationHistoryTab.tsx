@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
 import {
   Bot,
   MessageSquare,
@@ -25,6 +24,7 @@ import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import ConversationNotes from "@/components/chat/ConversationNotes";
+import { useChatBubbleOptional } from "@/hooks/useChatBubble";
 
 interface ConversationHistoryTabProps {
   leadId: string;
@@ -59,16 +59,23 @@ const temperatureLabels: Record<string, { label: string; color: string; icon: st
 
 export function ConversationHistoryTab({ leadId, leadName, leadPhone }: ConversationHistoryTabProps) {
   const { toast } = useToast();
-  const navigate = useNavigate();
+  const chatBubble = useChatBubbleOptional();
   const { data: summary, isLoading: summaryLoading } = useConversationSummary(leadId);
   const generateSummary = useGenerateSummary();
   const [summaryExpanded, setSummaryExpanded] = useState(false);
 
-  // TODO(chat-bubble): substituir navigate por openBubble({ phone, instanceId }) quando ChatBubbleContext existir
-  // (ver Obsidian/Segundo Cerebro/.../08 — Backlog/backlog/chat-bubble-kanban-pr3-pr4.md).
   const handleOpenChat = () => {
-    if (!leadPhone) return;
-    navigate(`/chat?phone=${encodeURIComponent(leadPhone)}`);
+    if (chatBubble) {
+      chatBubble.open({
+        phone: leadPhone ?? null,
+        leadName: leadName ?? null,
+      });
+      return;
+    }
+    // Fallback: bubble não disponível (flag off ou rota fora de /pipe).
+    if (leadPhone) {
+      window.location.href = `/chat?phone=${encodeURIComponent(leadPhone)}`;
+    }
   };
 
   const handleGenerateSummary = () => {

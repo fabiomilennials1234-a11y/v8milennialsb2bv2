@@ -8,6 +8,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember, isVirtualTeamMember } from "@/hooks/useTeamMembers";
+import { useUserWriteInstanceFlag } from "@/hooks/useUserWriteInstanceFlag";
 import { track } from "@/lib/analytics";
 import { formatPhoneForWhatsApp } from "@/lib/whatsapp";
 import type { WhatsAppMessage, FailedMessage } from "./types";
@@ -28,8 +29,16 @@ async function isSzChatInstance(instanceId: string | null | undefined): Promise<
 }
 
 /**
- * Verifica se o usuário pode responder neste número (instância).
- * Se a instância não tiver vendedores definidos, todos podem.
+ * Verifica se o usuário pode responder neste número (instância) — caminho LEGACY.
+ *
+ * Sob flag user_write_instance_strict OFF: usado como guard frontend (rápido,
+ * evita roundtrip ao backend pra rejeições óbvias). Lê whatsapp_instance_allowed_members.
+ *
+ * Sob flag ON: caller deve PULAR esta função. O backend (whatsapp-api-proxy
+ * + instance-write-guard) é a fonte de verdade — checa owner_team_member_id +
+ * admin/master via RPC can_user_write_instance. Owners criados via
+ * set_instance_owner que não estão duplicados em allowed_members ficariam
+ * bloqueados aqui se não pularmos.
  */
 async function assertCanReplyOnInstance(
   instanceName: string,
@@ -163,6 +172,7 @@ async function uploadMediaToStorage(
 export function useSendWhatsAppMessage() {
   const queryClient = useQueryClient();
   const { data: teamMember } = useCurrentTeamMember();
+  const { isStrict } = useUserWriteInstanceFlag();
 
   return useMutation({
     mutationFn: async ({
@@ -170,20 +180,32 @@ export function useSendWhatsAppMessage() {
       message,
       instanceName,
       instanceId,
+      leadId,
     }: {
       phoneNumber: string;
       message: string;
       instanceName: string;
       instanceId?: string | null;
+      /** Lead vinculado à conversa. Encaminhado ao whatsapp-api-proxy quando
+       *  flag user_write_instance_strict está ON; ignorado caso contrário.
+       *  Etapa C — vínculo user↔instância de escrita. */
+      leadId?: string | null;
     }) => {
       if (!teamMember?.organization_id || !teamMember?.id) {
         throw new Error("Usuário não vinculado à equipe");
       }
-      await assertCanReplyOnInstance(
-        instanceName,
-        teamMember.organization_id,
-        teamMember.id
-      );
+
+      // Flag ON → backend (whatsapp-api-proxy + instance-write-guard) é a
+      // fonte de verdade. Pulamos o guard legacy por allowed_members pra não
+      // bloquear owners criados via set_instance_owner que não estão na
+      // lista legacy.
+      if (!isStrict) {
+        await assertCanReplyOnInstance(
+          instanceName,
+          teamMember.organization_id,
+          teamMember.id
+        );
+      }
 
       const formattedNumber = formatPhoneForWhatsApp(phoneNumber);
       if (!formattedNumber) throw new Error("Número de telefone inválido");
@@ -205,13 +227,23 @@ export function useSendWhatsAppMessage() {
         data = result.data;
         error = result.error;
       } else {
-        const result = await supabase.functions.invoke("evolution-api-proxy", {
+        // whatsapp-api-proxy: provider-agnostic (Evolution + Uazapi).
+        // Carrega lead_id no payload para guard backend validar vínculo
+        // user↔instância quando flag user_write_instance_strict está ON.
+        if (!instanceId) {
+          throw new Error(
+            "Instância WhatsApp não identificada. Recarregue a página."
+          );
+        }
+        const result = await supabase.functions.invoke("whatsapp-api-proxy", {
           body: {
-            endpoint: `/message/sendText/${instanceName}`,
-            method: "POST",
-            body: {
+            action: "sendText",
+            instance_id: instanceId,
+            organization_id: teamMember.organization_id,
+            payload: {
               number: formattedNumber,
               text: message,
+              ...(leadId ? { lead_id: leadId } : {}),
             },
           },
         });
@@ -326,6 +358,7 @@ export function useSendWhatsAppMessage() {
 export function useSendWhatsAppMedia() {
   const queryClient = useQueryClient();
   const { data: teamMember } = useCurrentTeamMember();
+  const { isStrict } = useUserWriteInstanceFlag();
 
   return useMutation({
     mutationFn: async ({
@@ -337,6 +370,7 @@ export function useSendWhatsAppMedia() {
       caption,
       fileName,
       mimetype,
+      leadId,
     }: {
       phoneNumber: string;
       instanceName: string;
@@ -346,15 +380,20 @@ export function useSendWhatsAppMedia() {
       caption?: string;
       fileName?: string;
       mimetype?: string;
+      /** Lead vinculado à conversa — vide useSendWhatsAppMessage. */
+      leadId?: string | null;
     }) => {
       if (!teamMember?.organization_id || !teamMember?.id) {
         throw new Error("Usuário não vinculado à equipe");
       }
-      await assertCanReplyOnInstance(
-        instanceName,
-        teamMember.organization_id,
-        teamMember.id
-      );
+      // Vide useSendWhatsAppMessage: skip legacy guard quando flag ON.
+      if (!isStrict) {
+        await assertCanReplyOnInstance(
+          instanceName,
+          teamMember.organization_id,
+          teamMember.id
+        );
+      }
 
       const formattedNumber = formatPhoneForWhatsApp(phoneNumber);
       if (!formattedNumber) throw new Error("Número de telefone inválido");
@@ -391,29 +430,35 @@ export function useSendWhatsAppMedia() {
         if (error) throw new Error((error as { message?: string }).message || "Erro ao enviar mídia via SZ.chat");
         if ((data as Record<string, unknown>)?.error) throw new Error((data as Record<string, string>).error);
       } else {
-        let endpoint: string;
-        let body: Record<string, unknown>;
-
-        if (mediaType === "audio") {
-          endpoint = `/message/sendWhatsAppAudio/${instanceName}`;
-          body = {
-            number: formattedNumber,
-            audio: mediaUrl,
-          };
-        } else {
-          endpoint = `/message/sendMedia/${instanceName}`;
-          body = {
-            number: formattedNumber,
-            mediatype: mediaType,
-            mimetype: mimetype || getMimeType(mediaType),
-            caption: caption || "",
-            media: mediaUrl,
-            fileName: fileName || `file_${Date.now()}`,
-          };
+        if (!instanceId) {
+          throw new Error(
+            "Instância WhatsApp não identificada. Recarregue a página."
+          );
         }
+        // Áudio (PTT): proxy mapeia para sendMedia type=ptt internamente.
+        const proxyAction = mediaType === "audio" ? "sendAudio" : "sendMedia";
+        const proxyPayload: Record<string, unknown> =
+          mediaType === "audio"
+            ? {
+                number: formattedNumber,
+                file: mediaUrl,
+              }
+            : {
+                number: formattedNumber,
+                type: mediaType,
+                file: mediaUrl,
+                filename: fileName || `file_${Date.now()}`,
+                caption: caption || "",
+              };
+        if (leadId) proxyPayload.lead_id = leadId;
 
-        const result = await supabase.functions.invoke("evolution-api-proxy", {
-          body: { endpoint, method: "POST", body },
+        const result = await supabase.functions.invoke("whatsapp-api-proxy", {
+          body: {
+            action: proxyAction,
+            instance_id: instanceId,
+            organization_id: teamMember.organization_id,
+            payload: proxyPayload,
+          },
         });
         data = result.data;
         error = result.error;

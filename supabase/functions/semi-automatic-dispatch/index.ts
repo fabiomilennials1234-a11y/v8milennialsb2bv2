@@ -166,6 +166,14 @@ async function processBatch(
     .eq("id", batch.id);
 
   // Instância WhatsApp: usar a vinculada à campanha se existir; senão primeira ativa da organização
+  //
+  // Etapa B / arquitetura: semi-automatic-dispatch é um broadcaster por campanha
+  // (admin escolhe uma única instância e dispara para N leads). Mantém o
+  // comportamento legado mesmo com flag user_write_instance_strict ON — paralelo
+  // a mass-send-create. O vínculo user-instância é enforced em fluxos
+  // 1:1 (outbound copilot, followup copilot, pipe rules, scheduled user msgs,
+  // workflow actions, ai-action send-document). Cobertura aqui exigiria
+  // reagrupar leads por responsável → backlog Etapa F.
   let whatsappInstance: { id: string; instance_name: string } | null = null;
   const campaignInstanceId = batch.campanha?.whatsapp_instance_id;
 

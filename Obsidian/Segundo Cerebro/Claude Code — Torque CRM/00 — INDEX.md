@@ -4,7 +4,7 @@ tags:
   - index
   - torque-crm
 created: 2026-04-12
-last_updated: 2026-05-06
+last_updated: 2026-09-30
 status: active
 ---
 
@@ -92,8 +92,13 @@ SaaS B2B multi-tenant para gestao de leads, pipelines de vendas, campanhas e aut
 
 #### Comunicacao
 - [[Chat WhatsApp]] — Chat multi-canal unificado (WhatsApp, Messenger, Instagram, SZ.Chat)
+- [[chat-bubble]] — Chat Bubble Kanban (FAB flutuante nas Pipe pages)
 - [[Mensagens Agendadas]] — Agendar envio de mensagens WhatsApp
 - [[Templates de Mensagem]] — Templates com variaveis dinamicas e slash commands
+- [[01-schema|WhatsApp Write Instance — Schema]] — Vinculo 1:1 user→instancia de escrita por org (Etapa A: schema/RPCs/RLS)
+- [[02-ui-states|WhatsApp Write Instance — UI States]] — Spec visual completa (banner, card de erro, modal admin)
+- [[03-frontend|WhatsApp Write Instance — Frontend]] — Etapa C: hook useLeadWriteInstance + ChatComposerShell + InstanceOwnerModal
+- [[04-uat-roteiro|WhatsApp Write Instance — UAT Roteiro]] — Roteiro F1-F8 de testes presenciais pre-cutover (60-90 min, CTO + dev + admin Milennials)
 
 #### Vendas
 - [[Pipe WhatsApp]] — Kanban de qualificacao de leads (novo → agendado)

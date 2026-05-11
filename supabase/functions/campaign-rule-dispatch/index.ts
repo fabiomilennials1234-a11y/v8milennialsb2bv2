@@ -324,7 +324,15 @@ async function processCampaignQueue(
           continue;
         }
 
-        const instance = await resolveInstance(supabase, row.whatsapp_instance_id, campanha.organization_id);
+        let instance: { id: string; instance_name: string } | null = null;
+        try {
+          instance = await resolveInstance(supabase, row.whatsapp_instance_id, campanha.organization_id, lead.id);
+        } catch (e) {
+          // Etapa B: flag ON + falha estrita
+          await markFailed(supabase, row.id, `Strict write blocked: ${(e as Error).message}`);
+          failed++;
+          continue;
+        }
         if (!instance) {
           await markFailed(supabase, row.id, "No active WhatsApp instance");
           failed++;
@@ -718,7 +726,15 @@ async function processExpiredTimeouts(
           .single();
 
         if (tmpl && campanha) {
-          const instance = await resolveInstance(supabase, row.whatsapp_instance_id, campanha.organization_id);
+          let instance: { id: string; instance_name: string } | null = null;
+          try {
+            instance = await resolveInstance(supabase, row.whatsapp_instance_id, campanha.organization_id, lead?.id ?? null);
+          } catch (e) {
+            // Etapa B: timeout-fallback NÃO bloqueia o pipe — log estruturado e segue.
+            console.warn(
+              `[campaign-rule-dispatch][${campanhaId}] Timeout strict write blocked: ${(e as Error).message}`,
+            );
+          }
           if (instance) {
             const isAudio = tmpl.message_type === "audio" && tmpl.audio_url;
             const timeVars = getTimeBasedVariables();
@@ -806,8 +822,28 @@ async function processExpiredTimeouts(
 async function resolveInstance(
   supabase: SupabaseClient,
   instanceId: string | null,
-  organizationId: string
+  organizationId: string,
+  // Etapa B: lead_id opcional. Quando flag user_write_instance_strict ON,
+  // força vínculo via responsable_user_id. OFF ⇒ comportamento legado.
+  leadId?: string | null,
 ): Promise<{ id: string; instance_name: string } | null> {
+  if (leadId) {
+    const { resolveStrictInstanceForCaller } = await import(
+      "../_shared/instance-write-guard.ts"
+    );
+    const strict = await resolveStrictInstanceForCaller(
+      supabase as unknown as Parameters<typeof resolveStrictInstanceForCaller>[0],
+      organizationId,
+      leadId,
+    );
+    if (strict) {
+      return {
+        id: strict.id as string,
+        instance_name: strict.instance_name as string,
+      };
+    }
+  }
+
   if (instanceId) {
     const { data: inst } = await supabase
       .from("whatsapp_instances")

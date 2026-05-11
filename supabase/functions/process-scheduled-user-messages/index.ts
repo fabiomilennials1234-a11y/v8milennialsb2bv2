@@ -64,11 +64,32 @@ Deno.serve(withSentry("process-scheduled-user-messages", async (req) => {
       if (lockErr) { failed++; continue; }
 
       try {
-        // Resolve instance — may be SZ.Chat (handled separately) or WA provider
+        // Resolve instance — may be SZ.Chat (handled separately) or WA provider.
+        //
+        // Etapa B: quando flag user_write_instance_strict ON e msg.lead_id
+        // presente, força resolução pelo vínculo do responsável. SZ.Chat
+        // continua sendo decidido após a row ser carregada.
         let instance: any = null;
         let isSzChat = false;
 
-        if (msg.whatsapp_instance_id) {
+        if (msg.lead_id) {
+          // Strict-mode falhou e flag ON → propaga (catch externo marca
+          // scheduled_user_messages como failed sem fallback).
+          const { resolveStrictInstanceForCaller } = await import(
+            "../_shared/instance-write-guard.ts"
+          );
+          const strict = await resolveStrictInstanceForCaller(
+            supabase,
+            msg.organization_id,
+            msg.lead_id,
+          );
+          if (strict) {
+            instance = strict;
+            isSzChat = (strict as any).metadata?.provider === "szchat";
+          }
+        }
+
+        if (!instance && msg.whatsapp_instance_id) {
           const { data: inst } = await supabase
             .from("whatsapp_instances")
             .select("*")
