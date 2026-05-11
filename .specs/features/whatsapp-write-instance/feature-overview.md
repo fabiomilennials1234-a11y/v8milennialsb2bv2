@@ -94,12 +94,14 @@ Todos gated por flag `user_write_instance_strict`. Flag OFF = comportamento lega
 
 **Arquivos:** [whatsapp-api-proxy/index.ts](../../../supabase/functions/whatsapp-api-proxy/index.ts), [useWhatsAppSend.ts](../../../src/hooks/chat/useWhatsAppSend.ts), [ChatComposerShell.tsx](../../../src/components/chat/composer/ChatComposerShell.tsx)
 
-**Flag OFF:** envio passa direto. Frontend não chama RPC. Backend ignora `lead_id` no body.
+**Frontend invoke**: `supabase.functions.invoke("whatsapp-api-proxy", { body: { action: "sendText" | "sendMedia" | "sendAudio", instance_id, organization_id, payload: { number, text|file|..., lead_id } } })`. Refactor de QA-2026-05-11: substituiu o caminho legacy `evolution-api-proxy` (que ficava fora do source control e bypassava o guard).
+
+**Flag OFF:** Frontend pula `assertCanReplyOnInstance` legacy quando flag ON, mantém quando OFF (proteção rápida sem roundtrip ao backend pra rejeições óbvias). Backend (`whatsapp-api-proxy`) ignora `lead_id` no payload.
 
 **Flag ON:**
 1. Frontend hook `useLeadWriteInstance(leadId)` chama RPC `get_lead_write_instance`.
 2. Resposta determina estado do composer (ver §5).
-3. User envia → frontend POST com `lead_id` no body.
+3. User envia → frontend POST com `lead_id` no payload (frontend SKIPA `assertCanReplyOnInstance` legacy — backend é fonte de verdade).
 4. Backend (`whatsapp-api-proxy`):
    - Resolve instância do lead via `resolveLeadWriteInstance`.
    - Compara com instância que o frontend escolheu. Diferente? → **HTTP 409**.

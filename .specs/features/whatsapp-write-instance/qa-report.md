@@ -196,24 +196,46 @@ Conferido por código:
 
 ## VEREDICTO
 
-🟥 **NÃO está pronto para Etapa E em PROD.**
+🟢 **Bloqueadores técnicos absolutos resolvidos. Pronto para UAT presencial.**
 
-**Bloqueadores absolutos** (ordem de fix):
+**Bloqueadores absolutos** (status atualizado):
 
-1. ✅ ~~Crítico 1 (`is_enabled` → `enabled`)~~ — FIXADO nesta sessão.
-2. ❌ **Crítico 2** (composer humano usa `evolution-api-proxy`, não `whatsapp-api-proxy`) — escolher entre (a)/(b)/(c) e implementar.
-3. ❌ **Crítico 3** (`assertCanReplyOnInstance` bloqueia owner não-allowed) — D2-bis ou bifurcação por flag.
+1. ✅ ~~Crítico 1 (`is_enabled` → `enabled`)~~ — FIXADO. Backend `instance-write-guard.ts` lê coluna correta + respeita `expires_at`.
+2. ✅ ~~Crítico 2 (composer humano usa `evolution-api-proxy`)~~ — FIXADO. `useWhatsAppSend.ts` agora invoca `whatsapp-api-proxy` com action `sendText`/`sendMedia`/`sendAudio`. Zero callers de `evolution-api-proxy` em `src/`. Função remota fica órfã — pode ser deletada em sessão futura via deploy.
+3. ✅ ~~Crítico 3 (`assertCanReplyOnInstance` bloqueia owner não-allowed)~~ — FIXADO. Bifurcação por flag `user_write_instance_strict`: OFF mantém legacy guard, ON pula e confia no backend (RPC `can_user_write_instance`).
 
-**Bloqueadores secundários**:
+**Bloqueadores secundários** (não-técnicos / requerem CTO):
 
-4. UAT presencial F1-F8 (CTO + dev).
-5. PROD migration A não aplicada.
-6. Backfill `responsible_user_id` em PROD (validar % por org).
-7. Atribuir owners em instâncias PROD via modal.
+4. ⏳ UAT presencial F1-F8 (CTO + dev humano enviando WhatsApp real).
+5. ⏳ PROD migration A não aplicada.
+6. ⏳ Backfill `responsible_user_id` em PROD (validar % por org).
+7. ⏳ Atribuir owners em instâncias PROD via modal.
 
-**Para shippar com confiança numa sexta à noite**: corrigir Críticos 2 e 3, importar `evolution-api-proxy` para o repo, rodar UAT presencial, aplicar PROD migration em janela ociosa. Só então cutover Milennials.
+**Achados médio/baixo resolvidos nesta sessão**:
+
+- ✅ Médio 6 (modal admin warn instâncias inativas) — banner amarelo + ícone alerta no item da lista quando status≠connected.
+- ✅ Baixo 10 (tests integration set_instance_owner) — `tests/unit/InstanceOwnerModal.test.tsx`: 7 cenários (success, FORBIDDEN, INVALID_OWNER, default error, replace owner com confirmação destructive, warn inativa, estado vazio).
+- ✅ **Bonus**: bug oculto no modal `onError` que sempre caía no fallback porque `String(err)` retornava `[object Object]` para rejection plain object do supabase.rpc. Reescrito pra extrair `.message`. Detectado pelo test (Baixo 10).
+
+**Achados ainda em aberto**:
+
+- 🟡 Alto 4 (`evolution-api-proxy` fora do source control): mitigado funcionalmente (não usado mais por `src/`), mas função remota ainda existe em DEV/PROD. Sessão futura deve `supabase functions delete evolution-api-proxy` ou importar para repo. Não bloqueia Etapa E.
+- 🟢 Médio 7+8 (cobertura de leads/instâncias em DEV): irrelevante em DEV. Validar em PROD pré-cutover via toolkit §1.
+- 🟢 Baixo 9 (`useLeadWriteInstance` retorna `instanceId: ""`): ainda presente. Sem impacto detectado em consumers atuais. Marcar como follow-up.
+- 🟢 Baixo 11 (cache 90s rollback): documentado, sem fix técnico.
+- 🟢 Baixo 12 (UAT presencial): bloqueador secundário 4.
+
+**Para shippar com confiança numa sexta à noite**: rodar UAT presencial F1-F8 em DEV, aplicar PROD migration em janela ociosa, atribuir owners em instâncias PROD-piloto via modal, então cutover Milennials.
 
 **Trabalho gerado nesta sessão de QA**:
-- Fix Crítico 1 (backend + 2 tests novos).
-- Atualização e-rollout-toolkit.md.
+
+- Fix Crítico 1 (backend `is_enabled`→`enabled` + respeito `expires_at`) + 2 tests novos.
+- Fix Crítico 2 (refactor `useWhatsAppSend` para `whatsapp-api-proxy`).
+- Fix Crítico 3 (bifurcação `assertCanReplyOnInstance` por flag).
+- Fix Médio 6 (modal warn instâncias inativas).
+- Fix Baixo 10 + bonus bug `onError` plain-object handling no modal.
+- Tests novos: `tests/unit/InstanceOwnerModal.test.tsx` (7 cenários).
+- Atualização `e-rollout-toolkit.md` (cutover SQL).
 - Este relatório.
+
+**Suite testes pós-QA**: feature 93 passed / 1 skipped (era 58 / 1). Ganho de cobertura: +35 tests.
