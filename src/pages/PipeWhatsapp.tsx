@@ -261,11 +261,13 @@ export default function PipeWhatsapp() {
     return stagesToColumns(pipelineStages);
   }, [pipelineStages]);
 
-  // Organize data by status columns
+  // Organize data by status columns — orphan leads (stage_key not matching any column) fall into the first column
   const columns = useMemo((): KanbanColumn<LeadCardData>[] => {
     if (!pipeData) return statusColumns.map(col => ({ ...col, items: [] }));
 
-    return statusColumns.map(col => {
+    const knownStageIds = new Set(statusColumns.map(c => c.id));
+
+    const result = statusColumns.map(col => {
       const columnItems = pipeData
         .filter(item => item.status === col.id)
         .filter(filterItems)
@@ -276,6 +278,16 @@ export default function PipeWhatsapp() {
         items: columnItems,
       };
     });
+
+    if (result.length > 0) {
+      const orphanItems = pipeData
+        .filter(item => !knownStageIds.has(item.status))
+        .filter(filterItems)
+        .map(transformToCard);
+      result[0].items = [...result[0].items, ...orphanItems];
+    }
+
+    return result;
   }, [pipeData, pipelineStages, statusColumns, searchTerm, filterResponsible, filterOrigin, filterTags, filterScheduled, leadsWithSchedule, metricsRange]);
 
   // Count "ghost leads" — rows do pipe que o usuário enxerga mas cujo join

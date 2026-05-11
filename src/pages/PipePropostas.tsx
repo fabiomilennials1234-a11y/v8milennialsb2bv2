@@ -373,96 +373,85 @@ export default function PipePropostas() {
     return stagesToColumns(pipelineStages);
   }, [pipelineStages]);
 
-  // Organize data by status columns (recent first; compromisso_marcado by commitment date)
+  // Organize data by status columns — orphan leads (stage_key not matching any column) fall into the first column
   const columns = useMemo((): KanbanColumn<LeadCardData>[] => {
     if (!pipeData) return statusColumns.map(col => ({ ...col, items: [] }));
 
-    return statusColumns.map(col => {
+    const knownStageIds = new Set(statusColumns.map(c => c.id));
+
+    const filterProposta = (item: any) => {
+      if (periodRange && !isPropostaInPeriod(item, periodRange.startStr, periodRange.endStr)) return false;
+
+      const lead = item.lead;
+      if (!lead) return false;
+
+      const matchesSearch = searchTerm === "" ||
+        lead?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        lead?.company?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        lead?.phone?.includes(searchTerm);
+
+      const matchesResponsible = filterResponsible === "all" ||
+        item.responsible_id === filterResponsible ||
+        item.closer_id === filterResponsible ||
+        lead?.responsible_id === filterResponsible ||
+        lead?.sdr_id === filterResponsible ||
+        lead?.closer_id === filterResponsible;
+
+      let matchesType = filterProductType === "all";
+      if (!matchesType) {
+        const items = item.items || [];
+        if (items.length > 0) {
+          matchesType = items.some((it: any) => it.product?.type === filterProductType);
+        } else {
+          matchesType = item.product_type === filterProductType || item.product?.type === filterProductType;
+        }
+      }
+
+      const rating = lead?.rating || 0;
+      let matchesPriority = true;
+      if (filterPriority === "high") matchesPriority = rating >= 8;
+      else if (filterPriority === "medium") matchesPriority = rating >= 5 && rating < 8;
+      else if (filterPriority === "low") matchesPriority = rating < 5;
+
+      const calor = item.calor ?? 5;
+      let matchesCalor = true;
+      if (filterCalor === "hot") matchesCalor = calor >= 7;
+      else if (filterCalor === "warm") matchesCalor = calor >= 4 && calor < 7;
+      else if (filterCalor === "cold") matchesCalor = calor < 4;
+
+      const matchesOrigin = filterOrigin.length === 0 || filterOrigin.includes(lead?.origin || "");
+      const matchesTags = filterTags.length === 0 ||
+        (lead?.lead_tags?.some((lt: any) => filterTags.includes(lt.tag?.id)) ?? false);
+      const matchesScheduled = !filterScheduled || (leadsWithSchedule?.has(item.lead_id) ?? false);
+
+      return matchesSearch && matchesResponsible && matchesType && matchesPriority && matchesCalor && matchesOrigin && matchesTags && matchesScheduled;
+    };
+
+    const sortByRecent = (a: any, b: any) => {
+      const timeA = new Date(a.createdAt || 0).getTime();
+      const timeB = new Date(b.createdAt || 0).getTime();
+      return timeB - timeA;
+    };
+
+    const result = statusColumns.map(col => {
       const columnItems = pipeData
         .filter(item => item.status === col.id)
-        // 1. Filtro temporal — aplicado antes dos demais filtros
-        .filter(item => {
-          if (periodRange) {
-            return isPropostaInPeriod(item, periodRange.startStr, periodRange.endStr);
-          }
-          return true;
-        })
-        // 2. Filtros funcionais (busca, responsável, tipo, prioridade, calor, origem, tags)
-        .filter(item => {
-          const lead = item.lead;
-
-          // Hide ghost leads (RLS blocked the lead data for this user)
-          if (!lead) return false;
-
-          // Search filter
-          const matchesSearch = searchTerm === "" ||
-            lead?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            lead?.company?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            lead?.phone?.includes(searchTerm);
-
-          // Responsible filter — check pipe-level fields AND lead-level fallbacks
-          const matchesResponsible = filterResponsible === "all" ||
-            item.responsible_id === filterResponsible ||
-            item.closer_id === filterResponsible ||
-            lead?.responsible_id === filterResponsible ||
-            lead?.sdr_id === filterResponsible ||
-            lead?.closer_id === filterResponsible;
-
-          // Product type filter — check items for multi-product proposals, fallback to legacy field
-          let matchesType = filterProductType === "all";
-          if (!matchesType) {
-            const items = item.items || [];
-            if (items.length > 0) {
-              matchesType = items.some((it: any) => it.product?.type === filterProductType);
-            } else {
-              matchesType = item.product_type === filterProductType || item.product?.type === filterProductType;
-            }
-          }
-
-          // Priority filter based on lead rating
-          const rating = lead?.rating || 0;
-          let matchesPriority = true;
-          if (filterPriority === "high") {
-            matchesPriority = rating >= 8;
-          } else if (filterPriority === "medium") {
-            matchesPriority = rating >= 5 && rating < 8;
-          } else if (filterPriority === "low") {
-            matchesPriority = rating < 5;
-          }
-
-          // Calor filter
-          const calor = item.calor ?? 5;
-          let matchesCalor = true;
-          if (filterCalor === "hot") {
-            matchesCalor = calor >= 7;
-          } else if (filterCalor === "warm") {
-            matchesCalor = calor >= 4 && calor < 7;
-          } else if (filterCalor === "cold") {
-            matchesCalor = calor < 4;
-          }
-
-          // Origin filter (multi-select)
-          const matchesOrigin = filterOrigin.length === 0 || filterOrigin.includes(lead?.origin || "");
-
-          // Tags filter (multi-select — lead must have at least one of the selected tags)
-          const matchesTags = filterTags.length === 0 ||
-            (lead?.lead_tags?.some((lt: any) => filterTags.includes(lt.tag?.id)) ?? false);
-
-          const matchesScheduled = !filterScheduled || (leadsWithSchedule?.has(item.lead_id) ?? false);
-
-          return matchesSearch && matchesResponsible && matchesType && matchesPriority && matchesCalor && matchesOrigin && matchesTags && matchesScheduled;
-        })
+        .filter(filterProposta)
         .map(transformToCard)
-        .toSorted((a, b) => {
-          const timeA = new Date(a.createdAt || 0).getTime();
-          const timeB = new Date(b.createdAt || 0).getTime();
-          return timeB - timeA;
-        });
-      return {
-        ...col,
-        items: columnItems,
-      };
+        .toSorted(sortByRecent);
+      return { ...col, items: columnItems };
     });
+
+    if (result.length > 0) {
+      const orphanItems = pipeData
+        .filter(item => !knownStageIds.has(item.status))
+        .filter(filterProposta)
+        .map(transformToCard)
+        .toSorted(sortByRecent);
+      result[0].items = [...result[0].items, ...orphanItems];
+    }
+
+    return result;
   }, [pipeData, statusColumns, searchTerm, filterResponsible, filterProductType, filterPriority, filterCalor, filterOrigin, filterTags, filterScheduled, leadsWithSchedule, periodRange]);
 
   // Count ghost leads — rows visíveis no pipe cujo join com leads é null.

@@ -421,69 +421,78 @@ export default function PipeConfirmacao() {
     const weekStart = startOfWeek(now, { locale: ptBR });
     const weekEnd = endOfWeek(now, { locale: ptBR });
 
-    return statusColumns.map(col => {
+    const knownStageIds = new Set(statusColumns.map(c => c.id));
+
+    const filterConfirmacao = (item: any) => {
+      const lead = item.lead;
+      if (!lead) return false;
+
+      if (metricsRange) {
+        if (!item.created_at) return false;
+        if (item.created_at < metricsRange.startStr || item.created_at > metricsRange.endStr) return false;
+      }
+
+      const matchesSearch = searchQuery === "" ||
+        lead?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        lead?.company?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        lead?.phone?.includes(searchQuery);
+
+      let matchesOrigin = originFilter === "all" || lead?.origin === originFilter;
+      let matchesUrgency = urgencyFilter === "all" || lead?.urgency === urgencyFilter;
+
+      let matchesTime = true;
+      if (timeFilter === "today" && item.meeting_date) {
+        matchesTime = isToday(new Date(item.meeting_date));
+      } else if (timeFilter === "tomorrow" && item.meeting_date) {
+        matchesTime = isTomorrow(new Date(item.meeting_date));
+      } else if (timeFilter === "week" && item.meeting_date) {
+        matchesTime = isWithinInterval(new Date(item.meeting_date), { start: weekStart, end: weekEnd });
+      } else if (timeFilter === "overdue") {
+        matchesTime = isConfirmacaoOverdue(item.status, item.updated_at, overdueDays);
+      }
+
+      const matchesStatus = selectedStatuses.length === 0 || selectedStatuses.includes(item.status);
+      const matchesResponsible = selectedResponsibleId === "all" ||
+        item.responsible_id === selectedResponsibleId ||
+        item.sdr_id === selectedResponsibleId ||
+        item.closer_id === selectedResponsibleId ||
+        lead?.responsible_id === selectedResponsibleId ||
+        lead?.sdr_id === selectedResponsibleId ||
+        lead?.closer_id === selectedResponsibleId;
+
+      const matchesTags = selectedTags.length === 0 ||
+        (lead?.lead_tags?.some((lt: any) => selectedTags.includes(lt.tag?.id)) ?? false);
+      const matchesScheduled = !filterScheduled || (leadsWithSchedule?.has(item.lead_id) ?? false);
+
+      return matchesSearch && matchesOrigin && matchesUrgency && matchesTime && matchesStatus && matchesResponsible && matchesTags && matchesScheduled;
+    };
+
+    const sortByCreated = (a: any, b: any) => {
+      const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
+      return dateB - dateA;
+    };
+
+    const result = statusColumns.map(col => {
       const columnItems = pipeData
         .filter(item => item.status === col.id)
-        .filter(item => {
-          const lead = item.lead;
-
-          // Hide ghost leads (RLS blocked the lead data for this user)
-          if (!lead) return false;
-
-          // Date range filter (only when a period is selected)
-          if (metricsRange) {
-            if (!item.created_at) return false;
-            if (item.created_at < metricsRange.startStr || item.created_at > metricsRange.endStr) return false;
-          }
-
-          const matchesSearch = searchQuery === "" ||
-            lead?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            lead?.company?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            lead?.phone?.includes(searchQuery);
-          
-          let matchesOrigin = originFilter === "all" || lead?.origin === originFilter;
-          
-          let matchesUrgency = urgencyFilter === "all" || lead?.urgency === urgencyFilter;
-          
-          let matchesTime = true;
-          if (timeFilter === "today" && item.meeting_date) {
-            matchesTime = isToday(new Date(item.meeting_date));
-          } else if (timeFilter === "tomorrow" && item.meeting_date) {
-            matchesTime = isTomorrow(new Date(item.meeting_date));
-          } else if (timeFilter === "week" && item.meeting_date) {
-            matchesTime = isWithinInterval(new Date(item.meeting_date), { start: weekStart, end: weekEnd });
-          } else if (timeFilter === "overdue") {
-            matchesTime = isConfirmacaoOverdue(item.status, item.updated_at, overdueDays);
-          }
-
-          const matchesStatus = selectedStatuses.length === 0 || selectedStatuses.includes(item.status);
-
-          // Responsible filter — check pipe-level fields AND lead-level fallbacks
-          const matchesResponsible = selectedResponsibleId === "all" ||
-            item.responsible_id === selectedResponsibleId ||
-            item.sdr_id === selectedResponsibleId ||
-            item.closer_id === selectedResponsibleId ||
-            lead?.responsible_id === selectedResponsibleId ||
-            lead?.sdr_id === selectedResponsibleId ||
-            lead?.closer_id === selectedResponsibleId;
-
-          const matchesTags = selectedTags.length === 0 ||
-            (lead?.lead_tags?.some((lt: any) => selectedTags.includes(lt.tag?.id)) ?? false);
-
-          const matchesScheduled = !filterScheduled || (leadsWithSchedule?.has(item.lead_id) ?? false);
-
-          return matchesSearch && matchesOrigin && matchesUrgency && matchesTime && matchesStatus && matchesResponsible && matchesTags && matchesScheduled;
-        })
-        // Sort by created_at — leads mais recentes primeiro
-        .sort((a, b) => {
-          const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
-          const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
-          return dateB - dateA;
-        })
+        .filter(filterConfirmacao)
+        .sort(sortByCreated)
         .map(transformToCard);
 
       return { ...col, items: columnItems };
     });
+
+    if (result.length > 0) {
+      const orphanItems = pipeData
+        .filter(item => !knownStageIds.has(item.status))
+        .filter(filterConfirmacao)
+        .sort(sortByCreated)
+        .map(transformToCard);
+      result[0].items = [...result[0].items, ...orphanItems];
+    }
+
+    return result;
   }, [pipeData, statusColumns, searchQuery, originFilter, urgencyFilter, timeFilter, selectedStatuses, selectedTags, selectedResponsibleId, overdueDays, filterScheduled, leadsWithSchedule, metricsRange]);
 
   // Count ghost leads — rows visíveis no pipe cujo join com leads é null.
