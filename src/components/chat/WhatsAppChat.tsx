@@ -577,7 +577,7 @@ function ChatWindow({
   const transferToSzChat = useTransferToSzChatDepartment();
 
   // Ativar realtime
-  useWhatsAppMessagesRealtime(phoneNumber);
+  useWhatsAppMessagesRealtime(phoneNumber, instanceId);
 
   const handleSend = async () => {
     if (!newMessage.trim() || !instanceName) return;
@@ -1193,7 +1193,7 @@ export function WhatsAppChat() {
   }, [selectedPhone, selectedInstanceId, instances, instancesLoading, teamMember?.id, teamMember?.organization_id]);
 
   // Ativar realtime para lista de contatos
-  useWhatsAppMessagesRealtime(null);
+  useWhatsAppMessagesRealtime(null, null);
 
   // Ao abrir uma conversa, marcar como lida (atualizar last_seen e invalidar lista)
   useEffect(() => {

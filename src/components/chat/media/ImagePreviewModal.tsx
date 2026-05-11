@@ -1,7 +1,7 @@
 /**
  * ImagePreviewModal — lightbox simples para preview de imagem.
  *
- * Props públicas (contrato mantido para EmbeddedChatWindow):
+ * Props públicas:
  * - imageUrl: string | null
  * - isOpen: boolean
  * - onClose: () => void

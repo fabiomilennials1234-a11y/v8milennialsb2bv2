@@ -1,7 +1,7 @@
 /**
  * AudioRecorder — captura áudio do microfone e entrega Blob para o composer.
  *
- * Props públicas (contrato mantido para EmbeddedChatWindow):
+ * Props públicas:
  * - onRecorded: (blob: Blob) => void
  * - onCancel: () => void
  *
