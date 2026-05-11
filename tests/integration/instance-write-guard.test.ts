@@ -257,11 +257,11 @@ describe('assertUserCanWriteInstance', () => {
 // ============================================================================
 
 describe('isStrictWriteEnabled', () => {
-  it('respeita override true em organization_features', async () => {
+  it('respeita override true em organization_features (coluna enabled)', async () => {
     const client = buildMockClient({
       tableRows: {
         organization_features: [
-          { organization_id: 'org-1', feature_key: 'user_write_instance_strict', is_enabled: true },
+          { organization_id: 'org-1', feature_key: 'user_write_instance_strict', enabled: true, expires_at: null },
         ],
         feature_flags: [
           { key: 'user_write_instance_strict', default_enabled: false },
@@ -273,11 +273,11 @@ describe('isStrictWriteEnabled', () => {
     expect(enabled).toBe(true);
   });
 
-  it('respeita override false em organization_features', async () => {
+  it('respeita override false em organization_features (coluna enabled)', async () => {
     const client = buildMockClient({
       tableRows: {
         organization_features: [
-          { organization_id: 'org-1', feature_key: 'user_write_instance_strict', is_enabled: false },
+          { organization_id: 'org-1', feature_key: 'user_write_instance_strict', enabled: false, expires_at: null },
         ],
         feature_flags: [
           { key: 'user_write_instance_strict', default_enabled: true },
@@ -300,6 +300,40 @@ describe('isStrictWriteEnabled', () => {
     // deno-lint-ignore no-explicit-any
     const enabled = await isStrictWriteEnabled(client as any, 'org-2');
     expect(enabled).toBe(false);
+  });
+
+  it('override expirado cai pra default global', async () => {
+    const past = new Date(Date.now() - 60_000).toISOString();
+    const client = buildMockClient({
+      tableRows: {
+        organization_features: [
+          { organization_id: 'org-1', feature_key: 'user_write_instance_strict', enabled: true, expires_at: past },
+        ],
+        feature_flags: [
+          { key: 'user_write_instance_strict', default_enabled: false },
+        ],
+      },
+    });
+    // deno-lint-ignore no-explicit-any
+    const enabled = await isStrictWriteEnabled(client as any, 'org-1');
+    expect(enabled).toBe(false);
+  });
+
+  it('override com expires_at futuro permanece válido', async () => {
+    const future = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    const client = buildMockClient({
+      tableRows: {
+        organization_features: [
+          { organization_id: 'org-1', feature_key: 'user_write_instance_strict', enabled: true, expires_at: future },
+        ],
+        feature_flags: [
+          { key: 'user_write_instance_strict', default_enabled: false },
+        ],
+      },
+    });
+    // deno-lint-ignore no-explicit-any
+    const enabled = await isStrictWriteEnabled(client as any, 'org-1');
+    expect(enabled).toBe(true);
   });
 });
 

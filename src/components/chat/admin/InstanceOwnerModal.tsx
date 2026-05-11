@@ -132,7 +132,14 @@ export function InstanceOwnerModal({
       onOpenChange(false);
     },
     onError: (err: unknown) => {
-      const msg = err instanceof Error ? err.message : String(err);
+      // supabase.rpc rejeita com objeto plain { message, code, ... } —
+      // não Error instance. Cobrir ambos os shapes pra reconhecer códigos.
+      const msg =
+        err instanceof Error
+          ? err.message
+          : typeof err === "object" && err !== null && "message" in err
+            ? String((err as { message?: unknown }).message ?? "")
+            : String(err);
       if (msg.includes("INVALID_OWNER")) {
         toast.error("Não foi possível vincular", {
           description: "Este vendedor não está ativo nesta organização.",
@@ -290,6 +297,7 @@ export function InstanceOwnerModal({
                   const isInUse =
                     !!inst.owner_team_member_id && !isCurrent;
                   const isAvailable = !inst.owner_team_member_id;
+                  const isInactive = inst.status !== "connected";
                   return (
                     <button
                       type="button"
@@ -337,8 +345,21 @@ export function InstanceOwnerModal({
                             </span>
                           )}
                         </div>
-                        <p className="text-[12px] text-muted-foreground tabular-nums mt-0.5">
-                          {formatPhone(inst.phone_number)} · {statusLabel(inst.status)}
+                        <p
+                          className={cn(
+                            "text-[12px] tabular-nums mt-0.5 flex items-center gap-1.5",
+                            isInactive ? "text-warning" : "text-muted-foreground",
+                          )}
+                        >
+                          {isInactive && (
+                            <AlertTriangle
+                              className="w-3 h-3 shrink-0"
+                              aria-hidden
+                            />
+                          )}
+                          <span>
+                            {formatPhone(inst.phone_number)} · {statusLabel(inst.status)}
+                          </span>
                         </p>
                       </div>
                     </button>
@@ -350,6 +371,19 @@ export function InstanceOwnerModal({
 
         {!empty && (
           <>
+            {!confirming && selected && selected.status !== "connected" && (
+              <div
+                role="status"
+                aria-live="polite"
+                className="border-t border-warning/20 bg-warning/5 px-4 py-2.5 flex items-center gap-3"
+              >
+                <AlertTriangle className="w-4 h-4 text-warning shrink-0" aria-hidden />
+                <p className="text-[12px] text-foreground/85 leading-snug">
+                  Este número está <span className="font-medium">{statusLabel(selected.status).toLowerCase()}</span>.
+                  O vendedor verá o composer bloqueado até reconectar.
+                </p>
+              </div>
+            )}
             {confirming && selected && (
               <div
                 role="alertdialog"
