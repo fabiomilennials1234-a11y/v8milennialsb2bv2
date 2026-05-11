@@ -378,7 +378,7 @@ SET owner_team_member_id = sub.team_member_id,
 FROM (
   SELECT
     waam.whatsapp_instance_id,
-    MIN(waam.team_member_id) AS team_member_id,
+    (ARRAY_AGG(waam.team_member_id))[1] AS team_member_id,
     COUNT(*) AS c
   FROM public.whatsapp_instance_allowed_members waam
   GROUP BY waam.whatsapp_instance_id
