@@ -4,7 +4,20 @@
 **Data:** 2026-05-11
 **Branch base:** `feat/chat-bubble-kanban` (tip `49524ae`)
 **Baseline:** Etapas A+B+C merged. Migration A não aplicada em DEV. Flag `user_write_instance_strict` default OFF.
-**Status:** Spec — execução em branches separadas por etapa.
+**Status:** Spec — **execução unificada em uma branch** (`chore/whatsapp-write-instance-d0-migrate-dev`), 1 PR ao final.
+
+## Status atual (2026-05-11)
+
+| Etapa | Status | Artefato |
+|-------|--------|----------|
+| **D0** — Migration A em DEV | ✅ Concluída | commit `5f91cf5` (migration A + revoke anon) |
+| **D1** — UAT flag OFF | ✅ Automatizado | [d1-uat-report.md](d1-uat-report.md) |
+| **D2** — Cleanup `allowed_members` | 🟥 Bloqueada/reescopada | [d2-cleanup-decision.md](d2-cleanup-decision.md) |
+| **E** — Rollout flag ON por org | 🟡 Pronto p/ execução autorizada | [e-rollout-toolkit.md](e-rollout-toolkit.md) |
+
+**D2** virou pendência futura (D2-bis: refactor frontend `allowed_members` → `owner_team_member_id` gated por flag) — uso ativo no frontend impede drop/rename hoje.
+
+**E** prepared mas **não executado em PROD** (memory rule: PROD requer pedido explícito do CTO na sessão).
 
 ---
 
