@@ -153,15 +153,24 @@ export class UazapiProvider implements WhatsAppProvider {
   }
 
   async getStatus(): Promise<InstanceStatus> {
-    const raw = await this.client.getInstanceStatus();
-    return normaliseStatus(raw);
+    const raw: any = await this.client.getInstanceStatus();
+    const inst = raw.instance ?? raw;
+    return normaliseStatus({
+      status: inst.status,
+      connected: inst.connected ?? raw.connected,
+      qrcode: inst.qrcode,
+      paircode: inst.paircode,
+    });
   }
 
   async connectQR(
     phone?: string
   ): Promise<{ qrcode?: string; paircode?: string }> {
-    const raw = await this.client.connectInstance(phone);
-    return { qrcode: raw.qrcode, paircode: raw.paircode };
+    const raw: any = await this.client.connectInstance(phone);
+    return {
+      qrcode: raw.instance?.qrcode || raw.qrcode,
+      paircode: raw.instance?.paircode || raw.paircode,
+    };
   }
 
   async deleteInstance(): Promise<void> {
