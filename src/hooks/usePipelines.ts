@@ -103,7 +103,8 @@ export function usePipelineEntries(pipelineId: string | undefined) {
         .select("*")
         .eq("organization_id", organizationId)
         .eq("pipeline_id", pipelineId)
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .limit(10000);
 
       if (error) throw error;
       return data as PipelineEntry[];
@@ -128,7 +129,8 @@ export function usePipelineEntriesBySlug(slug: string) {
         .select("*")
         .eq("organization_id", organizationId)
         .eq("pipeline_id", pipeline.id)
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .limit(10000);
 
       if (error) throw error;
       return data as PipelineEntry[];

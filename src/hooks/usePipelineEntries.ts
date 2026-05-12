@@ -32,7 +32,8 @@ export function usePipelineId(slug: PipelineType) {
     queryKey: ["pipeline_id", slug, organizationId],
     queryFn: async () => {
       if (!organizationId) return null;
-      const { data, error } = await supabase
+
+      const { data } = await supabase
         .from("pipelines")
         .select("id")
         .eq("organization_id", organizationId)
@@ -41,8 +42,17 @@ export function usePipelineId(slug: PipelineType) {
         .maybeSingle();
 
       if (data?.id) return data.id;
+
       await supabase.rpc("create_default_pipelines", { p_org_id: organizationId });
-      const { data: created } = await supabase.from("pipelines").select("id").eq("organization_id", organizationId).eq("slug", slug).eq("type", "system").maybeSingle();
+
+      const { data: created } = await supabase
+        .from("pipelines")
+        .select("id")
+        .eq("organization_id", organizationId)
+        .eq("slug", slug)
+        .eq("type", "system")
+        .maybeSingle();
+
       return created?.id ?? null;
     },
     enabled: isReady && !!organizationId,
@@ -73,7 +83,6 @@ function flattenMetadata(entry: any) {
     commitment_date: meta.commitment_date ?? null,
     contract_duration: meta.contract_duration ?? null,
     metrics_period_at: meta.metrics_period_at ?? null,
-    // Team member names from lead joins (pipe-level sync keeps them aligned)
     responsible: entry.lead?.responsible ?? null,
     sdr: entry.lead?.sdr ?? null,
     closer: entry.lead?.closer ?? null,
@@ -102,7 +111,7 @@ export function usePipelineEntries(slug: PipelineType) {
         .limit(10000)
         .abortSignal(signal);
 
-
+      if (error) throw error;
 
       const entries = (data ?? []).map(flattenMetadata);
 
