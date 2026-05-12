@@ -374,12 +374,15 @@ export function MessageBubble({
             )}
 
             {/* Sticker */}
-            {isSticker && message.media_url && (
-              <img
-                src={message.media_url}
-                alt="Sticker"
-                className="w-32 h-32 max-w-full object-contain"
-              />
+            {isSticker && (
+              message.media_url && !["https://a.whatsapp.net", "https://web.whatsapp.net"].includes(message.media_url)
+                ? <img
+                    src={message.media_url}
+                    alt="Sticker"
+                    className="w-32 h-32 max-w-full object-contain rounded"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                  />
+                : <span className="inline-block w-20 h-20 rounded bg-muted/40 text-3xl flex items-center justify-center" title="Figurinha">🏷️</span>
             )}
 
             {/* Mensagem sem conteúdo e sem mídia */}

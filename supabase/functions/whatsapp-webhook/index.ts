@@ -109,10 +109,31 @@ function normalizeMessage(data: any, instance: ResolvedInstance) {
   const phoneNumber = String(remoteJid).split("@")[0] ?? null;
   const messageId = data.id ?? data.messageid ?? data.key?.id ?? null;
 
-  const messageType =
+  const rawType: string =
     data.type ??
     data.messageType ??
     (data.text ? "text" : data.media ? "media" : "unknown");
+
+  const MESSAGE_TYPE_MAP: Record<string, string> = {
+    stickerMessage: "sticker",
+    StickerMessage: "sticker",
+    imageMessage: "image",
+    ImageMessage: "image",
+    videoMessage: "video",
+    VideoMessage: "video",
+    audioMessage: "audio",
+    AudioMessage: "audio",
+    documentMessage: "document",
+    DocumentMessage: "document",
+    pttMessage: "ptt",
+    PttMessage: "ptt",
+    conversation: "text",
+    extendedTextMessage: "text",
+    ExtendedTextMessage: "text",
+    buttonsResponseMessage: "buttonResponse",
+    listResponseMessage: "listResponse",
+  };
+  const messageType = MESSAGE_TYPE_MAP[rawType] ?? rawType;
 
   // Interactive menu responses — extract selected choice to the content
   // column so downstream (agent-message) sees the choice as if it were
@@ -135,7 +156,15 @@ function normalizeMessage(data: any, instance: ResolvedInstance) {
       null;
   }
 
-  const mediaUrl = data.mediaUrl ?? data.media?.url ?? null;
+  const mediaUrl =
+    data.mediaUrl ??
+    data.media?.url ??
+    data.message?.stickerMessage?.url ??
+    data.message?.imageMessage?.url ??
+    data.message?.videoMessage?.url ??
+    data.message?.audioMessage?.url ??
+    data.message?.documentMessage?.url ??
+    null;
 
   const tsSeconds =
     data.timestamp ??
