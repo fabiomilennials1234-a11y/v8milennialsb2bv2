@@ -615,6 +615,85 @@ Deno.serve(
           break;
         }
 
+        // -------------------------------------------------------------------
+        // Rich send — Uazapi-only
+        // -------------------------------------------------------------------
+        case "sendMenu": {
+          if (!provider.sendMenu) throw new Error("Provider does not support sendMenu");
+          const { number, type, text, choices } = payload as {
+            number?: string;
+            type?: "list" | "button";
+            text?: string;
+            choices?: Array<{ title: string; description?: string }>;
+          };
+          if (!number || !type || !text || !choices?.length) {
+            return jsonResponse(400, { error: "Missing number/type/text/choices" }, corsHeaders);
+          }
+          result = await provider.sendMenu({ number, type, text, choices });
+          break;
+        }
+
+        case "sendPixButton": {
+          if (!provider.sendPixButton) throw new Error("Provider does not support sendPixButton");
+          const { number, pixkey, pixkeyType, merchantName, amount, text } = payload as {
+            number?: string;
+            pixkey?: string;
+            pixkeyType?: string;
+            merchantName?: string;
+            amount?: number;
+            text?: string;
+          };
+          if (!number || !pixkey || !merchantName || amount == null) {
+            return jsonResponse(400, { error: "Missing number/pixkey/merchantName/amount" }, corsHeaders);
+          }
+          result = await provider.sendPixButton({ number, pixkey, pixkeyType: pixkeyType as any, merchantName, amount, text });
+          break;
+        }
+
+        // -------------------------------------------------------------------
+        // Presence, media download, history, limits — Uazapi-only
+        // -------------------------------------------------------------------
+        case "setPresence": {
+          if (!provider.setPresence) throw new Error("Provider does not support setPresence");
+          const { number, state } = payload as {
+            number?: string;
+            state?: "composing" | "available";
+          };
+          if (!number || !state) {
+            return jsonResponse(400, { error: "Missing number/state" }, corsHeaders);
+          }
+          await provider.setPresence(number, state);
+          result = { ok: true };
+          break;
+        }
+
+        case "downloadMedia": {
+          if (!provider.downloadMedia) throw new Error("Provider does not support downloadMedia");
+          const { message_id } = payload as { message_id?: string };
+          if (!message_id) {
+            return jsonResponse(400, { error: "Missing message_id" }, corsHeaders);
+          }
+          result = await provider.downloadMedia(message_id);
+          break;
+        }
+
+        case "historySync": {
+          if (!provider.historySync) throw new Error("Provider does not support historySync");
+          const { chat_jid, limit, cursor } = payload as {
+            chat_jid?: string;
+            limit?: number;
+            cursor?: string;
+          };
+          result = await provider.historySync({ chat_jid, limit, cursor });
+          break;
+        }
+
+        case "getMessageLimits": {
+          if (!provider.getMessageLimits) throw new Error("Provider does not support getMessageLimits");
+          result = await provider.getMessageLimits();
+          break;
+        }
+
         default:
           return jsonResponse(
             400,

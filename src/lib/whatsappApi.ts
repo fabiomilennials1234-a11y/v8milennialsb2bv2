@@ -202,3 +202,83 @@ export async function markMessageRead(
     payload: { message_id: messageId, number },
   });
 }
+
+// ============================================================================
+// Rich send — Uazapi-only
+// ============================================================================
+
+export type MenuChoice = { title: string; description?: string };
+
+export async function sendMenu(
+  instanceId: string,
+  number: string,
+  type: "list" | "button",
+  text: string,
+  choices: MenuChoice[]
+): Promise<{ message_id: string; status: string; timestamp: number }> {
+  return callProxy("sendMenu", {
+    instance_id: instanceId,
+    payload: { number, type, text, choices },
+  });
+}
+
+export async function sendPixButton(
+  instanceId: string,
+  number: string,
+  pixkey: string,
+  merchantName: string,
+  amount: number,
+  opts?: { pixkeyType?: "cpf" | "cnpj" | "phone" | "email" | "random"; text?: string }
+): Promise<{ message_id: string; status: string; timestamp: number }> {
+  return callProxy("sendPixButton", {
+    instance_id: instanceId,
+    payload: { number, pixkey, merchantName, amount, ...opts },
+  });
+}
+
+// ============================================================================
+// Presence, media download, history sync, limits — Uazapi-only
+// ============================================================================
+
+export async function setPresence(
+  instanceId: string,
+  number: string,
+  state: "composing" | "available"
+): Promise<void> {
+  await callProxy("setPresence", {
+    instance_id: instanceId,
+    payload: { number, state },
+  });
+}
+
+export async function downloadMedia(
+  instanceId: string,
+  messageId: string
+): Promise<{ base64: string; mimetype: string }> {
+  return callProxy("downloadMedia", {
+    instance_id: instanceId,
+    payload: { message_id: messageId },
+  });
+}
+
+export async function syncHistory(
+  instanceId: string,
+  opts?: { chatJid?: string; limit?: number; cursor?: string }
+): Promise<{ messages: unknown[]; nextCursor?: string }> {
+  return callProxy("historySync", {
+    instance_id: instanceId,
+    payload: {
+      chat_jid: opts?.chatJid,
+      limit: opts?.limit,
+      cursor: opts?.cursor,
+    },
+  });
+}
+
+export async function getMessageLimits(
+  instanceId: string
+): Promise<{ current: number; limit: number; reachout_timelock?: number }> {
+  return callProxy("getMessageLimits", {
+    instance_id: instanceId,
+  });
+}

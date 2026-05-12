@@ -305,4 +305,12 @@ export class UazapiProvider implements WhatsAppProvider {
   }): Promise<{ messages: unknown[]; nextCursor?: string }> {
     return this.client.historySync(opts);
   }
+
+  async getMessageLimits(): Promise<{
+    current: number;
+    limit: number;
+    reachout_timelock?: number;
+  }> {
+    return this.client.getMessageLimits();
+  }
 }

@@ -151,6 +151,11 @@ export interface WhatsAppProvider {
     limit?: number;
     cursor?: string;
   }): Promise<{ messages: unknown[]; nextCursor?: string }>;
+  getMessageLimits?(): Promise<{
+    current: number;
+    limit: number;
+    reachout_timelock?: number;
+  }>;
 
   readonly provider: "evolution" | "uazapi";
 }
