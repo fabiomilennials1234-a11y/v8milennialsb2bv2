@@ -340,6 +340,83 @@ Deno.serve(
       }
 
       // -----------------------------------------------------------------------
+      // deleteInstance — handled before getWhatsAppProvider because orphan
+      // instances (failed createInstance) have no provider credentials.
+      // -----------------------------------------------------------------------
+      if (action === "deleteInstance") {
+          console.log(`[deleteInstance] starting for instance=${instanceId} org=${callerOrgId}`);
+
+          // Best-effort provider-side delete (skip if credentials missing)
+          let providerError: string | null = null;
+          try {
+            const provider = await getWhatsAppProvider(
+              instance as WhatsAppInstance,
+              supabaseAdmin
+            );
+            const providerTimeout = new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error("provider delete timed out (5s)")), 5000)
+            );
+            await Promise.race([provider.deleteInstance(), providerTimeout]);
+            console.log(`[deleteInstance] provider delete OK`);
+          } catch (e) {
+            providerError = (e as Error).message ?? "provider delete failed";
+            console.log(`[deleteInstance] provider delete skipped/failed (best-effort): ${providerError}`);
+          }
+
+          // Nullify FKs before deleting row
+          await supabaseAdmin
+            .from("scheduled_user_messages")
+            .update({ whatsapp_instance_id: null })
+            .eq("whatsapp_instance_id", instanceId);
+
+          const { error: deleteErr } = await supabaseAdmin
+            .from("whatsapp_instances")
+            .delete()
+            .eq("id", instanceId);
+
+          console.log(`[deleteInstance] DB delete result: error=${deleteErr?.message ?? "none"}`);
+
+          if (deleteErr) {
+            await logRuntime({
+              organizationId: callerOrgId,
+              module: "whatsapp-api-proxy",
+              action: "deleteInstance",
+              status: "error",
+              entityType: "whatsapp_instances",
+              entityId: instanceId,
+              errorMessage: deleteErr.message,
+            });
+            return jsonResponse(500, { error: `DB delete failed: ${deleteErr.message}` }, corsHeaders);
+          }
+
+          // Verify row is actually gone
+          const { data: verifyRow } = await supabaseAdmin
+            .from("whatsapp_instances")
+            .select("id")
+            .eq("id", instanceId)
+            .maybeSingle();
+
+          if (verifyRow) {
+            console.error(`[deleteInstance] CRITICAL: row still exists after delete! instance=${instanceId}`);
+            return jsonResponse(500, { error: "Delete failed: row still exists" }, corsHeaders);
+          }
+
+          console.log(`[deleteInstance] verified row deleted successfully`);
+
+          await logRuntime({
+            organizationId: callerOrgId,
+            module: "whatsapp-api-proxy",
+            action: "deleteInstance",
+            status: "success",
+            entityType: "whatsapp_instances",
+            entityId: instanceId,
+            ...(providerError && { errorMessage: providerError }),
+          });
+
+          return jsonResponse(200, { ok: true, providerError }, corsHeaders);
+      }
+
+      // -----------------------------------------------------------------------
       // Etapa B — vínculo user-instância (flag user_write_instance_strict).
       //
       // Para ações de envio (sendText/sendMedia/sendAudio) que carregam
@@ -447,86 +524,7 @@ Deno.serve(
           break;
         }
 
-        case "deleteInstance": {
-          console.log(`[deleteInstance] starting for instance=${instanceId} org=${callerOrgId}`);
 
-          let providerError: string | null = null;
-          try {
-            const providerTimeout = new Promise<never>((_, reject) =>
-              setTimeout(() => reject(new Error("provider delete timed out (5s)")), 5000)
-            );
-            await Promise.race([provider.deleteInstance(), providerTimeout]);
-            console.log(`[deleteInstance] provider delete OK`);
-          } catch (e) {
-            providerError = (e as Error).message ?? "provider delete failed";
-            console.log(`[deleteInstance] provider delete failed (best-effort): ${providerError}`);
-          }
-
-          // Nullify FKs that lack ON DELETE CASCADE/SET NULL before deleting row
-          const { error: nullifyErr } = await supabaseAdmin
-            .from("scheduled_user_messages")
-            .update({ whatsapp_instance_id: null })
-            .eq("whatsapp_instance_id", instanceId);
-
-          if (nullifyErr) {
-            console.log(`[deleteInstance] nullify scheduled_user_messages failed: ${nullifyErr.message}`);
-          }
-
-          const { error: deleteErr } = await supabaseAdmin
-            .from("whatsapp_instances")
-            .delete()
-            .eq("id", instanceId);
-
-          console.log(`[deleteInstance] DB delete result: error=${deleteErr?.message ?? "none"}`);
-
-          if (deleteErr) {
-            await logRuntime({
-              organizationId: callerOrgId,
-              module: "whatsapp-api-proxy",
-              action: "deleteInstance",
-              status: "error",
-              entityType: "whatsapp_instances",
-              entityId: instanceId,
-              errorMessage: deleteErr.message,
-            });
-            return jsonResponse(500, { error: `DB delete failed: ${deleteErr.message}` }, corsHeaders);
-          }
-
-          // Verify row is actually gone
-          const { data: verifyRow } = await supabaseAdmin
-            .from("whatsapp_instances")
-            .select("id")
-            .eq("id", instanceId)
-            .maybeSingle();
-
-          if (verifyRow) {
-            console.error(`[deleteInstance] CRITICAL: row still exists after delete! instance=${instanceId}`);
-            await logRuntime({
-              organizationId: callerOrgId,
-              module: "whatsapp-api-proxy",
-              action: "deleteInstance",
-              status: "error",
-              entityType: "whatsapp_instances",
-              entityId: instanceId,
-              errorMessage: "Row still exists after DELETE — possible RLS or trigger interference",
-            });
-            return jsonResponse(500, { error: "Delete failed: row still exists" }, corsHeaders);
-          }
-
-          console.log(`[deleteInstance] verified row deleted successfully`);
-
-          await logRuntime({
-            organizationId: callerOrgId,
-            module: "whatsapp-api-proxy",
-            action: "deleteInstance",
-            status: "success",
-            entityType: "whatsapp_instances",
-            entityId: instanceId,
-            ...(providerError && { errorMessage: providerError }),
-          });
-
-          return jsonResponse(200, { ok: true, providerError }, corsHeaders);
-        }
 
         case "logoutInstance": {
           await provider.logoutInstance();
