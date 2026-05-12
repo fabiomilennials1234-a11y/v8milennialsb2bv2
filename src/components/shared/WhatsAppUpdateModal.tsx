@@ -10,20 +10,29 @@ import {
 import { Button } from "@/components/ui/button";
 import {
   MessageSquare,
-  Zap,
-  Send,
-  SmilePlus,
-  Pin,
-  History,
+  Trash2,
+  PlugZap,
+  AlertTriangle,
+  Headphones,
 } from "lucide-react";
 
-const DISMISS_KEY = "v8:whatsapp-update-v1:dismissed";
+const DISMISS_KEY = "v8:whatsapp-reconnect-v2:dismissed";
 
-const features = [
-  { icon: SmilePlus, label: "Reagir, editar e fixar mensagens" },
-  { icon: Send, label: "Menus interativos e botoes PIX" },
-  { icon: History, label: "Sincronizacao de historico" },
-  { icon: Zap, label: "Envio em massa otimizado" },
+const steps = [
+  {
+    icon: Trash2,
+    number: "1",
+    label: "Exclua sua instancia atual do WhatsApp",
+    description:
+      "Va em Configuracoes > WhatsApp e clique em Excluir instancia. Isso remove a conexao antiga.",
+  },
+  {
+    icon: PlugZap,
+    number: "2",
+    label: "Conecte uma nova instancia",
+    description:
+      "Clique em Conectar WhatsApp e escaneie o QR Code com seu celular. Pronto, nova conexao ativa!",
+  },
 ];
 
 export function WhatsAppUpdateModal() {
@@ -41,7 +50,7 @@ export function WhatsAppUpdateModal() {
 
   const handleContact = () => {
     window.open(
-      "https://wa.me/554884334050?text=Ol%C3%A1!%20Vi%20que%20tem%20uma%20NOVA%20INTEGRA%C3%87%C3%83O%20do%20WhatsApp%20no%20Torque%20CRM.%20Quero%20saber%20como%20fazer%20a%20nova%20conex%C3%A3o!",
+      "https://wa.me/554884334050?text=Ol%C3%A1!%20Preciso%20de%20ajuda%20para%20reconectar%20meu%20WhatsApp%20no%20Torque%20CRM.",
       "_blank",
     );
     handleDismiss();
@@ -51,40 +60,56 @@ export function WhatsAppUpdateModal() {
     <Dialog open={open} onOpenChange={(v) => !v && handleDismiss()}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader className="space-y-3">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500/10 ring-1 ring-emerald-500/20">
-            <MessageSquare className="h-7 w-7 text-emerald-400" />
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500/10 ring-1 ring-amber-500/20">
+            <AlertTriangle className="h-7 w-7 text-amber-400" />
           </div>
           <DialogTitle className="text-center text-xl">
-            Nova integracao WhatsApp
+            Reconexao do WhatsApp necessaria
           </DialogTitle>
           <DialogDescription className="text-center text-sm text-muted-foreground">
-            Temos uma nova integracao do WhatsApp com recursos que antes nao
-            eram possiveis. Para aproveitar, sera necessario realizar uma
-            nova conexao do seu numero. Confira as novidades:
+            Para garantir o funcionamento correto do sistema, voce precisa
+            excluir sua instancia atual do WhatsApp e conectar uma nova.
+            Siga os passos abaixo:
           </DialogDescription>
         </DialogHeader>
 
-        <div className="my-4 grid grid-cols-1 gap-3">
-          {features.map(({ icon: Icon, label }) => (
+        <div className="my-4 flex flex-col gap-3">
+          {steps.map(({ icon: Icon, number, label, description }) => (
             <div
-              key={label}
-              className="flex items-center gap-3 rounded-lg border border-border/50 bg-muted/30 px-4 py-3"
+              key={number}
+              className="flex items-start gap-3 rounded-lg border border-border/50 bg-muted/30 px-4 py-3"
             >
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10">
-                <Icon className="h-4 w-4 text-emerald-400" />
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 font-semibold text-amber-400">
+                {number}
               </div>
-              <span className="text-sm font-medium">{label}</span>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-sm font-medium">{label}</span>
+                <span className="text-xs text-muted-foreground">
+                  {description}
+                </span>
+              </div>
             </div>
           ))}
         </div>
 
-        <DialogFooter className="flex-col gap-2 sm:flex-col">
-          <Button onClick={handleContact} className="w-full bg-emerald-600 hover:bg-emerald-700">
-            <MessageSquare className="mr-2 h-4 w-4" />
-            Falar com suporte sobre as novidades
+        <div className="flex items-center gap-2 rounded-lg border border-border/50 bg-muted/20 px-4 py-3">
+          <Headphones className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <span className="text-xs text-muted-foreground">
+            Duvidas? Entre em contato com nosso suporte pelo botao abaixo.
+          </span>
+        </div>
+
+        <DialogFooter className="flex-col gap-2 sm:flex-col mt-2">
+          <Button onClick={handleDismiss} className="w-full">
+            Entendi, vou reconectar
           </Button>
-          <Button variant="ghost" onClick={handleDismiss} className="w-full text-muted-foreground">
-            Agora nao
+          <Button
+            variant="outline"
+            onClick={handleContact}
+            className="w-full"
+          >
+            <MessageSquare className="mr-2 h-4 w-4" />
+            Falar com suporte
           </Button>
         </DialogFooter>
       </DialogContent>

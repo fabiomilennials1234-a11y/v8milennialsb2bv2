@@ -494,8 +494,8 @@ function deleteLeadsAndRelated(ids: string[]): Promise<void> {
 }
 
 /**
- * Delete leads that are in a specific stage of this pipe.
- * When stageId is provided, only leads in that stage are deleted.
+ * Soft-delete leads in a specific stage of this pipe (moves to trash).
+ * Leads can be restored from the trash page or permanently purged.
  * SECURITY: Only deletes leads for current organization_id; permission check enforced.
  */
 export function useDeleteAllLeadsInPipe(pipeType: PipeTypeForDelete) {
@@ -514,7 +514,6 @@ export function useDeleteAllLeadsInPipe(pipeType: PipeTypeForDelete) {
         throw new Error("Cannot delete leads: No stage specified");
       }
 
-      // PERMISSION: Master and admin bypass org permission check (RLS still enforced)
       if (!isMaster && !isAdmin) {
         const { data: canDelete } = await supabase.rpc("user_has_org_permission", {
           p_permission_key: "can_delete_leads",
@@ -527,12 +526,16 @@ export function useDeleteAllLeadsInPipe(pipeType: PipeTypeForDelete) {
       const ids = await fetchAllLeadIdsInPipe(organizationId, pipeType, stageId);
       if (ids.length === 0) return { deleted: 0 };
 
-      await deleteLeadsAndRelated(ids);
-      return { deleted: ids.length };
+      const { data, error } = await supabase.rpc("bulk_delete_leads" as any, {
+        p_lead_ids: ids,
+      });
+      if (error) throw error;
+      return { deleted: (data as number) ?? ids.length };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["leads"] });
       queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
+      queryClient.invalidateQueries({ queryKey: ["trash_leads"] });
       queryClient.invalidateQueries({ queryKey: ["follow_ups"] });
       queryClient.invalidateQueries({ queryKey: ["campanha_leads"] });
       queryClient.invalidateQueries({ queryKey: ["acoes_do_dia"] });
@@ -543,9 +546,8 @@ export function useDeleteAllLeadsInPipe(pipeType: PipeTypeForDelete) {
 }
 
 /**
- * Delete ALL leads of the current organization and all related records (geral — toda a organização).
- * Excludes every lead that belongs to the org: both in the leads base and all that appear in any funnel (stage).
- * SECURITY: Only deletes leads for current organization_id; uses pagination so all rows are considered.
+ * Soft-delete ALL leads of the current organization (moves to trash).
+ * SECURITY: Only deletes leads for current organization_id; uses pagination.
  */
 export function useDeleteAllLeads() {
   const queryClient = useQueryClient();
@@ -559,7 +561,6 @@ export function useDeleteAllLeads() {
         throw new Error("Cannot delete leads: No organization context");
       }
 
-      // PERMISSION: Master and admin bypass org permission check (RLS still enforced)
       if (!isMaster && !isAdmin) {
         const { data: canDelete } = await supabase.rpc("user_has_org_permission", {
           p_permission_key: "can_delete_leads",
@@ -572,12 +573,16 @@ export function useDeleteAllLeads() {
       const ids = await fetchAllLeadIdsForOrganization(organizationId);
       if (ids.length === 0) return { deleted: 0 };
 
-      await deleteLeadsAndRelated(ids);
-      return { deleted: ids.length };
+      const { data, error } = await supabase.rpc("bulk_delete_leads" as any, {
+        p_lead_ids: ids,
+      });
+      if (error) throw error;
+      return { deleted: (data as number) ?? ids.length };
     },
-    onSuccess: (result) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["leads"] });
       queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
+      queryClient.invalidateQueries({ queryKey: ["trash_leads"] });
       queryClient.invalidateQueries({ queryKey: ["follow_ups"] });
       queryClient.invalidateQueries({ queryKey: ["campanha_leads"] });
       queryClient.invalidateQueries({ queryKey: ["acoes_do_dia"] });

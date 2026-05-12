@@ -118,7 +118,7 @@ function DroppableColumn<T extends DraggableItem>({
                   }}
                 >
                   <Trash2 className="w-4 h-4 mr-2" />
-                  Excluir todos os leads desta etapa
+                  Mover todos para lixeira
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

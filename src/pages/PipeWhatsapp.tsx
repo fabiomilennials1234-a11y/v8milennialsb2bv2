@@ -666,9 +666,9 @@ export default function PipeWhatsapp() {
       <AlertDialog open={!!stageToDelete} onOpenChange={(open) => { if (!open) setStageToDelete(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Excluir leads da etapa "{stageToDelete?.title}"</AlertDialogTitle>
+            <AlertDialogTitle>Mover leads da etapa "{stageToDelete?.title}" para lixeira</AlertDialogTitle>
             <AlertDialogDescription>
-              Esta ação irá excluir todos os leads que estão na etapa "{stageToDelete?.title}" do funil de Qualificação (WhatsApp) e na base de dados (histórico, tags, etc.). Leads em outras etapas não serão afetados. Não é possível desfazer.
+              Todos os leads da etapa "{stageToDelete?.title}" serão movidos para a lixeira. Leads em outras etapas não serão afetados. Você pode restaurá-los pela página de lixeira.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -680,14 +680,14 @@ export default function PipeWhatsapp() {
                   const result = await deleteAllLeadsInPipe.mutateAsync({ stageId: stageToDelete.id });
                   setStageToDelete(null);
                   refetch();
-                  toast.success(result?.deleted ? `${result.deleted} leads excluídos da etapa "${stageToDelete.title}".` : "Leads da etapa excluídos.");
+                  toast.success(result?.deleted ? `${result.deleted} leads movidos para lixeira.` : "Leads movidos para lixeira.");
                 } catch (e) {
                   toast.error("Erro ao excluir leads.");
                 }
               }}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {deleteAllLeadsInPipe.isPending ? "Excluindo..." : "Excluir leads desta etapa"}
+              {deleteAllLeadsInPipe.isPending ? "Movendo para lixeira..." : "Mover para lixeira"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

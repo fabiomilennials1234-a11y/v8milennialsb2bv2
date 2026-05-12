@@ -113,7 +113,9 @@ export function usePipelineEntries(slug: PipelineType) {
 
       if (error) throw error;
 
-      const entries = (data ?? []).map(flattenMetadata);
+      const entries = (data ?? [])
+        .filter((e: any) => e.lead != null)
+        .map(flattenMetadata);
 
       if (slug === "propostas" && entries.length > 0) {
         const entryIds = entries.map((e: any) => e.id);
