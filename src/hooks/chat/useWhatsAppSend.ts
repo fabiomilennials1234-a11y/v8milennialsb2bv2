@@ -375,7 +375,7 @@ export function useSendWhatsAppMedia() {
       phoneNumber: string;
       instanceName: string;
       instanceId?: string | null;
-      mediaType: "image" | "audio" | "document" | "video";
+      mediaType: "image" | "audio" | "document" | "video" | "sticker";
       media: string;
       caption?: string;
       fileName?: string;

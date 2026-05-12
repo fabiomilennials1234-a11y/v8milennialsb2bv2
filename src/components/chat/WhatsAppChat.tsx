@@ -16,6 +16,7 @@ import {
   Bot,
   Settings,
   RotateCw,
+  Sticker,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -497,6 +498,7 @@ function ChatWindow({
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [imageCaption, setImageCaption] = useState("");
+  const [sendAsSticker, setSendAsSticker] = useState(false);
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
   // Onda 2 U4 (2026-04-26): hook único — phone+leadId, query key unificada,
   // realtime via MainLayout, optimistic, rota master automática.
@@ -674,9 +676,9 @@ function ChatWindow({
         phoneNumber,
         instanceName,
         instanceId,
-        mediaType: "image",
+        mediaType: sendAsSticker ? "sticker" : "image",
         media: base64,
-        caption: imageCaption || undefined,
+        caption: sendAsSticker ? undefined : (imageCaption || undefined),
         fileName: selectedImage.name,
         mimetype: selectedImage.type,
         leadId,
@@ -685,6 +687,7 @@ function ChatWindow({
       setSelectedImage(null);
       setImagePreview(null);
       setImageCaption("");
+      setSendAsSticker(false);
       toast.success("Imagem enviada!");
     } catch (error: any) {
       console.error("[Image] Error sending:", error);
@@ -832,6 +835,7 @@ function ChatWindow({
                   setSelectedImage(null);
                   setImagePreview(null);
                   setImageCaption("");
+                  setSendAsSticker(false);
                 }}
                 className="absolute -top-2 -right-2 w-6 h-6 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center"
               >
@@ -839,23 +843,36 @@ function ChatWindow({
               </button>
             </div>
             <div className="flex-1 space-y-2">
-              <Input
-                placeholder="Adicionar legenda (opcional)..."
-                value={imageCaption}
-                onChange={(e) => setImageCaption(e.target.value)}
-              />
-              <Button
-                onClick={handleSendImage}
-                disabled={sendMedia.isPending}
-                className="w-full"
-              >
-                {sendMedia.isPending ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <Send className="w-4 h-4 mr-2" />
-                )}
-                Enviar Imagem
-              </Button>
+              {!sendAsSticker && (
+                <Input
+                  placeholder="Adicionar legenda (opcional)..."
+                  value={imageCaption}
+                  onChange={(e) => setImageCaption(e.target.value)}
+                />
+              )}
+              <div className="flex gap-2">
+                <Button
+                  variant={sendAsSticker ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setSendAsSticker(!sendAsSticker)}
+                  className="shrink-0"
+                >
+                  <Sticker className="w-4 h-4 mr-1" />
+                  Figurinha
+                </Button>
+                <Button
+                  onClick={handleSendImage}
+                  disabled={sendMedia.isPending}
+                  className="flex-1"
+                >
+                  {sendMedia.isPending ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Send className="w-4 h-4 mr-2" />
+                  )}
+                  {sendAsSticker ? "Enviar Figurinha" : "Enviar Imagem"}
+                </Button>
+              </div>
             </div>
           </div>
         </div>

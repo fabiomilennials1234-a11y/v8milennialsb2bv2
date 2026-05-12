@@ -16,7 +16,7 @@
  */
 import { useRef, useState, useCallback, useEffect, type DragEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Send, Loader2, ImageIcon, Mic, Clock, AlertCircle, X, LayoutList, QrCode } from "lucide-react";
+import { Send, Loader2, ImageIcon, Mic, Clock, AlertCircle, X, LayoutList, QrCode, Sticker } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
@@ -99,6 +99,7 @@ export function ChatComposer({
   const [menuDialogOpen, setMenuDialogOpen] = useState(false);
   const [pixDialogOpen, setPixDialogOpen] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [sendAsSticker, setSendAsSticker] = useState(false);
 
   // Refs
   const inputRef = useRef<HTMLInputElement>(null);
@@ -217,20 +218,21 @@ export function ChatComposer({
         phoneNumber,
         instanceName,
         instanceId,
-        mediaType: "image",
+        mediaType: sendAsSticker ? "sticker" : "image",
         media: base64,
-        caption: imageCaption || undefined,
+        caption: sendAsSticker ? undefined : (imageCaption || undefined),
         fileName: selectedImage.name,
         mimetype: selectedImage.type,
       });
       setSelectedImage(null);
       setImagePreview(null);
       setImageCaption("");
-      toast.success("Imagem enviada!");
+      setSendAsSticker(false);
+      toast.success(sendAsSticker ? "Figurinha enviada!" : "Imagem enviada!");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao enviar imagem");
     }
-  }, [selectedImage, instanceName, phoneNumber, instanceId, imageCaption, sendMedia]);
+  }, [selectedImage, instanceName, phoneNumber, instanceId, imageCaption, sendMedia, sendAsSticker]);
 
   const handleAudioRecorded = useCallback(async (audioBlob: Blob) => {
     setIsRecording(false);
@@ -357,6 +359,7 @@ export function ChatComposer({
                     setSelectedImage(null);
                     setImagePreview(null);
                     setImageCaption("");
+                    setSendAsSticker(false);
                   }}
                   aria-label="Remover imagem"
                   className="absolute -top-2 -right-2 w-6 h-6 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center"
@@ -365,23 +368,38 @@ export function ChatComposer({
                 </button>
               </div>
               <div className="flex-1 space-y-2">
-                <Input
-                  placeholder="Adicionar legenda (opcional)..."
-                  value={imageCaption}
-                  onChange={(e) => setImageCaption(e.target.value)}
-                />
-                <Button
-                  onClick={handleSendImage}
-                  disabled={sendMedia.isPending}
-                  className="w-full"
-                >
-                  {sendMedia.isPending ? (
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  ) : (
-                    <Send className="w-4 h-4 mr-2" />
-                  )}
-                  Enviar Imagem
-                </Button>
+                {!sendAsSticker && (
+                  <Input
+                    placeholder="Adicionar legenda (opcional)..."
+                    value={imageCaption}
+                    onChange={(e) => setImageCaption(e.target.value)}
+                  />
+                )}
+                <div className="flex gap-2">
+                  <Button
+                    onClick={handleSendImage}
+                    disabled={sendMedia.isPending}
+                    className="flex-1"
+                  >
+                    {sendMedia.isPending ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : sendAsSticker ? (
+                      <Sticker className="w-4 h-4 mr-2" />
+                    ) : (
+                      <Send className="w-4 h-4 mr-2" />
+                    )}
+                    {sendAsSticker ? "Enviar Figurinha" : "Enviar Imagem"}
+                  </Button>
+                  <Button
+                    variant={sendAsSticker ? "default" : "outline"}
+                    size="icon"
+                    onClick={() => setSendAsSticker(!sendAsSticker)}
+                    title={sendAsSticker ? "Enviar como imagem" : "Enviar como figurinha"}
+                    className="shrink-0"
+                  >
+                    <Sticker className="w-4 h-4" />
+                  </Button>
+                </div>
               </div>
             </div>
           )}
