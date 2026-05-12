@@ -141,15 +141,20 @@ export type UazapiInstanceInitInput = {
 };
 
 export type UazapiInstanceResponse = {
-  id: string;
-  name: string;
-  /** Per-instance token — persist in whatsapp_instance_secrets */
+  /** Top-level fields returned by /instance/init */
+  instance: {
+    id: string;
+    token: string;
+    status: string;
+    name: string;
+    qrcode?: string;
+    paircode?: string;
+  };
+  /** Per-instance token (also at top level) */
   token: string;
-  status: "created" | "connecting" | "connected" | "disconnected";
-  /** base64 QR code image */
-  qrcode?: string;
-  /** Numeric pair code for device linking */
-  paircode?: string;
+  name: string;
+  response: string;
+  status: { connected: boolean; jid: unknown; loggedIn: boolean };
 };
 
 // ---------------------------------------------------------------------------

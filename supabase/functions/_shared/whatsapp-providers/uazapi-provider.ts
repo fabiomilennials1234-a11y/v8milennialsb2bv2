@@ -28,19 +28,28 @@ import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 // ---------------------------------------------------------------------------
 
 function normaliseStatus(raw: {
-  status?: string;
+  status?: string | { connected?: boolean; loggedIn?: boolean };
   connected?: boolean;
   qrcode?: string;
   paircode?: string;
 }): InstanceStatus {
-  const s = (raw.status ?? "").toLowerCase();
+  const rawStatus = raw.status;
+  // Uazapi /instance/init returns status as object {connected, loggedIn, jid},
+  // while /instance/status returns a string. Handle both.
+  const statusObj = typeof rawStatus === "object" && rawStatus !== null ? rawStatus : null;
+  const s = (typeof rawStatus === "string" ? rawStatus : "").toLowerCase();
+
   let state: InstanceStatus["state"] = "unknown";
-  if (s === "connected") state = "connected";
+  if (statusObj) {
+    state = statusObj.connected ? "connected" : "disconnected";
+  } else if (s === "connected") state = "connected";
   else if (s === "connecting") state = "connecting";
   else if (s === "disconnected" || s === "closed") state = "disconnected";
 
+  const isConnected = statusObj?.connected ?? raw.connected ?? state === "connected";
+
   return {
-    connected: raw.connected ?? state === "connected",
+    connected: isConnected,
     state,
     qrcode: raw.qrcode,
     paircode: raw.paircode,
@@ -111,14 +120,18 @@ export class UazapiProvider implements WhatsAppProvider {
       webhookAddUrlTypesMessages: false,
     });
 
+    // Extract from nested response: instance.id, instance.token, top-level status object
+    const instanceId = resp.instance?.id ?? (resp as any).id;
+    const instanceToken = resp.instance?.token ?? resp.token;
+
     // Persist token via RPC — service_role only
     const { error: rpcError } = await this.supabaseAdmin.rpc(
       "set_uazapi_credentials",
       {
         p_instance_id: input.instance_id,
         p_organization_id: input.organization_id,
-        p_uazapi_instance_id: resp.id,
-        p_uazapi_token: resp.token,
+        p_uazapi_instance_id: instanceId,
+        p_uazapi_token: instanceToken,
       }
     );
 
@@ -129,12 +142,12 @@ export class UazapiProvider implements WhatsAppProvider {
     }
 
     return {
-      provider_instance_id: resp.id,
-      provider_token: resp.token,
+      provider_instance_id: instanceId,
+      provider_token: instanceToken,
       status: normaliseStatus({
-        status: resp.status,
-        qrcode: resp.qrcode,
-        paircode: resp.paircode,
+        status: resp.status ?? resp.instance?.status,
+        qrcode: resp.instance?.qrcode ?? (resp as any).qrcode,
+        paircode: resp.instance?.paircode ?? (resp as any).paircode,
       }),
     };
   }
