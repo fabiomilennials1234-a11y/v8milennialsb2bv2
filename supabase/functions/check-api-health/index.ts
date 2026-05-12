@@ -34,21 +34,20 @@ async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 
 async function checkUazapi(): Promise<ApiHealthResult> {
   const url = Deno.env.get("UAZAPI_BASE_URL");
-  const adminToken = Deno.env.get("UAZAPI_ADMIN_TOKEN");
-  if (!url || !adminToken) return { service: "Uazapi", status: "not_configured", latency_ms: 0, checked_at: new Date().toISOString() };
+  if (!url) return { service: "Uazapi", status: "not_configured", latency_ms: 0, checked_at: new Date().toISOString() };
 
   const start = Date.now();
   try {
-    // Any admin endpoint works as a liveness probe — list instances with limit=0
+    // Liveness probe: hit /instance/status — any HTTP response (even 401) means server is up.
+    // Managed Uazapi servers may reject admin tokens on /instance/all,
+    // so we use a lighter endpoint that always responds.
     const res = await withTimeout(
-      fetch(`${url.replace(/\/$/, "")}/instance/all`, {
-        method: "GET",
-        headers: { admintoken: adminToken },
-      }),
+      fetch(`${url.replace(/\/$/, "")}/instance/status`, { method: "GET" }),
       TIMEOUT_MS
     );
     const latency = Date.now() - start;
-    if (res.ok) return { service: "Uazapi", status: "connected", latency_ms: latency, checked_at: new Date().toISOString() };
+    // Any HTTP response = server reachable. 401/404 are expected without a token.
+    if (res.status < 500) return { service: "Uazapi", status: "connected", latency_ms: latency, checked_at: new Date().toISOString() };
     return { service: "Uazapi", status: "error", latency_ms: latency, error: `HTTP ${res.status}`, checked_at: new Date().toISOString() };
   } catch (e) {
     return { service: "Uazapi", status: "error", latency_ms: Date.now() - start, error: e instanceof Error ? e.message : String(e), checked_at: new Date().toISOString() };
