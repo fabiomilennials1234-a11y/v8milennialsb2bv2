@@ -14,6 +14,31 @@ import { isCopilotCanceled, logCopilotCancellation } from "../_shared/copilot/ca
 import "../_shared/whatsapp-providers/evolution-provider.ts";
 import "../_shared/whatsapp-providers/uazapi-provider.ts";
 
+// In-memory dedup: prevents processing the same phone+org twice within 30s.
+// Covers the common case where Evolution/Uazapi fire duplicate webhook events
+// that both dispatch to agent-message within milliseconds of each other.
+const inFlightMap = new Map<string, number>();
+const DEDUP_WINDOW_MS = 30_000;
+
+function acquireProcessingLock(phone: string, orgId: string): boolean {
+  const key = `${phone}:${orgId}`;
+  const now = Date.now();
+  const prev = inFlightMap.get(key);
+  if (prev && now - prev < DEDUP_WINDOW_MS) return false;
+  inFlightMap.set(key, now);
+  // Prune stale entries
+  if (inFlightMap.size > 500) {
+    for (const [k, ts] of inFlightMap) {
+      if (now - ts > DEDUP_WINDOW_MS * 2) inFlightMap.delete(k);
+    }
+  }
+  return true;
+}
+
+function releaseProcessingLock(phone: string, orgId: string) {
+  inFlightMap.delete(`${phone}:${orgId}`);
+}
+
 /**
  * Webhook receptor de mensagens de leads
  * Twilio/WhatsApp → /agent-message
@@ -61,6 +86,15 @@ Deno.serve(withSentry('agent-message', async (req) => {
       return new Response(
         JSON.stringify({ error: "Invalid phone number in 'from' field", code: "INVALID_PHONE" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    // 0.9. DEDUP GATE — prevent duplicate processing from concurrent webhook events
+    if (!acquireProcessingLock(from, organization_id)) {
+      console.log('[agent-message] Skipping duplicate — already processing:', { from, organization_id });
+      return new Response(
+        JSON.stringify({ skipped: true, reason: "dedup_concurrent", from }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -283,6 +317,8 @@ Deno.serve(withSentry('agent-message', async (req) => {
     });
 
   } catch (error) {
+    // Release dedup lock on error so retries can work
+    releaseProcessingLock(from, organization_id);
     console.error('[agent-message] Error:', error);
     await logRuntime({
       module: 'copilot',
