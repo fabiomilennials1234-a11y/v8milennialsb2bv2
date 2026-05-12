@@ -106,6 +106,29 @@ async function fetchContactsForInstance(
     }
   }
 
+  // Resolve lead names by phone for contacts missing lead_name
+  const phonesWithoutName = Array.from(contactsMap.entries())
+    .filter(([, c]) => !c.lead_name && !c.push_name)
+    .map(([, c]) => c.phone_number);
+
+  if (phonesWithoutName.length > 0) {
+    const { data: leads } = await supabase
+      .from("leads")
+      .select("name, phone")
+      .eq("organization_id", organizationId)
+      .in("phone", phonesWithoutName);
+
+    if (leads) {
+      const leadsByPhone = new Map(leads.map((l) => [normalizePhone(l.phone) ?? l.phone, l.name]));
+      for (const contact of contactsMap.values()) {
+        if (contact.lead_name || contact.push_name) continue;
+        const k = normalizePhone(contact.phone_number) ?? contact.phone_number;
+        const name = leadsByPhone.get(k);
+        if (name) contact.lead_name = name;
+      }
+    }
+  }
+
   // Unread count via localStorage last_seen
   const LAST_SEEN = "whatsapp_last_seen_";
   const lastSeen: Record<string, string> = {};

@@ -128,11 +128,11 @@ export function useChatBubbleContactsRealtime(
         },
       )
       .subscribe((status) => {
-        // status: 'SUBSCRIBED' | 'TIMED_OUT' | 'CHANNEL_ERROR' | 'CLOSED'
-        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-          setIsReconnecting(true);
-        } else if (status === "SUBSCRIBED") {
+        if (status === "SUBSCRIBED") {
           setIsReconnecting(false);
+        } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          setIsReconnecting(true);
+          setTimeout(() => setIsReconnecting(false), 8000);
         }
       });
 
