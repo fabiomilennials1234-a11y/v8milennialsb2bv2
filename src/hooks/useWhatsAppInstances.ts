@@ -245,19 +245,8 @@ export function useDeleteWhatsAppInstance() {
         throw new Error("Usuário não está vinculado a uma organização");
       }
 
-      try {
-        await proxyDeleteInstance(id, teamMember.organization_id);
-        return { removedFromProvider: true };
-      } catch (error: any) {
-        // Proxy already cleans up the local row even on provider failure via
-        // cascade / best-effort; if proxy itself failed, surface the error.
-        return {
-          removedFromProvider: false,
-          providerError:
-            error?.message ??
-            "Não foi possível remover a instância no provedor. Verifique manualmente se necessário.",
-        };
-      }
+      await proxyDeleteInstance(id, teamMember.organization_id);
+      return { removedFromProvider: true };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["whatsapp_instances"] });

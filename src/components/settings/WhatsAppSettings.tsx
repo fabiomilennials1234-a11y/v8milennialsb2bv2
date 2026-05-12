@@ -436,19 +436,12 @@ export function WhatsAppSettings() {
   const handleDelete = async () => {
     if (!deleteInstanceId) return;
     try {
-      const result = await deleteInstance.mutateAsync({
+      await deleteInstance.mutateAsync({
         id: deleteInstanceId.id,
         instance_name: deleteInstanceId.name,
       });
       setDeleteInstanceId(null);
-      if (result.removedFromProvider) {
-        toast.success("Instância removida com sucesso.");
-      } else {
-        toast.success("Instância removida do sistema.", {
-          description: result.providerError,
-          duration: 6000,
-        });
-      }
+      toast.success("Instância removida com sucesso.");
     } catch (error: any) {
       const errorMessage = error.message || "Erro ao remover instância";
       toast.error(errorMessage);
