@@ -526,6 +526,22 @@ Deno.serve(
 
 
 
+        case "reconfigureWebhook": {
+          const webhookBaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+          const webhookSecret = Deno.env.get("UAZAPI_WEBHOOK_SECRET") ?? "";
+          if (!webhookSecret) {
+            return jsonResponse(500, { error: "UAZAPI_WEBHOOK_SECRET not set" }, corsHeaders);
+          }
+          const webhookUrl = `${webhookBaseUrl}/functions/v1/whatsapp-webhook/${webhookSecret}`;
+          if (provider.provider === "uazapi" && typeof (provider as any).reconfigureWebhook === "function") {
+            await (provider as any).reconfigureWebhook(webhookUrl);
+          } else {
+            return jsonResponse(400, { error: "reconfigureWebhook only supported for uazapi provider" }, corsHeaders);
+          }
+          result = { ok: true, webhook_url: webhookUrl.replace(webhookSecret, "***") };
+          break;
+        }
+
         case "logoutInstance": {
           await provider.logoutInstance();
           // Update local status

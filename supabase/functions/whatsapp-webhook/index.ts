@@ -536,6 +536,7 @@ Deno.serve(
       return genericResponse(200, { ok: true });
     }
 
+
     if (req.method !== "POST") return genericResponse(405);
 
     const sourceIp =

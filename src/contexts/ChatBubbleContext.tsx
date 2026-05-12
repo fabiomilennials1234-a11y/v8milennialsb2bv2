@@ -130,12 +130,12 @@ export function ChatBubbleProvider({ children }: ChatBubbleProviderProps) {
   // ── Unread total: soma unread_count de cada instância permitida ────────────
   const contactsQueries = useQueries({
     queries: instances.map((inst) => ({
-      queryKey: chatQueryKeys.contacts(organizationId, inst.id),
+      queryKey: chatQueryKeys.unreadBadge(organizationId, inst.id),
       queryFn: async (): Promise<ChatContact[]> => {
         if (!organizationId) return [];
-        // Reusa cache populado por useWhatsAppContacts. Se não houver cache,
-        // executa fetch leve apenas das colunas necessárias para badge.
-        // Mantém RLS — query filtra org/instance.
+        // Query leve apenas das colunas necessárias para badge de unread.
+        // Cache separado (unreadBadge) para não poluir contacts com stubs
+        // sem content — evita "Sem mensagens" no /chat.
         const { data, error } = await supabase
           .from("whatsapp_messages")
           .select("phone_number, direction, timestamp")
@@ -167,9 +167,7 @@ export function ChatBubbleProvider({ children }: ChatBubbleProviderProps) {
           }
         }
 
-        // Stub mínimo de ChatContact apenas para somatório do badge —
-        // queryKey é compartilhado mas o consumer (lista no painel) escreve
-        // dados completos via useWhatsAppContacts (se cache existir, prevalece).
+        // Stub mínimo de ChatContact apenas para somatório do badge.
         return Object.entries(unreadByPhone).map(([phone, unread]) => ({
           phone_number: phone,
           push_name: null,
@@ -185,9 +183,6 @@ export function ChatBubbleProvider({ children }: ChatBubbleProviderProps) {
         })) as ChatContact[];
       },
       enabled: !!organizationId && !!inst.id,
-      // Cache curto pra não brigar com useWhatsAppContacts cheio:
-      // se a lista já abriu uma vez, useWhatsAppContacts vai sobrescrever
-      // o cache com dados ricos e o badge passa a ler de lá.
       staleTime: 30_000,
     })),
   });

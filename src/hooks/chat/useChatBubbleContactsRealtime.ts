@@ -101,7 +101,6 @@ export function useChatBubbleContactsRealtime(
             );
 
             if (existingIdx === -1) {
-              // Conversa nova nessa instância — refetch completo (precisa de tags/lead)
               queryClient.invalidateQueries({ queryKey: contactsQueryKey });
               return prev;
             }
@@ -124,6 +123,10 @@ export function useChatBubbleContactsRealtime(
                     : contact.unread_count,
               };
             });
+          });
+
+          queryClient.invalidateQueries({
+            queryKey: chatQueryKeys.unreadBadge(organizationId, msgInstanceId),
           });
         },
       )

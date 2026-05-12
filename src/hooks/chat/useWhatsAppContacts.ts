@@ -8,6 +8,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
+import { chatQueryKeys } from "./shared/queryKeys";
 import type { ChatContact, ChatContactTag } from "./types";
 
 const normalizePhone = (p: string) => {
@@ -43,7 +44,7 @@ export function useWhatsAppContacts(instanceId: string | null) {
   const organizationId = teamMember?.organization_id;
 
   return useQuery({
-    queryKey: ["whatsapp_contacts", organizationId, instanceId],
+    queryKey: chatQueryKeys.contacts(organizationId, instanceId),
     queryFn: async () => {
       if (!organizationId || !instanceId) return [];
 

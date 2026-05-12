@@ -40,6 +40,17 @@ export const chatQueryKeys = {
       instanceId ?? null,
     ] as const,
 
+  /** Contagem lightweight de unread para badge global (ChatBubbleContext). */
+  unreadBadge: (
+    organizationId: string | null | undefined,
+    instanceId: string | null | undefined,
+  ) =>
+    [
+      "whatsapp_unread_badge",
+      organizationId ?? null,
+      instanceId ?? null,
+    ] as const,
+
   /**
    * Resolução de instância para um lead a partir do telefone normalizado.
    * Substitui o queryKey ad-hoc `["lead-whatsapp-instance", phone]` que
@@ -76,6 +87,7 @@ export const chatQueryKeys = {
 export type ChatQueryKey =
   | ReturnType<typeof chatQueryKeys.messages>
   | ReturnType<typeof chatQueryKeys.contacts>
+  | ReturnType<typeof chatQueryKeys.unreadBadge>
   | ReturnType<typeof chatQueryKeys.leadWhatsAppInstance>
   | ReturnType<typeof chatQueryKeys.chatDeepLink>
   | ReturnType<typeof chatQueryKeys.failed>;

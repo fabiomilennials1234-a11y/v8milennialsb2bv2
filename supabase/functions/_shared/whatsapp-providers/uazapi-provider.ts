@@ -77,6 +77,7 @@ export class UazapiProvider implements WhatsAppProvider {
   readonly provider = "uazapi" as const;
 
   private readonly client: UazapiClient;
+  private readonly baseUrl: string;
   private readonly instanceId: string;
   private readonly organizationId: string;
   private readonly supabaseAdmin: SupabaseClient;
@@ -87,6 +88,7 @@ export class UazapiProvider implements WhatsAppProvider {
       token: config.token,
       adminToken: config.adminToken,
     });
+    this.baseUrl = config.baseUrl;
     this.instanceId = config.instanceId;
     this.organizationId = config.organizationId;
     this.supabaseAdmin = config.supabaseAdmin;
@@ -140,6 +142,20 @@ export class UazapiProvider implements WhatsAppProvider {
         `Failed to persist uazapi credentials via RPC: ${rpcError.message}`
       );
     }
+
+    // /instance/init may ignore inline webhook fields — explicitly configure
+    // via /instance/updateWebhook using the newly obtained instance token.
+    const instanceClient = new UazapiClient({
+      baseUrl: this.baseUrl,
+      token: instanceToken,
+    });
+    await instanceClient.updateWebhook({
+      url: webhookUrl,
+      events: ["messages", "messages_update", "connection"],
+      excludeMessages: ["wasSentByApi"],
+      addUrlEvents: true,
+      addUrlTypesMessages: false,
+    });
 
     return {
       provider_instance_id: instanceId,
@@ -317,5 +333,15 @@ export class UazapiProvider implements WhatsAppProvider {
     reachout_timelock?: number;
   }> {
     return this.client.getMessageLimits();
+  }
+
+  async reconfigureWebhook(webhookUrl: string): Promise<void> {
+    await this.client.updateWebhook({
+      url: webhookUrl,
+      events: ["messages", "messages_update", "connection"],
+      excludeMessages: ["wasSentByApi"],
+      addUrlEvents: true,
+      addUrlTypesMessages: false,
+    });
   }
 }

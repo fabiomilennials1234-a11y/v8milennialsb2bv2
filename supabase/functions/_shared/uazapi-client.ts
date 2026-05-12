@@ -135,13 +135,15 @@ export class UazapiClient {
     excludeMessages?: string[];
     addUrlTypesMessages?: boolean;
     addUrlEvents?: boolean;
+    enabled?: boolean;
     id?: string;
     action?: "add" | "update" | "delete";
   }): Promise<void> {
+    const body = { enabled: true, ...config };
     await this.request<unknown>(
       "POST",
-      "/instance/updateWebhook",
-      config,
+      "/webhook",
+      body,
       { useAdminToken: false }
     );
   }
