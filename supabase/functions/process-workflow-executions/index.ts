@@ -36,21 +36,23 @@ Deno.serve(
       return new Response(null, { status: 204, headers });
     }
 
-    // Auth: cron secret or service role
     const cronSecret = req.headers.get("x-cron-secret");
     const authHeader = req.headers.get("authorization");
-    const isAuthorized =
-      (CRON_SECRET && cronSecret === CRON_SECRET) ||
-      (authHeader && authHeader.includes(SUPABASE_SERVICE_ROLE_KEY));
-
-    if (!isAuthorized) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers });
-    }
-
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+    let authMode: "cron" | "service_role" | "jwt" | null = null;
+    if (CRON_SECRET && cronSecret === CRON_SECRET) {
+      authMode = "cron";
+    } else if (authHeader && authHeader.includes(SUPABASE_SERVICE_ROLE_KEY)) {
+      authMode = "service_role";
+    } else if (authHeader?.startsWith("Bearer ")) {
+      try {
+        const { data: { user } } = await supabase.auth.getUser(authHeader.slice(7));
+        if (user) authMode = "jwt";
+      } catch { /* invalid token */ }
+    }
+
     try {
-      // Parse mode from body
       let mode = "default";
       let triggerParams: Record<string, unknown> | null = null;
 
@@ -62,6 +64,11 @@ Deno.serve(
         }
       } catch {
         // No body or invalid JSON — use default mode
+      }
+
+      // JWT auth only allowed for fire_trigger mode
+      if (!authMode || (authMode === "jwt" && mode !== "fire_trigger")) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers });
       }
 
       // ── Mode: cron_triggers ──
