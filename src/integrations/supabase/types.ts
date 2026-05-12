@@ -6637,6 +6637,7 @@ export type Database = {
           organization_id: string | null
           origin: Database["public"]["Enums"]["lead_origin"]
           phone: string | null
+          phone_digits: string | null
           pipe_whatsapp: string | null
           pre_sale_responsible_id: string | null
           qualification_score: number | null
@@ -6679,6 +6680,7 @@ export type Database = {
           organization_id?: string | null
           origin?: Database["public"]["Enums"]["lead_origin"]
           phone?: string | null
+          phone_digits?: string | null
           pipe_whatsapp?: string | null
           pre_sale_responsible_id?: string | null
           qualification_score?: number | null
@@ -6721,6 +6723,7 @@ export type Database = {
           organization_id?: string | null
           origin?: Database["public"]["Enums"]["lead_origin"]
           phone?: string | null
+          phone_digits?: string | null
           pipe_whatsapp?: string | null
           pre_sale_responsible_id?: string | null
           qualification_score?: number | null
