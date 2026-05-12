@@ -15,6 +15,8 @@
  */
 
 import { UazapiClient } from "./uazapi-client.ts";
+import { EvolutionProvider } from "./whatsapp-providers/evolution-provider.ts";
+import { UazapiProvider } from "./whatsapp-providers/uazapi-provider.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // ---------------------------------------------------------------------------
@@ -200,9 +202,6 @@ export async function getWhatsAppProvider(
   }
 
   if (effectiveProvider === "evolution") {
-    const { EvolutionProvider } = await import(
-      "./whatsapp-providers/evolution-provider.ts"
-    );
     return new EvolutionProvider(instance);
   }
 
@@ -216,7 +215,7 @@ export async function getWhatsAppProvider(
     // Bootstrap mode: new instance with no credentials yet (createInstance flow).
     // Uses adminToken only — per-instance token is persisted by createInstance.
     if (options?.bootstrap) {
-      const { UazapiProvider } = await import("./whatsapp-providers/uazapi-provider.ts");
+
       return new UazapiProvider({
         baseUrl,
         token: "",
