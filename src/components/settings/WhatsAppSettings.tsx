@@ -441,11 +441,11 @@ export function WhatsAppSettings() {
         instance_name: deleteInstanceId.name,
       });
       setDeleteInstanceId(null);
-      if (result.removedFromEvolution) {
-        toast.success("Instância removida do sistema e da Evolution API.");
+      if (result.removedFromProvider) {
+        toast.success("Instância removida com sucesso.");
       } else {
         toast.success("Instância removida do sistema.", {
-          description: result.evolutionError,
+          description: result.providerError,
           duration: 6000,
         });
       }

@@ -432,8 +432,14 @@ Deno.serve(
         }
 
         case "deleteInstance": {
-          await provider.deleteInstance();
-          // Cascade handles whatsapp_instance_secrets
+          let providerError: string | null = null;
+          try {
+            await provider.deleteInstance();
+          } catch (e) {
+            providerError = (e as Error).message ?? "provider delete failed";
+          }
+
+          // Always delete local row — provider is best-effort
           await supabaseAdmin
             .from("whatsapp_instances")
             .delete()
@@ -443,12 +449,13 @@ Deno.serve(
             organizationId: callerOrgId,
             module: "whatsapp-api-proxy",
             action: "deleteInstance",
-            status: "success",
+            status: providerError ? "partial" : "success",
             entityType: "whatsapp_instances",
             entityId: instanceId,
+            ...(providerError && { errorMessage: providerError }),
           });
 
-          return jsonResponse(200, { ok: true }, corsHeaders);
+          return jsonResponse(200, { ok: true, providerError }, corsHeaders);
         }
 
         case "logoutInstance": {
