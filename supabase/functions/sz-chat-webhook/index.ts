@@ -429,6 +429,20 @@ async function handleClientMessage(
   // Associate message to existing lead
   await associateMessageToExistingLead(supabase, organizationId, phoneNumber);
 
+  // Resolve any waiting workflow executions for this phone (fire-and-forget).
+  // Safe if nothing is waiting — RPC returns 0 quickly.
+  supabase
+    .rpc("resolve_wait_response_by_phone", {
+      p_phone: phoneNumber,
+      p_organization_id: organizationId,
+      p_channel: "whatsapp",
+    })
+    .then(({ error }) => {
+      if (error) {
+        console.warn("[SZ Chat Webhook] resolve_wait_response_by_phone failed:", error.message);
+      }
+    });
+
   // Check if we have a linked and active agent
   const hasAgent = instance?.copilot_agent_id && agent?.is_active;
 

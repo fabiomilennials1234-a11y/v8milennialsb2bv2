@@ -194,6 +194,33 @@ async function handleMessagesEvent(
     return;
   }
 
+  // Resolve any waiting workflow executions for this phone — must run BEFORE
+  // agent-message dispatch so the workflow advances to its "replied" branch
+  // before further automation kicks in. Fire-and-forget; failures are logged
+  // but never break the webhook (idempotent — RPC is safe to call when nothing waits).
+  if (normalized.direction === "incoming" && normalized.phone_number) {
+    supabase
+      .rpc("resolve_wait_response_by_phone", {
+        p_phone: normalized.phone_number,
+        p_organization_id: instance.organization_id,
+        p_channel: "whatsapp",
+      })
+      .then(({ error }) => {
+        if (error) {
+          void logRuntime({
+            organizationId: instance.organization_id,
+            module: "workflow",
+            action: "resolve_wait_response_failed",
+            status: "error",
+            payloadSnapshot: {
+              instance_id: instance.id,
+              error: error.message,
+            },
+          });
+        }
+      });
+  }
+
   // Bridge to Copilot — previously missing: whatsapp-webhook only persisted
   // messages and never invoked agent-message, leaving Uazapi-backed orgs with
   // a silent Copilot. Parity with sz-chat-webhook and evolution-webhook.
