@@ -35,7 +35,11 @@ interface ChatBubbleConversationListProps {
   searchQuery: string;
   selectedPhone: string | null;
   selectedInstanceId: string | null;
+  /** Filtro visual por instância. "all" = sem filtro. */
+  filterInstanceId: string | "all";
   onSelect: (phone: string, instanceId: string) => void;
+  /** Reseta filtro pra "all" — usado pelo empty `filtered-empty`. */
+  onResetFilter: () => void;
 }
 
 /**
@@ -205,7 +209,9 @@ export function ChatBubbleConversationList({
   searchQuery,
   selectedPhone,
   selectedInstanceId,
+  filterInstanceId,
   onSelect,
+  onResetFilter,
 }: ChatBubbleConversationListProps) {
   const { data: teamMember } = useCurrentTeamMember();
   const organizationId = teamMember?.organization_id ?? null;
@@ -239,15 +245,28 @@ export function ChatBubbleConversationList({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [queries.map((q) => q.dataUpdatedAt).join("|"), instances]);
 
+  // Filtro por instância (visual, client-side). Aplicado ANTES de search/empty
+  // pra que o empty state filtered-empty fale do contexto correto.
+  const instanceFiltered: ListEntry[] = useMemo(() => {
+    if (filterInstanceId === "all") return allEntries;
+    return allEntries.filter((e) => e.instanceId === filterInstanceId);
+  }, [allEntries, filterInstanceId]);
+
   const filtered: ListEntry[] = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    if (!q) return allEntries;
-    return allEntries.filter((e) => {
+    if (!q) return instanceFiltered;
+    return instanceFiltered.filter((e) => {
       const name = (e.contact.lead_name || e.contact.push_name || "").toLowerCase();
       const phone = (e.contact.phone_number || "").toLowerCase();
       return name.includes(q) || phone.includes(q);
     });
-  }, [allEntries, searchQuery]);
+  }, [instanceFiltered, searchQuery]);
+
+  // Nome da instância filtrada (pro empty state `filtered-empty`)
+  const filteredInstanceName = useMemo(() => {
+    if (filterInstanceId === "all") return null;
+    return instances.find((i) => i.id === filterInstanceId)?.instance_name ?? null;
+  }, [filterInstanceId, instances]);
 
   // Virtualização
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -288,6 +307,15 @@ export function ChatBubbleConversationList({
             Nenhum resultado pra "{searchQuery.trim()}"
           </p>
         </div>
+      );
+    }
+    if (filterInstanceId !== "all" && filteredInstanceName) {
+      return (
+        <ChatBubbleEmptyState
+          variant="filtered-empty"
+          instanceName={filteredInstanceName}
+          onReset={onResetFilter}
+        />
       );
     }
     return <ChatBubbleEmptyState variant="no-conversations" />;

@@ -52,6 +52,12 @@ export interface ChatBubbleContextValue {
   needsPhoneHint: boolean;
   /** True quando channel realtime está em CHANNEL_ERROR ou TIMED_OUT. */
   isReconnecting: boolean;
+  /**
+   * Filtro visual da lista de conversas por instância. "all" = não filtrado.
+   * Persistido por user em localStorage. Filtro é client-side — não afeta
+   * `useQueries` cross-instance nem unread badge.
+   */
+  listInstanceFilter: string | "all";
 
   // ações
   open: (args?: { phone?: string | null; instanceId?: string | null; leadName?: string | null }) => void;
@@ -62,11 +68,36 @@ export interface ChatBubbleContextValue {
   acknowledgeNeedsPhone: () => void;
   /** Marca conversa como "lida agora" (atualiza localStorage whatsapp_last_seen_*). */
   markAsRead: (phone: string, instanceId: string) => void;
+  /** Define filtro visual da lista. Passe "all" pra resetar. */
+  setListInstanceFilter: (next: string | "all") => void;
 }
 
 export const ChatBubbleContext = createContext<ChatBubbleContextValue | null>(null);
 
 const LAST_SEEN_KEY_PREFIX = "whatsapp_last_seen_";
+const LIST_FILTER_KEY_PREFIX = "chat-bubble:list-filter:";
+
+function readListFilter(userId: string | null | undefined): string | "all" {
+  if (!userId) return "all";
+  if (typeof localStorage === "undefined") return "all";
+  try {
+    const raw = localStorage.getItem(`${LIST_FILTER_KEY_PREFIX}${userId}`);
+    if (!raw) return "all";
+    return raw === "all" ? "all" : raw;
+  } catch {
+    return "all";
+  }
+}
+
+function writeListFilter(userId: string | null | undefined, value: string | "all"): void {
+  if (!userId) return;
+  if (typeof localStorage === "undefined") return;
+  try {
+    localStorage.setItem(`${LIST_FILTER_KEY_PREFIX}${userId}`, value);
+  } catch {
+    /* falha silenciosa */
+  }
+}
 
 function writeLastSeen(phone: string): void {
   if (typeof localStorage === "undefined") return;
@@ -96,10 +127,31 @@ export function ChatBubbleProvider({ children }: ChatBubbleProviderProps) {
   const [pendingLeadName, setPendingLeadName] = useState<string | null>(null);
   const [pendingPhoneToResolve, setPendingPhoneToResolve] = useState<string | null>(null);
   const [needsPhoneHint, setNeedsPhoneHint] = useState(false);
+  const [listInstanceFilter, setListInstanceFilterState] = useState<string | "all">(
+    () => readListFilter(userId),
+  );
+
+  // Re-sincroniza filter quando userId muda (troca de usuário sem reload)
+  useEffect(() => {
+    setListInstanceFilterState(readListFilter(userId));
+  }, [userId]);
+
+  // Persiste filter por user
+  useEffect(() => {
+    writeListFilter(userId, listInstanceFilter);
+  }, [userId, listInstanceFilter]);
 
   // ── Instâncias permitidas ──────────────────────────────────────────────────
   const { data: instances = [] } = useWhatsAppInstancesForUser();
   const instanceIds = useMemo(() => instances.map((i) => i.id), [instances]);
+
+  // Auto-reset filter quando instância filtrada some das permitidas
+  useEffect(() => {
+    if (listInstanceFilter === "all") return;
+    if (instances.length === 0) return;
+    const stillExists = instances.some((i) => i.id === listInstanceFilter);
+    if (!stillExists) setListInstanceFilterState("all");
+  }, [instances, listInstanceFilter]);
 
   // ── Realtime ───────────────────────────────────────────────────────────────
   // (1) Singleton da thread aberta + contacts da instância selecionada.
@@ -262,6 +314,9 @@ export function ChatBubbleProvider({ children }: ChatBubbleProviderProps) {
       setSelectedPhone(args.phone);
       setSelectedInstanceId(args.instanceId);
       setPendingPhoneToResolve(null);
+      // Auto-sincroniza filtro com a instância aberta — usuário ao voltar
+      // pra lista vê apenas a instância dessa conversa, em coerência.
+      setListInstanceFilterState(args.instanceId);
       return;
     }
 
@@ -308,6 +363,10 @@ export function ChatBubbleProvider({ children }: ChatBubbleProviderProps) {
     writeLastSeen(phone);
   }, []);
 
+  const setListInstanceFilter = useCallback((next: string | "all") => {
+    setListInstanceFilterState(next);
+  }, []);
+
   const value = useMemo<ChatBubbleContextValue>(
     () => ({
       isOpen,
@@ -320,6 +379,7 @@ export function ChatBubbleProvider({ children }: ChatBubbleProviderProps) {
       isResolvingDeepLink: !!pendingPhoneToResolve && deepLink.isLoading,
       needsPhoneHint,
       isReconnecting,
+      listInstanceFilter,
       open,
       close,
       toggleMinimized,
@@ -327,6 +387,7 @@ export function ChatBubbleProvider({ children }: ChatBubbleProviderProps) {
       backToList,
       acknowledgeNeedsPhone,
       markAsRead,
+      setListInstanceFilter,
     }),
     [
       isOpen,
@@ -340,6 +401,7 @@ export function ChatBubbleProvider({ children }: ChatBubbleProviderProps) {
       deepLink.isLoading,
       needsPhoneHint,
       isReconnecting,
+      listInstanceFilter,
       open,
       close,
       toggleMinimized,
@@ -347,6 +409,7 @@ export function ChatBubbleProvider({ children }: ChatBubbleProviderProps) {
       backToList,
       acknowledgeNeedsPhone,
       markAsRead,
+      setListInstanceFilter,
     ],
   );
 

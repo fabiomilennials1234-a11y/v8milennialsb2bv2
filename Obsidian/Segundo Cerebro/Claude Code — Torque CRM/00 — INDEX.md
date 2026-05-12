@@ -93,6 +93,7 @@ SaaS B2B multi-tenant para gestao de leads, pipelines de vendas, campanhas e aut
 #### Comunicacao
 - [[Chat WhatsApp]] — Chat multi-canal unificado (WhatsApp, Messenger, Instagram, SZ.Chat)
 - [[chat-bubble]] — Chat Bubble Kanban (FAB flutuante nas Pipe pages)
+- [[chat-bubble-instance-filter]] — Filtro de instancia WhatsApp no Chat Bubble (Popover switcher)
 - [[Mensagens Agendadas]] — Agendar envio de mensagens WhatsApp
 - [[Templates de Mensagem]] — Templates com variaveis dinamicas e slash commands
 - [[01-schema|WhatsApp Write Instance — Schema]] — Vinculo 1:1 user→instancia de escrita por org (Etapa A: schema/RPCs/RLS)
