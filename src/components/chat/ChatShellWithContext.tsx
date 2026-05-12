@@ -179,6 +179,7 @@ function ChatView({
         hasLead={!!selectedContact?.lead_id}
         leadId={selectedContact?.lead_id ?? undefined}
         conversationId={conversationId}
+        instanceId={instanceId ?? undefined}
         aiDisabled={aiDisabled || isHumanActive}
         isWaitingHuman={isWaitingHuman}
         szChatSession={null}

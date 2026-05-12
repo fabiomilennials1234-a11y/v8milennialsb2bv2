@@ -9,7 +9,7 @@
  *  - Erros NotSupportedError (instance=evolution) → toast informativo.
  */
 import { useState } from "react";
-import { Pencil, Pin, Trash2, Check } from "lucide-react";
+import { Pencil, Pin, Trash2, Check, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { toast } from "sonner";
@@ -21,6 +21,7 @@ import {
   usePinMessage,
   useDeleteMessage,
   useMarkMessageRead,
+  useDownloadMedia,
   isFeatureUnavailable,
 } from "@/hooks/useMessageActions";
 import { EmojiPickerPopover } from "./EmojiPickerPopover";
@@ -37,6 +38,8 @@ export interface MessageBubbleActionsProps {
   canDelete: boolean;
   /** true when this message is currently pinned */
   isPinned: boolean;
+  /** true when message has downloadable media (image/video/audio/doc) */
+  hasMedia?: boolean;
   /** Fired when user clicks the edit pencil — parent swaps to EditMessageInline */
   onRequestEdit: () => void;
   className?: string;
@@ -50,6 +53,7 @@ export function MessageBubbleActions({
   canEdit,
   canDelete,
   isPinned,
+  hasMedia,
   onRequestEdit,
   className,
 }: MessageBubbleActionsProps) {
@@ -57,6 +61,7 @@ export function MessageBubbleActions({
   const pinMut = usePinMessage();
   const deleteMut = useDeleteMessage();
   const markReadMut = useMarkMessageRead();
+  const downloadMut = useDownloadMedia();
   const [deleteOpen, setDeleteOpen] = useState(false);
 
   const handleError = (err: unknown, fallback: string) => {
@@ -91,6 +96,20 @@ export function MessageBubbleActions({
       toast.success("Marcada como lida");
     } catch (e) {
       handleError(e, "Erro ao marcar como lida");
+    }
+  };
+
+  const handleDownload = async () => {
+    try {
+      const { base64, mimetype } = await downloadMut.mutateAsync({ instanceId, messageId });
+      const link = document.createElement("a");
+      link.href = `data:${mimetype};base64,${base64}`;
+      const ext = mimetype.split("/")[1]?.split(";")[0] ?? "bin";
+      link.download = `media-${messageId.slice(0, 8)}.${ext}`;
+      link.click();
+      toast.success("Download iniciado");
+    } catch (e) {
+      handleError(e, "Erro ao baixar mídia");
     }
   };
 
@@ -150,6 +169,25 @@ export function MessageBubbleActions({
           </TooltipTrigger>
           <TooltipContent>{isPinned ? "Desafixar" : "Fixar"}</TooltipContent>
         </Tooltip>
+
+        {hasMedia && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                onClick={handleDownload}
+                disabled={downloadMut.isPending}
+                aria-label="Baixar mídia"
+              >
+                <Download className="h-3.5 w-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Baixar mídia</TooltipContent>
+          </Tooltip>
+        )}
 
         {direction === "incoming" && (
           <Tooltip>

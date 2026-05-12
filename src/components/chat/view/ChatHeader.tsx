@@ -6,7 +6,7 @@
  * Props: callbacks puros — sem hooks de mutation aqui, recebe handlers do pai.
  */
 import React from "react";
-import { ArrowLeft, Phone, UserCircle, Plus, Bot, UserPlus, ArrowRightLeft, Loader2, AlignJustify, List, LayoutList } from "lucide-react";
+import { ArrowLeft, Phone, UserCircle, Plus, Bot, UserPlus, ArrowRightLeft, Loader2, AlignJustify, List, LayoutList, AlertTriangle } from "lucide-react";
 import { TakeoverControls } from "@/components/chat/takeover/TakeoverControls";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -26,6 +26,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { ChannelBadge } from "@/components/chat/ChannelBadge";
+import { SyncChatButton } from "@/components/chat/history-sync/SyncChatButton";
+import { useMessageLimits } from "@/hooks/useMessageLimits";
 
 export interface SzChatSession {
   sz_chat_session_id: string;
@@ -39,6 +41,8 @@ export interface ChatHeaderProps {
   leadId?: string;
   /** ID da conversa — usado pelo TakeoverControls (C30) */
   conversationId?: string | null;
+  /** ID da instância WhatsApp — usado pra SyncChatButton e MessageLimits */
+  instanceId?: string;
   aiDisabled: boolean;
   isWaitingHuman: boolean;
   szChatSession: SzChatSession | null;
@@ -112,6 +116,7 @@ export function ChatHeader({
   hasLead,
   leadId,
   conversationId,
+  instanceId,
   aiDisabled,
   isWaitingHuman,
   szChatSession,
@@ -126,6 +131,9 @@ export function ChatHeader({
   onDensityChange,
   onOpenTimeline,
 }: ChatHeaderProps) {
+  const { data: limits } = useMessageLimits(instanceId ?? null);
+  const limitsWarning = limits && limits.limit > 0 && (limits.current / limits.limit) >= 0.8;
+  const chatJid = phoneNumber ? `${phoneNumber.replace(/\D/g, "")}@s.whatsapp.net` : null;
   return (
     <div className="flex items-center gap-3 p-3 border-b border-border/60 bg-background shrink-0 min-w-0 overflow-hidden">
       <Button variant="ghost" size="icon" onClick={onBack} className="md:hidden shrink-0">
@@ -193,6 +201,24 @@ export function ChatHeader({
           </>
         )}
       </Button>
+
+      {/* Sync history per-chat */}
+      {instanceId && chatJid && (
+        <SyncChatButton instanceId={instanceId} chatJid={chatJid} />
+      )}
+
+      {/* Message limits warning */}
+      {limitsWarning && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Badge variant="outline" className="border-amber-400 text-amber-500 gap-1 text-xs shrink-0">
+              <AlertTriangle className="h-3 w-3" />
+              {limits!.current}/{limits!.limit}
+            </Badge>
+          </TooltipTrigger>
+          <TooltipContent>Limite de mensagens próximo ({Math.round((limits!.current / limits!.limit) * 100)}%)</TooltipContent>
+        </Tooltip>
+      )}
 
       {/* TakeoverControls — FSM IA↔humano (C30) — posição: antes do AI toggle */}
       <TakeoverControls

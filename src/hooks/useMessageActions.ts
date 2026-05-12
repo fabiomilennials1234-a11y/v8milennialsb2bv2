@@ -14,6 +14,7 @@ import {
   pinMessage,
   deleteMessage,
   markMessageRead,
+  downloadMedia,
 } from "@/lib/whatsappApi";
 import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
 
@@ -83,6 +84,14 @@ export function useMarkMessageRead() {
       await markMessageRead(instanceId, messageId, number);
     },
     onSuccess: invalidate,
+  });
+}
+
+export function useDownloadMedia() {
+  return useMutation({
+    mutationFn: async ({ instanceId, messageId }: { instanceId: string; messageId: string }) => {
+      return downloadMedia(instanceId, messageId);
+    },
   });
 }
 

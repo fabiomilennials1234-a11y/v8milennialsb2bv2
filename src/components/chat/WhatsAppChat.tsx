@@ -301,6 +301,7 @@ export function MessageBubble({
             canEdit={canEdit}
             canDelete={canDelete}
             isPinned={!!meta.pinned_at}
+            hasMedia={hasMedia}
             onRequestEdit={() => setIsEditing(true)}
           />
         </div>
@@ -429,6 +430,7 @@ export function MessageBubble({
             canEdit={false}
             canDelete={false}
             isPinned={!!meta.pinned_at}
+            hasMedia={hasMedia}
             onRequestEdit={() => {}}
           />
         </div>
@@ -740,6 +742,7 @@ function ChatWindow({
         contactName={contactName}
         hasLead={hasLead}
         leadId={leadId}
+        instanceId={instanceId}
         aiDisabled={currentAiDisabled}
         isWaitingHuman={isWaitingHuman}
         szChatSession={szChatSession as SzChatSession | null}

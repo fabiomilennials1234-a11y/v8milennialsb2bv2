@@ -16,7 +16,7 @@
  */
 import { useRef, useState, useCallback, useEffect, type DragEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Send, Loader2, ImageIcon, Mic, Clock, AlertCircle, X } from "lucide-react";
+import { Send, Loader2, ImageIcon, Mic, Clock, AlertCircle, X, LayoutList, QrCode } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
@@ -26,6 +26,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
 import { useConversationDraft } from "@/hooks/useConversationDraft";
 import { useSendWhatsAppMessage, useSendWhatsAppMedia } from "@/hooks/chat/useWhatsAppSend";
+import { setPresence } from "@/lib/whatsappApi";
 import { AudioRecorder } from "@/components/chat/media/AudioRecorder";
 import { ScheduleMessageModal } from "@/components/chat/ScheduleMessageModal";
 import { SlashCommandPopover } from "@/components/chat/SlashCommandPopover";
@@ -35,6 +36,8 @@ import { convertAudioBlobToMp3 } from "@/lib/audioToMp3";
 import type { LeadContext, AttendantContext } from "@/lib/template-variables";
 import type { MessageTemplate } from "@/hooks/useMessageTemplates";
 import type { DensityMode } from "@/components/chat/layout/ChatShell";
+import { SendMenuDialog } from "./SendMenuDialog";
+import { SendPixDialog } from "./SendPixDialog";
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -93,6 +96,8 @@ export function ChatComposer({
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [imageCaption, setImageCaption] = useState("");
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
+  const [menuDialogOpen, setMenuDialogOpen] = useState(false);
+  const [pixDialogOpen, setPixDialogOpen] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
 
   // Refs
@@ -276,6 +281,31 @@ export function ChatComposer({
     if (file) handleImageSelect(file);
   }, [handleImageSelect]);
 
+  // Presence: "composing" on type, "available" after 3s idle or blur
+  const presenceTimer = useRef<ReturnType<typeof setTimeout>>();
+  const presenceSent = useRef<"composing" | "available">("available");
+
+  const sendPresence = useCallback((state: "composing" | "available") => {
+    if (presenceSent.current === state) return;
+    presenceSent.current = state;
+    setPresence(instanceId, phoneNumber, state).catch(() => {});
+  }, [instanceId, phoneNumber]);
+
+  const handlePresenceTyping = useCallback(() => {
+    sendPresence("composing");
+    clearTimeout(presenceTimer.current);
+    presenceTimer.current = setTimeout(() => sendPresence("available"), 3000);
+  }, [sendPresence]);
+
+  useEffect(() => {
+    return () => {
+      clearTimeout(presenceTimer.current);
+      if (presenceSent.current === "composing") {
+        setPresence(instanceId, phoneNumber, "available").catch(() => {});
+      }
+    };
+  }, [instanceId, phoneNumber]);
+
   // Focar input ao montar
   useEffect(() => {
     inputRef.current?.focus();
@@ -377,6 +407,30 @@ export function ChatComposer({
               <ImageIcon className="w-5 h-5 text-muted-foreground" />
             </Button>
 
+            {/* Menu interativo */}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setMenuDialogOpen(true)}
+              aria-label="Enviar menu interativo"
+              title="Menu interativo"
+              className="opacity-50 hover:opacity-100 transition-opacity"
+            >
+              <LayoutList className="w-4 h-4 text-muted-foreground" />
+            </Button>
+
+            {/* Pix */}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setPixDialogOpen(true)}
+              aria-label="Enviar botão Pix"
+              title="Enviar Pix"
+              className="opacity-50 hover:opacity-100 transition-opacity"
+            >
+              <QrCode className="w-4 h-4 text-muted-foreground" />
+            </Button>
+
             {/* SlashCommandPopover para templates */}
             {showSlashPopover && templates && (
               <SlashCommandPopover
@@ -396,7 +450,9 @@ export function ChatComposer({
                 const val = e.target.value;
                 setMessage(val);
                 setShowSlashPopover(val.startsWith("/") && val.length > 0);
+                if (val.trim()) handlePresenceTyping();
               }}
+              onBlur={() => sendPresence("available")}
               onKeyDown={handleKeyDown}
               disabled={sendMessage.isPending || sendMedia.isPending}
               aria-label={`Digite uma mensagem para ${contactName}`}
@@ -485,6 +541,20 @@ export function ChatComposer({
           initialMessage={message}
         />
       )}
+
+      <SendMenuDialog
+        open={menuDialogOpen}
+        onOpenChange={setMenuDialogOpen}
+        instanceId={instanceId}
+        phoneNumber={phoneNumber}
+      />
+
+      <SendPixDialog
+        open={pixDialogOpen}
+        onOpenChange={setPixDialogOpen}
+        instanceId={instanceId}
+        phoneNumber={phoneNumber}
+      />
     </div>
   );
 }

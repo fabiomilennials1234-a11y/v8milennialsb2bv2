@@ -11,6 +11,7 @@ import {
   Loader2,
   LogOut,
   Users,
+  Activity,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -52,6 +53,8 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrgQuotas } from "@/hooks/useOrgQuotas";
+import { useMessageLimits } from "@/hooks/useMessageLimits";
+import { HistorySyncPanel } from "@/components/chat/history-sync/HistorySyncPanel";
 import { toast } from "sonner";
 
 function QRCodeModal({
@@ -278,6 +281,32 @@ function QRCodeModal({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function MessageLimitsCard({ instanceId }: { instanceId: string }) {
+  const { data, isLoading } = useMessageLimits(instanceId);
+  if (isLoading || !data) return null;
+  const pct = data.limit > 0 ? Math.round((data.current / data.limit) * 100) : 0;
+  const isHigh = pct >= 80;
+  return (
+    <div className="flex items-center gap-3 text-xs">
+      <Activity className={`h-3.5 w-3.5 shrink-0 ${isHigh ? "text-amber-500" : "text-muted-foreground"}`} />
+      <div className="flex-1 min-w-0">
+        <div className="flex justify-between mb-1">
+          <span className="text-muted-foreground">Mensagens enviadas</span>
+          <span className={isHigh ? "text-amber-500 font-medium" : "text-muted-foreground"}>
+            {data.current.toLocaleString()} / {data.limit.toLocaleString()}
+          </span>
+        </div>
+        <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+          <div
+            className={`h-full rounded-full transition-all ${isHigh ? "bg-amber-500" : "bg-primary"}`}
+            style={{ width: `${Math.min(pct, 100)}%` }}
+          />
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -680,6 +709,13 @@ export function WhatsAppSettings() {
                   )}
                 </div>
               </div>
+
+              {instance.status === "connected" && (
+                <div className="mt-4 space-y-4 pt-4 border-t border-border/40">
+                  <MessageLimitsCard instanceId={instance.id} />
+                  <HistorySyncPanel instanceId={instance.id} />
+                </div>
+              )}
             </motion.div>
           ))}
         </div>
