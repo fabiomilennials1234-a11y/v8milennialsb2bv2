@@ -35,9 +35,15 @@ export function getAudioPlaybackUrl(mediaUrl: string | null): string | null {
 interface AudioPlayerProps {
   src: string;
   isOutgoing: boolean;
+  instanceId?: string | null;
+  whatsappMessageId?: string | null;
 }
 
-export function AudioPlayer({ src, isOutgoing: _isOutgoing }: AudioPlayerProps) {
+function isEncryptedWhatsAppUrl(url: string): boolean {
+  return url.includes(".whatsapp.net/") || url.includes(".whatsapp.com/");
+}
+
+export function AudioPlayer({ src, isOutgoing: _isOutgoing, instanceId, whatsappMessageId }: AudioPlayerProps) {
   const [error, setError] = useState(false);
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -146,11 +152,37 @@ export function AudioPlayer({ src, isOutgoing: _isOutgoing }: AudioPlayerProps) 
     setBlobUrl((prev) => { if (prev) URL.revokeObjectURL(prev); return null; });
   }, [src, isStreamMediaUrl]);
 
+  const proxyDownloadAttemptedRef = useRef(false);
+
   // Etapa 2 (fallback): Se o <audio> disparar erro, tentar novo blob URL (Safari) ou converter para MP3
   const handleError = useCallback(async () => {
     if (!isValidSrc) {
       setError(true);
       return;
+    }
+
+    // Encrypted WhatsApp CDN URL — download decrypted media via proxy
+    if (isEncryptedWhatsAppUrl(src) && instanceId && whatsappMessageId && !proxyDownloadAttemptedRef.current) {
+      proxyDownloadAttemptedRef.current = true;
+      setLoading(true);
+      try {
+        const { downloadMedia } = await import("@/lib/whatsappApi");
+        const { base64, mimetype } = await downloadMedia(instanceId, whatsappMessageId);
+        if (base64) {
+          const pure = base64.includes(",") ? base64.split(",")[1] : base64;
+          const bin = Uint8Array.from(atob(pure), (c) => c.charCodeAt(0));
+          const blob = new Blob([bin], { type: mimetype || "audio/ogg" });
+          rawBlobRef.current = blob;
+          const url = URL.createObjectURL(blob);
+          setBlobUrl((prev) => { if (prev) URL.revokeObjectURL(prev); return url; });
+          setLoading(false);
+          if (audioRef.current) { audioRef.current.src = url; audioRef.current.load(); }
+          return;
+        }
+      } catch (err) {
+        console.warn("[AudioPlayer] proxy download failed:", err);
+      }
+      setLoading(false);
     }
 
     const blob = rawBlobRef.current;

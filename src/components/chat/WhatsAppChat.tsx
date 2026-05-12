@@ -349,7 +349,12 @@ export function MessageBubble({
             {/* Áudio */}
             {isAudio && message.media_url && (
               <div>
-                <AudioPlayer src={getAudioPlaybackUrl(message.media_url) ?? message.media_url} isOutgoing={isOutgoing} />
+                <AudioPlayer
+                  src={getAudioPlaybackUrl(message.media_url) ?? message.media_url}
+                  isOutgoing={isOutgoing}
+                  instanceId={isWhatsAppMsg ? (message as WhatsAppMessage).instance_id : undefined}
+                  whatsappMessageId={isWhatsAppMsg ? (message as WhatsAppMessage).message_id : undefined}
+                />
               </div>
             )}
 

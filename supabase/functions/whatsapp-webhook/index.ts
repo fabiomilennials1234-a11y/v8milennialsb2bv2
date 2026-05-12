@@ -38,6 +38,17 @@ const REPLAY_WINDOW_MS = 5 * 60_000; // 5 minutes
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const UAZAPI_WEBHOOK_SECRET = Deno.env.get("UAZAPI_WEBHOOK_SECRET") ?? "";
+const UAZAPI_BASE_URL = Deno.env.get("UAZAPI_BASE_URL") ?? "";
+
+const MEDIA_PERSIST_TIMEOUT_MS = 25_000;
+const MIME_TO_EXT: Record<string, string> = {
+  "audio/ogg": "ogg", "audio/ogg; codecs=opus": "ogg",
+  "audio/mpeg": "mp3", "audio/mp4": "m4a", "audio/aac": "aac",
+  "audio/webm": "webm", "audio/wav": "wav",
+  "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp",
+  "video/mp4": "mp4", "video/webm": "webm",
+  "application/pdf": "pdf", "application/octet-stream": "bin",
+};
 
 // ============================================================================
 // In-memory rate limit (follow-up: KV/Redis before prod volume)
@@ -100,6 +111,77 @@ async function resolveInstance(
 
   if (!inst) return null;
   return inst as ResolvedInstance;
+}
+
+function isWhatsAppCdnUrl(url: string): boolean {
+  return url.includes(".whatsapp.net/") || url.includes(".whatsapp.com/");
+}
+
+async function persistMediaToStorage(
+  sb: ReturnType<typeof createClient>,
+  instance: ResolvedInstance,
+  messageId: string,
+  messageType: string,
+) {
+  if (!UAZAPI_BASE_URL) return;
+
+  const { data: secrets } = await sb
+    .from("whatsapp_instance_secrets")
+    .select("uazapi_token")
+    .eq("instance_id", instance.id)
+    .maybeSingle();
+  if (!secrets?.uazapi_token) return;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), MEDIA_PERSIST_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${UAZAPI_BASE_URL}/message/download`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        token: secrets.uazapi_token,
+      },
+      body: JSON.stringify({ id: messageId }),
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    if (!res.ok) return;
+
+    const result = await res.json();
+    const rawB64: string = result.base64 ?? "";
+    const mimetype: string = result.mimetype ?? "application/octet-stream";
+    if (!rawB64) return;
+
+    const pure = rawB64.includes(",") ? rawB64.split(",")[1] : rawB64;
+    const bin = Uint8Array.from(atob(pure), (c) => c.charCodeAt(0));
+
+    const ext = MIME_TO_EXT[mimetype] ?? mimetype.split("/")[1] ?? "bin";
+    const path = `whatsapp-media/${instance.organization_id}/${messageId}.${ext}`;
+
+    const { error: upErr } = await sb.storage
+      .from("media")
+      .upload(path, bin, { contentType: mimetype, upsert: true });
+    if (upErr) {
+      console.error(`[webhook] storage upload failed: ${upErr.message}`);
+      return;
+    }
+
+    const { data: urlData } = sb.storage.from("media").getPublicUrl(path);
+    if (urlData?.publicUrl) {
+      await sb
+        .from("whatsapp_messages")
+        .update({ media_url: urlData.publicUrl })
+        .eq("message_id", messageId)
+        .eq("instance_id", instance.id);
+    }
+  } catch (err) {
+    clearTimeout(timer);
+    if ((err as Error).name === "AbortError") {
+      console.warn(`[webhook] media persist timeout for ${messageId}`);
+    } else {
+      console.error(`[webhook] media persist error for ${messageId}:`, err);
+    }
+  }
 }
 
 function normalizeMessage(data: any, instance: ResolvedInstance) {
@@ -221,6 +303,12 @@ async function handleMessagesEvent(
       payloadSnapshot: { instance_id: instance.id, error: error.message },
     });
     return;
+  }
+
+  // Fire-and-forget: download encrypted WhatsApp CDN media and persist to Storage
+  if (normalized.media_url && isWhatsAppCdnUrl(normalized.media_url) && normalized.message_id) {
+    persistMediaToStorage(supabase, instance, normalized.message_id, normalized.message_type)
+      .catch((err) => console.error(`[webhook] media persist fire-forget:`, err));
   }
 
   // Resolve any waiting workflow executions for this phone — must run BEFORE
