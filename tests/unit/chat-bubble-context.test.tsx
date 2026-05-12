@@ -257,6 +257,101 @@ describe("ChatBubbleProvider — transitions", () => {
   });
 });
 
+describe("ChatBubbleProvider — listInstanceFilter", () => {
+  it("default = 'all' quando não há valor em localStorage", () => {
+    const qc = newQc();
+    const { result } = renderHook(() => useChatBubble(), {
+      wrapper: wrapWithProvider(qc),
+    });
+    expect(result.current.listInstanceFilter).toBe("all");
+  });
+
+  it("setListInstanceFilter atualiza state e persiste no localStorage", () => {
+    instancesRef.value = [
+      { id: "i1", instance_name: "Vendas", status: "connected" },
+      { id: "i2", instance_name: "Suporte", status: "connected" },
+    ];
+    const qc = newQc();
+    const { result } = renderHook(() => useChatBubble(), {
+      wrapper: wrapWithProvider(qc),
+    });
+    act(() => result.current.setListInstanceFilter("i2"));
+    expect(result.current.listInstanceFilter).toBe("i2");
+    expect(localStorage.getItem("chat-bubble:list-filter:u1")).toBe("i2");
+  });
+
+  it("estado inicial lê do localStorage", () => {
+    localStorage.setItem("chat-bubble:list-filter:u1", "i1");
+    const qc = newQc();
+    const { result } = renderHook(() => useChatBubble(), {
+      wrapper: wrapWithProvider(qc),
+    });
+    expect(result.current.listInstanceFilter).toBe("i1");
+  });
+
+  it("reset 'all' grava 'all' no localStorage", () => {
+    instancesRef.value = [
+      { id: "i1", instance_name: "Vendas", status: "connected" },
+      { id: "i2", instance_name: "Suporte", status: "connected" },
+    ];
+    const qc = newQc();
+    const { result } = renderHook(() => useChatBubble(), {
+      wrapper: wrapWithProvider(qc),
+    });
+    act(() => result.current.setListInstanceFilter("i2"));
+    act(() => result.current.setListInstanceFilter("all"));
+    expect(result.current.listInstanceFilter).toBe("all");
+    expect(localStorage.getItem("chat-bubble:list-filter:u1")).toBe("all");
+  });
+
+  it("auto-reset pra 'all' quando instância filtrada some das permitidas", () => {
+    instancesRef.value = [
+      { id: "i1", instance_name: "Vendas", status: "connected" },
+      { id: "i2", instance_name: "Suporte", status: "connected" },
+    ];
+    localStorage.setItem("chat-bubble:list-filter:u1", "i2");
+    const qc = newQc();
+    const { result, rerender } = renderHook(() => useChatBubble(), {
+      wrapper: wrapWithProvider(qc),
+    });
+    expect(result.current.listInstanceFilter).toBe("i2");
+    // i2 removida da lista de permitidas
+    act(() => {
+      instancesRef.value = [{ id: "i1", instance_name: "Vendas", status: "connected" }];
+    });
+    rerender();
+    expect(result.current.listInstanceFilter).toBe("all");
+  });
+
+  it("open({phone, instanceId}) auto-define filtro pra esse instanceId", () => {
+    instancesRef.value = [
+      { id: "i1", instance_name: "Vendas", status: "connected" },
+      { id: "i2", instance_name: "Suporte", status: "connected" },
+    ];
+    const qc = newQc();
+    const { result } = renderHook(() => useChatBubble(), {
+      wrapper: wrapWithProvider(qc),
+    });
+    expect(result.current.listInstanceFilter).toBe("all");
+    act(() => result.current.open({ phone: "11999", instanceId: "i2" }));
+    expect(result.current.listInstanceFilter).toBe("i2");
+  });
+
+  it("listInstanceFilter NÃO impacta unreadTotal (badge soma todas)", () => {
+    instancesRef.value = [
+      { id: "i1", instance_name: "Vendas", status: "connected" },
+      { id: "i2", instance_name: "Suporte", status: "connected" },
+    ];
+    const qc = newQc();
+    const { result } = renderHook(() => useChatBubble(), {
+      wrapper: wrapWithProvider(qc),
+    });
+    const unreadBefore = result.current.unreadTotal;
+    act(() => result.current.setListInstanceFilter("i1"));
+    expect(result.current.unreadTotal).toBe(unreadBefore);
+  });
+});
+
 describe("Provider integração com Provider mount", () => {
   it("renderiza children sem crash", () => {
     const qc = newQc();

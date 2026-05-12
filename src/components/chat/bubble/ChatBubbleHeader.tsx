@@ -6,6 +6,7 @@
  *
  * Glass blur: fórmula coerente com .topnav-header (src/index.css).
  */
+import type { ReactNode } from "react";
 import { ChevronLeft, Minus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -18,6 +19,11 @@ interface ChatBubbleHeaderProps {
   instanceName?: string | null;
   showInstanceDot?: boolean;
   instanceId?: string | null;
+  // list-mode props
+  /** Slot que substitui o título "Conversas" (ex: switcher). */
+  titleSlot?: ReactNode;
+  /** Quando há 1 única instância, exibe o nome dela como subtítulo discreto. */
+  singleInstanceName?: string | null;
   // ações
   onBack: () => void;
   onMinimize: () => void;
@@ -38,6 +44,8 @@ export function ChatBubbleHeader({
   instanceName,
   showInstanceDot,
   instanceId,
+  titleSlot,
+  singleInstanceName,
   onBack,
   onMinimize,
   onClose,
@@ -92,10 +100,19 @@ export function ChatBubbleHeader({
             </div>
           </div>
         </>
+      ) : titleSlot ? (
+        <div className="flex-1 min-w-0 flex items-center px-1">{titleSlot}</div>
       ) : (
-        <p className="flex-1 text-sm font-semibold tracking-tight text-foreground px-1">
-          Conversas
-        </p>
+        <div className="flex-1 min-w-0 flex flex-col justify-center px-1">
+          <p className="text-sm font-semibold tracking-tight text-foreground leading-tight">
+            Conversas
+          </p>
+          {singleInstanceName && (
+            <p className="text-[10px] text-muted-foreground/70 leading-tight truncate">
+              {singleInstanceName}
+            </p>
+          )}
+        </div>
       )}
 
       <Button

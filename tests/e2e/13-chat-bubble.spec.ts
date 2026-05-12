@@ -107,4 +107,58 @@ test.describe("Chat Bubble Kanban", () => {
       .getByRole("button", { name: /fechar/i });
     await closeBtn.click();
   });
+
+  test("filtro de instância: seleção persiste em reload, badge inalterado", async ({
+    page,
+  }) => {
+    await page.goto(PIPE_ROUTE);
+    await page.waitForLoadState("networkidle");
+
+    await page.getByTestId("chat-bubble-fab").click();
+    const panel = page.locator("#chat-bubble-panel");
+    await expect(panel).toBeVisible({ timeout: 5_000 });
+
+    // Switcher só aparece com ≥2 instâncias. Em ambiente seed pode haver 0/1 —
+    // não falhar nesses cenários; apenas validar que UI tá coerente.
+    const switcherTrigger = panel.locator(
+      'button[aria-haspopup="listbox"]',
+    );
+    const switcherCount = await switcherTrigger.count();
+    if (switcherCount === 0) {
+      // Org de teste com 0/1 instância — feature renderiza fallback (single name).
+      // Smoke OK; pula validação de filtragem.
+      return;
+    }
+
+    // Captura badge atual do FAB ANTES do filtro
+    const fab = page.getByTestId("chat-bubble-fab");
+    const badgeBefore = await fab.textContent();
+
+    // Abre popover e seleciona o primeiro item após "Todas as conversas"
+    await switcherTrigger.first().click();
+    const options = page.locator('[role="option"]');
+    await expect(options.first()).toBeVisible({ timeout: 3_000 });
+    // Pula "Todas" (idx 0) e seleciona idx 1
+    const optionCount = await options.count();
+    if (optionCount < 2) return;
+    await options.nth(1).click();
+
+    // Badge do FAB NÃO muda
+    const badgeAfter = await fab.textContent();
+    expect(badgeAfter).toBe(badgeBefore);
+
+    // Reload preserva seleção
+    await page.reload();
+    await page.waitForLoadState("networkidle");
+    await expect(page.locator("#chat-bubble-panel")).toBeVisible({ timeout: 10_000 });
+    // Trigger atual deve refletir a instância (não "Todas")
+    const reloadedTriggerText = await switcherTrigger.first().textContent();
+    expect(reloadedTriggerText).not.toMatch(/Todas/i);
+
+    // Cleanup: reset filter pra não vazar
+    await switcherTrigger.first().click();
+    await options.first().click(); // "Todas as conversas"
+    const closeBtn = panel.getByRole("button", { name: /fechar/i });
+    await closeBtn.click();
+  });
 });

@@ -17,6 +17,7 @@ import { ChatBubbleConversationList } from "./ChatBubbleConversationList";
 import { ChatBubbleThread } from "./ChatBubbleThread";
 import { ChatBubbleEmptyState } from "./ChatBubbleEmptyState";
 import { ChatBubbleRealtimePill } from "./ChatBubbleRealtimePill";
+import { ChatBubbleInstanceSwitcher } from "./ChatBubbleInstanceSwitcher";
 
 const MOBILE_BREAKPOINT = 768;
 
@@ -56,6 +57,8 @@ function PanelContent() {
     markAsRead,
     pendingLeadName,
     isReconnecting,
+    listInstanceFilter,
+    setListInstanceFilter,
   } = useChatBubble();
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -124,6 +127,10 @@ function PanelContent() {
   }
 
   // Lista (modo default ou enquanto resolve deep-link)
+  const hasMultiInstance = instances.length >= 2;
+  const singleInstanceName =
+    instances.length === 1 ? instances[0].instance_name : null;
+
   return (
     <div className="flex flex-col h-full">
       <ChatBubbleHeader
@@ -131,6 +138,16 @@ function PanelContent() {
         onBack={backToList}
         onMinimize={toggleMinimized}
         onClose={close}
+        titleSlot={
+          hasMultiInstance ? (
+            <ChatBubbleInstanceSwitcher
+              instances={instances}
+              value={listInstanceFilter}
+              onChange={setListInstanceFilter}
+            />
+          ) : undefined
+        }
+        singleInstanceName={hasMultiInstance ? null : singleInstanceName}
       />
       <ChatBubbleRealtimePill show={isReconnecting} />
       <ChatBubbleSearch value={searchQuery} onChange={setSearchQuery} />
@@ -144,7 +161,9 @@ function PanelContent() {
           searchQuery={debouncedQuery}
           selectedPhone={selectedPhone}
           selectedInstanceId={selectedInstanceId}
+          filterInstanceId={listInstanceFilter}
           onSelect={selectConversation}
+          onResetFilter={() => setListInstanceFilter("all")}
         />
       )}
     </div>
