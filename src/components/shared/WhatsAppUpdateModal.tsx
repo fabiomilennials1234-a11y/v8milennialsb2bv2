@@ -41,7 +41,7 @@ export function WhatsAppUpdateModal() {
 
   const handleContact = () => {
     window.open(
-      "https://wa.me/554884334050?text=Ol%C3%A1!%20Quero%20saber%20sobre%20as%20novidades%20do%20WhatsApp%20no%20Torque%20CRM",
+      "https://wa.me/554884334050?text=Ol%C3%A1!%20Vi%20que%20tem%20uma%20NOVA%20INTEGRA%C3%87%C3%83O%20do%20WhatsApp%20no%20Torque%20CRM.%20Quero%20saber%20como%20fazer%20a%20nova%20conex%C3%A3o!",
       "_blank",
     );
     handleDismiss();
@@ -55,12 +55,12 @@ export function WhatsAppUpdateModal() {
             <MessageSquare className="h-7 w-7 text-emerald-400" />
           </div>
           <DialogTitle className="text-center text-xl">
-            WhatsApp com superpoderes
+            Nova integracao WhatsApp
           </DialogTitle>
           <DialogDescription className="text-center text-sm text-muted-foreground">
-            Atualizamos a integracao do WhatsApp com recursos que antes nao
-            eram possiveis. Confira o que agora voce pode fazer direto pelo
-            Torque CRM:
+            Temos uma nova integracao do WhatsApp com recursos que antes nao
+            eram possiveis. Para aproveitar, sera necessario realizar uma
+            nova conexao do seu numero. Confira as novidades:
           </DialogDescription>
         </DialogHeader>
 
