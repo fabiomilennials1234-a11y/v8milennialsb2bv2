@@ -324,6 +324,9 @@ export async function executeWorkflowAction(ctx: ActionContext): Promise<ActionR
     case "send_whatsapp_image":
       result = await handleSendWhatsAppImage(ctx);
       break;
+    case "send_whatsapp_sticker":
+      result = await handleSendWhatsAppSticker(ctx);
+      break;
     case "send_whatsapp_template":
       result = await handleSendWhatsAppTemplate(ctx);
       break;
@@ -574,6 +577,29 @@ async function handleSendWhatsAppImage(ctx: ActionContext): Promise<ActionResult
 
   if (!sendResult.success) return { success: false, error: `Image send failed: ${sendResult.error}` };
   return { success: true, message: "WhatsApp image sent" };
+}
+
+async function handleSendWhatsAppSticker(ctx: ActionContext): Promise<ActionResult> {
+  const wa = await getWhatsAppInstance(ctx.supabase, ctx.organizationId, ctx.nodeData.whatsappInstanceId as string, ctx.leadId);
+  if (!wa) return { success: false, error: "WhatsApp instance not available" };
+
+  const phone = await getLeadPhone(ctx.supabase, ctx.leadId);
+  if (!phone) return { success: false, error: "Lead has no phone" };
+
+  const stickerUrl = ctx.nodeData.stickerUrl as string;
+  if (!stickerUrl) return { success: false, error: "No sticker URL configured" };
+
+  const { sendMediaViaInstance } = await import("./whatsapp-dispatch.ts");
+  const sendResult = await sendMediaViaInstance(
+    ctx.supabase,
+    wa.instance,
+    phone,
+    { type: "sticker", file: stickerUrl },
+    { trackSource: "workflow-action", trackId: ctx.executionId }
+  );
+
+  if (!sendResult.success) return { success: false, error: `Sticker send failed: ${sendResult.error}` };
+  return { success: true, message: "WhatsApp sticker sent" };
 }
 
 async function handleSendWhatsAppTemplate(ctx: ActionContext): Promise<ActionResult> {

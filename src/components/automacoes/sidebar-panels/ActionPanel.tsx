@@ -193,6 +193,7 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
       {(at === "send_whatsapp" ||
         at === "send_whatsapp_audio" ||
         at === "send_whatsapp_image" ||
+        at === "send_whatsapp_sticker" ||
         at === "send_whatsapp_template") && (
         <WhatsAppInstanceSelector
           instanceId={data.whatsappInstanceId}
@@ -236,6 +237,21 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
             </p>
           </div>
         </>
+      )}
+
+      {/* Send WhatsApp (Figurinha) */}
+      {at === "send_whatsapp_sticker" && (
+        <div className="space-y-2">
+          <Label>URL da Figurinha</Label>
+          <Input
+            value={data.stickerUrl || ""}
+            onChange={(e) => onUpdate({ stickerUrl: e.target.value })}
+            placeholder="https://... (PNG ou WebP, idealmente 512x512)"
+          />
+          <p className="text-xs text-muted-foreground">
+            Imagem PNG ou WebP. Recomendado 512×512px com fundo transparente.
+          </p>
+        </div>
       )}
 
       {/* Send WhatsApp Template */}

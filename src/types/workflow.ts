@@ -48,6 +48,7 @@ export type WorkflowActionType =
   | "send_whatsapp"
   | "send_whatsapp_audio"
   | "send_whatsapp_image"
+  | "send_whatsapp_sticker"
   | "send_whatsapp_template"
   | "send_whatsapp_menu"
   | "send_whatsapp_pix_button"
@@ -273,6 +274,8 @@ export interface ActionNodeData {
   // Send WhatsApp (imagem)
   imageUrl?: string;
   imageCaption?: string;
+  // Send WhatsApp (figurinha)
+  stickerUrl?: string;
   // Send WhatsApp Menu (Uazapi-only)
   menuType?: "button" | "list" | "poll" | "carousel";
   menuText?: string;
@@ -666,6 +669,7 @@ export const ACTION_LABELS: Record<WorkflowActionType, string> = {
   send_whatsapp: "Enviar WhatsApp (Texto)",
   send_whatsapp_audio: "Enviar WhatsApp (Áudio)",
   send_whatsapp_image: "Enviar WhatsApp (Imagem)",
+  send_whatsapp_sticker: "Enviar WhatsApp (Figurinha)",
   send_whatsapp_template: "Enviar Template WhatsApp",
   send_whatsapp_menu: "Enviar Menu Interativo (Uazapi)",
   send_whatsapp_pix_button: "Enviar Botão PIX (Uazapi)",
@@ -774,6 +778,7 @@ export const ACTION_CATEGORIES: ActionCategory[] = [
       "send_whatsapp",
       "send_whatsapp_audio",
       "send_whatsapp_image",
+      "send_whatsapp_sticker",
       "send_whatsapp_template",
       "send_whatsapp_menu",
       "send_whatsapp_pix_button",

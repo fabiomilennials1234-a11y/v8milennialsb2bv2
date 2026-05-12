@@ -386,7 +386,7 @@ export async function sendMediaViaInstance(
   instance: WhatsAppInstance,
   phoneNumber: string,
   media: {
-    type: "image" | "video" | "document" | "audio";
+    type: "image" | "video" | "document" | "audio" | "sticker";
     file: string;
     filename?: string;
     caption?: string;
