@@ -26,6 +26,7 @@ interface ChatBubbleInstanceSwitcherProps {
   instances: WhatsAppInstanceForUser[];
   value: string | "all";
   onChange: (next: string | "all") => void;
+  preferredId?: string | null;
 }
 
 function statusLabel(status: string | null | undefined): string | null {
@@ -41,6 +42,7 @@ export function ChatBubbleInstanceSwitcher({
   instances,
   value,
   onChange,
+  preferredId,
 }: ChatBubbleInstanceSwitcherProps) {
   const [open, setOpen] = useState(false);
 
@@ -151,6 +153,7 @@ export function ChatBubbleInstanceSwitcher({
 
           {sorted.map((inst) => {
             const isSelected = value === inst.id;
+            const isPreferred = preferredId === inst.id;
             const status = statusLabel(inst.status as string | null | undefined);
             return (
               <li key={inst.id}>
@@ -178,6 +181,11 @@ export function ChatBubbleInstanceSwitcher({
                   />
                   <span className="flex-1 min-w-0 text-left truncate">
                     <span className="truncate">{inst.instance_name}</span>
+                    {isPreferred && (
+                      <span className="text-[10px] text-muted-foreground/60 ml-1.5 font-medium uppercase tracking-wider">
+                        padrão
+                      </span>
+                    )}
                     {status && (
                       <span className="text-muted-foreground/70 ml-1">
                         • {status}

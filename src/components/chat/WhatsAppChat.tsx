@@ -63,6 +63,7 @@ import { useEditMessage, isFeatureUnavailable } from "@/hooks/useMessageActions"
 import { ChatComposerShell } from "@/components/chat/composer/ChatComposerShell";
 import { InstanceOwnerModal } from "@/components/chat/admin/InstanceOwnerModal";
 import { useLeadWriteInstance } from "@/hooks/useLeadWriteInstance";
+import { usePreferredInstance } from "@/hooks/usePreferredInstance";
 import { toast } from "sonner";
 import { useIsAdmin } from "@/hooks/useUserRole";
 import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
@@ -1072,7 +1073,7 @@ export function WhatsAppChat() {
   // TanStack Query v5: isLoading = isPending && isFetching, so it's false when query is disabled.
   // Use isPending to also show spinner while waiting for the team member to load (query not yet enabled).
   const instancesLoading = instancesPending;
-  const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(null);
+  const [selectedInstanceId, setSelectedInstanceIdRaw] = useState<string | null>(null);
 
   // Track whether instance restoration has already run for this user context
   const instanceRestoredRef = useRef(false);
@@ -1080,6 +1081,13 @@ export function WhatsAppChat() {
   // Hooks para archive/delete/tags
   const { isAdmin } = useIsAdmin();
   const { data: teamMember } = useCurrentTeamMember();
+
+  const { preferredInstanceId, setPreferredInstance } = usePreferredInstance(instances);
+
+  const setSelectedInstanceId = useCallback((id: string | null) => {
+    setSelectedInstanceIdRaw(id);
+    if (id) setPreferredInstance(id);
+  }, [setPreferredInstance]);
 
   // Resolve effective instance: only use selectedInstanceId if it's valid for this user
   const selectedInstance = selectedInstanceId
@@ -1177,20 +1185,26 @@ export function WhatsAppChat() {
 
     instanceRestoredRef.current = true;
 
+    // Priority: banco (preferredInstanceId) → localStorage → single-instance auto
+    const preferredIsValid = preferredInstanceId
+      ? instances.some((i) => i.id === preferredInstanceId)
+      : false;
+
+    if (preferredIsValid) {
+      setSelectedInstanceIdRaw(preferredInstanceId);
+      return;
+    }
+
     const storageKey = getInstanceStorageKey(teamMember.id, teamMember.organization_id);
     const persistedId = storageKey ? localStorage.getItem(storageKey) : null;
-
-    // Validate: persisted instance must exist in user's allowed list
     const persistedIsValid = persistedId ? instances.some((i) => i.id === persistedId) : false;
 
     if (persistedIsValid) {
-      setSelectedInstanceId(persistedId);
+      setSelectedInstanceIdRaw(persistedId);
     } else if (instances.length === 1) {
-      // Only auto-select when there's a single option — no ambiguity
-      setSelectedInstanceId(instances[0].id);
+      setSelectedInstanceIdRaw(instances[0].id);
     }
-    // Multiple instances + no valid persisted → stays null, user must choose
-  }, [teamMember?.id, teamMember?.organization_id, instances, instancesLoading]);
+  }, [teamMember?.id, teamMember?.organization_id, instances, instancesLoading, preferredInstanceId]);
 
   // Reset restoration flag when user context changes (login switch)
   useEffect(() => {

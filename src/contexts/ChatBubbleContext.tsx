@@ -31,6 +31,7 @@ import { useWhatsAppInstancesForUser } from "@/hooks/chat/useWhatsAppInstances";
 import { useWhatsAppMessagesRealtime } from "@/hooks/chat/useWhatsAppRealtime";
 import { useChatBubbleContactsRealtime } from "@/hooks/chat/useChatBubbleContactsRealtime";
 import { useResolveChatDeepLink } from "@/hooks/chat/useResolveChatDeepLink";
+import { usePreferredInstance } from "@/hooks/usePreferredInstance";
 import { chatQueryKeys } from "@/hooks/chat/shared/queryKeys";
 import { normalizePhone } from "@/lib/normalizePhone";
 import type { ChatContact, WhatsAppInstanceForUser } from "@/hooks/chat/types";
@@ -58,6 +59,8 @@ export interface ChatBubbleContextValue {
    * `useQueries` cross-instance nem unread badge.
    */
   listInstanceFilter: string | "all";
+  /** ID da instância preferida do user (banco). Usado pra badge "padrão" no switcher. */
+  preferredInstanceId: string | null;
 
   // ações
   open: (args?: { phone?: string | null; instanceId?: string | null; leadName?: string | null }) => void;
@@ -144,6 +147,20 @@ export function ChatBubbleProvider({ children }: ChatBubbleProviderProps) {
   // ── Instâncias permitidas ──────────────────────────────────────────────────
   const { data: instances = [] } = useWhatsAppInstancesForUser();
   const instanceIds = useMemo(() => instances.map((i) => i.id), [instances]);
+
+  // ── Instância preferida (banco + fallback localStorage) ───────────────────
+  const { preferredInstanceId, setPreferredInstance } = usePreferredInstance(instances);
+  const preferredAppliedRef = useRef(false);
+
+  // Aplica preferência do banco como filtro inicial (uma vez, sem sobrescrever escolha manual)
+  useEffect(() => {
+    if (preferredAppliedRef.current) return;
+    if (!preferredInstanceId) return;
+    if (instances.length < 2) return;
+    preferredAppliedRef.current = true;
+    setListInstanceFilterState(preferredInstanceId);
+    writeListFilter(userId, preferredInstanceId);
+  }, [preferredInstanceId, instances.length, userId]);
 
   // Auto-reset filter quando instância filtrada some das permitidas
   useEffect(() => {
@@ -235,7 +252,7 @@ export function ChatBubbleProvider({ children }: ChatBubbleProviderProps) {
         })) as ChatContact[];
       },
       enabled: !!organizationId && !!inst.id,
-      staleTime: 30_000,
+      staleTime: 5 * 60_000,
     })),
   });
 
@@ -263,9 +280,14 @@ export function ChatBubbleProvider({ children }: ChatBubbleProviderProps) {
       const dialogs = document.querySelectorAll(
         '[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]',
       );
-      // Filtra o painel do próprio Bubble (id="chat-bubble-panel")
+      const bubblePanel = document.getElementById("chat-bubble-panel");
       for (const el of Array.from(dialogs)) {
         if (el.id === "chat-bubble-panel") continue;
+        // Popover/dropdown portals triggered from inside the bubble panel
+        if (bubblePanel?.contains(el)) continue;
+        // Radix Popover portals use data-radix-popper-content-wrapper or
+        // aria-labelledby pointing to a trigger inside the bubble
+        if (el.closest("[data-radix-popper-content-wrapper]")) continue;
         return true;
       }
       return false;
@@ -314,14 +336,11 @@ export function ChatBubbleProvider({ children }: ChatBubbleProviderProps) {
       setSelectedPhone(args.phone);
       setSelectedInstanceId(args.instanceId);
       setPendingPhoneToResolve(null);
-      // Auto-sincroniza filtro com a instância aberta — usuário ao voltar
-      // pra lista vê apenas a instância dessa conversa, em coerência.
       setListInstanceFilterState(args.instanceId);
       return;
     }
 
     if (args.phone && !args.instanceId) {
-      // Resolver via useResolveChatDeepLink (effect cuida da atribuição)
       setPendingPhoneToResolve(args.phone);
       setSelectedPhone(null);
       setSelectedInstanceId(null);
@@ -365,7 +384,8 @@ export function ChatBubbleProvider({ children }: ChatBubbleProviderProps) {
 
   const setListInstanceFilter = useCallback((next: string | "all") => {
     setListInstanceFilterState(next);
-  }, []);
+    setPreferredInstance(next === "all" ? null : next);
+  }, [setPreferredInstance]);
 
   const value = useMemo<ChatBubbleContextValue>(
     () => ({
@@ -380,6 +400,7 @@ export function ChatBubbleProvider({ children }: ChatBubbleProviderProps) {
       needsPhoneHint,
       isReconnecting,
       listInstanceFilter,
+      preferredInstanceId,
       open,
       close,
       toggleMinimized,
@@ -402,6 +423,7 @@ export function ChatBubbleProvider({ children }: ChatBubbleProviderProps) {
       needsPhoneHint,
       isReconnecting,
       listInstanceFilter,
+      preferredInstanceId,
       open,
       close,
       toggleMinimized,

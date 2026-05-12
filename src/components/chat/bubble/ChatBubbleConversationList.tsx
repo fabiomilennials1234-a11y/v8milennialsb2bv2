@@ -222,7 +222,7 @@ export function ChatBubbleConversationList({
       queryKey: chatQueryKeys.contacts(organizationId, inst.id),
       queryFn: () => fetchContactsForInstance(organizationId!, inst.id),
       enabled: !!organizationId && !!inst.id,
-      staleTime: 60_000,
+      staleTime: 5 * 60_000,
     })),
   });
 

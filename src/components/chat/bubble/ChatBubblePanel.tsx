@@ -59,6 +59,7 @@ function PanelContent() {
     isReconnecting,
     listInstanceFilter,
     setListInstanceFilter,
+    preferredInstanceId,
   } = useChatBubble();
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -144,6 +145,7 @@ function PanelContent() {
               instances={instances}
               value={listInstanceFilter}
               onChange={setListInstanceFilter}
+              preferredId={preferredInstanceId}
             />
           ) : undefined
         }

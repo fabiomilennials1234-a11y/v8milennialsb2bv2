@@ -59,6 +59,7 @@ import {
   useRemoveConversationTag,
 } from "@/hooks/useWhatsAppConversations";
 import { supabase } from "@/integrations/supabase/client";
+import { usePreferredInstance } from "@/hooks/usePreferredInstance";
 import type { ChatContact, FailedMessage } from "@/hooks/chat/types";
 import type { DensityMode } from "@/hooks/chat/useChatDensity";
 
@@ -265,7 +266,14 @@ export function ChatShellWithContext() {
   // ── Instâncias ──────────────────────────────────────────────────────────────
   const { data: instances = [], isLoading: instancesLoading } = useWhatsAppInstancesForUser();
 
-  const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(null);
+  const [selectedInstanceId, setSelectedInstanceIdRaw] = useState<string | null>(null);
+
+  const { preferredInstanceId, setPreferredInstance } = usePreferredInstance(instances);
+
+  const setSelectedInstanceId = useCallback((id: string | null) => {
+    setSelectedInstanceIdRaw(id);
+    if (id) setPreferredInstance(id);
+  }, [setPreferredInstance]);
 
   // ── Deep-link (?phone=&instance=) ───────────────────────────────────────────
   // Lê params uma vez no mount; estado pendente impede que o auto-select de
@@ -356,15 +364,25 @@ export function ChatShellWithContext() {
     setSearchParams({}, { replace: true });
   }, [deepLinkProcessed, searchParams, setSearchParams]);
 
-  // Auto-select primeira instância conectada ao carregar — só dispara se NÃO
-  // houver deep-link pendente, pra não sobrescrever a resolução.
+  // Auto-select: preferência do banco → primeira conectada → primeira da lista.
+  // Não dispara se deep-link pendente.
   useEffect(() => {
     if (selectedInstanceId) return;
     if (!instances.length) return;
     if (hasDeepLinkPhone && !deepLinkProcessed) return;
+
+    const preferredIsValid = preferredInstanceId
+      ? instances.some((i) => i.id === preferredInstanceId)
+      : false;
+
+    if (preferredIsValid) {
+      setSelectedInstanceIdRaw(preferredInstanceId);
+      return;
+    }
+
     const connected = instances.find((i) => i.status === "connected");
-    setSelectedInstanceId(connected?.id ?? instances[0].id);
-  }, [instances, selectedInstanceId, hasDeepLinkPhone, deepLinkProcessed]);
+    setSelectedInstanceIdRaw(connected?.id ?? instances[0].id);
+  }, [instances, selectedInstanceId, hasDeepLinkPhone, deepLinkProcessed, preferredInstanceId]);
 
   const selectedInstance = useMemo(
     () => instances.find((i) => i.id === selectedInstanceId) ?? null,

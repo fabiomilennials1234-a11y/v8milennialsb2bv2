@@ -1,11 +1,11 @@
 /**
  * useChatBubbleState — persist {isOpen, isMinimized} no localStorage por userId.
  *
- * NUNCA persiste selectedPhone/selectedInstanceId — essas vivem só em memória
- * para evitar que o Bubble abra preso em uma conversa obsoleta após reload.
- *
  * Chave: `chat-bubble:${userId}`. Falha silenciosa se localStorage indisponível
  * (modo privado, SSR, etc).
+ *
+ * Instância preferida é persistida separadamente via listInstanceFilter
+ * (localStorage `chat-bubble:list-filter:${userId}`) no ChatBubbleContext.
  */
 import { useCallback, useEffect, useState } from "react";
 

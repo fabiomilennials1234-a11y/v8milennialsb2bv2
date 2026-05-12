@@ -6622,6 +6622,8 @@ export type Database = {
           compromisso_date: string | null
           contact_id: string | null
           created_at: string
+          deleted_at: string | null
+          deleted_by: string | null
           email: string | null
           faturamento: string | null
           id: string
@@ -6665,6 +6667,8 @@ export type Database = {
           compromisso_date?: string | null
           contact_id?: string | null
           created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
           email?: string | null
           faturamento?: string | null
           id?: string
@@ -6708,6 +6712,8 @@ export type Database = {
           compromisso_date?: string | null
           contact_id?: string | null
           created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
           email?: string | null
           faturamento?: string | null
           id?: string
@@ -10677,6 +10683,7 @@ export type Database = {
           organization_id: string | null
           ote_base: number | null
           ote_bonus: number | null
+          preferred_whatsapp_instance_id: string | null
           role: Database["public"]["Enums"]["app_role"]
           updated_at: string
           user_id: string | null
@@ -10694,6 +10701,7 @@ export type Database = {
           organization_id?: string | null
           ote_base?: number | null
           ote_bonus?: number | null
+          preferred_whatsapp_instance_id?: string | null
           role: Database["public"]["Enums"]["app_role"]
           updated_at?: string
           user_id?: string | null
@@ -10711,6 +10719,7 @@ export type Database = {
           organization_id?: string | null
           ote_base?: number | null
           ote_bonus?: number | null
+          preferred_whatsapp_instance_id?: string | null
           role?: Database["public"]["Enums"]["app_role"]
           updated_at?: string
           user_id?: string | null
@@ -10721,6 +10730,13 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "team_members_preferred_whatsapp_instance_id_fkey"
+            columns: ["preferred_whatsapp_instance_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_instances"
             referencedColumns: ["id"]
           },
         ]
@@ -13398,6 +13414,7 @@ export type Database = {
         }
         Returns: Json
       }
+      bulk_delete_leads: { Args: { p_lead_ids: string[] }; Returns: number }
       can_delete_lead: { Args: never; Returns: boolean }
       can_manage_copilot:
         | { Args: never; Returns: boolean }
@@ -13997,6 +14014,18 @@ export type Database = {
         Args: { p_end_date: string; p_org_id: string; p_start_date: string }
         Returns: Json
       }
+      get_trash_leads: {
+        Args: never
+        Returns: {
+          company: string
+          deleted_at: string
+          deleted_by: string
+          email: string
+          id: string
+          name: string
+          phone: string
+        }[]
+      }
       get_uazapi_credentials: {
         Args: { p_instance_id: string }
         Returns: {
@@ -14232,11 +14261,16 @@ export type Database = {
           similarity: number
         }[]
       }
+      matches_workflow_trigger_config: {
+        Args: { p_config: Json; p_context: Json; p_trigger_type: string }
+        Returns: boolean
+      }
       migrate_follow_ups_to_activities: { Args: never; Returns: Json }
       migrate_leads_to_contacts_companies: {
         Args: { p_batch_size?: number }
         Returns: Json
       }
+      normalize_br_mobile: { Args: { digits: string }; Returns: string }
       normalize_brazilian_phone: { Args: { phone: string }; Returns: string }
       org_check_limit: {
         Args: { p_limit_key: string; p_org_id: string }
@@ -14260,6 +14294,7 @@ export type Database = {
         }[]
       }
       purge_expired_rate_limits: { Args: never; Returns: undefined }
+      purge_lead: { Args: { p_lead_id: string }; Returns: undefined }
       record_oraculo_usage: {
         Args: {
           p_org_id: string
@@ -14282,6 +14317,8 @@ export type Database = {
         Args: { p_channel?: string; p_organization_id: string; p_phone: string }
         Returns: number
       }
+      restore_lead: { Args: { p_lead_id: string }; Returns: undefined }
+      restore_leads_bulk: { Args: { p_lead_ids: string[] }; Returns: number }
       rollback_import_batch: { Args: { p_batch_id: string }; Returns: Json }
       save_document_content: {
         Args: { p_content: string; p_doc_id: string }
