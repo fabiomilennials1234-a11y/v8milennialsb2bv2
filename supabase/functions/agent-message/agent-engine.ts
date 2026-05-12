@@ -457,6 +457,36 @@ export class AgentEngine {
     // Versão limpa sem delimitadores (usada para memória e logs)
     const cleanMessage = messageParts.join(' ');
 
+    // 8b. Duplicate content guard — block if identical message sent to this lead in last 60s
+    {
+      const normalizedContent = cleanMessage.replace(/\s+/g, ' ').trim().toLowerCase();
+      const { data: recentDup } = await this.supabase
+        .from("whatsapp_messages")
+        .select("id, content")
+        .eq("lead_id", leadId)
+        .eq("direction", "outgoing")
+        .eq("sent_by_ai", true)
+        .gte("created_at", new Date(Date.now() - 60_000).toISOString())
+        .order("created_at", { ascending: false })
+        .limit(3);
+
+      if (recentDup && recentDup.length > 0) {
+        const isDuplicate = recentDup.some((msg: any) => {
+          const prev = (msg.content || '').replace(/\s+/g, ' ').trim().toLowerCase();
+          return prev === normalizedContent;
+        });
+        if (isDuplicate) {
+          console.warn('[AgentEngine] Blocking duplicate AI response for lead:', leadId);
+          return {
+            message: null,
+            state: nextState,
+            action_executed: actionToExecute?.action,
+            _blocked_reason: "duplicate_content",
+          } as any;
+        }
+      }
+    }
+
     // 8. Enqueue Action (via pending_ai_actions → worker assíncrono)
     let executionResult: Record<string, unknown> | null = null;
     if (actionToExecute) {
