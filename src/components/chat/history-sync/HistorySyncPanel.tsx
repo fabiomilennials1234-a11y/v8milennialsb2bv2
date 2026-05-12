@@ -1,14 +1,15 @@
 /**
  * HistorySyncPanel — lista de jobs ativos + CTA para criar novo.
  *
- * Consumido no WhatsAppSettings como collapse ou section "Histórico".
+ * v2: "Atualizar" button for incremental sync.
  */
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Download, Info } from "lucide-react";
+import { Download, Info, RefreshCw } from "lucide-react";
+import { toast } from "sonner";
 import { HistorySyncDialog } from "./HistorySyncDialog";
 import { SyncProgressCard } from "./SyncProgressCard";
-import { useHistorySyncJobs } from "@/hooks/useHistorySyncJobs";
+import { useHistorySyncJobs, useCreateHistorySyncJob } from "@/hooks/useHistorySyncJobs";
 
 interface Props {
   instanceId: string;
@@ -17,9 +18,25 @@ interface Props {
 export function HistorySyncPanel({ instanceId }: Props) {
   const { data: jobs = [], isLoading } = useHistorySyncJobs({ instanceId });
   const [open, setOpen] = useState(false);
+  const createJob = useCreateHistorySyncJob();
 
   const active = jobs.filter((j) => j.status === "queued" || j.status === "running");
   const recent = jobs.filter((j) => j.status !== "queued" && j.status !== "running").slice(0, 3);
+  const hasCompletedSync = jobs.some((j) => j.status === "completed");
+  const hasActiveJob = active.length > 0;
+
+  const handleIncremental = async () => {
+    try {
+      await createJob.mutateAsync({
+        instance_id: instanceId,
+        scope: "incremental",
+        max_chats: 100,
+      });
+      toast.success("Atualização incremental agendada");
+    } catch (e) {
+      toast.error(`Erro: ${(e as Error).message}`);
+    }
+  };
 
   return (
     <div className="space-y-3">
@@ -30,10 +47,23 @@ export function HistorySyncPanel({ instanceId }: Props) {
             Importa mensagens antigas do WhatsApp via Uazapi.
           </p>
         </div>
-        <Button size="sm" onClick={() => setOpen(true)}>
-          <Download className="h-3.5 w-3.5 mr-2" />
-          Importar
-        </Button>
+        <div className="flex gap-2">
+          {hasCompletedSync && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleIncremental}
+              disabled={createJob.isPending || hasActiveJob}
+            >
+              <RefreshCw className="h-3.5 w-3.5 mr-2" />
+              Atualizar
+            </Button>
+          )}
+          <Button size="sm" onClick={() => setOpen(true)} disabled={hasActiveJob}>
+            <Download className="h-3.5 w-3.5 mr-2" />
+            Importar
+          </Button>
+        </div>
       </div>
 
       {isLoading ? (

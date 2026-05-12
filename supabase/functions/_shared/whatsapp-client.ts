@@ -146,6 +146,7 @@ export interface WhatsAppProvider {
   pin?(messageId: string, number: string): Promise<void>;
   deleteForAll?(messageId: string, number: string): Promise<void>;
   markRead?(messageId: string, number: string): Promise<void>;
+  listChats?(type?: "all" | "individual" | "group"): Promise<Array<{ id: string; name?: string; isGroup?: boolean; lastMessageTimestamp?: number }>>;
   historySync?(opts: {
     chat_jid?: string;
     limit?: number;

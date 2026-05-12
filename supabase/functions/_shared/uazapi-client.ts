@@ -297,12 +297,57 @@ export class UazapiClient {
     );
   }
 
+  async listChats(type: "all" | "individual" | "group" = "all"): Promise<Array<{ id: string; name?: string; isGroup?: boolean; lastMessageTimestamp?: number }>> {
+    const body: Record<string, unknown> = {
+      sort: "-wa_lastMsgTimestamp",
+      limit: 100,
+      offset: 0,
+    };
+    if (type !== "all") {
+      body.operator = "AND";
+      body.filter = [{ field: "wa_isGroup", operator: "eq", value: type === "group" }];
+    }
+    const result = await this.request<any>("POST", "/chat/find", body);
+    const raw: any[] = Array.isArray(result)
+      ? result
+      : Array.isArray(result?.data)
+        ? result.data
+        : Array.isArray(result?.chats)
+          ? result.chats
+          : [];
+    return raw.map((c: any) => ({
+      id: c.wa_chatid ?? c.jid ?? c.chatId ?? c.wa_id ?? c.phone ?? c.id ?? "",
+      name: c.wa_contactName ?? c.wa_name ?? c.name ?? c.pushName ?? c.notify ?? undefined,
+      isGroup: c.wa_isGroup === true ?? String(c.wa_chatid ?? c.jid ?? c.id ?? "").endsWith("@g.us"),
+      lastMessageTimestamp: c.wa_lastMsgTimestamp ?? c.lastMessageTimestamp ?? c.t ?? undefined,
+    }));
+  }
+
   async historySync(input: {
-    chat_jid?: string;
+    number: string;
     limit?: number;
     cursor?: string;
   }): Promise<{ messages: unknown[]; nextCursor?: string }> {
-    return this.request("POST", "/message/history-sync", input);
+    const body: Record<string, unknown> = {
+      chatId: input.number,
+      limit: input.limit ?? 100,
+    };
+    if (input.cursor) {
+      body.offset = Number(input.cursor) || 0;
+    }
+    const result = await this.request<any>("POST", "/message/find", body);
+    const messages: unknown[] = Array.isArray(result)
+      ? result
+      : Array.isArray(result?.data)
+        ? result.data
+        : Array.isArray(result?.messages)
+          ? result.messages
+          : [];
+    const offset = (Number(input.cursor) || 0) + messages.length;
+    return {
+      messages,
+      nextCursor: messages.length >= (input.limit ?? 100) ? String(offset) : undefined,
+    };
   }
 
   async setPresence(input: {

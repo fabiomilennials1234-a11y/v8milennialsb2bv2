@@ -460,10 +460,53 @@ async function handleConnectionEvent(
   };
   const mapped = statusMap[state] ?? "unknown";
 
+  const { data: prevInstance } = await supabase
+    .from("whatsapp_instances")
+    .select("status")
+    .eq("id", instance.id)
+    .maybeSingle();
+  const previousStatus = prevInstance?.status;
+
   await supabase
     .from("whatsapp_instances")
     .update({ status: mapped, updated_at: new Date().toISOString() })
     .eq("id", instance.id);
+
+  // Auto-sync: trigger default history sync on first connect
+  if (mapped === "connected" && previousStatus !== "connected") {
+    await maybeAutoSync(supabase, instance);
+  }
+}
+
+async function maybeAutoSync(
+  supabase: ReturnType<typeof createClient>,
+  instance: ResolvedInstance,
+) {
+  try {
+    const cutoff = new Date(Date.now() - 24 * 3_600_000).toISOString();
+    const { data: recentJobs } = await supabase
+      .from("history_sync_jobs")
+      .select("id")
+      .eq("instance_id", instance.id)
+      .in("status", ["queued", "running", "completed"])
+      .gte("created_at", cutoff)
+      .limit(1);
+
+    if (recentJobs && recentJobs.length > 0) return;
+
+    await supabase.from("history_sync_jobs").insert({
+      organization_id: instance.organization_id,
+      instance_id: instance.id,
+      scope: "default",
+      max_days: 30,
+      max_messages_per_chat: 500,
+      max_chats: 100,
+      status: "queued",
+      triggered_by: "auto_connect",
+    });
+  } catch {
+    // Never block webhook processing on auto-sync failure
+  }
 }
 
 // ============================================================================

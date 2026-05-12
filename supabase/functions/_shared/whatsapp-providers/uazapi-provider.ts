@@ -298,12 +298,17 @@ export class UazapiProvider implements WhatsAppProvider {
     await this.client.markRead(messageId, number);
   }
 
+  async listChats(type: "all" | "individual" | "group" = "all"): Promise<Array<{ id: string; name?: string; isGroup?: boolean; lastMessageTimestamp?: number }>> {
+    return this.client.listChats(type);
+  }
+
   async historySync(opts: {
     chat_jid?: string;
     limit?: number;
     cursor?: string;
   }): Promise<{ messages: unknown[]; nextCursor?: string }> {
-    return this.client.historySync(opts);
+    const number = opts.chat_jid ?? "";
+    return this.client.historySync({ number, limit: opts.limit, cursor: opts.cursor });
   }
 
   async getMessageLimits(): Promise<{

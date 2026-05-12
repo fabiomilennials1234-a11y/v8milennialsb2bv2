@@ -132,11 +132,21 @@ export function useWhatsAppContacts(instanceId: string | null) {
         if (meta?.id) convIds.push(meta.id);
       }
 
-      // Query 2: lead names + lead_tags + conversation_tags em paralelo
-      const [leadNamesResult, leadTagsResult, convTagsResult] = await Promise.all([
+      // Contacts without lead_id — resolve by phone match
+      const phonesWithoutLead = Array.from(contactsMap.entries())
+        .filter(([, c]) => !c.lead_id)
+        .map(([key]) => key);
+
+      // Query 2: lead names (by id + by phone) + lead_tags + conversation_tags em paralelo
+      const [leadNamesResult, leadsByPhoneResult, leadTagsResult, convTagsResult] = await Promise.all([
         leadIds.length > 0
-          ? supabase.from("leads").select("id, name").in("id", leadIds)
-          : Promise.resolve({ data: [] as { id: string; name: string | null }[] }),
+          ? supabase.from("leads").select("id, name, phone").in("id", leadIds)
+          : Promise.resolve({ data: [] as { id: string; name: string | null; phone: string | null }[] }),
+        phonesWithoutLead.length > 0
+          ? supabase.from("leads").select("id, name, phone")
+              .eq("organization_id", organizationId)
+              .not("phone", "is", null)
+          : Promise.resolve({ data: [] as { id: string; name: string | null; phone: string | null }[] }),
         leadIds.length > 0
           ? supabase.from("lead_tags").select("lead_id, tags!inner(id, name, color)").in("lead_id", leadIds)
           : Promise.resolve({ data: [] as any[] }),
@@ -145,10 +155,18 @@ export function useWhatsAppContacts(instanceId: string | null) {
           : Promise.resolve({ data: [] as any[] }),
       ]);
 
-      // Index lead names
+      // Index lead names by id
       const leadNameMap = new Map<string, string>();
       for (const row of leadNamesResult.data || []) {
         if (row.name) leadNameMap.set(row.id, row.name);
+      }
+
+      // Index leads by normalized phone for fallback resolution
+      const leadByPhoneMap = new Map<string, { id: string; name: string }>();
+      for (const row of leadsByPhoneResult.data || []) {
+        if (row.phone && row.name) {
+          leadByPhoneMap.set(normalizePhone(row.phone), { id: row.id, name: row.name });
+        }
       }
 
       // Index lead tags
@@ -169,6 +187,35 @@ export function useWhatsAppContacts(instanceId: string | null) {
         convTagsByConvId.set(row.conversation_id, existing);
       }
 
+      // Pre-resolve phone-matched leads and collect extra lead_ids for tag fetch
+      const extraLeadIds: string[] = [];
+      for (const contact of contactsMap.values()) {
+        if (!contact.lead_id) {
+          const phoneLead = leadByPhoneMap.get(normalizePhone(contact.phone_number));
+          if (phoneLead) {
+            contact.lead_id = phoneLead.id;
+            contact.lead_name = phoneLead.name;
+            extraLeadIds.push(phoneLead.id);
+          }
+        } else {
+          contact.lead_name = leadNameMap.get(contact.lead_id) ?? null;
+        }
+      }
+
+      // Fetch tags for phone-resolved leads
+      if (extraLeadIds.length > 0) {
+        const { data: extraTags } = await supabase
+          .from("lead_tags")
+          .select("lead_id, tags!inner(id, name, color)")
+          .in("lead_id", extraLeadIds);
+        for (const row of (extraTags || []) as any[]) {
+          const tag = (row as unknown as { tags: ChatContactTag }).tags;
+          const existing = leadTagsMap.get(row.lead_id) || [];
+          existing.push(tag);
+          leadTagsMap.set(row.lead_id, existing);
+        }
+      }
+
       // Assemble final results
       const results: ChatContact[] = [];
       for (const contact of contactsMap.values()) {
@@ -179,7 +226,6 @@ export function useWhatsAppContacts(instanceId: string | null) {
 
         contact.conversation_id = meta?.id ?? null;
         contact.archived_at = meta?.archived_at ?? null;
-        contact.lead_name = contact.lead_id ? (leadNameMap.get(contact.lead_id) ?? null) : null;
 
         // Merge tags: lead_tags + conversation_tags (deduplicated by tag.id)
         const tagIds = new Set<string>();

@@ -14,7 +14,7 @@ import type { Tables, TablesInsert } from "@/integrations/supabase/types";
 export type HistorySyncJob = Tables<"history_sync_jobs">;
 export type HistorySyncJobInsert = TablesInsert<"history_sync_jobs">;
 
-export type SyncScope = "default" | "full" | "chat";
+export type SyncScope = "default" | "full" | "chat" | "incremental";
 
 type JobFilter = {
   instanceId?: string;
@@ -94,7 +94,7 @@ export function useCreateHistorySyncJob() {
         instance_id: input.instance_id,
         scope: input.scope,
         chat_jid: input.chat_jid ?? null,
-        max_days: input.max_days ?? (input.scope === "full" ? 0 : 30),
+        max_days: input.max_days ?? (input.scope === "full" || input.scope === "incremental" ? 0 : 30),
         max_messages_per_chat: input.max_messages_per_chat ?? 500,
         max_chats: input.max_chats ?? 100,
         status: "queued",
