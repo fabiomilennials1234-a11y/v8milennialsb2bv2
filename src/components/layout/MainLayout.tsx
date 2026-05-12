@@ -9,6 +9,7 @@ import { useCopilotToggleRealtime } from "@/hooks/useCopilotToggleRealtime";
 import { featureFlags } from "@/lib/feature-flags";
 import { ChatBubbleProvider } from "@/contexts/ChatBubbleContext";
 import { ChatBubble } from "@/components/chat/bubble";
+import { WhatsAppUpdateModal } from "@/components/shared/WhatsAppUpdateModal";
 
 // Rotas onde o checklist NÃO deve aparecer
 const CHECKLIST_HIDDEN_PATTERNS = [
@@ -100,6 +101,8 @@ export function MainLayout({ children }: MainLayoutProps) {
       />
 
       {featureFlags.chatBubble && <ChatBubble />}
+
+      <WhatsAppUpdateModal />
     </div>
   );
 
