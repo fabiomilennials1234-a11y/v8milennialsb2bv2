@@ -436,7 +436,10 @@ Deno.serve(
 
           let providerError: string | null = null;
           try {
-            await provider.deleteInstance();
+            const providerTimeout = new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error("provider delete timed out (5s)")), 5000)
+            );
+            await Promise.race([provider.deleteInstance(), providerTimeout]);
             console.log(`[deleteInstance] provider delete OK`);
           } catch (e) {
             providerError = (e as Error).message ?? "provider delete failed";

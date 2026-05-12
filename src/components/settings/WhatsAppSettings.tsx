@@ -435,16 +435,18 @@ export function WhatsAppSettings() {
 
   const handleDelete = async () => {
     if (!deleteInstanceId) return;
+    const target = deleteInstanceId;
+    setDeleteInstanceId(null);
+    const toastId = toast.loading("Removendo instância...");
     try {
       await deleteInstance.mutateAsync({
-        id: deleteInstanceId.id,
-        instance_name: deleteInstanceId.name,
+        id: target.id,
+        instance_name: target.name,
       });
-      setDeleteInstanceId(null);
-      toast.success("Instância removida com sucesso.");
+      toast.success("Instância removida com sucesso.", { id: toastId });
     } catch (error: any) {
       const errorMessage = error.message || "Erro ao remover instância";
-      toast.error(errorMessage);
+      toast.error(errorMessage, { id: toastId });
       console.error("Erro ao remover instância:", error);
     }
   };
@@ -786,7 +788,7 @@ export function WhatsAppSettings() {
           <AlertDialogHeader>
             <AlertDialogTitle>Remover Instância?</AlertDialogTitle>
             <AlertDialogDescription>
-              Esta ação não pode ser desfeita. A instância será removida da Evolution API e do sistema.
+              Esta ação não pode ser desfeita. A instância será removida permanentemente.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
