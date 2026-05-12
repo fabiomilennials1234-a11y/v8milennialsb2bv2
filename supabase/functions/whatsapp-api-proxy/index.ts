@@ -695,16 +695,22 @@ Deno.serve(
         // -------------------------------------------------------------------
         case "sendMenu": {
           if (!provider.sendMenu) throw new Error("Provider does not support sendMenu");
-          const { number, type, text, choices } = payload as {
+          const { number, type, text, choices, footer, selectableCount } = payload as {
             number?: string;
-            type?: "list" | "button";
+            type?: "button" | "list" | "poll" | "carousel";
             text?: string;
-            choices?: Array<{ title: string; description?: string }>;
+            choices?: Array<string | { title: string; description?: string }>;
+            footer?: string;
+            selectableCount?: number;
           };
           if (!number || !type || !text || !choices?.length) {
             return jsonResponse(400, { error: "Missing number/type/text/choices" }, corsHeaders);
           }
-          result = await provider.sendMenu({ number, type, text, choices });
+          // Uazapi expects choices as string[] — flatten objects from frontend
+          const flatChoices = choices.map((c) =>
+            typeof c === "string" ? c : c.title
+          );
+          result = await provider.sendMenu({ number, type, text, choices: flatChoices, footer, selectableCount });
           break;
         }
 
