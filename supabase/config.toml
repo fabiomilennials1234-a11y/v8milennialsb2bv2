@@ -182,6 +182,9 @@ verify_jwt = false
 [functions.whatsapp-api-proxy]
 verify_jwt = false
 
+# reconfigure-uazapi-webhooks: one-time admin, auth via x-cron-secret. DELETE AFTER USE.
+[functions.reconfigure-uazapi-webhooks]
+verify_jwt = false
 # whatsapp-webhook: auth via secret in path segment (Uazapi has no HMAC nor customHeaders)
 [functions.whatsapp-webhook]
 verify_jwt = false
@@ -203,6 +206,10 @@ verify_jwt = false
 
 # meeting-webhook: public API for creating meetings; auth via API key (Bearer tq_live_xxxx)
 [functions.meeting-webhook]
+verify_jwt = false
+
+# analyze-copilot-prompt: JWT validated inside function; OPTIONS preflight needs passthrough
+[functions.analyze-copilot-prompt]
 verify_jwt = false
 
 

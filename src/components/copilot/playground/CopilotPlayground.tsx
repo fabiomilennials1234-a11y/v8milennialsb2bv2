@@ -21,13 +21,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { FileText, Wrench, BookOpen } from "lucide-react";
+import { FileText, Wrench, BookOpen, Sparkles } from "lucide-react";
 
 import { PromptEditor } from "./PromptEditor";
 import { PlaygroundSettings } from "./PlaygroundSettings";
 import { PlaygroundTools } from "./PlaygroundTools";
 import { PlaygroundKnowledge } from "./PlaygroundKnowledge";
 import { LivePreviewChat } from "./LivePreviewChat";
+import { PromptAnalysisTab } from "./PromptAnalysisTab";
 import { TEMPLATE_PRESETS, getTemplatePreset } from "./template-presets";
 import {
   PLAYGROUND_TOOLS,
@@ -528,7 +529,7 @@ export function CopilotPlayground() {
         {/* ===== Left Column: Tabs (Prompt | Tools | Conhecimento) ===== */}
         <div className="flex flex-col w-[60%] border-r min-h-0">
           <Tabs defaultValue="prompt" className="flex flex-col flex-1 min-h-0">
-            <TabsList className="grid w-full grid-cols-3 rounded-none border-b bg-background h-11 shrink-0">
+            <TabsList className="grid w-full grid-cols-4 rounded-none border-b bg-background h-11 shrink-0">
               <TabsTrigger value="prompt" className="gap-2 data-[state=active]:bg-muted/50">
                 <FileText className="w-4 h-4" />
                 Prompt
@@ -540,6 +541,10 @@ export function CopilotPlayground() {
               <TabsTrigger value="knowledge" className="gap-2 data-[state=active]:bg-muted/50">
                 <BookOpen className="w-4 h-4" />
                 Conhecimento
+              </TabsTrigger>
+              <TabsTrigger value="analysis" className="gap-2 data-[state=active]:bg-muted/50">
+                <Sparkles className="w-4 h-4" />
+                Análise
               </TabsTrigger>
             </TabsList>
 
@@ -585,6 +590,10 @@ export function CopilotPlayground() {
                   if (editId) deleteDocument.mutate({ documentId: docId, filePath, agentId: editId });
                 }}
               />
+            </TabsContent>
+
+            <TabsContent value="analysis" className="flex-1 overflow-y-auto m-0 p-4 data-[state=inactive]:hidden">
+              <PromptAnalysisTab agentId={editId ?? undefined} />
             </TabsContent>
           </Tabs>
         </div>
