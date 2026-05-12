@@ -287,7 +287,10 @@ function QRCodeModal({
 function MessageLimitsCard({ instanceId }: { instanceId: string }) {
   const { data, isLoading } = useMessageLimits(instanceId);
   if (isLoading || !data) return null;
-  const pct = data.limit > 0 ? Math.round((data.current / data.limit) * 100) : 0;
+  const current = typeof data.current === "number" ? data.current : 0;
+  const limit = typeof data.limit === "number" ? data.limit : 0;
+  if (limit <= 0) return null;
+  const pct = Math.round((current / limit) * 100);
   const isHigh = pct >= 80;
   return (
     <div className="flex items-center gap-3 text-xs">
@@ -296,7 +299,7 @@ function MessageLimitsCard({ instanceId }: { instanceId: string }) {
         <div className="flex justify-between mb-1">
           <span className="text-muted-foreground">Mensagens enviadas</span>
           <span className={isHigh ? "text-amber-500 font-medium" : "text-muted-foreground"}>
-            {data.current.toLocaleString()} / {data.limit.toLocaleString()}
+            {current.toLocaleString()} / {limit.toLocaleString()}
           </span>
         </div>
         <div className="h-1.5 rounded-full bg-muted overflow-hidden">
