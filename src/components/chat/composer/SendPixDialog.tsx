@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,7 +21,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
 import { sendPixButton } from "@/lib/whatsappApi";
+import { formatPhoneForWhatsApp } from "@/lib/whatsapp";
 
 interface Props {
   open: boolean;
@@ -38,6 +42,8 @@ export function SendPixDialog({ open, onOpenChange, instanceId, phoneNumber }: P
   const [amount, setAmount] = useState("");
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
+  const { data: teamMember } = useCurrentTeamMember();
+  const queryClient = useQueryClient();
 
   const handleSend = async () => {
     if (!pixkey.trim()) { toast.error("Chave Pix obrigatória"); return; }
@@ -46,10 +52,30 @@ export function SendPixDialog({ open, onOpenChange, instanceId, phoneNumber }: P
     if (!numAmount || numAmount <= 0) { toast.error("Valor inválido"); return; }
     setSending(true);
     try {
-      await sendPixButton(instanceId, phoneNumber, pixkey.trim(), merchantName.trim(), numAmount, {
+      const result = await sendPixButton(instanceId, phoneNumber, pixkey.trim(), merchantName.trim(), numAmount, {
         pixkeyType,
         text: text.trim() || undefined,
       });
+      const orgId = teamMember?.organization_id;
+      if (orgId) {
+        const formattedNumber = formatPhoneForWhatsApp(phoneNumber);
+        const content = `${text.trim() || "Pagamento Pix"}\n💰 R$ ${numAmount.toFixed(2)} — ${merchantName.trim()}`;
+        await supabase.from("whatsapp_messages").upsert({
+          organization_id: orgId,
+          instance_id: instanceId,
+          message_id: result.message_id || `pix_${Date.now()}`,
+          remote_jid: `${formattedNumber}@s.whatsapp.net`,
+          phone_number: phoneNumber,
+          direction: "outgoing",
+          message_type: "pix-button",
+          content,
+          status: "sent",
+          timestamp: new Date().toISOString(),
+        }, { onConflict: "message_id,instance_id", ignoreDuplicates: true });
+        queryClient.invalidateQueries({
+          queryKey: ["whatsapp_messages", orgId, phoneNumber, instanceId],
+        });
+      }
       toast.success("Botão Pix enviado");
       onOpenChange(false);
       setPixkey("");

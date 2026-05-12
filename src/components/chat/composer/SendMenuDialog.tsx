@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Loader2, Plus, Trash2 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,7 +21,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
 import { sendMenu } from "@/lib/whatsappApi";
+import { formatPhoneForWhatsApp } from "@/lib/whatsapp";
 
 interface Props {
   open: boolean;
@@ -34,6 +38,8 @@ export function SendMenuDialog({ open, onOpenChange, instanceId, phoneNumber }: 
   const [text, setText] = useState("");
   const [choices, setChoices] = useState([{ title: "", description: "" }]);
   const [sending, setSending] = useState(false);
+  const { data: teamMember } = useCurrentTeamMember();
+  const queryClient = useQueryClient();
 
   const addChoice = () => {
     if (choices.length >= (type === "button" ? 3 : 10)) return;
@@ -54,7 +60,28 @@ export function SendMenuDialog({ open, onOpenChange, instanceId, phoneNumber }: 
     if (valid.length === 0) { toast.error("Pelo menos 1 opção"); return; }
     setSending(true);
     try {
-      await sendMenu(instanceId, phoneNumber, type, text.trim(), valid);
+      const result = await sendMenu(instanceId, phoneNumber, type, text.trim(), valid);
+      const orgId = teamMember?.organization_id;
+      if (orgId) {
+        const formattedNumber = formatPhoneForWhatsApp(phoneNumber);
+        const optionsText = valid.map((c) => `• ${c.title}`).join("\n");
+        const content = `${text.trim()}\n\n${optionsText}`;
+        await supabase.from("whatsapp_messages").upsert({
+          organization_id: orgId,
+          instance_id: instanceId,
+          message_id: result.message_id || `menu_${Date.now()}`,
+          remote_jid: `${formattedNumber}@s.whatsapp.net`,
+          phone_number: phoneNumber,
+          direction: "outgoing",
+          message_type: type === "button" ? "button" : "list",
+          content,
+          status: "sent",
+          timestamp: new Date().toISOString(),
+        }, { onConflict: "message_id,instance_id", ignoreDuplicates: true });
+        queryClient.invalidateQueries({
+          queryKey: ["whatsapp_messages", orgId, phoneNumber, instanceId],
+        });
+      }
       toast.success("Menu enviado");
       onOpenChange(false);
       setText("");
