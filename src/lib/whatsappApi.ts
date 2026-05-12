@@ -45,9 +45,14 @@ async function callProxy<T = unknown>(
   action: string,
   body: Record<string, unknown> = {}
 ): Promise<T> {
+  const resolvedBody: Record<string, unknown> = { action, ...body };
+  if (!resolvedBody.organization_id) {
+    const storedOrg = localStorage.getItem("selected_org_id");
+    if (storedOrg) resolvedBody.organization_id = storedOrg;
+  }
   const { data, error } = await supabase.functions.invoke<ProxyResponse<T>>(
     "whatsapp-api-proxy",
-    { body: { action, ...body } }
+    { body: resolvedBody }
   );
   if (error) {
     const msg = await extractFunctionError(error);
