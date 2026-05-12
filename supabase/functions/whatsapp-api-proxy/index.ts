@@ -25,6 +25,10 @@ import {
   type WhatsAppInstance,
 } from "../_shared/whatsapp-client.ts";
 
+// Force bundler to include provider modules (used via dynamic import in whatsapp-client)
+import "../_shared/whatsapp-providers/evolution-provider.ts";
+import "../_shared/whatsapp-providers/uazapi-provider.ts";
+
 // ---------------------------------------------------------------------------
 // Rate limit state (in-memory, per org)
 // ---------------------------------------------------------------------------
@@ -206,6 +210,8 @@ Deno.serve(
           );
         }
 
+        console.log(`[createInstance] start: name=${instanceName} org=${callerOrgId}`);
+
         // Resolve provider: org override > payload > default uazapi
         let targetProvider: "uazapi" | "evolution" = "uazapi";
         try {
@@ -225,8 +231,12 @@ Deno.serve(
           // Fall back to default (uazapi)
         }
 
+        console.log(`[createInstance] provider=${targetProvider}`);
+
         const webhookBaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
         const webhookSecret = Deno.env.get("UAZAPI_WEBHOOK_SECRET") ?? "";
+
+        console.log(`[createInstance] webhookBaseUrl=${webhookBaseUrl ? "set" : "EMPTY"} webhookSecret=${webhookSecret ? "set" : "EMPTY"}`);
 
         // Insert row first to obtain a stable UUID
         const { data: newRow, error: insertErr } = await supabaseAdmin
@@ -241,15 +251,18 @@ Deno.serve(
           .single();
 
         if (insertErr || !newRow) {
+          console.error(`[createInstance] DB insert failed: ${insertErr?.message}`);
           throw new Error(
             `Failed to create whatsapp_instances row: ${insertErr?.message}`
           );
         }
 
         const instance = newRow as WhatsAppInstance;
+        console.log(`[createInstance] DB row created: ${instance.id}`);
 
         // Bootstrap: new instance has no credentials yet — factory skips credential lookup
         const provider = await getWhatsAppProvider(instance, supabaseAdmin, { bootstrap: true });
+        console.log(`[createInstance] provider initialized: ${provider.provider}`);
 
         let result;
         try {
@@ -260,7 +273,9 @@ Deno.serve(
             webhook_url: `${webhookBaseUrl}/functions/v1/whatsapp-webhook`,
             webhook_secret: webhookSecret,
           });
+          console.log(`[createInstance] provider.createInstance OK: status=${JSON.stringify(result.status)}`);
         } catch (initErr) {
+          console.error(`[createInstance] provider.createInstance FAILED: ${(initErr as Error).message}`);
           // Roll back the placeholder row so the unique
           // (organization_id, instance_name) constraint does not block retries.
           await supabaseAdmin
@@ -285,6 +300,7 @@ Deno.serve(
           entityId: instance.id,
         });
 
+        console.log(`[createInstance] complete: instance_id=${instance.id}`);
         return jsonResponse(200, { ok: true, result, instance_id: instance.id }, corsHeaders);
       }
 
@@ -766,6 +782,7 @@ Deno.serve(
       return jsonResponse(200, { ok: true, result }, corsHeaders);
     } catch (e) {
       const msg = (e as Error).message ?? "Internal error";
+      console.error(`[whatsapp-api-proxy] action=${action} UNHANDLED ERROR: ${msg}`, (e as Error).stack ?? e);
 
       await logRuntime({
         organizationId: callerOrgId,

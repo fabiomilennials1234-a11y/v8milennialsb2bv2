@@ -15,6 +15,10 @@ import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { getWhatsAppProvider } from "../_shared/whatsapp-client.ts";
 
+// Force bundler to include provider modules (used via dynamic import in whatsapp-client)
+import "../_shared/whatsapp-providers/evolution-provider.ts";
+import "../_shared/whatsapp-providers/uazapi-provider.ts";
+
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";

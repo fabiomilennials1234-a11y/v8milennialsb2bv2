@@ -10,6 +10,10 @@ import { AgentEngine } from "./agent-engine.ts";
 import { fireTrigger } from "../_shared/workflow-trigger.ts";
 import { isCopilotCanceled, logCopilotCancellation } from "../_shared/copilot/cancellation.ts";
 
+// Force bundler to include provider modules (used via dynamic import in whatsapp-client)
+import "../_shared/whatsapp-providers/evolution-provider.ts";
+import "../_shared/whatsapp-providers/uazapi-provider.ts";
+
 /**
  * Webhook receptor de mensagens de leads
  * Twilio/WhatsApp → /agent-message
