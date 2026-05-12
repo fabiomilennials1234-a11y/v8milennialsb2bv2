@@ -57,7 +57,7 @@ export function AudioPlayer({ src, isOutgoing: _isOutgoing }: AudioPlayerProps) 
   const inferAudioType = useCallback((url: string): string => {
     const ext = url.split(".").pop()?.split("?")[0]?.toLowerCase() || "";
     const typeMap: Record<string, string> = {
-      mp3: "audio/mpeg", ogg: "audio/ogg", opus: "audio/ogg",
+      mp3: "audio/mpeg", mpeg: "audio/mpeg", ogg: "audio/ogg", opus: "audio/ogg",
       webm: "audio/webm", m4a: "audio/mp4", aac: "audio/aac", wav: "audio/wav",
     };
     return typeMap[ext] || "audio/ogg";

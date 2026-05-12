@@ -78,6 +78,7 @@ serve(withSentry('stream-media', async (req) => {
     const ext = path.split(".").pop()?.toLowerCase();
     const mimeMap: Record<string, string> = {
       mp3: "audio/mpeg",
+      mpeg: "audio/mpeg",
       ogg: "audio/ogg",
       opus: "audio/ogg",
       webm: "audio/webm",
@@ -97,7 +98,7 @@ serve(withSentry('stream-media', async (req) => {
       contentType = (ext && mimeMap[ext]) || "application/octet-stream";
     }
     // Áudio: forçar audio/mpeg para .mp3 e Accept-Ranges (Safari)
-    const finalContentType = ext === "mp3" ? "audio/mpeg" : contentType;
+    const finalContentType = (ext === "mp3" || ext === "mpeg") ? "audio/mpeg" : contentType;
     const headers: Record<string, string> = {
       ...corsHeaders,
       "Content-Type": finalContentType,

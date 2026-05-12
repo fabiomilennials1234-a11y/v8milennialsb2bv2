@@ -32,7 +32,7 @@ import { ScheduleMessageModal } from "@/components/chat/ScheduleMessageModal";
 import { SlashCommandPopover } from "@/components/chat/SlashCommandPopover";
 import { useMessageTemplates } from "@/hooks/useMessageTemplates";
 import { resolveVariables } from "@/lib/template-variables";
-import { convertAudioBlobToMp3 } from "@/lib/audioToMp3";
+import { convertAudioBlobToMp3, preloadLamejs } from "@/lib/audioToMp3";
 import type { LeadContext, AttendantContext } from "@/lib/template-variables";
 import type { MessageTemplate } from "@/hooks/useMessageTemplates";
 import type { DensityMode } from "@/components/chat/layout/ChatShell";
@@ -305,6 +305,9 @@ export function ChatComposer({
       }
     };
   }, [instanceId, phoneNumber]);
+
+  // Preload lamejs pra conversão MP3 (evita enviar WebM que Safari não toca)
+  useEffect(() => { preloadLamejs(); }, []);
 
   // Focar input ao montar
   useEffect(() => {
