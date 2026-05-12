@@ -6,6 +6,9 @@ import { KeyboardShortcutsHelp } from "@/components/shared/KeyboardShortcutsHelp
 import { useGlobalShortcuts, type Shortcut } from "@/hooks/useKeyboardShortcuts";
 import { cn } from "@/lib/utils";
 import { useCopilotToggleRealtime } from "@/hooks/useCopilotToggleRealtime";
+import { featureFlags } from "@/lib/feature-flags";
+import { ChatBubbleProvider } from "@/contexts/ChatBubbleContext";
+import { ChatBubble } from "@/components/chat/bubble";
 
 // Rotas onde o checklist NÃO deve aparecer
 const CHECKLIST_HIDDEN_PATTERNS = [
@@ -58,7 +61,7 @@ export function MainLayout({ children }: MainLayoutProps) {
     pattern.test(location.pathname),
   );
 
-  return (
+  const layout = (
     <div className="flex flex-col h-screen bg-background" data-layout="main">
       <TopNavigation />
 
@@ -95,6 +98,13 @@ export function MainLayout({ children }: MainLayoutProps) {
         onOpenChange={setShortcutsHelpOpen}
         shortcuts={globalShortcuts}
       />
+
+      {featureFlags.chatBubble && <ChatBubble />}
     </div>
   );
+
+  if (featureFlags.chatBubble) {
+    return <ChatBubbleProvider>{layout}</ChatBubbleProvider>;
+  }
+  return layout;
 }

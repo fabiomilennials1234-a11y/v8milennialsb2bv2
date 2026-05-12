@@ -6,6 +6,13 @@
  * Delega policy ao dispatch-router.decideDispatchRoute pra respeitar
  * threshold + non-chained actions + non-dynamic audio.
  * Persiste row em uazapi_sender_jobs.
+ *
+ * Etapa B (vínculo user-instância de escrita) — EXCEÇÃO ARQUITETURAL:
+ * Mass-send é um broadcast 1-instância → N-recipients. Admin/master escolhe
+ * uma única instância no UI e dispara em lote. NÃO chama
+ * resolveLeadWriteInstance — vínculo user-instância é enforced em fluxos 1:1
+ * (outbound copilot, followup, pipe rules, workflow actions, scheduled msgs).
+ * Validação de tenant (instance.organization_id === orgId) já é feita abaixo.
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { withSentry } from "../_shared/sentry.ts";

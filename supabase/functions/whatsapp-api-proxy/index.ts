@@ -323,6 +323,95 @@ Deno.serve(
         return jsonResponse(403, { error: "Forbidden" }, corsHeaders);
       }
 
+      // -----------------------------------------------------------------------
+      // Etapa B — vínculo user-instância (flag user_write_instance_strict).
+      //
+      // Para ações de envio (sendText/sendMedia/sendAudio) que carregam
+      // `payload.lead_id` opcional: se a flag está ON na org, exigir
+      //   (a) responsible_user_id do lead → instância vinculada == instance_id
+      //   (b) caller pode escrever via instância (owner / admin / master)
+      //
+      // Quando lead_id ausente, comportamento legado é preservado.
+      // Frontend (Etapa C) passa a anexar lead_id no composer humano.
+      // -----------------------------------------------------------------------
+      const SEND_ACTIONS = new Set(["sendText", "sendMedia", "sendAudio"]);
+      const leadIdPayload = (payload?.lead_id ?? null) as string | null;
+      if (SEND_ACTIONS.has(action) && leadIdPayload) {
+        const {
+          isStrictWriteEnabled,
+          resolveLeadWriteInstance,
+          assertUserCanWriteInstance,
+          WriteAuthorizationError,
+        } = await import("../_shared/instance-write-guard.ts");
+
+        const strict = await isStrictWriteEnabled(supabaseAdmin, callerOrgId);
+        if (strict) {
+          // (a) responsible→instância vinculada deve casar com instance_id
+          const resolved = await resolveLeadWriteInstance(supabaseAdmin, leadIdPayload);
+          if (!resolved.ok || !resolved.instance) {
+            await logRuntime({
+              organizationId: callerOrgId,
+              module: "whatsapp-api-proxy",
+              action: "strict_write_blocked",
+              status: "error",
+              entityType: "leads",
+              entityId: leadIdPayload,
+              payloadSnapshot: { error_code: resolved.errorCode, action },
+            });
+            return jsonResponse(
+              409,
+              { error: `Strict write: ${resolved.errorCode ?? "no_instance"}` },
+              corsHeaders,
+            );
+          }
+          if (resolved.instance.instanceId !== instanceId) {
+            await logRuntime({
+              organizationId: callerOrgId,
+              module: "whatsapp-api-proxy",
+              action: "strict_write_instance_mismatch",
+              status: "error",
+              entityType: "leads",
+              entityId: leadIdPayload,
+              payloadSnapshot: {
+                expected_instance: resolved.instance.instanceId,
+                provided_instance: instanceId,
+              },
+            });
+            return jsonResponse(
+              409,
+              {
+                error: "Strict write: lead is bound to a different instance",
+                expected_instance_id: resolved.instance.instanceId,
+              },
+              corsHeaders,
+            );
+          }
+
+          // (b) Autorização do caller sobre a instância
+          try {
+            await assertUserCanWriteInstance(supabaseAdmin, user.id, instanceId);
+          } catch (authErr) {
+            if (authErr instanceof WriteAuthorizationError) {
+              await logRuntime({
+                organizationId: callerOrgId,
+                module: "whatsapp-api-proxy",
+                action: "strict_write_authz_denied",
+                status: "error",
+                entityType: "whatsapp_instances",
+                entityId: instanceId,
+                payloadSnapshot: { user_id: user.id },
+              });
+              return jsonResponse(
+                403,
+                { error: "User cannot write via this instance" },
+                corsHeaders,
+              );
+            }
+            throw authErr;
+          }
+        }
+      }
+
       const provider = await getWhatsAppProvider(
         instance as WhatsAppInstance,
         supabaseAdmin

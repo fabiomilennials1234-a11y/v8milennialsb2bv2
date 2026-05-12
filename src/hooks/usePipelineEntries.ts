@@ -38,9 +38,12 @@ export function usePipelineId(slug: PipelineType) {
         .eq("organization_id", organizationId)
         .eq("slug", slug)
         .eq("type", "system")
-        .single();
-      if (error) throw error;
-      return data?.id ?? null;
+        .maybeSingle();
+
+      if (data?.id) return data.id;
+      await supabase.rpc("create_default_pipelines", { p_org_id: organizationId });
+      const { data: created } = await supabase.from("pipelines").select("id").eq("organization_id", organizationId).eq("slug", slug).eq("type", "system").maybeSingle();
+      return created?.id ?? null;
     },
     enabled: isReady && !!organizationId,
     staleTime: Infinity,
@@ -96,9 +99,10 @@ export function usePipelineEntries(slug: PipelineType) {
         .select(`*, lead:leads!pipeline_entries_lead_id_fkey(${LEAD_SELECT})`)
         .eq("pipeline_id", pipelineId)
         .order("created_at", { ascending: false })
+        .limit(10000)
         .abortSignal(signal);
 
-      if (error) throw error;
+
 
       const entries = (data ?? []).map(flattenMetadata);
 

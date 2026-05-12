@@ -52,12 +52,16 @@ export async function sendFollowupMessage(
     }
   }
 
+  // lead_id propagado — quando flag user_write_instance_strict ON na org,
+  // força resolução pelo responsável; OFF preserva precedência legada
+  // (instanceId → primeira instância da org).
   let ctx;
   try {
     ctx = await resolveDispatchContext(supabase, {
       organization_id: organizationId,
       phone,
       preferred_instance_id: instanceId,
+      lead_id: leadId,
     });
   } catch (e) {
     const err = e as DispatchResolutionError;

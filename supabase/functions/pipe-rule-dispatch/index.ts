@@ -390,7 +390,17 @@ async function processPipeQueue(
           continue;
         }
 
-        const instance = await resolveInstance(supabase, row.whatsapp_instance_id, orgId);
+        let instance: { id: string; instance_name: string } | null = null;
+        try {
+          instance = await resolveInstance(supabase, row.whatsapp_instance_id, orgId, lead.id);
+        } catch (e) {
+          // Etapa B: flag ON + falha estrita (sem responsável / sem instância vinculada)
+          const errMsg = `Strict write blocked: ${(e as Error).message}`;
+          await markFailed(supabase, row.id, errMsg);
+          if (jobId) await failJob(supabase, jobId, errMsg);
+          failed++;
+          continue;
+        }
         if (!instance) {
           await markFailed(supabase, row.id, "No active WhatsApp instance");
           if (jobId) await failJob(supabase, jobId, "No active WhatsApp instance");
@@ -769,7 +779,16 @@ async function processExpiredTimeouts(
           .single();
 
         if (tmpl && orgId) {
-          const instance = await resolveInstance(supabase, row.whatsapp_instance_id, orgId);
+          let instance: { id: string; instance_name: string } | null = null;
+          try {
+            instance = await resolveInstance(supabase, row.whatsapp_instance_id, orgId, lead?.id ?? null);
+          } catch (e) {
+            // Etapa B: timeout-fallback NÃO bloqueia o pipe — registra log
+            // estruturado e segue (sem instance disponível, send é skipped abaixo).
+            console.warn(
+              `[pipe-rule-dispatch][${pipeType}] Timeout strict write blocked: ${(e as Error).message}`,
+            );
+          }
           if (instance) {
             const isAudio = tmpl.message_type === "audio" && tmpl.audio_url;
             const timeVars = getTimeBasedVariables();
@@ -849,8 +868,30 @@ async function processExpiredTimeouts(
 async function resolveInstance(
   supabase: SupabaseClient,
   instanceId: string | null,
-  organizationId: string
+  organizationId: string,
+  // Etapa B: lead_id opcional. Quando flag user_write_instance_strict ON na org,
+  // força vínculo via responsable_user_id. OFF ⇒ comportamento legado.
+  leadId?: string | null,
 ): Promise<{ id: string; instance_name: string } | null> {
+  if (leadId) {
+    // Flag ON + falha estrita → propaga StrictWriteResolutionError;
+    // caller marca scheduled_pipe_messages como failed.
+    const { resolveStrictInstanceForCaller } = await import(
+      "../_shared/instance-write-guard.ts"
+    );
+    const strict = await resolveStrictInstanceForCaller(
+      supabase as unknown as Parameters<typeof resolveStrictInstanceForCaller>[0],
+      organizationId,
+      leadId,
+    );
+    if (strict) {
+      return {
+        id: strict.id as string,
+        instance_name: strict.instance_name as string,
+      };
+    }
+  }
+
   if (instanceId) {
     const { data: inst } = await supabase
       .from("whatsapp_instances")
