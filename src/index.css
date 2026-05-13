@@ -76,6 +76,10 @@
     --bubble-ai-foreground:       36 20% 18%;
     --bubble-ai-border:           47 100% 50%;
 
+    --bubble-workflow:            263 30% 92%;
+    --bubble-workflow-foreground: 263 20% 18%;
+    --bubble-workflow-border:     263 70% 70%;
+
     --bubble-system:              42 15% 92%;
     --bubble-system-foreground:   30 12% 33%;
     --bubble-system-border:       40 12% 80%;
@@ -181,6 +185,10 @@
     --bubble-ai:                  38 22% 24%;
     --bubble-ai-foreground:       47 40% 90%;
     --bubble-ai-border:           47 100% 50%;
+
+    --bubble-workflow:            263 30% 12%;
+    --bubble-workflow-foreground: 263 70% 80%;
+    --bubble-workflow-border:     263 60% 55%;
 
     --bubble-system:              36 15% 15%;
     --bubble-system-foreground:   40 12% 56%;
