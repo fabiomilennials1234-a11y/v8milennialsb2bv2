@@ -619,6 +619,7 @@ async function handleClientMessage(
         status: "sent",
         timestamp: new Date().toISOString(),
         sent_by_ai: true,
+        sent_source: "copilot",
       }, { onConflict: "message_id,instance_id", ignoreDuplicates: true });
 
       if (outMsgError) {
