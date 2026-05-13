@@ -785,7 +785,9 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
           nextNodes.push(...getNextNodes(nodeId, edgeMap));
       }
     } catch (nodeError) {
-      const errMsg = nodeError instanceof Error ? nodeError.message : String(nodeError);
+      const errMsg = nodeError instanceof Error
+        ? nodeError.message
+        : (nodeError as any)?.message ?? JSON.stringify(nodeError);
       console.error(`[workflow-executor] Node ${nodeId} threw:`, nodeError);
       await recordStep(supabase, executionId, node, "failed", node.data, undefined, errMsg);
       await updateExecution(supabase, executionId, "failed", nodeId, loopCounters, errMsg);

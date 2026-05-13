@@ -535,7 +535,14 @@ async function handleSendWhatsAppAudio(ctx: ActionContext): Promise<ActionResult
   const audioUrl = ctx.nodeData.audioUrl as string;
   if (!audioUrl) return { success: false, error: "No audio URL configured" };
 
-  const provider = await getWhatsAppProvider(wa.instance, ctx.supabase);
+  let provider;
+  try {
+    provider = await getWhatsAppProvider(wa.instance, ctx.supabase);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : (err as any)?.message ?? JSON.stringify(err);
+    return { success: false, error: `WhatsApp provider error: ${msg}` };
+  }
+
   const result = await sendAudioViaProvider(provider, phone, audioUrl, {
     trackSource: "workflow-action-audio",
     trackId: (ctx as unknown as { executionId?: string }).executionId,
@@ -1522,7 +1529,7 @@ async function handleGenerateAiMessage(ctx: ActionContext): Promise<ActionResult
       data: { [outputVar]: generatedMessage },
     };
   } catch (err) {
-    return { success: false, error: `Erro ao gerar mensagem: ${err instanceof Error ? err.message : String(err)}` };
+    return { success: false, error: `Erro ao gerar mensagem: ${err instanceof Error ? err.message : (err as any)?.message ?? JSON.stringify(err)}` };
   }
 }
 

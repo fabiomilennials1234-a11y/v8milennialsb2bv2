@@ -36,7 +36,9 @@ export async function sendAudioViaProvider(
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : String(error),
+      error: error instanceof Error
+        ? error.message
+        : (error as any)?.message ?? JSON.stringify(error),
     };
   }
 }
@@ -72,7 +74,9 @@ export async function sendWhatsAppAudio(
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : String(error),
+      error: error instanceof Error
+        ? error.message
+        : (error as any)?.message ?? JSON.stringify(error),
     };
   }
 }

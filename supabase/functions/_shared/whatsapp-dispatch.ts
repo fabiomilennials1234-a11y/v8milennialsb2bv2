@@ -263,7 +263,7 @@ export async function sendTextViaInstance(
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : String(error),
+      error: error instanceof Error ? error.message : (error as any)?.message ?? JSON.stringify(error),
     };
   }
 }
@@ -290,7 +290,7 @@ export async function sendAudioViaInstance(
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : String(error),
+      error: error instanceof Error ? error.message : (error as any)?.message ?? JSON.stringify(error),
     };
   }
 }
@@ -333,7 +333,7 @@ export async function sendMenuViaInstance(
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : String(error),
+      error: error instanceof Error ? error.message : (error as any)?.message ?? JSON.stringify(error),
     };
   }
 }
@@ -376,7 +376,7 @@ export async function sendPixButtonViaInstance(
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : String(error),
+      error: error instanceof Error ? error.message : (error as any)?.message ?? JSON.stringify(error),
     };
   }
 }
@@ -410,7 +410,7 @@ export async function sendMediaViaInstance(
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : String(error),
+      error: error instanceof Error ? error.message : (error as any)?.message ?? JSON.stringify(error),
     };
   }
 }
