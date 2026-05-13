@@ -14,6 +14,7 @@ import {
   Mic,
   X,
   Bot,
+  Zap,
   Settings,
   RotateCw,
   Sticker,
@@ -201,7 +202,10 @@ export function MessageBubble({
 }) {
   const isOutgoing = message.direction === "outgoing";
   const isFailed = message.status === "failed";
-  const isAi = isOutgoing && !!message.sent_by_ai;
+  const sentSource: "manual" | "copilot" | "workflow" =
+    isOutgoing
+      ? ((message as any).sent_source ?? (message.sent_by_ai ? "copilot" : "manual"))
+      : "manual";
   const isWhatsAppMsg = "message_type" in message;
   const mediaUrl = isWhatsAppMsg ? (message as WhatsAppMessage).media_url : null;
   const messageType = isWhatsAppMsg ? (message as WhatsAppMessage).message_type : null;
@@ -254,11 +258,14 @@ export function MessageBubble({
   };
 
   // Bubble color tokens — C9
-  const bubbleColorClass = isAi
-    ? "bg-bubble-ai text-bubble-ai-foreground border border-bubble-ai-border/30 border-l-[3px] border-l-bubble-ai-border"
-    : isOutgoing
-      ? "bg-bubble-outgoing text-bubble-outgoing-foreground border border-bubble-outgoing-border"
-      : "bg-bubble-incoming text-bubble-incoming-foreground border border-bubble-incoming-border";
+  const bubbleColorClass =
+    sentSource === "copilot"
+      ? "bg-bubble-ai text-bubble-ai-foreground border border-bubble-ai-border/30 border-l-[3px] border-l-bubble-ai-border"
+      : sentSource === "workflow"
+        ? "bg-bubble-workflow text-bubble-workflow-foreground border border-bubble-workflow-border/30 border-l-[3px] border-l-bubble-workflow-border"
+        : isOutgoing
+          ? "bg-bubble-outgoing text-bubble-outgoing-foreground border border-bubble-outgoing-border"
+          : "bg-bubble-incoming text-bubble-incoming-foreground border border-bubble-incoming-border";
 
   const radiusClass = isOutgoing
     ? (isFirstInGroup && isLastInGroup
@@ -319,10 +326,19 @@ export function MessageBubble({
         )}
       >
         {/* Sender label for AI messages — only on first in group */}
-        {isFirstInGroup && isAi && (
+        {isFirstInGroup && sentSource !== "manual" && (
           <div className="flex items-center gap-1 mb-1">
-            <Bot className="h-3 w-3 text-bubble-ai-foreground/60" />
-            <span className="text-[10px] text-bubble-ai-foreground/70 font-medium">Copilot</span>
+            {sentSource === "workflow" ? (
+              <>
+                <Zap className="h-3 w-3 text-[#a78bfa]/60" />
+                <span className="text-[10px] text-[#a78bfa]/70 font-medium">Automação</span>
+              </>
+            ) : (
+              <>
+                <Bot className="h-3 w-3 text-bubble-ai-foreground/60" />
+                <span className="text-[10px] text-bubble-ai-foreground/70 font-medium">Copilot</span>
+              </>
+            )}
           </div>
         )}
 
