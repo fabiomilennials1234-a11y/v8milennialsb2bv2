@@ -537,10 +537,16 @@ serve(withSentry('lead-webhook', async (req) => {
 
       const existingEntry = await getPipeEntry(supabase, leadId, organizationId, pipeSlug);
       if (existingEntry) {
-        await updatePipeEntryById(supabase, existingEntry.id, {
-          stageKey: stageVal,
-          ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
-        });
+        // Ingestão externa (n8n/Meta Ads) não pode regredir um lead que já está em movimento no funil.
+        // Atualiza só metadata; preserva stage_key atual.
+        if (Object.keys(metadata).length > 0) {
+          await updatePipeEntryById(supabase, existingEntry.id, { metadata });
+        }
+        if (existingEntry.stage_key !== stageVal) {
+          console.log(
+            `[lead-webhook] Lead já existe em pipeline_entries(${pipeSlug}) stage="${existingEntry.stage_key}"; ignorando place_in_pipe.stage="${stageVal}" (não regride stage via webhook).`
+          );
+        }
       } else {
         await upsertPipeEntry(supabase, {
           leadId,
@@ -550,8 +556,8 @@ serve(withSentry('lead-webhook', async (req) => {
           metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
         });
         await autoDistributePipe(pipeSlug);
+        console.log(`[lead-webhook] Lead placed in pipeline_entries(${pipeSlug}) stage:`, stageVal);
       }
-      console.log(`[lead-webhook] Lead placed in pipeline_entries(${pipeSlug}) stage:`, stageVal);
     }
 
     // Colocar lead em uma campanha em etapa específica (ex: campanha de ads)
