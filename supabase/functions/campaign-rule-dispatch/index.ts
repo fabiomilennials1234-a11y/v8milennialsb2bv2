@@ -828,19 +828,30 @@ async function resolveInstance(
   leadId?: string | null,
 ): Promise<{ id: string; instance_name: string } | null> {
   if (leadId) {
-    const { resolveStrictInstanceForCaller } = await import(
+    const { resolveStrictInstanceForCaller, StrictWriteResolutionError } = await import(
       "../_shared/instance-write-guard.ts"
     );
-    const strict = await resolveStrictInstanceForCaller(
-      supabase as unknown as Parameters<typeof resolveStrictInstanceForCaller>[0],
-      organizationId,
-      leadId,
-    );
-    if (strict) {
-      return {
-        id: strict.id as string,
-        instance_name: strict.instance_name as string,
-      };
+    try {
+      const strict = await resolveStrictInstanceForCaller(
+        supabase as unknown as Parameters<typeof resolveStrictInstanceForCaller>[0],
+        organizationId,
+        leadId,
+      );
+      if (strict) {
+        return {
+          id: strict.id as string,
+          instance_name: strict.instance_name as string,
+        };
+      }
+    } catch (err) {
+      if (err instanceof StrictWriteResolutionError) {
+        console.warn(
+          "[campaign-rule-dispatch] strict_write_fallback lead=%s code=%s — using legacy instance resolution",
+          leadId, err.errorCode,
+        );
+      } else {
+        throw err;
+      }
     }
   }
 

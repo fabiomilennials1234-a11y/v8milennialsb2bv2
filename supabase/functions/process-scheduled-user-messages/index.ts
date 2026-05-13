@@ -73,19 +73,28 @@ Deno.serve(withSentry("process-scheduled-user-messages", async (req) => {
         let isSzChat = false;
 
         if (msg.lead_id) {
-          // Strict-mode falhou e flag ON → propaga (catch externo marca
-          // scheduled_user_messages como failed sem fallback).
-          const { resolveStrictInstanceForCaller } = await import(
+          const { resolveStrictInstanceForCaller, StrictWriteResolutionError } = await import(
             "../_shared/instance-write-guard.ts"
           );
-          const strict = await resolveStrictInstanceForCaller(
-            supabase,
-            msg.organization_id,
-            msg.lead_id,
-          );
-          if (strict) {
-            instance = strict;
-            isSzChat = (strict as any).metadata?.provider === "szchat";
+          try {
+            const strict = await resolveStrictInstanceForCaller(
+              supabase,
+              msg.organization_id,
+              msg.lead_id,
+            );
+            if (strict) {
+              instance = strict;
+              isSzChat = (strict as any).metadata?.provider === "szchat";
+            }
+          } catch (err) {
+            if (err instanceof StrictWriteResolutionError) {
+              console.warn(
+                "[scheduled-user-messages] strict_write_fallback lead=%s code=%s — using legacy instance resolution",
+                msg.lead_id, err.errorCode,
+              );
+            } else {
+              throw err;
+            }
           }
         }
 

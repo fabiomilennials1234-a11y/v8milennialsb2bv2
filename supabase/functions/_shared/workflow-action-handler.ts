@@ -232,17 +232,26 @@ async function getWhatsAppInstance(
   let resolved: any = null;
 
   if (leadId) {
-    const { resolveStrictInstanceForCaller } = await import(
+    const { resolveStrictInstanceForCaller, StrictWriteResolutionError } = await import(
       "./instance-write-guard.ts"
     );
-    // Lança StrictWriteResolutionError se flag ON e vínculo ausente —
-    // workflow node trata como falha de action (action_result.success=false).
-    const strict = await resolveStrictInstanceForCaller(
-      supabase as unknown as Parameters<typeof resolveStrictInstanceForCaller>[0],
-      organizationId,
-      leadId,
-    );
-    if (strict) resolved = strict;
+    try {
+      const strict = await resolveStrictInstanceForCaller(
+        supabase as unknown as Parameters<typeof resolveStrictInstanceForCaller>[0],
+        organizationId,
+        leadId,
+      );
+      if (strict) resolved = strict;
+    } catch (err) {
+      if (err instanceof StrictWriteResolutionError) {
+        console.warn(
+          "[workflow-action] strict_write_fallback lead=%s code=%s — using legacy instance resolution",
+          leadId, err.errorCode,
+        );
+      } else {
+        throw err;
+      }
+    }
   }
 
   if (!resolved && instanceId) {
