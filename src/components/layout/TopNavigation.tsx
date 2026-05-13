@@ -137,6 +137,7 @@ const primaryNavItems: NavItemWithChildren[] = [
 const moreNavItems: NavItemWithChildren[] = [
   { label: "Revisão", icon: Wrench, path: "/follow-ups" },
   { label: "Combustível", icon: Fuel, path: "/leads" },
+  { label: "Negócios", icon: Briefcase, path: "/negocios" },
   { label: "Checklists", icon: ListChecks, path: "/checklists" },
   { label: "Templates", icon: FileText, path: "/templates" },
   { label: "Duplicatas", icon: Copy, path: "/duplicatas" },
@@ -151,6 +152,7 @@ const allNavItems: NavItemWithChildren[] = [
   { label: "Chat", icon: Zap, path: "/chat" },
   { label: "Funis", icon: GitBranch, path: "/funis", children: [] },
   { label: "Combustível", icon: Fuel, path: "/leads" },
+  { label: "Negócios", icon: Briefcase, path: "/negocios" },
   { label: "Ranking", icon: Trophy, path: "/performance" },
   { label: "Comissões", icon: DollarSign, path: "/comissoes" },
   { label: "Turbo", icon: Zap, path: "/turbo", children: turboSubItems },
@@ -216,6 +218,7 @@ const NAV_VIEW_PERMISSIONS: Record<string, string> = {
   "/automacoes": "workflows.view",
   "/equipe": "team.view",
   "/produtos": "products.view",
+  "/negocios": "deals.view",
   "/configuracoes": "settings.view",
 };
 
@@ -277,6 +280,7 @@ export function TopNavigation() {
   };
 
   const isLocked = (path: string): boolean => {
+    if (isMaster || isAdmin) return false;
     if (path === "/turbo") {
       return turboSubItems.every((child) => {
         const featureKey = SIDEBAR_FEATURE_MAP[child.path];
