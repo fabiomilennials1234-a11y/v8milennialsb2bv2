@@ -41,7 +41,7 @@ Deno.serve(
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     let authMode: "cron" | "service_role" | "jwt" | null = null;
-    if (CRON_SECRET && cronSecret === CRON_SECRET) {
+    if (!!CRON_SECRET && cronSecret === CRON_SECRET) {
       authMode = "cron";
     } else if (authHeader && authHeader.includes(SUPABASE_SERVICE_ROLE_KEY)) {
       authMode = "service_role";
@@ -244,14 +244,12 @@ async function processExecution(
     if (result.success) {
       if (result.status === "paused" || result.status === "waiting_response") {
         stats.paused++;
-        // Don't finish the job — it will be picked up again
         if (jobId) await finishJob(supabase, jobId);
       } else {
         stats.completed++;
         if (jobId) await finishJob(supabase, jobId);
       }
 
-      // Track usage event
       trackEvent({
         organizationId,
         eventType: "workflow_triggered",
@@ -278,6 +276,8 @@ async function processExecution(
         entityId: leadId,
         payloadSnapshot: { execution_id: executionId, status: result.status },
       });
+
+      checkWorkflowFailureAlert(supabase, workflowId, organizationId, workflow.name || workflowId).catch(() => {});
     }
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
@@ -459,4 +459,58 @@ async function processPeriodicTriggers(
   }
 
   return count;
+}
+
+async function checkWorkflowFailureAlert(
+  supabase: ReturnType<typeof createClient>,
+  workflowId: string,
+  organizationId: string,
+  workflowName: string,
+): Promise<void> {
+  try {
+    const oneHourAgo = new Date(Date.now() - 3_600_000).toISOString();
+    const { count } = await supabase
+      .from("workflow_executions")
+      .select("*", { count: "exact", head: true })
+      .eq("workflow_id", workflowId)
+      .eq("status", "failed")
+      .gte("completed_at", oneHourAgo);
+
+    const ALERT_THRESHOLD = 3;
+    if ((count ?? 0) < ALERT_THRESHOLD) return;
+
+    const { count: recentAlerts } = await supabase
+      .from("notifications")
+      .select("*", { count: "exact", head: true })
+      .eq("organization_id", organizationId)
+      .eq("type", "workflow_alert")
+      .gte("created_at", oneHourAgo);
+
+    if ((recentAlerts ?? 0) > 0) return;
+
+    const { data: members } = await supabase
+      .from("team_members")
+      .select("user_id")
+      .eq("organization_id", organizationId)
+      .eq("is_active", true)
+      .not("user_id", "is", null)
+      .limit(10);
+
+    const userIds = (members ?? []).map((m: { user_id: string }) => m.user_id).filter(Boolean);
+    if (userIds.length === 0) return;
+
+    await supabase.from("notifications").insert(
+      userIds.map((userId: string) => ({
+        organization_id: organizationId,
+        user_id: userId,
+        type: "workflow_alert",
+        title: "Alerta de Workflow",
+        description: `Workflow "${workflowName}" falhou ${count} vezes na última hora`,
+        link: "/automacoes",
+      })),
+    );
+    console.log(`[workflow-trigger] Alert: ${workflowName} failed ${count}x/1h, notified ${userIds.length} users`);
+  } catch (err) {
+    console.warn("[process-workflow-executions] Alert check failed:", err);
+  }
 }

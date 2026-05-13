@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
-import { triggerStageChangedWorkflows, triggerLeadCreatedInCustomPipeline } from "@/lib/workflowTrigger";
+import { triggerLeadCreatedInCustomPipeline } from "@/lib/workflowTrigger";
 import { useCanPerformActionAsync } from "@/lib/permissions";
 
 // ────────────────────────────────────────────────────────────
@@ -825,13 +825,7 @@ export function useAddLeadToCustomPipe() {
             .eq("id", data.stage_id)
             .maybeSingle();
 
-          // Fire stage_changed so workflows triggered on pipeline entry work
-          triggerStageChangedWorkflows({
-            organizationId: data.organization_id,
-            leadId: data.lead_id,
-            pipelineId: data.pipeline_id,
-            toStage: stageData?.stage_key || data.stage_id,
-          });
+          // stage_changed handled by PG trigger (trg_workflow_custom_pipe_stage_change)
 
           // Fire lead_created scoped to this custom pipeline
           triggerLeadCreatedInCustomPipeline({
@@ -889,16 +883,7 @@ export function useMoveLeadInCustomPipe() {
         .eq("id", stage_id)
         .maybeSingle();
 
-      // Trigger workflow automations for custom pipe stage change
-      // Use stage_key (not UUID) to match trigger_config.stages saved by TriggerPanel
-      if (data.lead_id && data.organization_id) {
-        triggerStageChangedWorkflows({
-          organizationId: data.organization_id,
-          leadId: data.lead_id,
-          pipelineId: pipeline_id,
-          toStage: stageRow?.stage_key || stage_id,
-        });
-      }
+      // stage_changed handled by PG trigger (trg_workflow_custom_pipe_stage_change)
 
       // Auto-transition: check if target stage has a transition configured
       try {

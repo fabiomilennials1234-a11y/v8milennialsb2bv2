@@ -14,6 +14,8 @@ import { executeWorkflowAction, type ActionResult } from "./workflow-action-hand
 import { getNextSendTime } from "./followupSchedule.ts";
 import { resolveActiveWindow, computeNextWindowStart as computeNextWindowStartLocal } from "./copilot/time-context.ts";
 import { logRuntime } from "./logger.ts";
+import { validateExternalUrl } from "./url-validator.ts";
+import { fetchWithTimeout } from "./fetch-utils.ts";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -157,6 +159,9 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
           break;
 
         case "action": {
+          const retryCounts = (context._retry_counts as Record<string, number>) || {};
+          const currentRetry = retryCounts[nodeId] || 0;
+
           const result = await executeWorkflowAction({
             supabase,
             organizationId,
@@ -165,14 +170,54 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
             executionContext: context,
           });
 
-          await recordStep(supabase, executionId, node, result.success ? "success" : "failed", node.data, result, result.error);
+          await recordStep(supabase, executionId, node, result.success ? "success" : "failed",
+            node.data,
+            { ...result, ...(currentRetry > 0 ? { retry_attempt: currentRetry } : {}) },
+            result.error,
+          );
 
           if (!result.success) {
+            const outEdges = edgeMap.get(nodeId) || [];
+            const errorEdge = outEdges.find(e =>
+              e.sourceHandle === "error" || e.sourceHandle === "on_error"
+            );
+
+            if (errorEdge) {
+              context._last_error = result.error || "Unknown error";
+              context._last_error_node = nodeId;
+              nextNodes.push(errorEdge.target);
+              break;
+            }
+
+            const retryable = result.retryable !== false;
+            const MAX_RETRIES = 3;
+
+            if (retryable && currentRetry < MAX_RETRIES) {
+              const backoffMs = 30_000 * Math.pow(3, currentRetry);
+              const nextRunAt = new Date(Date.now() + backoffMs).toISOString();
+              retryCounts[nodeId] = currentRetry + 1;
+              context._retry_counts = retryCounts;
+
+              await supabase.from("workflow_executions").update({
+                status: "running",
+                current_node_id: nodeId,
+                next_run_at: nextRunAt,
+                loop_counters: loopCounters,
+                context: { ...context },
+              }).eq("id", executionId);
+
+              console.log(`[workflow-executor] Retry ${currentRetry + 1}/${MAX_RETRIES} for node ${nodeId} in ${backoffMs}ms`);
+              return { success: true, status: "paused", stepsExecuted };
+            }
+
             await updateExecution(supabase, executionId, "failed", nodeId, loopCounters, result.error);
             return { success: false, status: "failed", error: result.error, stepsExecuted };
           }
 
-          // Record split funnel event for message-type actions
+          if (context._retry_counts) {
+            delete (context._retry_counts as Record<string, number>)[nodeId];
+          }
+
           const actionType = (node.data.actionType as string) || "";
           if (actionType === "send_message" || actionType === "send_template" || actionType === "send_media") {
             await recordSplitEvent(supabase, {
@@ -492,6 +537,13 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
             return { success: false, status: "failed", error: "Webhook: no URL", stepsExecuted };
           }
 
+          const urlCheck = validateExternalUrl(url);
+          if (!urlCheck.valid) {
+            await recordStep(supabase, executionId, node, "failed", { url, method }, undefined, `Blocked URL: ${urlCheck.reason}`);
+            await updateExecution(supabase, executionId, "failed", nodeId, loopCounters, `Webhook blocked: ${urlCheck.reason}`);
+            return { success: false, status: "failed", error: `Webhook blocked: ${urlCheck.reason}`, stepsExecuted };
+          }
+
           // Resolve variables in body
           bodyTemplate = await resolveWebhookBody(supabase, leadId, bodyTemplate);
 
@@ -503,7 +555,7 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
             fetchOpts.body = bodyTemplate;
           }
 
-          const res = await fetch(url, fetchOpts);
+          const res = await fetchWithTimeout(url, fetchOpts, 15_000);
           const responseText = await res.text();
 
           if (!res.ok) {
@@ -790,8 +842,19 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
         : (nodeError as any)?.message ?? JSON.stringify(nodeError);
       console.error(`[workflow-executor] Node ${nodeId} threw:`, nodeError);
       await recordStep(supabase, executionId, node, "failed", node.data, undefined, errMsg);
-      await updateExecution(supabase, executionId, "failed", nodeId, loopCounters, errMsg);
-      return { success: false, status: "failed", error: errMsg, stepsExecuted };
+
+      const outEdges = edgeMap.get(nodeId) || [];
+      const errorEdge = outEdges.find(e =>
+        e.sourceHandle === "error" || e.sourceHandle === "on_error"
+      );
+      if (errorEdge) {
+        context._last_error = errMsg;
+        context._last_error_node = nodeId;
+        nextNodes.push(errorEdge.target);
+      } else {
+        await updateExecution(supabase, executionId, "failed", nodeId, loopCounters, errMsg);
+        return { success: false, status: "failed", error: errMsg, stepsExecuted };
+      }
     }
   }
 

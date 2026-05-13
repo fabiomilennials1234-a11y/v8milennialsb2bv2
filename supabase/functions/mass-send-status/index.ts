@@ -89,7 +89,7 @@ Deno.serve(
     // Auth: cron secret bypass OR JWT user
     const cronSecret = req.headers.get("x-cron-secret");
     let isCron = false;
-    if (CRON_SECRET && cronSecret === CRON_SECRET) {
+    if (!!CRON_SECRET && cronSecret === CRON_SECRET) {
       isCron = true;
     }
 

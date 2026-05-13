@@ -52,6 +52,15 @@ Deno.serve(withSentry('agent-message', async (req) => {
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader || authHeader !== `Bearer ${supabaseKey}`) {
+    return new Response(
+      JSON.stringify({ error: "Unauthorized" }),
+      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  }
+
   const supabase = createClient(supabaseUrl, supabaseKey);
 
   const openRouterApiKey = Deno.env.get("OPENROUTER_API_KEY");

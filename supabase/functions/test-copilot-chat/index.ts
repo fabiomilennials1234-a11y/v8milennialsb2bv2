@@ -14,11 +14,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { withSentry } from '../_shared/sentry.ts';
 import { logRuntime } from "../_shared/logger.ts";
 import { sanitizeAssistantMessage, splitByDelimiter } from "../_shared/message-sanitizer.ts";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { getCorsHeaders } from "../_shared/cors.ts";
+import { withSecurityHeaders } from "../_shared/security-headers.ts";
 
 const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
 const DEFAULT_MODEL = "google/gemini-2.5-flash";
@@ -127,6 +124,9 @@ async function callOpenRouter(
 }
 
 Deno.serve(withSentry('test-copilot-chat', async (req) => {
+  const origin = req.headers.get("Origin") ?? undefined;
+  const corsHeaders = withSecurityHeaders(getCorsHeaders(origin));
+
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }

@@ -3,11 +3,8 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.89.0";
 import { logRuntime } from "../_shared/logger.ts";
 import { getPipeEntriesByLeads } from "../_shared/pipeline-adapter.ts";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { getCorsHeaders } from "../_shared/cors.ts";
+import { withSecurityHeaders } from "../_shared/security-headers.ts";
 
 interface LeadData {
   id: string;
@@ -38,6 +35,9 @@ interface HistoryData {
 }
 
 serve(withSentry('calculate-lead-score', async (req) => {
+  const origin = req.headers.get("Origin") ?? undefined;
+  const corsHeaders = withSecurityHeaders(getCorsHeaders(origin));
+
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }

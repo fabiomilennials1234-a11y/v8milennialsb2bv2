@@ -53,7 +53,7 @@ serve(withSentry('outbound-trigger', async (req) => {
   const requestStart = Date.now();
   try {
     const payload: OutboundTriggerPayload = await req.json();
-    console.log("[outbound-trigger] Received:", JSON.stringify(payload));
+    console.log("[outbound-trigger] Received for lead:", payload.lead_id, "org:", payload.organization_id);
 
     // Criar cliente Supabase
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -82,7 +82,7 @@ serve(withSentry('outbound-trigger', async (req) => {
       );
     }
 
-    console.log("[outbound-trigger] Lead loaded:", lead.name);
+    console.log("[outbound-trigger] Lead loaded:", lead.id);
 
     // Extrair tags do lead
     const leadTags = (lead.lead_tags || []).map((lt: any) => lt.tag?.name).filter(Boolean);

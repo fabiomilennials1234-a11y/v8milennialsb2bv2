@@ -17,6 +17,7 @@ export interface ActionResult {
   message?: string;
   error?: string;
   data?: Record<string, unknown>;
+  retryable?: boolean;
 }
 
 interface ActionContext {
@@ -290,6 +291,28 @@ async function getLeadPhone(supabase: SupabaseClient, leadId: string): Promise<s
   return phone;
 }
 
+async function enforceWhatsAppRateLimit(
+  supabase: SupabaseClient,
+  instanceId: string,
+): Promise<void> {
+  const MIN_INTERVAL_MS = 3000;
+  const { data: lastMsg } = await supabase
+    .from("whatsapp_messages")
+    .select("timestamp")
+    .eq("instance_id", instanceId)
+    .eq("direction", "outgoing")
+    .order("timestamp", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (lastMsg?.timestamp) {
+    const elapsed = Date.now() - new Date(lastMsg.timestamp).getTime();
+    if (elapsed < MIN_INTERVAL_MS) {
+      await new Promise(r => setTimeout(r, MIN_INTERVAL_MS - elapsed));
+    }
+  }
+}
+
 // ─── Lead history logger ────────────────────────────────────────────────────
 
 async function logToHistory(
@@ -466,7 +489,7 @@ export async function executeWorkflowAction(ctx: ActionContext): Promise<ActionR
       break;
 
     default:
-      return { success: false, error: `Unknown action type: ${actionType}` };
+      return { success: false, error: `Unknown action type: ${actionType}`, retryable: false };
   }
 
   // Log to lead_history on success
@@ -491,13 +514,14 @@ export async function executeWorkflowAction(ctx: ActionContext): Promise<ActionR
 async function handleSendWhatsApp(ctx: ActionContext): Promise<ActionResult> {
   const wa = await getWhatsAppInstance(ctx.supabase, ctx.organizationId, ctx.nodeData.whatsappInstanceId as string, ctx.leadId);
   if (!wa) return { success: false, error: "WhatsApp instance not available" };
+  await enforceWhatsAppRateLimit(ctx.supabase, wa.instanceId);
 
   const phone = await getLeadPhone(ctx.supabase, ctx.leadId);
-  if (!phone) return { success: false, error: "Lead has no phone" };
+  if (!phone) return { success: false, error: "Lead has no phone", retryable: false };
 
   const template = ctx.nodeData.messageTemplate as string || "";
   const message = await resolveVariables(ctx.supabase, ctx.leadId, template, ctx.executionContext);
-  if (!message) return { success: false, error: "Empty message template" };
+  if (!message) return { success: false, error: "Empty message template", retryable: false };
 
   const { sendTextViaInstance } = await import("./whatsapp-dispatch.ts");
   const sendResult = await sendTextViaInstance(ctx.supabase, wa.instance, phone, message, {
@@ -533,12 +557,13 @@ async function handleSendWhatsApp(ctx: ActionContext): Promise<ActionResult> {
 async function handleSendWhatsAppAudio(ctx: ActionContext): Promise<ActionResult> {
   const wa = await getWhatsAppInstance(ctx.supabase, ctx.organizationId, ctx.nodeData.whatsappInstanceId as string, ctx.leadId);
   if (!wa) return { success: false, error: "WhatsApp instance not available" };
+  await enforceWhatsAppRateLimit(ctx.supabase, wa.instanceId);
 
   const phone = await getLeadPhone(ctx.supabase, ctx.leadId);
-  if (!phone) return { success: false, error: "Lead has no phone" };
+  if (!phone) return { success: false, error: "Lead has no phone", retryable: false };
 
   const audioUrl = ctx.nodeData.audioUrl as string;
-  if (!audioUrl) return { success: false, error: "No audio URL configured" };
+  if (!audioUrl) return { success: false, error: "No audio URL configured", retryable: false };
 
   let provider;
   try {
@@ -577,12 +602,13 @@ async function handleSendWhatsAppAudio(ctx: ActionContext): Promise<ActionResult
 async function handleSendWhatsAppImage(ctx: ActionContext): Promise<ActionResult> {
   const wa = await getWhatsAppInstance(ctx.supabase, ctx.organizationId, ctx.nodeData.whatsappInstanceId as string, ctx.leadId);
   if (!wa) return { success: false, error: "WhatsApp instance not available" };
+  await enforceWhatsAppRateLimit(ctx.supabase, wa.instanceId);
 
   const phone = await getLeadPhone(ctx.supabase, ctx.leadId);
-  if (!phone) return { success: false, error: "Lead has no phone" };
+  if (!phone) return { success: false, error: "Lead has no phone", retryable: false };
 
   const imageUrl = ctx.nodeData.imageUrl as string;
-  if (!imageUrl) return { success: false, error: "No image URL configured" };
+  if (!imageUrl) return { success: false, error: "No image URL configured", retryable: false };
 
   const caption = ctx.nodeData.imageCaption as string || "";
   const resolvedCaption = await resolveVariables(ctx.supabase, ctx.leadId, caption, ctx.executionContext);
@@ -603,12 +629,13 @@ async function handleSendWhatsAppImage(ctx: ActionContext): Promise<ActionResult
 async function handleSendWhatsAppSticker(ctx: ActionContext): Promise<ActionResult> {
   const wa = await getWhatsAppInstance(ctx.supabase, ctx.organizationId, ctx.nodeData.whatsappInstanceId as string, ctx.leadId);
   if (!wa) return { success: false, error: "WhatsApp instance not available" };
+  await enforceWhatsAppRateLimit(ctx.supabase, wa.instanceId);
 
   const phone = await getLeadPhone(ctx.supabase, ctx.leadId);
-  if (!phone) return { success: false, error: "Lead has no phone" };
+  if (!phone) return { success: false, error: "Lead has no phone", retryable: false };
 
   const stickerUrl = ctx.nodeData.stickerUrl as string;
-  if (!stickerUrl) return { success: false, error: "No sticker URL configured" };
+  if (!stickerUrl) return { success: false, error: "No sticker URL configured", retryable: false };
 
   const { sendMediaViaInstance } = await import("./whatsapp-dispatch.ts");
   const sendResult = await sendMediaViaInstance(
@@ -626,12 +653,13 @@ async function handleSendWhatsAppSticker(ctx: ActionContext): Promise<ActionResu
 async function handleSendWhatsAppTemplate(ctx: ActionContext): Promise<ActionResult> {
   const wa = await getWhatsAppInstance(ctx.supabase, ctx.organizationId, ctx.nodeData.whatsappInstanceId as string, ctx.leadId);
   if (!wa) return { success: false, error: "WhatsApp instance not available" };
+  await enforceWhatsAppRateLimit(ctx.supabase, wa.instanceId);
 
   const phone = await getLeadPhone(ctx.supabase, ctx.leadId);
-  if (!phone) return { success: false, error: "Lead has no phone" };
+  if (!phone) return { success: false, error: "Lead has no phone", retryable: false };
 
   const templateId = ctx.nodeData.templateId as string;
-  if (!templateId) return { success: false, error: "No template configured" };
+  if (!templateId) return { success: false, error: "No template configured", retryable: false };
 
   // Fetch template from DB
   const { data: tpl } = await ctx.supabase
@@ -659,9 +687,10 @@ async function handleSendWhatsAppTemplate(ctx: ActionContext): Promise<ActionRes
 async function handleSendWhatsAppMenu(ctx: ActionContext): Promise<ActionResult> {
   const wa = await getWhatsAppInstance(ctx.supabase, ctx.organizationId, ctx.nodeData.whatsappInstanceId as string, ctx.leadId);
   if (!wa) return { success: false, error: "WhatsApp instance not available" };
+  await enforceWhatsAppRateLimit(ctx.supabase, wa.instanceId);
 
   const phone = await getLeadPhone(ctx.supabase, ctx.leadId);
-  if (!phone) return { success: false, error: "Lead has no phone" };
+  if (!phone) return { success: false, error: "Lead has no phone", retryable: false };
 
   const menuType = (ctx.nodeData.menuType as string) || "button";
   if (!["button", "list", "poll", "carousel"].includes(menuType)) {
@@ -670,11 +699,11 @@ async function handleSendWhatsAppMenu(ctx: ActionContext): Promise<ActionResult>
 
   const rawText = (ctx.nodeData.menuText as string) || "";
   const text = await resolveVariables(ctx.supabase, ctx.leadId, rawText, ctx.executionContext);
-  if (!text) return { success: false, error: "Empty menu text" };
+  if (!text) return { success: false, error: "Empty menu text", retryable: false };
 
   const rawChoices = ctx.nodeData.menuChoices as string[] | undefined;
   if (!Array.isArray(rawChoices) || rawChoices.length === 0) {
-    return { success: false, error: "Menu requires at least one choice" };
+    return { success: false, error: "Menu requires at least one choice", retryable: false };
   }
   const choices = await Promise.all(
     rawChoices.map((c) => resolveVariables(ctx.supabase, ctx.leadId, c, ctx.executionContext))
@@ -723,9 +752,10 @@ async function handleSendWhatsAppMenu(ctx: ActionContext): Promise<ActionResult>
 async function handleSendWhatsAppPixButton(ctx: ActionContext): Promise<ActionResult> {
   const wa = await getWhatsAppInstance(ctx.supabase, ctx.organizationId, ctx.nodeData.whatsappInstanceId as string, ctx.leadId);
   if (!wa) return { success: false, error: "WhatsApp instance not available" };
+  await enforceWhatsAppRateLimit(ctx.supabase, wa.instanceId);
 
   const phone = await getLeadPhone(ctx.supabase, ctx.leadId);
-  if (!phone) return { success: false, error: "Lead has no phone" };
+  if (!phone) return { success: false, error: "Lead has no phone", retryable: false };
 
   const pixkey = ctx.nodeData.pixkey as string;
   const pixkeyType = ctx.nodeData.pixkeyType as string;
@@ -1161,7 +1191,7 @@ async function handleSendCampaignMessage(ctx: ActionContext): Promise<ActionResu
   const campaignId = ctx.nodeData.campaignId as string;
   const templateId = ctx.nodeData.campaignTemplateId as string;
   if (!campaignId) return { success: false, error: "No campaign configured" };
-  if (!templateId) return { success: false, error: "No template configured" };
+  if (!templateId) return { success: false, error: "No template configured", retryable: false };
 
   const { data: template } = await ctx.supabase
     .from("campaign_templates")
@@ -1175,9 +1205,10 @@ async function handleSendCampaignMessage(ctx: ActionContext): Promise<ActionResu
 
   const wa = await getWhatsAppInstance(ctx.supabase, ctx.organizationId, ctx.nodeData.whatsappInstanceId as string, ctx.leadId);
   if (!wa) return { success: false, error: "WhatsApp instance not available" };
+  await enforceWhatsAppRateLimit(ctx.supabase, wa.instanceId);
 
   const phone = await getLeadPhone(ctx.supabase, ctx.leadId);
-  if (!phone) return { success: false, error: "Lead has no phone" };
+  if (!phone) return { success: false, error: "Lead has no phone", retryable: false };
 
   const isAudio = template.message_type === "audio" && template.audio_url;
 

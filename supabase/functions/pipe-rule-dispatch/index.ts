@@ -59,12 +59,10 @@ Deno.serve(withSentry('pipe-rule-dispatch', async (req) => {
   let authorized = false;
   const cronSecret = req.headers.get("x-cron-secret");
 
-  // 1. Cron secret match
-  if (CRON_SECRET && cronSecret && cronSecret === CRON_SECRET) {
+  // 1. Cron secret match — reject if env var missing (empty string is falsy)
+  if (!!CRON_SECRET && cronSecret === CRON_SECRET) {
     authorized = true;
   }
-
-  // CRON_SECRET must be set in env — no fallback for missing secret
 
   // 3. Bearer token auth (frontend calls)
   if (!authorized) {

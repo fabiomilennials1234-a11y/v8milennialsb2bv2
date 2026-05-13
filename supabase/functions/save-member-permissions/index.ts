@@ -1,12 +1,12 @@
 import { requireAdmin, AuthError, authErrorResponse } from "../_shared/user-auth.ts";
 import { withSentry } from "../_shared/sentry.ts";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-user-jwt",
-};
+import { getCorsHeaders } from "../_shared/cors.ts";
+import { withSecurityHeaders } from "../_shared/security-headers.ts";
 
 Deno.serve(withSentry("save-member-permissions", async (req) => {
+  const origin = req.headers.get("Origin") ?? undefined;
+  const corsHeaders = withSecurityHeaders(getCorsHeaders(origin));
+
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }

@@ -41,6 +41,7 @@ const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secon
   paused: { label: "Pausado", variant: "secondary", icon: Pause },
   completed: { label: "Concluído", variant: "default", icon: CheckCircle2 },
   failed: { label: "Falhou", variant: "destructive", icon: XCircle },
+  cancelled: { label: "Cancelado", variant: "outline", icon: XCircle },
   loop_limit_reached: { label: "Limite de Loop", variant: "destructive", icon: AlertTriangle },
   waiting_response: { label: "Aguardando Resposta", variant: "outline", icon: Clock },
 };
@@ -107,7 +108,7 @@ export default function AutomacoesExecucoes() {
       </div>
 
       {/* Stats summary */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
         <StatCard
           label="Total"
           value={executions?.length ?? 0}
@@ -121,6 +122,11 @@ export default function AutomacoesExecucoes() {
           label="Falharam"
           value={executions?.filter(e => e.status === "failed" || e.status === "loop_limit_reached").length ?? 0}
           className="text-red-600"
+        />
+        <StatCard
+          label="Cancelados"
+          value={executions?.filter(e => e.status === "cancelled").length ?? 0}
+          className="text-muted-foreground"
         />
         <StatCard
           label="Em andamento"
@@ -344,6 +350,13 @@ function StepsDialog({
                       {step.status === "failed" && <XCircle className="h-4 w-4 text-red-500" />}
                       {step.status === "skipped" && <span className="text-xs text-muted-foreground">pulado</span>}
                     </div>
+
+                    {(step.output_data as any)?.retry_attempt != null && (
+                      <Badge variant="outline" className="text-xs gap-1 mt-0.5">
+                        <RotateCw className="h-2.5 w-2.5" />
+                        Tentativa {(step.output_data as any).retry_attempt}
+                      </Badge>
+                    )}
 
                     {step.error && (
                       <p className="text-xs text-red-600 mt-1">{step.error}</p>

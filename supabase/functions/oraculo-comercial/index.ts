@@ -1,11 +1,8 @@
 import { withSentry } from '../_shared/sentry.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { getCorsHeaders } from "../_shared/cors.ts";
+import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logRuntime } from "../_shared/logger.ts";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
 
 interface MetricsData {
   role?: "sdr" | "closer"; // deprecated, use metric_type
@@ -325,7 +322,7 @@ async function fetchHistoricalMetrics(
 }
 
 // ---- Chat mode handler ----
-async function handleChatMode(body: any) {
+async function handleChatMode(body: any, corsHeaders: Record<string, string>) {
   const { question, user_id, organization_id } = body;
 
   if (!question || !user_id || !organization_id) {
@@ -550,7 +547,7 @@ REGRAS ABSOLUTAS:
 }
 
 // ---- Legacy mode handler (problema + tarefa) ----
-async function handleLegacyMode(metrics: MetricsData) {
+async function handleLegacyMode(metrics: MetricsData, corsHeaders: Record<string, string>) {
   const openRouterApiKey = Deno.env.get("OPENROUTER_API_KEY");
   const referer = Deno.env.get("OPENROUTER_REFERER_URL") || "https://v8millennials.com";
 
@@ -679,7 +676,7 @@ Qual o problema principal e qual a tarefa prioritária de hoje?`;
 }
 
 // ---- TV Analysis mode handler (structured diagnosis for TV Dashboard) ----
-async function handleTVAnalysisMode(body: any) {
+async function handleTVAnalysisMode(body: any, corsHeaders: Record<string, string>) {
   const { organization_id, tv_data, team_members } = body;
 
   if (!organization_id) {
@@ -920,6 +917,9 @@ FORMATO JSON OBRIGATÓRIO:
 
 // ---- Main handler ----
 serve(withSentry('oraculo-comercial', async (req) => {
+  const origin = req.headers.get("Origin") ?? undefined;
+  const corsHeaders = withSecurityHeaders(getCorsHeaders(origin));
+
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -929,15 +929,15 @@ serve(withSentry('oraculo-comercial', async (req) => {
 
     // Route to appropriate mode
     if (body.mode === "chat") {
-      return await handleChatMode(body);
+      return await handleChatMode(body, corsHeaders);
     }
     if (body.mode === "tv_analysis") {
-      return await handleTVAnalysisMode(body);
+      return await handleTVAnalysisMode(body, corsHeaders);
     }
 
     // Legacy mode: expects { metrics: MetricsData }
     const metrics = body.metrics as MetricsData;
-    return await handleLegacyMode(metrics);
+    return await handleLegacyMode(metrics, corsHeaders);
   } catch (e) {
     console.error("oraculo-comercial error:", e);
     await logRuntime({

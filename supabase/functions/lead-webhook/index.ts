@@ -16,11 +16,8 @@ import { isValidUUID, isValidISODate, validateArraySize, validateReferencedId } 
 import { successResponse, errorResponse } from "../_shared/response.ts";
 import { upsertPipeEntry, getPipeEntry, updatePipeEntryById } from "../_shared/pipeline-adapter.ts";
 import type { PipeSlug } from "../_shared/pipeline-adapter.ts";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-webhook-key",
-};
+import { getCorsHeaders } from "../_shared/cors.ts";
+import { withSecurityHeaders } from "../_shared/security-headers.ts";
 
 // Destino opcional: colocar o lead em um pipe (funil) em uma etapa específica
 interface PlaceInPipe {
@@ -70,6 +67,9 @@ interface LeadWebhookPayload {
 }
 
 serve(withSentry('lead-webhook', async (req) => {
+  const origin = req.headers.get("Origin") ?? undefined;
+  const corsHeaders = withSecurityHeaders(getCorsHeaders(origin));
+
   // CORS
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -87,7 +87,7 @@ serve(withSentry('lead-webhook', async (req) => {
 
     // Parse payload
     const payload: LeadWebhookPayload = await req.json();
-    console.log("[lead-webhook] Received payload:", JSON.stringify(payload, null, 2));
+    console.log("[lead-webhook] Received payload for org:", payload.organization_id, "source:", payload.source);
 
     // Sanitizar campos: remover whitespace/newlines de todos os valores em fields
     if (payload.fields) {
@@ -247,7 +247,7 @@ serve(withSentry('lead-webhook', async (req) => {
       });
 
       if (!result) {
-        console.error("[lead-webhook] Failed to get or create lead for org:", organizationId, "phone:", phone, "email:", email);
+        console.error("[lead-webhook] Failed to get or create lead for org:", organizationId);
         return errorResponse(500, "Failed to get or create lead", corsHeaders, {
           req,
           details: {

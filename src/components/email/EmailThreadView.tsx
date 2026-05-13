@@ -1,4 +1,5 @@
 import { useState } from "react";
+import DOMPurify from "dompurify";
 import { ChevronDown, ChevronUp, Paperclip, Reply, Forward, Loader2, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -114,7 +115,7 @@ export function EmailThreadView({ threadId, onReply, onForward }: EmailThreadVie
 
                 <div
                   className="ml-11 prose prose-sm dark:prose-invert max-w-none text-sm"
-                  dangerouslySetInnerHTML={{ __html: email.body_html || email.body_text || "" }}
+                  dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(email.body_html || email.body_text || "") }}
                 />
 
                 {(email.open_count > 0 || email.click_count > 0) && (

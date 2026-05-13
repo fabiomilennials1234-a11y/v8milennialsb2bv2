@@ -58,7 +58,7 @@ Deno.serve(withSentry('campaign-rule-dispatch', async (req) => {
   // --- Auth: CRON_SECRET ou JWT admin via middleware compartilhado ---
   let authorized = false;
   const cronSecret = req.headers.get("x-cron-secret");
-  if (CRON_SECRET && cronSecret === CRON_SECRET) {
+  if (!!CRON_SECRET && cronSecret === CRON_SECRET) {
     authorized = true;
   }
   if (!authorized) {

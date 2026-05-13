@@ -141,6 +141,10 @@ export async function executeCreateCustomField(
     return { success: false, error: "field_name e field_type são obrigatórios" };
   }
 
+  if (field_name.length > 100) {
+    return { success: false, error: "field_name excede 100 caracteres" };
+  }
+
   const validTypes = ["text", "number", "date", "select", "boolean"];
   if (!validTypes.includes(field_type)) {
     return { success: false, error: `field_type inválido. Use: ${validTypes.join(", ")}` };
@@ -195,11 +199,12 @@ export async function executeCreateCustomField(
   }
 
   if (initial_value && currentLeadId) {
+    const trimmedValue = String(initial_value).trim().slice(0, 5000);
     await supabase.from("lead_custom_field_values").upsert(
       {
         lead_id: currentLeadId,
         field_id: fieldId,
-        value: String(initial_value).trim(),
+        value: trimmedValue,
         updated_at: new Date().toISOString(),
       },
       { onConflict: "lead_id,field_id" },

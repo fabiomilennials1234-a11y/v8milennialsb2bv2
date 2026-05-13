@@ -17,10 +17,10 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 Deno.serve(withSentry('refresh-meta-tokens', async (req) => {
-  // Validar que e um cron job (opcional: verificar header x-cron-secret)
+  // Cron secret is mandatory — reject if env var missing or mismatch
   const cronSecret = req.headers.get("x-cron-secret");
   const expectedSecret = Deno.env.get("CRON_SECRET");
-  if (expectedSecret && cronSecret !== expectedSecret) {
+  if (!expectedSecret || cronSecret !== expectedSecret) {
     return new Response("Unauthorized", { status: 401 });
   }
 

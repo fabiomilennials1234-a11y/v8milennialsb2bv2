@@ -39,10 +39,9 @@ Deno.serve(
     // Auth: cron secret OR bearer token (master admin)
     let isCron = false;
     const cronSecret = req.headers.get("x-cron-secret");
-    if (CRON_SECRET && cronSecret === CRON_SECRET) {
+    if (!!CRON_SECRET && cronSecret === CRON_SECRET) {
       isCron = true;
     }
-    // CRON_SECRET must be set in env — no fallback for missing secret
 
     if (!isCron) {
       // Check bearer token for manual retry

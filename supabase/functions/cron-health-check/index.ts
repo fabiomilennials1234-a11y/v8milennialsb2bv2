@@ -79,7 +79,7 @@ Deno.serve(
     const cronSecret = req.headers.get("x-cron-secret");
     const authHeader = req.headers.get("authorization");
     const isAuthorized =
-      (CRON_SECRET && cronSecret === CRON_SECRET) ||
+      (!!CRON_SECRET && cronSecret === CRON_SECRET) ||
       (authHeader && authHeader.includes(SUPABASE_SERVICE_ROLE_KEY));
 
     if (!isAuthorized) {

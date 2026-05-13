@@ -13,6 +13,20 @@ Sentry.init({
   tracesSampleRate: 1.0,
   replaysSessionSampleRate: 0.1,
   replaysOnErrorSampleRate: 1.0,
+  beforeSend(event) {
+    if (event.request?.data) {
+      event.request.data = "[REDACTED]";
+    }
+    if (event.breadcrumbs) {
+      event.breadcrumbs = event.breadcrumbs.map((b) => {
+        if (b.category === "fetch" || b.category === "xhr") {
+          return { ...b, data: { ...b.data, request_body: undefined, response_body: undefined } };
+        }
+        return b;
+      });
+    }
+    return event;
+  },
 });
 
 // Usuários com index.html cacheado de um deploy anterior apontam para chunks

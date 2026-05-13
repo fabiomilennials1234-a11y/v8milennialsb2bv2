@@ -51,25 +51,40 @@ export async function fireTrigger(params: FireTriggerParams): Promise<number> {
 
     if (matching.length === 0) return 0;
 
-    // ── Dedup: skip workflows that already have an active execution for this lead ──
+    // ── Dedup / Auto-cancel ──
     const matchingIds = matching.map((w: { id: string }) => w.id);
     const { data: activeExecs } = await supabase
       .from("workflow_executions")
-      .select("workflow_id")
+      .select("id, workflow_id")
       .eq("lead_id", leadId)
       .in("workflow_id", matchingIds)
       .in("status", ["running", "processing", "waiting_response", "paused"]);
 
-    const activeWorkflowIds = new Set((activeExecs ?? []).map((e: { workflow_id: string }) => e.workflow_id));
-    const deduped = matching.filter((w: { id: string }) => !activeWorkflowIds.has(w.id));
+    let deduped = matching;
 
-    if (deduped.length === 0) {
-      console.log(`[workflow-trigger] All ${matching.length} workflows already active for lead ${leadId}, skipping`);
-      return 0;
-    }
+    if (triggerType === "stage_changed" && activeExecs?.length) {
+      const activeIds = activeExecs.map((e: { id: string }) => e.id);
+      await supabase
+        .from("workflow_executions")
+        .update({
+          status: "cancelled",
+          completed_at: new Date().toISOString(),
+          error: "Auto-cancelled: new stage_changed trigger",
+        })
+        .in("id", activeIds);
+      console.log(`[workflow-trigger] Auto-cancelled ${activeIds.length} executions for lead ${leadId}`);
+    } else {
+      const activeWorkflowIds = new Set((activeExecs ?? []).map((e: { workflow_id: string }) => e.workflow_id));
+      deduped = matching.filter((w: { id: string }) => !activeWorkflowIds.has(w.id));
 
-    if (deduped.length < matching.length) {
-      console.log(`[workflow-trigger] Dedup: ${matching.length - deduped.length} workflows already active, firing ${deduped.length}`);
+      if (deduped.length === 0) {
+        console.log(`[workflow-trigger] All ${matching.length} workflows already active for lead ${leadId}, skipping`);
+        return 0;
+      }
+
+      if (deduped.length < matching.length) {
+        console.log(`[workflow-trigger] Dedup: ${matching.length - deduped.length} workflows already active, firing ${deduped.length}`);
+      }
     }
 
     const executions = deduped.map((w: { id: string }) => ({

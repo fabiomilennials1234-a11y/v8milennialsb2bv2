@@ -5,6 +5,8 @@ import { unzipSync } from "https://esm.sh/fflate@0.8.2";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { generateEmbedding, generateEmbeddingsBatch, generateMultimodalEmbedding, chunkText, formatEmbeddingForPg } from "../_shared/embeddings.ts";
 import { logRuntime } from "../_shared/logger.ts";
+import { getCorsHeaders } from "../_shared/cors.ts";
+import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { splitPdfIntoBatches, encodeBatchAsBase64 } from "./pdf-chunking.ts";
 
 // Threshold pra acionar chunking. PDFs >= esse tamanho viram batched
@@ -22,11 +24,6 @@ const PDF_MAX_BYTES = 8 * 1024 * 1024; // 8MB
 // Configuração do chunking
 const PDF_PAGES_PER_BATCH = 3;
 const PDF_MAX_PAGES = 100;
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
 
 // Modelos via OpenAI
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
@@ -173,6 +170,9 @@ async function cleanTextViaLLM(
 }
 
 serve(withSentry('process-agent-document', async (req) => {
+  const origin = req.headers.get("Origin") ?? undefined;
+  const corsHeaders = withSecurityHeaders(getCorsHeaders(origin));
+
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }

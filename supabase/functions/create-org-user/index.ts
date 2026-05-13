@@ -13,6 +13,7 @@ import { withSentry } from '../_shared/sentry.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { requireAuth, AuthError, authErrorResponse } from "../_shared/user-auth.ts";
 import { logRuntime } from "../_shared/logger.ts";
 
@@ -25,13 +26,6 @@ const SUPABASE_ANON_KEY =
   Deno.env.get("SUPABASE_ANON_KEY")?.trim() ||
   "";
 const INTERNAL_API_KEY = Deno.env.get("INTERNAL_API_KEY")?.trim() ?? "";
-
-const CORS_PREFLIGHT_HEADERS: Record<string, string> = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "content-type, authorization, x-internal-api-key, x-user-jwt",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Max-Age": "86400",
-};
 
 interface CreateOrgUserBody {
   email: string;
@@ -58,15 +52,11 @@ function jsonResponse(
 }
 
 serve(withSentry('create-org-user', async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response("", { status: 200, headers: CORS_PREFLIGHT_HEADERS });
-  }
+  const origin = req.headers.get("Origin") ?? undefined;
+  const corsHeaders = withSecurityHeaders(getCorsHeaders(origin));
 
-  let corsHeaders: Record<string, string>;
-  try {
-    corsHeaders = getCorsHeaders(req.headers.get("origin"));
-  } catch {
-    corsHeaders = CORS_PREFLIGHT_HEADERS;
+  if (req.method === "OPTIONS") {
+    return new Response("", { status: 200, headers: corsHeaders });
   }
 
   if (req.method !== "POST") {
@@ -300,7 +290,7 @@ serve(withSentry('create-org-user', async (req) => {
     return jsonResponse(
       { success: false, error: "Internal server error", message: String(err) },
       500,
-      { ...CORS_PREFLIGHT_HEADERS, "Content-Type": "application/json" }
+      { ...corsHeaders, "Content-Type": "application/json" }
     );
   }
 }));
