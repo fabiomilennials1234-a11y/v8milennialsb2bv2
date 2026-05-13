@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 import { triggerFollowUpAutomation } from "./useAutoFollowUp";
-import { triggerStageChangedWorkflows } from "@/lib/workflowTrigger";
+
 import { useOrganization } from "./useOrganization";
 import { useCanPerformActionAsync } from "@/lib/permissions";
 import { usePipelineEntries, usePipelineId } from "./usePipelineEntries";
@@ -155,13 +155,7 @@ export function useUpdatePipeWhatsapp() {
           organizationId: data.organization_id,
         });
 
-        // Trigger visual workflow automations
-        triggerStageChangedWorkflows({
-          organizationId: data.organization_id,
-          leadId: effectiveLeadId,
-          pipeType: "whatsapp",
-          toStage: updates.status,
-        });
+
       }
 
       return data;

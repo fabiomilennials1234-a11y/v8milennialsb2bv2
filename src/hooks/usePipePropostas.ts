@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 import { triggerFollowUpAutomation } from "./useAutoFollowUp";
-import { triggerStageChangedWorkflows } from "@/lib/workflowTrigger";
+
 import { useOrganization } from "./useOrganization";
 import { useCanPerformActionAsync } from "@/lib/permissions";
 import { usePipelineEntries, usePipelineId } from "./usePipelineEntries";
@@ -82,14 +82,6 @@ export function useCreatePipeProposta() {
         stage,
         sourcePipeId: data.id,
         organizationId: data.organization_id,
-      });
-
-      // Trigger visual workflow automations
-      triggerStageChangedWorkflows({
-        organizationId: data.organization_id,
-        leadId: data.lead_id,
-        pipeType: "propostas",
-        toStage: stage,
       });
 
       return data;
@@ -211,13 +203,7 @@ export function useUpdatePipeProposta() {
           organizationId: data.organization_id,
         });
 
-        // Trigger visual workflow automations
-        triggerStageChangedWorkflows({
-          organizationId: data.organization_id,
-          leadId: effectiveLeadId,
-          pipeType: "propostas",
-          toStage: updates.status,
-        });
+
       }
 
       return data;
