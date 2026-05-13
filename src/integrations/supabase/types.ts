@@ -4009,6 +4009,60 @@ export type Database = {
           },
         ]
       }
+      copilot_prompt_analyses: {
+        Row: {
+          accepted_ids: string[]
+          agent_id: string
+          conversation_count: number
+          created_at: string
+          created_by: string
+          dismissed_ids: string[]
+          id: string
+          message_count: number
+          organization_id: string
+          suggestions: Json
+        }
+        Insert: {
+          accepted_ids?: string[]
+          agent_id: string
+          conversation_count?: number
+          created_at?: string
+          created_by: string
+          dismissed_ids?: string[]
+          id?: string
+          message_count?: number
+          organization_id: string
+          suggestions?: Json
+        }
+        Update: {
+          accepted_ids?: string[]
+          agent_id?: string
+          conversation_count?: number
+          created_at?: string
+          created_by?: string
+          dismissed_ids?: string[]
+          id?: string
+          message_count?: number
+          organization_id?: string
+          suggestions?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "copilot_prompt_analyses_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "copilot_agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "copilot_prompt_analyses_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       coupons: {
         Row: {
           applies_to: string[]
@@ -6513,6 +6567,96 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lead_products: {
+        Row: {
+          avg_cycle_days: number | null
+          created_at: string
+          first_purchased_at: string | null
+          id: string
+          last_purchased_at: string | null
+          lead_id: string
+          organization_id: string
+          product_id: string
+          purchase_count: number
+          quantity_total: number
+          revenue_total: number
+          source: string
+          source_deal_id: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          avg_cycle_days?: number | null
+          created_at?: string
+          first_purchased_at?: string | null
+          id?: string
+          last_purchased_at?: string | null
+          lead_id: string
+          organization_id: string
+          product_id: string
+          purchase_count?: number
+          quantity_total?: number
+          revenue_total?: number
+          source?: string
+          source_deal_id?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          avg_cycle_days?: number | null
+          created_at?: string
+          first_purchased_at?: string | null
+          id?: string
+          last_purchased_at?: string | null
+          lead_id?: string
+          organization_id?: string
+          product_id?: string
+          purchase_count?: number
+          quantity_total?: number
+          revenue_total?: number
+          source?: string
+          source_deal_id?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_products_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_products_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads_compat"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_products_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_products_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_products_source_deal_id_fkey"
+            columns: ["source_deal_id"]
+            isOneToOne: false
+            referencedRelation: "deals"
             referencedColumns: ["id"]
           },
         ]
@@ -10420,133 +10564,6 @@ export type Database = {
           },
         ]
       }
-      sz_chat_config: {
-        Row: {
-          api_token: string | null
-          api_url: string
-          channel_id: string | null
-          created_at: string | null
-          id: string
-          is_active: boolean | null
-          organization_id: string
-          team_mappings: Json | null
-          updated_at: string | null
-          webhook_secret: string | null
-          whatsapp_instance_id: string | null
-        }
-        Insert: {
-          api_token?: string | null
-          api_url?: string
-          channel_id?: string | null
-          created_at?: string | null
-          id?: string
-          is_active?: boolean | null
-          organization_id: string
-          team_mappings?: Json | null
-          updated_at?: string | null
-          webhook_secret?: string | null
-          whatsapp_instance_id?: string | null
-        }
-        Update: {
-          api_token?: string | null
-          api_url?: string
-          channel_id?: string | null
-          created_at?: string | null
-          id?: string
-          is_active?: boolean | null
-          organization_id?: string
-          team_mappings?: Json | null
-          updated_at?: string | null
-          webhook_secret?: string | null
-          whatsapp_instance_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "sz_chat_config_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: true
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "sz_chat_config_whatsapp_instance_id_fkey"
-            columns: ["whatsapp_instance_id"]
-            isOneToOne: false
-            referencedRelation: "whatsapp_instances"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      sz_chat_sessions: {
-        Row: {
-          contact_name: string | null
-          created_at: string | null
-          id: string
-          lead_id: string | null
-          organization_id: string
-          phone_number: string
-          status: string | null
-          sz_chat_channel_id: string | null
-          sz_chat_contact_id: string | null
-          sz_chat_platform: string | null
-          sz_chat_session_id: string
-          transferred_from_team: string | null
-          updated_at: string | null
-        }
-        Insert: {
-          contact_name?: string | null
-          created_at?: string | null
-          id?: string
-          lead_id?: string | null
-          organization_id: string
-          phone_number: string
-          status?: string | null
-          sz_chat_channel_id?: string | null
-          sz_chat_contact_id?: string | null
-          sz_chat_platform?: string | null
-          sz_chat_session_id: string
-          transferred_from_team?: string | null
-          updated_at?: string | null
-        }
-        Update: {
-          contact_name?: string | null
-          created_at?: string | null
-          id?: string
-          lead_id?: string | null
-          organization_id?: string
-          phone_number?: string
-          status?: string | null
-          sz_chat_channel_id?: string | null
-          sz_chat_contact_id?: string | null
-          sz_chat_platform?: string | null
-          sz_chat_session_id?: string
-          transferred_from_team?: string | null
-          updated_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "sz_chat_sessions_lead_id_fkey"
-            columns: ["lead_id"]
-            isOneToOne: false
-            referencedRelation: "leads"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "sz_chat_sessions_lead_id_fkey"
-            columns: ["lead_id"]
-            isOneToOne: false
-            referencedRelation: "leads_compat"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "sz_chat_sessions_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       tags: {
         Row: {
           color: string | null
@@ -12339,6 +12356,7 @@ export type Database = {
           remote_jid: string
           search_tsv: unknown
           sent_by_ai: boolean | null
+          sent_source: string
           status: string | null
           timestamp: string
         }
@@ -12366,6 +12384,7 @@ export type Database = {
           remote_jid: string
           search_tsv?: unknown
           sent_by_ai?: boolean | null
+          sent_source?: string
           status?: string | null
           timestamp?: string
         }
@@ -12393,6 +12412,7 @@ export type Database = {
           remote_jid?: string
           search_tsv?: unknown
           sent_by_ai?: boolean | null
+          sent_source?: string
           status?: string | null
           timestamp?: string
         }
@@ -13414,7 +13434,32 @@ export type Database = {
         }
         Returns: Json
       }
+      bulk_assign_leads: {
+        Args: {
+          p_closer_id?: string
+          p_lead_ids: string[]
+          p_responsible_id?: string
+          p_sdr_id?: string
+        }
+        Returns: undefined
+      }
       bulk_delete_leads: { Args: { p_lead_ids: string[] }; Returns: number }
+      bulk_move_stage: {
+        Args: {
+          p_lead_ids: string[]
+          p_target_pipe: string
+          p_target_stage: string
+        }
+        Returns: undefined
+      }
+      bulk_tag_leads: {
+        Args: {
+          p_add_tag_ids?: string[]
+          p_lead_ids: string[]
+          p_remove_tag_ids?: string[]
+        }
+        Returns: undefined
+      }
       can_delete_lead: { Args: never; Returns: boolean }
       can_manage_copilot:
         | { Args: never; Returns: boolean }
