@@ -51,7 +51,28 @@ export async function fireTrigger(params: FireTriggerParams): Promise<number> {
 
     if (matching.length === 0) return 0;
 
-    const executions = matching.map((w: { id: string }) => ({
+    // ── Dedup: skip workflows that already have an active execution for this lead ──
+    const matchingIds = matching.map((w: { id: string }) => w.id);
+    const { data: activeExecs } = await supabase
+      .from("workflow_executions")
+      .select("workflow_id")
+      .eq("lead_id", leadId)
+      .in("workflow_id", matchingIds)
+      .in("status", ["running", "processing", "waiting_response", "paused"]);
+
+    const activeWorkflowIds = new Set((activeExecs ?? []).map((e: { workflow_id: string }) => e.workflow_id));
+    const deduped = matching.filter((w: { id: string }) => !activeWorkflowIds.has(w.id));
+
+    if (deduped.length === 0) {
+      console.log(`[workflow-trigger] All ${matching.length} workflows already active for lead ${leadId}, skipping`);
+      return 0;
+    }
+
+    if (deduped.length < matching.length) {
+      console.log(`[workflow-trigger] Dedup: ${matching.length - deduped.length} workflows already active, firing ${deduped.length}`);
+    }
+
+    const executions = deduped.map((w: { id: string }) => ({
       workflow_id: w.id,
       organization_id: organizationId,
       lead_id: leadId,
@@ -68,8 +89,8 @@ export async function fireTrigger(params: FireTriggerParams): Promise<number> {
       return 0;
     }
 
-    console.log(`[workflow-trigger] Fired ${matching.length} workflows for ${triggerType}`);
-    return matching.length;
+    console.log(`[workflow-trigger] Fired ${deduped.length} workflows for ${triggerType}`);
+    return deduped.length;
   } catch (err) {
     console.warn("[workflow-trigger] Error:", err);
     return 0;
