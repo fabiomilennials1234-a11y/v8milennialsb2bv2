@@ -192,7 +192,7 @@ export function ConfirmacaoContext({ lead, pipeData: item, onSuccess }: Confirma
 
   const handleQuickStatusChange = async (newStatus: PipeConfirmacaoStatus) => {
     if (newStatus === "compareceu") { setIsCompareceuModalOpen(true); return; }
-    if (newStatus === "remarcar") { setIsRescheduleModalOpen(true); return; }
+    if (newStatus === "reuniao_marcada") { setIsRescheduleModalOpen(true); return; }
     try {
       const label = statusColumns.find((s) => s.id === newStatus)?.title;
       logAction({ leadId: item.lead_id, action: "stage_changed", description: `Status alterado para "${label}" na Confirmação` });
@@ -466,6 +466,7 @@ export function ConfirmacaoContext({ lead, pipeData: item, onSuccess }: Confirma
       <RescheduleModal
         open={isRescheduleModalOpen}
         onOpenChange={setIsRescheduleModalOpen}
+        mode="schedule"
         pipeItem={item ? { ...item, lead } : null}
         onSuccess={() => onSuccess?.()}
       />

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, type ReactNode } from "react";
 import {
   Dialog,
   DialogContent,
@@ -24,10 +24,17 @@ import { useCalendarSharing } from "@/hooks/useGoogleCalendarSharing";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
+export type ReschedulingMode = "schedule" | "reschedule";
+
 interface RescheduleModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
+  /**
+   * "schedule" → contexto: marcar reunião (drag para "Reunião Marcada").
+   * "reschedule" → contexto: remarcar reunião existente.
+   */
+  mode?: ReschedulingMode;
   /** pipe_confirmacao row */
   pipeItem: {
     id: string;
@@ -39,6 +46,53 @@ interface RescheduleModalProps {
     meeting_date?: string | null;
   } | null;
 }
+
+const COPY: Record<ReschedulingMode, {
+  title: string;
+  description: (leadName: string) => ReactNode;
+  dateLabel: string;
+  submitButton: string;
+  submitting: string;
+  actionLog: string;
+  logDescription: (when: string) => string;
+  gcalEventTitle: (leadName: string) => string;
+  gcalEventNote: (leadName: string) => string;
+  toastSuccess: string;
+  toastSuccessWithMeet: { title: string; description: string };
+  toastSuccessWithEvent: string;
+  toastWarnGcal: string;
+}> = {
+  schedule: {
+    title: "Agendar Reunião",
+    description: (leadName) => <>Selecione o dia e horário da reunião com <span className="font-medium text-foreground">{leadName}</span></>,
+    dateLabel: "Data *",
+    submitButton: "Agendar",
+    submitting: "Agendando...",
+    actionLog: "meeting_scheduled",
+    logDescription: (when) => `Reunião agendada para ${when}`,
+    gcalEventTitle: (leadName) => `${leadName} - Reunião`,
+    gcalEventNote: (leadName) => `Reunião com lead: ${leadName}`,
+    toastSuccess: "Reunião agendada com sucesso!",
+    toastSuccessWithMeet: { title: "Reunião agendada!", description: "Link do Google Meet gerado." },
+    toastSuccessWithEvent: "Reunião agendada e evento criado no Google Calendar!",
+    toastWarnGcal: "Não foi possível criar o evento no Google Calendar",
+  },
+  reschedule: {
+    title: "Remarcar Reunião",
+    description: (leadName) => <>Selecione o novo dia e horário para <span className="font-medium text-foreground">{leadName}</span></>,
+    dateLabel: "Nova Data *",
+    submitButton: "Remarcar",
+    submitting: "Remarcando...",
+    actionLog: "meeting_rescheduled",
+    logDescription: (when) => `Reunião remarcada para ${when}`,
+    gcalEventTitle: (leadName) => `${leadName} - Reunião (Remarcada)`,
+    gcalEventNote: (leadName) => `Reunião remarcada com lead: ${leadName}`,
+    toastSuccess: "Reunião remarcada com sucesso!",
+    toastSuccessWithMeet: { title: "Reunião remarcada!", description: "Novo link do Google Meet gerado." },
+    toastSuccessWithEvent: "Reunião remarcada e evento criado no Google Calendar!",
+    toastWarnGcal: "Não foi possível criar o evento no Google Calendar",
+  },
+};
 
 function calculateNewStatus(meetingDate: Date): PipeConfirmacaoStatus {
   const today = startOfDay(new Date());
@@ -54,7 +108,8 @@ function calculateNewStatus(meetingDate: Date): PipeConfirmacaoStatus {
   return "reuniao_marcada";
 }
 
-export function RescheduleModal({ open, onOpenChange, onSuccess, pipeItem }: RescheduleModalProps) {
+export function RescheduleModal({ open, onOpenChange, onSuccess, pipeItem, mode = "schedule" }: RescheduleModalProps) {
+  const copy = COPY[mode];
   const [meetingDate, setMeetingDate] = useState<Date | undefined>();
   const [meetingTime, setMeetingTime] = useState("10:00");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -129,8 +184,8 @@ export function RescheduleModal({ open, onOpenChange, onSuccess, pipeItem }: Res
 
       logAction({
         leadId: pipeItem.lead_id,
-        action: "meeting_rescheduled",
-        description: `Reunião remarcada para ${format(meetingDateTime, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}`,
+        action: copy.actionLog,
+        description: copy.logDescription(format(meetingDateTime, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })),
       });
 
       // Google Calendar event
@@ -145,9 +200,9 @@ export function RescheduleModal({ open, onOpenChange, onSuccess, pipeItem }: Res
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              title: `${leadName} - Reunião (Remarcada)`,
+              title: copy.gcalEventTitle(leadName),
               description: [
-                `Reunião remarcada com lead: ${leadName}`,
+                copy.gcalEventNote(leadName),
                 pipeItem.lead?.company ? `Empresa: ${pipeItem.lead.company}` : null,
                 pipeItem.lead?.phone ? `Telefone: ${pipeItem.lead.phone}` : null,
               ]
@@ -165,27 +220,27 @@ export function RescheduleModal({ open, onOpenChange, onSuccess, pipeItem }: Res
           if (res.ok) {
             const gcData = await res.json();
             if (gcData.meet_link) {
-              toast.success("Reunião remarcada!", { description: "Novo link do Google Meet gerado." });
+              toast.success(copy.toastSuccessWithMeet.title, { description: copy.toastSuccessWithMeet.description });
             } else {
-              toast.success("Reunião remarcada e evento criado no Google Calendar!");
+              toast.success(copy.toastSuccessWithEvent);
             }
           } else {
-            toast.success("Reunião remarcada com sucesso!");
-            toast.warning("Não foi possível criar o evento no Google Calendar");
+            toast.success(copy.toastSuccess);
+            toast.warning(copy.toastWarnGcal);
           }
         } catch {
-          toast.success("Reunião remarcada com sucesso!");
-          toast.warning("Não foi possível criar o evento no Google Calendar");
+          toast.success(copy.toastSuccess);
+          toast.warning(copy.toastWarnGcal);
         }
       } else {
-        toast.success("Reunião remarcada com sucesso!");
+        toast.success(copy.toastSuccess);
       }
 
       onOpenChange(false);
       onSuccess?.();
     } catch (error) {
       console.error(error);
-      toast.error("Erro ao remarcar reunião");
+      toast.error(mode === "schedule" ? "Erro ao agendar reunião" : "Erro ao remarcar reunião");
     } finally {
       setIsSubmitting(false);
     }
@@ -199,11 +254,11 @@ export function RescheduleModal({ open, onOpenChange, onSuccess, pipeItem }: Res
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <RefreshCw className="w-5 h-5 text-primary" />
-            Remarcar Reunião
+            {mode === "schedule" ? <CalendarIcon className="w-5 h-5 text-primary" /> : <RefreshCw className="w-5 h-5 text-primary" />}
+            {copy.title}
           </DialogTitle>
           <DialogDescription>
-            Selecione o novo dia e horário para <span className="font-medium text-foreground">{leadName}</span>
+            {copy.description(leadName)}
           </DialogDescription>
         </DialogHeader>
 
@@ -211,7 +266,7 @@ export function RescheduleModal({ open, onOpenChange, onSuccess, pipeItem }: Res
           {/* Date & Time */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Nova Data *</Label>
+              <Label>{copy.dateLabel}</Label>
               <Popover>
                 <PopoverTrigger asChild>
                   <Button
@@ -313,7 +368,7 @@ export function RescheduleModal({ open, onOpenChange, onSuccess, pipeItem }: Res
             <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
             <Button onClick={handleSubmit} disabled={isSubmitting || !meetingDate} className="gradient-gold">
               {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              Remarcar
+              {isSubmitting ? copy.submitting : copy.submitButton}
             </Button>
           </div>
         </div>
