@@ -441,6 +441,11 @@ export async function executeWorkflowAction(ctx: ActionContext): Promise<ActionR
       result = await handleCreateFollowup(ctx);
       break;
 
+    // ── Checklists ──
+    case "apply_checklist":
+      result = await handleApplyChecklist(ctx);
+      break;
+
     // ── AI ──
     case "generate_ai_message":
       result = await handleGenerateAiMessage(ctx);
@@ -1456,6 +1461,82 @@ async function handleCreateFollowup(ctx: ActionContext): Promise<ActionResult> {
 
   if (error) return { success: false, error: error.message };
   return { success: true, message: `Follow-up "${title}" created` };
+}
+
+// ─── Checklist Handlers ─────────────────────────────────────────────────────
+
+async function handleApplyChecklist(ctx: ActionContext): Promise<ActionResult> {
+  const templateId = (ctx.nodeData.checklistTemplateId as string | undefined)?.trim();
+  if (!templateId) {
+    return { success: false, error: "checklistTemplateId não configurado no nó" };
+  }
+
+  // Load template (must belong to same org and be a template — lead_id IS NULL)
+  const { data: template, error: tErr } = await ctx.supabase
+    .from("checklists")
+    .select("id, organization_id, title, description, lead_id")
+    .eq("id", templateId)
+    .maybeSingle();
+
+  if (tErr) return { success: false, error: tErr.message };
+  if (!template) {
+    return { success: false, error: `Template de checklist não encontrado (id=${templateId})` };
+  }
+  if (template.organization_id !== ctx.organizationId) {
+    return { success: false, error: "Template pertence a outra organização" };
+  }
+  if (template.lead_id !== null) {
+    return { success: false, error: "Registro alvo não é um template (lead_id não é null)" };
+  }
+
+  // Load template items
+  const { data: templateItems, error: iErr } = await ctx.supabase
+    .from("checklist_items")
+    .select("title, position")
+    .eq("checklist_id", templateId)
+    .order("position", { ascending: true });
+
+  if (iErr) return { success: false, error: iErr.message };
+
+  // Insert new checklist tied to the lead
+  const { data: newChecklist, error: cErr } = await ctx.supabase
+    .from("checklists")
+    .insert({
+      organization_id: ctx.organizationId,
+      created_by: null,
+      title: template.title,
+      description: template.description,
+      lead_id: ctx.leadId,
+    })
+    .select("id")
+    .single();
+
+  if (cErr) return { success: false, error: cErr.message };
+
+  // Insert items (if any)
+  if (templateItems && templateItems.length > 0) {
+    const itemsToInsert = templateItems.map((it) => ({
+      checklist_id: newChecklist.id,
+      title: it.title,
+      position: it.position,
+    }));
+
+    const { error: insErr } = await ctx.supabase
+      .from("checklist_items")
+      .insert(itemsToInsert);
+
+    if (insErr) {
+      // Best-effort rollback so we don't leave a partial checklist
+      await ctx.supabase.from("checklists").delete().eq("id", newChecklist.id);
+      return { success: false, error: insErr.message };
+    }
+  }
+
+  return {
+    success: true,
+    message: `Checklist "${template.title}" aplicado (${templateItems?.length ?? 0} itens)`,
+    data: { checklist_id: newChecklist.id, template_id: templateId },
+  };
 }
 
 // ─── AI Handlers ────────────────────────────────────────────────────────────
