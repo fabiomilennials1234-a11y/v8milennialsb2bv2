@@ -54,6 +54,7 @@ const CampanhaDetail = lazy(() => lazyRetry(() => import("./pages/CampanhaDetail
 const FunisHub = lazy(() => lazyRetry(() => import("./pages/FunisHub")));
 // Marketing and Analytics are unified in the Analytics tab — see TabAnalyticsV2.tsx
 const Produtos = lazy(() => lazyRetry(() => import("./pages/Produtos")));
+const Negocios = lazy(() => lazyRetry(() => import("./pages/Negocios")));
 const Copilot = lazy(() => lazyRetry(() => import("./pages/Copilot")));
 const CopilotMetrics = lazy(() => lazyRetry(() => import("./pages/CopilotMetrics")));
 const ChatWhatsApp = lazy(() => lazyRetry(() => import("./pages/ChatWhatsApp")));
@@ -441,6 +442,16 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <TVDashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/negocios"
+        element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <Negocios />
+            </LayoutWrapper>
           </ProtectedRoute>
         }
       />
