@@ -12,6 +12,8 @@ import {
   ArchiveRestore,
   Trash2,
   Check,
+  Bot,
+  Zap,
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -329,7 +331,13 @@ export function ConversationListItem({
           </div>
           <div className="flex items-center justify-between gap-2 mt-0.5">
             <p className="text-[12px] text-muted-foreground/60 truncate flex-1 min-w-0 flex items-center gap-1">
-              {contact.last_message_direction === "outgoing" && (
+              {contact.last_message_direction === "outgoing" && contact.last_message_sent_source === "workflow" && (
+                <Zap className="h-2.5 w-2.5 text-[#a78bfa] shrink-0" />
+              )}
+              {contact.last_message_direction === "outgoing" && contact.last_message_sent_source === "copilot" && (
+                <Bot className="h-2.5 w-2.5 text-[#fbbf24] shrink-0" />
+              )}
+              {contact.last_message_direction === "outgoing" && (!contact.last_message_sent_source || contact.last_message_sent_source === "manual") && (
                 <span className="text-foreground/50 shrink-0" title="Você enviou">
                   Você:
                 </span>
