@@ -299,10 +299,13 @@ export function MessageList({
     const prevMsg = prevItem && prevItem._type === "message" ? prevItem : null;
     const nextItem = index < timeline.length - 1 ? timeline[index + 1] : null;
     const nextMsg = nextItem && nextItem._type === "message" ? nextItem : null;
+    const getSource = (m: typeof message) =>
+      (m as any).sent_source ?? (m.sent_by_ai ? "copilot" : "manual");
+    const msgSource = getSource(message);
     const sameAuthorPrev =
-      prevMsg && prevMsg.direction === message.direction && prevMsg.sent_by_ai === message.sent_by_ai;
+      prevMsg && prevMsg.direction === message.direction && getSource(prevMsg) === msgSource;
     const sameAuthorNext =
-      nextMsg && nextMsg.direction === message.direction && nextMsg.sent_by_ai === message.sent_by_ai;
+      nextMsg && nextMsg.direction === message.direction && getSource(nextMsg) === msgSource;
     const deltaPrev = prevMsg
       ? Math.abs(new Date(message.timestamp).getTime() - new Date(prevMsg.timestamp).getTime())
       : Infinity;
