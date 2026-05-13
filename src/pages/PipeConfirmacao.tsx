@@ -506,8 +506,8 @@ export default function PipeConfirmacao() {
     const item = pipeData?.find(p => p.id === itemId);
     if (!item) return;
 
-    // Intercept: moving to "remarcar" opens reschedule modal
-    if (newStatus === "remarcar") {
+    // Intercept: moving to "reuniao_marcada" opens schedule modal (date/time picker)
+    if (newStatus === "reuniao_marcada") {
       setPendingRescheduleItem(item);
       setIsRescheduleModalOpen(true);
       return;
@@ -861,6 +861,7 @@ export default function PipeConfirmacao() {
       <RescheduleModal
         open={isRescheduleModalOpen}
         onOpenChange={setIsRescheduleModalOpen}
+        mode="schedule"
         pipeItem={pendingRescheduleItem}
         onSuccess={() => {
           setPendingRescheduleItem(null);
