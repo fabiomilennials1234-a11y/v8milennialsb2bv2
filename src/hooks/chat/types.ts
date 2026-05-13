@@ -23,6 +23,7 @@ export interface WhatsAppMessage {
   created_at: string;
   /** Whether this message was sent by the Copilot AI agent */
   sent_by_ai: boolean | null;
+  sent_source: "manual" | "copilot" | "workflow" | null;
 }
 
 /** Mensagem que falhou ao ser enviada — armazenada em cache paralelo para retry. */
@@ -54,6 +55,7 @@ export interface ChatContact {
   last_message_time: string;
   /** Direção da última mensagem: incoming = lead enviou, outgoing = você enviou */
   last_message_direction: "incoming" | "outgoing" | null;
+  last_message_sent_source: "manual" | "copilot" | "workflow" | null;
   unread_count: number;
   lead_id: string | null;
   lead_name: string | null;

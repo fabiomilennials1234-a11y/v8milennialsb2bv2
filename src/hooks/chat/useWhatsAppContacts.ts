@@ -52,7 +52,7 @@ export function useWhatsAppContacts(instanceId: string | null) {
       const [{ data: msgData, error: msgError }, { data: convMeta }] = await Promise.all([
         supabase
           .from("whatsapp_messages")
-          .select("phone_number, push_name, content, timestamp, direction, lead_id")
+          .select("phone_number, push_name, content, timestamp, direction, lead_id, sent_source")
           .eq("organization_id", organizationId)
           .eq("instance_id", instanceId)
           .is("deleted_at", null)
@@ -91,6 +91,7 @@ export function useWhatsAppContacts(instanceId: string | null) {
             last_message: msg.content,
             last_message_time: msg.timestamp,
             last_message_direction: msg.direction === "incoming" || msg.direction === "outgoing" ? msg.direction : null,
+            last_message_sent_source: (msg as any).sent_source ?? null,
             unread_count: 0,
             lead_id: msg.lead_id,
             lead_name: null,
