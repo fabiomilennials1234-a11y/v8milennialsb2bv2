@@ -22,17 +22,12 @@ export interface LeadProduct {
   product?: { id: string; name: string; type: string; ticket: number | null } | null;
 }
 
-// lead_products table is not yet reflected in the generated types file;
-// cast through `any` to bypass strict Supabase client generics until types are regenerated.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const db = supabase as any;
-
 export function useLeadProducts(leadId: string | null) {
   return useQuery({
     queryKey: ["lead-products", leadId],
     queryFn: async () => {
       if (!leadId) return [];
-      const { data, error } = await db
+      const { data, error } = await supabase
         .from("lead_products")
         .select(`
           *,
@@ -66,7 +61,7 @@ export function useAddLeadProduct() {
     }) => {
       if (!organizationId) throw new Error("Org not ready");
 
-      const { data, error } = await db
+      const { data, error } = await supabase
         .from("lead_products")
         .upsert(
           {
@@ -103,7 +98,7 @@ export function useUpdateLeadProduct() {
 
   return useMutation({
     mutationFn: async ({ id, leadId, status }: { id: string; leadId: string; status: "active" | "inactive" }) => {
-      const { error } = await db
+      const { error } = await supabase
         .from("lead_products")
         .update({ status })
         .eq("id", id);
@@ -121,7 +116,7 @@ export function useRemoveLeadProduct() {
 
   return useMutation({
     mutationFn: async ({ id, leadId }: { id: string; leadId: string }) => {
-      const { error } = await db.from("lead_products").delete().eq("id", id);
+      const { error } = await supabase.from("lead_products").delete().eq("id", id);
       if (error) throw error;
       return { leadId };
     },
