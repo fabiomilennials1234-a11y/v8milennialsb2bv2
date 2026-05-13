@@ -415,6 +415,7 @@ async function processCampaignQueue(
               lead_id: lead.id,
               timestamp: new Date().toISOString(),
               sent_by_ai: true,
+              sent_source: "workflow",
             }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
             if (chatErr) {
               console.warn("[campaign-rule-dispatch] whatsapp_messages upsert failed:", chatErr);
@@ -766,6 +767,7 @@ async function processExpiredTimeouts(
                   lead_id: lead.id,
                   timestamp: new Date().toISOString(),
                   sent_by_ai: true,
+                  sent_source: "workflow",
                 }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
               } catch (_) { /* ignore */ }
             }

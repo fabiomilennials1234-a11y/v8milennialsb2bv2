@@ -151,6 +151,7 @@ export async function executeSendDocument(
           status: "sent",
           timestamp: new Date().toISOString(),
           sent_by_ai: true,
+          sent_source: "workflow",
         },
         { onConflict: "message_id,instance_id", ignoreDuplicates: false },
       );

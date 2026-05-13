@@ -549,6 +549,7 @@ async function handleSendWhatsApp(ctx: ActionContext): Promise<ActionResult> {
     timestamp: new Date().toISOString(),
     status: "sent",
     sent_by_ai: true,
+    sent_source: "workflow",
   }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
 
   return { success: true, message: "WhatsApp text sent" };
@@ -594,6 +595,7 @@ async function handleSendWhatsAppAudio(ctx: ActionContext): Promise<ActionResult
     timestamp: new Date().toISOString(),
     status: "sent",
     sent_by_ai: true,
+    sent_source: "workflow",
   }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
 
   return { success: true, message: "WhatsApp audio sent" };
@@ -744,6 +746,7 @@ async function handleSendWhatsAppMenu(ctx: ActionContext): Promise<ActionResult>
     lead_id: ctx.leadId,
     timestamp: new Date().toISOString(),
     sent_by_ai: true,
+    sent_source: "workflow",
   }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
 
   return { success: true, message: `WhatsApp ${menuType} menu sent` };
@@ -805,6 +808,7 @@ async function handleSendWhatsAppPixButton(ctx: ActionContext): Promise<ActionRe
     lead_id: ctx.leadId,
     timestamp: new Date().toISOString(),
     sent_by_ai: true,
+    sent_source: "workflow",
   }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
 
   return { success: true, message: "PIX button sent" };
@@ -1240,6 +1244,7 @@ async function handleSendCampaignMessage(ctx: ActionContext): Promise<ActionResu
     timestamp: new Date().toISOString(),
     status: "sent",
     sent_by_ai: true,
+    sent_source: "workflow",
   }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
 
   return { success: true, message: `Campaign message sent` };

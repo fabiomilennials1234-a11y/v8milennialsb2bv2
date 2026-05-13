@@ -289,6 +289,7 @@ export async function sendOutboundDispatch(
       timestamp: new Date().toISOString(),
       status: "sent",
       sent_by_ai: true,
+      sent_source: "workflow",
     }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
 
     if (chosenAudio && audioResult?.ok) {
@@ -306,6 +307,7 @@ export async function sendOutboundDispatch(
         timestamp: new Date().toISOString(),
         status: "sent",
         sent_by_ai: true,
+        sent_source: "workflow",
       }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
     }
 

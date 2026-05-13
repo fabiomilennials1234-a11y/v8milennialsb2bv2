@@ -151,6 +151,7 @@ export async function sendFollowupMessage(
     lead_id: leadId,
     timestamp: new Date().toISOString(),
     sent_by_ai: true,
+    sent_source: "workflow",
   }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
 
   await supabase.from("copilot_followup_execution_log").insert({
