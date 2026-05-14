@@ -14,6 +14,7 @@ import {
 import { usePipelineStages } from "@/hooks/usePipelineStages";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
 import { useOrganization } from "@/hooks/useOrganization";
+import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
 import { supabase } from "@/integrations/supabase/client";
 import { downloadUpsellImportTemplate } from "@/lib/upsellImportTemplate";
 import { toast } from "sonner";
@@ -48,6 +49,25 @@ const UPSELL_HEADER_ALIASES: Record<string, string> = {
   "primeira venda": "data_primeira_venda",
   "first sale": "data_primeira_venda",
   "data venda": "data_primeira_venda",
+  // order-scope fields (customer_portfolio)
+  produto: "produto",
+  product: "produto",
+  item: "produto",
+  quantidade: "quantidade",
+  qty: "quantidade",
+  qtd: "quantidade",
+  quantity: "quantidade",
+  "valor unitario": "valor_unitario",
+  "preco unitario": "valor_unitario",
+  "unit price": "valor_unitario",
+  valor: "valor_unitario",
+  unidade: "unidade",
+  unit: "unidade",
+  un: "unidade",
+  "data pedido": "data_pedido",
+  "data do pedido": "data_pedido",
+  "order date": "data_pedido",
+  cnpj: "cnpj",
 };
 
 const POTENCIAL_ALIASES: Record<string, string> = {
@@ -79,6 +99,16 @@ const UPSELL_SYSTEM_FIELDS: { key: string; label: string; required?: boolean }[]
   { key: "notes", label: "Notas / Observações" },
   { key: "origin", label: "Origem" },
   { key: "rating", label: "Prioridade" },
+];
+
+/** Campos adicionais disponíveis quando a flag customer_portfolio está ativa */
+const UPSELL_ORDER_FIELDS: { key: string; label: string }[] = [
+  { key: "produto", label: "Produto" },
+  { key: "quantidade", label: "Quantidade" },
+  { key: "valor_unitario", label: "Valor Unitário" },
+  { key: "unidade", label: "Unidade (un/kg/l/m/cx/pc)" },
+  { key: "data_pedido", label: "Data do Pedido" },
+  { key: "cnpj", label: "CNPJ" },
 ];
 
 interface PreviewClient {
@@ -133,9 +163,16 @@ export function ImportUpsellClientsContent({
 
   const queryClient = useQueryClient();
   const { organizationId } = useOrganization();
+  const { hasFeature } = useOrgFeatures();
+  const hasPortfolio = hasFeature("customer_portfolio");
   const { data: stages = [] } = usePipelineStages(pipeType);
   const { data: baseStages = [] } = usePipelineStages("upsell_base");
   const { data: members = [] } = useTeamMembers();
+
+  /** Combined field list — order fields only when feature flag is ON */
+  const activeSystemFields = hasPortfolio
+    ? [...UPSELL_SYSTEM_FIELDS, ...UPSELL_ORDER_FIELDS]
+    : UPSELL_SYSTEM_FIELDS;
 
   const memberOptions = (members || []).map((m) => ({ id: m.id, name: m.name || "" }));
   const defaultStage = stages.find((s) => s.position === 0) || stages[0];
@@ -185,9 +222,12 @@ export function ImportUpsellClientsContent({
           }
         }
 
-        // Pre-fill: cada campo do sistema → coluna sugerida ou "none"
+        // Pre-fill: todos os campos ativos → coluna sugerida ou "none"
+        // activeSystemFields não está disponível aqui (hook state), por isso
+        // inicializamos para todos os campos possíveis e filtramos na UI.
+        const allFields = [...UPSELL_SYSTEM_FIELDS, ...UPSELL_ORDER_FIELDS];
         const initialMapping: Record<string, string> = {};
-        for (const { key } of UPSELL_SYSTEM_FIELDS) {
+        for (const { key } of allFields) {
           initialMapping[key] = fieldToCol[key] || "none";
         }
 
@@ -428,6 +468,16 @@ export function ImportUpsellClientsContent({
       const stagesList = stages.map((s) => ({ stage_key: s.stage_key, name: s.name }));
       const effectiveDefaultStageKey = selectedStageKey || stagesList[0]?.stage_key || "";
 
+      // Determine if this import contains order-scope columns (customer_portfolio feature)
+      const hasOrderColumns =
+        hasPortfolio &&
+        (userColumnMapping["produto"] != null && userColumnMapping["produto"] !== "none");
+
+      // Map: clientKey → { upsellClientId, rows: MappedRow[] }
+      // Used to batch-create orders after all clients are processed
+      type OrderGroup = { upsellClientId: string; rows: Record<string, string>[] };
+      const orderGroups = new Map<string, OrderGroup>();
+
       for (let i = 0; i < rows.length; i += BATCH_SIZE) {
         const batch = rows.slice(i, i + BATCH_SIZE);
         for (const { m: lead, fileRow } of batch) {
@@ -515,9 +565,11 @@ export function ImportUpsellClientsContent({
               await supabase.from("leads").update({ responsible_id: responsibleId, closer_id: responsibleId, sale_responsible_id: responsibleId }).eq("id", leadId);
             }
 
-            const { error: clientError } = await supabase
+            const { data: insertedClient, error: clientError } = await supabase
               .from("upsell_clients")
-              .insert(clientData);
+              .insert(clientData)
+              .select("id")
+              .single();
 
             if (clientError) {
               if (clientError.code === "23505") {
@@ -530,6 +582,17 @@ export function ImportUpsellClientsContent({
             } else {
               imported++;
               existingClientLeadIds.add(leadId);
+
+              // Collect rows for order creation if customer_portfolio is active
+              if (hasOrderColumns && insertedClient) {
+                const clientKey = formattedPhone || `${normalizeName(lead.name)}__${normalizeName(lead.company || "")}`;
+                const existing = orderGroups.get(clientKey);
+                if (existing) {
+                  existing.rows.push(lead);
+                } else {
+                  orderGroups.set(clientKey, { upsellClientId: insertedClient.id, rows: [lead] });
+                }
+              }
             }
 
             if (formattedPhone) processedPhones.add(formattedPhone);
@@ -541,6 +604,82 @@ export function ImportUpsellClientsContent({
         }
         setProgress(Math.round(((i + batch.length) / rows.length) * 100));
       }
+
+      // ── Order creation (customer_portfolio) ────────────────────────────────
+      if (hasOrderColumns && orderGroups.size > 0) {
+        for (const [, group] of orderGroups) {
+          // Group rows by data_pedido to create one order per date per client
+          const byDate = new Map<string, Record<string, string>[]>();
+          for (const row of group.rows) {
+            const dateKey = row.data_pedido?.trim() || "__none__";
+            const bucket = byDate.get(dateKey);
+            if (bucket) {
+              bucket.push(row);
+            } else {
+              byDate.set(dateKey, [row]);
+            }
+          }
+
+          for (const [dateKey, dateRows] of byDate) {
+            const soldAt =
+              dateKey === "__none__" ? new Date().toISOString() : parseDateValue(dateKey);
+
+            // Aggregate sale value: sum(quantidade * valor_unitario)
+            let saleValue = 0;
+            for (const row of dateRows) {
+              const qty = parseFloat((row.quantidade || "1").replace(",", ".")) || 1;
+              const unitPrice = parseFloat((row.valor_unitario || "0").replace(/[^\d.,]/g, "").replace(",", ".")) || 0;
+              saleValue += qty * unitPrice;
+            }
+
+            const productNames = dateRows
+              .map((r) => r.produto?.trim())
+              .filter(Boolean)
+              .join(", ");
+
+            const { data: newOrder, error: orderError } = await supabase
+              .from("upsell_orders")
+              .insert({
+                organization_id: organizationId,
+                upsell_client_id: group.upsellClientId,
+                source: "csv_import",
+                sale_value: saleValue || null,
+                product_name: productNames || null,
+                sold_at: soldAt,
+              })
+              .select("id")
+              .single();
+
+            if (orderError) {
+              console.error("[ImportUpsell] Order insert error:", orderError.message);
+              continue;
+            }
+
+            if (newOrder) {
+              // Create line items
+              const lineItems = dateRows.map((row) => ({
+                order_id: newOrder.id,
+                product_name: row.produto?.trim() || null,
+                quantity: parseFloat((row.quantidade || "1").replace(",", ".")) || 1,
+                unit_price: parseFloat((row.valor_unitario || "0").replace(/[^\d.,]/g, "").replace(",", ".")) || 0,
+                unit: row.unidade?.trim() || null,
+              }));
+
+              const { error: itemsError } = await supabase
+                .from("client_purchase_items")
+                .insert(lineItems);
+
+              if (itemsError) {
+                console.error("[ImportUpsell] Line items insert error:", itemsError.message);
+              }
+            }
+          }
+        }
+
+        queryClient.invalidateQueries({ queryKey: ["upsell_orders"] });
+        queryClient.invalidateQueries({ queryKey: ["client_purchase_items"] });
+      }
+      // ───────────────────────────────────────────────────────────────────────
 
       setProgress(100);
       setResult({ total: rows.length, imported, duplicates, updated, invalid, errors });
@@ -717,7 +856,7 @@ export function ImportUpsellClientsContent({
             <Label>Campos do sistema → Coluna da planilha</Label>
             <ScrollArea className="h-72 rounded-lg border">
               <div className="p-3 space-y-2.5">
-                {UPSELL_SYSTEM_FIELDS.map(({ key, label, required }) => {
+                {activeSystemFields.map(({ key, label, required }) => {
                   const selectedCol = userColumnMapping[key] || "none";
                   const sample = selectedCol !== "none" ? sampleData[0]?.[selectedCol] : undefined;
                   return (

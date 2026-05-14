@@ -11,6 +11,12 @@ export const UPSELL_TEMPLATE_HEADERS = [
   "Etapa",
   "Faturamento",
   "Segmento",
+  "Produto",
+  "Quantidade",
+  "Valor Unitario",
+  "Unidade",
+  "Data Pedido",
+  "CNPJ",
 ] as const;
 
 /** Linha de exemplo. */
@@ -25,6 +31,12 @@ const EXAMPLE_ROW: Record<string, string> = {
   Etapa: "0-3m",
   Faturamento: "R$100 mil a R$250 mil",
   Segmento: "Varejo",
+  Produto: "Produto Exemplo",
+  Quantidade: "10",
+  "Valor Unitario": "25.00",
+  Unidade: "un",
+  "Data Pedido": "15/01/2026",
+  CNPJ: "00.000.000/0001-00",
 };
 
 /** Aba Instruções. */
@@ -50,6 +62,14 @@ const INSTRUCOES_ROWS: (string | number)[][] = [
   ["Etapa", "Não", "Nome da etapa do funil (ex: 0-3m, 3-6m, Campeões, Fiéis). Se vazio, usa a etapa padrão.", "0-3m"],
   ["Faturamento", "Não", "Faixa de faturamento da empresa.", "R$100 mil a R$250 mil"],
   ["Segmento", "Não", "Segmento ou setor de atuação.", "Varejo"],
+  [""],
+  ["COLUNAS DE HISTÓRICO DE PEDIDOS (requer plano com Carteira de Clientes):"],
+  ["Produto", "Não", "Nome do produto ou item vendido. Quando preenchido, gera um pedido automaticamente.", "Produto Exemplo"],
+  ["Quantidade", "Não", "Quantidade vendida do produto (número). Padrão: 1.", "10"],
+  ["Valor Unitario", "Não", "Preço unitário do produto (número). Pode conter R$ e vírgula.", "25.00"],
+  ["Unidade", "Não", "Unidade de medida: un, kg, l, m, cx, pc etc.", "un"],
+  ["Data Pedido", "Não", "Data do pedido (DD/MM/AAAA ou AAAA-MM-DD). Pedidos com a mesma data são agrupados em um único pedido.", "15/01/2026"],
+  ["CNPJ", "Não", "CNPJ da empresa do cliente (informativo).", "00.000.000/0001-00"],
   [""],
   ["Dica: Você pode adicionar outras colunas. Na hora de importar, o sistema mostrará as colunas não reconhecidas para você mapear ou ignorar."],
   [""],
