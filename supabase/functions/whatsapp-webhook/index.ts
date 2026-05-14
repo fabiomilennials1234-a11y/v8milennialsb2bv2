@@ -24,6 +24,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { withSentry } from "../_shared/sentry.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { upsertPipeEntry } from "../_shared/pipeline-adapter.ts";
+import { isCopilotCanceled, logCopilotCancellation } from "../_shared/copilot/cancellation.ts";
 
 // ============================================================================
 // Config
@@ -439,11 +440,38 @@ async function handleMessagesEvent(
             return;
           }
 
+          let chunksSent = 0;
+          let canceledMidDelivery = false;
           for (let i = 0; i < parts.length; i++) {
             const text = parts[i]?.trim();
             if (!text) continue;
 
             if (i > 0) await new Promise((r) => setTimeout(r, 1200 + Math.random() * 800));
+
+            // RC-cancel: per-part cancellation gate. User may toggle "IA
+            // desligada" between agent-message return and full delivery; abort
+            // remaining parts so the lead does not keep receiving AI messages
+            // after the switch was flipped off.
+            const cancelCheck = await isCopilotCanceled(
+              supabase,
+              instance.organization_id,
+              normalized.phone_number,
+            );
+            if (cancelCheck.canceled) {
+              canceledMidDelivery = true;
+              logCopilotCancellation({
+                organizationId: instance.organization_id,
+                gate: "outbound_chunks",
+                phone: normalized.phone_number,
+                chunksSent,
+                chunksTotal: parts.length,
+                source: cancelCheck.source,
+              });
+              console.log(
+                `[whatsapp-webhook] Copilot canceled mid-delivery; aborting after ${chunksSent} of ${parts.length} part(s)`,
+              );
+              break;
+            }
 
             const sendResult = await sendTextViaInstance(
               supabase, fullInstance, normalized.phone_number, text,
@@ -482,10 +510,16 @@ async function handleMessagesEvent(
                   part: i,
                 },
               });
+            } else {
+              chunksSent++;
             }
           }
 
-          console.log(`[whatsapp-webhook] AI response delivered: ${parts.length} part(s) to ${normalized.phone_number}`);
+          if (canceledMidDelivery) {
+            console.log(`[whatsapp-webhook] AI response partial: ${chunksSent} of ${parts.length} part(s) delivered before cancellation`);
+          } else {
+            console.log(`[whatsapp-webhook] AI response delivered: ${parts.length} part(s) to ${normalized.phone_number}`);
+          }
         } catch (deliveryErr) {
           console.error("[whatsapp-webhook] AI response delivery error:", deliveryErr);
           void logRuntime({
