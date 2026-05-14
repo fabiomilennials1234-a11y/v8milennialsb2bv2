@@ -6,7 +6,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
+import { MessageCircle, ClipboardList, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -31,6 +31,9 @@ interface CarteiraClientTableProps {
   clients: CarteiraClient[];
   selectedClientId: string | null;
   onSelectClient: (clientId: string) => void;
+  onWhatsApp?: (clientId: string) => void;
+  onNewOrder?: (clientId: string) => void;
+  onViewDetail?: (clientId: string) => void;
   searchQuery: string;
   filter: string;
 }
@@ -46,64 +49,29 @@ const formatBRL = (value: number) =>
 
 function healthConfig(status: string | null, score: number | null) {
   const s = score ?? 0;
-  switch (status) {
-    case "saudavel":
-      return {
-        label: `${s} Saudável`,
-        className: "bg-emerald-500/15 text-emerald-400 border-emerald-500/25",
-      };
-    case "atencao":
-      return {
-        label: `${s} Atenção`,
-        className: "bg-amber-500/15 text-amber-400 border-amber-500/25",
-      };
-    case "risco":
-      return {
-        label: `${s} Risco`,
-        className: "bg-red-500/15 text-red-400 border-red-500/25",
-      };
-    case "inativo":
-      return {
-        label: `${s} Inativo`,
-        className: "bg-zinc-700/40 text-zinc-400 border-zinc-600/30",
-      };
-    default: {
-      // Derive from score when status is null
-      if (s >= 80) return { label: `${s} Saudável`, className: "bg-emerald-500/15 text-emerald-400 border-emerald-500/25" };
-      if (s >= 60) return { label: `${s} Atenção`, className: "bg-amber-500/15 text-amber-400 border-amber-500/25" };
-      if (s > 0) return { label: `${s} Risco`, className: "bg-red-500/15 text-red-400 border-red-500/25" };
-      return { label: "—", className: "bg-zinc-700/40 text-zinc-400 border-zinc-600/30" };
-    }
-  }
+  if (status === "saudavel" || (!status && s >= 80))
+    return { label: String(s), bg: "bg-[#052e16]", text: "text-[#22c55e]", dot: "bg-[#22c55e]" };
+  if (status === "atencao" || (!status && s >= 60))
+    return { label: String(s), bg: "bg-[#422006]", text: "text-[#f59e0b]", dot: "bg-[#f59e0b]" };
+  if (status === "risco" || (!status && s > 0))
+    return { label: String(s), bg: "bg-[#450a0a]", text: "text-[#ef4444]", dot: "bg-[#ef4444]" };
+  if (status === "inativo")
+    return { label: String(s), bg: "bg-[#172554]", text: "text-[#3b82f6]", dot: "bg-[#3b82f6]" };
+  return { label: "—", bg: "bg-zinc-800", text: "text-zinc-500", dot: "bg-zinc-500" };
 }
 
 function segmentConfig(segment: string | null) {
   switch (segment) {
     case "ouro":
-      return {
-        label: "Ouro",
-        className: "bg-[hsl(47_100%_50%_/_0.15)] text-[hsl(47_100%_60%)] border-[hsl(47_100%_50%_/_0.3)]",
-      };
+      return { label: "OURO", className: "bg-[#422006] text-[#eab308]" };
     case "prata":
-      return {
-        label: "Prata",
-        className: "bg-slate-500/15 text-slate-300 border-slate-500/25",
-      };
+      return { label: "PRATA", className: "bg-[#1e293b] text-[#94a3b8]" };
     case "novo":
-      return {
-        label: "Novo",
-        className: "bg-blue-500/15 text-blue-400 border-blue-500/25",
-      };
+      return { label: "NOVO", className: "bg-[#172554] text-[#60a5fa]" };
     case "resgate":
-      return {
-        label: "Resgate",
-        className: "bg-rose-500/15 text-rose-400 border-rose-500/25",
-      };
+      return { label: "RESGATE", className: "bg-[#450a0a] text-[#f87171]" };
     case "dormindo":
-      return {
-        label: "Dormindo",
-        className: "bg-zinc-700/40 text-zinc-400 border-zinc-600/30",
-      };
+      return { label: "DORMINDO", className: "bg-zinc-800 text-zinc-400" };
     default:
       return null;
   }
@@ -114,40 +82,30 @@ function recompraCell(
   cycleDays: number | null,
   nextExpected: string | null,
 ) {
-  if (!cycleDays) return { label: "—", className: "text-zinc-500" };
+  if (!cycleDays) return { label: "—", className: "text-[#71717a]" };
 
   if (nextExpected) {
     const diff = Math.round(
       (new Date(nextExpected).getTime() - Date.now()) / 86_400_000,
     );
-    if (diff < 0) {
-      return {
-        label: `${Math.abs(diff)} dias atrasado`,
-        className: "text-red-400",
-      };
-    }
-    return {
-      label: `Em ${diff} dias`,
-      className: "text-emerald-400",
-    };
+    if (diff < 0)
+      return { label: `${Math.abs(diff)} dias atrasado`, className: "text-[#ef4444] font-semibold" };
+    if (diff <= 3)
+      return { label: `Em ${diff} dias`, className: "text-[#f59e0b]" };
+    return { label: `Em ${diff} dias`, className: "text-[#22c55e]" };
   }
 
   if (daysSinceLast !== null && cycleDays) {
     const overdue = daysSinceLast - cycleDays;
-    if (overdue > 0) {
-      return {
-        label: `${overdue} dias atrasado`,
-        className: "text-red-400",
-      };
-    }
+    if (overdue > 0)
+      return { label: `${overdue} dias atrasado`, className: "text-[#ef4444] font-semibold" };
     const remaining = cycleDays - daysSinceLast;
-    return {
-      label: `Em ${remaining} dias`,
-      className: "text-emerald-400",
-    };
+    if (remaining <= 3)
+      return { label: `Em ${remaining} dias`, className: "text-[#f59e0b]" };
+    return { label: `Em ${remaining} dias`, className: "text-[#22c55e]" };
   }
 
-  return { label: "—", className: "text-zinc-500" };
+  return { label: "—", className: "text-[#71717a]" };
 }
 
 function matchesFilter(client: CarteiraClient, filter: string): boolean {
@@ -161,16 +119,21 @@ function matchesFilter(client: CarteiraClient, filter: string): boolean {
     const t = new Date(client.next_order_expected).getTime();
     return t >= Date.now() && t <= Date.now() + 7 * 86_400_000;
   }
-  // segment-based filters
   return client.segment === filter;
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
+const iconBtnClass =
+  "w-[30px] h-[30px] rounded-md border border-[#27272a] bg-transparent text-[#71717a] hover:bg-[#27272a] hover:text-[#fafafa] transition-colors flex items-center justify-center";
+
 export function CarteiraClientTable({
   clients,
   selectedClientId,
   onSelectClient,
+  onWhatsApp,
+  onNewOrder,
+  onViewDetail,
   searchQuery,
   filter,
 }: CarteiraClientTableProps) {
@@ -187,32 +150,36 @@ export function CarteiraClientTable({
 
   if (filtered.length === 0) {
     return (
-      <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 py-16 text-center">
-        <p className="text-sm text-zinc-500">Nenhum cliente encontrado.</p>
+      <div className="rounded-xl border border-[#27272a] bg-[#18181b] py-16 text-center">
+        <p className="text-sm text-[#71717a]">Nenhum cliente encontrado.</p>
       </div>
     );
   }
 
   return (
-    <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 overflow-hidden">
+    <div className="rounded-xl border border-[#27272a] bg-[#18181b] overflow-hidden">
       <Table>
         <TableHeader>
-          <TableRow className="border-zinc-800 hover:bg-transparent">
-            <TableHead className="text-zinc-400 text-xs font-medium uppercase tracking-wider py-3 pl-4">
+          <TableRow className="border-[#27272a] hover:bg-transparent bg-[#111113]">
+            <TableHead className="text-[#71717a] text-[11px] font-semibold uppercase tracking-wider py-2.5 pl-4">
               Cliente
             </TableHead>
-            <TableHead className="text-zinc-400 text-xs font-medium uppercase tracking-wider py-3">
+            <TableHead className="text-[#71717a] text-[11px] font-semibold uppercase tracking-wider py-2.5">
               Health
             </TableHead>
-            <TableHead className="text-zinc-400 text-xs font-medium uppercase tracking-wider py-3">
+            <TableHead className="text-[#71717a] text-[11px] font-semibold uppercase tracking-wider py-2.5">
               Recompra
             </TableHead>
-            <TableHead className="text-zinc-400 text-xs font-medium uppercase tracking-wider py-3">
-              Ticket Médio
+            <TableHead className="text-[#71717a] text-[11px] font-semibold uppercase tracking-wider py-2.5">
+              Ticket médio
             </TableHead>
-            <TableHead className="text-zinc-400 text-xs font-medium uppercase tracking-wider py-3 pr-4">
+            <TableHead className="text-[#71717a] text-[11px] font-semibold uppercase tracking-wider py-2.5">
+              Tendência
+            </TableHead>
+            <TableHead className="text-[#71717a] text-[11px] font-semibold uppercase tracking-wider py-2.5">
               Segmento
             </TableHead>
+            <TableHead className="text-[#71717a] text-[11px] font-semibold uppercase tracking-wider py-2.5 pr-4 w-[100px]" />
           </TableRow>
         </TableHeader>
 
@@ -232,75 +199,111 @@ export function CarteiraClientTable({
                 key={client.id}
                 onClick={() => onSelectClient(client.id)}
                 className={cn(
-                  "border-zinc-800 cursor-pointer transition-colors",
-                  isSelected
-                    ? "bg-[hsl(47_100%_50%_/_0.06)] hover:bg-[hsl(47_100%_50%_/_0.09)]"
-                    : "hover:bg-zinc-800/40",
+                  "border-[#1e1e21] cursor-pointer transition-colors",
+                  isSelected ? "bg-[#1c1c1f]" : "hover:bg-[#1c1c1f]",
                 )}
               >
-                {/* Cliente */}
                 <TableCell className="py-3 pl-4">
-                  <div className="flex flex-col gap-0.5 min-w-0">
-                    <span
-                      className={cn(
-                        "text-sm font-medium leading-tight truncate max-w-[200px]",
-                        isSelected ? "text-[hsl(47_100%_60%)]" : "text-zinc-100",
-                      )}
-                    >
+                  <div className="flex flex-col gap-px min-w-0">
+                    <span className="text-sm font-semibold text-[#fafafa] truncate max-w-[220px]">
                       {client.name}
                     </span>
-                    {client.company && (
-                      <span className="text-xs text-zinc-500 truncate max-w-[200px]">
-                        {client.company}
-                      </span>
-                    )}
+                    <span className="text-xs text-[#71717a] truncate max-w-[220px]">
+                      {[
+                        client.order_count
+                          ? `${client.order_count} pedido${client.order_count !== 1 ? "s" : ""}`
+                          : null,
+                        client.company,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ") || "—"}
+                    </span>
                   </div>
-                  {(client.order_count ?? 0) > 0 && (
-                    <Badge
-                      variant="outline"
-                      className="mt-1 h-4 px-1 text-[10px] border-zinc-700 text-zinc-500"
-                    >
-                      {client.order_count} pedido{client.order_count !== 1 ? "s" : ""}
-                    </Badge>
-                  )}
                 </TableCell>
 
-                {/* Health */}
                 <TableCell className="py-3">
-                  <Badge
-                    variant="outline"
-                    className={cn("text-xs font-medium tabular-nums", health.className)}
+                  <span
+                    className={cn(
+                      "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium",
+                      health.bg,
+                      health.text,
+                    )}
                   >
+                    <span className={cn("w-1.5 h-1.5 rounded-full", health.dot)} />
                     {health.label}
-                  </Badge>
+                  </span>
                 </TableCell>
 
-                {/* Recompra */}
                 <TableCell className="py-3">
-                  <span className={cn("text-sm tabular-nums", recompra.className)}>
+                  <span className={cn("text-[13px]", recompra.className)}>
                     {recompra.label}
                   </span>
                 </TableCell>
 
-                {/* Ticket Médio */}
                 <TableCell className="py-3">
-                  <span className="text-sm tabular-nums text-zinc-200">
+                  <span className="text-sm text-[#fafafa]">
                     {client.avg_ticket != null ? formatBRL(client.avg_ticket) : "—"}
                   </span>
                 </TableCell>
 
-                {/* Segmento */}
-                <TableCell className="py-3 pr-4">
+                <TableCell className="py-3">
+                  <span className="text-[13px] text-[#71717a]">—</span>
+                </TableCell>
+
+                <TableCell className="py-3">
                   {segment ? (
-                    <Badge
-                      variant="outline"
-                      className={cn("text-xs font-medium", segment.className)}
+                    <span
+                      className={cn(
+                        "px-2 py-0.5 rounded text-[11px] font-semibold uppercase tracking-wide",
+                        segment.className,
+                      )}
                     >
                       {segment.label}
-                    </Badge>
+                    </span>
                   ) : (
-                    <span className="text-zinc-600 text-sm">—</span>
+                    <span className="text-[#71717a] text-sm">—</span>
                   )}
+                </TableCell>
+
+                <TableCell className="py-3 pr-4">
+                  <div className="flex gap-1">
+                    {onWhatsApp && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onWhatsApp(client.id);
+                        }}
+                        className={iconBtnClass}
+                        title="WhatsApp"
+                      >
+                        <MessageCircle className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    {onNewOrder && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onNewOrder(client.id);
+                        }}
+                        className={iconBtnClass}
+                        title="Novo pedido"
+                      >
+                        <ClipboardList className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    {onViewDetail && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onViewDetail(client.id);
+                        }}
+                        className={iconBtnClass}
+                        title="Detalhes"
+                      >
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </TableCell>
               </TableRow>
             );

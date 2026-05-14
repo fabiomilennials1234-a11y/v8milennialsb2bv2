@@ -1,5 +1,4 @@
-import { AlertTriangle } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePortfolioHealth } from "@/hooks/usePortfolioHealth";
 
@@ -21,33 +20,30 @@ export function CarteiraAlertBanner({ onViewDetails, className }: CarteiraAlertB
   return (
     <div
       className={cn(
-        "flex items-center justify-between gap-4 rounded-lg px-4 py-3",
-        "bg-amber-500/10 border border-amber-500/20 border-l-[3px] border-l-[hsl(47_100%_50%)]",
+        "flex items-center justify-between gap-4 rounded-xl px-5 py-4",
+        "bg-gradient-to-br from-[#451a03] to-[#78350f] border border-[#92400e]",
         className,
       )}
     >
       <div className="flex items-center gap-3 min-w-0">
-        <AlertTriangle
-          size={16}
-          className="shrink-0 text-amber-400"
-          aria-hidden="true"
-        />
-        <p className="text-sm text-amber-200 truncate">
-          <span className="font-semibold text-amber-100">{overdueCount}</span>
-          {overdueCount === 1 ? " cliente com" : " clientes com"} recompra atrasada —{" "}
-          <span className="font-semibold text-amber-100">{formatBRL(overdueRevenue)}</span> em risco
-        </p>
+        <Zap size={20} className="shrink-0 text-[#fbbf24]" aria-hidden="true" />
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-[#fafafa]">
+            {overdueCount} {overdueCount === 1 ? "cliente" : "clientes"} com recompra atrasada — {formatBRL(overdueRevenue)} em risco
+          </p>
+          <p className="text-[13px] text-[#fbbf24] mt-0.5">
+            Copilot pode abordar automaticamente. Clientes estratégicos precisam de contato pessoal.
+          </p>
+        </div>
       </div>
 
       {onViewDetails && (
-        <Button
-          variant="outline"
-          size="sm"
+        <button
           onClick={onViewDetails}
-          className="shrink-0 h-7 text-xs border-amber-500/40 text-amber-300 hover:bg-amber-500/20 hover:text-amber-100 hover:border-amber-500/60"
+          className="shrink-0 px-3.5 py-1.5 bg-[#eab308] text-[#09090b] rounded-md text-[13px] font-semibold hover:bg-[#facc15] transition-colors"
         >
           Ver detalhes
-        </Button>
+        </button>
       )}
     </div>
   );

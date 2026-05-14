@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Plus, Search, LayoutGrid, List, TrendingUp, ShoppingCart, Upload } from "lucide-react";
@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 import { UpsellStats } from "@/components/upsell/UpsellStats";
 import { UpsellBaseKanban } from "@/components/upsell/UpsellBaseKanban";
 import { UpsellBaseList } from "@/components/upsell/UpsellBaseList";
@@ -24,13 +25,13 @@ import { CarteiraClientPreview } from "@/components/carteira/CarteiraClientPrevi
 
 type ViewMode = "kanban" | "list";
 
-const FILTER_TABS = [
+const PORTFOLIO_TABS = [
   { value: "all", label: "Todos" },
-  { value: "overdue", label: "Atrasados" },
-  { value: "expected", label: "Esta Semana" },
+  { value: "expected", label: "Pedido previsto" },
+  { value: "overdue", label: "Recompra atrasada", isRisk: true },
   { value: "ouro", label: "Ouro" },
   { value: "prata", label: "Prata" },
-  { value: "novo", label: "Novo" },
+  { value: "novo", label: "Novos" },
   { value: "resgate", label: "Resgate" },
   { value: "dormindo", label: "Dormindo" },
 ] as const;
@@ -69,19 +70,35 @@ export default function Upsell() {
   const [quickOrderClientId, setQuickOrderClientId] = useState<string | null>(null);
   const { data: portfolioData } = usePortfolioHealth();
 
+  const tabCounts = useMemo(() => {
+    const cs = portfolioData?.clients ?? [];
+    const counts: Record<string, number> = { all: cs.length, overdue: 0, expected: 0 };
+    for (const c of cs) {
+      if (c.segment) counts[c.segment] = (counts[c.segment] ?? 0) + 1;
+      if (c.days_since_last_order && c.reorder_cycle_days && c.days_since_last_order > c.reorder_cycle_days * 1.15)
+        counts.overdue++;
+      if (c.next_order_expected) {
+        const t = new Date(c.next_order_expected).getTime();
+        if (t >= Date.now() && t <= Date.now() + 7 * 86_400_000) counts.expected++;
+      }
+    }
+    return counts;
+  }, [portfolioData]);
+
   // ─── Portfolio layout ──────────────────────────────────────────────────────
   if (isPortfolio) {
     return (
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#27272a]">
           <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2">
-              <TrendingUp className="w-7 h-7 text-primary" />
+            <h1 className="text-2xl font-semibold tracking-tight">
               Carteira de Clientes
             </h1>
-            <p className="text-muted-foreground text-sm mt-1">
-              Health score, recompra e gestão de carteira
+            <p className="text-sm text-[#a1a1aa] mt-0.5">
+              {portfolioData
+                ? `${portfolioData.totalClients} clientes ativos · ${new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }).format(portfolioData.totalRecurring)}/mês recorrente`
+                : "Health score, recompra e gestão de carteira"}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -113,37 +130,55 @@ export default function Upsell() {
         {/* Alert banner */}
         <CarteiraAlertBanner onViewDetails={() => setCarteiraFilter("overdue")} />
 
-        {/* Filters row */}
-        <div className="flex flex-wrap items-center gap-3">
-          {/* Search */}
-          <div className="relative min-w-[200px] max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar cliente ou empresa…"
-              value={carteiraSearch}
-              onChange={(e) => setCarteiraSearch(e.target.value)}
-              className="pl-9"
-            />
-          </div>
-
-          {/* Segment filter tabs */}
-          <div className="flex flex-wrap gap-1">
-            {FILTER_TABS.map((tab) => (
+        {/* Tabs */}
+        <div className="flex gap-0 border-b border-[#27272a] overflow-x-auto">
+          {PORTFOLIO_TABS.map((tab) => {
+            const count = tabCounts[tab.value] ?? 0;
+            const active = carteiraFilter === tab.value;
+            const isRisk = "isRisk" in tab && tab.isRisk;
+            return (
               <button
                 key={tab.value}
                 onClick={() => {
                   setCarteiraFilter(tab.value);
                   setSelectedClientId(null);
                 }}
-                className={
-                  carteiraFilter === tab.value
-                    ? "px-3 py-1.5 rounded-md text-xs font-semibold bg-[hsl(47_100%_50%_/_0.15)] text-[hsl(47_100%_60%)] border border-[hsl(47_100%_50%_/_0.3)] transition-colors"
-                    : "px-3 py-1.5 rounded-md text-xs font-medium text-zinc-400 border border-zinc-800 hover:border-zinc-700 hover:text-zinc-200 transition-colors"
-                }
+                className={cn(
+                  "px-5 py-2.5 text-[13px] font-medium border-b-2 transition-colors whitespace-nowrap",
+                  active
+                    ? "text-[#fafafa] border-b-[#eab308]"
+                    : "text-[#71717a] border-b-transparent hover:text-[#a1a1aa]",
+                )}
               >
                 {tab.label}
+                {count > 0 && (
+                  <span
+                    className={cn(
+                      "ml-1.5 text-[11px] px-1.5 py-px rounded-full inline-block",
+                      active && !isRisk && "bg-[#422006] text-[#eab308]",
+                      active && isRisk && "bg-[#450a0a] text-[#ef4444]",
+                      !active && !isRisk && "bg-[#27272a] text-[#a1a1aa]",
+                      !active && isRisk && "bg-[#450a0a] text-[#ef4444]",
+                    )}
+                  >
+                    {count}
+                  </span>
+                )}
               </button>
-            ))}
+            );
+          })}
+        </div>
+
+        {/* Search */}
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1 max-w-[320px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#52525b]" />
+            <Input
+              placeholder="Buscar cliente, empresa…"
+              value={carteiraSearch}
+              onChange={(e) => setCarteiraSearch(e.target.value)}
+              className="pl-9 bg-[#18181b] border-[#27272a] text-[13px]"
+            />
           </div>
         </div>
 
@@ -156,6 +191,11 @@ export default function Upsell() {
               onSelectClient={(id) =>
                 setSelectedClientId((prev) => (prev === id ? null : id))
               }
+              onNewOrder={(id) => {
+                setQuickOrderClientId(id);
+                setNovaVendaOpen(true);
+              }}
+              onViewDetail={(id) => navigate(`/carteira/${id}`)}
               searchQuery={carteiraSearch}
               filter={carteiraFilter}
             />
