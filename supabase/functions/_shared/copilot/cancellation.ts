@@ -64,12 +64,16 @@ export async function isCopilotCanceled(
       };
     }
 
-    // 2. Fallback: leads.ai_disabled (lead mais recente pra esse telefone)
+    // 2. Fallback: leads.ai_disabled (lead mais recente pra esse telefone).
+    // Query é por normalized_phone (canonical 11-digit, populado pelo trigger
+    // leads_normalize_phone_trigger). Antes comparava contra leads.phone que
+    // armazena raw — match dependia de coincidência de formato, então o
+    // fallback quase nunca disparava. Agora alinhado com a coluna canônica.
     const { data: lead } = await supabase
       .from("leads")
       .select("ai_disabled")
       .eq("organization_id", organizationId)
-      .eq("phone", normalized)
+      .eq("normalized_phone", normalized)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
