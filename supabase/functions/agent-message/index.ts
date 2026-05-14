@@ -107,6 +107,32 @@ Deno.serve(withSentry('agent-message', async (req) => {
       );
     }
 
+    // 0.95. AGENT ACTIVE GATE (early) — sem nenhum agente ativo na org,
+    // não há motivo pra criar lead fantasma a partir de uma msg que ninguém
+    // vai responder. Roda ANTES de getOrCreateLead pra evitar poluir o pipe
+    // com contatos órfãos quando Copilot está totalmente desligado.
+    {
+      const { data: activeAgentEarly } = await supabase
+        .from("copilot_agents")
+        .select("id")
+        .eq("organization_id", organization_id)
+        .eq("is_active", true)
+        .limit(1)
+        .maybeSingle();
+
+      if (!activeAgentEarly) {
+        console.log('[agent-message] No active agents for org (early gate):', organization_id);
+        return new Response(
+          JSON.stringify({
+            skipped: true,
+            reason: "no_active_agents",
+            organization_id,
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+    }
+
     // 1.0. AUDIENCE GATE — bloqueia contatos sem lead pre-existente quando
     // agente default da org tem attend_unknown_contacts=false. Roda ANTES do
     // getOrCreateLead pra nao criar lead fantasma quando filtro esta on.
