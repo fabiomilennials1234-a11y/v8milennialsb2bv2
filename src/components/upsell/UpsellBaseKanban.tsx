@@ -6,8 +6,8 @@ import { usePipelineStages, stagesToColumns, type PipelineStage } from "@/hooks/
 import { useUpsellClients, useUpdateUpsellClient } from "@/hooks/useUpsellClients";
 import { useUpsellOrders } from "@/hooks/useUpsellOrders";
 import { LeadCard, type LeadCardData } from "@/components/leads/LeadCard";
-import { LeadDetailDrawer } from "@/components/leads/LeadDetailDrawer";
-import { UpsellClientContext } from "@/components/leads/funnel-contexts";
+import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/components/lead-detail";
+import { LeadPanelLayout } from "@/components/layout/LeadPanelLayout";
 import { QuickSaleModal } from "./QuickSaleModal";
 import { PipeSettingsDialog } from "@/components/pipelines/PipeSettingsDialog";
 import { useIsAdmin } from "@/hooks/useUserRole";
@@ -30,7 +30,7 @@ function formatCurrency(value: number): string {
   }).format(value);
 }
 
-export function UpsellBaseKanban({ searchQuery, filterPotencial, filterActive }: UpsellBaseKanbanProps) {
+function UpsellBaseKanbanInner({ searchQuery, filterPotencial, filterActive }: UpsellBaseKanbanProps) {
   const { data: stages = [] } = usePipelineStages("upsell_base");
   const { data: clients = [] } = useUpsellClients();
   const { data: orders = [] } = useUpsellOrders();
@@ -38,9 +38,8 @@ export function UpsellBaseKanban({ searchQuery, filterPotencial, filterActive }:
   const createAcaoDoDia = useCreateAcaoDoDia();
   const updateLead = useUpdateLead();
   const isAdmin = useIsAdmin();
+  const { openLead } = useLeadSheet();
 
-  const [detailOpen, setDetailOpen] = useState(false);
-  const [selectedClient, setSelectedClient] = useState<any>(null);
   const [quickSaleClientId, setQuickSaleClientId] = useState<string>();
   const [quickSaleClientName, setQuickSaleClientName] = useState("");
   const [quickSaleOpen, setQuickSaleOpen] = useState(false);
@@ -117,14 +116,8 @@ export function UpsellBaseKanban({ searchQuery, filterPotencial, filterActive }:
   };
 
   const openDetail = (client: any) => {
-    setSelectedClient(client);
-    setDetailOpen(true);
-  };
-
-  const openQuickSale = (clientId: string, clientName: string) => {
-    setQuickSaleClientId(clientId);
-    setQuickSaleClientName(clientName);
-    setQuickSaleOpen(true);
+    const leadId = (client as any).lead_id || client?.lead?.id;
+    if (leadId) openLead(leadId, "upsell_client", client);
   };
 
   return (
@@ -247,27 +240,6 @@ export function UpsellBaseKanban({ searchQuery, filterPotencial, filterActive }:
         })}
       </div>
 
-      <LeadDetailDrawer
-        open={detailOpen}
-        onOpenChange={setDetailOpen}
-        leadId={(selectedClient as any)?.lead_id || selectedClient?.lead?.id || null}
-        variant="upsell_client"
-        pipeData={selectedClient}
-        renderFunnelContext={({ lead, pipeData: client, onSuccess }) => (
-          <UpsellClientContext
-            lead={lead}
-            pipeData={client}
-            onSuccess={onSuccess}
-            onQuickSale={() => {
-              if (selectedClient) {
-                setDetailOpen(false);
-                openQuickSale(selectedClient.id, selectedClient.name);
-              }
-            }}
-          />
-        )}
-      />
-
       {quickSaleClientId && (
         <QuickSaleModal
           open={quickSaleOpen}
@@ -286,5 +258,15 @@ export function UpsellBaseKanban({ searchQuery, filterPotencial, filterActive }:
         />
       )}
     </>
+  );
+}
+
+export function UpsellBaseKanban(props: UpsellBaseKanbanProps) {
+  return (
+    <LeadPanelProvider>
+      <LeadPanelLayout panel={<LeadDetailSheet />}>
+        <UpsellBaseKanbanInner {...props} />
+      </LeadPanelLayout>
+    </LeadPanelProvider>
   );
 }

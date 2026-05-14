@@ -2,8 +2,8 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { useUpsellCampanhas, useUpdateUpsellCampanha } from "@/hooks/useUpsellCampanhas";
 import { LeadCard } from "@/components/leads/LeadCard";
-import { LeadDetailDrawer } from "@/components/leads/LeadDetailDrawer";
-import { UpsellClientContext } from "@/components/leads/funnel-contexts";
+import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/components/lead-detail";
+import { LeadPanelLayout } from "@/components/layout/LeadPanelLayout";
 import { QuickSaleModal } from "./QuickSaleModal";
 import { useCreateAcaoDoDia } from "@/hooks/useAcoesDoDia";
 import { useUpdateLead } from "@/hooks/useLeads";
@@ -29,13 +29,13 @@ const CAMPANHA_COLUMNS: { id: CampanhaStatus; title: string; color: string }[] =
   { id: "perdido", title: "Perdido", color: "#EF4444" },
 ];
 
-export function UpsellCampanhasKanban({ searchQuery, filterStatus, filterResponsible }: UpsellCampanhasKanbanProps) {
+function UpsellCampanhasKanbanInner({ searchQuery, filterStatus, filterResponsible }: UpsellCampanhasKanbanProps) {
   const { data: campanhas = [] } = useUpsellCampanhas();
   const updateCampanha = useUpdateUpsellCampanha();
   const createAcaoDoDia = useCreateAcaoDoDia();
   const updateLead = useUpdateLead();
+  const { openLead } = useLeadSheet();
 
-  const [detailOpen, setDetailOpen] = useState(false);
   const [selectedCampanha, setSelectedCampanha] = useState<any>(null);
   const [quickSaleOpen, setQuickSaleOpen] = useState(false);
   const [quickSaleCampanha, setQuickSaleCampanha] = useState<{
@@ -218,7 +218,8 @@ export function UpsellCampanhasKanban({ searchQuery, filterStatus, filterRespons
                       variant="upsell_campanha"
                       onClick={() => {
                         setSelectedCampanha(campanha);
-                        setDetailOpen(true);
+                        const leadId = (campanha.client as any)?.lead_id;
+                        if (leadId) openLead(leadId, "upsell_campanha", campanha.client);
                       }}
                       onQuickAction={(title) => {
                         createAcaoDoDia.mutate({ title, lead_id: (campanha.client as any)?.lead_id || undefined });
@@ -235,17 +236,6 @@ export function UpsellCampanhasKanban({ searchQuery, filterStatus, filterRespons
         })}
       </div>
 
-      <LeadDetailDrawer
-        open={detailOpen}
-        onOpenChange={setDetailOpen}
-        leadId={(selectedCampanha?.client as any)?.lead_id || null}
-        variant="upsell_campanha"
-        pipeData={selectedCampanha?.client}
-        renderFunnelContext={({ lead, pipeData: client, onSuccess }) => (
-          <UpsellClientContext lead={lead} pipeData={client} onSuccess={onSuccess} />
-        )}
-      />
-
       {quickSaleCampanha && (
         <QuickSaleModal
           open={quickSaleOpen}
@@ -260,5 +250,15 @@ export function UpsellCampanhasKanban({ searchQuery, filterStatus, filterRespons
         />
       )}
     </>
+  );
+}
+
+export function UpsellCampanhasKanban(props: UpsellCampanhasKanbanProps) {
+  return (
+    <LeadPanelProvider>
+      <LeadPanelLayout panel={<LeadDetailSheet />}>
+        <UpsellCampanhasKanbanInner {...props} />
+      </LeadPanelLayout>
+    </LeadPanelProvider>
   );
 }

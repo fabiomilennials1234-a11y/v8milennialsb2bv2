@@ -29,7 +29,8 @@ import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useOpenWhatsAppChat } from "@/lib/whatsapp";
-import { LeadDetailModal } from "@/components/leads/LeadDetailModal";
+import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/components/lead-detail";
+import { LeadPanelLayout } from "@/components/layout/LeadPanelLayout";
 import { LeadModal } from "@/components/leads/LeadModal";
 import {
   AlertDialog,
@@ -512,7 +513,7 @@ const DEFAULT_CAMPANHA_KANBAN_FILTERS: CampanhaKanbanFilterState = {
   nameFilter: "",
 };
 
-export function CampanhaKanban({
+function CampanhaKanbanInner({
   campanhaId,
   stages,
   leads,
@@ -523,6 +524,7 @@ export function CampanhaKanban({
   onExtractToPipe,
 }: CampanhaKanbanProps) {
   const openWhatsApp = useOpenWhatsAppChat();
+  const { openLead } = useLeadSheet();
   // screen key includes campanhaId so each campaign has independent filters
   const [filterState, setFilterState] = usePersistedState(
     `campanha-kanban-${campanhaId}`,
@@ -541,7 +543,6 @@ export function CampanhaKanban({
   );
 
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [editLeadId, setEditLeadId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<CampanhaLead | null>(null);
   const updateLead = useUpdateCampanhaLead();
@@ -739,7 +740,7 @@ export function CampanhaKanban({
   const handleDragOver = (event: DragOverEvent) => {};
 
   const handleCardClick = (leadId: string) => {
-    setSelectedLeadId(leadId);
+    openLead(leadId, "leads");
   };
 
   const handleEdit = (leadId: string) => {
@@ -869,19 +870,6 @@ export function CampanhaKanban({
         </DragOverlay>
       </DndContext>
 
-      {/* Lead Detail Modal */}
-      <LeadDetailModal
-        open={!!selectedLeadId}
-        onOpenChange={(open) => !open && setSelectedLeadId(null)}
-        leadId={selectedLeadId}
-        onEdit={() => {
-          if (selectedLeadId) {
-            setEditLeadId(selectedLeadId);
-            setSelectedLeadId(null);
-          }
-        }}
-      />
-
       {/* Edit Lead Modal */}
       {editLeadId && (
         <LeadModal
@@ -914,5 +902,15 @@ export function CampanhaKanban({
         </AlertDialogContent>
       </AlertDialog>
     </>
+  );
+}
+
+export function CampanhaKanban(props: CampanhaKanbanProps) {
+  return (
+    <LeadPanelProvider>
+      <LeadPanelLayout panel={<LeadDetailSheet />}>
+        <CampanhaKanbanInner {...props} />
+      </LeadPanelLayout>
+    </LeadPanelProvider>
   );
 }
