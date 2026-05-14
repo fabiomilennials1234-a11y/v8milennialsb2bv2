@@ -29,23 +29,24 @@ export function useInlineEdit({ value, onSave }: UseInlineEditOptions) {
     setIsEditing(false);
   }, []);
 
-  const commit = useCallback(async () => {
+  const commit = useCallback(() => {
     if (localValue === originalRef.current) {
       setIsEditing(false);
       return;
     }
+    const savedValue = localValue;
+    const originalValue = originalRef.current;
     setIsSaving(true);
-    try {
-      await onSave(localValue);
-      originalRef.current = localValue;
+    onSave(savedValue).then(() => {
+      originalRef.current = savedValue;
       setIsEditing(false);
-    } catch (err: any) {
-      setLocalValue(originalRef.current);
-      setIsEditing(false);
-      toast.error(err?.message || "Erro ao salvar");
-    } finally {
       setIsSaving(false);
-    }
+    }).catch((err: any) => {
+      setLocalValue(originalValue);
+      setIsEditing(false);
+      setIsSaving(false);
+      toast.error(err?.message || "Erro ao salvar");
+    });
   }, [localValue, onSave]);
 
   return { localValue, setLocalValue, isEditing, isSaving, startEditing, commit, cancel };
