@@ -20,8 +20,8 @@ const UAZAPI_WEBHOOK_SECRET = Deno.env.get("UAZAPI_WEBHOOK_SECRET") ?? "";
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204 });
-  const secret = req.headers.get("x-cron-secret") ?? "";
-  if (!CRON_SECRET || secret !== CRON_SECRET) {
+  const cronSecret = req.headers.get("x-cron-secret") ?? "";
+  if (!CRON_SECRET || cronSecret !== CRON_SECRET) {
     return new Response("unauthorized", { status: 401 });
   }
 
