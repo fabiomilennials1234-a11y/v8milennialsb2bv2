@@ -42,7 +42,8 @@ export type FeatureKey =
   | "campaigns_indicacao"
   | "campaigns_prospeccao"
   | "campaigns_reativacao"
-  | "message_templates";
+  | "message_templates"
+  | "customer_portfolio";
 
 export type LimitKey =
   | "max_leads"
