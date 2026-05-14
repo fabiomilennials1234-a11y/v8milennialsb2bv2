@@ -12,7 +12,6 @@ import { LeadDetailProperties } from "./LeadDetailProperties";
 import { LeadDetailFocus } from "./LeadDetailFocus";
 import { LeadDetailFunnelContext } from "./LeadDetailFunnelContext";
 import { LeadDetailTimeline } from "./LeadDetailTimeline";
-import { LeadDetailChat } from "./LeadDetailChat";
 import { LeadDetailNotes } from "./LeadDetailNotes";
 import { ScheduleMessageModal } from "@/components/chat/ScheduleMessageModal";
 import { LogCallModal } from "@/components/calls/LogCallModal";
@@ -150,31 +149,21 @@ export const LeadDetailSheet = memo(function LeadDetailSheet() {
         <LeadDetailProperties lead={lead} pipelineData={pipelineData} />
 
         {/* Right: Content */}
-        <div className="flex-1 overflow-y-auto p-4 min-w-0">
+        <div className="flex-1 overflow-y-auto px-5 py-4 min-w-0">
           <LeadDetailFocus leadId={lead.id} />
           <LeadDetailFunnelContext lead={lead} variant={variant} pipeData={pipeData} />
 
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="h-8 mb-3">
-              <TabsTrigger value="atividade" className="text-xs">
+            <TabsList className="h-9 p-0.5 bg-muted/50 mb-4 w-full">
+              <TabsTrigger value="atividade" className="text-xs flex-1 data-[state=active]:bg-background data-[state=active]:shadow-sm">
                 Atividade
               </TabsTrigger>
-              <TabsTrigger value="chat" className="text-xs">
-                Chat
-              </TabsTrigger>
-              <TabsTrigger value="notas" className="text-xs">
+              <TabsTrigger value="notas" className="text-xs flex-1 data-[state=active]:bg-background data-[state=active]:shadow-sm">
                 Notas
               </TabsTrigger>
             </TabsList>
             <TabsContent value="atividade" className="m-0">
               <LeadDetailTimeline leadId={lead.id} />
-            </TabsContent>
-            <TabsContent value="chat" className="m-0">
-              <LeadDetailChat
-                leadId={lead.id}
-                leadName={lead.name}
-                leadPhone={lead.phone}
-              />
             </TabsContent>
             <TabsContent value="notas" className="m-0">
               <LeadDetailNotes

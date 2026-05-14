@@ -38,7 +38,7 @@ export const LeadDetailFunnelContext = memo(function LeadDetailFunnelContext({
 
   return (
     <Suspense fallback={<div className="flex justify-center py-4"><Loader2 className="w-4 h-4 animate-spin text-muted-foreground" /></div>}>
-      <div className="mb-3 border border-border/50 rounded-lg p-3">
+      <div className="mb-4 border border-border/30 rounded-xl p-4 bg-muted/20">
         {context}
       </div>
     </Suspense>

@@ -2,7 +2,7 @@ import { memo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Send } from "lucide-react";
+import { Loader2, Send, StickyNote } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useLeadTimeline } from "@/hooks/useLeadTimeline";
@@ -30,7 +30,7 @@ export const LeadDetailNotes = memo(function LeadDetailNotes({ leadId, organizat
       const { data: member } = user
         ? await supabase.from("team_members").select("name").eq("user_id", user.id).maybeSingle()
         : { data: null };
-      const userName = member?.name || user?.email?.split("@")[0] || "Usuário";
+      const userName = member?.name || user?.email?.split("@")[0] || "Usuario";
 
       const { error } = await supabase.from("lead_history").insert({
         lead_id: leadId,
@@ -54,34 +54,44 @@ export const LeadDetailNotes = memo(function LeadDetailNotes({ leadId, organizat
   };
 
   return (
-    <div>
-      <div className="flex gap-2 mb-4">
+    <div className="space-y-4">
+      <div className="relative">
         <Textarea
           value={note}
           onChange={(e) => setNote(e.target.value)}
-          placeholder="Adicionar nota..."
-          rows={2}
-          className="text-xs resize-none"
+          placeholder="Escreva uma nota..."
+          rows={3}
+          className="text-xs resize-none pr-12 bg-muted/30 border-border/30 focus-visible:bg-background"
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleSave();
+          }}
         />
         <Button
           size="icon"
-          variant="outline"
-          className="h-auto shrink-0"
+          variant="ghost"
+          className="absolute right-2 bottom-2 h-7 w-7 text-muted-foreground hover:text-primary"
           onClick={handleSave}
           disabled={!note.trim() || isSaving}
         >
           {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
         </Button>
       </div>
+
       <div className="space-y-2">
         {noteEvents.length === 0 ? (
-          <p className="text-xs text-muted-foreground text-center py-4">Nenhuma nota ainda.</p>
+          <div className="text-center py-10">
+            <div className="w-12 h-12 rounded-full bg-muted/50 flex items-center justify-center mx-auto mb-3">
+              <StickyNote className="w-5 h-5 text-muted-foreground/30" />
+            </div>
+            <p className="text-xs text-muted-foreground/60">Nenhuma nota ainda.</p>
+            <p className="text-[10px] text-muted-foreground/40 mt-1">Cmd+Enter para salvar</p>
+          </div>
         ) : (
           noteEvents.map((event) => (
-            <div key={event.id} className="bg-muted/30 rounded-md p-2.5">
-              <p className="text-xs text-foreground/70">{event.description}</p>
-              <p className="text-[9px] text-muted-foreground/50 mt-1">
-                {format(new Date(event.created_at), "dd/MM/yy 'às' HH:mm", { locale: ptBR })}
+            <div key={event.id} className="rounded-lg bg-muted/30 border border-border/20 px-3.5 py-2.5">
+              <p className="text-xs text-foreground/80 leading-relaxed">{event.description}</p>
+              <p className="text-[9px] text-muted-foreground/40 mt-1.5 font-medium">
+                {format(new Date(event.created_at), "dd MMM 'as' HH:mm", { locale: ptBR })}
               </p>
             </div>
           ))
