@@ -363,11 +363,22 @@ Deno.serve(
             console.log(`[deleteInstance] provider delete skipped/failed (best-effort): ${providerError}`);
           }
 
-          // Nullify FKs before deleting row
+          // Nullify/delete FKs in batches before deleting the instance row,
+          // otherwise ON DELETE SET NULL / CASCADE on large tables causes timeout.
           await supabaseAdmin
             .from("scheduled_user_messages")
             .update({ whatsapp_instance_id: null })
             .eq("whatsapp_instance_id", instanceId);
+
+          await supabaseAdmin
+            .from("whatsapp_messages")
+            .update({ instance_id: null })
+            .eq("instance_id", instanceId);
+
+          await supabaseAdmin
+            .from("whatsapp_conversations")
+            .delete()
+            .eq("instance_id", instanceId);
 
           const { error: deleteErr } = await supabaseAdmin
             .from("whatsapp_instances")
