@@ -2052,6 +2052,114 @@ export type Database = {
           },
         ]
       }
+      client_alerts: {
+        Row: {
+          alert_type: string
+          client_id: string
+          created_at: string | null
+          description: string | null
+          id: string
+          is_resolved: boolean | null
+          metadata: Json | null
+          organization_id: string
+          resolved_at: string | null
+          severity: string
+          title: string
+        }
+        Insert: {
+          alert_type: string
+          client_id: string
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_resolved?: boolean | null
+          metadata?: Json | null
+          organization_id: string
+          resolved_at?: string | null
+          severity?: string
+          title: string
+        }
+        Update: {
+          alert_type?: string
+          client_id?: string
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_resolved?: boolean | null
+          metadata?: Json | null
+          organization_id?: string
+          resolved_at?: string | null
+          severity?: string
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_alerts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "upsell_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_alerts_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_purchase_items: {
+        Row: {
+          created_at: string | null
+          id: string
+          order_id: string
+          product_id: string | null
+          product_name: string
+          quantity: number
+          total_price: number | null
+          unit: string | null
+          unit_price: number
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          order_id: string
+          product_id?: string | null
+          product_name: string
+          quantity?: number
+          total_price?: number | null
+          unit?: string | null
+          unit_price: number
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          order_id?: string
+          product_id?: string | null
+          product_name?: string
+          quantity?: number
+          total_price?: number | null
+          unit?: string | null
+          unit_price?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_purchase_items_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "upsell_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_purchase_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_sidebar_permissions: {
         Row: {
           created_at: string
@@ -3678,6 +3786,8 @@ export type Database = {
           reasoning_mode: string
           response_delay_ms: number | null
           response_delay_seconds: number | null
+          retention_config: Json | null
+          retention_enabled: boolean | null
           routing_origins: string[] | null
           routing_segments: string[] | null
           routing_stages: string[] | null
@@ -3746,6 +3856,8 @@ export type Database = {
           reasoning_mode?: string
           response_delay_ms?: number | null
           response_delay_seconds?: number | null
+          retention_config?: Json | null
+          retention_enabled?: boolean | null
           routing_origins?: string[] | null
           routing_segments?: string[] | null
           routing_stages?: string[] | null
@@ -3814,6 +3926,8 @@ export type Database = {
           reasoning_mode?: string
           response_delay_ms?: number | null
           response_delay_seconds?: number | null
+          retention_config?: Json | null
+          retention_enabled?: boolean | null
           routing_origins?: string[] | null
           routing_segments?: string[] | null
           routing_stages?: string[] | null
@@ -8946,6 +9060,60 @@ export type Database = {
           },
         ]
       }
+      pipeline_entries_revert_20260514: {
+        Row: {
+          assigned_to: string | null
+          closed_at: string | null
+          created_at: string | null
+          deal_id: string | null
+          entered_at: string | null
+          id: string | null
+          lead_id: string | null
+          metadata: Json | null
+          notes: string | null
+          organization_id: string | null
+          pipeline_id: string | null
+          snapshot_at: string | null
+          stage_changed_at: string | null
+          stage_key: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          assigned_to?: string | null
+          closed_at?: string | null
+          created_at?: string | null
+          deal_id?: string | null
+          entered_at?: string | null
+          id?: string | null
+          lead_id?: string | null
+          metadata?: Json | null
+          notes?: string | null
+          organization_id?: string | null
+          pipeline_id?: string | null
+          snapshot_at?: string | null
+          stage_changed_at?: string | null
+          stage_key?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          assigned_to?: string | null
+          closed_at?: string | null
+          created_at?: string | null
+          deal_id?: string | null
+          entered_at?: string | null
+          id?: string | null
+          lead_id?: string | null
+          metadata?: Json | null
+          notes?: string | null
+          organization_id?: string | null
+          pipeline_id?: string | null
+          snapshot_at?: string | null
+          stage_changed_at?: string | null
+          stage_key?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       pipeline_stages: {
         Row: {
           auto_move_max_days: number | null
@@ -11318,71 +11486,107 @@ export type Database = {
       }
       upsell_clients: {
         Row: {
+          avg_ticket: number | null
           churned_at: string | null
           closer_id: string | null
           company: string | null
+          company_id: string | null
           created_at: string
+          days_since_last_order: number | null
           email: string | null
           first_sale_at: string
           gestao_manual_override: boolean
           gestao_stage: string | null
+          health_score: number | null
+          health_status: string | null
+          health_updated_at: string | null
           id: string
           is_active: boolean
+          last_order_at: string | null
           lead_id: string
+          lifetime_value: number | null
           name: string
+          next_order_expected: string | null
+          order_count: number | null
           organization_id: string
           phone: string | null
           potencial: Database["public"]["Enums"]["upsell_potencial"]
           pre_sale_responsible_id: string | null
           reactivated_at: string | null
+          reorder_cycle_days: number | null
           responsible_id: string | null
           sale_responsible_id: string | null
+          segment: string | null
           tipo_cliente_tempo: string
           updated_at: string
         }
         Insert: {
+          avg_ticket?: number | null
           churned_at?: string | null
           closer_id?: string | null
           company?: string | null
+          company_id?: string | null
           created_at?: string
+          days_since_last_order?: number | null
           email?: string | null
           first_sale_at?: string
           gestao_manual_override?: boolean
           gestao_stage?: string | null
+          health_score?: number | null
+          health_status?: string | null
+          health_updated_at?: string | null
           id?: string
           is_active?: boolean
+          last_order_at?: string | null
           lead_id: string
+          lifetime_value?: number | null
           name: string
+          next_order_expected?: string | null
+          order_count?: number | null
           organization_id: string
           phone?: string | null
           potencial?: Database["public"]["Enums"]["upsell_potencial"]
           pre_sale_responsible_id?: string | null
           reactivated_at?: string | null
+          reorder_cycle_days?: number | null
           responsible_id?: string | null
           sale_responsible_id?: string | null
+          segment?: string | null
           tipo_cliente_tempo?: string
           updated_at?: string
         }
         Update: {
+          avg_ticket?: number | null
           churned_at?: string | null
           closer_id?: string | null
           company?: string | null
+          company_id?: string | null
           created_at?: string
+          days_since_last_order?: number | null
           email?: string | null
           first_sale_at?: string
           gestao_manual_override?: boolean
           gestao_stage?: string | null
+          health_score?: number | null
+          health_status?: string | null
+          health_updated_at?: string | null
           id?: string
           is_active?: boolean
+          last_order_at?: string | null
           lead_id?: string
+          lifetime_value?: number | null
           name?: string
+          next_order_expected?: string | null
+          order_count?: number | null
           organization_id?: string
           phone?: string | null
           potencial?: Database["public"]["Enums"]["upsell_potencial"]
           pre_sale_responsible_id?: string | null
           reactivated_at?: string | null
+          reorder_cycle_days?: number | null
           responsible_id?: string | null
           sale_responsible_id?: string | null
+          segment?: string | null
           tipo_cliente_tempo?: string
           updated_at?: string
         }
@@ -11399,6 +11603,13 @@ export type Database = {
             columns: ["closer_id"]
             isOneToOne: false
             referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "upsell_clients_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
             referencedColumns: ["id"]
           },
           {
@@ -11529,6 +11740,7 @@ export type Database = {
           sale_responsible_id: string | null
           sale_value: number
           sold_at: string
+          source: string | null
         }
         Insert: {
           campanha_id?: string | null
@@ -11548,6 +11760,7 @@ export type Database = {
           sale_responsible_id?: string | null
           sale_value: number
           sold_at?: string
+          source?: string | null
         }
         Update: {
           campanha_id?: string | null
@@ -11567,6 +11780,7 @@ export type Database = {
           sale_responsible_id?: string | null
           sale_value?: number
           sold_at?: string
+          source?: string | null
         }
         Relationships: [
           {
