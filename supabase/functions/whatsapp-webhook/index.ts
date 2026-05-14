@@ -287,6 +287,24 @@ async function handleMessagesEvent(
     return;
   }
 
+  // Skip group messages — phone_number derived from group JID (120363...@g.us)
+  // pollutes the leads table with ghost contacts named after the first speaker.
+  // Parity with history-sync-worker which already filters @g.us.
+  if (String(normalized.remote_jid).endsWith("@g.us")) {
+    await logRuntime({
+      organizationId: instance.organization_id,
+      module: "webhook",
+      action: "uazapi_group_message_skipped",
+      status: "ok",
+      payloadSnapshot: {
+        instance_id: instance.id,
+        remote_jid: normalized.remote_jid,
+        message_id: normalized.message_id,
+      },
+    });
+    return;
+  }
+
   const { error } = await supabase
     .from("whatsapp_messages")
     .upsert(normalized, {
