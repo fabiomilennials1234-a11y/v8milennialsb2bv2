@@ -212,6 +212,10 @@ verify_jwt = false
 [functions.analyze-copilot-prompt]
 verify_jwt = false
 
+# calculate-portfolio-health: cron job, auth via x-cron-secret; no JWT needed
+[functions.calculate-portfolio-health]
+verify_jwt = false
+
 
 
 
