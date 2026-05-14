@@ -25,8 +25,8 @@ const MODE_OPTIONS: { value: AssignMode; label: string; description: string }[] 
 
 const TARGET_OPTIONS: { value: AssignTarget; label: string }[] = [
   { value: "responsible", label: "Responsável" },
-  { value: "sdr", label: "SDR" },
-  { value: "closer", label: "Closer" },
+  { value: "sdr", label: "Pré-Venda" },
+  { value: "sale", label: "Vendedor" },
 ];
 
 export function AssignResponsiblePanel({ data, onUpdate }: AssignResponsiblePanelProps) {

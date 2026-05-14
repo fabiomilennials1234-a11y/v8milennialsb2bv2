@@ -85,7 +85,7 @@ export function IndividualGoals({ closers, sdrs }: IndividualGoalsProps) {
           <div className="p-2 rounded-lg bg-primary/20">
             <Target className="w-5 h-5 text-primary" />
           </div>
-          <h3 className="text-lg font-bold text-foreground">Metas Closers</h3>
+          <h3 className="text-lg font-bold text-foreground">Metas Vendedores</h3>
           <span className="text-xs text-muted-foreground">(Faturamento)</span>
         </div>
         
@@ -108,7 +108,7 @@ export function IndividualGoals({ closers, sdrs }: IndividualGoalsProps) {
           <div className="p-2 rounded-lg bg-amber-500/20">
             <TrendingUp className="w-5 h-5 text-amber-500" />
           </div>
-          <h3 className="text-lg font-bold text-foreground">Metas SDRs</h3>
+          <h3 className="text-lg font-bold text-foreground">Metas Pré-Vendas</h3>
           <span className="text-xs text-muted-foreground">(Reuniões)</span>
         </div>
         

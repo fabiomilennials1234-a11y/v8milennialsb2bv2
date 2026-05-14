@@ -774,7 +774,7 @@ export function useToggleLeadAI() {
       // Atualizar cache DIRETAMENTE com o valor confirmado pelo servidor.
       // NÃO invalidar lead_by_phone nem lead-detail: a invalidação dispara
       // um refetch que passa pelo RLS, e o RLS pode bloquear o SELECT para
-      // usuários que não são SDR/closer/responsible do lead — sobrescrevendo
+      // usuários que não são responsáveis do lead — sobrescrevendo
       // o cache correto com null e fazendo o switch reverter.
       const updateAiDisabled = (old: any) => {
         if (!old) return old;

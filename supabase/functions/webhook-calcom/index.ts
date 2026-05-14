@@ -303,10 +303,9 @@ Deno.serve(withSentry('webhook-calcom', async (req) => {
         origin: "ambos", // Lead veio do Quiz e agora agendou via Cal
       };
       
-      // Assign closer if found and lead doesn't have one already
       if (closerId && !existingLead.closer_id) {
         updateData.closer_id = closerId;
-        console.log("Assigning closer to existing lead:", closerId);
+        updateData.sale_responsible_id = closerId;
       }
       if (closerId && !existingLead.responsible_id) {
         updateData.responsible_id = closerId;

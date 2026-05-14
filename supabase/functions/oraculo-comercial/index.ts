@@ -270,8 +270,8 @@ async function fetchLostDeals(
   for (const d of lostDeals.slice(0, 5)) {
     const leadName = d.lead?.name || "Lead";
     const company = d.lead?.company ? ` (${d.lead.company})` : "";
-    const closer = d.closer?.name || "sem closer";
-    output += `\n  • ${leadName}${company} — R$ ${(d.sale_value || 0).toLocaleString("pt-BR")} — Motivo: ${d.loss_reason || "não informado"} — Closer: ${closer}`;
+    const vendedor = d.closer?.name || "sem vendedor";
+    output += `\n  • ${leadName}${company} — R$ ${(d.sale_value || 0).toLocaleString("pt-BR")} — Motivo: ${d.loss_reason || "não informado"} — Vendedor: ${vendedor}`;
   }
 
   return output;
@@ -419,10 +419,10 @@ DADOS OPERACIONAIS DO MÊS ATUAL
 - Taxa no-show: ${(metrics?.taxaNoShow || 0).toFixed(1)}%
 - Taxa conversão: ${(metrics?.taxaConversao || metrics?.taxaConversaoGeral || 0).toFixed(1)}%
 
-RANKING DE VENDEDORES (CLOSERS):
+RANKING DE VENDEDORES:
 ${JSON.stringify(ranking?.salesRanking?.slice(0, 8) || [], null, 2)}
 
-RANKING SDRs:
+RANKING PRÉ-VENDAS:
 ${JSON.stringify(ranking?.sdrRanking?.slice(0, 8) || [], null, 2)}
 
 ═══════════════════════════════════════
@@ -599,7 +599,7 @@ Qual o problema principal e qual a tarefa prioritária de hoje?`;
     const vendas = metrics.numeroVendas || 0;
     const falta = meta - faturamento;
 
-    userPrompt = `Métricas do Closer:
+    userPrompt = `Métricas do Vendedor:
 - Faturamento no mês: R$ ${faturamento.toLocaleString("pt-BR")}
 - Meta de vendas: R$ ${meta.toLocaleString("pt-BR")}
 - Progresso: ${progresso.toFixed(0)}%
@@ -770,7 +770,7 @@ async function handleTVAnalysisMode(body: any, corsHeaders: Record<string, strin
   // Build team member context
   const membersContext = safeTeamMembers.map((tm: any) => {
     const isSales = tm.metric_type === "sales";
-    return `- ${tm.name} (${isSales ? "Closer" : "SDR"}): ${
+    return `- ${tm.name} (${isSales ? "Vendedor" : "Pré-Venda"}): ${
       isSales
         ? `R$ ${(tm.current || 0).toLocaleString("pt-BR")} / meta R$ ${(tm.goal || 0).toLocaleString("pt-BR")} (${tm.percentage || 0}%)`
         : `${tm.current || 0} / meta ${tm.goal || 0} reuniões (${tm.percentage || 0}%)`

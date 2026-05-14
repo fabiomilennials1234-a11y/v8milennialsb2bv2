@@ -201,6 +201,7 @@ export function useCreateLeadFromWhatsApp() {
             status: firstStage,
             responsible_id: effectiveSdrIdForShadow,
             closer_id: effectiveSdrIdForShadow,
+            sale_responsible_id: effectiveSdrIdForShadow,
             organization_id: teamMember.organization_id,
           });
         } else if (effectiveDestination === "campanha" && campanhaId) {
@@ -298,6 +299,7 @@ export function useCreateLeadFromWhatsApp() {
           status: firstStage,
           responsible_id: effectiveSdrId,
           closer_id: effectiveSdrId,
+          sale_responsible_id: effectiveSdrId,
           organization_id: teamMember.organization_id,
         });
         if (pipeError) {

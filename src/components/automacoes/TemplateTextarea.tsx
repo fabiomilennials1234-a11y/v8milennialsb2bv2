@@ -20,7 +20,7 @@ const PREVIEW_EXAMPLES: Record<string, string> = {
   "{{responsavel}}":        "Maria Santos",
   "{{responsavel_telefone}}": "(11) 98888-8888",
   "{{sdr}}":                "Carlos (SDR)",
-  "{{closer}}":             "Ana (Closer)",
+  "{{closer}}":             "Ana (Vendedor)",
   "{{data_hoje}}":          new Date().toLocaleDateString("pt-BR"),
   "{{hora_atual}}":         new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
   "{{nome_empresa_crm}}":   "Minha Empresa",

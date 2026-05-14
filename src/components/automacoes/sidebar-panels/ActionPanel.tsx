@@ -634,7 +634,7 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
 
       {/* ═══════ EQUIPE ═══════ */}
 
-      {(at === "assign_responsible" || at === "assign_sdr" || at === "assign_closer") && (
+      {(at === "assign_responsible" || at === "assign_sdr" || at === "assign_closer" || at === "assign_sale_responsible") && (
         <AssignResponsibleConfig data={data} onUpdate={onUpdate} />
       )}
 

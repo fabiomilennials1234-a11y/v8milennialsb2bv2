@@ -503,6 +503,7 @@ export function ImportUpsellClientsContent({
               potencial,
               responsible_id: responsibleId,
               closer_id: responsibleId,
+              sale_responsible_id: responsibleId,
               first_sale_at: firstSaleAt,
               tipo_cliente_tempo: tipoClienteTempo,
               ...(pipeType === "upsell_gestao"
@@ -511,7 +512,7 @@ export function ImportUpsellClientsContent({
             };
 
             if (responsibleId) {
-              await supabase.from("leads").update({ responsible_id: responsibleId, closer_id: responsibleId }).eq("id", leadId);
+              await supabase.from("leads").update({ responsible_id: responsibleId, closer_id: responsibleId, sale_responsible_id: responsibleId }).eq("id", leadId);
             }
 
             const { error: clientError } = await supabase

@@ -13,7 +13,7 @@ import { useCanManageCopilot } from "@/hooks/useUserRole";
  * Verifica se o usuário tem acesso ao Copilot
  *
  * Regra:
- * - Admins e Closers têm acesso completo (mesmo sem subscription)
+ * - Admins e Vendedores têm acesso completo (mesmo sem subscription)
  * - Outros usuários precisam de subscription status === 'active'
  * - Trial não tem acesso (requer upgrade)
  *
@@ -38,7 +38,7 @@ export function useCopilotSubscription() {
 
   const isLoading = adminLoading || subLoading;
 
-  // Admins e Closers têm acesso completo, outros precisam de subscription ativa
+  // Admins e Vendedores têm acesso completo, outros precisam de subscription ativa
   const hasAccess = canManage ||
     (subscription?.isValid === true && subscription?.status === "active");
   const isTrial = !canManage && subscription?.status === "trial";

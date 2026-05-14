@@ -13,7 +13,8 @@ const MODE_LABELS: Record<string, string> = {
 const TARGET_LABELS: Record<string, string> = {
   responsible: "Responsável",
   sdr: "SDR",
-  closer: "Closer",
+  closer: "Vendedor",
+  sale: "Vendedor",
 };
 
 function AssignResponsibleNodeComponent({ id, data, selected }: NodeProps) {

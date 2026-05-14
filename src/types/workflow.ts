@@ -81,7 +81,7 @@ export type WorkflowActionType =
   // Equipe
   | "assign_responsible"
   | "assign_sdr"
-  | "assign_closer"
+  | "assign_closer" // @deprecated — legado, mapeado para sale_responsible
   | "notify_team_member"
   // Follow-up
   | "create_followup"
@@ -210,7 +210,7 @@ export interface TriggerConfigWebhookReceived {
 }
 
 export interface TriggerConfigLeadAssigned {
-  role?: "sdr" | "closer" | "any";
+  role?: "sdr" | "closer" | "sale" | "any";
 }
 
 export interface TriggerConfigCampaignStatus {
@@ -482,7 +482,7 @@ export interface GotoNodeData {
 }
 
 export type AssignMode = "round_robin" | "random" | "manual";
-export type AssignTarget = "responsible" | "sdr" | "closer";
+export type AssignTarget = "responsible" | "sdr" | "closer" | "sale";
 
 /**
  * Onda 5 — Time-Aware Workflow Window.
@@ -701,8 +701,8 @@ export const ACTION_LABELS: Record<WorkflowActionType, string> = {
   create_tinyerp_upsell_order: "Criar Pedido Upsell TinyERP",
   // Equipe
   assign_responsible: "Atribuir Responsável",
-  assign_sdr: "Atribuir SDR",
-  assign_closer: "Atribuir Closer",
+  assign_sdr: "Atribuir Pré-Venda",
+  assign_closer: "Atribuir Vendedor",
   notify_team_member: "Notificar Membro da Equipe",
   // Follow-up
   create_followup: "Criar Follow-up",
@@ -868,7 +868,7 @@ export const WORKFLOW_VARIABLES: WorkflowVariable[] = [
   { key: "{{responsavel}}",            label: "Nome do responsável",          category: "Responsável" },
   { key: "{{responsavel_telefone}}",   label: "Telefone do responsável",      category: "Responsável" },
   { key: "{{sdr}}",                    label: "SDR (legado)",                 category: "Responsável" },
-  { key: "{{closer}}",                 label: "Closer (legado)",              category: "Responsável" },
+  { key: "{{closer}}",                 label: "Vendedor (legado)",            category: "Responsável" },
   // Campanha
   { key: "{{campanha_nome}}",    label: "Nome da campanha",    category: "Campanha" },
   { key: "{{campanha_estagio}}", label: "Estágio na campanha", category: "Campanha" },

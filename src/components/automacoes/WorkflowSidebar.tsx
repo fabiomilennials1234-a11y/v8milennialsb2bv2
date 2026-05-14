@@ -27,7 +27,7 @@ const ORG_SPECIFIC_ID_FIELDS: Record<string, string> = {
   templateSourceId: "Fonte do Template",
   assigneeId: "Responsável",
   notifyMemberId: "Membro para Notificação",
-  meetingCloserId: "Closer da Reunião",
+  meetingCloserId: "Vendedor da Reunião",
   semiAutoApprover: "Aprovador Semi-Automático",
   aiAgentId: "Agente de IA",
   tagId: "Tag",

@@ -221,9 +221,9 @@ export default function MasterUsers() {
         return <Badge variant="destructive">Agency</Badge>;
       // Legacy roles (pre-migration data)
       case "sdr":
-        return <Badge variant="default">Membro (SDR)</Badge>;
+        return <Badge variant="default">Membro (Pré-Venda)</Badge>;
       case "closer":
-        return <Badge variant="secondary">Membro (Closer)</Badge>;
+        return <Badge variant="secondary">Membro (Vendedor)</Badge>;
       case "bdr":
         return <Badge variant="default">Membro (BDR)</Badge>;
       case "cliente":

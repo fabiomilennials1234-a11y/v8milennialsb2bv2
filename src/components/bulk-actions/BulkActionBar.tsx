@@ -197,7 +197,7 @@ function BulkAssignDialog({
         lead_ids: leadIds,
         responsible_id: id,
         sdr_id: id,
-        closer_id: null,
+        sale_responsible_id: id,
       });
       toast.success(`${leadIds.length} leads atribuidos`);
       onOpenChange(false);

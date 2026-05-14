@@ -11,6 +11,7 @@ import { sendAudioViaProvider } from "./audio-sender.ts";
 import { getWhatsAppProvider } from "./whatsapp-client.ts";
 import { getTimeBasedVariables } from "./time-variables.ts";
 import { getPipeEntry, upsertPipeEntry, updatePipeEntryById, deletePipeEntry } from "./pipeline-adapter.ts";
+import { sendMessage } from "./message-gateway.ts";
 
 export interface ActionResult {
   success: boolean;
@@ -523,34 +524,53 @@ async function handleSendWhatsApp(ctx: ActionContext): Promise<ActionResult> {
   const message = await resolveVariables(ctx.supabase, ctx.leadId, template, ctx.executionContext);
   if (!message) return { success: false, error: "Empty message template", retryable: false };
 
-  const { sendTextViaInstance } = await import("./whatsapp-dispatch.ts");
-  const sendResult = await sendTextViaInstance(ctx.supabase, wa.instance, phone, message, {
-    trackSource: "workflow-action",
-    trackId: ctx.executionId,
+  // ── Gateway dual-path ──
+  const gwResult = await sendMessage(ctx.supabase, {
+    organization_id: ctx.organizationId,
+    phone,
+    content: message,
+    message_type: "text",
+    source: "workflow",
+    instance_id: wa.instanceId,
+    lead_id: ctx.leadId,
+    track_id: `wf-${ctx.executionId}-${ctx.nodeData._nodeId || "action"}`,
+    triggered_by: "workflow",
   });
 
-  if (!sendResult.success) {
-    return { success: false, error: `WhatsApp send failed: ${sendResult.error}` };
+  if (!gwResult.delegated) {
+    // ── Legacy path (unchanged) ──
+    const { sendTextViaInstance } = await import("./whatsapp-dispatch.ts");
+    const sendResult = await sendTextViaInstance(ctx.supabase, wa.instance, phone, message, {
+      trackSource: "workflow-action",
+      trackId: ctx.executionId,
+    });
+
+    if (!sendResult.success) {
+      return { success: false, error: `WhatsApp send failed: ${sendResult.error}` };
+    }
+
+    // Use provider's real message ID so the inbound webhook echo UPSERTs this same row
+    // instead of creating a duplicate. Preserves sent_by_ai: true.
+    const messageId = sendResult.messageId || `wf_${crypto.randomUUID()}`;
+
+    await ctx.supabase.from("whatsapp_messages").upsert({
+      organization_id: ctx.organizationId,
+      instance_id: wa.instanceId,
+      message_id: messageId,
+      remote_jid: phone + "@s.whatsapp.net",
+      phone_number: phone,
+      direction: "outgoing",
+      message_type: "conversation",
+      content: message,
+      timestamp: new Date().toISOString(),
+      status: "sent",
+      sent_by_ai: true,
+      sent_source: "workflow",
+    }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
+  } else if (!gwResult.success) {
+    console.error("[workflow-action-handler] Gateway send failed:", gwResult.error);
+    return { success: false, error: `WhatsApp send failed: ${gwResult.error}` };
   }
-
-  // Use provider's real message ID so the inbound webhook echo UPSERTs this same row
-  // instead of creating a duplicate. Preserves sent_by_ai: true.
-  const messageId = sendResult.messageId || `wf_${crypto.randomUUID()}`;
-
-  await ctx.supabase.from("whatsapp_messages").upsert({
-    organization_id: ctx.organizationId,
-    instance_id: wa.instanceId,
-    message_id: messageId,
-    remote_jid: phone + "@s.whatsapp.net",
-    phone_number: phone,
-    direction: "outgoing",
-    message_type: "conversation",
-    content: message,
-    timestamp: new Date().toISOString(),
-    status: "sent",
-    sent_by_ai: true,
-    sent_source: "workflow",
-  }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
 
   return { success: true, message: "WhatsApp text sent" };
 }
@@ -566,37 +586,57 @@ async function handleSendWhatsAppAudio(ctx: ActionContext): Promise<ActionResult
   const audioUrl = ctx.nodeData.audioUrl as string;
   if (!audioUrl) return { success: false, error: "No audio URL configured", retryable: false };
 
-  let provider;
-  try {
-    provider = await getWhatsAppProvider(wa.instance, ctx.supabase);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : (err as any)?.message ?? JSON.stringify(err);
-    return { success: false, error: `WhatsApp provider error: ${msg}` };
-  }
-
-  const result = await sendAudioViaProvider(provider, phone, audioUrl, {
-    trackSource: "workflow-action-audio",
-    trackId: (ctx as unknown as { executionId?: string }).executionId,
-  });
-  if (!result.success) return { success: false, error: result.error || "Audio send failed" };
-
-  const messageId = result.messageId || `wf_${crypto.randomUUID()}`;
-
-  await ctx.supabase.from("whatsapp_messages").upsert({
+  // ── Gateway dual-path ──
+  const gwResult = await sendMessage(ctx.supabase, {
     organization_id: ctx.organizationId,
-    instance_id: wa.instanceId,
-    message_id: messageId,
-    remote_jid: phone + "@s.whatsapp.net",
-    phone_number: phone,
-    direction: "outgoing",
+    phone,
+    content: "[Áudio]",
     message_type: "audio",
-    content: null,
+    source: "workflow",
     media_url: audioUrl,
-    timestamp: new Date().toISOString(),
-    status: "sent",
-    sent_by_ai: true,
-    sent_source: "workflow",
-  }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
+    instance_id: wa.instanceId,
+    lead_id: ctx.leadId,
+    track_id: `wf-${ctx.executionId}-${ctx.nodeData._nodeId || "action"}`,
+    triggered_by: "workflow",
+  });
+
+  if (!gwResult.delegated) {
+    // ── Legacy path (unchanged) ──
+    let provider;
+    try {
+      provider = await getWhatsAppProvider(wa.instance, ctx.supabase);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : (err as any)?.message ?? JSON.stringify(err);
+      return { success: false, error: `WhatsApp provider error: ${msg}` };
+    }
+
+    const result = await sendAudioViaProvider(provider, phone, audioUrl, {
+      trackSource: "workflow-action-audio",
+      trackId: (ctx as unknown as { executionId?: string }).executionId,
+    });
+    if (!result.success) return { success: false, error: result.error || "Audio send failed" };
+
+    const messageId = result.messageId || `wf_${crypto.randomUUID()}`;
+
+    await ctx.supabase.from("whatsapp_messages").upsert({
+      organization_id: ctx.organizationId,
+      instance_id: wa.instanceId,
+      message_id: messageId,
+      remote_jid: phone + "@s.whatsapp.net",
+      phone_number: phone,
+      direction: "outgoing",
+      message_type: "audio",
+      content: null,
+      media_url: audioUrl,
+      timestamp: new Date().toISOString(),
+      status: "sent",
+      sent_by_ai: true,
+      sent_source: "workflow",
+    }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
+  } else if (!gwResult.success) {
+    console.error("[workflow-action-handler] Gateway audio send failed:", gwResult.error);
+    return { success: false, error: `Audio send failed: ${gwResult.error}` };
+  }
 
   return { success: true, message: "WhatsApp audio sent" };
 }
@@ -615,16 +655,38 @@ async function handleSendWhatsAppImage(ctx: ActionContext): Promise<ActionResult
   const caption = ctx.nodeData.imageCaption as string || "";
   const resolvedCaption = await resolveVariables(ctx.supabase, ctx.leadId, caption, ctx.executionContext);
 
-  const { sendMediaViaInstance } = await import("./whatsapp-dispatch.ts");
-  const sendResult = await sendMediaViaInstance(
-    ctx.supabase,
-    wa.instance,
+  // ── Gateway dual-path ──
+  const gwResult = await sendMessage(ctx.supabase, {
+    organization_id: ctx.organizationId,
     phone,
-    { type: "image", file: imageUrl, caption: resolvedCaption },
-    { trackSource: "workflow-action", trackId: ctx.executionId }
-  );
+    content: resolvedCaption || null,
+    message_type: "image",
+    source: "workflow",
+    media_url: imageUrl,
+    caption: resolvedCaption || undefined,
+    instance_id: wa.instanceId,
+    lead_id: ctx.leadId,
+    track_id: `wf-${ctx.executionId}-${ctx.nodeData._nodeId || "action"}`,
+    triggered_by: "workflow",
+  });
 
-  if (!sendResult.success) return { success: false, error: `Image send failed: ${sendResult.error}` };
+  if (!gwResult.delegated) {
+    // ── Legacy path (unchanged) ──
+    const { sendMediaViaInstance } = await import("./whatsapp-dispatch.ts");
+    const sendResult = await sendMediaViaInstance(
+      ctx.supabase,
+      wa.instance,
+      phone,
+      { type: "image", file: imageUrl, caption: resolvedCaption },
+      { trackSource: "workflow-action", trackId: ctx.executionId }
+    );
+
+    if (!sendResult.success) return { success: false, error: `Image send failed: ${sendResult.error}` };
+  } else if (!gwResult.success) {
+    console.error("[workflow-action-handler] Gateway image send failed:", gwResult.error);
+    return { success: false, error: `Image send failed: ${gwResult.error}` };
+  }
+
   return { success: true, message: "WhatsApp image sent" };
 }
 
@@ -639,16 +701,37 @@ async function handleSendWhatsAppSticker(ctx: ActionContext): Promise<ActionResu
   const stickerUrl = ctx.nodeData.stickerUrl as string;
   if (!stickerUrl) return { success: false, error: "No sticker URL configured", retryable: false };
 
-  const { sendMediaViaInstance } = await import("./whatsapp-dispatch.ts");
-  const sendResult = await sendMediaViaInstance(
-    ctx.supabase,
-    wa.instance,
+  // ── Gateway dual-path ──
+  const gwResult = await sendMessage(ctx.supabase, {
+    organization_id: ctx.organizationId,
     phone,
-    { type: "sticker", file: stickerUrl },
-    { trackSource: "workflow-action", trackId: ctx.executionId }
-  );
+    content: null,
+    message_type: "sticker",
+    source: "workflow",
+    media_url: stickerUrl,
+    instance_id: wa.instanceId,
+    lead_id: ctx.leadId,
+    track_id: `wf-${ctx.executionId}-${ctx.nodeData._nodeId || "action"}`,
+    triggered_by: "workflow",
+  });
 
-  if (!sendResult.success) return { success: false, error: `Sticker send failed: ${sendResult.error}` };
+  if (!gwResult.delegated) {
+    // ── Legacy path (unchanged) ──
+    const { sendMediaViaInstance } = await import("./whatsapp-dispatch.ts");
+    const sendResult = await sendMediaViaInstance(
+      ctx.supabase,
+      wa.instance,
+      phone,
+      { type: "sticker", file: stickerUrl },
+      { trackSource: "workflow-action", trackId: ctx.executionId }
+    );
+
+    if (!sendResult.success) return { success: false, error: `Sticker send failed: ${sendResult.error}` };
+  } else if (!gwResult.success) {
+    console.error("[workflow-action-handler] Gateway sticker send failed:", gwResult.error);
+    return { success: false, error: `Sticker send failed: ${gwResult.error}` };
+  }
+
   return { success: true, message: "WhatsApp sticker sent" };
 }
 
@@ -674,13 +757,33 @@ async function handleSendWhatsAppTemplate(ctx: ActionContext): Promise<ActionRes
 
   const message = await resolveVariables(ctx.supabase, ctx.leadId, tpl.content || "", ctx.executionContext);
 
-  const { sendTextViaInstance } = await import("./whatsapp-dispatch.ts");
-  const sendResult = await sendTextViaInstance(ctx.supabase, wa.instance, phone, message, {
-    trackSource: "workflow-action-template",
-    trackId: ctx.executionId,
+  // ── Gateway dual-path ──
+  const gwResult = await sendMessage(ctx.supabase, {
+    organization_id: ctx.organizationId,
+    phone,
+    content: message,
+    message_type: "text",
+    source: "workflow",
+    instance_id: wa.instanceId,
+    lead_id: ctx.leadId,
+    track_id: `wf-${ctx.executionId}-${ctx.nodeData._nodeId || "action"}`,
+    triggered_by: "workflow",
   });
 
-  if (!sendResult.success) return { success: false, error: `Template send failed: ${sendResult.error}` };
+  if (!gwResult.delegated) {
+    // ── Legacy path (unchanged) ──
+    const { sendTextViaInstance } = await import("./whatsapp-dispatch.ts");
+    const sendResult = await sendTextViaInstance(ctx.supabase, wa.instance, phone, message, {
+      trackSource: "workflow-action-template",
+      trackId: ctx.executionId,
+    });
+
+    if (!sendResult.success) return { success: false, error: `Template send failed: ${sendResult.error}` };
+  } else if (!gwResult.success) {
+    console.error("[workflow-action-handler] Gateway template send failed:", gwResult.error);
+    return { success: false, error: `Template send failed: ${gwResult.error}` };
+  }
+
   return { success: true, message: `Template "${tpl.name}" sent` };
 }
 
@@ -715,39 +818,64 @@ async function handleSendWhatsAppMenu(ctx: ActionContext): Promise<ActionResult>
     ? await resolveVariables(ctx.supabase, ctx.leadId, ctx.nodeData.menuFooter as string, ctx.executionContext)
     : undefined;
 
-  const { sendMenuViaInstance } = await import("./whatsapp-dispatch.ts");
-  const sendResult = await sendMenuViaInstance(
-    ctx.supabase,
-    wa.instance,
+  // ── Gateway dual-path ──
+  const gwResult = await sendMessage(ctx.supabase, {
+    organization_id: ctx.organizationId,
     phone,
-    {
+    content: text,
+    message_type: "menu",
+    source: "workflow",
+    instance_id: wa.instanceId,
+    lead_id: ctx.leadId,
+    track_id: `wf-${ctx.executionId}-${ctx.nodeData._nodeId || "action"}`,
+    triggered_by: "workflow",
+    menu_options: {
       type: menuType as "button" | "list" | "poll" | "carousel",
-      text,
       choices,
       footer,
       selectableCount: ctx.nodeData.menuSelectableCount as number | undefined,
     },
-    { trackSource: "workflow-action-menu", trackId: ctx.executionId }
-  );
+  });
 
-  if (!sendResult.success) return { success: false, error: `Menu send failed: ${sendResult.error}` };
+  if (!gwResult.delegated) {
+    // ── Legacy path (unchanged) ──
+    const { sendMenuViaInstance } = await import("./whatsapp-dispatch.ts");
+    const sendResult = await sendMenuViaInstance(
+      ctx.supabase,
+      wa.instance,
+      phone,
+      {
+        type: menuType as "button" | "list" | "poll" | "carousel",
+        text,
+        choices,
+        footer,
+        selectableCount: ctx.nodeData.menuSelectableCount as number | undefined,
+      },
+      { trackSource: "workflow-action-menu", trackId: ctx.executionId }
+    );
 
-  const messageId = sendResult.messageId || `wf_menu_${crypto.randomUUID()}`;
-  await ctx.supabase.from("whatsapp_messages").upsert({
-    organization_id: ctx.organizationId,
-    instance_id: wa.instanceId,
-    message_id: messageId,
-    remote_jid: `${phone}@s.whatsapp.net`,
-    phone_number: phone,
-    direction: "outgoing",
-    message_type: menuType,
-    content: text,
-    status: "sent",
-    lead_id: ctx.leadId,
-    timestamp: new Date().toISOString(),
-    sent_by_ai: true,
-    sent_source: "workflow",
-  }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
+    if (!sendResult.success) return { success: false, error: `Menu send failed: ${sendResult.error}` };
+
+    const messageId = sendResult.messageId || `wf_menu_${crypto.randomUUID()}`;
+    await ctx.supabase.from("whatsapp_messages").upsert({
+      organization_id: ctx.organizationId,
+      instance_id: wa.instanceId,
+      message_id: messageId,
+      remote_jid: `${phone}@s.whatsapp.net`,
+      phone_number: phone,
+      direction: "outgoing",
+      message_type: menuType,
+      content: text,
+      status: "sent",
+      lead_id: ctx.leadId,
+      timestamp: new Date().toISOString(),
+      sent_by_ai: true,
+      sent_source: "workflow",
+    }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
+  } else if (!gwResult.success) {
+    console.error("[workflow-action-handler] Gateway menu send failed:", gwResult.error);
+    return { success: false, error: `Menu send failed: ${gwResult.error}` };
+  }
 
   return { success: true, message: `WhatsApp ${menuType} menu sent` };
 }
@@ -777,39 +905,64 @@ async function handleSendWhatsAppPixButton(ctx: ActionContext): Promise<ActionRe
     ? await resolveVariables(ctx.supabase, ctx.leadId, rawText, ctx.executionContext)
     : undefined;
 
-  const { sendPixButtonViaInstance } = await import("./whatsapp-dispatch.ts");
-  const sendResult = await sendPixButtonViaInstance(
-    ctx.supabase,
-    wa.instance,
+  // ── Gateway dual-path ──
+  const gwResult = await sendMessage(ctx.supabase, {
+    organization_id: ctx.organizationId,
     phone,
-    {
+    content: text || `[PIX R$ ${amount.toFixed(2)}]`,
+    message_type: "pix_button",
+    source: "workflow",
+    instance_id: wa.instanceId,
+    lead_id: ctx.leadId,
+    track_id: `wf-${ctx.executionId}-${ctx.nodeData._nodeId || "action"}`,
+    triggered_by: "workflow",
+    pix_payload: {
       pixkey,
       pixkeyType: pixkeyType as "cpf" | "cnpj" | "email" | "phone" | "random",
       amount,
       merchantName,
-      text,
     },
-    { trackSource: "workflow-action-pix", trackId: ctx.executionId }
-  );
+  });
 
-  if (!sendResult.success) return { success: false, error: `PIX button failed: ${sendResult.error}` };
+  if (!gwResult.delegated) {
+    // ── Legacy path (unchanged) ──
+    const { sendPixButtonViaInstance } = await import("./whatsapp-dispatch.ts");
+    const sendResult = await sendPixButtonViaInstance(
+      ctx.supabase,
+      wa.instance,
+      phone,
+      {
+        pixkey,
+        pixkeyType: pixkeyType as "cpf" | "cnpj" | "email" | "phone" | "random",
+        amount,
+        merchantName,
+        text,
+      },
+      { trackSource: "workflow-action-pix", trackId: ctx.executionId }
+    );
 
-  const messageId = sendResult.messageId || `wf_pix_${crypto.randomUUID()}`;
-  await ctx.supabase.from("whatsapp_messages").upsert({
-    organization_id: ctx.organizationId,
-    instance_id: wa.instanceId,
-    message_id: messageId,
-    remote_jid: `${phone}@s.whatsapp.net`,
-    phone_number: phone,
-    direction: "outgoing",
-    message_type: "pix_button",
-    content: text || `[PIX R$ ${amount.toFixed(2)}]`,
-    status: "sent",
-    lead_id: ctx.leadId,
-    timestamp: new Date().toISOString(),
-    sent_by_ai: true,
-    sent_source: "workflow",
-  }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
+    if (!sendResult.success) return { success: false, error: `PIX button failed: ${sendResult.error}` };
+
+    const messageId = sendResult.messageId || `wf_pix_${crypto.randomUUID()}`;
+    await ctx.supabase.from("whatsapp_messages").upsert({
+      organization_id: ctx.organizationId,
+      instance_id: wa.instanceId,
+      message_id: messageId,
+      remote_jid: `${phone}@s.whatsapp.net`,
+      phone_number: phone,
+      direction: "outgoing",
+      message_type: "pix_button",
+      content: text || `[PIX R$ ${amount.toFixed(2)}]`,
+      status: "sent",
+      lead_id: ctx.leadId,
+      timestamp: new Date().toISOString(),
+      sent_by_ai: true,
+      sent_source: "workflow",
+    }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
+  } else if (!gwResult.success) {
+    console.error("[workflow-action-handler] Gateway PIX button send failed:", gwResult.error);
+    return { success: false, error: `PIX button failed: ${gwResult.error}` };
+  }
 
   return { success: true, message: "PIX button sent" };
 }
@@ -1220,36 +1373,56 @@ async function handleSendCampaignMessage(ctx: ActionContext): Promise<ActionResu
 
   const isAudio = template.message_type === "audio" && template.audio_url;
 
-  const { sendTextViaInstance, sendAudioViaInstance } = await import("./whatsapp-dispatch.ts");
-  const sendResult = isAudio
-    ? await sendAudioViaInstance(ctx.supabase, wa.instance, phone, template.audio_url, {
-        trackSource: "workflow-campaign-message",
-        trackId: ctx.executionId,
-      })
-    : await sendTextViaInstance(ctx.supabase, wa.instance, phone, message, {
-        trackSource: "workflow-campaign-message",
-        trackId: ctx.executionId,
-      });
-
-  if (!sendResult.success) return { success: false, error: `Campaign message send failed: ${sendResult.error}` };
-
-  const messageId = sendResult.messageId || `wf_camp_${crypto.randomUUID()}`;
-
-  await ctx.supabase.from("whatsapp_messages").upsert({
+  // ── Gateway dual-path ──
+  const gwResult = await sendMessage(ctx.supabase, {
     organization_id: ctx.organizationId,
+    phone,
+    content: isAudio ? "[Áudio]" : message,
+    message_type: isAudio ? "audio" : "text",
+    source: "workflow",
+    media_url: isAudio ? template.audio_url : undefined,
     instance_id: wa.instanceId,
-    message_id: messageId,
-    remote_jid: phone + "@s.whatsapp.net",
-    phone_number: phone,
-    direction: "outgoing",
-    message_type: isAudio ? "audio" : "conversation",
-    content: isAudio ? null : message,
-    media_url: isAudio ? template.audio_url : null,
-    timestamp: new Date().toISOString(),
-    status: "sent",
-    sent_by_ai: true,
-    sent_source: "workflow",
-  }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
+    lead_id: ctx.leadId,
+    track_id: `wf-${ctx.executionId}-${ctx.nodeData._nodeId || "action"}`,
+    triggered_by: "workflow",
+  });
+
+  if (!gwResult.delegated) {
+    // ── Legacy path (unchanged) ──
+    const { sendTextViaInstance, sendAudioViaInstance } = await import("./whatsapp-dispatch.ts");
+    const sendResult = isAudio
+      ? await sendAudioViaInstance(ctx.supabase, wa.instance, phone, template.audio_url, {
+          trackSource: "workflow-campaign-message",
+          trackId: ctx.executionId,
+        })
+      : await sendTextViaInstance(ctx.supabase, wa.instance, phone, message, {
+          trackSource: "workflow-campaign-message",
+          trackId: ctx.executionId,
+        });
+
+    if (!sendResult.success) return { success: false, error: `Campaign message send failed: ${sendResult.error}` };
+
+    const messageId = sendResult.messageId || `wf_camp_${crypto.randomUUID()}`;
+
+    await ctx.supabase.from("whatsapp_messages").upsert({
+      organization_id: ctx.organizationId,
+      instance_id: wa.instanceId,
+      message_id: messageId,
+      remote_jid: phone + "@s.whatsapp.net",
+      phone_number: phone,
+      direction: "outgoing",
+      message_type: isAudio ? "audio" : "conversation",
+      content: isAudio ? null : message,
+      media_url: isAudio ? template.audio_url : null,
+      timestamp: new Date().toISOString(),
+      status: "sent",
+      sent_by_ai: true,
+      sent_source: "workflow",
+    }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
+  } else if (!gwResult.success) {
+    console.error("[workflow-action-handler] Gateway campaign message send failed:", gwResult.error);
+    return { success: false, error: `Campaign message send failed: ${gwResult.error}` };
+  }
 
   return { success: true, message: `Campaign message sent` };
 }
@@ -1389,6 +1562,8 @@ async function handleAssignResponsible(ctx: ActionContext): Promise<ActionResult
     sdr_id: assigneeId,
     closer_id: assigneeId,
     responsible_id: assigneeId,
+    pre_sale_responsible_id: assigneeId,
+    sale_responsible_id: assigneeId,
   }).eq("id", ctx.leadId);
 
   return { success: true, message: `Responsável atribuído`, data: { assigneeId } };
@@ -1398,6 +1573,7 @@ async function handleAssign(ctx: ActionContext, role: "sdr" | "closer"): Promise
   let assigneeId = ctx.nodeData.assigneeId as string;
   const assignMode = ctx.nodeData.assignMode as string || "specific";
   const field = role === "sdr" ? "sdr_id" : "closer_id";
+  const newField = role === "sdr" ? "pre_sale_responsible_id" : "sale_responsible_id";
 
   if (assignMode === "round_robin") {
     // Check if workflow node has campaign context
@@ -1446,7 +1622,7 @@ async function handleAssign(ctx: ActionContext, role: "sdr" | "closer"): Promise
 
   if (!assigneeId) return { success: false, error: `No ${role} to assign` };
 
-  await ctx.supabase.from("leads").update({ [field]: assigneeId, responsible_id: assigneeId }).eq("id", ctx.leadId);
+  await ctx.supabase.from("leads").update({ [field]: assigneeId, [newField]: assigneeId, responsible_id: assigneeId }).eq("id", ctx.leadId);
 
   return { success: true, message: `Responsável atribuído`, data: { assigneeId, role } };
 }

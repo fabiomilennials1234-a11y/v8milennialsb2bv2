@@ -290,7 +290,7 @@ export function TriggerPanel({ data, onUpdate }: TriggerPanelProps) {
             <SelectContent>
               <SelectItem value="any">Qualquer</SelectItem>
               <SelectItem value="sdr">Responsável (Qualificação)</SelectItem>
-              <SelectItem value="closer">Responsável (Propostas)</SelectItem>
+              <SelectItem value="sale">Vendedor</SelectItem>
             </SelectContent>
           </Select>
         </div>

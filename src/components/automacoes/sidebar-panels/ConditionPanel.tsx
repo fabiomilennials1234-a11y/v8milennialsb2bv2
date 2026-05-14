@@ -33,7 +33,7 @@ const FIELD_OPTIONS = [
   { value: "tag", label: "Tag" },
   { value: "stage", label: "Estagio" },
   { value: "sdr_id", label: "Responsavel (Qualificacao)" },
-  { value: "closer_id", label: "Responsavel (Propostas)" },
+  { value: "sale_responsible_id", label: "Vendedor" },
   { value: "last_message", label: "Ultima mensagem" },
   { value: "message_count", label: "Qtd. mensagens" },
   { value: "days_since_contact", label: "Dias sem contato" },

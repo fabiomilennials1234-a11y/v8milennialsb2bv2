@@ -44,7 +44,7 @@ const ACTION_LABELS: Record<string, string> = {
   send_template: "Enviar template",
   wait_response: "Esperar resposta",
   change_stage: "Mudar etapa",
-  assign_sdr: "Atribuir SDR",
+  assign_sdr: "Atribuir Pré-Venda",
   cancel_sequence: "Cancelar sequência",
 };
 

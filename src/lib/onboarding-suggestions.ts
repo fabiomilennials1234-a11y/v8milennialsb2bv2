@@ -175,8 +175,8 @@ export function generateSuggestions(answers: Answers): OnboardingSuggestions {
 
   if (hasSdr) {
     automations.push({
-      name: "Notificar Closer",
-      description: "Avisa o closer quando SDR qualifica um lead",
+      name: "Notificar Vendedor",
+      description: "Avisa o vendedor quando pré-venda qualifica um lead",
       trigger_type: "stage_changed",
       enabled: true,
     });
@@ -216,8 +216,8 @@ export function generateSuggestions(answers: Answers): OnboardingSuggestions {
   };
   const segmentLabel = segmentLabels[perfil.segment ?? "outro"] ?? "Empresa";
   const modelLabel = hasSdr && hasCloser
-    ? "com SDR + Closer"
-    : hasSdr ? "com SDR" : isWhatsappDirect ? "venda direta WhatsApp" : "venda consultiva";
+    ? "com Pré-Venda + Vendedor"
+    : hasSdr ? "com Pré-Venda" : isWhatsappDirect ? "venda direta WhatsApp" : "venda consultiva";
 
   return { pipelines, automations, profileLabel: `${segmentLabel} B2B — ${modelLabel}`, checklistPriorities };
 }
