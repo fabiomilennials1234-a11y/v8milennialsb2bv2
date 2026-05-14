@@ -18,6 +18,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { withSentry } from "../_shared/sentry.ts";
 import { logRuntime } from "../_shared/logger.ts";
+import { fireTrigger } from "../_shared/workflow-trigger.ts";
 import {
   calculateFrequencyScore,
   calculateHealthScore,
@@ -51,6 +52,7 @@ interface Order {
 interface ClientRow {
   id: string;
   organization_id: string;
+  lead_id: string | null;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -200,7 +202,7 @@ async function processClient(
   });
 
   // Sync alerts: resolve stale, create new
-  await syncAlerts(supabase, client, signals, now);
+  await syncAlerts(supabase, client, signals, now, healthScore, segment);
 
   return { success: true };
 }
@@ -212,6 +214,8 @@ async function syncAlerts(
   client: ClientRow,
   signals: DetectedSignal[],
   now: Date,
+  healthScore: number,
+  segment: string,
 ): Promise<void> {
   // Fetch open alerts for this client
   const { data: openAlerts } = await supabase
@@ -244,7 +248,7 @@ async function syncAlerts(
   // Create new alerts (skip already-open ones)
   for (const signal of signals) {
     if (openByType.has(signal.type)) continue; // already open
-    await supabase.from("client_alerts").insert({
+    const { error: insertError } = await supabase.from("client_alerts").insert({
       organization_id: client.organization_id,
       client_id: client.id,
       alert_type: signal.type,
@@ -253,6 +257,38 @@ async function syncAlerts(
       description: signal.description,
       metadata: signal.metadata,
     });
+
+    if (insertError) {
+      console.error(
+        `[portfolio-health] Failed to insert alert for client ${client.id}:`,
+        insertError,
+      );
+      continue;
+    }
+
+    // Fire workflow trigger for reorder_overdue signal if lead exists
+    if (signal.type === "reorder_overdue" && client.lead_id) {
+      try {
+        await fireTrigger({
+          supabase,
+          organizationId: client.organization_id,
+          triggerType: "recompra_atrasada",
+          leadId: client.lead_id,
+          context: {
+            client_id: client.id,
+            days_overdue: signal.metadata.daysOverdue,
+            cycle_days: signal.metadata.cycleDays,
+            health_score: healthScore,
+            segment,
+          },
+        });
+      } catch (err) {
+        console.error(
+          `[portfolio-health] Failed to fire recompra_atrasada trigger for lead ${client.lead_id}:`,
+          err,
+        );
+      }
+    }
   }
 }
 
@@ -282,7 +318,7 @@ async function processOrg(
   while (true) {
     const { data: clients, error: clientsError } = await supabase
       .from("upsell_clients")
-      .select("id, organization_id")
+      .select("id, organization_id, lead_id")
       .eq("organization_id", orgId)
       .eq("is_active", true)
       .range(offset, offset + BATCH_SIZE - 1);
