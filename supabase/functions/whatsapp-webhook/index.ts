@@ -187,8 +187,15 @@ async function persistMediaToStorage(
 function normalizeMessage(data: any, instance: ResolvedInstance) {
   const fromMe = data.fromMe === true || data.fromme === true;
   const direction = fromMe ? "outgoing" : "incoming";
-  const remoteJid = data.chatid ?? data.remoteJid ?? data.from ?? data.to ?? "";
-  const phoneNumber = String(remoteJid).split("@")[0] ?? null;
+
+  // Phone resolution: _phone_jid (injected from webhook envelope) is most reliable.
+  // Uazapi V2 may send chatid as LID (@lid suffix) instead of phone JID (@s.whatsapp.net).
+  const rawJid = data._phone_jid ?? data.chatid ?? data.remoteJid ?? data.from ?? data.to ?? "";
+  const jidStr = String(rawJid);
+  const resolvedJid = jidStr.includes("@lid")
+    ? String(data._phone_jid ?? data.sender_pn ?? data.from ?? "")
+    : jidStr;
+  const phoneNumber = resolvedJid.split("@")[0] || null;
   const messageId = data.id ?? data.messageid ?? data.key?.id ?? null;
 
   const rawType: string =
@@ -210,6 +217,7 @@ function normalizeMessage(data: any, instance: ResolvedInstance) {
     pttMessage: "ptt",
     PttMessage: "ptt",
     conversation: "text",
+    Conversation: "text",
     extendedTextMessage: "text",
     ExtendedTextMessage: "text",
     buttonsResponseMessage: "buttonResponse",
@@ -226,7 +234,7 @@ function normalizeMessage(data: any, instance: ResolvedInstance) {
   const isListResponse =
     messageType === "listResponse" || messageType === "listResponseMessage";
 
-  let content = data.text ?? data.caption ?? data.body ?? null;
+  let content = data.text ?? data.caption ?? data.body ?? data.content?.text ?? null;
   if ((isButtonResponse || isListResponse) && !content) {
     content =
       data.selected ??
@@ -241,6 +249,7 @@ function normalizeMessage(data: any, instance: ResolvedInstance) {
   const mediaUrl =
     data.mediaUrl ??
     data.media?.url ??
+    (data.fileURL && data.fileURL !== "" ? data.fileURL : null) ??
     data.message?.stickerMessage?.url ??
     data.message?.imageMessage?.url ??
     data.message?.videoMessage?.url ??
@@ -248,16 +257,18 @@ function normalizeMessage(data: any, instance: ResolvedInstance) {
     data.message?.documentMessage?.url ??
     null;
 
-  const tsSeconds =
+  let tsRaw =
     data.timestamp ??
     data.messageTimestamp ??
     Math.floor(Date.now() / 1000);
+  // Uazapi V2 sends messageTimestamp in milliseconds; detect and convert
+  const tsSeconds = Number(tsRaw) > 1e12 ? Math.floor(Number(tsRaw) / 1000) : Number(tsRaw);
 
   return {
     organization_id: instance.organization_id,
     instance_id: instance.id,
     message_id: messageId,
-    remote_jid: remoteJid,
+    remote_jid: resolvedJid,
     phone_number: phoneNumber,
     direction,
     message_type: messageType,
@@ -265,7 +276,7 @@ function normalizeMessage(data: any, instance: ResolvedInstance) {
     media_url: mediaUrl,
     push_name: data.pushName ?? data.senderName ?? null,
     status: direction === "incoming" ? "received" : "sent",
-    timestamp: new Date(Number(tsSeconds) * 1000).toISOString(),
+    timestamp: new Date(tsSeconds * 1000).toISOString(),
     raw_payload: data as Record<string, unknown>,
   };
 }
@@ -747,8 +758,18 @@ Deno.serve(
       }
     }
 
-    const event = (typeof payload.event === "string" ? payload.event : null) ?? pathEvent ?? "unknown";
-    const uazapiInstanceId = payload.instance ?? payload.instance_id ?? pathInstanceId ?? null;
+    // Uazapi V2 sends event name in EventType (PascalCase), not event.
+    // payload.event in V2 is the event DATA object, not the type string.
+    const rawEvent =
+      (typeof payload.event === "string" ? payload.event : null) ??
+      (typeof payload.EventType === "string" ? payload.EventType : null) ??
+      pathEvent ??
+      "unknown";
+    const event = rawEvent.toLowerCase();
+
+    // pathInstanceId (from URL) is the reliable Uazapi instance ID for reconfigured instances.
+    // payload.instanceName is a friendly name (e.g., "comercial 1") — last resort only.
+    const uazapiInstanceId = payload.instance ?? payload.instance_id ?? pathInstanceId ?? payload.instanceName ?? null;
 
     if (!uazapiInstanceId) {
       await logRuntime({
@@ -783,21 +804,37 @@ Deno.serve(
       await withTimeout(
         (async () => {
           switch (event) {
-            case "messages":
-              await handleMessagesEvent(supabase, instance, payload.data ?? payload);
+            case "messages": {
+              // Uazapi V2: message object in payload.message. Legacy: payload.data.
+              const msgData = payload.data
+                ?? (typeof payload.message === "object" && payload.message ? payload.message : null)
+                ?? payload;
+              // Uazapi V2: payload.chat has the phone JID; message.chatid may be LID
+              if (payload.chat && typeof payload.chat === "string") {
+                msgData._phone_jid = payload.chat;
+              }
+              await handleMessagesEvent(supabase, instance, msgData);
               break;
-            case "messages_update":
-              await handleMessagesUpdateEvent(
-                supabase,
-                instance,
-                payload.data ?? payload
-              );
+            }
+            case "messages_update": {
+              // Uazapi V2: update data in payload.event (object) with PascalCase fields
+              let updateData = payload.data;
+              if (!updateData && typeof payload.event === "object" && payload.event !== null) {
+                const ev = payload.event;
+                updateData = {
+                  id: ev.MessageIDs?.[0] ?? ev.messageid,
+                  status: ev.Type ?? ev.type,
+                  chatid: ev.chatid ?? ev.Chat,
+                };
+              }
+              await handleMessagesUpdateEvent(supabase, instance, updateData ?? payload);
               break;
+            }
             case "connection":
               await handleConnectionEvent(
                 supabase,
                 instance,
-                payload.data ?? payload
+                payload.data ?? { status: payload.state, state: payload.state },
               );
               break;
             case "payment":
@@ -817,6 +854,7 @@ Deno.serve(
                 payloadSnapshot: {
                   event,
                   instance_id: instance.id,
+                  keys: Object.keys(payload).slice(0, 15),
                 },
               });
           }
