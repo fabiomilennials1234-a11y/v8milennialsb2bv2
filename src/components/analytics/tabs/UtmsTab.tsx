@@ -6,7 +6,8 @@ import { UtmBreadcrumb } from "../charts/UtmBreadcrumb";
 import { UtmKpiCards } from "../charts/UtmKpiCards";
 import { UtmDataTable } from "../charts/UtmDataTable";
 import { UtmLeadsList } from "../charts/UtmLeadsList";
-import { LeadDetailDrawer } from "@/components/leads/LeadDetailDrawer";
+import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/components/lead-detail";
+import { LeadPanelLayout } from "@/components/layout/LeadPanelLayout";
 
 interface DrillDownState {
   level: UtmLevel;
@@ -17,7 +18,8 @@ interface DrillDownState {
   ad: string | null;
 }
 
-export function UtmsTab() {
+function UtmsTabInner() {
+  const { openLead } = useLeadSheet();
   const [drill, setDrill] = useState<DrillDownState>({
     level: "campaign",
     campaign: null,
@@ -26,8 +28,6 @@ export function UtmsTab() {
     adsetMetaId: null,
     ad: null,
   });
-
-  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
 
   const { data, isLoading } = useAnalyticsUtms(
     drill.level,
@@ -124,7 +124,7 @@ export function UtmsTab() {
         <AnalyticsErrorBoundary>
           <UtmLeadsList
             leads={data.leads}
-            onOpenLead={(id) => setSelectedLeadId(id)}
+            onOpenLead={(id) => openLead(id, "leads")}
           />
         </AnalyticsErrorBoundary>
       ) : (
@@ -137,13 +137,16 @@ export function UtmsTab() {
         </AnalyticsErrorBoundary>
       )}
 
-      {/* Lead Detail Drawer */}
-      <LeadDetailDrawer
-        leadId={selectedLeadId}
-        open={!!selectedLeadId}
-        onOpenChange={(open) => { if (!open) setSelectedLeadId(null); }}
-        variant="leads"
-      />
     </div>
+  );
+}
+
+export function UtmsTab() {
+  return (
+    <LeadPanelProvider>
+      <LeadPanelLayout panel={<LeadDetailSheet />}>
+        <UtmsTabInner />
+      </LeadPanelLayout>
+    </LeadPanelProvider>
   );
 }

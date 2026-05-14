@@ -15,7 +15,8 @@ import {
 import { EmptyState } from "@/components/shared/EmptyState";
 import { RevisionItem, type RevisionTask } from "@/components/revisao/RevisionItem";
 import { AutomationSettings } from "@/components/followups/AutomationSettings";
-import { LeadDetailDrawer } from "@/components/leads/LeadDetailDrawer";
+import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/components/lead-detail";
+import { LeadPanelLayout } from "@/components/layout/LeadPanelLayout";
 import { ScheduleFollowUpModal } from "@/components/followups/ScheduleFollowUpModal";
 import { useFollowUps, useCompleteFollowUp, useUpdateFollowUp, useArchiveFollowUp, useDeleteFollowUp } from "@/hooks/useFollowUps";
 import { useMyScheduledMessages, useCancelScheduledMessage } from "@/hooks/useScheduledMessages";
@@ -25,7 +26,8 @@ import { useUserRole, useFeaturePermission } from "@/hooks/useUserRole";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
-export default function Revisao() {
+function RevisaoInner() {
+  const { openLead } = useLeadSheet();
   const [searchQuery, setSearchQuery] = useState("");
   const [assignedTo, setAssignedTo] = useState<string>("mine");
   const [showCompleted, setShowCompleted] = useState(false);
@@ -54,8 +56,6 @@ export default function Revisao() {
 
   const { data: priorities, totalPending: suggestionsCount } = useDailyPriorities();
 
-  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
-  const [isDetailDrawerOpen, setIsDetailDrawerOpen] = useState(false);
   const [scheduleContext, setScheduleContext] = useState<{
     leadId: string;
     leadName: string;
@@ -140,8 +140,7 @@ export default function Revisao() {
   };
 
   const handleOpenLead = (leadId: string) => {
-    setSelectedLeadId(leadId);
-    setIsDetailDrawerOpen(true);
+    openLead(leadId, "followup");
   };
 
   const handleScheduleNew = (
@@ -362,13 +361,6 @@ export default function Revisao() {
         </Dialog>
       )}
 
-      <LeadDetailDrawer
-        open={isDetailDrawerOpen}
-        onOpenChange={setIsDetailDrawerOpen}
-        leadId={selectedLeadId}
-        variant="followup"
-      />
-
       {scheduleContext && (
         <ScheduleFollowUpModal
           open={!!scheduleContext}
@@ -381,5 +373,15 @@ export default function Revisao() {
         />
       )}
     </div>
+  );
+}
+
+export default function Revisao() {
+  return (
+    <LeadPanelProvider>
+      <LeadPanelLayout panel={<LeadDetailSheet />}>
+        <RevisaoInner />
+      </LeadPanelLayout>
+    </LeadPanelProvider>
   );
 }

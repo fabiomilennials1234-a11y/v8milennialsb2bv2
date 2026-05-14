@@ -56,7 +56,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useLeads, useLeadsCount, useCreateLead, useUpdateLead, useDeleteLead, LEADS_PAGE_SIZE, type Lead } from "@/hooks/useLeads";
 import { ExportLeadsModal } from "@/components/leads/ExportLeadsModal";
 import { ImportHistoryPanel } from "@/components/leads/ImportHistoryPanel";
-import { LeadDetailDrawer } from "@/components/leads/LeadDetailDrawer";
+import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/components/lead-detail";
+import { LeadPanelLayout } from "@/components/layout/LeadPanelLayout";
 import { useCanPerformAction } from "@/lib/permissions";
 import { useFeaturePermission } from "@/hooks/useUserRole";
 import {
@@ -183,7 +184,8 @@ const DEFAULT_LEADS_FILTERS: LeadsFilterState = {
   filterRating: "all",
 };
 
-export default function Leads() {
+function LeadsInner() {
+  const { openLead } = useLeadSheet();
   const [filterState, setFilterState] = usePersistedState(
     "leads",
     DEFAULT_LEADS_FILTERS
@@ -217,9 +219,6 @@ export default function Leads() {
   const { allowed: canCreateLead } = useCanPerformAction("create_lead");
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [formData, setFormData] = useState<LeadFormData>(initialFormData);
-  const [isDetailDrawerOpen, setIsDetailDrawerOpen] = useState(false);
-  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
-
   const { organizationId } = useOrganization();
   useEffect(() => { trackModuleVisit("leads", organizationId); }, []);
 
@@ -566,7 +565,7 @@ export default function Leads() {
               </TableRow>
             ) : (
               leads.map((lead: Lead) => (
-                <TableRow key={lead.id} className={cn("cursor-pointer hover:bg-muted/50", bulk.isSelected(lead.id) && "bg-primary/5")} onClick={() => { setSelectedLeadId(lead.id); setIsDetailDrawerOpen(true); }}>
+                <TableRow key={lead.id} className={cn("cursor-pointer hover:bg-muted/50", bulk.isSelected(lead.id) && "bg-primary/5")} onClick={() => openLead(lead.id, "leads")}>
                   <TableCell onClick={(e) => e.stopPropagation()}>
                     <Checkbox
                       checked={bulk.isSelected(lead.id)}
@@ -700,14 +699,6 @@ export default function Leads() {
           <ImportHistoryPanel />
         </DialogContent>
       </Dialog>
-
-      {/* Lead Detail Drawer */}
-      <LeadDetailDrawer
-        open={isDetailDrawerOpen}
-        onOpenChange={setIsDetailDrawerOpen}
-        leadId={selectedLeadId}
-        variant="whatsapp"
-      />
 
       {/* Lead Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={(open) => { setIsDialogOpen(open); if (!open) { setSelectedPipe(""); setSelectedStage(""); } }}>
@@ -962,5 +953,15 @@ export default function Leads() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  );
+}
+
+export default function Leads() {
+  return (
+    <LeadPanelProvider>
+      <LeadPanelLayout panel={<LeadDetailSheet />}>
+        <LeadsInner />
+      </LeadPanelLayout>
+    </LeadPanelProvider>
   );
 }
