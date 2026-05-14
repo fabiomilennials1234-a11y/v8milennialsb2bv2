@@ -1,0 +1,151 @@
+import { describe, it, expect } from "vitest";
+import {
+  calculateRecencyScore,
+  calculateFrequencyScore,
+  calculateTicketScore,
+  calculateHealthScore,
+  deriveHealthStatus,
+  deriveSegment,
+  detectSignals,
+} from "../../supabase/functions/_shared/portfolio-health.ts";
+
+describe("calculateRecencyScore", () => {
+  it("returns 100 when within cycle", () => {
+    expect(calculateRecencyScore(25, 30)).toBe(100);
+  });
+  it("returns 100 at exact cycle boundary", () => {
+    expect(calculateRecencyScore(30, 30)).toBe(100);
+  });
+  it("decays linearly past cycle", () => {
+    expect(calculateRecencyScore(45, 30)).toBe(50);
+  });
+  it("returns 0 at 2x cycle", () => {
+    expect(calculateRecencyScore(60, 30)).toBe(0);
+  });
+  it("returns 0 beyond 2x cycle", () => {
+    expect(calculateRecencyScore(90, 30)).toBe(0);
+  });
+});
+
+describe("calculateFrequencyScore", () => {
+  it("returns 100 when frequency matches", () => {
+    expect(calculateFrequencyScore(3, 3)).toBe(100);
+  });
+  it("caps at 100 when frequency exceeds", () => {
+    expect(calculateFrequencyScore(5, 3)).toBe(100);
+  });
+  it("returns proportional score when frequency drops", () => {
+    expect(calculateFrequencyScore(2, 3)).toBe(67);
+  });
+  it("returns 0 when no recent orders", () => {
+    expect(calculateFrequencyScore(0, 3)).toBe(0);
+  });
+});
+
+describe("calculateTicketScore", () => {
+  it("returns 100 when ticket matches", () => {
+    expect(calculateTicketScore(10000, 10000)).toBe(100);
+  });
+  it("caps at 100 when ticket exceeds", () => {
+    expect(calculateTicketScore(15000, 10000)).toBe(100);
+  });
+  it("returns proportional score when ticket drops", () => {
+    expect(calculateTicketScore(7000, 10000)).toBe(70);
+  });
+});
+
+describe("calculateHealthScore", () => {
+  it("returns weighted composite", () => {
+    const score = calculateHealthScore({
+      recency: 100, frequency: 100, ticket: 100, engagement: 100,
+    });
+    expect(score).toBe(100);
+  });
+  it("applies correct weights", () => {
+    const score = calculateHealthScore({
+      recency: 0, frequency: 0, ticket: 0, engagement: 100,
+    });
+    expect(score).toBe(15);
+  });
+});
+
+describe("deriveHealthStatus", () => {
+  it("returns saudavel for 80+", () => {
+    expect(deriveHealthStatus(85)).toBe("saudavel");
+  });
+  it("returns atencao for 60-79", () => {
+    expect(deriveHealthStatus(65)).toBe("atencao");
+  });
+  it("returns risco for 30-59", () => {
+    expect(deriveHealthStatus(45)).toBe("risco");
+  });
+  it("returns inativo for 0-29", () => {
+    expect(deriveHealthStatus(20)).toBe("inativo");
+  });
+});
+
+describe("deriveSegment", () => {
+  it("returns ouro for high health + high ticket + many orders", () => {
+    expect(deriveSegment(90, 15000, 10000, 8)).toBe("ouro");
+  });
+  it("returns prata for good health + stable + enough orders", () => {
+    expect(deriveSegment(70, 8000, 10000, 5)).toBe("prata");
+  });
+  it("returns novo for few orders regardless of health", () => {
+    expect(deriveSegment(90, 15000, 10000, 2)).toBe("novo");
+  });
+  it("returns resgate for low health + was active", () => {
+    expect(deriveSegment(40, 8000, 10000, 7)).toBe("resgate");
+  });
+  it("returns dormindo for very low health", () => {
+    expect(deriveSegment(15, 8000, 10000, 10)).toBe("dormindo");
+  });
+});
+
+describe("detectSignals", () => {
+  it("detects reorder_overdue", () => {
+    const signals = detectSignals({
+      daysSinceLastOrder: 40, cycleDays: 30,
+      lastThreeTickets: [10000, 10000, 10000], historicalAvgTicket: 10000,
+      productFrequencies: [], lastOrderProducts: [],
+      daysSinceLastWhatsAppReply: 2, lastNpsScore: 4,
+    });
+    expect(signals.find((s) => s.type === "reorder_overdue")).toBeDefined();
+    expect(signals.find((s) => s.type === "reorder_overdue")?.severity).toBe("critical");
+  });
+
+  it("detects ticket_declining with 3 consecutive drops", () => {
+    const signals = detectSignals({
+      daysSinceLastOrder: 10, cycleDays: 30,
+      lastThreeTickets: [14000, 11000, 9000], historicalAvgTicket: 13000,
+      productFrequencies: [], lastOrderProducts: [],
+      daysSinceLastWhatsAppReply: 1, lastNpsScore: 5,
+    });
+    expect(signals.find((s) => s.type === "ticket_declining")).toBeDefined();
+  });
+
+  it("does not detect ticket_declining when not 3 consecutive", () => {
+    const signals = detectSignals({
+      daysSinceLastOrder: 10, cycleDays: 30,
+      lastThreeTickets: [14000, 15000, 9000], historicalAvgTicket: 13000,
+      productFrequencies: [], lastOrderProducts: [],
+      daysSinceLastWhatsAppReply: 1, lastNpsScore: 5,
+    });
+    expect(signals.find((s) => s.type === "ticket_declining")).toBeUndefined();
+  });
+
+  it("detects product_missing", () => {
+    const signals = detectSignals({
+      daysSinceLastOrder: 10, cycleDays: 30,
+      lastThreeTickets: [10000, 10000, 10000], historicalAvgTicket: 10000,
+      productFrequencies: [
+        { productName: "Resina Epoxi", appearsInPct: 100 },
+        { productName: "Catalisador B2", appearsInPct: 90 },
+      ],
+      lastOrderProducts: ["Resina Epoxi"],
+      daysSinceLastWhatsAppReply: 1, lastNpsScore: 5,
+    });
+    expect(signals.find((s) => s.type === "product_missing")).toBeDefined();
+    expect(signals.find((s) => s.type === "product_missing")?.metadata?.productName).toBe("Catalisador B2");
+  });
+});
