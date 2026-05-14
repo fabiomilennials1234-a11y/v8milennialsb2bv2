@@ -34,8 +34,8 @@ import { useUserRole, useFeaturePermission } from "@/hooks/useUserRole";
 import { useLogLeadAction } from "@/hooks/useLogLeadAction";
 import { useCreateAcaoDoDia } from "@/hooks/useAcoesDoDia";
 import { LeadCard, type LeadCardData } from "@/components/leads/LeadCard";
-import { LeadDetailDrawer } from "@/components/leads/LeadDetailDrawer";
-import { WhatsAppContext } from "@/components/leads/funnel-contexts";
+import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/components/lead-detail";
+import { LeadPanelLayout } from "@/components/layout/LeadPanelLayout";
 import { LeadModal } from "@/components/leads/LeadModal";
 import { CreateOpportunityModal } from "@/components/kanban/CreateOpportunityModal";
 import { AddMeetingModal } from "@/components/confirmacao/AddMeetingModal";
@@ -85,7 +85,7 @@ const DEFAULT_WHATSAPP_FILTERS: WhatsappFilterState = {
   viewMode: "kanban",
 };
 
-export default function PipeWhatsapp() {
+function PipeWhatsappInner() {
   const [filterState, setFilterState] = usePersistedState(
     "whatsapp",
     DEFAULT_WHATSAPP_FILTERS
@@ -128,8 +128,7 @@ export default function PipeWhatsapp() {
   const [isCreateLeadModalOpen, setIsCreateLeadModalOpen] = useState(false);
   const [isOpportunityModalOpen, setIsOpportunityModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isDetailDrawerOpen, setIsDetailDrawerOpen] = useState(false);
-  const [selectedItem, setSelectedItem] = useState<any>(null);
+  const { openLead } = useLeadSheet();
   const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; pipeId: string; leadId: string } | null>(null);
   const [stageToDelete, setStageToDelete] = useState<{ id: string; title: string } | null>(null);
   const [meetingModal, setMeetingModal] = useState<{
@@ -573,8 +572,7 @@ export default function PipeWhatsapp() {
               onClick={() => {
                 const item = pipeData?.find(p => p.id === card.id);
                 if (item) {
-                  setSelectedItem(item);
-                  setIsDetailDrawerOpen(true);
+                  openLead(item.lead_id, "whatsapp", item);
                 }
               }}
               onRemove={canDeleteCards ? () => handleOpenDeleteDialog(card.id, card.leadId || "") : undefined}
@@ -597,8 +595,7 @@ export default function PipeWhatsapp() {
           onRowClick={(card) => {
             const item = pipeData?.find(p => p.id === card.id);
             if (item) {
-              setSelectedItem(item);
-              setIsDetailDrawerOpen(true);
+              openLead(item.lead_id, "whatsapp", item);
             }
           }}
           selectedIds={bulk.selectedIds}
@@ -626,19 +623,6 @@ export default function PipeWhatsapp() {
         onOpenChange={setIsCreateLeadModalOpen}
         lead={null}
         onSuccess={() => refetch()}
-      />
-
-      {/* Lead Detail Drawer */}
-      <LeadDetailDrawer
-        open={isDetailDrawerOpen}
-        onOpenChange={setIsDetailDrawerOpen}
-        leadId={selectedItem?.lead_id || null}
-        variant="whatsapp"
-        pipeData={selectedItem}
-        onSuccess={refetch}
-        renderFunnelContext={({ lead, pipeData: pd, onSuccess: onCtxSuccess }) => (
-          <WhatsAppContext lead={lead} pipeData={pd} onSuccess={onCtxSuccess} />
-        )}
       />
 
       {/* Delete Confirmation Dialog */}
@@ -715,5 +699,15 @@ export default function PipeWhatsapp() {
       )}
 
     </div>
+  );
+}
+
+export default function PipeWhatsapp() {
+  return (
+    <LeadPanelProvider>
+      <LeadPanelLayout panel={<LeadDetailSheet />}>
+        <PipeWhatsappInner />
+      </LeadPanelLayout>
+    </LeadPanelProvider>
   );
 }
