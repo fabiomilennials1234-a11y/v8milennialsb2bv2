@@ -374,7 +374,8 @@ async function handleMessagesEvent(
       incoming_message_type: normalized.message_type,
     };
 
-    // Fire-and-forget. Errors are logged but do NOT fail the webhook.
+    // Dispatch to agent-message and deliver AI response via WhatsApp.
+    // The webhook returns 200 immediately; this runs in the background.
     fetch(`${SUPABASE_URL}/functions/v1/agent-message`, {
       method: "POST",
       headers: {
@@ -383,7 +384,7 @@ async function handleMessagesEvent(
       },
       body: JSON.stringify(agentMessagePayload),
     })
-      .then((res) => {
+      .then(async (res) => {
         if (!res.ok) {
           console.error(
             `[whatsapp-webhook] agent-message returned ${res.status} for message ${normalized.message_id}`,
@@ -397,6 +398,87 @@ async function handleMessagesEvent(
               instance_id: instance.id,
               message_id: normalized.message_id,
               http_status: res.status,
+            },
+          });
+          return;
+        }
+
+        const agentData = await res.json().catch(() => null);
+        if (!agentData || agentData.skipped) return;
+
+        const parts: string[] = agentData.messages ?? (agentData.message ? [agentData.message] : []);
+        if (parts.length === 0) return;
+
+        try {
+          const { sendTextViaInstance } = await import("../_shared/whatsapp-dispatch.ts");
+          const { data: fullInstance } = await supabase
+            .from("whatsapp_instances")
+            .select("*")
+            .eq("id", instance.id)
+            .maybeSingle();
+          if (!fullInstance) {
+            console.error("[whatsapp-webhook] Instance not found for AI response delivery:", instance.id);
+            return;
+          }
+
+          for (let i = 0; i < parts.length; i++) {
+            const text = parts[i]?.trim();
+            if (!text) continue;
+
+            if (i > 0) await new Promise((r) => setTimeout(r, 1200 + Math.random() * 800));
+
+            const sendResult = await sendTextViaInstance(
+              supabase, fullInstance, normalized.phone_number, text,
+              { trackSource: "copilot" },
+            );
+
+            const msgId = sendResult.messageId
+              ?? `agent_wh_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+
+            await supabase.from("whatsapp_messages").upsert({
+              organization_id: instance.organization_id,
+              instance_id: instance.id,
+              message_id: msgId,
+              remote_jid: `${normalized.phone_number}@s.whatsapp.net`,
+              phone_number: normalized.phone_number,
+              direction: "outgoing",
+              message_type: "text",
+              content: text,
+              status: sendResult.success ? "sent" : "failed",
+              timestamp: new Date().toISOString(),
+              sent_by_ai: true,
+              sent_source: "copilot",
+            }, { onConflict: "message_id,instance_id", ignoreDuplicates: true });
+
+            if (!sendResult.success) {
+              console.error("[whatsapp-webhook] AI response send failed:", sendResult.error);
+              void logRuntime({
+                organizationId: instance.organization_id,
+                module: "webhook",
+                action: "copilot_response_send_failed",
+                status: "error",
+                payloadSnapshot: {
+                  instance_id: instance.id,
+                  phone: normalized.phone_number,
+                  error: sendResult.error,
+                  part: i,
+                },
+              });
+            }
+          }
+
+          console.log(`[whatsapp-webhook] AI response delivered: ${parts.length} part(s) to ${normalized.phone_number}`);
+        } catch (deliveryErr) {
+          console.error("[whatsapp-webhook] AI response delivery error:", deliveryErr);
+          void logRuntime({
+            organizationId: instance.organization_id,
+            module: "webhook",
+            action: "copilot_response_delivery_error",
+            status: "error",
+            payloadSnapshot: {
+              instance_id: instance.id,
+              phone: normalized.phone_number,
+              error: deliveryErr instanceof Error ? deliveryErr.message : String(deliveryErr),
             },
           });
         }
