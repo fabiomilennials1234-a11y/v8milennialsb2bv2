@@ -208,7 +208,11 @@ Deno.serve(withSentry('process-copilot-followups', async (req) => {
       // (phone_ai_preferences > leads.ai_disabled fallback). Cobre case onde
       // user toggla via toggle_phone_ai sem lead — preference muda mas
       // lead.ai_disabled denormalizado pode estar stale.
-      const followupCancel = await isCopilotCanceled(supabase, rule.organization_id, lead.phone);
+      //
+      // orgId vem da junção copilot_agents (linha 96); rule.organization_id
+      // não é selecionado na query, então era undefined — isCopilotCanceled
+      // com orgId undefined retorna fail-open (canceled:false), virando no-op.
+      const followupCancel = await isCopilotCanceled(supabase, orgId, lead.phone);
       if (followupCancel.canceled) {
         totalSkipped++;
         continue;
