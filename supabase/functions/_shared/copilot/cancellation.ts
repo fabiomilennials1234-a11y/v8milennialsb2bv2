@@ -15,7 +15,7 @@
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { logRuntime } from "../logger.ts";
-import { normalizeBrazilianPhone } from "../whatsapp-dispatch.ts";
+import { normalizePhoneForSearch } from "../lead-service.ts";
 
 export interface CancellationCheck {
   canceled: boolean;
@@ -41,7 +41,16 @@ export async function isCopilotCanceled(
       return { canceled: false, source: "default", ai_disabled: false };
     }
 
-    const normalized = normalizeBrazilianPhone(phone);
+    // CRITICAL: normalize using the SAME function used by the canonical RPCs
+    // (normalize_brazilian_phone in SQL → normalizePhoneForSearch mirror in TS).
+    // Output format: 11 digits for mobile, 10 for landline, NO "55" prefix.
+    //
+    // DO NOT use normalizeBrazilianPhone from whatsapp-dispatch.ts here — that
+    // function adds the "55" prefix because the WhatsApp provider (Uazapi/
+    // Evolution) requires it on outbound. Using it for DB lookups produces a
+    // format mismatch against phone_ai_preferences.normalized_phone (stored
+    // without the prefix), turning every gate into a silent fail-open.
+    const normalized = normalizePhoneForSearch(phone);
     if (!normalized) {
       return { canceled: false, source: "default", ai_disabled: false };
     }
