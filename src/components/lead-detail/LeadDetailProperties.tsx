@@ -133,7 +133,6 @@ export const LeadDetailProperties = memo(function LeadDetailProperties({
       <PropertyGroup label="Responsáveis">
         <ResponsibleSelect field="pre_sale_responsible_id" label="Pré-Venda" />
         <ResponsibleSelect field="sale_responsible_id" label="Venda" />
-        <ResponsibleSelect field="responsible_id" label="Closer" />
       </PropertyGroup>
 
       <PropertyGroup label="Detalhes">
