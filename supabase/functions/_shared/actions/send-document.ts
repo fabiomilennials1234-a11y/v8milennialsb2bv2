@@ -11,6 +11,7 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import type { ActionResult } from "./types.ts";
 import { resolveDispatchContext, DispatchResolutionError } from "../whatsapp-dispatch.ts";
+import { isCopilotCanceled, logCopilotCancellation } from "../copilot/cancellation.ts";
 
 export async function executeSendDocument(
   supabase: SupabaseClient,
@@ -62,6 +63,27 @@ export async function executeSendDocument(
 
   if (!lead?.phone) {
     return { success: false, error: "Lead has no phone number" };
+  }
+
+  // RC-cancel: gate antes de enviar via provider. SEND_DOCUMENT é enfileirado
+  // em pending_ai_actions e processado por process-ai-actions (cron 1min).
+  // Janela: user pode desligar "IA" entre AgentEngine decidir o envio e o
+  // worker pegar a ação — sem este gate, o documento ainda é entregue mesmo
+  // depois do toggle off. Fonte canônica: phone_ai_preferences > leads.ai_disabled.
+  const cancelCheck = await isCopilotCanceled(supabase, organizationId, lead.phone);
+  if (cancelCheck.canceled) {
+    logCopilotCancellation({
+      organizationId,
+      gate: "ai_action_send",
+      leadId,
+      conversationId: conversationId ?? undefined,
+      phone: lead.phone,
+      source: cancelCheck.source,
+    });
+    return {
+      success: false,
+      error: "Copilot disabled for lead — send_document skipped",
+    };
   }
 
   // Find the correct instance: prefer the one linked to the conversation's agent.
