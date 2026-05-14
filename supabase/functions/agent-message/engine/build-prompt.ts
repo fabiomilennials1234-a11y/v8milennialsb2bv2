@@ -675,6 +675,56 @@ export async function buildDynamicPrompt(params: BuildPromptParams): Promise<str
   }
 
   // =====================================================
+  // 4.0.1 RETENÇÃO DE CARTEIRA (Portfolio)
+  // =====================================================
+  if (capabilities.retention_enabled && currentLeadId) {
+    const { data: portfolioClient } = await supabase
+      .from("upsell_clients")
+      .select("id, health_score, health_status, segment, reorder_cycle_days, days_since_last_order, last_order_at, avg_ticket")
+      .eq("lead_id", currentLeadId)
+      .eq("is_active", true)
+      .maybeSingle();
+
+    if (portfolioClient) {
+      const { data: lastOrders } = await supabase
+        .from("upsell_orders")
+        .select("product_name, sale_value, sold_at")
+        .eq("client_id", portfolioClient.id)
+        .order("sold_at", { ascending: false })
+        .limit(3);
+
+      const { data: activeAlerts } = await supabase
+        .from("client_alerts")
+        .select("alert_type, severity, title")
+        .eq("client_id", portfolioClient.id)
+        .eq("is_resolved", false);
+
+      const retentionConfig = (capabilities.retention_config || {}) as Record<string, any>;
+      const maxFreq = retentionConfig.max_frequency_days || 7;
+
+      sections.push("");
+      sections.push("# RETENÇÃO DE CLIENTES ATIVOS");
+      sections.push("");
+      sections.push("Quando o contato for um cliente ativo (dados abaixo), priorize:");
+      sections.push("1. Se recompra atrasada: ofereça renovação do último pedido com itens e valores.");
+      sections.push("2. Se pós-entrega recente (3 dias): pergunte satisfação de 1 a 5.");
+      sections.push("3. Se produto ausente detectado: sonde motivo sem ser invasivo.");
+      sections.push("4. Se cliente pedir algo: interprete como pedido, confirme itens + quantidades + valores.");
+      sections.push(`5. Nunca aborde retenção mais de 1x a cada ${maxFreq} dias.`);
+      sections.push("");
+      sections.push("DADOS DO CLIENTE:");
+      sections.push(`- Health Score: ${portfolioClient.health_score}/100 (${portfolioClient.health_status})`);
+      sections.push(`- Segmento: ${portfolioClient.segment}`);
+      sections.push(`- Ciclo de recompra: ${portfolioClient.reorder_cycle_days || "N/A"} dias`);
+      sections.push(`- Dias desde último pedido: ${portfolioClient.days_since_last_order || "N/A"}`);
+      sections.push(`- Ticket médio: R$ ${portfolioClient.avg_ticket || 0}`);
+      sections.push(`- Últimos pedidos: ${lastOrders?.map((o: any) => `${o.product_name} (R$${o.sale_value})`).join("; ") || "nenhum"}`);
+      sections.push(`- Alertas ativos: ${activeAlerts?.map((a: any) => a.title).join("; ") || "nenhum"}`);
+      sections.push("");
+    }
+  }
+
+  // =====================================================
   // 4.1 REGRAS DA ETAPA ATUAL (Kanban)
   // =====================================================
   const kanbanRules = capabilities?.copilot_agent_kanban_rules;

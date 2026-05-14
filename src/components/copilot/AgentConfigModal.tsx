@@ -22,6 +22,7 @@ import {
   Pencil,
   Volume2,
   Sparkles,
+  Shield,
 } from "lucide-react";
 import {
   Dialog,
@@ -60,6 +61,10 @@ import {
   type BehaviorWindow,
 } from "./BehaviorWindowsEditor";
 import { createDefaultBehaviorWindows } from "./playground/types";
+import { Switch } from "@/components/ui/switch";
+import { Slider } from "@/components/ui/slider";
+import { Input } from "@/components/ui/input";
+import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
 
 // ── Sub-componente para custom pipeline rows (hooks não podem ser chamados em .map()) ──
 
@@ -197,6 +202,7 @@ export function AgentConfigModal({
   const { data: whatsappInstances = [], isLoading: isLoadingInstances } = useWhatsAppInstancesWithAgent();
   const { stagesByPipe } = useAllPipelineStageOptions();
   const { data: customPipelines = [] } = useCustomPipelines();
+  const { hasFeature } = useOrgFeatures();
 
   // Estado local para edição
   const [activePipes, setActivePipes] = useState<string[]>([]);
@@ -212,6 +218,15 @@ export function AgentConfigModal({
   const [behaviorEnforcement, setBehaviorEnforcement] = useState<BehaviorEnforcement>("hard");
   const [behaviorTimezone, setBehaviorTimezone] = useState<string>("America/Sao_Paulo");
   const [savingBehavior, setSavingBehavior] = useState(false);
+
+  // Retenção & Carteira
+  const [retentionEnabled, setRetentionEnabled] = useState(false);
+  const [retentionConfig, setRetentionConfig] = useState<{
+    max_frequency_days: number;
+    auto_approach: boolean;
+    strategic_alert_only: boolean;
+  }>({ max_frequency_days: 7, auto_approach: true, strategic_alert_only: false });
+  const [savingRetention, setSavingRetention] = useState(false);
 
   // Carregar dados do agente quando abrir
   useEffect(() => {
@@ -244,6 +259,15 @@ export function AgentConfigModal({
         expanded[pipe] = true;
       });
       setExpandedPipes(expanded);
+
+      // Retenção & Carteira
+      setRetentionEnabled((agent as any).retention_enabled ?? false);
+      const rc = (agent as any).retention_config || {};
+      setRetentionConfig({
+        max_frequency_days: rc.max_frequency_days ?? 7,
+        auto_approach: rc.auto_approach ?? true,
+        strategic_alert_only: rc.strategic_alert_only ?? false,
+      });
     }
   }, [agent, open]);
 
@@ -333,6 +357,26 @@ export function AgentConfigModal({
       toast.error("Erro ao salvar configuracao de audio");
     } else {
       toast.success("Configuracao de audio salva");
+    }
+  };
+
+  const handleSaveRetention = async () => {
+    if (!agent?.id) return;
+    setSavingRetention(true);
+    try {
+      const { error } = await supabase
+        .from("copilot_agents")
+        .update({
+          retention_enabled: retentionEnabled,
+          retention_config: retentionConfig,
+        } as any)
+        .eq("id", agent.id);
+      if (error) throw error;
+      toast.success("Configuracao de retencao salva");
+    } catch (err: any) {
+      toast.error("Erro ao salvar", { description: err?.message ?? "" });
+    } finally {
+      setSavingRetention(false);
     }
   };
 
@@ -578,6 +622,123 @@ export function AgentConfigModal({
                   )}
                 </CardContent>
               </Card>
+
+              {/* Seção Retenção & Carteira — só com feature customer_portfolio */}
+              {hasFeature("customer_portfolio") && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <Shield className="w-5 h-5 text-primary" />
+                      Retencao & Carteira
+                    </CardTitle>
+                    <CardDescription>
+                      Configure o comportamento do agente para clientes ativos na carteira.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    {/* Toggle principal */}
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label className="text-sm font-medium">Ativar retencao de clientes</Label>
+                        <p className="text-xs text-muted-foreground">
+                          Injeta contexto de carteira no prompt do agente automaticamente.
+                        </p>
+                      </div>
+                      <Switch
+                        checked={retentionEnabled}
+                        onCheckedChange={setRetentionEnabled}
+                      />
+                    </div>
+
+                    {/* Config adicional quando ativado */}
+                    {retentionEnabled && (
+                      <div className="space-y-5 pl-1 border-l-2 border-primary/30 ml-1">
+                        {/* Frequência máxima */}
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-sm font-medium">
+                              Frequencia maxima de abordagem
+                            </Label>
+                            <div className="flex items-center gap-2">
+                              <Input
+                                type="number"
+                                min={3}
+                                max={30}
+                                value={retentionConfig.max_frequency_days}
+                                onChange={(e) => {
+                                  const v = Math.min(30, Math.max(3, parseInt(e.target.value) || 7));
+                                  setRetentionConfig((prev) => ({ ...prev, max_frequency_days: v }));
+                                }}
+                                className="w-16 h-8 text-center text-sm"
+                              />
+                              <span className="text-xs text-muted-foreground">dias</span>
+                            </div>
+                          </div>
+                          <Slider
+                            min={3}
+                            max={30}
+                            step={1}
+                            value={[retentionConfig.max_frequency_days]}
+                            onValueChange={([v]) =>
+                              setRetentionConfig((prev) => ({ ...prev, max_frequency_days: v }))
+                            }
+                            className="w-full"
+                          />
+                          <div className="flex justify-between text-xs text-muted-foreground">
+                            <span>3 dias</span>
+                            <span>30 dias</span>
+                          </div>
+                        </div>
+
+                        {/* Abordagem automática */}
+                        <div className="flex items-center justify-between">
+                          <div className="space-y-0.5">
+                            <Label className="text-sm font-medium">Abordagem automatica</Label>
+                            <p className="text-xs text-muted-foreground">
+                              Agente inicia contato proativo quando ciclo de recompra vence.
+                            </p>
+                          </div>
+                          <Switch
+                            checked={retentionConfig.auto_approach}
+                            onCheckedChange={(v) =>
+                              setRetentionConfig((prev) => ({ ...prev, auto_approach: v }))
+                            }
+                          />
+                        </div>
+
+                        {/* Clientes estratégicos */}
+                        <div className="flex items-center justify-between">
+                          <div className="space-y-0.5">
+                            <Label className="text-sm font-medium">
+                              Clientes estrategicos: alertar vendedor
+                            </Label>
+                            <p className="text-xs text-muted-foreground">
+                              Em vez de abordar diretamente, notifica o responsavel pelo cliente.
+                            </p>
+                          </div>
+                          <Switch
+                            checked={retentionConfig.strategic_alert_only}
+                            onCheckedChange={(v) =>
+                              setRetentionConfig((prev) => ({ ...prev, strategic_alert_only: v }))
+                            }
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex justify-end pt-2 border-t">
+                      <Button
+                        onClick={handleSaveRetention}
+                        disabled={savingRetention}
+                        className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                      >
+                        <Save className="w-4 h-4 mr-2" />
+                        {savingRetention ? "Salvando..." : "Salvar retencao"}
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
             </TabsContent>
 
             {/* Tab: Funis & Etapas */}
