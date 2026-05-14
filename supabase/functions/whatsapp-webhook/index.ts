@@ -672,10 +672,30 @@ Deno.serve(
       return genericResponse(429, { error: "rate_limited" });
     }
 
+    // URL formats supported:
+    //   /whatsapp-webhook/<SECRET>                         — instance from payload
+    //   /whatsapp-webhook/<SECRET>/<INSTANCE_ID>           — instance from URL
+    //   /whatsapp-webhook/<SECRET>/<INSTANCE_ID>/<EVENT>   — instance + event from URL
+    //   /whatsapp-webhook/<SECRET>/<EVENT>                 — legacy addUrlEvents
+    const KNOWN_EVENTS = new Set(["messages", "messages_update", "connection", "payment", "payment_response"]);
     const pathSegments = url.pathname.split("/").filter(Boolean);
     const idx = pathSegments.findIndex((s) => s === "whatsapp-webhook");
     const pathSecret = idx >= 0 ? pathSegments[idx + 1] : undefined;
-    const pathEvent = idx >= 0 ? pathSegments[idx + 2] : undefined;
+    const seg2 = idx >= 0 ? pathSegments[idx + 2] : undefined;
+    const seg3 = idx >= 0 ? pathSegments[idx + 3] : undefined;
+
+    let pathInstanceId: string | undefined;
+    let pathEvent: string | undefined;
+    if (seg2 && seg3) {
+      pathInstanceId = seg2;
+      pathEvent = seg3;
+    } else if (seg2) {
+      if (KNOWN_EVENTS.has(seg2)) {
+        pathEvent = seg2;
+      } else {
+        pathInstanceId = seg2;
+      }
+    }
 
     if (
       !pathSecret ||
@@ -727,15 +747,15 @@ Deno.serve(
       }
     }
 
-    const event = payload.event ?? pathEvent ?? "unknown";
-    const uazapiInstanceId = payload.instance ?? payload.instance_id ?? null;
+    const event = (typeof payload.event === "string" ? payload.event : null) ?? pathEvent ?? "unknown";
+    const uazapiInstanceId = payload.instance ?? payload.instance_id ?? pathInstanceId ?? null;
 
     if (!uazapiInstanceId) {
       await logRuntime({
         module: "webhook",
         action: "uazapi_missing_instance",
         status: "error",
-        payloadSnapshot: { source_ip: sourceIp, event },
+        payloadSnapshot: { source_ip: sourceIp, event, keys: Object.keys(payload).slice(0, 15) },
       });
       return genericResponse(200);
     }
