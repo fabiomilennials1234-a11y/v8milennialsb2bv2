@@ -21,7 +21,7 @@ export function LeadPanelLayout({ children, panel }: LeadPanelLayoutProps) {
         {children}
       </div>
       {isOpen && panel && (
-        <div className="w-[55%] min-w-[480px] max-w-[720px] border-l border-border bg-background animate-in slide-in-from-right-5 duration-200">
+        <div className="flex-1 min-w-[480px] border-l border-border bg-background animate-in slide-in-from-right-5 duration-200">
           {panel}
         </div>
       )}
