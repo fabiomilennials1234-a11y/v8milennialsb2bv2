@@ -865,21 +865,24 @@ async function handleMoveStage(ctx: ActionContext): Promise<ActionResult> {
   switch (pipeType) {
     case "whatsapp": {
       await ctx.supabase.from("leads").update({ pipe_whatsapp: targetStage }).eq("id", ctx.leadId);
-      await upsertPipeEntry(ctx.supabase, {
+      const entryId = await upsertPipeEntry(ctx.supabase, {
         leadId: ctx.leadId, orgId: ctx.organizationId, slug: "whatsapp", stageKey: targetStage,
       });
+      if (!entryId) return { success: false, error: `Failed to upsert pipeline_entries for whatsapp/${targetStage}` };
       break;
     }
     case "confirmacao": {
-      await upsertPipeEntry(ctx.supabase, {
+      const entryId = await upsertPipeEntry(ctx.supabase, {
         leadId: ctx.leadId, orgId: ctx.organizationId, slug: "confirmacao", stageKey: targetStage,
       });
+      if (!entryId) return { success: false, error: `Failed to upsert pipeline_entries for confirmacao/${targetStage}` };
       break;
     }
     case "propostas": {
-      await upsertPipeEntry(ctx.supabase, {
+      const entryId = await upsertPipeEntry(ctx.supabase, {
         leadId: ctx.leadId, orgId: ctx.organizationId, slug: "propostas", stageKey: targetStage,
       });
+      if (!entryId) return { success: false, error: `Failed to upsert pipeline_entries for propostas/${targetStage}` };
       break;
     }
     case "upsell_base":
@@ -955,9 +958,10 @@ async function handleMoveStage(ctx: ActionContext): Promise<ActionResult> {
             if (transitionPipe === "whatsapp") {
               await ctx.supabase.from("leads").update({ pipe_whatsapp: transitionStage }).eq("id", ctx.leadId);
             }
-            await upsertPipeEntry(ctx.supabase, {
+            const transEntryId = await upsertPipeEntry(ctx.supabase, {
               leadId: ctx.leadId, orgId: ctx.organizationId, slug: transitionPipe, stageKey: transitionStage,
             });
+            if (!transEntryId) return { success: false, error: `Auto-transition failed: pipeline_entries upsert for ${transitionPipe}/${transitionStage}` };
           } else if (transitionPipe === "upsell_base") {
             await ctx.supabase.from("upsell_clients").update({ tipo_cliente_tempo: transitionStage }).eq("lead_id", ctx.leadId);
           } else if (transitionPipe === "upsell_gestao") {
