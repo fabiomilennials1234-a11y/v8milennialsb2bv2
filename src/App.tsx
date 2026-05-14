@@ -59,6 +59,7 @@ const Copilot = lazy(() => lazyRetry(() => import("./pages/Copilot")));
 const CopilotMetrics = lazy(() => lazyRetry(() => import("./pages/CopilotMetrics")));
 const ChatWhatsApp = lazy(() => lazyRetry(() => import("./pages/ChatWhatsApp")));
 const Upsell = lazy(() => lazyRetry(() => import("./pages/Upsell")));
+const ClienteDetail = lazy(() => lazyRetry(() => import("./components/carteira/ClienteDetailPage")));
 const CustomPipeline = lazy(() => lazyRetry(() => import("./pages/CustomPipeline")));
 const Agenda = lazy(() => lazyRetry(() => import("./pages/Agenda")));
 const Privacidade = lazy(() => lazyRetry(() => import("./pages/Privacidade")));
@@ -523,6 +524,16 @@ function AppRoutes() {
               <PermissionProtectedRoute featureKey="upsell.view">
                 <Upsell />
               </PermissionProtectedRoute>
+            </LayoutWrapper>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/carteira/:clientId"
+        element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <ClienteDetail />
             </LayoutWrapper>
           </ProtectedRoute>
         }
