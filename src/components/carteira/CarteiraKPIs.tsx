@@ -25,7 +25,7 @@ function KPICard({ label, value, sub, valueClassName }: KPICardProps) {
       >
         {value}
       </div>
-      {sub && <div className="text-xs mt-1 text-[#a1a1aa]">{sub}</div>}
+      {sub && <div className="text-[13px] mt-1 text-[#a1a1aa]">{sub}</div>}
     </div>
   );
 }
@@ -69,7 +69,7 @@ export function CarteiraKPIs() {
         label="Receita Recorrente"
         value={formatBRL(totalRecurring)}
         sub="ticket médio mensal"
-        valueClassName="text-[#eab308]"
+        valueClassName={totalRecurring > 0 ? "text-[#eab308]" : undefined}
       />
 
       <KPICard

@@ -125,7 +125,7 @@ function matchesFilter(client: CarteiraClient, filter: string): boolean {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 const iconBtnClass =
-  "w-[30px] h-[30px] rounded-md border border-[#27272a] bg-transparent text-[#71717a] hover:bg-[#27272a] hover:text-[#fafafa] transition-colors flex items-center justify-center";
+  "w-[30px] h-[30px] rounded-md border border-[#3f3f46] bg-transparent text-[#a1a1aa] hover:bg-[#27272a] hover:text-[#fafafa] transition-colors flex items-center justify-center";
 
 export function CarteiraClientTable({
   clients,
@@ -161,25 +161,25 @@ export function CarteiraClientTable({
       <Table>
         <TableHeader>
           <TableRow className="border-[#27272a] hover:bg-transparent bg-[#111113]">
-            <TableHead className="text-[#71717a] text-[11px] font-semibold uppercase tracking-wider py-2.5 pl-4">
+            <TableHead className="h-auto text-[#71717a] text-[11px] font-semibold uppercase tracking-wider py-2.5 pl-4">
               Cliente
             </TableHead>
-            <TableHead className="text-[#71717a] text-[11px] font-semibold uppercase tracking-wider py-2.5">
+            <TableHead className="h-auto text-[#71717a] text-[11px] font-semibold uppercase tracking-wider py-2.5">
               Health
             </TableHead>
-            <TableHead className="text-[#71717a] text-[11px] font-semibold uppercase tracking-wider py-2.5">
+            <TableHead className="h-auto text-[#71717a] text-[11px] font-semibold uppercase tracking-wider py-2.5">
               Recompra
             </TableHead>
-            <TableHead className="text-[#71717a] text-[11px] font-semibold uppercase tracking-wider py-2.5">
+            <TableHead className="h-auto text-[#71717a] text-[11px] font-semibold uppercase tracking-wider py-2.5">
               Ticket médio
             </TableHead>
-            <TableHead className="text-[#71717a] text-[11px] font-semibold uppercase tracking-wider py-2.5">
+            <TableHead className="h-auto text-[#71717a] text-[11px] font-semibold uppercase tracking-wider py-2.5">
               Tendência
             </TableHead>
-            <TableHead className="text-[#71717a] text-[11px] font-semibold uppercase tracking-wider py-2.5">
+            <TableHead className="h-auto text-[#71717a] text-[11px] font-semibold uppercase tracking-wider py-2.5">
               Segmento
             </TableHead>
-            <TableHead className="text-[#71717a] text-[11px] font-semibold uppercase tracking-wider py-2.5 pr-4 w-[100px]" />
+            <TableHead className="h-auto text-[#71717a] text-[11px] font-semibold uppercase tracking-wider py-2.5 pr-4 w-[100px]" />
           </TableRow>
         </TableHeader>
 
@@ -200,7 +200,7 @@ export function CarteiraClientTable({
                 onClick={() => onSelectClient(client.id)}
                 className={cn(
                   "border-[#1e1e21] cursor-pointer transition-colors",
-                  isSelected ? "bg-[#1c1c1f]" : "hover:bg-[#1c1c1f]",
+                  isSelected ? "bg-[#232326]" : "hover:bg-[#1c1c1f]",
                 )}
               >
                 <TableCell className="py-3 pl-4">
@@ -241,20 +241,20 @@ export function CarteiraClientTable({
                 </TableCell>
 
                 <TableCell className="py-3">
-                  <span className="text-sm text-[#fafafa]">
+                  <span className={cn("text-sm", client.avg_ticket != null ? "text-[#fafafa]" : "text-[#3f3f46]")}>
                     {client.avg_ticket != null ? formatBRL(client.avg_ticket) : "—"}
                   </span>
                 </TableCell>
 
                 <TableCell className="py-3">
-                  <span className="text-[13px] text-[#71717a]">—</span>
+                  <span className="text-[13px] text-[#3f3f46]">—</span>
                 </TableCell>
 
                 <TableCell className="py-3">
                   {segment ? (
                     <span
                       className={cn(
-                        "px-2 py-0.5 rounded text-[11px] font-semibold uppercase tracking-wide",
+                        "px-2.5 py-0.5 rounded text-[11px] font-semibold uppercase tracking-wide",
                         segment.className,
                       )}
                     >
