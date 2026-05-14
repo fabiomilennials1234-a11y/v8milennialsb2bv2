@@ -6,8 +6,8 @@
  *   - usePhoneAiStatus(phone)
  *   - useToggleLeadAI()
  *   - useToggleConversationAI()
- *   - useQuery+useMutation inline em ChatShellWithContext, LeadDetailModal,
- *     LeadDetailDrawer, KanbanCard, WhatsAppChat
+ *   - useQuery+useMutation inline em ChatShellWithContext, LeadDetailSheet,
+ *     KanbanCard, WhatsAppChat
  *
  * Garantias:
  *   - Source of truth: phone_ai_preferences via RPC SECURITY DEFINER

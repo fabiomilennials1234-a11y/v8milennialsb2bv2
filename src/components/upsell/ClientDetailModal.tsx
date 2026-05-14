@@ -1,5 +1,5 @@
 /**
- * @deprecated Use LeadDetailDrawer + UpsellClientContext instead. This component is kept for reference only.
+ * @deprecated Use LeadDetailSheet + UpsellClientContext instead. This component is kept for reference only.
  */
 import { useState } from "react";
 import {

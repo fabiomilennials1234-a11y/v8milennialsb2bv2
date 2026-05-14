@@ -1,5 +1,5 @@
 /**
- * @deprecated Use LeadDetailDrawer + PropostasContext instead. This component is kept for reference only.
+ * @deprecated Use LeadDetailSheet + PropostasContext instead. This component is kept for reference only.
  */
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";

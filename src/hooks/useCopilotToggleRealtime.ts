@@ -69,7 +69,7 @@ export function useCopilotToggleRealtime() {
           queryClient.invalidateQueries({ queryKey: key });
 
           // Invalidate keys legadas que podem estar mostrando o estado antigo
-          // (LeadDetailModal/Drawer leem lead-detail; Kanban lê pipe_*).
+          // (LeadDetailSheet lê lead-detail; Kanban lê pipe_*).
           queryClient.invalidateQueries({ queryKey: ["lead_ai_status"] });
           queryClient.invalidateQueries({ queryKey: ["lead-ai-status"] });
           queryClient.invalidateQueries({ queryKey: ["lead-detail"] });

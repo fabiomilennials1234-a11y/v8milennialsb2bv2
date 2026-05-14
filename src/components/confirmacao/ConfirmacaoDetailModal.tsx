@@ -1,5 +1,5 @@
 /**
- * @deprecated Use LeadDetailDrawer + ConfirmacaoContext instead. This component is kept for reference only.
+ * @deprecated Use LeadDetailSheet + ConfirmacaoContext instead. This component is kept for reference only.
  */
 import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
