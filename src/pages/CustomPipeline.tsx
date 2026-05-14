@@ -37,7 +37,8 @@ import {
   useDeleteCustomPipeline,
 } from "@/hooks/useCustomPipelines";
 import { CustomPipelineKanban } from "@/components/custom-pipelines/CustomPipelineKanban";
-import { LeadDetailDrawer } from "@/components/leads/LeadDetailDrawer";
+import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/components/lead-detail";
+import { LeadPanelLayout } from "@/components/layout/LeadPanelLayout";
 import { AddLeadToPipeModal } from "@/components/custom-pipelines/AddLeadToPipeModal";
 import { CustomPipeSettingsDialog } from "@/components/custom-pipelines/CustomPipeSettingsDialog";
 import { toast } from "sonner";
@@ -56,17 +57,16 @@ const ICON_MAP: Record<string, LucideIcon> = {
   gift: Gift,
 };
 
-export default function CustomPipelinePage() {
+function CustomPipelinePageInner() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
 
+  const { openLead } = useLeadSheet();
   const [searchQuery, setSearchQuery] = useState("");
   const [showAddLead, setShowAddLead] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [removeEntryId, setRemoveEntryId] = useState<string | null>(null);
   const [showDeletePipeline, setShowDeletePipeline] = useState(false);
-  const [isDetailDrawerOpen, setIsDetailDrawerOpen] = useState(false);
-  const [selectedEntry, setSelectedEntry] = useState<any>(null);
 
   const { data: pipeline, isLoading: loadingPipeline } = useCustomPipeline(slug);
   const { data: stages = [], isLoading: loadingStages } = useCustomPipelineStages(pipeline?.id);
@@ -183,8 +183,7 @@ export default function CustomPipelinePage() {
           searchQuery={searchQuery}
           onRemoveEntry={canDeleteCards ? (id) => setRemoveEntryId(id) : undefined}
           onClickEntry={(entry) => {
-            setSelectedEntry(entry);
-            setIsDetailDrawerOpen(true);
+            openLead(entry.lead_id, "custom", entry);
           }}
         />
       ) : (
@@ -250,15 +249,6 @@ export default function CustomPipelinePage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Lead Detail Drawer */}
-      <LeadDetailDrawer
-        open={isDetailDrawerOpen}
-        onOpenChange={setIsDetailDrawerOpen}
-        leadId={selectedEntry?.lead_id || null}
-        variant="custom"
-        pipeData={selectedEntry}
-      />
-
       {/* Confirmar remoção de lead */}
       <AlertDialog open={!!removeEntryId} onOpenChange={() => setRemoveEntryId(null)}>
         <AlertDialogContent>
@@ -281,5 +271,15 @@ export default function CustomPipelinePage() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  );
+}
+
+export default function CustomPipelinePage() {
+  return (
+    <LeadPanelProvider>
+      <LeadPanelLayout panel={<LeadDetailSheet />}>
+        <CustomPipelinePageInner />
+      </LeadPanelLayout>
+    </LeadPanelProvider>
   );
 }

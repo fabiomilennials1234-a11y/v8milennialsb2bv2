@@ -28,7 +28,8 @@ import {
 } from "@/components/ui/select";
 import { FollowUpCard } from "@/components/followups/FollowUpCard";
 import { ScheduleFollowUpModal } from "@/components/followups/ScheduleFollowUpModal";
-import { LeadDetailDrawer } from "@/components/leads/LeadDetailDrawer";
+import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/components/lead-detail";
+import { LeadPanelLayout } from "@/components/layout/LeadPanelLayout";
 import { AutomationSettings } from "@/components/followups/AutomationSettings";
 import { AcoesDoDia } from "@/components/followups/AcoesDoDia";
 import {
@@ -65,7 +66,7 @@ const DEFAULT_FOLLOWUPS_FILTERS: FollowUpsFilterState = {
   showArchived: false,
 };
 
-export default function PipeFollowUps() {
+function PipeFollowUpsInner() {
   const [filterState, setFilterState] = usePersistedState(
     "followups",
     DEFAULT_FOLLOWUPS_FILTERS
@@ -93,10 +94,9 @@ export default function PipeFollowUps() {
 
   // selectedMember is NOT persisted — it has role-based auto-logic (admin vs SDR/Closer)
   const [selectedMember, setSelectedMember] = useState<string | null>(null);
+  const { openLead } = useLeadSheet();
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; followUpId: string } | null>(null);
-  const [isDetailDrawerOpen, setIsDetailDrawerOpen] = useState(false);
-  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [scheduleContext, setScheduleContext] = useState<{
     leadId: string;
     leadName: string;
@@ -232,8 +232,7 @@ export default function PipeFollowUps() {
   };
 
   const handleOpenLead = (leadId: string) => {
-    setSelectedLeadId(leadId);
-    setIsDetailDrawerOpen(true);
+    openLead(leadId, "followup");
   };
 
   const overdueIds = useMemo(() => {
@@ -517,14 +516,6 @@ export default function PipeFollowUps() {
         </div>
       </div>
 
-      {/* Lead Detail Drawer */}
-      <LeadDetailDrawer
-        open={isDetailDrawerOpen}
-        onOpenChange={setIsDetailDrawerOpen}
-        leadId={selectedLeadId}
-        variant="followup"
-      />
-
       {/* Delete follow-up confirmation */}
       <AlertDialog open={deleteDialog?.open} onOpenChange={(open) => !open && setDeleteDialog(null)}>
         <AlertDialogContent>
@@ -559,5 +550,15 @@ export default function PipeFollowUps() {
         />
       )}
     </div>
+  );
+}
+
+export default function PipeFollowUps() {
+  return (
+    <LeadPanelProvider>
+      <LeadPanelLayout panel={<LeadDetailSheet />}>
+        <PipeFollowUpsInner />
+      </LeadPanelLayout>
+    </LeadPanelProvider>
   );
 }

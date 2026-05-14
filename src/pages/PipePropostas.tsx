@@ -44,8 +44,8 @@ import { PipeSettingsDialog } from "@/components/pipelines/PipeSettingsDialog";
 import { useTeamMembers, useResponsibleMembers } from "@/hooks/useTeamMembers";
 import { CreateProposalModal } from "@/components/proposals/CreateProposalModal";
 import { LeadCard, type LeadCardData } from "@/components/leads/LeadCard";
-import { LeadDetailDrawer } from "@/components/leads/LeadDetailDrawer";
-import { PropostasContext } from "@/components/leads/funnel-contexts";
+import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/components/lead-detail";
+import { LeadPanelLayout } from "@/components/layout/LeadPanelLayout";
 import { FunnelChart } from "@/components/dashboard/FunnelChart";
 import { CalorSlider, CalorBadge } from "@/components/proposals/CalorSlider";
 import { QuickAddDailyAction } from "@/components/proposals/QuickAddDailyAction";
@@ -157,7 +157,7 @@ const DEFAULT_PROPOSTAS_FILTERS: PropostasFilterState = {
   membroDefaultApplied: false,
 };
 
-export default function PipePropostas() {
+function PipePropostasInner() {
   const [filterState, setFilterState] = usePersistedState(
     "propostas",
     DEFAULT_PROPOSTAS_FILTERS
@@ -211,10 +211,9 @@ export default function PipePropostas() {
       membroDefaultApplied: true,
     }));
   }, [teamMemberId, isAdmin, isMaster, filterState.membroDefaultApplied, setFilterState]);
+  const { openLead } = useLeadSheet();
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
-  const [selectedProposta, setSelectedProposta] = useState<any>(null);
   const [analyticsTab, setAnalyticsTab] = useState<"propostas" | "produtos">("propostas");
   
   // State for commitment date modal
@@ -1148,8 +1147,7 @@ export default function PipePropostas() {
                   onClick={() => {
                     const item = pipeData?.find(p => p.id === card.id);
                     if (item) {
-                      setSelectedProposta(item);
-                      setIsDetailModalOpen(true);
+                      openLead(item.lead_id || item.lead?.id, "propostas", item);
                     }
                   }}
                   onRemove={canDeleteCards ? () => handleOpenDeleteDialog(card.id, card.leadId || "") : undefined}
@@ -1334,19 +1332,6 @@ export default function PipePropostas() {
         onSuccess={refetch}
       />
 
-      {/* Proposal Detail Drawer */}
-      <LeadDetailDrawer
-        open={isDetailModalOpen}
-        onOpenChange={setIsDetailModalOpen}
-        leadId={selectedProposta?.lead_id || selectedProposta?.lead?.id || null}
-        variant="propostas"
-        pipeData={selectedProposta}
-        onSuccess={refetch}
-        renderFunnelContext={({ lead, pipeData: pData, onSuccess: onCtxSuccess }) => (
-          <PropostasContext lead={lead} pipeData={pData} onSuccess={onCtxSuccess} />
-        )}
-      />
-
       {/* TinyERP Confirm Order Modal (on drag-to-vendido) */}
       {pendingVendido && (
         <TinyErpConfirmOrderDialog
@@ -1485,5 +1470,15 @@ export default function PipePropostas() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  );
+}
+
+export default function PipePropostas() {
+  return (
+    <LeadPanelProvider>
+      <LeadPanelLayout panel={<LeadDetailSheet />}>
+        <PipePropostasInner />
+      </LeadPanelLayout>
+    </LeadPanelProvider>
   );
 }

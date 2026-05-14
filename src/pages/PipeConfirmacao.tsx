@@ -33,8 +33,8 @@ import { type MetricsPeriodState, getDateRange, createInitialPeriodState } from 
 import { MetricsPeriodSelector } from "@/components/pipelines/MetricsPeriodSelector";
 import { GhostLeadsBanner } from "@/components/pipelines/GhostLeadsBanner";
 import { LeadCard, type LeadCardData } from "@/components/leads/LeadCard";
-import { LeadDetailDrawer } from "@/components/leads/LeadDetailDrawer";
-import { ConfirmacaoContext } from "@/components/leads/funnel-contexts/ConfirmacaoContext";
+import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/components/lead-detail";
+import { LeadPanelLayout } from "@/components/layout/LeadPanelLayout";
 import { KanbanFilterPanel, FilterChips, type FilterSectionConfig } from "@/components/kanban/KanbanFilterPanel";
 import { MeetingTimeline } from "@/components/confirmacao/MeetingTimeline";
 import { CompareceuModal } from "@/components/confirmacao/CompareceuModal";
@@ -170,7 +170,7 @@ const DEFAULT_CONFIRMACAO_FILTERS: ConfirmacaoFilterState = {
   membroDefaultApplied: false,
 };
 
-export default function PipeConfirmacao() {
+function PipeConfirmacaoInner() {
   const [filterState, setFilterState] = usePersistedState(
     "confirmacao",
     DEFAULT_CONFIRMACAO_FILTERS
@@ -242,12 +242,11 @@ export default function PipeConfirmacao() {
     }));
   }, [teamMemberId, isAdmin, isMaster, filterState.membroDefaultApplied, setFilterState]);
 
+  const { openLead } = useLeadSheet();
   const [isLeadModalOpen, setIsLeadModalOpen] = useState(false);
   const [isMeetingModalOpen, setIsMeetingModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [editingLead, setEditingLead] = useState<any>(null);
-  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
 
   // Reschedule modal state
   const [isRescheduleModalOpen, setIsRescheduleModalOpen] = useState(false);
@@ -628,8 +627,7 @@ export default function PipeConfirmacao() {
   const handleCardClick = (card: LeadCardData) => {
     const item = pipeData?.find(p => p.id === card.id);
     if (item) {
-      setSelectedItemId(item.id);
-      setIsDetailModalOpen(true);
+      openLead(item.lead_id, "confirmacao", item);
     }
   };
 
@@ -823,8 +821,7 @@ export default function PipeConfirmacao() {
         <MeetingTimeline
           meetings={pipeData || []}
           onMeetingClick={(meeting) => {
-            setSelectedItemId(meeting.id);
-            setIsDetailModalOpen(true);
+            openLead(meeting.lead_id, "confirmacao", meeting);
           }}
         />
       )}
@@ -844,18 +841,6 @@ export default function PipeConfirmacao() {
         open={isMeetingModalOpen}
         onOpenChange={setIsMeetingModalOpen}
         onSuccess={refetch}
-      />
-
-      <LeadDetailDrawer
-        open={isDetailModalOpen}
-        onOpenChange={setIsDetailModalOpen}
-        leadId={pipeData?.find((p) => p.id === selectedItemId)?.lead_id ?? null}
-        variant="confirmacao"
-        pipeData={pipeData?.find((p) => p.id === selectedItemId) ?? null}
-        onSuccess={refetch}
-        renderFunnelContext={({ lead, pipeData, onSuccess: onCtxSuccess }) => (
-          <ConfirmacaoContext lead={lead} pipeData={pipeData} onSuccess={onCtxSuccess} />
-        )}
       />
 
       <RescheduleModal
@@ -933,5 +918,15 @@ export default function PipeConfirmacao() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  );
+}
+
+export default function PipeConfirmacao() {
+  return (
+    <LeadPanelProvider>
+      <LeadPanelLayout panel={<LeadDetailSheet />}>
+        <PipeConfirmacaoInner />
+      </LeadPanelLayout>
+    </LeadPanelProvider>
   );
 }
