@@ -10,6 +10,7 @@
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import type { ActionResult } from "./types.ts";
+import { resolveDispatchContext, DispatchResolutionError } from "../whatsapp-dispatch.ts";
 
 export async function executeSendDocument(
   supabase: SupabaseClient,
@@ -86,10 +87,6 @@ export async function executeSendDocument(
     }
   }
 
-  // Resolve provider + instance + phone via adapter
-  const { resolveDispatchContext, DispatchResolutionError } = await import(
-    "../whatsapp-dispatch.ts"
-  );
   let ctx;
   try {
     ctx = await resolveDispatchContext(supabase, {
@@ -151,7 +148,7 @@ export async function executeSendDocument(
           status: "sent",
           timestamp: new Date().toISOString(),
           sent_by_ai: true,
-          sent_source: "workflow",
+          sent_source: "copilot",
         },
         { onConflict: "message_id,instance_id", ignoreDuplicates: false },
       );

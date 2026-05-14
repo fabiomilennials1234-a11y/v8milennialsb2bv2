@@ -9,7 +9,8 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { promoveShadowLead } from "../lead-service.ts";
 import type { ActionResult } from "./types.ts";
-import { executeMoveToPipe, upsertPipeWhatsapp } from "./_helpers.ts";
+import { upsertPipeEntry, deletePipeEntry } from "../pipeline-adapter.ts";
+import type { PipeSlug } from "../pipeline-adapter.ts";
 
 export async function executeUpdateQualificationScore(
   supabase: SupabaseClient,
@@ -74,12 +75,13 @@ export async function executeAutomation(
     if (updateError) {
       console.warn("[executeAutomation] Failed to update lead:", updateError);
     } else if (actionConfig.moveToStage) {
-      await upsertPipeWhatsapp(
-        supabase,
-        leadId,
-        organizationId,
-        actionConfig.moveToStage as string,
-      );
+      const entryId = await upsertPipeEntry(supabase, {
+        leadId, orgId: organizationId, slug: "whatsapp",
+        stageKey: actionConfig.moveToStage as string,
+      });
+      if (!entryId) {
+        console.error("[executeAutomation] Failed to upsert pipeline_entries for whatsapp");
+      }
     }
   }
 
@@ -143,7 +145,11 @@ export async function executeAutomation(
   const moveToPipe = actionConfig.moveToPipe as { pipe?: string; stage?: string } | undefined;
   if (moveToPipe && moveToPipe.stage) {
     if (moveToPipe.pipe === "confirmacao" || moveToPipe.pipe === "propostas") {
-      await executeMoveToPipe(supabase, leadId, organizationId, moveToPipe.pipe, moveToPipe.stage);
+      const slug = moveToPipe.pipe as PipeSlug;
+      await upsertPipeEntry(supabase, {
+        leadId, orgId: organizationId, slug, stageKey: moveToPipe.stage,
+      });
+      await deletePipeEntry(supabase, leadId, organizationId, "whatsapp");
     } else if (moveToPipe.pipe === "upsell_base") {
       await supabase
         .from("upsell_clients")

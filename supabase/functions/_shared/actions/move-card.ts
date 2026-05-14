@@ -3,13 +3,12 @@
  *
  *  - executeAdvanceStage: muda lead de stage no pipe alvo
  *  - executeUpdatePipelineStage: atalho específico do pipe_whatsapp
- *
- * Helpers em _helpers.ts (executeMoveToPipe, upsertPipeWhatsapp).
  */
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import type { ActionResult } from "./types.ts";
-import { executeMoveToPipe, upsertPipeWhatsapp } from "./_helpers.ts";
+import { upsertPipeEntry } from "../pipeline-adapter.ts";
+import type { PipeSlug } from "../pipeline-adapter.ts";
 
 const PIPE_LABELS: Record<string, string> = {
   whatsapp: "WhatsApp",
@@ -65,14 +64,26 @@ export async function executeAdvanceStage(
     stageKeys.find((k: string) => k.toLowerCase() === normalizedStage) || normalizedStage;
 
   switch (target_pipe) {
-    case "whatsapp":
+    case "whatsapp": {
+      const entryId = await upsertPipeEntry(supabase, {
+        leadId: lead_id, orgId: tenantId, slug: "whatsapp", stageKey: finalStage,
+      });
+      if (!entryId) {
+        return { success: false, error: `Falha ao atualizar pipeline_entries para whatsapp/${finalStage}` };
+      }
       await supabase.from("leads").update({ pipe_whatsapp: finalStage }).eq("id", lead_id);
-      await upsertPipeWhatsapp(supabase, lead_id, tenantId, finalStage);
       break;
+    }
     case "confirmacao":
-    case "propostas":
-      await executeMoveToPipe(supabase, lead_id, tenantId, target_pipe, finalStage);
+    case "propostas": {
+      const entryId = await upsertPipeEntry(supabase, {
+        leadId: lead_id, orgId: tenantId, slug: target_pipe as PipeSlug, stageKey: finalStage,
+      });
+      if (!entryId) {
+        return { success: false, error: `Falha ao atualizar pipeline_entries para ${target_pipe}/${finalStage}` };
+      }
       break;
+    }
     case "upsell_base":
       await supabase
         .from("upsell_clients")
@@ -123,8 +134,13 @@ export async function executeUpdatePipelineStage(
     return { success: false, error: "lead_id e new_stage são obrigatórios" };
   }
 
+  const entryId = await upsertPipeEntry(supabase, {
+    leadId, orgId: organizationId, slug: "whatsapp", stageKey: newStage,
+  });
+  if (!entryId) {
+    return { success: false, error: `Falha ao atualizar pipeline_entries para whatsapp/${newStage}` };
+  }
   await supabase.from("leads").update({ pipe_whatsapp: newStage }).eq("id", leadId);
-  await upsertPipeWhatsapp(supabase, leadId, organizationId, newStage);
 
   return {
     success: true,
