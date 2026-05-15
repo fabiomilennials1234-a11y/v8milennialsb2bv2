@@ -380,9 +380,11 @@ function normalizeMessage(data: any, instance: ResolvedInstance) {
 async function handleMessagesEvent(
   supabase: ReturnType<typeof createClient>,
   instance: ResolvedInstance,
-  data: any
+  data: any,
+  receivedVia: "webhook" | "dlq_replay" = "webhook",
 ) {
-  const normalized = normalizeMessage(data, instance);
+  const normalized: any = normalizeMessage(data, instance);
+  normalized.received_via = receivedVia;
   if (!normalized.message_id) {
     await logRuntime({
       organizationId: instance.organization_id,
@@ -901,6 +903,11 @@ Deno.serve(
       req.headers.get("cf-connecting-ip") ??
       "unknown";
 
+    // Replay provenance: whatsapp-dlq-replay sets x-replay-source so we can
+    // tag the resulting row with received_via='dlq_replay'.
+    const replaySource: "webhook" | "dlq_replay" =
+      req.headers.get("x-replay-source") === "dlq-replay" ? "dlq_replay" : "webhook";
+
     const rl = checkRateLimit(sourceIp);
     if (!rl.allowed) {
       await logRuntime({
@@ -1085,7 +1092,7 @@ Deno.serve(
               if (payload.chat && typeof payload.chat === "string") {
                 msgData._phone_jid = payload.chat;
               }
-              await handleMessagesEvent(supabase, instance, msgData);
+              await handleMessagesEvent(supabase, instance, msgData, replaySource);
               break;
             }
             case "messages_update": {

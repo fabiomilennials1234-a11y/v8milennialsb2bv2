@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { ChannelBadge } from "@/components/chat/ChannelBadge";
+import { RealtimeStatusBadge } from "@/components/chat/RealtimeStatusBadge";
 import { SyncChatButton } from "@/components/chat/history-sync/SyncChatButton";
 import { useMessageLimits } from "@/hooks/useMessageLimits";
 
@@ -163,6 +164,7 @@ export function ChatHeader({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <h3 className="font-semibold truncate text-foreground">{contactName}</h3>
+            <RealtimeStatusBadge organizationId={organizationId} />
             {!hasLead && (
               <Badge
                 variant="secondary"

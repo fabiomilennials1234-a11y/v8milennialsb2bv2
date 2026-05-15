@@ -89,6 +89,7 @@ const MasterFeatures = lazy(() => lazyRetry(() => import("./pages/master/MasterF
 const MasterAuditLogs = lazy(() => lazyRetry(() => import("./pages/master/MasterAuditLogs")));
 const MasterOperations = lazy(() => lazyRetry(() => import("./pages/master/MasterOperations")));
 const MasterAutomationHealth = lazy(() => lazyRetry(() => import("./pages/master/MasterAutomationHealth")));
+const MasterWhatsAppHealth = lazy(() => lazyRetry(() => import("./pages/master/MasterWhatsAppHealth")));
 const CopilotReasoning = lazy(() => lazyRetry(() => import("./pages/master/CopilotReasoning")));
 const CopilotToggleAudit = lazy(() => lazyRetry(() => import("./pages/master/CopilotToggleAudit")));
 const MockupChat = lazy(() => lazyRetry(() => import("./pages/MockupChat")));
@@ -663,6 +664,7 @@ function AppRoutes() {
         <Route path="audit-logs" element={<MasterAuditLogs />} />
         <Route path="operations" element={<MasterOperations />} />
         <Route path="automation-health" element={<MasterAutomationHealth />} />
+        <Route path="whatsapp-health" element={<MasterWhatsAppHealth />} />
         <Route path="copilot-reasoning" element={<CopilotReasoning />} />
         <Route path="copilot-toggle-audit" element={<CopilotToggleAudit />} />
       </Route>
