@@ -156,8 +156,8 @@ export async function canUserPerformAction(params: {
     return { allowed: true, reason: `matrix_${matrixResult}` };
   }
 
-  // 8. Fallback: consultar feature_permissions.default_value
-  return { allowed: true, reason: "fallback_allowed" };
+  // 8. Fallback: deny by default — every action must be explicitly mapped
+  return { allowed: false, reason: "permission_not_defined" };
 }
 
 // ─── canUserAccessFeature ────────────────────────────────

@@ -46,34 +46,40 @@ COPY --from=builder /app/dist /usr/share/nginx/html
 # SPA + headers de segurança + cache estratégico.
 # Assets hashados (Vite gera /assets/xxx-HASH.{js,css}) ficam 1 ano immutable.
 # index.html NUNCA é cacheado — garante que deploy novo invalide chunks antigos.
+# Security headers shared across all location blocks (nginx add_header does NOT inherit)
 RUN printf '%s\n' \
+  'add_header X-Content-Type-Options "nosniff" always;' \
+  'add_header X-Frame-Options "DENY" always;' \
+  'add_header X-XSS-Protection "1; mode=block" always;' \
+  'add_header Referrer-Policy "strict-origin-when-cross-origin" always;' \
+  'add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;' \
+  'add_header Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()" always;' \
+  "add_header Content-Security-Policy \"default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.supabase.co; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://generativelanguage.googleapis.com https://*.sentry.io https://openrouter.ai; img-src 'self' data: https: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; frame-ancestors 'none'; base-uri 'self'; form-action 'self';\" always;" \
+  > /etc/nginx/security-headers.conf && \
+printf '%s\n' \
   'server {' \
   '  listen 8080;' \
+  '  server_tokens off;' \
   '  root /usr/share/nginx/html;' \
   '  index index.html;' \
-  '  add_header X-Content-Type-Options "nosniff" always;' \
-  '  add_header X-Frame-Options "DENY" always;' \
-  '  add_header X-XSS-Protection "1; mode=block" always;' \
-  '  add_header Referrer-Policy "strict-origin-when-cross-origin" always;' \
-  '  add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;' \
-  "  add_header Content-Security-Policy \"default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.supabase.co; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://generativelanguage.googleapis.com https://*.sentry.io https://openrouter.ai; img-src 'self' data: https: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; frame-ancestors 'none'; base-uri 'self'; form-action 'self';\" always;" \
+  '  include /etc/nginx/security-headers.conf;' \
+  '  location ~ /\. { return 404; }' \
   '  location ~* ^/assets/.*\.(js|css|woff2?|ttf|eot|svg|png|jpg|jpeg|gif|webp|ico|map)$ {' \
+  '    include /etc/nginx/security-headers.conf;' \
   '    add_header Cache-Control "public, max-age=31536000, immutable" always;' \
-  '    add_header X-Content-Type-Options "nosniff" always;' \
   '    try_files $uri =404;' \
   '  }' \
   '  location = / {' \
+  '    include /etc/nginx/security-headers.conf;' \
   '    add_header Cache-Control "no-store, must-revalidate" always;' \
-  '    add_header X-Content-Type-Options "nosniff" always;' \
-  '    add_header X-Frame-Options "DENY" always;' \
   '    try_files /index.html =404;' \
   '  }' \
   '  location = /index.html {' \
+  '    include /etc/nginx/security-headers.conf;' \
   '    add_header Cache-Control "no-store, must-revalidate" always;' \
-  '    add_header X-Content-Type-Options "nosniff" always;' \
-  '    add_header X-Frame-Options "DENY" always;' \
   '  }' \
   '  location / {' \
+  '    include /etc/nginx/security-headers.conf;' \
   '    add_header Cache-Control "no-store, must-revalidate" always;' \
   '    try_files $uri $uri/ /index.html;' \
   '  }' \

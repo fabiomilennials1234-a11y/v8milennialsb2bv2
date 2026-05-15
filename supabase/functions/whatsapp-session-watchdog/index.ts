@@ -27,6 +27,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { withSentry } from "../_shared/sentry.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
+import { timingSafeCompare } from "../_shared/auth.ts";
 import { logRuntime } from "../_shared/logger.ts";
 
 const REQUEST_TIMEOUT_MS = 15_000;
@@ -87,11 +88,12 @@ Deno.serve(
 
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers });
 
-    const cronSecret = req.headers.get("x-cron-secret");
+    const cronSecret = req.headers.get("x-cron-secret") ?? "";
     const authHeader = req.headers.get("authorization") ?? "";
+    const bearerToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
     const isAuthorized =
-      (!!CRON_SECRET && cronSecret === CRON_SECRET) ||
-      (!!SUPABASE_SERVICE_ROLE_KEY && authHeader.includes(SUPABASE_SERVICE_ROLE_KEY));
+      (!!CRON_SECRET && !!cronSecret && timingSafeCompare(cronSecret, CRON_SECRET)) ||
+      (!!SUPABASE_SERVICE_ROLE_KEY && !!bearerToken && timingSafeCompare(bearerToken, SUPABASE_SERVICE_ROLE_KEY));
 
     if (!isAuthorized) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers });

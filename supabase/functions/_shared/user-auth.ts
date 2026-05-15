@@ -10,6 +10,7 @@
 
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { logRuntime } from "./logger.ts";
+import { timingSafeCompare } from "./auth.ts";
 
 // ─── Types ───────────────────────────────────────────────
 
@@ -107,7 +108,7 @@ export async function requireAuth(
   if (options?.allowInternalKey) {
     const internalKey = Deno.env.get("INTERNAL_API_KEY")?.trim();
     const providedKey = req.headers.get("X-Internal-Api-Key")?.trim();
-    if (internalKey && providedKey === internalKey) {
+    if (internalKey && providedKey && timingSafeCompare(providedKey, internalKey)) {
       // Chamada interna — precisa do organization_id e user_id no body
       const orgId = (body?.organization_id as string) || options?.organizationId || "";
       if (!orgId) {

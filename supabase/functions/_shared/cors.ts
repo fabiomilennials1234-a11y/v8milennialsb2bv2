@@ -10,7 +10,7 @@ export function getCorsHeaders(origin?: string | null): Record<string, string> {
   // Format: "https://example.com,https://app.example.com"
   const allowedOrigins = Deno.env.get("ALLOWED_ORIGINS");
 
-  let corsOrigin = "*";
+  let corsOrigin = "";
 
   if (origin) {
     const isLocalhost =
@@ -25,6 +25,10 @@ export function getCorsHeaders(origin?: string | null): Record<string, string> {
     }
   } else if (allowedOrigins) {
     corsOrigin = allowedOrigins.split(",")[0].trim();
+  }
+
+  if (!corsOrigin) {
+    corsOrigin = allowedOrigins ? allowedOrigins.split(",")[0].trim() : "https://torquecrm.com.br";
   }
 
   return {

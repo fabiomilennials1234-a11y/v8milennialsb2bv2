@@ -17,6 +17,7 @@ import {
 import { logRuntime } from "../_shared/logger.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { getCampaignResponsibleAssignment } from "../_shared/campaign-distribution.ts";
+import { timingSafeCompare } from "../_shared/auth.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -34,7 +35,7 @@ Deno.serve(withSentry('meta-webhook', async (req) => {
     const token = url.searchParams.get("hub.verify_token");
     const challenge = url.searchParams.get("hub.challenge");
 
-    if (mode === "subscribe" && token === META_WEBHOOK_VERIFY_TOKEN) {
+    if (mode === "subscribe" && token && timingSafeCompare(token, META_WEBHOOK_VERIFY_TOKEN)) {
       console.log("[meta-webhook] Webhook verified successfully");
       return new Response(challenge, { status: 200, headers: withSecurityHeaders({}) });
     }
