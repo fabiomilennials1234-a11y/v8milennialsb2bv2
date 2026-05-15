@@ -188,11 +188,14 @@ export default function Upsell() {
               selectedClientId={selectedClient?.id ?? null}
               onSelectClient={(client) => setSelectedClient(client)}
               onWhatsApp={(client) => {
-                if (!client.phone) return;
-                window.open(
-                  `https://wa.me/${client.phone.replace(/\D/g, "")}`,
-                  "_blank",
-                );
+                if (client.lead_id) {
+                  navigate(`/chat?lead=${client.lead_id}`);
+                } else if (client.phone) {
+                  window.open(
+                    `https://wa.me/${client.phone.replace(/\D/g, "")}`,
+                    "_blank",
+                  );
+                }
               }}
               onNewOrder={(id) => {
                 setQuickOrderClientId(id);

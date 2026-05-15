@@ -42,14 +42,15 @@ export function CarteiraKPIs() {
     );
   }
 
-  if (!data) {
+  if (!data || data.total_clients === 0) {
     return (
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <KPICard label="Receita Recorrente" value="—" />
-        <KPICard label="Pedidos Esperados" value="—" />
-        <KPICard label="Recompra Atrasada" value="—" />
-        <KPICard label="Ticket Médio" value="—" />
-        <KPICard label="Health Score Médio" value="—" />
+      <div className="rounded-xl border border-dashed border-[#27272a] bg-[#18181b]/50 px-6 py-8 text-center">
+        <p className="text-sm font-medium text-[#a1a1aa]">
+          Sua carteira ainda está vazia
+        </p>
+        <p className="text-[13px] text-[#52525b] mt-1 max-w-md mx-auto">
+          Cadastre clientes manualmente, importe uma planilha ou marque propostas como vendidas. Os KPIs aparecem automaticamente.
+        </p>
       </div>
     );
   }

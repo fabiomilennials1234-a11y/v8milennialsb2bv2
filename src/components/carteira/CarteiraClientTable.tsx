@@ -315,10 +315,10 @@ export function CarteiraClientTable({
               ? "Nenhum cliente encontrado"
               : "Sua carteira está vazia"}
           </p>
-          <p className="text-[13px] text-[#52525b] max-w-[280px]">
+          <p className="text-[13px] text-[#52525b] max-w-[320px]">
             {hasActiveFilters
               ? "Tente ajustar o filtro ou termo de busca."
-              : "Clientes aparecem aqui após uma proposta ser marcada como vendida."}
+              : "Use os botões acima para cadastrar, importar uma planilha ou marcar propostas como vendidas."}
           </p>
         </div>
       </div>

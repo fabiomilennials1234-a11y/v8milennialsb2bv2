@@ -193,9 +193,13 @@ export default function ClienteDetailPage() {
                 size="sm"
                 variant="outline"
                 className="gap-1.5 border-zinc-700 hover:bg-zinc-800 hover:border-green-600/50 hover:text-green-400"
-                onClick={() =>
-                  window.open(`https://wa.me/${clientPhone.replace(/\D/g, "")}`, "_blank")
-                }
+                onClick={() => {
+                  if (client?.lead_id) {
+                    navigate(`/chat?lead=${client.lead_id}`);
+                  } else if (clientPhone) {
+                    window.open(`https://wa.me/${clientPhone.replace(/\D/g, "")}`, "_blank");
+                  }
+                }}
               >
                 <MessageCircle size={13} />
                 WhatsApp

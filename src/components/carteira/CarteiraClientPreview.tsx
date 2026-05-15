@@ -1,3 +1,4 @@
+import { useNavigate } from "react-router-dom";
 import { X, MessageCircle, ExternalLink, ShoppingCart, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -57,6 +58,7 @@ export function CarteiraClientPreview({
   onViewDetail,
   onNewOrder,
 }: CarteiraClientPreviewProps) {
+  const navigate = useNavigate();
   const { data: alerts = [], resolveAlert } = useClientAlerts(client.id);
 
   const score = client.health_score ?? 0;
@@ -230,11 +232,11 @@ export function CarteiraClientPreview({
               variant="outline"
               className="flex-1 gap-2 border-zinc-700 hover:bg-zinc-800 hover:border-green-600/50 hover:text-green-400"
               onClick={() => {
-                // Navigate to chat with this lead's phone if available
-                const phone = client.phone;
-                if (phone) {
+                if (client.lead_id) {
+                  navigate(`/chat?lead=${client.lead_id}`);
+                } else if (client.phone) {
                   window.open(
-                    `https://wa.me/${phone.replace(/\D/g, "")}`,
+                    `https://wa.me/${client.phone.replace(/\D/g, "")}`,
                     "_blank",
                   );
                 }
