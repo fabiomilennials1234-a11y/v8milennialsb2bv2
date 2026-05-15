@@ -1,17 +1,20 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   UserPlus,
   Tag,
   Bot,
+  MessageCircle,
   X,
   Loader2,
   CheckCircle2,
+  Send,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -43,6 +46,7 @@ export function CarteiraBulkBar({ selectedClients, onClear }: CarteiraBulkBarPro
   const [assignOpen, setAssignOpen] = useState(false);
   const [tagOpen, setTagOpen] = useState(false);
   const [copilotOpen, setCopilotOpen] = useState(false);
+  const [messageOpen, setMessageOpen] = useState(false);
 
   if (count === 0) return null;
 
@@ -83,6 +87,15 @@ export function CarteiraBulkBar({ selectedClients, onClear }: CarteiraBulkBarPro
             size="sm"
             variant="outline"
             className="border-border bg-transparent text-foreground hover:bg-muted"
+            onClick={() => setMessageOpen(true)}
+          >
+            <MessageCircle className="mr-1.5 h-3.5 w-3.5" />
+            Mensagem
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="border-border bg-transparent text-foreground hover:bg-muted"
             onClick={() => setCopilotOpen(true)}
           >
             <Bot className="mr-1.5 h-3.5 w-3.5" />
@@ -118,6 +131,12 @@ export function CarteiraBulkBar({ selectedClients, onClear }: CarteiraBulkBarPro
         open={copilotOpen}
         onOpenChange={setCopilotOpen}
         clients={selectedClients.filter((c) => c.lead_id)}
+        onSuccess={onClear}
+      />
+      <BulkMessageDialog
+        open={messageOpen}
+        onOpenChange={setMessageOpen}
+        clients={selectedClients}
         onSuccess={onClear}
       />
     </>
@@ -376,6 +395,192 @@ function CopilotDialog({
           >
             {firing && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
             Acionar {withLead} clientes
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Variáveis disponíveis ──────────────────────────────────────────────────
+
+const TEMPLATE_VARIABLES = [
+  { key: "primeiro_nome", label: "Primeiro nome" },
+  { key: "nome", label: "Nome completo" },
+  { key: "empresa", label: "Empresa" },
+  { key: "segmento", label: "Segmento" },
+  { key: "ticket_medio", label: "Ticket médio" },
+  { key: "dias_sem_pedido", label: "Dias s/ pedido" },
+  { key: "health_score", label: "Health Score" },
+  { key: "ciclo", label: "Ciclo recompra" },
+  { key: "ltv", label: "LTV" },
+  { key: "saudacao", label: "Saudação" },
+] as const;
+
+function resolvePreview(template: string, client: PortfolioClientRow): string {
+  const firstName = (client.name ?? "").split(" ")[0];
+  const fmtBRL = (v: number | null) =>
+    v != null
+      ? v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 0 })
+      : "—";
+
+  const vars: Record<string, string> = {
+    nome: client.name ?? "",
+    primeiro_nome: firstName,
+    empresa: client.company ?? "",
+    segmento: client.segment ?? "",
+    ticket_medio: fmtBRL(client.avg_ticket),
+    dias_sem_pedido: client.days_since_last_order?.toString() ?? "—",
+    health_score: client.health_score?.toString() ?? "—",
+    ciclo: client.reorder_cycle_days?.toString() ?? "—",
+    ltv: fmtBRL(client.lifetime_value),
+    saudacao: new Date().getHours() < 12 ? "Bom dia" : new Date().getHours() < 18 ? "Boa tarde" : "Boa noite",
+  };
+
+  return template.replace(/\{(\w+)\}/g, (match, key) => vars[key] ?? match);
+}
+
+// ─── Bulk Message Dialog ────────────────────────────────────────────────────
+
+function BulkMessageDialog({
+  open,
+  onOpenChange,
+  clients,
+  onSuccess,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  clients: PortfolioClientRow[];
+  onSuccess: () => void;
+}) {
+  const { organizationId } = useOrganization();
+  const [message, setMessage] = useState("");
+  const [sending, setSending] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const withPhone = clients.filter((c) => c.lead_id);
+  const withoutPhone = clients.length - withPhone.length;
+  const previewClient = withPhone[0] ?? clients[0];
+
+  const insertVariable = (varKey: string) => {
+    const el = textareaRef.current;
+    if (!el) return;
+    const start = el.selectionStart;
+    const end = el.selectionEnd;
+    const token = `{${varKey}}`;
+    const next = message.slice(0, start) + token + message.slice(end);
+    setMessage(next);
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(start + token.length, start + token.length);
+    });
+  };
+
+  const handleSend = async () => {
+    if (!organizationId || !message.trim() || !withPhone.length) return;
+    setSending(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("carteira-bulk-message", {
+        body: {
+          organization_id: organizationId,
+          client_ids: withPhone.map((c) => c.id),
+          message_template: message,
+        },
+      });
+      if (error) throw error;
+      const result = data as { sent: number; failed: number };
+      if (result.sent > 0) {
+        toast.success(`${result.sent} mensagens enviadas`);
+      }
+      if (result.failed > 0) {
+        toast.error(`${result.failed} falharam`);
+      }
+      onOpenChange(false);
+      setMessage("");
+      onSuccess();
+    } catch {
+      toast.error("Erro ao enviar mensagens");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg bg-card border-border">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Send size={16} className="text-primary" />
+            Enviar mensagem para {withPhone.length} clientes
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-3 py-2">
+          {withoutPhone > 0 && (
+            <p className="text-xs text-amber-500">
+              {withoutPhone} cliente(s) sem lead vinculado serão ignorados.
+            </p>
+          )}
+
+          <div>
+            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
+              Variáveis
+            </label>
+            <div className="flex flex-wrap gap-1.5">
+              {TEMPLATE_VARIABLES.map((v) => (
+                <button
+                  key={v.key}
+                  type="button"
+                  onClick={() => insertVariable(v.key)}
+                  className="inline-flex items-center rounded-md border border-border px-2 py-0.5 text-[10px] font-medium text-muted-foreground hover:border-primary/50 hover:text-primary transition-colors"
+                >
+                  {`{${v.key}}`}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
+              Mensagem
+            </label>
+            <Textarea
+              ref={textareaRef}
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              placeholder="Olá {primeiro_nome}! {saudacao}, tudo bem?"
+              rows={4}
+              className="resize-none bg-background border-border text-foreground placeholder:text-muted-foreground/50"
+            />
+          </div>
+
+          {message.trim() && previewClient && (
+            <div>
+              <label className="text-[10px] uppercase tracking-wider font-medium text-muted-foreground mb-1 block">
+                Preview — {previewClient.name}
+              </label>
+              <div className="rounded-lg bg-muted/50 border border-border px-3 py-2 text-sm text-card-foreground leading-relaxed whitespace-pre-wrap">
+                {resolvePreview(message, previewClient)}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} className="border-border">
+            Cancelar
+          </Button>
+          <Button
+            onClick={handleSend}
+            disabled={sending || !message.trim() || !withPhone.length}
+            className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold gap-1.5"
+          >
+            {sending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Send size={13} />
+            )}
+            Enviar {withPhone.length} mensagens
           </Button>
         </DialogFooter>
       </DialogContent>

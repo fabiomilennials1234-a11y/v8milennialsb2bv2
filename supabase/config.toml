@@ -241,6 +241,10 @@ verify_jwt = false
 [functions.suggest-retention-action]
 verify_jwt = false
 
+# carteira-bulk-message: Bulk WhatsApp dispatch from portfolio; JWT validated inside function
+[functions.carteira-bulk-message]
+verify_jwt = false
+
 
 
 
