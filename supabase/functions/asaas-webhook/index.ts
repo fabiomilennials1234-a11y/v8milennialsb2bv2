@@ -17,7 +17,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { withSentry, captureError } from "../_shared/sentry.ts";
+import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logRuntime } from "../_shared/logger.ts";
+import { timingSafeCompare } from "../_shared/auth.ts";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -54,7 +56,7 @@ const ASAAS_WEBHOOK_TOKEN = Deno.env.get("ASAAS_WEBHOOK_TOKEN");
 function ack(extra?: Record<string, unknown>): Response {
   return new Response(
     JSON.stringify({ received: true, ...extra }),
-    { status: 200, headers: { "Content-Type": "application/json" } },
+    { status: 200, headers: withSecurityHeaders({ "Content-Type": "application/json" }) },
   );
 }
 
@@ -505,17 +507,17 @@ serve(
     if (req.method !== "POST") {
       return new Response(JSON.stringify({ error: "Method not allowed" }), {
         status: 405,
-        headers: { "Content-Type": "application/json" },
+        headers: withSecurityHeaders({ "Content-Type": "application/json" }),
       });
     }
 
     // ── 1. Authenticate ───────────────────────────────────────────────────────
     const incomingToken = req.headers.get("asaas-access-token");
-    if (!ASAAS_WEBHOOK_TOKEN || incomingToken !== ASAAS_WEBHOOK_TOKEN) {
+    if (!ASAAS_WEBHOOK_TOKEN || !incomingToken || !timingSafeCompare(incomingToken, ASAAS_WEBHOOK_TOKEN)) {
       console.warn("[asaas-webhook] Rejected: invalid asaas-access-token");
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
-        headers: { "Content-Type": "application/json" },
+        headers: withSecurityHeaders({ "Content-Type": "application/json" }),
       });
     }
 

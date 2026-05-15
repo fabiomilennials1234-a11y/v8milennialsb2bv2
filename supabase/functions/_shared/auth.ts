@@ -7,6 +7,27 @@
 import { createHmac } from "https://deno.land/std@0.177.0/node/crypto.ts";
 
 /**
+ * Constant-time string comparison using Web Crypto API.
+ * Prevents timing side-channel attacks on secret comparisons.
+ */
+export function timingSafeCompare(a: string, b: string): boolean {
+  const encoder = new TextEncoder();
+  const bufA = encoder.encode(a);
+  const bufB = encoder.encode(b);
+  if (bufA.length !== bufB.length) {
+    // Compare against dummy to avoid early-exit timing leak
+    const dummy = new Uint8Array(bufA.length);
+    try { crypto.subtle.timingSafeEqual(bufA, dummy); } catch { /* ignore */ }
+    return false;
+  }
+  try {
+    return crypto.subtle.timingSafeEqual(bufA, bufB);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Result of authentication validation
  */
 export interface AuthResult {
@@ -28,7 +49,7 @@ const rateLimitStore = new Map<string, { count: number; resetTime: number }>();
 export function requireCronAuth(req: Request): { authorized: boolean } {
   const CRON_SECRET = Deno.env.get("CRON_SECRET");
   const cronSecret = req.headers.get("x-cron-secret");
-  if (!CRON_SECRET || cronSecret !== CRON_SECRET) {
+  if (!CRON_SECRET || !cronSecret || !timingSafeCompare(cronSecret, CRON_SECRET)) {
     return { authorized: false };
   }
   return { authorized: true };
@@ -52,10 +73,10 @@ export function validateEvolutionWebhook(req: Request): AuthResult {
     return { valid: false, error: "Missing API key in request headers" };
   }
   
-  if (apiKey !== expectedKey) {
+  if (!timingSafeCompare(apiKey, expectedKey)) {
     return { valid: false, error: "Invalid API key" };
   }
-  
+
   return { valid: true };
 }
 
@@ -82,7 +103,7 @@ export function validateCalcomWebhook(req: Request, body: string): AuthResult {
     .update(body)
     .digest("hex");
   
-  if (signature !== expectedSignature && signature !== `sha256=${expectedSignature}`) {
+  if (!timingSafeCompare(signature, expectedSignature) && !timingSafeCompare(signature, `sha256=${expectedSignature}`)) {
     return { valid: false, error: "Invalid Cal.com signature" };
   }
   
@@ -105,10 +126,10 @@ export function validateWebhookApiKey(req: Request): AuthResult {
     return { valid: false, error: "Missing API key" };
   }
   
-  if (apiKey !== expectedKey) {
+  if (!timingSafeCompare(apiKey, expectedKey)) {
     return { valid: false, error: "Invalid API key" };
   }
-  
+
   return { valid: true };
 }
 

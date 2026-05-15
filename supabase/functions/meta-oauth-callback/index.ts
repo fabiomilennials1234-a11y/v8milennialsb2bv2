@@ -1,4 +1,5 @@
 import { withSentry } from '../_shared/sentry.ts';
+import { withSecurityHeaders } from "../_shared/security-headers.ts";
 /**
  * meta-oauth-callback
  *

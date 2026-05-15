@@ -10,6 +10,7 @@ import { Mail, Lock, User, ArrowRight, ArrowLeft, Loader2, Flag, Fuel, Trophy } 
 import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import torqueLogo from '@/assets/torque-logo.png';
+import { validatePassword } from '@/lib/password-validation';
 
 type AuthMode = 'login' | 'signup' | 'forgot';
 
@@ -83,6 +84,17 @@ export default function Auth() {
           toast({
             title: 'Nome obrigatório',
             description: 'Por favor, informe seu nome completo.',
+            variant: 'destructive',
+          });
+          setLoading(false);
+          return;
+        }
+
+        const pwResult = validatePassword(password);
+        if (!pwResult.valid) {
+          toast({
+            title: 'Senha fraca',
+            description: pwResult.message,
             variant: 'destructive',
           });
           setLoading(false);
@@ -376,7 +388,7 @@ export default function Auth() {
                         onChange={(e) => setPassword(e.target.value)}
                         className="pl-10"
                         required
-                        minLength={6}
+                        minLength={12}
                       />
                     </div>
                   </div>

@@ -22,6 +22,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { withSentry } from "../_shared/sentry.ts";
+import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { upsertPipeEntry } from "../_shared/pipeline-adapter.ts";
 import { isCopilotCanceled, logCopilotCancellation } from "../_shared/copilot/cancellation.ts";
@@ -875,7 +876,7 @@ async function maybeAutoSync(
 function genericResponse(status: number, body?: unknown): Response {
   return new Response(body ? JSON.stringify(body) : null, {
     status,
-    headers: { "Content-Type": "application/json" },
+    headers: withSecurityHeaders({ "Content-Type": "application/json" }),
   });
 }
 

@@ -15,6 +15,7 @@ import {
   getLeadgenData,
 } from "../_shared/meta-api.ts";
 import { logRuntime } from "../_shared/logger.ts";
+import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { getCampaignResponsibleAssignment } from "../_shared/campaign-distribution.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -35,11 +36,11 @@ Deno.serve(withSentry('meta-webhook', async (req) => {
 
     if (mode === "subscribe" && token === META_WEBHOOK_VERIFY_TOKEN) {
       console.log("[meta-webhook] Webhook verified successfully");
-      return new Response(challenge, { status: 200 });
+      return new Response(challenge, { status: 200, headers: withSecurityHeaders({}) });
     }
 
     console.error("[meta-webhook] Verification failed - invalid token");
-    return new Response("Forbidden", { status: 403 });
+    return new Response("Forbidden", { status: 403, headers: withSecurityHeaders({}) });
   }
 
   // ── POST: Webhook events ───────────────────────────────────────────────
@@ -50,14 +51,14 @@ Deno.serve(withSentry('meta-webhook', async (req) => {
     const signature = req.headers.get("x-hub-signature-256");
     if (!verifyWebhookSignature(body, signature)) {
       console.error("[meta-webhook] Invalid signature");
-      return new Response("Unauthorized", { status: 401 });
+      return new Response("Unauthorized", { status: 401, headers: withSecurityHeaders({}) });
     }
 
     let payload: WebhookPayload;
     try {
       payload = JSON.parse(body);
     } catch {
-      return new Response("Bad Request", { status: 400 });
+      return new Response("Bad Request", { status: 400, headers: withSecurityHeaders({}) });
     }
 
     console.log(`[meta-webhook] Received ${payload.object} event with ${payload.entry?.length || 0} entries`);
@@ -85,10 +86,10 @@ Deno.serve(withSentry('meta-webhook', async (req) => {
     });
 
     // Meta espera 200 rapido para nao reenviar
-    return new Response("OK", { status: 200 });
+    return new Response("OK", { status: 200, headers: withSecurityHeaders({}) });
   }
 
-  return new Response("Method Not Allowed", { status: 405 });
+  return new Response("Method Not Allowed", { status: 405, headers: withSecurityHeaders({}) });
 }));
 
 // ── Types ──────────────────────────────────────────────────────────────────

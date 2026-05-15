@@ -9,6 +9,7 @@
  */
 
 import { withSentry } from '../_shared/sentry.ts';
+import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { logRuntime } from "../_shared/logger.ts";
 import {

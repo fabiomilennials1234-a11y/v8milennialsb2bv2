@@ -18,6 +18,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { withSentry } from "../_shared/sentry.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { trackEvent } from "../_shared/track.ts";
 import { upsertPipeEntry } from "../_shared/pipeline-adapter.ts";
@@ -1157,7 +1158,7 @@ function resolveCustomStageFromName(
 
 Deno.serve(
   withSentry("import-leads", async (req: Request): Promise<Response> => {
-    const corsHeaders = getCorsHeaders(req.headers.get("origin"));
+    const corsHeaders = withSecurityHeaders(getCorsHeaders(req.headers.get("origin")));
 
     if (req.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: corsHeaders });

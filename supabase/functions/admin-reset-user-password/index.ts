@@ -90,9 +90,10 @@ serve(withSentry('admin-reset-user-password', async (req) => {
         corsHeaders
       );
     }
-    if (!newPassword || newPassword.length < 6) {
+    const PWD_RE = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{}|;:',.<>?]).{12,}$/;
+    if (!newPassword || !PWD_RE.test(newPassword)) {
       return jsonResponse(
-        { success: false, error: "Bad request", message: "new_password é obrigatório e deve ter no mínimo 6 caracteres" },
+        { success: false, error: "Bad request", message: "new_password é obrigatório: mínimo 12 caracteres, incluindo maiúscula, minúscula, número e caractere especial" },
         400,
         corsHeaders
       );

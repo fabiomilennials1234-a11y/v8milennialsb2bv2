@@ -22,6 +22,7 @@ import { trackEvent } from '../_shared/track.ts';
 import { logRuntime } from "../_shared/logger.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { requireAuth, AuthError } from "../_shared/user-auth.ts";
 import { getTimeBasedVariables } from '../_shared/time-variables.ts';
 import { requireCronAuth } from "../_shared/auth.ts";
@@ -47,7 +48,7 @@ interface ProcessResult {
 
 Deno.serve(withSentry('campaign-rule-dispatch', async (req) => {
   const origin = req.headers.get("origin") ?? req.headers.get("Origin");
-  const corsHeaders = getCorsHeaders(origin);
+  const corsHeaders = withSecurityHeaders(getCorsHeaders(origin));
 
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders });

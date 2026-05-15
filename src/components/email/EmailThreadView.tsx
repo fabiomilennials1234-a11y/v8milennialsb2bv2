@@ -115,7 +115,17 @@ export function EmailThreadView({ threadId, onReply, onForward }: EmailThreadVie
 
                 <div
                   className="ml-11 prose prose-sm dark:prose-invert max-w-none text-sm"
-                  dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(email.body_html || email.body_text || "") }}
+                  dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(email.body_html || email.body_text || "", {
+                    ALLOWED_TAGS: ['p', 'br', 'b', 'i', 'u', 'strong', 'em', 'a', 'ul', 'ol', 'li',
+                      'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'pre', 'code', 'span', 'div',
+                      'table', 'tr', 'td', 'th', 'thead', 'tbody', 'tfoot', 'img', 'hr', 'sub', 'sup'],
+                    ALLOWED_ATTR: ['href', 'src', 'alt', 'class', 'style', 'target', 'width', 'height',
+                      'colspan', 'rowspan', 'align', 'valign'],
+                    ALLOW_DATA_ATTR: false,
+                    FORBID_TAGS: ['form', 'input', 'textarea', 'select', 'button', 'style', 'iframe',
+                      'object', 'embed', 'script', 'link', 'meta'],
+                    FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover', 'onfocus', 'onblur'],
+                  }) }}
                 />
 
                 {(email.open_count > 0 || email.click_count > 0) && (

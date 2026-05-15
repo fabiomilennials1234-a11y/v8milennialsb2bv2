@@ -10,6 +10,7 @@
 import { withSentry } from '../_shared/sentry.ts';
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import {
   encodeState,
@@ -27,7 +28,7 @@ const SUPABASE_ANON_KEY        =
   "";
 
 Deno.serve(withSentry('google-calendar-connect', async (req) => {
-  const corsHeaders = getCorsHeaders(req.headers.get("origin"));
+  const corsHeaders = withSecurityHeaders(getCorsHeaders(req.headers.get("origin")));
 
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });

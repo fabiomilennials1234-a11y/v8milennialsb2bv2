@@ -55,6 +55,8 @@ RUN printf '%s\n' \
   '  add_header X-Frame-Options "DENY" always;' \
   '  add_header X-XSS-Protection "1; mode=block" always;' \
   '  add_header Referrer-Policy "strict-origin-when-cross-origin" always;' \
+  '  add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;' \
+  "  add_header Content-Security-Policy \"default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.supabase.co; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://generativelanguage.googleapis.com https://*.sentry.io https://openrouter.ai; img-src 'self' data: https: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; frame-ancestors 'none'; base-uri 'self'; form-action 'self';\" always;" \
   '  location ~* ^/assets/.*\.(js|css|woff2?|ttf|eot|svg|png|jpg|jpeg|gif|webp|ico|map)$ {' \
   '    add_header Cache-Control "public, max-age=31536000, immutable" always;' \
   '    add_header X-Content-Type-Options "nosniff" always;' \

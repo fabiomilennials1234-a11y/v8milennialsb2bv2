@@ -19,6 +19,7 @@
 
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import {
   getValidAccessToken,
   logCalendarOp,
@@ -213,7 +214,7 @@ async function canAccessCalendar(
 // ─── Handler principal ────────────────────────────────────────────────────────
 
 Deno.serve(withSentry('google-calendar-events', async (req) => {
-  const corsHeaders = getCorsHeaders(req.headers.get("origin"));
+  const corsHeaders = withSecurityHeaders(getCorsHeaders(req.headers.get("origin")));
 
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });

@@ -11,6 +11,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { refreshLongLivedToken } from "../_shared/meta-api.ts";
 import { withSentry } from '../_shared/sentry.ts';
+import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logRuntime } from "../_shared/logger.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -21,7 +22,7 @@ Deno.serve(withSentry('refresh-meta-tokens', async (req) => {
   const cronSecret = req.headers.get("x-cron-secret");
   const expectedSecret = Deno.env.get("CRON_SECRET");
   if (!expectedSecret || cronSecret !== expectedSecret) {
-    return new Response("Unauthorized", { status: 401 });
+    return new Response("Unauthorized", { status: 401, headers: withSecurityHeaders({}) });
   }
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
@@ -47,14 +48,14 @@ Deno.serve(withSentry('refresh-meta-tokens', async (req) => {
       status: "error",
       errorMessage: error.message,
     });
-    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+    return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: withSecurityHeaders({ "Content-Type": "application/json" }) });
   }
 
   if (!connections?.length) {
     console.log("[refresh-meta-tokens] No tokens need refreshing");
     return new Response(JSON.stringify({ refreshed: 0, expired: 0 }), {
       status: 200,
-      headers: { "Content-Type": "application/json" },
+      headers: withSecurityHeaders({ "Content-Type": "application/json" }),
     });
   }
 
@@ -115,6 +116,6 @@ Deno.serve(withSentry('refresh-meta-tokens', async (req) => {
 
   return new Response(JSON.stringify(result), {
     status: 200,
-    headers: { "Content-Type": "application/json" },
+    headers: withSecurityHeaders({ "Content-Type": "application/json" }),
   });
 }));

@@ -1,9 +1,9 @@
 project_id = "jsjsmuncfkbsbzqzqhfq"
 
-# Auth: não exigir confirmação de email para login (SDR/equipe interno).
-# Em projetos hospedados, desative em: Dashboard → Authentication → Providers → Email → "Confirm email".
+# Auth: exigir confirmação de email para login.
+# Em projetos hospedados, habilite em: Dashboard → Authentication → Providers → Email → "Confirm email".
 [auth.email]
-enable_confirmations = false
+enable_confirmations = true
 
 # import-leads: autenticação via apikey; organization_id validado internamente
 [functions.import-leads]

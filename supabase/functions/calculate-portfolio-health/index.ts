@@ -17,7 +17,9 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { withSentry } from "../_shared/sentry.ts";
+import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logRuntime } from "../_shared/logger.ts";
+import { timingSafeCompare } from "../_shared/auth.ts";
 import { fireTrigger } from "../_shared/workflow-trigger.ts";
 import {
   calculateFrequencyScore,
@@ -354,11 +356,11 @@ async function processOrg(
 
 Deno.serve(
   withSentry("calculate-portfolio-health", async (req: Request): Promise<Response> => {
-    const headers = { "Content-Type": "application/json" };
+    const headers = withSecurityHeaders({ "Content-Type": "application/json" });
 
     // Auth
     const cronSecret = req.headers.get("x-cron-secret");
-    if (!CRON_SECRET || cronSecret !== CRON_SECRET) {
+    if (!CRON_SECRET || !cronSecret || !timingSafeCompare(cronSecret, CRON_SECRET)) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers });
     }
 

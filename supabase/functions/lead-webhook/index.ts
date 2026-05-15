@@ -18,6 +18,7 @@ import { upsertPipeEntry, getPipeEntry, updatePipeEntryById } from "../_shared/p
 import type { PipeSlug } from "../_shared/pipeline-adapter.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
+import { timingSafeCompare } from "../_shared/auth.ts";
 
 // Destino opcional: colocar o lead em um pipe (funil) em uma etapa específica
 interface PlaceInPipe {
@@ -80,7 +81,7 @@ serve(withSentry('lead-webhook', async (req) => {
     const webhookKey = req.headers.get("x-webhook-key");
     const expectedKey = Deno.env.get("WEBHOOK_API_KEY");
     
-    if (!webhookKey || webhookKey !== expectedKey) {
+    if (!webhookKey || !expectedKey || !timingSafeCompare(webhookKey, expectedKey)) {
       console.error("[lead-webhook] Invalid or missing webhook key");
       return errorResponse(401, "Unauthorized", corsHeaders, { req });
     }
