@@ -10,6 +10,7 @@ import { featureFlags } from "@/lib/feature-flags";
 import { ChatBubbleProvider } from "@/contexts/ChatBubbleContext";
 import { ChatBubble } from "@/components/chat/bubble";
 import { WhatsAppUpdateModal } from "@/components/shared/WhatsAppUpdateModal";
+import { SessionDeadBanner } from "@/components/whatsapp/SessionDeadBanner";
 
 // Rotas onde o checklist NÃO deve aparecer
 const CHECKLIST_HIDDEN_PATTERNS = [
@@ -65,6 +66,10 @@ export function MainLayout({ children }: MainLayoutProps) {
   const layout = (
     <div className="flex flex-col h-screen bg-background" data-layout="main">
       <TopNavigation />
+
+      {/* Dead-session banner — global pra qualquer página enquanto a org tem
+          instância WhatsApp com sessão morta. Hide silencioso no caminho feliz. */}
+      <SessionDeadBanner />
 
       {/* Checklist de onboarding — pill fixado no top-right, abaixo do topnav */}
       {showChecklist && !isFullBleed && (

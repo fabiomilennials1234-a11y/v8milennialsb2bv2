@@ -84,12 +84,14 @@ async function fetchContactsForInstance(
           msg.direction === "incoming" || msg.direction === "outgoing"
             ? msg.direction
             : null,
+        last_message_sent_source: null,
         unread_count: 0,
         lead_id: msg.lead_id,
         lead_name: leadName,
         conversation_id: null,
         archived_at: null,
         tags: [],
+        is_group: false,
       });
     } else {
       if (new Date(msg.timestamp) > new Date(existing.last_message_time)) {

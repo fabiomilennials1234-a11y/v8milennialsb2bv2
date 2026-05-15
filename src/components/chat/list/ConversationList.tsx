@@ -7,9 +7,9 @@
  * Lista plana (sem grouping) → estimateSize via CSS var --chat-list-row-height.
  * Mobile fallback: render plain sempre.
  */
-import { useRef, useCallback } from "react";
+import { useRef, useCallback, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Loader2, Search, Filter, UserPlus, MessageSquare, Archive, Settings } from "lucide-react";
+import { Loader2, Search, Filter, UserPlus, MessageSquare, Archive, Settings, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -106,8 +106,16 @@ export function ConversationList({
   density = "comfortable",
 }: ConversationListProps) {
   const scrollAreaRef = useRef<HTMLDivElement | null>(null);
+  // Local toggle: BL-WA-05 added group capture. Default view hides groups so
+  // existing 1:1 sales workflow is unchanged; user opts in via the "Grupos" pill.
+  const [showGroups, setShowGroups] = useState(false);
 
   const filteredContacts = contacts.filter((c) => {
+    if (showGroups) {
+      if (!c.is_group) return false;
+    } else {
+      if (c.is_group) return false;
+    }
     if (showOnlyWithLead && !c.lead_id) return false;
     if (showOnlyWaitingHuman && !(c.lead_id && waitingHumanLeadIds?.has(c.lead_id))) return false;
     if (activeTab === "active" && c.archived_at) return false;
@@ -119,8 +127,9 @@ export function ConversationList({
     );
   });
 
-  const activeCount = contacts.filter((c) => !c.archived_at).length;
-  const archivedCount = contacts.filter((c) => !!c.archived_at).length;
+  const activeCount = contacts.filter((c) => !c.is_group && !c.archived_at).length;
+  const archivedCount = contacts.filter((c) => !c.is_group && !!c.archived_at).length;
+  const groupCount = contacts.filter((c) => c.is_group).length;
 
   const isMobile = typeof window !== "undefined" && window.innerWidth < MOBILE_BREAKPOINT;
   const shouldVirtualize = !isMobile && filteredContacts.length > VIRTUALIZE_THRESHOLD;
@@ -239,6 +248,28 @@ export function ConversationList({
             {waitingHumanCount > 0 && (
               <span className="bg-amber-500 text-white text-[10px] rounded-full min-w-[16px] h-4 flex items-center justify-center px-1 tabular-nums">
                 {waitingHumanCount}
+              </span>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowGroups((v) => !v)}
+            className={cn(
+              "flex items-center gap-1.5 text-xs px-2 py-1 rounded-md transition-colors",
+              showGroups
+                ? "bg-sky-500/15 text-sky-500 font-medium"
+                : "text-muted-foreground hover:bg-muted",
+            )}
+            title={showGroups ? "Mostrando apenas grupos" : "Mostrar grupos"}
+          >
+            <Users className="w-3 h-3" />
+            Grupos
+            {groupCount > 0 && (
+              <span className={cn(
+                "text-[10px] rounded-full min-w-[16px] h-4 flex items-center justify-center px-1 tabular-nums",
+                showGroups ? "bg-sky-500 text-white" : "bg-muted-foreground/20 text-muted-foreground",
+              )}>
+                {groupCount}
               </span>
             )}
           </button>

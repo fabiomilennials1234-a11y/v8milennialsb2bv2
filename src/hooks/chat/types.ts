@@ -65,6 +65,8 @@ export interface ChatContact {
   archived_at: string | null;
   /** Tags combinadas: lead_tags + conversation_tags (sem duplicatas) */
   tags: ChatContactTag[];
+  /** True quando o "contato" representa um grupo do WhatsApp (remote_jid @g.us). */
+  is_group: boolean;
 }
 
 /** Instância de WhatsApp que o usuário pode acessar (para seletor de inbox) */

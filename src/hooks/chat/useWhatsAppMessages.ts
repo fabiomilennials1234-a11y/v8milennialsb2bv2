@@ -11,10 +11,18 @@ import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
 import type { WhatsAppMessage } from "./types";
 import { chatQueryKeys } from "./shared/queryKeys";
+import {
+  useWhatsAppRealtimeFallback,
+  FALLBACK_POLL_INTERVAL_MS,
+} from "./useRealtimeFallback";
 
 /**
  * Hook para buscar mensagens de um contato específico em uma instância (inbox).
  * Filtra por instanceId para mostrar só a conversa daquele número.
+ *
+ * Realtime via useWhatsAppMessagesRealtime cobre o caminho saudável. Quando o
+ * canal fica offline/stale por >2min, useWhatsAppRealtimeFallback ativa
+ * `refetchInterval` de 10s pra garantir progresso até reconectar.
  */
 export function useWhatsAppMessages(
   phoneNumber: string | null,
@@ -22,6 +30,7 @@ export function useWhatsAppMessages(
 ) {
   const { data: teamMember } = useCurrentTeamMember();
   const organizationId = teamMember?.organization_id;
+  const { shouldPoll } = useWhatsAppRealtimeFallback(organizationId);
 
   return useQuery({
     queryKey: chatQueryKeys.messages(organizationId, phoneNumber, instanceId),
@@ -40,7 +49,6 @@ export function useWhatsAppMessages(
       return data as WhatsAppMessage[];
     },
     enabled: !!organizationId && !!phoneNumber && !!instanceId,
-    // Sem refetchInterval — realtime via useWhatsAppMessagesRealtime cuida da atualização.
-    // Fallback de staleTime padrão (5min) garante que dados sejam refetched em edge cases.
+    refetchInterval: shouldPoll ? FALLBACK_POLL_INTERVAL_MS : false,
   });
 }
