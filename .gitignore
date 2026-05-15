@@ -51,11 +51,16 @@ dist-ssr
 supabase/.temp/
 supabase/.branches/
 
-# SQL files with credentials (should not be committed)
+# SQL files with credentials or admin operations (should not be committed)
 *.credentials.sql
 CRIAR_ORGANIZACAO*.sql
 VINCULAR_ORGANIZACAO.sql
+FORCAR_VINCULO_ORGANIZACAO.sql
 SOLUCAO_DEFINITIVA_RLS.sql
+scripts/insert-master-user.sql
+*.pem
+*.key
+*.p8
 
 # Test artifacts
 .playwright-auth/
