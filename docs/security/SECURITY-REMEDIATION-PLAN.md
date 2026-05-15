@@ -335,6 +335,15 @@
 | Wave 2 | 8/10 | 1 semana | FEITO | `a75334f4` |
 | Wave 3 | 9/10 | 2 semanas | FEITO | `7be8550a` |
 
+### Producao (2026-05-15)
+
+- Migrations W0-W2: aplicadas via `supabase db query --linked`
+- Migration W3 (cross-tenant): aplicada via SQL direto (team_members, profiles, tags hardened)
+- W3-2 (pipe_propostas): SKIP — pipe_propostas e VIEW, nao tabela. Seguranca herdada das tabelas base via RLS
+- W2-6 (fire_workflow_trigger): prod tem 5 params, migration corrigida para assinatura correta
+- Edge functions: todas deployadas via `supabase functions deploy`
+- Funcoes deletadas (test-gemini-rag, reconfigure-uazapi-webhooks): confirmado ausentes no deploy
+
 ### Items pendentes (decisoes de produto)
 
 - **W2-3 (MFA/2FA)**: Requer implementacao de flow de enrollment no frontend + decisao sobre obrigatoriedade

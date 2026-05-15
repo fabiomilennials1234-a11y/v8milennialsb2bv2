@@ -5,7 +5,8 @@
 -- ============================================================================
 
 -- From 20260802000000_workflow_executor_infrastructure.sql
-ALTER FUNCTION public.fire_workflow_trigger(uuid, text, uuid, jsonb)
+-- Prod has 5-param signature (includes p_triggered_by_execution_id uuid)
+ALTER FUNCTION public.fire_workflow_trigger(uuid, text, uuid, jsonb, uuid)
   SET search_path = public;
 
 ALTER FUNCTION public.trigger_workflow_lead_created()

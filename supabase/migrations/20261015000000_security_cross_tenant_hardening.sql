@@ -8,9 +8,9 @@
 --   no bypass occurs. For defense-in-depth, re-create with explicit
 --   subquery pattern (IN instead of =) so intent is unambiguous.
 --
--- W3-2: pipe_propostas UPDATE has WITH CHECK (true) from 20260826100000.
---   This allows a user who passes the USING clause to set organization_id
---   to a different org. Fix by mirroring the org guard in WITH CHECK.
+-- W3-2: pipe_propostas — SKIPPED. pipe_propostas is a VIEW in prod, not
+--   a table. Views inherit security from underlying tables' RLS policies.
+--   No RLS policy can be applied to a view.
 --
 -- Date: 2026-05-15
 -- ============================================================================
@@ -79,35 +79,10 @@ CREATE POLICY "tags_select_own_org"
 
 
 -- ────────────────────────────────────────────────────────────────────────────
--- W3-2: pipe_propostas UPDATE — replace WITH CHECK (true) with org guard
---
--- pipe_whatsapp and pipe_confirmacao already have proper WITH CHECK
--- (fixed in 20260826100000). Only pipe_propostas still has WITH CHECK (true).
+-- W3-2: pipe_propostas — SKIPPED
+-- pipe_propostas is a VIEW in prod. Views cannot have RLS policies.
+-- Security is enforced by the underlying tables' RLS (leads, etc).
 -- ────────────────────────────────────────────────────────────────────────────
-
-DROP POLICY IF EXISTS "pipe_propostas_update_by_permissions" ON public.pipe_propostas;
-CREATE POLICY "pipe_propostas_update_by_permissions"
-  ON public.pipe_propostas FOR UPDATE
-  TO authenticated
-  USING (
-    (SELECT l.organization_id FROM public.leads l WHERE l.id = lead_id LIMIT 1) IN (
-      SELECT tm.organization_id FROM public.team_members tm WHERE tm.user_id = auth.uid()
-    )
-    AND (
-      public.is_user_admin()
-      OR public.has_feature_permission('leads.view_all')
-      OR public.is_user_responsible(responsible_id)
-      OR public.can_see_lead_by_permissions(
-        (SELECT l.sdr_id FROM public.leads l WHERE l.id = lead_id LIMIT 1),
-        closer_id
-      )
-    )
-  )
-  WITH CHECK (
-    (SELECT l.organization_id FROM public.leads l WHERE l.id = lead_id LIMIT 1) IN (
-      SELECT tm.organization_id FROM public.team_members tm WHERE tm.user_id = auth.uid()
-    )
-  );
 
 
 -- ────────────────────────────────────────────────────────────────────────────
@@ -145,17 +120,9 @@ BEGIN
     RAISE EXCEPTION 'VALIDATION FAILED: tags_select_own_org policy missing';
   END IF;
 
-  -- Verify pipe_propostas UPDATE policy exists and does NOT have WITH CHECK (true)
-  SELECT count(*) INTO _count
-  FROM pg_policies
-  WHERE tablename = 'pipe_propostas'
-    AND policyname = 'pipe_propostas_update_by_permissions'
-    AND cmd = 'u';
-  IF _count < 1 THEN
-    RAISE EXCEPTION 'VALIDATION FAILED: pipe_propostas_update_by_permissions policy missing';
-  END IF;
+  -- W3-2 pipe_propostas skipped (view, not table)
 
-  RAISE NOTICE 'VALIDATION PASSED: W3-1 cross-tenant SELECT hardened, W3-2 pipe_propostas WITH CHECK fixed.';
+  RAISE NOTICE 'VALIDATION PASSED: W3-1 cross-tenant SELECT hardened. W3-2 skipped (pipe_propostas is a view).';
 END;
 $$;
 
