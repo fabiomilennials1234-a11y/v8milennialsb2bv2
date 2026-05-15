@@ -28,6 +28,7 @@ import {
   calculateTicketScore,
   deriveHealthStatus,
   deriveSegment,
+  deriveTrend,
   detectSignals,
   type DetectedSignal,
   type ProductFrequency,
@@ -160,6 +161,7 @@ async function processClient(
 
   const healthStatus = deriveHealthStatus(healthScore);
   const segment = deriveSegment(healthScore, avgTicket, orgAvgTicket, orderCount);
+  const trend = deriveTrend(lastThreeTickets, avgTicket);
 
   // Next expected order
   const nextOrderExpected = lastOrderAt
@@ -181,6 +183,7 @@ async function processClient(
       order_count: orderCount,
       lifetime_value: lifetimeValue,
       avg_ticket: avgTicket || null,
+      trend,
     })
     .eq("id", client.id);
 

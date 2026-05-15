@@ -11,7 +11,7 @@ export function usePortfolioHealth() {
       const { data: clients } = await supabase
         .from("upsell_clients")
         .select(
-          "id, name, company, phone, email, lead_id, health_score, health_status, segment, avg_ticket, lifetime_value, days_since_last_order, reorder_cycle_days, next_order_expected, order_count, is_active, potencial, closer_id, first_sale_at, last_order_at",
+          "id, name, company, phone, email, lead_id, health_score, health_status, segment, avg_ticket, lifetime_value, days_since_last_order, reorder_cycle_days, next_order_expected, order_count, is_active, potencial, closer_id, first_sale_at, last_order_at, trend",
         )
         .eq("organization_id", organizationId!)
         .eq("is_active", true);

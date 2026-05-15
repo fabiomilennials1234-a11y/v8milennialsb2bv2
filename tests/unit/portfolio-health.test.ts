@@ -6,6 +6,7 @@ import {
   calculateHealthScore,
   deriveHealthStatus,
   deriveSegment,
+  deriveTrend,
   detectSignals,
 } from "../../supabase/functions/_shared/portfolio-health.ts";
 
@@ -147,5 +148,47 @@ describe("detectSignals", () => {
     });
     expect(signals.find((s) => s.type === "product_missing")).toBeDefined();
     expect(signals.find((s) => s.type === "product_missing")?.metadata?.productName).toBe("Catalisador B2");
+  });
+});
+
+describe("deriveTrend", () => {
+  it("returns up when recent avg exceeds historical by >10%", () => {
+    expect(deriveTrend([15000, 14000, 13000], 10000)).toBe("up");
+  });
+
+  it("returns down when recent avg is below historical by >10%", () => {
+    expect(deriveTrend([7000, 8000, 9000], 12000)).toBe("down");
+  });
+
+  it("returns stable when recent avg is within ±10% of historical", () => {
+    expect(deriveTrend([10500, 9800, 10200], 10000)).toBe("stable");
+  });
+
+  it("returns stable when fewer than 3 tickets", () => {
+    expect(deriveTrend([15000, 14000], 10000)).toBe("stable");
+  });
+
+  it("returns stable when historicalAvg is 0", () => {
+    expect(deriveTrend([15000, 14000, 13000], 0)).toBe("stable");
+  });
+
+  it("returns stable at exactly +10% boundary", () => {
+    expect(deriveTrend([11000, 11000, 11000], 10000)).toBe("stable");
+  });
+
+  it("returns stable at exactly -10% boundary", () => {
+    expect(deriveTrend([9000, 9000, 9000], 10000)).toBe("stable");
+  });
+
+  it("returns up when just above +10% boundary", () => {
+    expect(deriveTrend([11001, 11001, 11001], 10000)).toBe("up");
+  });
+
+  it("returns down when just below -10% boundary", () => {
+    expect(deriveTrend([8999, 8999, 8999], 10000)).toBe("down");
+  });
+
+  it("returns stable for empty array", () => {
+    expect(deriveTrend([], 10000)).toBe("stable");
   });
 });

@@ -6,7 +6,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { MessageCircle, ClipboardList, ChevronRight } from "lucide-react";
+import { MessageCircle, ClipboardList, ChevronRight, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatBRL } from "@/lib/format";
 
@@ -26,6 +26,7 @@ export interface CarteiraClient {
   order_count: number | null;
   lifetime_value: number | null;
   lead_id: string | null;
+  trend: string | null;
 }
 
 interface CarteiraClientTableProps {
@@ -241,7 +242,27 @@ export function CarteiraClientTable({
                 </TableCell>
 
                 <TableCell className="py-3">
-                  <span className="text-[13px] text-[#3f3f46]">—</span>
+                  {client.trend === "up" && (
+                    <span className="inline-flex items-center gap-1 text-[13px] font-medium text-[#22c55e]">
+                      <TrendingUp className="w-3.5 h-3.5" />
+                      Subindo
+                    </span>
+                  )}
+                  {client.trend === "down" && (
+                    <span className="inline-flex items-center gap-1 text-[13px] font-medium text-[#ef4444]">
+                      <TrendingDown className="w-3.5 h-3.5" />
+                      Caindo
+                    </span>
+                  )}
+                  {client.trend === "stable" && (
+                    <span className="inline-flex items-center gap-1 text-[13px] text-[#71717a]">
+                      <Minus className="w-3.5 h-3.5" />
+                      Estável
+                    </span>
+                  )}
+                  {!client.trend && (
+                    <span className="text-[13px] text-[#3f3f46]">—</span>
+                  )}
                 </TableCell>
 
                 <TableCell className="py-3">

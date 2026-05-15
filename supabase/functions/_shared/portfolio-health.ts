@@ -89,6 +89,20 @@ export function deriveSegment(
   return "prata";
 }
 
+export type Trend = "up" | "stable" | "down";
+
+export function deriveTrend(
+  lastThreeTickets: number[],
+  historicalAvg: number,
+): Trend {
+  if (lastThreeTickets.length < 3 || historicalAvg <= 0) return "stable";
+  const recentAvg =
+    lastThreeTickets.reduce((s, v) => s + v, 0) / lastThreeTickets.length;
+  if (recentAvg > historicalAvg * 1.1) return "up";
+  if (recentAvg < historicalAvg * 0.9) return "down";
+  return "stable";
+}
+
 export function detectSignals(input: SignalInput): DetectedSignal[] {
   const signals: DetectedSignal[] = [];
 
