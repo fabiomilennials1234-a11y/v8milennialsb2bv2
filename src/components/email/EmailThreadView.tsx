@@ -118,13 +118,16 @@ export function EmailThreadView({ threadId, onReply, onForward }: EmailThreadVie
                   dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(email.body_html || email.body_text || "", {
                     ALLOWED_TAGS: ['p', 'br', 'b', 'i', 'u', 'strong', 'em', 'a', 'ul', 'ol', 'li',
                       'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'pre', 'code', 'span', 'div',
-                      'table', 'tr', 'td', 'th', 'thead', 'tbody', 'tfoot', 'img', 'hr', 'sub', 'sup'],
-                    ALLOWED_ATTR: ['href', 'src', 'alt', 'class', 'style', 'target', 'width', 'height',
+                      'table', 'tr', 'td', 'th', 'thead', 'tbody', 'tfoot', 'hr', 'sub', 'sup'],
+                    ALLOWED_ATTR: ['href', 'alt', 'target', 'width', 'height',
                       'colspan', 'rowspan', 'align', 'valign'],
+                    ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto):|[^a-z]|[a-z+.-]+(?:[^a-z+.\-:]|$))/i,
                     ALLOW_DATA_ATTR: false,
+                    ALLOW_UNKNOWN_PROTOCOLS: false,
                     FORBID_TAGS: ['form', 'input', 'textarea', 'select', 'button', 'style', 'iframe',
-                      'object', 'embed', 'script', 'link', 'meta'],
-                    FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover', 'onfocus', 'onblur'],
+                      'object', 'embed', 'script', 'link', 'meta', 'img'],
+                    FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover', 'onfocus', 'onblur',
+                      'style', 'class', 'src'],
                   }) }}
                 />
 
