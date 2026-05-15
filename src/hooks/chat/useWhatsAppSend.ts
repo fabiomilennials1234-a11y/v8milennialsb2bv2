@@ -7,69 +7,42 @@
  */
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useCurrentTeamMember, isVirtualTeamMember } from "@/hooks/useTeamMembers";
-import { useUserWriteInstanceFlag } from "@/hooks/useUserWriteInstanceFlag";
+import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
 import { track } from "@/lib/analytics";
 import { formatPhoneForWhatsApp } from "@/lib/whatsapp";
 import type { WhatsAppMessage, FailedMessage } from "./types";
 
 // ─── Helpers privados ────────────────────────────────────────────────────────
 
-/**
- * Check if a whatsapp_instance is backed by SZ.chat (via metadata.channel).
- */
-async function isSzChatInstance(instanceId: string | null | undefined): Promise<boolean> {
+const SEND_TIMEOUT_MS = 15_000;
+
+// Per-instance cache — instance type never changes during a session
+const szChatCache = new Map<string, boolean>();
+
+async function isSzChatInstanceCached(instanceId: string | null | undefined): Promise<boolean> {
   if (!instanceId) return false;
+  const cached = szChatCache.get(instanceId);
+  if (cached !== undefined) return cached;
   const { data } = await supabase
     .from("whatsapp_instances")
     .select("metadata")
     .eq("id", instanceId)
     .maybeSingle();
-  return (data?.metadata as Record<string, unknown>)?.channel === "sz_chat";
+  const result = (data?.metadata as Record<string, unknown>)?.channel === "sz_chat";
+  szChatCache.set(instanceId, result);
+  return result;
 }
 
-/**
- * Verifica se o usuário pode responder neste número (instância) — caminho LEGACY.
- *
- * Sob flag user_write_instance_strict OFF: usado como guard frontend (rápido,
- * evita roundtrip ao backend pra rejeições óbvias). Lê whatsapp_instance_allowed_members.
- *
- * Sob flag ON: caller deve PULAR esta função. O backend (whatsapp-api-proxy
- * + instance-write-guard) é a fonte de verdade — checa owner_team_member_id +
- * admin/master via RPC can_user_write_instance. Owners criados via
- * set_instance_owner que não estão duplicados em allowed_members ficariam
- * bloqueados aqui se não pularmos.
- */
-async function assertCanReplyOnInstance(
-  instanceName: string,
-  organizationId: string,
-  teamMemberId: string
-): Promise<void> {
-  // Master (shadow user) pode responder em qualquer instância
-  if (isVirtualTeamMember(teamMemberId)) return;
-
-  const { data: instance } = await supabase
-    .from("whatsapp_instances")
-    .select("id")
-    .eq("organization_id", organizationId)
-    .eq("instance_name", instanceName)
-    .maybeSingle();
-
-  if (!instance?.id) return;
-
-  const { data: allowed } = await supabase
-    .from("whatsapp_instance_allowed_members")
-    .select("team_member_id")
-    .eq("whatsapp_instance_id", instance.id);
-
-  if (allowed && allowed.length > 0) {
-    const allowedIds = allowed.map((a) => a.team_member_id);
-    if (!allowedIds.includes(teamMemberId)) {
-      throw new Error(
-        "Apenas os vendedores selecionados para este número podem responder no chat. Peça ao admin para incluir você na configuração da instância."
-      );
-    }
-  }
+async function invokeWithTimeout<T>(
+  fnName: string,
+  body: Record<string, unknown>,
+  timeoutMs = SEND_TIMEOUT_MS,
+): Promise<{ data: T; error: unknown }> {
+  const invoke = supabase.functions.invoke(fnName, { body });
+  const timeout = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error("Envio expirou. Tente novamente.")), timeoutMs),
+  );
+  return Promise.race([invoke, timeout]) as Promise<{ data: T; error: unknown }>;
 }
 
 /** Sanitiza nome de arquivo para ser compatível com Storage */
@@ -172,7 +145,6 @@ async function uploadMediaToStorage(
 export function useSendWhatsAppMessage() {
   const queryClient = useQueryClient();
   const { data: teamMember } = useCurrentTeamMember();
-  const { isStrict } = useUserWriteInstanceFlag();
 
   return useMutation({
     mutationFn: async ({
@@ -186,65 +158,43 @@ export function useSendWhatsAppMessage() {
       message: string;
       instanceName: string;
       instanceId?: string | null;
-      /** Lead vinculado à conversa. Encaminhado ao whatsapp-api-proxy quando
-       *  flag user_write_instance_strict está ON; ignorado caso contrário.
-       *  Etapa C — vínculo user↔instância de escrita. */
       leadId?: string | null;
     }) => {
       if (!teamMember?.organization_id || !teamMember?.id) {
         throw new Error("Usuário não vinculado à equipe");
       }
 
-      // Flag ON → backend (whatsapp-api-proxy + instance-write-guard) é a
-      // fonte de verdade. Pulamos o guard legacy por allowed_members pra não
-      // bloquear owners criados via set_instance_owner que não estão na
-      // lista legacy.
-      if (!isStrict) {
-        await assertCanReplyOnInstance(
-          instanceName,
-          teamMember.organization_id,
-          teamMember.id
-        );
-      }
-
       const formattedNumber = formatPhoneForWhatsApp(phoneNumber);
       if (!formattedNumber) throw new Error("Número de telefone inválido");
 
-      const isSzChat = await isSzChatInstance(instanceId);
+      const isSzChat = await isSzChatInstanceCached(instanceId);
 
       let data: Record<string, unknown>;
       let error: unknown;
 
       if (isSzChat) {
-        const result = await supabase.functions.invoke("sz-chat-send", {
-          body: {
-            action: "send_message",
-            organization_id: teamMember.organization_id,
-            phone_number: formattedNumber,
-            message,
-          },
+        const result = await invokeWithTimeout("sz-chat-send", {
+          action: "send_message",
+          organization_id: teamMember.organization_id,
+          phone_number: formattedNumber,
+          message,
         });
         data = result.data;
         error = result.error;
       } else {
-        // whatsapp-api-proxy: provider-agnostic (Evolution + Uazapi).
-        // Carrega lead_id no payload para guard backend validar vínculo
-        // user↔instância quando flag user_write_instance_strict está ON.
         if (!instanceId) {
           throw new Error(
             "Instância WhatsApp não identificada. Recarregue a página."
           );
         }
-        const result = await supabase.functions.invoke("whatsapp-api-proxy", {
-          body: {
-            action: "sendText",
-            instance_id: instanceId,
-            organization_id: teamMember.organization_id,
-            payload: {
-              number: formattedNumber,
-              text: message,
-              ...(leadId ? { lead_id: leadId } : {}),
-            },
+        const result = await invokeWithTimeout("whatsapp-api-proxy", {
+          action: "sendText",
+          instance_id: instanceId,
+          organization_id: teamMember.organization_id,
+          payload: {
+            number: formattedNumber,
+            text: message,
+            ...(leadId ? { lead_id: leadId } : {}),
           },
         });
         data = result.data;
@@ -256,7 +206,9 @@ export function useSendWhatsAppMessage() {
 
       const messageId = (data as Record<string, { id?: string }>)?.key?.id || `local_${Date.now()}`;
       const timestamp = new Date().toISOString();
-      const { error: insertError } = await supabase.from("whatsapp_messages").upsert({
+
+      // Fire-and-forget — webhook send.message is the authoritative save
+      supabase.from("whatsapp_messages").upsert({
         organization_id: teamMember.organization_id,
         instance_id: instanceId || null,
         message_id: messageId,
@@ -267,11 +219,8 @@ export function useSendWhatsAppMessage() {
         content: message,
         status: "sent",
         timestamp,
-      }, { onConflict: "message_id,instance_id", ignoreDuplicates: true });
-
-      if (insertError) {
-        // Não bloquear: o webhook send.message também salva como fallback
-      }
+      }, { onConflict: "message_id,instance_id", ignoreDuplicates: true })
+        .then(({ error: e }) => { if (e) console.warn("[send] upsert fallback failed:", e.message); });
 
       return { ...data, _localMessage: { phoneNumber, message, instanceId, messageId, timestamp } };
     },
@@ -358,7 +307,6 @@ export function useSendWhatsAppMessage() {
 export function useSendWhatsAppMedia() {
   const queryClient = useQueryClient();
   const { data: teamMember } = useCurrentTeamMember();
-  const { isStrict } = useUserWriteInstanceFlag();
 
   return useMutation({
     mutationFn: async ({
@@ -380,19 +328,10 @@ export function useSendWhatsAppMedia() {
       caption?: string;
       fileName?: string;
       mimetype?: string;
-      /** Lead vinculado à conversa — vide useSendWhatsAppMessage. */
       leadId?: string | null;
     }) => {
       if (!teamMember?.organization_id || !teamMember?.id) {
         throw new Error("Usuário não vinculado à equipe");
-      }
-      // Vide useSendWhatsAppMessage: skip legacy guard quando flag ON.
-      if (!isStrict) {
-        await assertCanReplyOnInstance(
-          instanceName,
-          teamMember.organization_id,
-          teamMember.id
-        );
       }
 
       const formattedNumber = formatPhoneForWhatsApp(phoneNumber);
@@ -403,26 +342,24 @@ export function useSendWhatsAppMedia() {
         mediaUrl = await uploadMediaToStorage(
           media,
           mediaType,
-          teamMember?.organization_id || "default",
-          fileName
+          teamMember.organization_id,
+          fileName,
         );
       }
 
-      const isSzChat = await isSzChatInstance(instanceId);
+      const isSzChat = await isSzChatInstanceCached(instanceId);
 
       let data: Record<string, unknown>;
       let error: unknown;
 
       if (isSzChat) {
-        const result = await supabase.functions.invoke("sz-chat-send", {
-          body: {
-            action: "send_message",
-            organization_id: teamMember.organization_id,
-            phone_number: formattedNumber,
-            message: caption || "",
-            message_type: "media",
-            media_url: mediaUrl,
-          },
+        const result = await invokeWithTimeout("sz-chat-send", {
+          action: "send_message",
+          organization_id: teamMember.organization_id,
+          phone_number: formattedNumber,
+          message: caption || "",
+          message_type: "media",
+          media_url: mediaUrl,
         });
         data = result.data;
         error = result.error;
@@ -435,14 +372,10 @@ export function useSendWhatsAppMedia() {
             "Instância WhatsApp não identificada. Recarregue a página."
           );
         }
-        // Áudio (PTT): proxy mapeia para sendMedia type=ptt internamente.
         const proxyAction = mediaType === "audio" ? "sendAudio" : "sendMedia";
         const proxyPayload: Record<string, unknown> =
           mediaType === "audio"
-            ? {
-                number: formattedNumber,
-                file: mediaUrl,
-              }
+            ? { number: formattedNumber, file: mediaUrl }
             : {
                 number: formattedNumber,
                 type: mediaType,
@@ -452,14 +385,16 @@ export function useSendWhatsAppMedia() {
               };
         if (leadId) proxyPayload.lead_id = leadId;
 
-        const result = await supabase.functions.invoke("whatsapp-api-proxy", {
-          body: {
+        const result = await invokeWithTimeout(
+          "whatsapp-api-proxy",
+          {
             action: proxyAction,
             instance_id: instanceId,
             organization_id: teamMember.organization_id,
             payload: proxyPayload,
           },
-        });
+          60_000, // media needs more time (upload + Uazapi)
+        );
         data = result.data;
         error = result.error;
 
@@ -474,10 +409,13 @@ export function useSendWhatsAppMedia() {
         }
       }
 
-      const { error: insertError } = await supabase.from("whatsapp_messages").upsert({
+      const messageId = (data as Record<string, { id?: string }>)?.key?.id || `local_${Date.now()}`;
+
+      // Fire-and-forget — webhook send.message is the authoritative save
+      supabase.from("whatsapp_messages").upsert({
         organization_id: teamMember.organization_id,
         instance_id: instanceId || null,
-        message_id: (data as Record<string, { id?: string }>)?.key?.id || `local_${Date.now()}`,
+        message_id: messageId,
         remote_jid: `${formattedNumber}@s.whatsapp.net`,
         phone_number: phoneNumber,
         direction: "outgoing",
@@ -486,11 +424,8 @@ export function useSendWhatsAppMedia() {
         media_url: mediaUrl,
         status: "sent",
         timestamp: new Date().toISOString(),
-      }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
-
-      if (insertError) {
-        // Não bloquear: o webhook send.message também salva como fallback
-      }
+      }, { onConflict: "message_id,instance_id", ignoreDuplicates: false })
+        .then(({ error: e }) => { if (e) console.warn("[send] media upsert fallback failed:", e.message); });
 
       return data;
     },
