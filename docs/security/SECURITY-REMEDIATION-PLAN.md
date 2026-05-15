@@ -328,9 +328,15 @@
 
 ## Metricas de progresso
 
-| Wave | Items | Estimativa | Status |
-|------|-------|-----------|--------|
-| Wave 0 | 8 | Mesmo dia | Pendente |
-| Wave 1 | 12 | 48h | Pendente |
-| Wave 2 | 10 | 1 semana | Pendente |
-| Wave 3 | 10 | 2 semanas | Pendente |
+| Wave | Items | Estimativa | Status | Commit |
+|------|-------|-----------|--------|--------|
+| Wave 0 | 8/8 | Mesmo dia | FEITO | `b8c5647f` |
+| Wave 1 | 12/12 | 48h | FEITO | `a4b6de63` |
+| Wave 2 | 8/10 | 1 semana | FEITO | `a75334f4` |
+| Wave 3 | 9/10 | 2 semanas | FEITO | `7be8550a` |
+
+### Items pendentes (decisoes de produto)
+
+- **W2-3 (MFA/2FA)**: Requer implementacao de flow de enrollment no frontend + decisao sobre obrigatoriedade
+- **W2-5 (Desabilitar signup publico)**: Requer confirmar que provisioning via create-org-user cobre todos os cenarios
+- **W3-7 (rel=noopener)**: Ja estava correto — todos os links externos ja tinham o atributo
