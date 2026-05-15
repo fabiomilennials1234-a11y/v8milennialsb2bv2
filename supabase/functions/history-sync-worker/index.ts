@@ -164,6 +164,7 @@ async function upsertMessages(
           ? new Date(tsSeconds * 1000).toISOString()
           : new Date().toISOString(),
         raw_payload: msg as Record<string, unknown>,
+        received_via: "history_sync",
       },
       { onConflict: "message_id,instance_id", ignoreDuplicates: true }
     );

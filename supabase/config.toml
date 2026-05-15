@@ -192,6 +192,18 @@ verify_jwt = false
 # whatsapp-rebind-webhook: re-registra webhook Uazapi nas instâncias-alvo; auth via x-cron-secret ou service_role
 [functions.whatsapp-rebind-webhook]
 verify_jwt = false
+
+# whatsapp-dlq-replay: replay de eventos Uazapi não processáveis na primeira entrega; cron 5min; auth via x-cron-secret
+[functions.whatsapp-dlq-replay]
+verify_jwt = false
+
+# whatsapp-session-watchdog: detecta sessões WhatsApp mortas; cron 10min; auth via x-cron-secret
+[functions.whatsapp-session-watchdog]
+verify_jwt = false
+
+# whatsapp-health-monitor: drift v8 vs uazapi + auto-rebind; cron 5min; auth via x-cron-secret
+[functions.whatsapp-health-monitor]
+verify_jwt = false
 # history-sync-worker: chamado por pg_cron via pg_net; auth via x-cron-secret
 [functions.history-sync-worker]
 verify_jwt = false

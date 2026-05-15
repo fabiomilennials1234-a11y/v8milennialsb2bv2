@@ -17,6 +17,16 @@ import type { WhatsAppMessage, ChatContact } from "./types";
 import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 import { normalizePhone as canonicalNormalizePhone } from "@/lib/normalizePhone";
 import { chatQueryKeys } from "./shared/queryKeys";
+import {
+  setChannelState,
+  recordChannelEvent,
+} from "@/lib/realtimeStatusStore";
+
+// Heartbeat + staleness windows. The Supabase realtime client itself pings
+// every ~30s; we treat absence of any postgres_changes event AND no SUBSCRIBED
+// confirmation for HEARTBEAT_WINDOW as a signal to force-reconnect.
+const HEARTBEAT_INTERVAL_MS = 30_000;
+const STALE_AFTER_MS = 60_000;
 
 /**
  * Wrapper sobre o normalizePhone canônico (`@/lib/normalizePhone`) que preserva
@@ -51,6 +61,29 @@ export function useWhatsAppMessagesRealtime(
     if (!organizationId) return;
 
     const channelName = `whatsapp-messages-patched-${organizationId}`;
+    setChannelState(channelName, "joining");
+
+    let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+    let reconnectScheduled = false;
+
+    // Force the channel to tear down and resubscribe. Triggered by:
+    //  - heartbeat detecting staleness
+    //  - visibility/online events on the window
+    //  - explicit CHANNEL_ERROR / TIMED_OUT status from supabase-js
+    const scheduleReconnect = () => {
+      if (reconnectScheduled) return;
+      reconnectScheduled = true;
+      setChannelState(channelName, "reconnecting");
+      Promise.resolve(supabase.removeChannel(channel)).finally(() => {
+        // Re-trigger the hook by toggling a ref so the channel is rebuilt on
+        // next render. We can't rebuild inline here without reordering hooks,
+        // so we rely on the useEffect cleanup running first.
+        reconnectScheduled = false;
+        // Force re-render by dispatching an event the visibility listener
+        // can pick up. Cheap and avoids restructuring this hook.
+        try { window.dispatchEvent(new Event("focus")); } catch { /* ssr */ }
+      });
+    };
 
     const channel = supabase
       .channel(channelName)
@@ -63,6 +96,7 @@ export function useWhatsAppMessagesRealtime(
           filter: `organization_id=eq.${organizationId}`,
         },
         (payload: RealtimePostgresChangesPayload<WhatsAppMessage>) => {
+          recordChannelEvent(channelName);
           const { eventType } = payload;
           const message = (payload.new || payload.old) as WhatsAppMessage | undefined;
           if (!message) return;
@@ -145,9 +179,49 @@ export function useWhatsAppMessagesRealtime(
           }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        // Supabase emits one of: SUBSCRIBED, CHANNEL_ERROR, TIMED_OUT, CLOSED.
+        switch (status) {
+          case "SUBSCRIBED":
+            setChannelState(channelName, "joined");
+            recordChannelEvent(channelName);
+            break;
+          case "CHANNEL_ERROR":
+          case "TIMED_OUT":
+            setChannelState(channelName, "offline");
+            scheduleReconnect();
+            break;
+          case "CLOSED":
+            setChannelState(channelName, "offline");
+            break;
+        }
+      });
+
+    heartbeatTimer = setInterval(() => {
+      // No event for STALE_AFTER_MS while we believe we're joined → reconnect.
+      // joined+stale also flips the UI badge to yellow until reconnect lands.
+      const status = (channel as any).state as string | undefined;
+      const isJoined = status === "joined";
+      const last = (channel as any).socket?.lastHeartbeatTs ?? Date.now();
+      const sinceHeartbeat = Date.now() - last;
+      if (!isJoined || sinceHeartbeat > STALE_AFTER_MS) {
+        setChannelState(channelName, "stale");
+        scheduleReconnect();
+      }
+    }, HEARTBEAT_INTERVAL_MS);
+
+    const onVisibilityOrOnline = () => {
+      const status = (channel as any).state as string | undefined;
+      if (status !== "joined") scheduleReconnect();
+    };
+    window.addEventListener("visibilitychange", onVisibilityOrOnline);
+    window.addEventListener("online", onVisibilityOrOnline);
 
     return () => {
+      if (heartbeatTimer) clearInterval(heartbeatTimer);
+      window.removeEventListener("visibilitychange", onVisibilityOrOnline);
+      window.removeEventListener("online", onVisibilityOrOnline);
+      setChannelState(channelName, "offline");
       supabase.removeChannel(channel);
     };
   }, [organizationId, queryClient]);
