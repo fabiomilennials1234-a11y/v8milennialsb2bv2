@@ -1,45 +1,54 @@
 /**
- * useWhatsAppRealtimeFallback — decide if React Query should fall back to
- * polling because the realtime channel has been off `joined` for too long.
+ * useWhatsAppRealtimeFallback — activates polling when realtime is unhealthy.
  *
- * Returns { shouldPoll, reason }. Consumers set
- * `refetchInterval: shouldPoll ? FALLBACK_POLL_INTERVAL_MS : false` on
- * their queries; when realtime recovers (state === "joined") the flag
- * flips back to false and polling stops.
+ * Returns { shouldPoll, mode, reason }. Consumers set
+ * `refetchInterval: shouldPoll ? FALLBACK_POLL_INTERVAL_MS : false`.
  *
- * Threshold: 120s. The channel's heartbeat already triggers reconnect at
- * 60s of staleness; we wait beyond that so a healthy reconnect (which
- * usually completes in seconds) does not trigger unnecessary polls.
+ * Activation rules:
+ *   - Circuit breaker open (state "polling") → immediate poll
+ *   - Non-healthy state for > 10s → poll as backup
+ *   - State "joined" → no poll
  */
 import { useEffect, useState } from "react";
 import { useWhatsAppRealtimeStatus } from "@/hooks/useRealtimeChannelStatus";
 import type { RealtimeChannelState } from "@/lib/realtimeStatusStore";
 
-export const FALLBACK_THRESHOLD_MS = 120_000;
+export const FALLBACK_THRESHOLD_MS = 10_000;
 export const FALLBACK_POLL_INTERVAL_MS = 10_000;
-const TICK_INTERVAL_MS = 15_000;
+const TICK_INTERVAL_MS = 5_000;
 
 const NON_HEALTHY_STATES: RealtimeChannelState[] = [
   "offline",
-  "stale",
   "reconnecting",
+  "polling",
   "joining",
   "unknown",
 ];
 
 export function shouldFallback(
   state: RealtimeChannelState,
+  circuitOpen: boolean,
   lastTransitionAt: number,
   now: number,
   thresholdMs: number = FALLBACK_THRESHOLD_MS,
 ): boolean {
+  if (state === "joined") return false;
+  if (circuitOpen || state === "polling") return true;
   if (!NON_HEALTHY_STATES.includes(state)) return false;
   return now - lastTransitionAt >= thresholdMs;
 }
 
+export type FallbackMode = "realtime" | "polling" | "connecting" | "offline";
+
+export type FallbackResult = {
+  shouldPoll: boolean;
+  mode: FallbackMode;
+  reason: string | null;
+};
+
 export function useWhatsAppRealtimeFallback(
   organizationId: string | null | undefined,
-): { shouldPoll: boolean } {
+): FallbackResult {
   const status = useWhatsAppRealtimeStatus(organizationId);
   const [now, setNow] = useState(() => Date.now());
 
@@ -49,9 +58,23 @@ export function useWhatsAppRealtimeFallback(
     return () => clearInterval(id);
   }, [organizationId]);
 
-  const shouldPoll = organizationId
-    ? shouldFallback(status.state, status.lastTransitionAt, now)
-    : false;
+  if (!organizationId) {
+    return { shouldPoll: false, mode: "offline", reason: null };
+  }
 
-  return { shouldPoll };
+  const poll = shouldFallback(
+    status.state,
+    status.circuitOpen,
+    status.lastTransitionAt,
+    now,
+  );
+
+  let mode: FallbackMode;
+  if (status.state === "joined") mode = "realtime";
+  else if (poll) mode = "polling";
+  else if (status.state === "joining" || status.state === "reconnecting")
+    mode = "connecting";
+  else mode = "offline";
+
+  return { shouldPoll: poll, mode, reason: status.lastReason };
 }

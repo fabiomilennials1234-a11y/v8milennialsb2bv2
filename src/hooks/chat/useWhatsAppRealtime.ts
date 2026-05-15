@@ -1,13 +1,15 @@
 /**
  * useWhatsAppMessagesRealtime — subscrição realtime em whatsapp_messages.
  *
- * C19/C20: migrado para usePatchedRealtime — patch incremental via setQueryData
- * em vez de refetchQueries. Reduz ~80% de bandwidth e latência p99.
+ * Architecture (3 layers):
+ *   Transport: Supabase channel subscription + reconnect with exponential backoff
+ *   Circuit breaker: after N consecutive failures → stop reconnecting, set "polling"
+ *   Diagnostics: every state transition logged with reason to realtimeStatusStore
  *
- * Preserva:
- * - Dedup por message_id (idempotência server-side já garantida por 3066b5e)
- * - Normalização de telefone
- * - Atualização de contatos (last_message + unread_count)
+ * Reconnect cycle:
+ *   CHANNEL_ERROR → incrementFailures → backoff delay → epoch++ → useEffect re-run
+ *   If failures >= threshold → circuit open → polling state → cooldown → probe
+ *   On SUBSCRIBED → resetFailures → circuit close → "joined"
  */
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -21,32 +23,19 @@ import {
   setChannelState,
   recordChannelEvent,
   getChannelStatus,
+  incrementFailures,
+  resetFailures,
+  openCircuitBreaker,
 } from "@/lib/realtimeStatusStore";
 
-// Heartbeat + staleness windows. The Supabase realtime client itself pings
-// every ~30s; we treat absence of any postgres_changes event AND no SUBSCRIBED
-// confirmation for HEARTBEAT_WINDOW as a signal to force-reconnect.
-const HEARTBEAT_INTERVAL_MS = 30_000;
-const STALE_AFTER_MS = 60_000;
+const CIRCUIT_BREAKER_THRESHOLD = 5;
+const CIRCUIT_COOLDOWN_MS = 120_000;
 
-/**
- * Wrapper sobre o normalizePhone canônico (`@/lib/normalizePhone`) que preserva
- * o contrato anterior (string-in / string-out) usado por matching de realtime.
- *
- * Diferenças do canônico:
- *  - canônico retorna `null` para entradas vazias/inválidas; aqui convertemos
- *    para `""` para evitar match falso-positivo (`null === null`) entre
- *    múltiplas mensagens sem `phone_number`.
- */
 const normalizePhone = (p: string): string => canonicalNormalizePhone(p) ?? "";
 
-/**
- * Hook para subscrição em tempo real de mensagens e contatos.
- * Usa setQueryData para patch incremental — sem refetch total.
- */
 export function useWhatsAppMessagesRealtime(
   phoneNumber: string | null,
-  instanceId: string | null
+  instanceId: string | null,
 ) {
   const { data: teamMember } = useCurrentTeamMember();
   const organizationId = teamMember?.organization_id;
@@ -64,18 +53,41 @@ export function useWhatsAppMessagesRealtime(
     if (!organizationId) return;
 
     const channelName = `whatsapp-messages-patched-${organizationId}`;
-    setChannelState(channelName, "joining");
+    setChannelState(channelName, "joining", "subscribe");
 
-    let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
     let tornDown = false;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
-    const scheduleReconnect = () => {
+    const scheduleReconnect = (reason: string) => {
       if (tornDown) return;
       tornDown = true;
-      setChannelState(channelName, "reconnecting");
-      const { reconnectCount } = getChannelStatus(channelName);
-      const backoffMs = Math.min(1000 * Math.pow(2, reconnectCount), 30_000);
-      setTimeout(() => setReconnectEpoch((e) => e + 1), backoffMs);
+
+      const failures = incrementFailures(channelName, reason);
+
+      if (failures >= CIRCUIT_BREAKER_THRESHOLD) {
+        openCircuitBreaker(
+          channelName,
+          `${failures} consecutive failures, last: ${reason}`,
+        );
+        setChannelState(
+          channelName,
+          "polling",
+          `circuit open after ${failures} failures`,
+        );
+        // Probe after cooldown — single attempt to re-establish
+        reconnectTimer = setTimeout(
+          () => setReconnectEpoch((e) => e + 1),
+          CIRCUIT_COOLDOWN_MS,
+        );
+        return;
+      }
+
+      setChannelState(channelName, "reconnecting", reason);
+      const backoffMs = Math.min(1000 * Math.pow(2, failures - 1), 30_000);
+      reconnectTimer = setTimeout(
+        () => setReconnectEpoch((e) => e + 1),
+        backoffMs,
+      );
     };
 
     const channel = supabase
@@ -91,7 +103,9 @@ export function useWhatsAppMessagesRealtime(
         (payload: RealtimePostgresChangesPayload<WhatsAppMessage>) => {
           recordChannelEvent(channelName);
           const { eventType } = payload;
-          const message = (payload.new || payload.old) as WhatsAppMessage | undefined;
+          const message = (payload.new || payload.old) as
+            | WhatsAppMessage
+            | undefined;
           if (!message) return;
 
           const messagePhone = message.phone_number ?? "";
@@ -99,121 +113,152 @@ export function useWhatsAppMessagesRealtime(
           const currentInstanceId = instanceIdRef.current;
 
           // ── Patch messages do chat ativo ───────────────────────────────────
-          if (currentPhone && normalizePhone(messagePhone) === normalizePhone(currentPhone)) {
-            const msgQueryKey = chatQueryKeys.messages(organizationId, currentPhone, currentInstanceId);
+          if (
+            currentPhone &&
+            normalizePhone(messagePhone) === normalizePhone(currentPhone)
+          ) {
+            const msgQueryKey = chatQueryKeys.messages(
+              organizationId,
+              currentPhone,
+              currentInstanceId,
+            );
 
             if (eventType === "INSERT") {
-              queryClient.setQueryData<WhatsAppMessage[]>(msgQueryKey, (prev) => {
-                const existing = prev ?? [];
-                // Dedup por message_id
-                const alreadyExists = existing.some((m) => m.message_id === message.message_id);
-                if (alreadyExists) return existing;
-                return [...existing, message];
-              });
+              queryClient.setQueryData<WhatsAppMessage[]>(
+                msgQueryKey,
+                (prev) => {
+                  const existing = prev ?? [];
+                  if (
+                    existing.some(
+                      (m) => m.message_id === message.message_id,
+                    )
+                  )
+                    return existing;
+                  return [...existing, message];
+                },
+              );
             } else if (eventType === "UPDATE") {
-              queryClient.setQueryData<WhatsAppMessage[]>(msgQueryKey, (prev) => {
-                if (!prev) return prev;
-                return prev.map((m) => m.id === message.id ? message : m);
-              });
+              queryClient.setQueryData<WhatsAppMessage[]>(
+                msgQueryKey,
+                (prev) => {
+                  if (!prev) return prev;
+                  return prev.map((m) =>
+                    m.id === message.id ? message : m,
+                  );
+                },
+              );
             } else if (eventType === "DELETE") {
-              queryClient.setQueryData<WhatsAppMessage[]>(msgQueryKey, (prev) => {
-                if (!prev) return prev;
-                return prev.filter((m) => m.id !== message.id);
-              });
+              queryClient.setQueryData<WhatsAppMessage[]>(
+                msgQueryKey,
+                (prev) => {
+                  if (!prev) return prev;
+                  return prev.filter((m) => m.id !== message.id);
+                },
+              );
             }
           }
 
           // ── Patch lista de contatos (sidebar) ─────────────────────────────
           if (currentInstanceId) {
-            const contactsQueryKey = chatQueryKeys.contacts(organizationId, currentInstanceId);
+            const contactsQueryKey = chatQueryKeys.contacts(
+              organizationId,
+              currentInstanceId,
+            );
 
             if (eventType === "INSERT" || eventType === "UPDATE") {
-              queryClient.setQueryData<ChatContact[]>(contactsQueryKey, (prev) => {
-                if (!prev) return prev;
+              queryClient.setQueryData<ChatContact[]>(
+                contactsQueryKey,
+                (prev) => {
+                  if (!prev) return prev;
 
-                const normPhone = normalizePhone(messagePhone);
-                const existingIdx = prev.findIndex(
-                  (c) => normalizePhone(c.phone_number) === normPhone
-                );
+                  const normPhone = normalizePhone(messagePhone);
+                  const existingIdx = prev.findIndex(
+                    (c) => normalizePhone(c.phone_number) === normPhone,
+                  );
 
-                if (existingIdx === -1) {
-                  // Nova conversa — invalidate para refetch completo (tags, lead, etc.)
-                  queryClient.invalidateQueries({ queryKey: contactsQueryKey });
-                  return prev;
-                }
+                  if (existingIdx === -1) {
+                    queryClient.invalidateQueries({
+                      queryKey: contactsQueryKey,
+                    });
+                    return prev;
+                  }
 
-                // Patch in-place: atualiza last_message e unread_count
-                return prev.map((contact, idx) => {
-                  if (idx !== existingIdx) return contact;
+                  return prev.map((contact, idx) => {
+                    if (idx !== existingIdx) return contact;
 
-                  const msgTime = new Date(message.timestamp).getTime();
-                  const existingTime = new Date(contact.last_message_time).getTime();
+                    const msgTime = new Date(message.timestamp).getTime();
+                    const existingTime = new Date(
+                      contact.last_message_time,
+                    ).getTime();
 
-                  if (msgTime <= existingTime) return contact;
+                    if (msgTime <= existingTime) return contact;
 
-                  const isIncoming = message.direction === "incoming";
-                  const isCurrentConversation =
-                    currentPhone && normalizePhone(messagePhone) === normalizePhone(currentPhone);
+                    const isIncoming = message.direction === "incoming";
+                    const isCurrentConversation =
+                      currentPhone &&
+                      normalizePhone(messagePhone) ===
+                        normalizePhone(currentPhone);
 
-                  return {
-                    ...contact,
-                    last_message: message.content ?? contact.last_message,
-                    last_message_time: message.timestamp,
-                    last_message_direction: message.direction as "incoming" | "outgoing",
-                    // Incrementa unread só se incoming e não é a conversa aberta
-                    unread_count:
-                      isIncoming && !isCurrentConversation
-                        ? contact.unread_count + 1
-                        : contact.unread_count,
-                  };
-                });
-              });
+                    return {
+                      ...contact,
+                      last_message:
+                        message.content ?? contact.last_message,
+                      last_message_time: message.timestamp,
+                      last_message_direction: message.direction as
+                        | "incoming"
+                        | "outgoing",
+                      unread_count:
+                        isIncoming && !isCurrentConversation
+                          ? contact.unread_count + 1
+                          : contact.unread_count,
+                    };
+                  });
+                },
+              );
             }
           }
-        }
+        },
       )
       .subscribe((status) => {
-        // Supabase emits one of: SUBSCRIBED, CHANNEL_ERROR, TIMED_OUT, CLOSED.
         switch (status) {
           case "SUBSCRIBED":
-            setChannelState(channelName, "joined");
+            resetFailures(channelName);
+            setChannelState(channelName, "joined", "subscribed");
             recordChannelEvent(channelName);
             break;
           case "CHANNEL_ERROR":
+            setChannelState(channelName, "offline", "channel_error");
+            scheduleReconnect("channel_error");
+            break;
           case "TIMED_OUT":
-            setChannelState(channelName, "offline");
-            scheduleReconnect();
+            setChannelState(channelName, "offline", "timed_out");
+            scheduleReconnect("timed_out");
             break;
           case "CLOSED":
-            setChannelState(channelName, "offline");
+            if (!tornDown) {
+              setChannelState(channelName, "offline", "closed");
+            }
             break;
         }
       });
 
-    heartbeatTimer = setInterval(() => {
-      const { state, lastEventAt } = getChannelStatus(channelName);
-      if (state !== "joined" && state !== "joining") return;
-      const sinceEvent = Date.now() - (lastEventAt ?? 0);
-      if (sinceEvent > STALE_AFTER_MS) {
-        setChannelState(channelName, "stale");
-        scheduleReconnect();
-      }
-    }, HEARTBEAT_INTERVAL_MS);
-
+    // Reconnect on visibility/online change when channel is unhealthy
     const onVisibilityOrOnline = () => {
       if (tornDown) return;
       const { state } = getChannelStatus(channelName);
-      if (state !== "joined" && state !== "joining") scheduleReconnect();
+      if (state !== "joined" && state !== "joining") {
+        scheduleReconnect("visibility_change");
+      }
     };
     window.addEventListener("visibilitychange", onVisibilityOrOnline);
     window.addEventListener("online", onVisibilityOrOnline);
 
     return () => {
       tornDown = true;
-      if (heartbeatTimer) clearInterval(heartbeatTimer);
+      if (reconnectTimer) clearTimeout(reconnectTimer);
       window.removeEventListener("visibilitychange", onVisibilityOrOnline);
       window.removeEventListener("online", onVisibilityOrOnline);
-      setChannelState(channelName, "offline");
+      setChannelState(channelName, "offline", "cleanup");
       supabase.removeChannel(channel);
     };
   }, [organizationId, queryClient, reconnectEpoch]);

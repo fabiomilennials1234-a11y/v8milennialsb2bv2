@@ -1,47 +1,86 @@
 /**
- * RealtimeStatusBadge — small status pill rendered in the chat header that
- * surfaces whether the live WhatsApp message stream is healthy. Sourced from
- * realtimeStatusStore, populated by useWhatsAppMessagesRealtime.
+ * RealtimeStatusBadge — status pill in chat header showing connection health.
  *
  * States:
- *   joined / unknown  → 🟢 ao vivo
- *   joining           → 🟡 conectando
- *   stale / reconnecting → 🟡 reconectando
- *   offline           → 🔴 offline (manual refresh sugerido)
+ *   joined          → green  "Ao vivo"
+ *   joining         → amber  "Conectando"
+ *   reconnecting    → amber  "Reconectando"
+ *   polling         → orange "Polling"     (circuit breaker tripped)
+ *   offline         → red    "Offline"
+ *
+ * Tooltip shows reason + failure/reconnect counts for diagnostics.
  */
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useWhatsAppRealtimeStatus } from "@/hooks/useRealtimeChannelStatus";
+import type { ChannelStatus } from "@/lib/realtimeStatusStore";
 
-type Variant = "ok" | "pending" | "offline";
+type Variant = "ok" | "pending" | "polling" | "offline";
 
-function classify(state: string): { variant: Variant; label: string; tooltip: string } {
-  switch (state) {
+function classify(
+  status: ChannelStatus,
+): { variant: Variant; label: string; tooltip: string } {
+  switch (status.state) {
     case "joined":
-      return { variant: "ok", label: "Ao vivo", tooltip: "Mensagens chegam em tempo real." };
+      return {
+        variant: "ok",
+        label: "Ao vivo",
+        tooltip: "Mensagens chegam em tempo real.",
+      };
     case "joining":
-      return { variant: "pending", label: "Conectando", tooltip: "Estabelecendo conexão de tempo real." };
-    case "stale":
-      return { variant: "pending", label: "Sincronizando", tooltip: "Sem eventos há mais de 1 min — reconectando." };
+      return {
+        variant: "pending",
+        label: "Conectando",
+        tooltip: "Estabelecendo conexao de tempo real.",
+      };
     case "reconnecting":
-      return { variant: "pending", label: "Reconectando", tooltip: "Restabelecendo a conexão." };
+      return {
+        variant: "pending",
+        label: "Reconectando",
+        tooltip: status.lastReason
+          ? `Restabelecendo conexao (${status.lastReason}).`
+          : "Restabelecendo a conexao.",
+      };
+    case "polling":
+      return {
+        variant: "polling",
+        label: "Polling",
+        tooltip: `Realtime indisponivel apos ${status.consecutiveFailures} falhas. Buscando mensagens a cada 10s.`,
+      };
     case "offline":
-      return { variant: "offline", label: "Offline", tooltip: "Sem conexão em tempo real. Atualize a página se persistir." };
+      return {
+        variant: "offline",
+        label: "Offline",
+        tooltip: status.lastReason
+          ? `Sem conexao (${status.lastReason}). Atualize a pagina se persistir.`
+          : "Sem conexao. Atualize a pagina se persistir.",
+      };
     case "unknown":
     default:
-      return { variant: "pending", label: "—", tooltip: "Aguardando primeira conexão." };
+      return {
+        variant: "pending",
+        label: "—",
+        tooltip: "Aguardando primeira conexao.",
+      };
   }
 }
 
 const variantClasses: Record<Variant, string> = {
   ok: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
   pending: "bg-amber-500/15 text-amber-400 border-amber-500/30",
+  polling: "bg-orange-500/15 text-orange-400 border-orange-500/30",
   offline: "bg-red-500/15 text-red-400 border-red-500/30",
 };
 
 const dotClasses: Record<Variant, string> = {
   ok: "bg-emerald-400",
   pending: "bg-amber-400 animate-pulse",
+  polling: "bg-orange-400 animate-pulse",
   offline: "bg-red-400",
 };
 
@@ -53,7 +92,7 @@ export function RealtimeStatusBadge({
   className?: string;
 }) {
   const status = useWhatsAppRealtimeStatus(organizationId);
-  const { variant, label, tooltip } = classify(status.state);
+  const { variant, label, tooltip } = classify(status);
 
   return (
     <TooltipProvider delayDuration={150}>
@@ -67,16 +106,28 @@ export function RealtimeStatusBadge({
             )}
             aria-live="polite"
           >
-            <span className={cn("h-1.5 w-1.5 rounded-full", dotClasses[variant])} />
+            <span
+              className={cn(
+                "h-1.5 w-1.5 rounded-full",
+                dotClasses[variant],
+              )}
+            />
             {label}
           </span>
         </TooltipTrigger>
-        <TooltipContent side="bottom" className="text-xs">
-          {tooltip}
-          {status.reconnectCount > 0 && (
-            <span className="block text-[10px] opacity-70 mt-0.5">
-              Reconexões na sessão: {status.reconnectCount}
-            </span>
+        <TooltipContent side="bottom" className="max-w-xs text-xs">
+          <p>{tooltip}</p>
+          {(status.reconnectCount > 0 ||
+            status.consecutiveFailures > 0) && (
+            <p className="mt-0.5 text-[10px] opacity-70">
+              {status.reconnectCount > 0 &&
+                `Reconexoes: ${status.reconnectCount}`}
+              {status.reconnectCount > 0 &&
+                status.consecutiveFailures > 0 &&
+                " · "}
+              {status.consecutiveFailures > 0 &&
+                `Falhas: ${status.consecutiveFailures}`}
+            </p>
           )}
         </TooltipContent>
       </Tooltip>
