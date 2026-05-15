@@ -93,6 +93,7 @@ Provider-agnostic via adapter. Migração Evolution→Uazapi completa.
 - Deploy: `--no-verify-jwt` obsoleto. Use config.toml. Cuidado: `--no-verify-jwt=false` HABILITA JWT (double negative).
 - pg_net: só Supabase. Cron depende dele.
 - Realtime onUpdate: só campos alterados, sem joins. Dados aninhados vêm do cache.
+- RLS + Realtime: NUNCA usar `SELECT ... FROM team_members` inline em policies. Sempre usar `get_my_organization_ids()` / `get_my_admin_organization_ids()` / `get_my_team_member_ids()` (SECURITY DEFINER, bypassa RLS). Subquery inline causa recursão infinita quando Realtime avalia `apply_rls()`. Mesma regra pra qualquer tabela com RLS referenciada dentro de policies de outra tabela.
 - n8n body params: sempre strings. Arrays → JSON body ou normalizar na edge function.
 - Vite chunks: deps grandes → adicionar em `manualChunks` do vite.config.ts.
 
