@@ -1,3 +1,14 @@
+---
+type: changelog
+title: "2026-04-27 — RLS strict products: drop master permissive policies"
+status: shipped
+created: 2026-04-27
+updated: 2026-04-27
+tags: [uncategorized]
+related: []
+owner: gabriel
+---
+
 # 2026-04-27 — RLS strict products: drop master permissive policies
 
 ## Bug reportado pelo CTO

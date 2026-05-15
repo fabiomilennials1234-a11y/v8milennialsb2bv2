@@ -1,16 +1,15 @@
 ---
-tags:
-  - changelog
-  - whatsapp
-  - uazapi
-  - stability
-  - incident
-date: 2026-05-15
+type: changelog
+title: 2026-05-15 — Incidente Uazapi V2 + rollout estabilização
 status: shipped
-related:
-  - "[[whatsapp-stability-plan]]"
-  - "[[whatsapp-stability-100pct]]"
+created: 2026-05-15
+updated: 2026-05-15
+tags: [uncategorized]
+related: []
+owner: gabriel
 ---
+
+
 
 # 2026-05-15 — Incidente Uazapi V2 + rollout estabilização
 

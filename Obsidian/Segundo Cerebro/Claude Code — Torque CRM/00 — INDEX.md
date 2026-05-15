@@ -1,10 +1,11 @@
 ---
 type: identity
 title: INDEX — Torque CRM Vault
-tags: [claude-code, index, torque-crm]
 status: active
 created: 2026-04-12
 updated: 2026-05-15
+tags: [claude-code, index, torque-crm]
+related: []
 owner: gabriel
 ---
 

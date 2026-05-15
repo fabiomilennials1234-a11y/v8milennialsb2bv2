@@ -1,16 +1,15 @@
 ---
-tags:
-  - feature
-  - whatsapp
-  - ui
-  - design-spec
-  - composer
-created: 2026-05-08
-last_updated: 2026-05-08
-status: ready-for-impl
-stage: B — UI States
-depends_on: "[[01-schema]]"
+type: feature
+title: Estados do composer — vínculo user ↔ instância de escrita
+status: active
+created: 2026-04-12
+updated: 2026-04-12
+tags: [uncategorized]
+related: []
+owner: gabriel
 ---
+
+
 
 # Estados do composer — vínculo user ↔ instância de escrita
 

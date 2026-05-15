@@ -1,12 +1,15 @@
 ---
-tags: [adr, pipe-confirmacao, permissoes, security]
+type: adr
+title: ADR-2026-04-30 — Sync meeting_date ⇄ compromisso_date + permissão move_pipe_record fail-closed
+status: accepted
 created: 2026-04-30
-status: aceita
-related:
-  - "[[Pipe Confirmacao]]"
-  - "[[Permissoes Sistema]]"
-  - "[[2026-04-30-meeting-date-sync]]"
+updated: 2026-04-30
+tags: [uncategorized]
+related: []
+owner: gabriel
 ---
+
+
 
 # ADR-2026-04-30 — Sync meeting_date ⇄ compromisso_date + permissão move_pipe_record fail-closed
 

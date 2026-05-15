@@ -1,11 +1,15 @@
 ---
-tags: [backlog, frontend, observability, low]
-created: 2026-04-30
-status: open
-severity: LOW
-owner: [Frontend, Observability]
-origem: "[[ADR-2026-04-30-meeting-date-sync]]"
+type: backlog
+title: Toast/Sentry quando sync inverso falha
+status: backlog
+created: 2026-04-12
+updated: 2026-04-12
+tags: [uncategorized]
+related: []
+owner: gabriel
 ---
+
+
 
 # Toast/Sentry quando sync inverso falha
 

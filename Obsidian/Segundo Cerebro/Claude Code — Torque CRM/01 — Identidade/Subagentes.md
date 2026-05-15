@@ -1,11 +1,12 @@
 ---
-tags: [identidade, subagentes, claude-code, harness, time]
-created: 2026-05-15
-last_updated: 2026-05-15
+type: identity
+title: Subagentes — Time Claude Code
 status: active
-related:
-  - "[[ADR-2026-05-15-consolidacao-subagentes]]"
-  - "[[Copilot]]"
+created: 2026-05-15
+updated: 2026-05-15
+tags: [identidade, subagentes, claude-code, harness, time]
+related: ["[[ADR-2026-05-15-consolidacao-subagentes]]", "[[Copilot]]"]
+owner: gabriel
 ---
 
 # Subagentes — Time Claude Code (Torque CRM)

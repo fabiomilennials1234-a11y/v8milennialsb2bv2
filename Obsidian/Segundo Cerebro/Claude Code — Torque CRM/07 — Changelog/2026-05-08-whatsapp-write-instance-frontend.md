@@ -1,3 +1,14 @@
+---
+type: changelog
+title: 2026-05-08 — WhatsApp Write Instance — Etapa C (frontend)
+status: shipped
+created: 2026-05-08
+updated: 2026-05-08
+tags: [uncategorized]
+related: []
+owner: gabriel
+---
+
 # 2026-05-08 — WhatsApp Write Instance — Etapa C (frontend)
 
 ## Mudanças

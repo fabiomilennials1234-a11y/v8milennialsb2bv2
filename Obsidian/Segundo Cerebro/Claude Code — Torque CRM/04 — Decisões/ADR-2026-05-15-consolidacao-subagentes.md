@@ -1,12 +1,13 @@
 ---
-tags: [adr, subagentes, claude-code, harness, time]
+type: adr
+title: ADR-2026-05-15 — Consolidação de subagentes 10→3
+status: accepted
 created: 2026-05-15
-status: aceita
-related:
-  - "[[Subagentes]]"
-  - "[[ADR-2026-04-27-refactor-agent-engine-modular]]"
-supersedes:
-  - "ADR-2026-04-15-agente-security (não escrito; setup obsoleto)"
+updated: 2026-05-15
+tags: [adr, subagentes, claude-code, harness, time]
+related: ["[[Subagentes]]", "[[ADR-2026-04-27-refactor-agent-engine-modular]]"]
+supersedes: ["ADR-2026-04-15-agente-security (não escrito; setup obsoleto)"]
+owner: gabriel
 ---
 
 # ADR-2026-05-15 — Consolidação dos subagentes do harness Claude Code (10 → 3)

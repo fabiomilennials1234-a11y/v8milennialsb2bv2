@@ -1,15 +1,15 @@
 ---
-tags:
-  - feature
-  - whatsapp
-  - schema
-  - multi-tenancy
-  - security
-created: 2026-09-30
-last_updated: 2026-09-30
-status: in-progress
-stage: A — Schema/DB
+type: feature
+title: WhatsApp Write Instance — Schema (Etapa A)
+status: active
+created: 2026-04-12
+updated: 2026-04-12
+tags: [uncategorized]
+related: []
+owner: gabriel
 ---
+
+
 
 # WhatsApp Write Instance — Schema (Etapa A)
 

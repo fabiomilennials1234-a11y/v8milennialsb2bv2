@@ -1,32 +1,25 @@
 ---
 type: reference
-title: Reference — Map of Content
+title: 03 — Reference — Map of Content
 status: active
 created: 2026-05-15
 updated: 2026-05-15
-tags: [reference, moc]
+tags: [moc, auto-regenerated]
 related: []
-owner: gabriel
+owner: claude-agent
 ---
 
-# Reference — Map of Content
+# 03 — Reference — Map of Content
 
-> Diátaxis: **Reference**. Lookup tables, valores, comandos.
-> Para entender o **porquê**, ver `02 — Arquitetura/`.
-> Para **fazer** algo, ver `05 — How-to/`.
+> Auto-gerado por `scripts/vault-regen-indexes.mjs`.
+> Seções marcadas `<!-- manual -->` são preservadas.
 
-## Sumário
+## Notas nesta pasta
 
-- [[Schema]] — tabelas principais e relações
-- [[RLS Policies]] — policies por tabela
-- [[Edge Functions]] — 78+ functions, padrão, categorias
-- [[RPCs]] — funções SQL chamadas do frontend/edge fn
-- [[Env Vars]] — variáveis de ambiente (prod + dev)
-- [[Cron Jobs]] — pg_cron jobs ativos
-- [[Webhooks Outbound]] — webhooks que o sistema chama
-
-## Convenção
-
-Reference docs são **lookups**. Não tutoriais, não explicações. Sintéticos.
-Atualizar quando schema/policies/functions mudam — preferível automação
-(`vault-regen` skill).
+- [[Cron Jobs|Cron Jobs (pg_cron)]]
+- [[Edge Functions|Edge Functions]]
+- [[Env Vars|Variáveis de Ambiente]] 🟡 draft
+- [[RLS Policies|RLS Policies]] 🟡 draft
+- [[RPCs|RPCs (Postgres Functions)]] 🟡 draft
+- [[Schema|Schema — Tabelas Principais]] 🟡 draft
+- [[Webhooks Outbound|Webhooks Outbound]] 🟡 draft
