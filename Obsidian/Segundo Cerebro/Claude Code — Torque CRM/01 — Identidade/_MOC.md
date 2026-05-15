@@ -16,5 +16,6 @@ owner: claude-agent
 
 ## Notas nesta pasta
 
+- [[Certificacao Permanencia|Certificação de Permanência do Vault]]
 - [[Convencoes|Convenções do Vault]]
 - [[Subagentes|Subagentes — Time Claude Code]]
