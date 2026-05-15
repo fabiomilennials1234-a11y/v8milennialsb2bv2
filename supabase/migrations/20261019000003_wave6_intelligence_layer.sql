@@ -153,30 +153,32 @@ CREATE OR REPLACE FUNCTION get_vendedor_ranking(p_org_id UUID)
 RETURNS JSONB
 LANGUAGE sql STABLE SECURITY DEFINER
 AS $$
-  SELECT COALESCE(jsonb_agg(row_data ORDER BY avg_health DESC), '[]'::jsonb)
+  SELECT COALESCE(jsonb_agg(row_data ORDER BY sort_health DESC), '[]'::jsonb)
   FROM (
-    SELECT jsonb_build_object(
-      'closer_id', tm.id,
-      'name', tm.name,
-      'role', tm.role,
-      'total_clients', COUNT(c.id),
-      'avg_health', ROUND(AVG(c.health_score)),
-      'avg_churn', ROUND(AVG(c.churn_probability)),
-      'avg_ticket', ROUND(AVG(c.avg_ticket)::numeric, 2),
-      'total_revenue', SUM(c.lifetime_value),
-      'on_time_pct', ROUND(
-        COUNT(*) FILTER (
-          WHERE c.days_since_last_order <= c.reorder_cycle_days
-        )::numeric / NULLIF(COUNT(*) FILTER (WHERE c.reorder_cycle_days > 0), 0) * 100
-      ),
-      'segments', jsonb_build_object(
-        'ouro', COUNT(*) FILTER (WHERE c.segment = 'ouro'),
-        'prata', COUNT(*) FILTER (WHERE c.segment = 'prata'),
-        'novo', COUNT(*) FILTER (WHERE c.segment = 'novo'),
-        'resgate', COUNT(*) FILTER (WHERE c.segment = 'resgate'),
-        'dormindo', COUNT(*) FILTER (WHERE c.segment = 'dormindo')
-      )
-    ) AS row_data
+    SELECT
+      ROUND(AVG(c.health_score)) AS sort_health,
+      jsonb_build_object(
+        'closer_id', tm.id,
+        'name', tm.name,
+        'role', tm.role,
+        'total_clients', COUNT(c.id),
+        'avg_health', ROUND(AVG(c.health_score)),
+        'avg_churn', ROUND(AVG(c.churn_probability)),
+        'avg_ticket', ROUND(AVG(c.avg_ticket)::numeric, 2),
+        'total_revenue', SUM(c.lifetime_value),
+        'on_time_pct', ROUND(
+          COUNT(*) FILTER (
+            WHERE c.days_since_last_order <= c.reorder_cycle_days
+          )::numeric / NULLIF(COUNT(*) FILTER (WHERE c.reorder_cycle_days > 0), 0) * 100
+        ),
+        'segments', jsonb_build_object(
+          'ouro', COUNT(*) FILTER (WHERE c.segment = 'ouro'),
+          'prata', COUNT(*) FILTER (WHERE c.segment = 'prata'),
+          'novo', COUNT(*) FILTER (WHERE c.segment = 'novo'),
+          'resgate', COUNT(*) FILTER (WHERE c.segment = 'resgate'),
+          'dormindo', COUNT(*) FILTER (WHERE c.segment = 'dormindo')
+        )
+      ) AS row_data
     FROM team_members tm
     JOIN upsell_clients c ON c.closer_id = tm.id AND c.is_active = true
     WHERE c.organization_id = p_org_id
