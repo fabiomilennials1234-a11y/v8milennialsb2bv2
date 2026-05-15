@@ -69,7 +69,7 @@
     "dompurify": "^3.4.1",
     "embla-carousel-react": "^8.6.0",
     "exceljs": "^4.4.0",
-    "framer-motion": "^12.24.7",
+    "framer-motion": "^12.38.0",
     "input-otp": "^1.4.2",
     "lamejs": "^1.2.1",
     "lucide-react": "^0.462.0",
