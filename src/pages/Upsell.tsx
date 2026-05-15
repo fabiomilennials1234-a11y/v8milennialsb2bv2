@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Plus, Search, LayoutGrid, List, TrendingUp, ShoppingCart, Upload, BarChart3, Users } from "lucide-react";
+import { Plus, Search, LayoutGrid, List, TrendingUp, ShoppingCart, Upload, BarChart3, Users, ClipboardCheck } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,6 +27,8 @@ import { CarteiraBulkBar } from "@/components/carteira/CarteiraBulkBar";
 import { CarteiraRevenueAtRisk } from "@/components/carteira/CarteiraRevenueAtRisk";
 import { CarteiraCohortHeatmap } from "@/components/carteira/CarteiraCohortHeatmap";
 import { CarteiraVendedorRanking } from "@/components/carteira/CarteiraVendedorRanking";
+import { CarteiraApprovals } from "@/components/carteira/CarteiraApprovals";
+import { usePendingOrders } from "@/hooks/useOrderApproval";
 import { useBulkSelection } from "@/hooks/useBulkSelection";
 
 type ViewMode = "kanban" | "list";
@@ -75,12 +77,14 @@ export default function Upsell() {
   const [carteiraFilter, setCarteiraFilter] = useState("all");
   const [quickOrderClientId, setQuickOrderClientId] = useState<string | null>(null);
   const [currentRows, setCurrentRows] = useState<PortfolioClientRow[]>([]);
-  const [carteiraView, setCarteiraView] = useState<"clientes" | "analytics">("clientes");
+  const [carteiraView, setCarteiraView] = useState<"clientes" | "analytics" | "aprovacoes">("clientes");
   const bulk = useBulkSelection();
   const { data: kpiData } = usePortfolioKPIs();
 
   useRealtimeSubscription("upsell_clients", ["portfolio-clients", "portfolio-kpis"]);
-  useRealtimeSubscription("upsell_orders", ["portfolio-clients", "portfolio-kpis"]);
+  useRealtimeSubscription("upsell_orders", ["portfolio-clients", "portfolio-kpis", "pending-orders"]);
+  const { data: pendingOrders = [] } = usePendingOrders();
+  const pendingCount = pendingOrders.length;
 
   const tabCounts = useMemo(() => {
     if (!kpiData) return {} as Record<string, number>;
@@ -203,7 +207,7 @@ export default function Upsell() {
             <button
               onClick={() => setCarteiraView("analytics")}
               className={cn(
-                "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-r-md transition-colors",
+                "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors",
                 carteiraView === "analytics"
                   ? "bg-muted text-foreground"
                   : "text-muted-foreground hover:text-muted-foreground",
@@ -211,6 +215,23 @@ export default function Upsell() {
             >
               <BarChart3 className="w-3.5 h-3.5" />
               Analytics
+            </button>
+            <button
+              onClick={() => setCarteiraView("aprovacoes")}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-r-md transition-colors",
+                carteiraView === "aprovacoes"
+                  ? "bg-muted text-foreground"
+                  : "text-muted-foreground hover:text-muted-foreground",
+              )}
+            >
+              <ClipboardCheck className="w-3.5 h-3.5" />
+              Aprovações
+              {pendingCount > 0 && (
+                <span className="ml-1 bg-primary/15 text-primary text-[10px] font-semibold px-1.5 py-px rounded-full">
+                  {pendingCount}
+                </span>
+              )}
             </button>
           </div>
         </div>
@@ -264,7 +285,7 @@ export default function Upsell() {
               onClear={bulk.clearSelection}
             />
           </>
-        ) : (
+        ) : carteiraView === "analytics" ? (
           <div className="space-y-6">
             <CarteiraRevenueAtRisk />
             <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-6">
@@ -272,6 +293,8 @@ export default function Upsell() {
               <CarteiraVendedorRanking />
             </div>
           </div>
+        ) : (
+          <CarteiraApprovals />
         )}
 
         {/* Shared modals */}
