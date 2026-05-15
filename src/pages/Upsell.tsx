@@ -18,6 +18,7 @@ import { usePipelineStages, type PipelineType } from "@/hooks/usePipelineStages"
 import { useAutoMoveUpsellClients } from "@/hooks/useAutoMoveUpsellClients";
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
 import { usePortfolioKPIs } from "@/hooks/usePortfolioKPIs";
+import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { CarteiraKPIs } from "@/components/carteira/CarteiraKPIs";
 import { CarteiraAlertBanner } from "@/components/carteira/CarteiraAlertBanner";
 import { CarteiraClientTable, type PortfolioClientRow } from "@/components/carteira/CarteiraClientTable";
@@ -69,6 +70,9 @@ export default function Upsell() {
   const [carteiraFilter, setCarteiraFilter] = useState("all");
   const [quickOrderClientId, setQuickOrderClientId] = useState<string | null>(null);
   const { data: kpiData } = usePortfolioKPIs();
+
+  useRealtimeSubscription("upsell_clients", ["portfolio-clients", "portfolio-kpis"]);
+  useRealtimeSubscription("upsell_orders", ["portfolio-clients", "portfolio-kpis"]);
 
   const tabCounts = useMemo(() => {
     if (!kpiData) return {} as Record<string, number>;
@@ -183,6 +187,13 @@ export default function Upsell() {
             <CarteiraClientTable
               selectedClientId={selectedClient?.id ?? null}
               onSelectClient={(client) => setSelectedClient(client)}
+              onWhatsApp={(client) => {
+                if (!client.phone) return;
+                window.open(
+                  `https://wa.me/${client.phone.replace(/\D/g, "")}`,
+                  "_blank",
+                );
+              }}
               onNewOrder={(id) => {
                 setQuickOrderClientId(id);
                 setNovaVendaOpen(true);

@@ -21,6 +21,8 @@ import {
   ArrowDown,
   Download,
   Loader2,
+  Users,
+  SearchX,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatBRL } from "@/lib/format";
@@ -297,9 +299,28 @@ export function CarteiraClientTable({
 
   // ── Empty state ─────────────────────────────────────────────────────────
   if (rows.length === 0 && !isFetching) {
+    const hasActiveFilters = filter !== "all" || searchQuery.length > 0;
     return (
-      <div className="rounded-xl border border-[#27272a] bg-[#18181b] py-16 text-center">
-        <p className="text-sm text-[#71717a]">Nenhum cliente encontrado.</p>
+      <div className="rounded-xl border border-[#27272a] bg-[#18181b] py-20 flex flex-col items-center gap-4">
+        <div className="w-14 h-14 rounded-2xl bg-[#27272a] flex items-center justify-center">
+          {hasActiveFilters ? (
+            <SearchX className="w-6 h-6 text-[#52525b]" />
+          ) : (
+            <Users className="w-6 h-6 text-[#52525b]" />
+          )}
+        </div>
+        <div className="text-center space-y-1">
+          <p className="text-sm font-medium text-[#a1a1aa]">
+            {hasActiveFilters
+              ? "Nenhum cliente encontrado"
+              : "Sua carteira está vazia"}
+          </p>
+          <p className="text-[13px] text-[#52525b] max-w-[280px]">
+            {hasActiveFilters
+              ? "Tente ajustar o filtro ou termo de busca."
+              : "Clientes aparecem aqui após uma proposta ser marcada como vendida."}
+          </p>
+        </div>
       </div>
     );
   }
