@@ -1,4 +1,4 @@
-import { usePortfolioHealth } from "@/hooks/usePortfolioHealth";
+import { usePortfolioKPIs } from "@/hooks/usePortfolioKPIs";
 import { formatBRL } from "@/lib/format";
 
 interface KPICardProps {
@@ -25,7 +25,7 @@ function KPICard({ label, value, sub, valueClassName }: KPICardProps) {
 }
 
 export function CarteiraKPIs() {
-  const { data, isLoading } = usePortfolioHealth();
+  const { data, isLoading } = usePortfolioKPIs();
 
   if (isLoading) {
     return (
@@ -54,8 +54,14 @@ export function CarteiraKPIs() {
     );
   }
 
-  const { totalClients, totalRecurring, expectedThisWeek, overdueCount, avgHealth } = data;
-  const avgTicket = totalClients > 0 ? totalRecurring / totalClients : 0;
+  const {
+    total_clients: totalClients,
+    total_recurring: totalRecurring,
+    expected_this_week: expectedThisWeek,
+    overdue_count: overdueCount,
+    avg_health: avgHealth,
+    avg_ticket: avgTicket,
+  } = data;
 
   return (
     <div className="grid grid-cols-2 md:grid-cols-5 gap-3">

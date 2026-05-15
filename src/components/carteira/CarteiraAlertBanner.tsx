@@ -1,6 +1,6 @@
 import { Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { usePortfolioHealth } from "@/hooks/usePortfolioHealth";
+import { usePortfolioKPIs } from "@/hooks/usePortfolioKPIs";
 import { formatBRL } from "@/lib/format";
 
 interface CarteiraAlertBannerProps {
@@ -9,11 +9,11 @@ interface CarteiraAlertBannerProps {
 }
 
 export function CarteiraAlertBanner({ onViewDetails, className }: CarteiraAlertBannerProps) {
-  const { data } = usePortfolioHealth();
+  const { data } = usePortfolioKPIs();
 
-  if (!data || data.overdueCount === 0) return null;
+  if (!data || data.overdue_count === 0) return null;
 
-  const { overdueCount, overdueRevenue } = data;
+  const { overdue_count: overdueCount, overdue_revenue: overdueRevenue } = data;
 
   return (
     <div
