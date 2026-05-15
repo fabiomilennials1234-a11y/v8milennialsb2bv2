@@ -4,12 +4,12 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { formatBRL } from "@/lib/format";
 import { useClientAlerts } from "@/hooks/useClientAlerts";
-import { usePortfolioHealth } from "@/hooks/usePortfolioHealth";
+import type { PortfolioClientRow } from "@/hooks/usePortfolioClients";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface CarteiraClientPreviewProps {
-  clientId: string;
+  client: PortfolioClientRow;
   onClose: () => void;
   onViewDetail: (clientId: string) => void;
   onNewOrder: (clientId: string) => void;
@@ -52,18 +52,15 @@ function MiniMetric({ label, value }: MiniMetricProps) {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export function CarteiraClientPreview({
-  clientId,
+  client,
   onClose,
   onViewDetail,
   onNewOrder,
 }: CarteiraClientPreviewProps) {
-  const { data: portfolioData } = usePortfolioHealth();
-  const { data: alerts = [], resolveAlert } = useClientAlerts(clientId);
+  const { data: alerts = [], resolveAlert } = useClientAlerts(client.id);
 
-  const client = portfolioData?.clients?.find((c) => c.id === clientId);
-
-  const score = client?.health_score ?? 0;
-  const status = client?.health_status ?? null;
+  const score = client.health_score ?? 0;
+  const status = client.health_status ?? null;
   const ringColor = healthRingColor(status, score);
   // SVG circle circumference for r=35: 2 * π * 35 ≈ 220
   const circumference = 220;
@@ -212,7 +209,7 @@ export function CarteiraClientPreview({
         <Button
           size="sm"
           className="w-full gap-2 bg-[hsl(47_100%_50%)] hover:bg-[hsl(47_100%_45%)] text-black font-semibold"
-          onClick={() => onViewDetail(clientId)}
+          onClick={() => onViewDetail(client.id)}
         >
           <ExternalLink size={14} />
           Ver 360°
@@ -222,7 +219,7 @@ export function CarteiraClientPreview({
             size="sm"
             variant="outline"
             className="flex-1 gap-2 border-zinc-700 hover:bg-zinc-800"
-            onClick={() => onNewOrder(clientId)}
+            onClick={() => onNewOrder(client.id)}
           >
             <ShoppingCart size={13} />
             Novo Pedido
@@ -234,7 +231,7 @@ export function CarteiraClientPreview({
               className="flex-1 gap-2 border-zinc-700 hover:bg-zinc-800 hover:border-green-600/50 hover:text-green-400"
               onClick={() => {
                 // Navigate to chat with this lead's phone if available
-                const phone = (client as any).phone;
+                const phone = client.phone;
                 if (phone) {
                   window.open(
                     `https://wa.me/${phone.replace(/\D/g, "")}`,

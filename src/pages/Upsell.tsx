@@ -17,10 +17,10 @@ import { PipeSettingsDialog } from "@/components/pipelines/PipeSettingsDialog";
 import { usePipelineStages, type PipelineType } from "@/hooks/usePipelineStages";
 import { useAutoMoveUpsellClients } from "@/hooks/useAutoMoveUpsellClients";
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
-import { usePortfolioHealth } from "@/hooks/usePortfolioHealth";
+import { usePortfolioKPIs } from "@/hooks/usePortfolioKPIs";
 import { CarteiraKPIs } from "@/components/carteira/CarteiraKPIs";
 import { CarteiraAlertBanner } from "@/components/carteira/CarteiraAlertBanner";
-import { CarteiraClientTable } from "@/components/carteira/CarteiraClientTable";
+import { CarteiraClientTable, type PortfolioClientRow } from "@/components/carteira/CarteiraClientTable";
 import { CarteiraClientPreview } from "@/components/carteira/CarteiraClientPreview";
 
 type ViewMode = "kanban" | "list";
@@ -64,26 +64,21 @@ export default function Upsell() {
   const { data: importStages = [] } = usePipelineStages(importPipeType);
 
   // Portfolio (carteira) state — only used when isPortfolio
-  const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
+  const [selectedClient, setSelectedClient] = useState<PortfolioClientRow | null>(null);
   const [carteiraSearch, setCarteiraSearch] = useState("");
   const [carteiraFilter, setCarteiraFilter] = useState("all");
   const [quickOrderClientId, setQuickOrderClientId] = useState<string | null>(null);
-  const { data: portfolioData } = usePortfolioHealth();
+  const { data: kpiData } = usePortfolioKPIs();
 
   const tabCounts = useMemo(() => {
-    const cs = portfolioData?.clients ?? [];
-    const counts: Record<string, number> = { all: cs.length, overdue: 0, expected: 0 };
-    for (const c of cs) {
-      if (c.segment) counts[c.segment] = (counts[c.segment] ?? 0) + 1;
-      if (c.days_since_last_order && c.reorder_cycle_days && c.days_since_last_order > c.reorder_cycle_days * 1.15)
-        counts.overdue++;
-      if (c.next_order_expected) {
-        const t = new Date(c.next_order_expected).getTime();
-        if (t >= Date.now() && t <= Date.now() + 7 * 86_400_000) counts.expected++;
-      }
-    }
-    return counts;
-  }, [portfolioData]);
+    if (!kpiData) return {} as Record<string, number>;
+    return {
+      all: kpiData.total_clients,
+      overdue: kpiData.overdue_count,
+      expected: kpiData.expected_this_week,
+      ...kpiData.segment_counts,
+    };
+  }, [kpiData]);
 
   // ─── Portfolio layout ──────────────────────────────────────────────────────
   if (isPortfolio) {
@@ -96,8 +91,8 @@ export default function Upsell() {
               Carteira de Clientes
             </h1>
             <p className="text-sm text-[#a1a1aa] mt-0.5">
-              {portfolioData
-                ? `${portfolioData.totalClients} clientes ativos · ${new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }).format(portfolioData.totalRecurring)}/mês recorrente`
+              {kpiData
+                ? `${kpiData.total_clients} clientes ativos · ${new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }).format(kpiData.total_recurring)}/mês recorrente`
                 : "Health score, recompra e gestão de carteira"}
             </p>
           </div>
@@ -141,7 +136,7 @@ export default function Upsell() {
                 key={tab.value}
                 onClick={() => {
                   setCarteiraFilter(tab.value);
-                  setSelectedClientId(null);
+                  setSelectedClient(null);
                 }}
                 className={cn(
                   "px-5 py-2.5 text-[13px] font-medium border-b-2 transition-colors whitespace-nowrap",
@@ -186,11 +181,8 @@ export default function Upsell() {
         <div className="flex gap-4 items-start">
           <div className="flex-1 min-w-0">
             <CarteiraClientTable
-              clients={portfolioData?.clients ?? []}
-              selectedClientId={selectedClientId}
-              onSelectClient={(id) =>
-                setSelectedClientId((prev) => (prev === id ? null : id))
-              }
+              selectedClientId={selectedClient?.id ?? null}
+              onSelectClient={(client) => setSelectedClient(client)}
               onNewOrder={(id) => {
                 setQuickOrderClientId(id);
                 setNovaVendaOpen(true);
@@ -201,10 +193,10 @@ export default function Upsell() {
             />
           </div>
 
-          {selectedClientId && (
+          {selectedClient && (
             <CarteiraClientPreview
-              clientId={selectedClientId}
-              onClose={() => setSelectedClientId(null)}
+              client={selectedClient}
+              onClose={() => setSelectedClient(null)}
               onViewDetail={(id) => navigate(`/carteira/${id}`)}
               onNewOrder={(id) => {
                 setQuickOrderClientId(id);
