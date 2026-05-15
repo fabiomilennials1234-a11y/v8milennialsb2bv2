@@ -8,6 +8,7 @@ import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { validateUrl } from "../_shared/webhook-utils.ts";
 import { withSentry } from '../_shared/sentry.ts';
 import { logRuntime } from "../_shared/logger.ts";
+import { requireAuth, AuthError, authErrorResponse } from "../_shared/user-auth.ts";
 
 Deno.serve(withSentry('webhook-validate-url', async (req) => {
   const corsHeaders = withSecurityHeaders(getCorsHeaders(req.headers.get("origin")));
@@ -22,12 +23,12 @@ Deno.serve(withSentry('webhook-validate-url', async (req) => {
     );
   }
 
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) {
-    return new Response(
-      JSON.stringify({ error: "Missing or invalid Authorization header" }),
-      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+  // Validate JWT
+  try {
+    await requireAuth(req);
+  } catch (e) {
+    if (e instanceof AuthError) return authErrorResponse(e, corsHeaders);
+    throw e;
   }
 
   let url: string;

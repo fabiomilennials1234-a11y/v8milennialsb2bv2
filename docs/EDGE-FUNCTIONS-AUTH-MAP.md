@@ -91,20 +91,25 @@ Generated 2026-05-15 during security audit.
 | google-calendar-callback | OAUTH | OAuth2 callback — validates state param |
 | meta-oauth-callback | OAUTH | OAuth2 callback — validates state param |
 
-### NEEDS REVIEW
+### Previously reviewed — now secured
 
-| Function | Current Auth | Risk | Recommended Fix |
-|----------|-------------|------|-----------------|
-| agent-message | SVC_ROLE (internal) | LOW | Called by other edge functions with service_role. Add INTERNAL key validation. |
-| meeting-webhook | SVC_ROLE (internal) | LOW | Called internally. Add CRON or INTERNAL key. |
-| google-calendar-webhook | NONE | MEDIUM | Google Calendar push notification. Add Google-provided token validation. |
-| list-lead-forms | NONE | HIGH | Reads Meta page data. Add JWT auth — only admin should call this. |
-| sz-chat-send | NONE | HIGH | Sends messages via SZ.Chat. Add JWT auth — critical action without auth. |
-| sz-chat-webhook | NONE | MEDIUM | Inbound from SZ.Chat. Add webhook secret validation. |
-| tinyerp-fetch-nfe | NONE | MEDIUM | Fetches NFe data from TinyERP. Add JWT or INTERNAL key. |
-| tinyerp-webhook | NONE | MEDIUM | Inbound from TinyERP. Add webhook secret validation. |
-| webhook-confirmacao | NONE | LOW | Internal trigger from pg_net. Add CRON secret. |
-| webhook-new-lead | NONE | LOW | Internal trigger from pg_net. Add CRON secret. |
-| webhook-orchestrator | API_KEY | OK | Has x-api-key validation. |
-| webhook-send-test | NONE | LOW | Test utility. Add JWT auth. |
-| webhook-validate-url | NONE | LOW | URL validation utility. Add JWT auth. |
+| Function | Auth | Status | Fix Applied |
+|----------|------|--------|-------------|
+| list-lead-forms | JWT | OK | Added requireAuth + org-scoped meta_pages query (Wave 5) |
+| sz-chat-send | JWT + SVC_ROLE | OK | Added requireAuth for frontend, timingSafeCompare for service_role (Wave 5) |
+| sz-chat-webhook | WEBHOOK (timing-safe) | OK | Already had webhook_secret validation; upgraded to timingSafeCompare (Wave 5) |
+| tinyerp-webhook | WEBHOOK (env secret) | OK | Added TINYERP_WEBHOOK_SECRET validation via header/query param (Wave 5) |
+| tinyerp-fetch-nfe | JWT + SVC_ROLE | OK | Added requireAuth for frontend, timingSafeCompare for service_role (Wave 5) |
+| webhook-send-test | JWT + org check | OK | Already had JWT validation + org membership check |
+| webhook-validate-url | JWT | OK | Added requireAuth (Wave 5) |
+| webhook-confirmacao | API_KEY (grace) | OK | Has validateApiKey — grace period ends 2026-07-09 |
+| webhook-new-lead | API_KEY (grace) | OK | Has validateApiKey — grace period ends 2026-07-09 |
+| webhook-orchestrator | API_KEY | OK | Has x-api-key validation |
+
+### Remaining — low risk, acceptable
+
+| Function | Current Auth | Risk | Notes |
+|----------|-------------|------|-------|
+| agent-message | SVC_ROLE (internal) | LOW | Called by other edge functions with service_role. Internal only. |
+| meeting-webhook | SVC_ROLE (internal) | LOW | Called internally with service_role. |
+| google-calendar-webhook | X-Goog-Channel-ID | LOW | Validates channel ID against DB. Google-provided auth. |

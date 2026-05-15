@@ -11,15 +11,31 @@ import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logTinyOp } from "../_shared/tinyerp-utils.ts";
 import { withSentry } from '../_shared/sentry.ts';
 import { logRuntime } from "../_shared/logger.ts";
+import { timingSafeCompare } from "../_shared/auth.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const TINYERP_WEBHOOK_SECRET = Deno.env.get("TINYERP_WEBHOOK_SECRET") || "";
 
 Deno.serve(withSentry('tinyerp-webhook', async (req) => {
   const corsHeaders = withSecurityHeaders(getCorsHeaders(req.headers.get("origin")));
 
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders });
+  }
+
+  // Validate webhook secret (header or query param)
+  if (TINYERP_WEBHOOK_SECRET) {
+    const url = new URL(req.url);
+    const secretFromQuery = url.searchParams.get("secret") ?? "";
+    const secretFromHeader = req.headers.get("x-webhook-secret") ?? "";
+    const providedSecret = secretFromHeader || secretFromQuery;
+    if (!providedSecret || !timingSafeCompare(providedSecret, TINYERP_WEBHOOK_SECRET)) {
+      return new Response(
+        JSON.stringify({ error: "Forbidden" }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
   }
 
   try {

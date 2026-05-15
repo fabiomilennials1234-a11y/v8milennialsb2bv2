@@ -3,6 +3,8 @@ import { logRuntime } from "../_shared/logger.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
+import { requireAuth, AuthError, authErrorResponse } from "../_shared/user-auth.ts";
+import { timingSafeCompare } from "../_shared/auth.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
@@ -164,6 +166,28 @@ Deno.serve(withSentry('sz-chat-send', async (req) => {
     if (!body.organization_id) {
       return new Response(JSON.stringify({ error: "organization_id is required" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // Auth: accept service_role key (internal edge function calls) or user JWT (frontend)
+    const authHeader = req.headers.get("authorization") ?? "";
+    const bearerToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+    const isServiceRole = !!SUPABASE_SERVICE_ROLE_KEY && !!bearerToken &&
+      timingSafeCompare(bearerToken, SUPABASE_SERVICE_ROLE_KEY);
+
+    if (!isServiceRole) {
+      try {
+        const authCtx = await requireAuth(req, {
+          body: body as unknown as Record<string, unknown>,
+          organizationId: body.organization_id,
+        });
+        if (authCtx.organizationId !== body.organization_id) {
+          return new Response(JSON.stringify({ error: "Forbidden: org mismatch" }),
+            { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+      } catch (e) {
+        if (e instanceof AuthError) return authErrorResponse(e, corsHeaders);
+        throw e;
+      }
     }
 
     const { data: config, error: configError } = await supabase

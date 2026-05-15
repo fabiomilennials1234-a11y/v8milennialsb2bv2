@@ -17,6 +17,8 @@ import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { getOrgTinyToken, callTinyApi, logTinyOp, getTinyErrorMessage } from "../_shared/tinyerp-utils.ts";
 import { withSentry } from "../_shared/sentry.ts";
 import { logRuntime } from "../_shared/logger.ts";
+import { requireAuth, AuthError, authErrorResponse } from "../_shared/user-auth.ts";
+import { timingSafeCompare } from "../_shared/auth.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -39,10 +41,32 @@ Deno.serve(withSentry("tinyerp-fetch-nfe", async (req) => {
       auth: { persistSession: false },
     });
 
-    const { organizationId, tinyOrderId, idNotaFiscal } = await req.json();
+    const body = await req.json();
+    const { organizationId, tinyOrderId, idNotaFiscal } = body;
 
     if (!organizationId || !idNotaFiscal) {
       return json({ error: "organizationId and idNotaFiscal are required" }, 400);
+    }
+
+    // Auth: accept service_role key (from tinyerp-webhook) or user JWT (frontend)
+    const authHeader = req.headers.get("authorization") ?? "";
+    const bearerToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+    const isServiceRole = !!SUPABASE_SERVICE_ROLE_KEY && !!bearerToken &&
+      timingSafeCompare(bearerToken, SUPABASE_SERVICE_ROLE_KEY);
+
+    if (!isServiceRole) {
+      try {
+        const authCtx = await requireAuth(req, {
+          body: body as Record<string, unknown>,
+          organizationId,
+        });
+        if (authCtx.organizationId !== organizationId) {
+          return json({ error: "Forbidden: org mismatch" }, 403);
+        }
+      } catch (e) {
+        if (e instanceof AuthError) return authErrorResponse(e, corsHeaders);
+        throw e;
+      }
     }
 
     const tokenData = await getOrgTinyToken(supabaseAdmin, organizationId);

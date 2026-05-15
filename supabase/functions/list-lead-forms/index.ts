@@ -19,6 +19,7 @@ import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { listLeadForms, getLeadFormFields } from "../_shared/meta-api.ts";
 import { withSentry } from '../_shared/sentry.ts';
 import { logRuntime } from "../_shared/logger.ts";
+import { requireAuth, AuthError, authErrorResponse } from "../_shared/user-auth.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -32,7 +33,17 @@ Deno.serve(withSentry('list-lead-forms', async (req) => {
   }
 
   try {
-    const { pageId, formId } = await req.json();
+    const body = await req.json();
+    const { pageId, formId } = body;
+
+    // Auth: require authenticated user
+    let authCtx;
+    try {
+      authCtx = await requireAuth(req, { body });
+    } catch (e) {
+      if (e instanceof AuthError) return authErrorResponse(e, corsHeaders);
+      throw e;
+    }
 
     if (!pageId) {
       return new Response(
@@ -45,11 +56,12 @@ Deno.serve(withSentry('list-lead-forms', async (req) => {
       auth: { persistSession: false },
     });
 
-    // Buscar pagina pelo UUID interno
+    // Buscar pagina pelo UUID interno — scoped to user's org
     const { data: page, error: pageError } = await supabase
       .from("meta_pages")
       .select("page_id, page_access_token")
       .eq("id", pageId)
+      .eq("organization_id", authCtx.organizationId)
       .eq("is_active", true)
       .single();
 

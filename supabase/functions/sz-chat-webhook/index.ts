@@ -6,6 +6,7 @@ import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { findLeadByPhoneOrEmail, associateMessagesToLead, getOrCreateLead } from "../_shared/lead-service.ts";
 import { smartSplitMessage, type NaturalMessagingConfig } from "../_shared/natural-messaging.ts";
 import { isCopilotCanceled, logCopilotCancellation } from "../_shared/copilot/cancellation.ts";
+import { timingSafeCompare } from "../_shared/auth.ts";
 
 /**
  * SZ.chat Webhook Receiver
@@ -801,7 +802,7 @@ function validateWebhookSecret(
 
   // If a secret header is provided, find the config that matches
   if (secret) {
-    const matched = configs.find(c => c.webhook_secret && c.webhook_secret === secret);
+    const matched = configs.find(c => c.webhook_secret && timingSafeCompare(secret, c.webhook_secret));
     if (matched) return matched;
 
     // Secret provided but no match — check if any config requires a secret
