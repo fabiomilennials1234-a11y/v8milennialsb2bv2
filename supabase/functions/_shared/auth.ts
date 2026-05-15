@@ -7,24 +7,30 @@
 import { createHmac } from "https://deno.land/std@0.177.0/node/crypto.ts";
 
 /**
- * Constant-time string comparison using Web Crypto API.
- * Prevents timing side-channel attacks on secret comparisons.
+ * Constant-time string comparison.
+ * Uses crypto.subtle.timingSafeEqual when available (Deno CLI),
+ * falls back to manual XOR comparison (Deno Deploy / Supabase Edge).
  */
 export function timingSafeCompare(a: string, b: string): boolean {
   const encoder = new TextEncoder();
   const bufA = encoder.encode(a);
   const bufB = encoder.encode(b);
   if (bufA.length !== bufB.length) {
-    // Compare against dummy to avoid early-exit timing leak
-    const dummy = new Uint8Array(bufA.length);
-    try { crypto.subtle.timingSafeEqual(bufA, dummy); } catch { /* ignore */ }
+    let _xor = 0;
+    for (let i = 0; i < bufA.length; i++) _xor |= bufA[i] ^ 0;
     return false;
   }
-  try {
-    return crypto.subtle.timingSafeEqual(bufA, bufB);
-  } catch {
-    return false;
+  // Prefer native API, fall back to manual constant-time XOR
+  if (typeof crypto?.subtle?.timingSafeEqual === "function") {
+    try {
+      return crypto.subtle.timingSafeEqual(bufA, bufB);
+    } catch { /* fall through */ }
   }
+  let result = 0;
+  for (let i = 0; i < bufA.length; i++) {
+    result |= bufA[i] ^ bufB[i];
+  }
+  return result === 0;
 }
 
 /**
