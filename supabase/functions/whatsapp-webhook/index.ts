@@ -114,6 +114,72 @@ async function resolveInstance(
   return inst as ResolvedInstance;
 }
 
+// Uazapi V2 sometimes omits instance_id at the top level but still sends the
+// per-instance token. Resolve by uazapi_token as a defensive fallback.
+async function resolveInstanceByToken(
+  supabase: ReturnType<typeof createClient>,
+  uazapiToken: string
+): Promise<ResolvedInstance | null> {
+  const { data, error } = await supabase
+    .from("whatsapp_instance_secrets")
+    .select("instance_id")
+    .eq("uazapi_token", uazapiToken)
+    .maybeSingle();
+
+  if (error || !data) return null;
+
+  const { data: inst } = await supabase
+    .from("whatsapp_instances")
+    .select("id, organization_id, instance_name")
+    .eq("id", data.instance_id)
+    .maybeSingle();
+
+  if (!inst) return null;
+  return inst as ResolvedInstance;
+}
+
+// Defensive instance-id picker: tolerates Uazapi V2 schema variations.
+// - Treats empty / whitespace strings as missing (?? would let "" through).
+// - Tries multiple camel/Pascal/snake aliases observed in V2 payloads.
+// Returns the first non-empty candidate or null.
+function pickInstanceId(
+  payload: Record<string, unknown> | null | undefined,
+  pathInstanceId?: string,
+): string | null {
+  const p: Record<string, unknown> = payload ?? {};
+  const candidates: unknown[] = [
+    p.instance,
+    p.instance_id,
+    p.instanceId,
+    p.InstanceId,
+    p.InstanceID,
+    p.instanceID,
+    pathInstanceId,
+    p.instanceName,
+    p.InstanceName,
+  ];
+  for (const c of candidates) {
+    if (typeof c === "string") {
+      const trimmed = c.trim();
+      if (trimmed.length > 0) return trimmed;
+    }
+  }
+  return null;
+}
+
+// Pick a per-instance Uazapi token from payload variants when present.
+function pickUazapiToken(payload: Record<string, unknown> | null | undefined): string | null {
+  const p: Record<string, unknown> = payload ?? {};
+  const candidates: unknown[] = [p.token, p.Token, p.instance_token, p.instanceToken];
+  for (const c of candidates) {
+    if (typeof c === "string") {
+      const trimmed = c.trim();
+      if (trimmed.length > 0) return trimmed;
+    }
+  }
+  return null;
+}
+
 function isWhatsAppCdnUrl(url: string): boolean {
   return url.includes(".whatsapp.net/") || url.includes(".whatsapp.com/");
 }
@@ -902,15 +968,25 @@ Deno.serve(
     const event = rawEvent.toLowerCase();
 
     // pathInstanceId (from URL) is the reliable Uazapi instance ID for reconfigured instances.
-    // payload.instanceName is a friendly name (e.g., "comercial 1") — last resort only.
-    const uazapiInstanceId = payload.instance ?? payload.instance_id ?? pathInstanceId ?? payload.instanceName ?? null;
+    // Defensive picker tolerates Uazapi V2 schema variations (empty strings, camel/Pascal/snake aliases).
+    const uazapiInstanceId = pickInstanceId(payload, pathInstanceId);
+    const uazapiToken = pickUazapiToken(payload);
 
-    if (!uazapiInstanceId) {
+    if (!uazapiInstanceId && !uazapiToken) {
+      const rawSnippet = (() => {
+        try { return JSON.stringify(payload).slice(0, 2048); } catch { return "[unserializable]"; }
+      })();
       await logRuntime({
         module: "webhook",
         action: "uazapi_missing_instance",
         status: "error",
-        payloadSnapshot: { source_ip: sourceIp, event, keys: Object.keys(payload).slice(0, 15) },
+        payloadSnapshot: {
+          source_ip: sourceIp,
+          event,
+          url_path: url.pathname,
+          keys: Object.keys(payload).slice(0, 15),
+          raw_truncated: rawSnippet,
+        },
       });
       return genericResponse(200);
     }
@@ -919,7 +995,26 @@ Deno.serve(
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    const instance = await resolveInstance(supabase, uazapiInstanceId);
+    let instance: ResolvedInstance | null = null;
+    if (uazapiInstanceId) {
+      instance = await resolveInstance(supabase, uazapiInstanceId);
+    }
+    if (!instance && uazapiToken) {
+      instance = await resolveInstanceByToken(supabase, uazapiToken);
+      if (instance) {
+        await logRuntime({
+          module: "webhook",
+          action: "uazapi_resolved_by_token_fallback",
+          status: "success",
+          payloadSnapshot: {
+            instance_id: instance.id,
+            organization_id: instance.organization_id,
+            event,
+            had_instance_id_candidate: !!uazapiInstanceId,
+          },
+        });
+      }
+    }
     if (!instance) {
       await logRuntime({
         module: "webhook",
