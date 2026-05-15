@@ -44,9 +44,12 @@ export function ProfileSettings() {
     const file = e.target.files?.[0];
     if (!file || !user?.id) return;
 
-    // Validar tipo e tamanho
-    if (!file.type.startsWith("image/")) {
-      toast.error("Por favor, selecione uma imagem");
+    const ALLOWED_EXTENSIONS = ["jpg", "jpeg", "png", "webp", "gif"];
+    const rawExt = (file.name.split(".").pop() || "").toLowerCase();
+    const ext = ALLOWED_EXTENSIONS.includes(rawExt) ? rawExt : "jpg";
+
+    if (!file.type.startsWith("image/") || !ALLOWED_EXTENSIONS.includes(rawExt)) {
+      toast.error("Formato inválido. Use: JPG, PNG, WebP ou GIF");
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
@@ -56,8 +59,7 @@ export function ProfileSettings() {
 
     setIsUploading(true);
     try {
-      const ext = file.name.split(".").pop() || "jpg";
-      const path = `avatars/${user.id}.${ext}`;
+      const path = `avatars/${user.id}-${Date.now()}.${ext}`;
 
       // Upload para Supabase Storage
       const { error: uploadError } = await supabase.storage

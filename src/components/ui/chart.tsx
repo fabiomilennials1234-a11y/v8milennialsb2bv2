@@ -83,7 +83,8 @@ const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
 ${prefix} [data-chart=${id}] {
 ${colorConfig
   .map(([key, itemConfig]) => {
-    const color = itemConfig.theme?.[theme as keyof typeof itemConfig.theme] || itemConfig.color;
+    const rawColor = itemConfig.theme?.[theme as keyof typeof itemConfig.theme] || itemConfig.color;
+    const color = rawColor && /^(#[0-9a-f]{3,8}|rgb[a]?\(|hsl[a]?\(|[a-z]{3,20})$/i.test(rawColor) ? rawColor : undefined;
     return color ? `  --color-${key}: ${color};` : null;
   })
   .join("\n")}
