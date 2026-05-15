@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+# =============================================================================
+# Pre-commit hook — Vault Obsidian sanity-check
+# =============================================================================
+# Bloqueia commit acidental que deleta/renomeia arquivos do vault.
+# Pede confirmação interativa antes de prosseguir.
+#
+# Instalação:
+#   git config core.hooksPath scripts/git-hooks
+#   chmod +x scripts/git-hooks/pre-commit
+#
+# Desinstalação:
+#   git config --unset core.hooksPath
+#
+# Bypass de emergência (usar com consciência):
+#   git commit --no-verify ...
+# =============================================================================
+
+set -euo pipefail
+
+# Cores
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+GREEN='\033[0;32m'
+NC='\033[0m'
+
+# Arquivos do vault sendo deletados
+DELETED_VAULT=$(git diff --cached --name-only --diff-filter=D 2>/dev/null \
+                | grep '^Obsidian/.*\.md$' || true)
+
+# Arquivos do vault sendo renomeados (R = rename)
+RENAMED_VAULT=$(git diff --cached --name-status --diff-filter=R 2>/dev/null \
+                | awk '$2 ~ /^Obsidian\/.*\.md$/ || $3 ~ /^Obsidian\/.*\.md$/' || true)
+
+# Atalho: nada do vault tocado, segue
+if [ -z "$DELETED_VAULT" ] && [ -z "$RENAMED_VAULT" ]; then
+  exit 0
+fi
+
+echo ""
+echo -e "${YELLOW}═══════════════════════════════════════════════════════════════${NC}"
+echo -e "${YELLOW}  ⚠  PRE-COMMIT — Mudança destrutiva no vault Obsidian detectada${NC}"
+echo -e "${YELLOW}═══════════════════════════════════════════════════════════════${NC}"
+echo ""
+
+if [ -n "$DELETED_VAULT" ]; then
+  echo -e "${RED}Arquivos sendo DELETADOS:${NC}"
+  echo "$DELETED_VAULT" | sed 's/^/  • /'
+  echo ""
+fi
+
+if [ -n "$RENAMED_VAULT" ]; then
+  echo -e "${YELLOW}Arquivos sendo RENOMEADOS:${NC}"
+  echo "$RENAMED_VAULT" | sed 's/^/  • /'
+  echo ""
+fi
+
+echo -e "${YELLOW}Antes de confirmar:${NC}"
+echo "  • Wikilinks que apontam para arquivos deletados ficarão quebrados"
+echo "  • Renomear é mais seguro — Obsidian normalmente atualiza refs automaticamente"
+echo "  • Deleção definitiva requer flag [vault-delete-ok] em commit message"
+echo "    para passar no vault-sentinel do GitHub Actions"
+echo ""
+
+# Stdin disponível? (git pode chamar hook sem TTY em GUIs)
+if [ ! -t 0 ]; then
+  if [ -t 1 ]; then exec < /dev/tty; else
+    echo -e "${RED}Sem TTY interativo. Use 'git commit --no-verify' explicitamente"
+    echo -e "       se a mudança é intencional, ou abra terminal regular.${NC}"
+    exit 1
+  fi
+fi
+
+read -r -p "Confirma operação? Digite YES (maiúsculo) para prosseguir: " confirm
+
+if [ "$confirm" = "YES" ]; then
+  echo -e "${GREEN}OK — commit prossegue.${NC}"
+
+  # Se há deleção, lembra de adicionar flag se quer mergear em main
+  if [ -n "$DELETED_VAULT" ]; then
+    if ! git log --format=%B -n 50 HEAD 2>/dev/null \
+         | grep -q '\[vault-delete-ok\]'; then
+      echo ""
+      echo -e "${YELLOW}Lembrete: para o vault-sentinel aceitar este PR,${NC}"
+      echo -e "${YELLOW}inclua [vault-delete-ok] em algum commit message do PR.${NC}"
+    fi
+  fi
+  exit 0
+else
+  echo -e "${RED}Abortado.${NC}"
+  exit 1
+fi

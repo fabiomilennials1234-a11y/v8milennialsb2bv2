@@ -1,0 +1,41 @@
+# =============================================================================
+# CODEOWNERS — Torque CRM
+# =============================================================================
+# Sintaxe: <path> <owner1> <owner2> ...
+# Owners listados aqui são adicionados automaticamente como reviewers em PRs.
+# Combinar com branch protection rule em `main` exigindo "Require review from
+# Code Owners" para que aprovação seja obrigatória nesses paths.
+#
+# Handles GitHub: ajustar para os usernames reais antes do merge.
+#   - @fabiomilennials1234-a11y  (Gabriel — CTO, owner repo)
+#   TODO: adicionar handle do Marcelo + outros maintainers
+# =============================================================================
+
+# Default — qualquer arquivo sem owner específico
+*                                       @fabiomilennials1234-a11y
+
+# =============================================================================
+# Vault Obsidian — proteção máxima contra perda
+# =============================================================================
+# Qualquer mudança em vault exige aprovação do CTO.
+/Obsidian/                              @fabiomilennials1234-a11y
+/Obsidian/**/*.md                       @fabiomilennials1234-a11y
+
+# =============================================================================
+# Áreas sensíveis — segurança/multi-tenant/auth
+# =============================================================================
+/supabase/migrations/                   @fabiomilennials1234-a11y
+/supabase/functions/_shared/            @fabiomilennials1234-a11y
+/supabase/functions/_shared/permission_engine.ts  @fabiomilennials1234-a11y
+/src/lib/permissions.ts                 @fabiomilennials1234-a11y
+/src/integrations/supabase/types.ts     @fabiomilennials1234-a11y
+
+# =============================================================================
+# Config de proteção do próprio vault — meta-guarda
+# =============================================================================
+/.github/CODEOWNERS                     @fabiomilennials1234-a11y
+/.github/workflows/vault-sentinel.yml   @fabiomilennials1234-a11y
+/.github/workflows/vault-backup.yml     @fabiomilennials1234-a11y
+/.gitattributes                         @fabiomilennials1234-a11y
+/.gitignore                             @fabiomilennials1234-a11y
+/CLAUDE.md                              @fabiomilennials1234-a11y
