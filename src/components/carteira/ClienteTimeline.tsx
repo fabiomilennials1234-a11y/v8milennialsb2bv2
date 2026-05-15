@@ -28,7 +28,7 @@ function alertSeverityDot(severity: string | undefined) {
     case "warning":
       return "bg-amber-400";
     default:
-      return "bg-zinc-500";
+      return "bg-muted-foreground";
   }
 }
 
@@ -59,7 +59,7 @@ export function ClienteTimeline({ orders, alerts }: ClienteTimelineProps) {
 
   if (items.length === 0) {
     return (
-      <p className="text-sm text-zinc-500 text-center py-6">
+      <p className="text-sm text-muted-foreground text-center py-6">
         Nenhuma atividade registrada.
       </p>
     );
@@ -68,13 +68,13 @@ export function ClienteTimeline({ orders, alerts }: ClienteTimelineProps) {
   return (
     <div className="relative flex flex-col">
       {/* Vertical line */}
-      <div className="absolute left-[7px] top-3 bottom-3 w-px bg-zinc-800" aria-hidden="true" />
+      <div className="absolute left-[7px] top-3 bottom-3 w-px bg-border" aria-hidden="true" />
 
       <ul className="space-y-3">
         {items.map((item) => (
           <li key={item.id} className="relative flex gap-3">
             {/* Icon dot */}
-            <div className="relative z-10 mt-1 flex items-center justify-center w-3.5 h-3.5 shrink-0 rounded-full bg-zinc-900 border border-zinc-700">
+            <div className="relative z-10 mt-1 flex items-center justify-center w-3.5 h-3.5 shrink-0 rounded-full bg-card border border-border">
               {item.type === "order" ? (
                 <ShoppingCart size={7} className="text-emerald-400" />
               ) : (
@@ -92,17 +92,17 @@ export function ClienteTimeline({ orders, alerts }: ClienteTimelineProps) {
               <div className="flex items-start justify-between gap-2">
                 <p className={cn(
                   "text-sm leading-snug",
-                  item.type === "order" ? "text-zinc-300" : "text-zinc-400",
+                  item.type === "order" ? "text-card-foreground" : "text-muted-foreground",
                 )}>
                   {item.description}
                 </p>
                 {item.value != null && (
-                  <span className="shrink-0 text-sm font-semibold tabular-nums text-zinc-200">
+                  <span className="shrink-0 text-sm font-semibold tabular-nums text-card-foreground">
                     {formatBRL(item.value)}
                   </span>
                 )}
               </div>
-              <p className="text-[10px] text-zinc-600 mt-0.5">
+              <p className="text-[10px] text-muted-foreground mt-0.5">
                 {formatDateTime(item.date)}
               </p>
             </div>

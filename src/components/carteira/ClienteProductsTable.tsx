@@ -40,7 +40,7 @@ function typeBadgeClass(type: string | null) {
     case "projeto":
       return "bg-blue-500/10 text-blue-400 border-blue-500/20";
     default:
-      return "bg-zinc-700/30 text-zinc-400 border-zinc-600/20";
+      return "bg-muted text-muted-foreground border-border";
   }
 }
 
@@ -50,9 +50,9 @@ export function ClienteProductsTable({ products }: ClienteProductsTableProps) {
   if (products.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-8 gap-2 text-center">
-        <Package size={28} className="text-zinc-700" />
-        <p className="text-sm text-zinc-500">Nenhum produto cadastrado</p>
-        <p className="text-xs text-zinc-600">Adicione produtos ao vincular pedidos a este cliente.</p>
+        <Package size={28} className="text-muted-foreground" />
+        <p className="text-sm text-muted-foreground">Nenhum produto cadastrado</p>
+        <p className="text-xs text-muted-foreground">Adicione produtos ao vincular pedidos a este cliente.</p>
       </div>
     );
   }
@@ -60,14 +60,14 @@ export function ClienteProductsTable({ products }: ClienteProductsTableProps) {
   return (
     <Table>
       <TableHeader>
-        <TableRow className="border-zinc-800 hover:bg-transparent">
-          <TableHead className="text-zinc-500 text-xs font-medium uppercase tracking-wider pl-0">
+        <TableRow className="border-border hover:bg-transparent">
+          <TableHead className="text-muted-foreground text-xs font-medium uppercase tracking-wider pl-0">
             Produto
           </TableHead>
-          <TableHead className="text-zinc-500 text-xs font-medium uppercase tracking-wider">
+          <TableHead className="text-muted-foreground text-xs font-medium uppercase tracking-wider">
             Tipo
           </TableHead>
-          <TableHead className="text-zinc-500 text-xs font-medium uppercase tracking-wider text-right pr-0">
+          <TableHead className="text-muted-foreground text-xs font-medium uppercase tracking-wider text-right pr-0">
             Valor
           </TableHead>
         </TableRow>
@@ -76,10 +76,10 @@ export function ClienteProductsTable({ products }: ClienteProductsTableProps) {
         {products.map((p) => (
           <TableRow
             key={p.id}
-            className="border-zinc-800/60 hover:bg-zinc-800/30 transition-colors"
+            className="border-border/60 hover:bg-muted/30 transition-colors"
           >
             <TableCell className="py-2.5 pl-0">
-              <span className="text-sm font-medium text-zinc-200 line-clamp-1">
+              <span className="text-sm font-medium text-card-foreground line-clamp-1">
                 {p.product_name ?? "—"}
               </span>
             </TableCell>
@@ -92,7 +92,7 @@ export function ClienteProductsTable({ products }: ClienteProductsTableProps) {
               </Badge>
             </TableCell>
             <TableCell className="py-2.5 text-right pr-0">
-              <span className="text-sm tabular-nums text-zinc-300">
+              <span className="text-sm tabular-nums text-card-foreground">
                 {p.sale_value != null ? formatBRL(p.sale_value) : "—"}
               </span>
             </TableCell>

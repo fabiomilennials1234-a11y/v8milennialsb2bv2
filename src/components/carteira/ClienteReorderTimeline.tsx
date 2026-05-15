@@ -37,7 +37,7 @@ export function ClienteReorderTimeline({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
-        <span className="text-[10px] uppercase tracking-wider font-medium text-zinc-500">
+        <span className="text-[10px] uppercase tracking-wider font-medium text-muted-foreground">
           Ciclo de Recompra
         </span>
         <span className={cn(
@@ -49,7 +49,7 @@ export function ClienteReorderTimeline({
       </div>
 
       {/* Progress bar */}
-      <div className="relative h-3 w-full rounded-full bg-zinc-800 overflow-hidden">
+      <div className="relative h-3 w-full rounded-full bg-muted overflow-hidden">
         <div
           className={cn(
             "h-full rounded-full bg-gradient-to-r transition-all",
@@ -69,10 +69,10 @@ export function ClienteReorderTimeline({
       </div>
 
       {/* Labels */}
-      <div className="flex items-center justify-between text-[10px] text-zinc-600">
+      <div className="flex items-center justify-between text-[10px] text-muted-foreground">
         <span>Último: {formatDateSafe(lastOrderAt)}</span>
         <span className="flex items-center gap-1">
-          <span className="inline-block w-1.5 h-1.5 rounded-full bg-zinc-500" />
+          <span className="inline-block w-1.5 h-1.5 rounded-full bg-muted-foreground" />
           Hoje
         </span>
         <span>Previsto: {formatDateSafe(nextOrderExpected)}</span>

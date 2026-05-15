@@ -254,8 +254,8 @@ export function QuickOrderModal({
       <DialogContent className="sm:max-w-[620px] gap-0 p-0 overflow-hidden">
         <DialogHeader className="px-6 pt-6 pb-4 border-b border-border/50">
           <DialogTitle className="flex items-center gap-2 text-base">
-            <div className="p-1.5 rounded-lg bg-[hsl(47_100%_50%/0.12)]">
-              <ShoppingBag className="w-4 h-4 text-[hsl(47_100%_50%)]" />
+            <div className="p-1.5 rounded-lg bg-primary/12">
+              <ShoppingBag className="w-4 h-4 text-primary" />
             </div>
             Novo Pedido
             {clientName && (
@@ -335,7 +335,7 @@ export function QuickOrderModal({
           {/* Total */}
           <div className="flex items-center justify-between pt-2 border-t border-border/50">
             <span className="text-sm text-muted-foreground">Total</span>
-            <span className="text-lg font-semibold text-[hsl(47_100%_50%)]">
+            <span className="text-lg font-semibold text-primary">
               {formatBRL(total)}
             </span>
           </div>
@@ -348,7 +348,7 @@ export function QuickOrderModal({
           <Button
             onClick={handleConfirm}
             disabled={createOrder.isPending}
-            className="bg-[hsl(47_100%_50%)] text-black hover:bg-[hsl(47_100%_45%)] font-semibold"
+            className="bg-primary text-primary-foreground hover:bg-primary/90 font-semibold"
           >
             {createOrder.isPending ? "Registrando..." : "Confirmar Pedido"}
           </Button>

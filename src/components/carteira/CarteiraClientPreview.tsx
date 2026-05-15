@@ -24,7 +24,7 @@ function healthRingColor(status: string | null, score: number) {
   if (status === "saudavel" || score >= 80) return "text-emerald-400";
   if (status === "atencao" || score >= 60) return "text-amber-400";
   if (status === "risco" || score > 0) return "text-red-400";
-  return "text-zinc-600";
+  return "text-muted-foreground";
 }
 
 function alertSeverityStyle(severity: string) {
@@ -34,7 +34,7 @@ function alertSeverityStyle(severity: string) {
     case "warning":
       return "bg-amber-500/10 text-amber-400 border-amber-500/20";
     default:
-      return "bg-zinc-700/30 text-zinc-400 border-zinc-600/20";
+      return "bg-muted text-muted-foreground border-border";
   }
 }
 
@@ -46,8 +46,8 @@ interface MiniMetricProps {
 function MiniMetric({ label, value }: MiniMetricProps) {
   return (
     <div className="flex flex-col gap-0.5">
-      <span className="text-[10px] uppercase tracking-wider font-medium text-zinc-500">{label}</span>
-      <span className="text-sm font-semibold text-zinc-100 tabular-nums">{value}</span>
+      <span className="text-[10px] uppercase tracking-wider font-medium text-muted-foreground">{label}</span>
+      <span className="text-sm font-semibold text-foreground tabular-nums">{value}</span>
     </div>
   );
 }
@@ -76,20 +76,20 @@ export function CarteiraClientPreview({
   const daysSince = client?.days_since_last_order ?? null;
 
   return (
-    <aside className="w-80 shrink-0 flex flex-col rounded-lg border border-zinc-800 bg-zinc-900 overflow-hidden">
+    <aside className="w-80 shrink-0 flex flex-col rounded-lg border border-border bg-card overflow-hidden">
       {/* Header */}
-      <div className="flex items-start justify-between gap-2 px-4 py-3 border-b border-zinc-800">
+      <div className="flex items-start justify-between gap-2 px-4 py-3 border-b border-border">
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-zinc-100 truncate">
+          <p className="text-sm font-semibold text-foreground truncate">
             {client?.name ?? "Carregando…"}
           </p>
           {client?.company && (
-            <p className="text-xs text-zinc-500 truncate">{client.company}</p>
+            <p className="text-xs text-muted-foreground truncate">{client.company}</p>
           )}
         </div>
         <button
           onClick={onClose}
-          className="shrink-0 rounded-md p-1 text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 transition-colors mt-0.5"
+          className="shrink-0 rounded-md p-1 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors mt-0.5"
           aria-label="Fechar painel"
         >
           <X size={14} />
@@ -99,7 +99,7 @@ export function CarteiraClientPreview({
       {/* Body — scrollable */}
       <div className="flex-1 overflow-y-auto">
         {/* Health Ring */}
-        <div className="flex flex-col items-center py-5 border-b border-zinc-800">
+        <div className="flex flex-col items-center py-5 border-b border-border">
           <div className="relative w-20 h-20">
             <svg
               className="w-20 h-20 -rotate-90"
@@ -113,7 +113,7 @@ export function CarteiraClientPreview({
                 fill="none"
                 stroke="currentColor"
                 strokeWidth="6"
-                className="text-zinc-800"
+                className="text-border"
               />
               <circle
                 cx="40"
@@ -136,7 +136,7 @@ export function CarteiraClientPreview({
               {score}
             </span>
           </div>
-          <span className="mt-2 text-xs text-zinc-500">Health Score</span>
+          <span className="mt-2 text-xs text-muted-foreground">Health Score</span>
           {healthHistory.length >= 2 && (
             <HealthSparkline
               data={healthHistory}
@@ -148,7 +148,7 @@ export function CarteiraClientPreview({
         </div>
 
         {/* Mini Metrics */}
-        <div className="grid grid-cols-3 gap-x-4 gap-y-3 px-4 py-4 border-b border-zinc-800">
+        <div className="grid grid-cols-3 gap-x-4 gap-y-3 px-4 py-4 border-b border-border">
           <MiniMetric
             label="Ciclo"
             value={cycleDays ? `${cycleDays} dias` : "—"}
@@ -161,7 +161,7 @@ export function CarteiraClientPreview({
                   className={
                     cycleDays && daysSince > cycleDays
                       ? "text-red-400"
-                      : "text-zinc-100"
+                      : "text-foreground"
                   }
                 >
                   {daysSince}
@@ -209,8 +209,8 @@ export function CarteiraClientPreview({
 
         {/* Alerts */}
         {alerts.length > 0 && (
-          <div className="px-4 py-3 border-b border-zinc-800">
-            <p className="text-[10px] uppercase tracking-wider font-medium text-zinc-500 mb-2">
+          <div className="px-4 py-3 border-b border-border">
+            <p className="text-[10px] uppercase tracking-wider font-medium text-muted-foreground mb-2">
               Alertas ativos
             </p>
             <ul className="space-y-1.5">
@@ -238,10 +238,10 @@ export function CarteiraClientPreview({
       </div>
 
       {/* Actions */}
-      <div className="flex flex-col gap-2 px-4 py-3 border-t border-zinc-800 bg-zinc-900/80">
+      <div className="flex flex-col gap-2 px-4 py-3 border-t border-border bg-card/80">
         <Button
           size="sm"
-          className="w-full gap-2 bg-[hsl(47_100%_50%)] hover:bg-[hsl(47_100%_45%)] text-black font-semibold"
+          className="w-full gap-2 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"
           onClick={() => onViewDetail(client.id)}
         >
           <ExternalLink size={14} />
@@ -251,7 +251,7 @@ export function CarteiraClientPreview({
           <Button
             size="sm"
             variant="outline"
-            className="flex-1 gap-2 border-zinc-700 hover:bg-zinc-800"
+            className="flex-1 gap-2 border-border hover:bg-muted"
             onClick={() => onNewOrder(client.id)}
           >
             <ShoppingCart size={13} />
@@ -261,7 +261,7 @@ export function CarteiraClientPreview({
             <Button
               size="sm"
               variant="outline"
-              className="flex-1 gap-2 border-zinc-700 hover:bg-zinc-800 hover:border-green-600/50 hover:text-green-400"
+              className="flex-1 gap-2 border-border hover:bg-muted hover:border-green-600/50 hover:text-green-400"
               onClick={() => {
                 if (client.lead_id) {
                   navigate(`/chat?lead=${client.lead_id}`);

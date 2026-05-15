@@ -98,22 +98,22 @@ export function ClienteCopilotSuggestion({
     <Card className={cn(
       "relative overflow-hidden border",
       isAI
-        ? "border-[hsl(47_100%_50%/0.3)] bg-zinc-900"
-        : "border-[hsl(47_100%_50%/0.2)] bg-zinc-900",
+        ? "border-primary/30 bg-card"
+        : "border-primary/20 bg-card",
     )}>
-      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[hsl(47_100%_50%/0.6)] to-transparent" />
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/60 to-transparent" />
 
       <CardContent className="p-4 flex flex-col gap-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="flex items-center justify-center w-6 h-6 rounded-md bg-[hsl(47_100%_50%/0.15)]">
-              <Sparkles size={13} className="text-[hsl(47_100%_60%)]" />
+            <div className="flex items-center justify-center w-6 h-6 rounded-md bg-primary/15">
+              <Sparkles size={13} className="text-primary" />
             </div>
-            <span className="text-xs font-semibold text-zinc-300">
+            <span className="text-xs font-semibold text-card-foreground">
               {isAI ? "Sugestão IA" : "Sugestão Copilot"}
             </span>
             {actionType && (
-              <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-[hsl(47_100%_50%/0.15)] text-[hsl(47_100%_60%)]">
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-primary/15 text-primary">
                 {ACTION_LABELS[actionType] ?? actionType}
               </span>
             )}
@@ -122,7 +122,7 @@ export function ClienteCopilotSuggestion({
             <Button
               size="sm"
               variant="ghost"
-              className="h-6 w-6 p-0 text-zinc-500 hover:text-zinc-200"
+              className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
               onClick={handleGenerate}
               disabled={generating || loadingCached}
               title="Gerar sugestão IA"
@@ -137,26 +137,26 @@ export function ClienteCopilotSuggestion({
         </div>
 
         {generating ? (
-          <div className="flex items-center gap-2 py-4 justify-center text-xs text-zinc-500">
+          <div className="flex items-center gap-2 py-4 justify-center text-xs text-muted-foreground">
             <Loader2 size={14} className="animate-spin" />
             Analisando contexto do cliente...
           </div>
         ) : (
           <>
-            <p className="text-sm text-zinc-300 leading-relaxed bg-zinc-800/60 rounded-lg px-3 py-2.5 border border-zinc-700/50">
+            <p className="text-sm text-card-foreground leading-relaxed bg-muted/60 rounded-lg px-3 py-2.5 border border-border/50">
               {message}
             </p>
 
             {isAI && aiSuggestion.reasoning && (
               <button
                 onClick={() => setShowReasoning(!showReasoning)}
-                className="text-[10px] text-zinc-500 hover:text-zinc-400 text-left transition-colors"
+                className="text-[10px] text-muted-foreground hover:text-foreground text-left transition-colors"
               >
                 {showReasoning ? "Ocultar raciocínio" : "Ver raciocínio da IA"}
               </button>
             )}
             {showReasoning && aiSuggestion?.reasoning && (
-              <p className="text-[11px] text-zinc-500 leading-relaxed bg-zinc-800/30 rounded px-2.5 py-2 border border-zinc-800">
+              <p className="text-[11px] text-muted-foreground leading-relaxed bg-muted/30 rounded px-2.5 py-2 border border-border">
                 {aiSuggestion.reasoning}
               </p>
             )}
@@ -167,7 +167,7 @@ export function ClienteCopilotSuggestion({
           <Button
             size="sm"
             variant="outline"
-            className="flex-1 gap-1.5 border-zinc-700 hover:bg-zinc-800 text-xs h-8"
+            className="flex-1 gap-1.5 border-border hover:bg-muted text-xs h-8"
             onClick={handleCopy}
             disabled={generating}
           >
@@ -179,8 +179,8 @@ export function ClienteCopilotSuggestion({
             className={cn(
               "flex-1 gap-1.5 text-xs h-8 font-semibold",
               phone && !generating
-                ? "bg-[hsl(47_100%_50%)] hover:bg-[hsl(47_100%_45%)] text-black"
-                : "bg-zinc-800 text-zinc-500 cursor-not-allowed",
+                ? "bg-primary hover:bg-primary/90 text-primary-foreground"
+                : "bg-muted text-muted-foreground cursor-not-allowed",
             )}
             onClick={handleWhatsApp}
             disabled={!phone || generating}

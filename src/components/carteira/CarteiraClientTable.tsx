@@ -297,12 +297,12 @@ export function CarteiraClientTable({
         <div className="divide-y divide-border">
           {Array.from({ length: 8 }).map((_, i) => (
             <div key={i} className="flex gap-4 px-4 py-3.5 animate-pulse">
-              <div className="h-4 bg-zinc-800 rounded w-40" />
-              <div className="h-4 bg-zinc-800 rounded w-14" />
-              <div className="h-4 bg-zinc-800 rounded w-24" />
-              <div className="h-4 bg-zinc-800 rounded w-20" />
-              <div className="h-4 bg-zinc-800 rounded w-16" />
-              <div className="h-4 bg-zinc-800 rounded w-16" />
+              <div className="h-4 bg-muted rounded w-40" />
+              <div className="h-4 bg-muted rounded w-14" />
+              <div className="h-4 bg-muted rounded w-24" />
+              <div className="h-4 bg-muted rounded w-20" />
+              <div className="h-4 bg-muted rounded w-16" />
+              <div className="h-4 bg-muted rounded w-16" />
             </div>
           ))}
         </div>

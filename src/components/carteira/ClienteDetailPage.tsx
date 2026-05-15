@@ -43,12 +43,12 @@ function alertSeverityClass(severity: string) {
     case "warning":
       return "bg-amber-500/10 text-amber-400 border-amber-500/20";
     default:
-      return "bg-zinc-700/30 text-zinc-400 border-zinc-600/20";
+      return "bg-muted text-muted-foreground border-border";
   }
 }
 
 function SkeletonBlock({ className }: { className?: string }) {
-  return <div className={cn("animate-pulse rounded-lg bg-zinc-800", className)} />;
+  return <div className={cn("animate-pulse rounded-lg bg-muted", className)} />;
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -141,7 +141,7 @@ export default function ClienteDetailPage() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex flex-col min-h-full bg-zinc-950">
+    <div className="flex flex-col min-h-full bg-background">
       <div className="flex flex-col gap-5 p-5 md:p-6 max-w-7xl mx-auto w-full">
 
         {/* ── Header ─────────────────────────────────────────────────────── */}
@@ -149,7 +149,7 @@ export default function ClienteDetailPage() {
           <Button
             variant="ghost"
             size="sm"
-            className="gap-1.5 text-zinc-400 hover:text-zinc-100 -ml-2"
+            className="gap-1.5 text-muted-foreground hover:text-foreground -ml-2"
             onClick={() => navigate(-1)}
           >
             <ArrowLeft size={15} />
@@ -166,7 +166,7 @@ export default function ClienteDetailPage() {
               <circle
                 cx="40" cy="40" r="35"
                 fill="none" stroke="currentColor"
-                strokeWidth="8" className="text-zinc-800"
+                strokeWidth="8" className="text-border"
               />
               <circle
                 cx="40" cy="40" r="35"
@@ -183,7 +183,7 @@ export default function ClienteDetailPage() {
 
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-3">
-              <h1 className="text-lg font-semibold text-zinc-100 truncate leading-tight">
+              <h1 className="text-lg font-semibold text-foreground truncate leading-tight">
                 {clientName}
               </h1>
               {healthHistory.length >= 2 && (
@@ -196,7 +196,7 @@ export default function ClienteDetailPage() {
               )}
             </div>
             {clientCompany && (
-              <p className="text-xs text-zinc-500 truncate">{clientCompany}</p>
+              <p className="text-xs text-muted-foreground truncate">{clientCompany}</p>
             )}
           </div>
 
@@ -223,7 +223,7 @@ export default function ClienteDetailPage() {
               <Button
                 size="sm"
                 variant="outline"
-                className="gap-1.5 border-zinc-700 hover:bg-zinc-800 hover:border-green-600/50 hover:text-green-400"
+                className="gap-1.5 border-border hover:bg-muted hover:border-green-600/50 hover:text-green-400"
                 onClick={() => {
                   if (client?.lead_id) {
                     navigate(`/chat?lead=${client.lead_id}`);
@@ -238,7 +238,7 @@ export default function ClienteDetailPage() {
             )}
             <Button
               size="sm"
-              className="gap-1.5 bg-[hsl(47_100%_50%)] hover:bg-[hsl(47_100%_45%)] text-black font-semibold"
+              className="gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"
             >
               <ShoppingCart size={13} />
               Novo Pedido
@@ -268,9 +268,9 @@ export default function ClienteDetailPage() {
         <div className="grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-4">
           <ClienteMetrics client={client ?? {}} />
 
-          <Card className="bg-zinc-900 border-zinc-800">
+          <Card className="bg-card border-border">
             <CardHeader className="px-4 pt-4 pb-2">
-              <CardTitle className="text-sm font-semibold text-zinc-300">
+              <CardTitle className="text-sm font-semibold text-card-foreground">
                 Ciclo de Recompra
               </CardTitle>
             </CardHeader>
@@ -283,7 +283,7 @@ export default function ClienteDetailPage() {
                   nextOrderExpected={nextOrderExpected}
                 />
               ) : (
-                <p className="text-sm text-zinc-500 text-center py-4">
+                <p className="text-sm text-muted-foreground text-center py-4">
                   Ciclo não calculado ainda.
                 </p>
               )}
@@ -302,9 +302,9 @@ export default function ClienteDetailPage() {
             nextOrderExpected={nextOrderExpected}
           />
 
-          <Card className="bg-zinc-900 border-zinc-800">
+          <Card className="bg-card border-border">
             <CardHeader className="px-4 pt-4 pb-2">
-              <CardTitle className="text-sm font-semibold text-zinc-300">
+              <CardTitle className="text-sm font-semibold text-card-foreground">
                 Produtos Ativos
               </CardTitle>
             </CardHeader>
@@ -324,9 +324,9 @@ export default function ClienteDetailPage() {
 
         {/* ── Bottom row: Order History + Timeline ────────────────────────── */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <Card className="bg-zinc-900 border-zinc-800">
+          <Card className="bg-card border-border">
             <CardHeader className="px-4 pt-4 pb-2">
-              <CardTitle className="text-sm font-semibold text-zinc-300">
+              <CardTitle className="text-sm font-semibold text-card-foreground">
                 Histórico de Pedidos
               </CardTitle>
             </CardHeader>
@@ -343,9 +343,9 @@ export default function ClienteDetailPage() {
             </CardContent>
           </Card>
 
-          <Card className="bg-zinc-900 border-zinc-800">
+          <Card className="bg-card border-border">
             <CardHeader className="px-4 pt-4 pb-2">
-              <CardTitle className="text-sm font-semibold text-zinc-300">
+              <CardTitle className="text-sm font-semibold text-card-foreground">
                 Atividade Recente
               </CardTitle>
             </CardHeader>

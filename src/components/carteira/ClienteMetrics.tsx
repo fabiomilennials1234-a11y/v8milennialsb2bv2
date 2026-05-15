@@ -53,19 +53,19 @@ interface MetricCardProps {
 
 function MetricCard({ label, value, icon, sub }: MetricCardProps) {
   return (
-    <Card className="bg-zinc-900 border-zinc-800 hover:border-zinc-700 transition-colors">
+    <Card className="bg-card border-border hover:border-border transition-colors">
       <CardContent className="p-4">
         <div className="flex items-start justify-between gap-2">
           <div className="flex flex-col gap-0.5 min-w-0">
-            <span className="text-[10px] uppercase tracking-wider font-medium text-zinc-500">
+            <span className="text-[10px] uppercase tracking-wider font-medium text-muted-foreground">
               {label}
             </span>
-            <span className="text-xl font-semibold text-zinc-100 tabular-nums leading-tight">
+            <span className="text-xl font-semibold text-foreground tabular-nums leading-tight">
               {value}
             </span>
-            {sub && <span className="text-xs text-zinc-500 mt-0.5">{sub}</span>}
+            {sub && <span className="text-xs text-muted-foreground mt-0.5">{sub}</span>}
           </div>
-          <div className="shrink-0 text-zinc-600 mt-0.5">{icon}</div>
+          <div className="shrink-0 text-muted-foreground mt-0.5">{icon}</div>
         </div>
       </CardContent>
     </Card>
@@ -118,18 +118,18 @@ export function ClienteMetrics({ client }: ClienteMetricsProps) {
       />
 
       {/* Health card — custom */}
-      <Card className="bg-zinc-900 border-zinc-800 hover:border-zinc-700 transition-colors">
+      <Card className="bg-card border-border hover:border-border transition-colors">
         <CardContent className="p-4">
           <div className="flex items-start justify-between gap-2">
             <div className="flex flex-col gap-0.5 min-w-0 w-full">
-              <span className="text-[10px] uppercase tracking-wider font-medium text-zinc-500">
+              <span className="text-[10px] uppercase tracking-wider font-medium text-muted-foreground">
                 Health
               </span>
               <span className={cn("text-xl font-semibold tabular-nums leading-tight", healthColor(score))}>
                 {score}
               </span>
               {/* Progress bar */}
-              <div className="mt-1.5 h-1.5 w-full rounded-full bg-zinc-800 overflow-hidden">
+              <div className="mt-1.5 h-1.5 w-full rounded-full bg-muted overflow-hidden">
                 <div
                   className={cn("h-full rounded-full transition-all", healthBarColor(score))}
                   style={{ width: `${Math.min(score, 100)}%` }}

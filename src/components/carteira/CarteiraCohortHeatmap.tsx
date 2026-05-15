@@ -8,7 +8,7 @@ function heatColor(pct: number): string {
   if (pct >= 40) return "bg-amber-500/40 text-amber-200";
   if (pct >= 20) return "bg-red-500/30 text-red-300";
   if (pct > 0) return "bg-red-500/50 text-red-200";
-  return "bg-muted/50 text-zinc-600";
+  return "bg-muted/50 text-muted-foreground";
 }
 
 function formatMonth(iso: string): string {
