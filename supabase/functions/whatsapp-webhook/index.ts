@@ -180,6 +180,35 @@ function pickUazapiToken(payload: Record<string, unknown> | null | undefined): s
   return null;
 }
 
+// Enqueue an unprocessable webhook event into the DLQ. Best-effort: a DLQ
+// insert failure must never break the 200 OK contract back to Uazapi (Uazapi
+// retries on non-2xx and we do not want to amplify load during incidents).
+async function enqueueDlq(
+  supabase: ReturnType<typeof createClient>,
+  input: {
+    source_ip: string | null;
+    url_path: string;
+    event: string;
+    reason: string;
+    payload: unknown;
+  },
+): Promise<void> {
+  try {
+    const { error } = await supabase.from("whatsapp_webhook_dlq").insert({
+      source_ip: input.source_ip,
+      url_path: input.url_path,
+      event: input.event,
+      reason: input.reason,
+      payload: input.payload as Record<string, unknown>,
+    });
+    if (error) {
+      console.error("[whatsapp-webhook] dlq insert failed:", error.message);
+    }
+  } catch (err) {
+    console.error("[whatsapp-webhook] dlq insert threw:", err);
+  }
+}
+
 function isWhatsAppCdnUrl(url: string): boolean {
   return url.includes(".whatsapp.net/") || url.includes(".whatsapp.com/");
 }
@@ -972,6 +1001,10 @@ Deno.serve(
     const uazapiInstanceId = pickInstanceId(payload, pathInstanceId);
     const uazapiToken = pickUazapiToken(payload);
 
+    const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+
     if (!uazapiInstanceId && !uazapiToken) {
       const rawSnippet = (() => {
         try { return JSON.stringify(payload).slice(0, 2048); } catch { return "[unserializable]"; }
@@ -988,12 +1021,15 @@ Deno.serve(
           raw_truncated: rawSnippet,
         },
       });
+      await enqueueDlq(supabase, {
+        source_ip: sourceIp,
+        url_path: url.pathname,
+        event,
+        reason: "missing_instance",
+        payload,
+      });
       return genericResponse(200);
     }
-
-    const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
 
     let instance: ResolvedInstance | null = null;
     if (uazapiInstanceId) {
@@ -1025,6 +1061,13 @@ Deno.serve(
           event,
           uazapi_instance_id: uazapiInstanceId,
         },
+      });
+      await enqueueDlq(supabase, {
+        source_ip: sourceIp,
+        url_path: url.pathname,
+        event,
+        reason: "unknown_instance",
+        payload,
       });
       return genericResponse(200);
     }
