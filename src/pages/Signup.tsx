@@ -154,7 +154,7 @@ export default function Signup() {
 
     if (signUpError) {
       if (signUpError.message.toLowerCase().includes('already registered')) {
-        setError('Este e-mail já está cadastrado. Faça login ou recupere sua senha.');
+        setError('Se este e-mail estiver cadastrado, verifique sua caixa de entrada. Caso contrário, tente novamente.');
       } else {
         setError(signUpError.message);
       }

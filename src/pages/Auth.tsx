@@ -105,8 +105,8 @@ export default function Auth() {
         if (error) {
           if (error.message.includes('already registered')) {
             toast({
-              title: 'E-mail já cadastrado',
-              description: 'Este e-mail já está em uso. Tente fazer login.',
+              title: 'Verifique seu e-mail',
+              description: 'Se este e-mail estiver cadastrado, verifique sua caixa de entrada. Caso contrário, tente novamente.',
               variant: 'destructive',
             });
           } else {

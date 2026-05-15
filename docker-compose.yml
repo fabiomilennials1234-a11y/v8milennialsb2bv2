@@ -14,5 +14,5 @@ services:
         - VITE_INVITE_API_URL=${VITE_INVITE_API_URL}
         - VITE_CHAT_ONDA_2B=${VITE_CHAT_ONDA_2B:-true}
     ports:
-      - "80:80"
+      - "80:8080"
     restart: unless-stopped

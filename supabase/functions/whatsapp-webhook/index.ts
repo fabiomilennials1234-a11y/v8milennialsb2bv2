@@ -26,6 +26,7 @@ import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { upsertPipeEntry } from "../_shared/pipeline-adapter.ts";
 import { isCopilotCanceled, logCopilotCancellation } from "../_shared/copilot/cancellation.ts";
+import { timingSafeCompare, checkRateLimitPersistent } from "../_shared/auth.ts";
 
 // ============================================================================
 // Config
@@ -71,17 +72,9 @@ function checkRateLimit(ip: string): { allowed: boolean; remaining: number } {
 }
 
 // ============================================================================
-// Constant-time secret comparison
+// Constant-time secret comparison — uses shared timingSafeCompare from auth.ts
+// (handles length-mismatch without leaking timing info)
 // ============================================================================
-
-function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) {
-    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  }
-  return diff === 0;
-}
 
 // ============================================================================
 // Event handlers
@@ -948,7 +941,7 @@ Deno.serve(
     if (
       !pathSecret ||
       !UAZAPI_WEBHOOK_SECRET ||
-      !timingSafeEqual(pathSecret, UAZAPI_WEBHOOK_SECRET)
+      !timingSafeCompare(pathSecret, UAZAPI_WEBHOOK_SECRET)
     ) {
       await logRuntime({
         module: "webhook",
@@ -1012,6 +1005,23 @@ Deno.serve(
     const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
+
+    // Persistent rate limit — authoritative check (in-memory is first-line only)
+    const persistentRl = await checkRateLimitPersistent(
+      supabase,
+      `whatsapp-webhook:${sourceIp}`,
+      RATE_LIMIT_MAX,
+      Math.floor(RATE_LIMIT_WINDOW_MS / 1000),
+    );
+    if (!persistentRl.allowed) {
+      await logRuntime({
+        module: "webhook",
+        action: "uazapi_rate_limit_persistent",
+        status: "error",
+        payloadSnapshot: { source_ip: sourceIp, remaining: persistentRl.remaining },
+      });
+      return genericResponse(429, { error: "rate_limited" });
+    }
 
     if (!uazapiInstanceId && !uazapiToken) {
       const rawSnippet = (() => {
@@ -1170,7 +1180,7 @@ Deno.serve(
 
 export {
   checkRateLimit,
-  timingSafeEqual,
+  timingSafeCompare,
   normalizeMessage,
   rateLimitState,
   RATE_LIMIT_MAX,

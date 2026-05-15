@@ -100,7 +100,7 @@ export class UazapiProvider implements WhatsAppProvider {
 
   async createInstance(input: CreateInstanceInput): Promise<CreateInstanceResult> {
     // Webhook auth: Uazapi has no HMAC / customHeaders. Secret is embedded
-    // as a path segment; edge function validates with timingSafeEqual.
+    // as a path segment; edge function validates with timingSafeCompare.
     if (!input.webhook_secret) {
       throw new Error("UazapiProvider.createInstance: webhook_secret required");
     }
