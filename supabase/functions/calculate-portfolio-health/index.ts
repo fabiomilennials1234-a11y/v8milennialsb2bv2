@@ -107,6 +107,7 @@ async function processClient(
     .from("upsell_orders")
     .select("id, sale_value, sold_at, product_name")
     .eq("client_id", client.id)
+    .eq("approval_status", "approved")
     .order("sold_at", { ascending: true });
 
   if (ordersError) {
@@ -440,7 +441,8 @@ async function processOrg(
   const { data: ticketData } = await supabase
     .from("upsell_orders")
     .select("sale_value")
-    .eq("organization_id", orgId);
+    .eq("organization_id", orgId)
+    .eq("approval_status", "approved");
 
   const allValues = (ticketData ?? []).map((r: { sale_value: number }) => Number(r.sale_value));
   const orgAvgTicket =
