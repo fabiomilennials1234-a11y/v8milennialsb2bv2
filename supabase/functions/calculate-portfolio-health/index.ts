@@ -26,6 +26,7 @@ import {
   calculateHealthScore,
   calculateRecencyScore,
   calculateTicketScore,
+  calculateEngagementScore,
   deriveHealthStatus,
   deriveSegment,
   deriveTrend,
@@ -107,6 +108,36 @@ async function processClient(
     return { success: false, error: ordersError.message };
   }
 
+  // Fetch engagement data (requires lead_id)
+  let engagementScore = ENGAGEMENT_DEFAULT;
+  let daysSinceLastIncoming: number | null = null;
+
+  if (client.lead_id) {
+    const { data: ctxSummary } = await supabase
+      .from("conversation_context_summary")
+      .select("engagement_score")
+      .eq("lead_id", client.lead_id)
+      .maybeSingle();
+
+    const { data: lastIncoming } = await supabase
+      .from("whatsapp_messages")
+      .select("timestamp")
+      .eq("lead_id", client.lead_id)
+      .eq("direction", "incoming")
+      .order("timestamp", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    daysSinceLastIncoming = lastIncoming
+      ? Math.round(daysBetween(new Date(lastIncoming.timestamp), now))
+      : null;
+
+    engagementScore = calculateEngagementScore(
+      ctxSummary?.engagement_score ?? null,
+      daysSinceLastIncoming,
+    );
+  }
+
   const orderList: Order[] = orders ?? [];
   const orderCount = orderList.length;
   const cycleDays = computeCycleDays(orderList);
@@ -152,7 +183,7 @@ async function processClient(
     recency: recencyScore,
     frequency: frequencyScore,
     ticket: ticketScore,
-    engagement: ENGAGEMENT_DEFAULT,
+    engagement: engagementScore,
   };
 
   // New clients get a neutral score
@@ -202,7 +233,7 @@ async function processClient(
     historicalAvgTicket: avgTicket,
     productFrequencies: pf,
     lastOrderProducts,
-    daysSinceLastWhatsAppReply: null, // not wired yet
+    daysSinceLastWhatsAppReply: daysSinceLastIncoming,
     lastNpsScore: null,               // not wired yet
   });
 

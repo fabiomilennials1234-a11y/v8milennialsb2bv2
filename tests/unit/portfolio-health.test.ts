@@ -4,6 +4,7 @@ import {
   calculateFrequencyScore,
   calculateTicketScore,
   calculateHealthScore,
+  calculateEngagementScore,
   deriveHealthStatus,
   deriveSegment,
   deriveTrend,
@@ -190,5 +191,65 @@ describe("deriveTrend", () => {
 
   it("returns stable for empty array", () => {
     expect(deriveTrend([], 10000)).toBe("stable");
+  });
+});
+
+describe("calculateEngagementScore — whatsapp recency only", () => {
+  it("returns 100 for 0 days", () => {
+    expect(calculateEngagementScore(null, 0)).toBe(100);
+  });
+
+  it("returns 100 for 3 days", () => {
+    expect(calculateEngagementScore(null, 3)).toBe(100);
+  });
+
+  it("returns 75 for 7 days", () => {
+    expect(calculateEngagementScore(null, 7)).toBe(75);
+  });
+
+  it("returns 50 for 14 days", () => {
+    expect(calculateEngagementScore(null, 14)).toBe(50);
+  });
+
+  it("returns 25 for 30 days", () => {
+    expect(calculateEngagementScore(null, 30)).toBe(25);
+  });
+
+  it("returns 0 for 60 days", () => {
+    expect(calculateEngagementScore(null, 60)).toBe(0);
+  });
+});
+
+describe("calculateEngagementScore — combo and fallbacks", () => {
+  it("returns weighted combo when both sources present", () => {
+    // context=80 * 0.6 = 48, whatsapp(3d)=100 * 0.4 = 40 → 88
+    expect(calculateEngagementScore(80, 3)).toBe(88);
+  });
+
+  it("returns weighted combo with low whatsapp recency", () => {
+    // context=80 * 0.6 = 48, whatsapp(30d)=25 * 0.4 = 10 → 58
+    expect(calculateEngagementScore(80, 30)).toBe(58);
+  });
+
+  it("returns context score only when whatsapp is null", () => {
+    expect(calculateEngagementScore(75, null)).toBe(75);
+  });
+
+  it("returns whatsapp score only when context is null", () => {
+    expect(calculateEngagementScore(null, 7)).toBe(75);
+  });
+
+  it("returns 50 fallback when both are null", () => {
+    expect(calculateEngagementScore(null, null)).toBe(50);
+  });
+
+  it("handles context=0 as valid (not null)", () => {
+    // context=0 * 0.6 = 0, whatsapp(3d)=100 * 0.4 = 40 → 40
+    expect(calculateEngagementScore(0, 3)).toBe(40);
+  });
+
+  it("handles whatsapp=0 as valid (not null)", () => {
+    // context=100 * 0.6 = 60, whatsapp(0d)=100 * 0.4 = 40 → 100
+    expect(calculateEngagementScore(100, 0)).toBe(100);
   });
 });

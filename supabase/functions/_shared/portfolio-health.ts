@@ -103,6 +103,32 @@ export function deriveTrend(
   return "stable";
 }
 
+function whatsappRecencyToScore(days: number): number {
+  if (days <= 3) return 100;
+  if (days <= 7) return 75;
+  if (days <= 14) return 50;
+  if (days <= 30) return 25;
+  return 0;
+}
+
+export function calculateEngagementScore(
+  contextEngagement: number | null,
+  daysSinceLastIncoming: number | null,
+): number {
+  const ctxScore = contextEngagement != null ? contextEngagement : null;
+  const waScore =
+    daysSinceLastIncoming != null
+      ? whatsappRecencyToScore(daysSinceLastIncoming)
+      : null;
+
+  if (ctxScore != null && waScore != null) {
+    return Math.round(ctxScore * 0.6 + waScore * 0.4);
+  }
+  if (ctxScore != null) return ctxScore;
+  if (waScore != null) return waScore;
+  return 50;
+}
+
 export function detectSignals(input: SignalInput): DetectedSignal[] {
   const signals: DetectedSignal[] = [];
 
