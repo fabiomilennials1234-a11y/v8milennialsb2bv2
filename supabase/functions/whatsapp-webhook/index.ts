@@ -260,10 +260,14 @@ function normalizeMessage(data: any, instance: ResolvedInstance) {
   const phoneNumber = resolvedJid.split("@")[0] || null;
   const messageId = data.id ?? data.messageid ?? data.key?.id ?? null;
 
-  const rawType: string =
+  let rawType: string =
     data.type ??
     data.messageType ??
     (data.text ? "text" : data.media ? "media" : "unknown");
+  // Uazapi sends type:"media" as generic bucket — resolve to actual type
+  if (rawType === "media" && (data.mediaType || data.messageType)) {
+    rawType = data.mediaType ?? data.messageType;
+  }
 
   const MESSAGE_TYPE_MAP: Record<string, string> = {
     stickerMessage: "sticker",
@@ -283,7 +287,27 @@ function normalizeMessage(data: any, instance: ResolvedInstance) {
     extendedTextMessage: "text",
     ExtendedTextMessage: "text",
     buttonsResponseMessage: "buttonResponse",
+    ButtonsResponseMessage: "buttonResponse",
     listResponseMessage: "listResponse",
+    ListResponseMessage: "listResponse",
+    locationMessage: "location",
+    LocationMessage: "location",
+    liveLocationMessage: "location",
+    LiveLocationMessage: "location",
+    contactMessage: "contact",
+    ContactMessage: "contact",
+    contactsArrayMessage: "contact",
+    ContactsArrayMessage: "contact",
+    reactionMessage: "reaction",
+    ReactionMessage: "reaction",
+    pollCreationMessage: "poll",
+    PollCreationMessage: "poll",
+    NativeFlowMessage: "interactive",
+    ButtonsMessage: "interactive",
+    ListMessage: "interactive",
+    AlbumMessage: "album",
+    TemplateMessage: "template",
+    PinInChatMessage: "system",
   };
   const messageType = MESSAGE_TYPE_MAP[rawType] ?? rawType;
 
@@ -307,11 +331,26 @@ function normalizeMessage(data: any, instance: ResolvedInstance) {
       data.listResponse?.title ??
       null;
   }
+  if (messageType === "location" && !content) {
+    const lat = data.degreesLatitude ?? data.latitude ?? data.content?.degreesLatitude;
+    const lng = data.degreesLongitude ?? data.longitude ?? data.content?.degreesLongitude;
+    if (lat != null && lng != null) content = `📍 ${lat}, ${lng}`;
+  }
+  if (messageType === "contact" && !content) {
+    const vcard = data.displayName ?? data.vcard ?? data.content?.displayName ?? data.content?.vcard;
+    if (typeof vcard === "string") {
+      const fnMatch = vcard.match(/FN:(.+)/);
+      content = fnMatch ? `👤 ${fnMatch[1]}` : `👤 Contato compartilhado`;
+    } else {
+      content = "👤 Contato compartilhado";
+    }
+  }
 
   const mediaUrl =
     data.mediaUrl ??
     data.media?.url ??
     (data.fileURL && data.fileURL !== "" ? data.fileURL : null) ??
+    data.content?.URL ??
     data.message?.stickerMessage?.url ??
     data.message?.imageMessage?.url ??
     data.message?.videoMessage?.url ??

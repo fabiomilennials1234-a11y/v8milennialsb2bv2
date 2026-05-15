@@ -18,6 +18,9 @@ import {
   Settings,
   RotateCw,
   Sticker,
+  MapPin,
+  Contact,
+  BarChart3,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -210,10 +213,15 @@ export function MessageBubble({
   const mediaUrl = isWhatsAppMsg ? (message as WhatsAppMessage).media_url : null;
   const messageType = isWhatsAppMsg ? (message as WhatsAppMessage).message_type : null;
   const isAudio = messageType === "audio" || messageType === "ptt";
-  const isImage = messageType === "image";
+  const isImage = messageType === "image" || messageType === "album";
   const isVideo = messageType === "video";
   const isDocument = messageType === "document";
   const isSticker = messageType === "sticker";
+  const isLocation = messageType === "location" || messageType === "LocationMessage";
+  const isContact = messageType === "contact" || messageType === "ContactMessage" || messageType === "ContactsArrayMessage";
+  const isReaction = messageType === "reaction" || messageType === "ReactionMessage";
+  const isPoll = messageType === "poll";
+  const isSystem = messageType === "system" || messageType === "PinInChatMessage";
   const hasMedia = isAudio || isImage || isVideo || isDocument || isSticker;
 
   const meta = message as unknown as {
@@ -408,8 +416,46 @@ export function MessageBubble({
                 : <span className="inline-block w-20 h-20 rounded bg-muted/40 text-3xl flex items-center justify-center" title="Figurinha">🏷️</span>
             )}
 
-            {/* Mensagem sem conteúdo e sem mídia */}
-            {!message.content && !hasMedia && (
+            {/* Location */}
+            {isLocation && !message.content && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <MapPin className="w-4 h-4 shrink-0" />
+                <span className="italic">Localização compartilhada</span>
+              </div>
+            )}
+
+            {/* Contact card */}
+            {isContact && !message.content && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Contact className="w-4 h-4 shrink-0" />
+                <span className="italic">Contato compartilhado</span>
+              </div>
+            )}
+
+            {/* Poll */}
+            {isPoll && !message.content && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <BarChart3 className="w-4 h-4 shrink-0" />
+                <span className="italic">Enquete</span>
+              </div>
+            )}
+
+            {/* System message (pin, etc) */}
+            {isSystem && !message.content && (
+              <p className="text-xs italic text-muted-foreground/60 text-center">
+                Mensagem do sistema
+              </p>
+            )}
+
+            {/* Media without media_url — empty bubble guard */}
+            {hasMedia && !mediaUrl && !message.content && (
+              <p className="text-sm italic text-muted-foreground">
+                [Mídia indisponível]
+              </p>
+            )}
+
+            {/* Truly unsupported — only for types we don't handle */}
+            {!message.content && !hasMedia && !isLocation && !isContact && !isPoll && !isReaction && !isSystem && (
               <p className="text-sm italic text-muted-foreground">
                 [Mensagem não suportada]
               </p>
