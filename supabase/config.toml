@@ -188,6 +188,10 @@ verify_jwt = false
 # whatsapp-webhook: auth via secret in path segment (Uazapi has no HMAC nor customHeaders)
 [functions.whatsapp-webhook]
 verify_jwt = false
+
+# whatsapp-rebind-webhook: re-registra webhook Uazapi nas instâncias-alvo; auth via x-cron-secret ou service_role
+[functions.whatsapp-rebind-webhook]
+verify_jwt = false
 # history-sync-worker: chamado por pg_cron via pg_net; auth via x-cron-secret
 [functions.history-sync-worker]
 verify_jwt = false
