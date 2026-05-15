@@ -2,6 +2,7 @@ import { Copy, MessageCircle, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { formatDateLong } from "@/lib/format";
 import { toast } from "@/components/ui/use-toast";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -15,14 +16,6 @@ interface ClienteCopilotSuggestionProps {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-const formatDate = (iso: string | null) => {
-  if (!iso) return "em breve";
-  return new Date(iso).toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "long",
-  });
-};
 
 const daysSince = (iso: string | null): number => {
   if (!iso) return 0;
@@ -51,7 +44,7 @@ function buildSuggestion(
     return `Olá ${firstName}! Notamos que os últimos pedidos tiveram um valor menor que o habitual. Podemos ajudar com condições especiais ou montar um pedido completo para você?`;
   }
 
-  const nextDate = formatDate(nextOrderExpected);
+  const nextDate = formatDateLong(nextOrderExpected);
   return `Tudo certo com ${firstName}! Próximo pedido previsto para ${nextDate}. Posso adiantar o contato ou aguardar a data?`;
 }
 

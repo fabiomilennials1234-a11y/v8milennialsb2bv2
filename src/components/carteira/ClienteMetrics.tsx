@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { formatBRL, formatDateShort } from "@/lib/format";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -26,19 +27,6 @@ interface ClienteMetricsProps {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-const formatBRL = (value: number) =>
-  new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-    maximumFractionDigits: 0,
-  }).format(value);
-
-const formatDate = (iso: string) =>
-  new Date(iso).toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "short",
-  });
 
 function healthColor(score: number | null | undefined) {
   const s = score ?? 0;
@@ -123,7 +111,7 @@ export function ClienteMetrics({ client }: ClienteMetricsProps) {
         label="Próx. Pedido"
         value={
           client.next_order_expected
-            ? formatDate(client.next_order_expected)
+            ? formatDateShort(client.next_order_expected)
             : "Sem dados"
         }
         icon={<Calendar size={16} />}

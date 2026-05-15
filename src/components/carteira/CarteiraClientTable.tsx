@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/table";
 import { MessageCircle, ClipboardList, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatBRL } from "@/lib/format";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -39,13 +40,6 @@ interface CarteiraClientTableProps {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-const formatBRL = (value: number) =>
-  new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-    maximumFractionDigits: 0,
-  }).format(value);
 
 function healthConfig(status: string | null, score: number | null) {
   const s = score ?? 0;

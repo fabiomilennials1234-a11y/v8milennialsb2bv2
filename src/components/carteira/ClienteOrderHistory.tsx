@@ -1,6 +1,7 @@
 import { ShoppingCart } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { formatBRL, formatDateFull } from "@/lib/format";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -10,20 +11,6 @@ interface ClienteOrderHistoryProps {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-const formatBRL = (value: number) =>
-  new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-    maximumFractionDigits: 0,
-  }).format(value);
-
-const formatDate = (iso: string) =>
-  new Date(iso).toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "short",
-    year: "2-digit",
-  });
 
 function sourceLabel(source: string | null) {
   switch (source) {
@@ -115,7 +102,7 @@ export function ClienteOrderHistory({ orders, cycleDays }: ClienteOrderHistoryPr
                     {order.product_name ?? "Pedido"}
                   </p>
                   <p className="text-xs text-zinc-500 mt-0.5">
-                    {order.sold_at ? formatDate(order.sold_at) : "—"}
+                    {order.sold_at ? formatDateFull(order.sold_at) : "—"}
                     {order.gap != null && (
                       <span className="ml-2 text-zinc-600">
                         +{order.gap}d desde anterior

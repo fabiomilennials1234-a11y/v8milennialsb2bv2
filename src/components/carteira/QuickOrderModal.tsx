@@ -21,6 +21,7 @@ import { useProducts } from "@/hooks/useProducts";
 import { useLastOrder, useCreateOrder, OrderLineItem } from "@/hooks/useQuickOrder";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { formatBRL } from "@/lib/format";
 
 interface QuickOrderModalProps {
   open: boolean;
@@ -37,10 +38,6 @@ const DEFAULT_ITEM: OrderLineItem = {
   unit_price: 0,
   unit: "un",
 };
-
-function formatBRL(value: number) {
-  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
 
 function LineItemRow({
   item,

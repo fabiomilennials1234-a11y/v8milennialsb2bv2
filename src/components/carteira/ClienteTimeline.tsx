@@ -1,5 +1,6 @@
 import { ShoppingCart, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatBRL, formatDateTime } from "@/lib/format";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -18,22 +19,6 @@ interface TimelineItem {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-const formatBRL = (value: number) =>
-  new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-    maximumFractionDigits: 0,
-  }).format(value);
-
-const formatDateTime = (iso: string) =>
-  new Date(iso).toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "short",
-    year: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 
 function alertSeverityDot(severity: string | undefined) {
   switch (severity) {

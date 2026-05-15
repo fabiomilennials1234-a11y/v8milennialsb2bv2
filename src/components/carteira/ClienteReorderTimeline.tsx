@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { formatDateSafe } from "@/lib/format";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -10,15 +11,6 @@ interface ClienteReorderTimelineProps {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-const formatDate = (iso: string | null) => {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "short",
-    year: "2-digit",
-  });
-};
 
 function barColor(pct: number) {
   if (pct <= 80) return "from-emerald-500 to-emerald-400";
@@ -78,12 +70,12 @@ export function ClienteReorderTimeline({
 
       {/* Labels */}
       <div className="flex items-center justify-between text-[10px] text-zinc-600">
-        <span>Último: {formatDate(lastOrderAt)}</span>
+        <span>Último: {formatDateSafe(lastOrderAt)}</span>
         <span className="flex items-center gap-1">
           <span className="inline-block w-1.5 h-1.5 rounded-full bg-zinc-500" />
           Hoje
         </span>
-        <span>Previsto: {formatDate(nextOrderExpected)}</span>
+        <span>Previsto: {formatDateSafe(nextOrderExpected)}</span>
       </div>
     </div>
   );

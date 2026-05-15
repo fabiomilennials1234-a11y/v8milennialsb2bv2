@@ -9,6 +9,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Package } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatBRL } from "@/lib/format";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -17,13 +18,6 @@ interface ClienteProductsTableProps {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-const formatBRL = (value: number) =>
-  new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-    maximumFractionDigits: 0,
-  }).format(value);
 
 function typeLabel(type: string | null) {
   switch (type) {

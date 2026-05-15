@@ -1,11 +1,5 @@
 import { usePortfolioHealth } from "@/hooks/usePortfolioHealth";
-
-const formatBRL = (value: number) =>
-  new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-    maximumFractionDigits: 0,
-  }).format(value);
+import { formatBRL } from "@/lib/format";
 
 interface KPICardProps {
   label: string;

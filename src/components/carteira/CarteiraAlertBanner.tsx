@@ -1,9 +1,7 @@
 import { Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePortfolioHealth } from "@/hooks/usePortfolioHealth";
-
-const formatBRL = (value: number) =>
-  new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
+import { formatBRL } from "@/lib/format";
 
 interface CarteiraAlertBannerProps {
   onViewDetails?: () => void;

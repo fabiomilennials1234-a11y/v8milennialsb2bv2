@@ -2,6 +2,7 @@ import { X, MessageCircle, ExternalLink, ShoppingCart, CheckCircle2 } from "luci
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { formatBRL } from "@/lib/format";
 import { useClientAlerts } from "@/hooks/useClientAlerts";
 import { usePortfolioHealth } from "@/hooks/usePortfolioHealth";
 
@@ -15,13 +16,6 @@ interface CarteiraClientPreviewProps {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-const formatBRL = (value: number) =>
-  new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-    maximumFractionDigits: 0,
-  }).format(value);
 
 function healthRingColor(status: string | null, score: number) {
   if (status === "saudavel" || score >= 80) return "text-emerald-400";
