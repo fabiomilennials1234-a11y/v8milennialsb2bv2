@@ -97,12 +97,12 @@ export default function Upsell() {
     return (
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#27272a]">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">
               Carteira de Clientes
             </h1>
-            <p className="text-sm text-[#a1a1aa] mt-0.5">
+            <p className="text-sm text-muted-foreground mt-0.5">
               {kpiData
                 ? `${kpiData.total_clients} clientes ativos · ${new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }).format(kpiData.total_recurring)}/mês recorrente`
                 : "Health score, recompra e gestão de carteira"}
@@ -138,7 +138,7 @@ export default function Upsell() {
         <CarteiraAlertBanner onViewDetails={() => setCarteiraFilter("overdue")} />
 
         {/* Tabs */}
-        <div className="flex gap-0 border-b border-[#27272a] overflow-x-auto">
+        <div className="flex gap-0 border-b border-border overflow-x-auto">
           {PORTFOLIO_TABS.map((tab) => {
             const count = tabCounts[tab.value] ?? 0;
             const active = carteiraFilter === tab.value;
@@ -153,8 +153,8 @@ export default function Upsell() {
                 className={cn(
                   "px-5 py-2.5 text-[13px] font-medium border-b-2 transition-colors whitespace-nowrap",
                   active
-                    ? "text-[#fafafa] border-b-[#eab308]"
-                    : "text-[#71717a] border-b-transparent hover:text-[#a1a1aa]",
+                    ? "text-foreground border-b-primary"
+                    : "text-muted-foreground border-b-transparent hover:text-muted-foreground",
                 )}
               >
                 {tab.label}
@@ -162,10 +162,10 @@ export default function Upsell() {
                   <span
                     className={cn(
                       "ml-1.5 text-[11px] px-1.5 py-px rounded-full inline-block",
-                      active && !isRisk && "bg-[#422006] text-[#eab308]",
-                      active && isRisk && "bg-[#450a0a] text-[#ef4444]",
-                      !active && !isRisk && "bg-[#27272a] text-[#a1a1aa]",
-                      !active && isRisk && "bg-[#450a0a] text-[#ef4444]",
+                      active && !isRisk && "bg-primary/10 text-primary",
+                      active && isRisk && "bg-destructive/10 text-destructive",
+                      !active && !isRisk && "bg-muted text-muted-foreground",
+                      !active && isRisk && "bg-destructive/10 text-destructive",
                     )}
                   >
                     {count}
@@ -179,22 +179,22 @@ export default function Upsell() {
         {/* Search + View toggle */}
         <div className="flex items-center gap-2">
           <div className="relative flex-1 max-w-[320px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#52525b]" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/60" />
             <Input
               placeholder="Buscar cliente, empresa…"
               value={carteiraSearch}
               onChange={(e) => setCarteiraSearch(e.target.value)}
-              className="pl-9 bg-[#18181b] border-[#27272a] text-[13px]"
+              className="pl-9 bg-card border-border text-[13px]"
             />
           </div>
-          <div className="flex border border-[#27272a] rounded-md ml-auto">
+          <div className="flex border border-border rounded-md ml-auto">
             <button
               onClick={() => setCarteiraView("clientes")}
               className={cn(
                 "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-l-md transition-colors",
                 carteiraView === "clientes"
-                  ? "bg-[#27272a] text-[#fafafa]"
-                  : "text-[#71717a] hover:text-[#a1a1aa]",
+                  ? "bg-muted text-foreground"
+                  : "text-muted-foreground hover:text-muted-foreground",
               )}
             >
               <Users className="w-3.5 h-3.5" />
@@ -205,8 +205,8 @@ export default function Upsell() {
               className={cn(
                 "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-r-md transition-colors",
                 carteiraView === "analytics"
-                  ? "bg-[#27272a] text-[#fafafa]"
-                  : "text-[#71717a] hover:text-[#a1a1aa]",
+                  ? "bg-muted text-foreground"
+                  : "text-muted-foreground hover:text-muted-foreground",
               )}
             >
               <BarChart3 className="w-3.5 h-3.5" />

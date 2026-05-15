@@ -27,11 +27,11 @@ export function CarteiraVendedorRanking({ onFilterByVendedor }: CarteiraVendedor
 
   if (isLoading) {
     return (
-      <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-5 animate-pulse">
-        <div className="h-4 bg-zinc-800 rounded w-40 mb-4" />
+      <div className="bg-card border border-border rounded-xl p-5 animate-pulse">
+        <div className="h-4 bg-muted rounded w-40 mb-4" />
         <div className="space-y-3">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="h-16 bg-zinc-800 rounded" />
+            <div key={i} className="h-16 bg-muted rounded" />
           ))}
         </div>
       </div>
@@ -40,17 +40,17 @@ export function CarteiraVendedorRanking({ onFilterByVendedor }: CarteiraVendedor
 
   if (vendedores.length === 0) {
     return (
-      <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-5 text-center text-sm text-[#71717a]">
+      <div className="bg-card border border-border rounded-xl p-5 text-center text-sm text-muted-foreground">
         Nenhum vendedor com clientes atribuídos.
       </div>
     );
   }
 
   return (
-    <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-5">
+    <div className="bg-card border border-border rounded-xl p-5">
       <div className="flex items-center gap-2 mb-4">
-        <Crown className="w-4 h-4 text-[#eab308]" />
-        <h3 className="text-sm font-semibold text-[#fafafa]">Ranking Vendedores</h3>
+        <Crown className="w-4 h-4 text-primary" />
+        <h3 className="text-sm font-semibold text-foreground">Ranking Vendedores</h3>
       </div>
 
       <div className="space-y-2">
@@ -60,28 +60,28 @@ export function CarteiraVendedorRanking({ onFilterByVendedor }: CarteiraVendedor
             <button
               key={v.closer_id}
               onClick={() => onFilterByVendedor?.(v.closer_id)}
-              className="w-full flex items-center gap-3 p-3 rounded-lg border border-[#27272a] hover:border-[#3f3f46] hover:bg-[#1c1c1f] transition-colors text-left"
+              className="w-full flex items-center gap-3 p-3 rounded-lg border border-border hover:border-muted-foreground/30 hover:bg-muted/50 transition-colors text-left"
             >
               {/* Rank + Avatar */}
               <div className="flex items-center gap-2.5 shrink-0">
-                <span className="text-xs font-bold text-[#52525b] w-4 text-right tabular-nums">
+                <span className="text-xs font-bold text-muted-foreground/60 w-4 text-right tabular-nums">
                   {idx + 1}
                 </span>
-                <div className="w-8 h-8 rounded-full bg-[#27272a] flex items-center justify-center text-xs font-bold text-[#a1a1aa]">
+                <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-xs font-bold text-muted-foreground">
                   {initials(v.name)}
                 </div>
               </div>
 
               {/* Name + role */}
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium text-[#fafafa] truncate">{v.name}</div>
+                <div className="text-sm font-medium text-foreground truncate">{v.name}</div>
                 <div className="flex items-center gap-2 mt-0.5">
-                  <span className="text-[10px] text-[#71717a]">
+                  <span className="text-[10px] text-muted-foreground">
                     <Users className="w-3 h-3 inline mr-0.5" />
                     {v.total_clients}
                   </span>
                   {v.segments.ouro > 0 && (
-                    <span className="text-[10px] text-[#eab308]">
+                    <span className="text-[10px] text-primary">
                       {v.segments.ouro} ouro
                     </span>
                   )}
@@ -91,16 +91,16 @@ export function CarteiraVendedorRanking({ onFilterByVendedor }: CarteiraVendedor
               {/* Metrics */}
               <div className="flex items-center gap-3 shrink-0">
                 <div className="text-right">
-                  <div className="text-xs text-[#a1a1aa]">Ticket</div>
-                  <div className="text-xs font-semibold text-[#fafafa] tabular-nums">
+                  <div className="text-xs text-muted-foreground">Ticket</div>
+                  <div className="text-xs font-semibold text-foreground tabular-nums">
                     {formatBRL(v.avg_ticket)}
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="text-xs text-[#a1a1aa]">No prazo</div>
+                  <div className="text-xs text-muted-foreground">No prazo</div>
                   <div className={cn(
                     "text-xs font-semibold tabular-nums",
-                    v.on_time_pct != null && v.on_time_pct >= 70 ? "text-emerald-400" : "text-[#f59e0b]",
+                    v.on_time_pct != null && v.on_time_pct >= 70 ? "text-emerald-400" : "text-amber-500",
                   )}>
                     {v.on_time_pct != null ? `${v.on_time_pct}%` : "—"}
                   </div>

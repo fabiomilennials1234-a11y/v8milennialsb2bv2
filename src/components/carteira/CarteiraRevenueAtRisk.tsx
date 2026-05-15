@@ -4,8 +4,8 @@ import { cn } from "@/lib/utils";
 import { AlertTriangle } from "lucide-react";
 
 const WINDOWS = [
-  { key: "7d" as const, label: "7 dias", accent: "text-[#ef4444]", bg: "bg-[#ef4444]" },
-  { key: "14d" as const, label: "14 dias", accent: "text-[#f59e0b]", bg: "bg-[#f59e0b]" },
+  { key: "7d" as const, label: "7 dias", accent: "text-destructive", bg: "bg-red-500" },
+  { key: "14d" as const, label: "14 dias", accent: "text-amber-500", bg: "bg-amber-500" },
   { key: "30d" as const, label: "30 dias", accent: "text-[#3b82f6]", bg: "bg-[#3b82f6]" },
 ];
 
@@ -14,11 +14,11 @@ export function CarteiraRevenueAtRisk() {
 
   if (isLoading) {
     return (
-      <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-5 animate-pulse">
-        <div className="h-4 bg-zinc-800 rounded w-40 mb-4" />
+      <div className="bg-card border border-border rounded-xl p-5 animate-pulse">
+        <div className="h-4 bg-muted rounded w-40 mb-4" />
         <div className="grid grid-cols-3 gap-4">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="h-20 bg-zinc-800 rounded" />
+            <div key={i} className="h-20 bg-muted rounded" />
           ))}
         </div>
       </div>
@@ -35,10 +35,10 @@ export function CarteiraRevenueAtRisk() {
   );
 
   return (
-    <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-5">
+    <div className="bg-card border border-border rounded-xl p-5">
       <div className="flex items-center gap-2 mb-4">
-        <AlertTriangle className="w-4 h-4 text-[#f59e0b]" />
-        <h3 className="text-sm font-semibold text-[#fafafa]">Receita em Risco</h3>
+        <AlertTriangle className="w-4 h-4 text-amber-500" />
+        <h3 className="text-sm font-semibold text-foreground">Receita em Risco</h3>
       </div>
 
       <div className="grid grid-cols-3 gap-4">
@@ -47,22 +47,22 @@ export function CarteiraRevenueAtRisk() {
           const barWidth = maxTotal > 0 ? (win.total / maxTotal) * 100 : 0;
           return (
             <div key={w.key} className="space-y-2">
-              <div className="text-[10px] uppercase tracking-wider font-medium text-[#71717a]">
+              <div className="text-[10px] uppercase tracking-wider font-medium text-muted-foreground">
                 {w.label}
               </div>
               <div className={cn("text-xl font-bold tabular-nums", w.accent)}>
                 {formatBRL(win.total)}
               </div>
-              <div className="h-1.5 bg-[#27272a] rounded-full overflow-hidden">
+              <div className="h-1.5 bg-muted rounded-full overflow-hidden">
                 <div
                   className={cn("h-full rounded-full transition-all", w.bg)}
                   style={{ width: `${barWidth}%`, opacity: 0.7 }}
                 />
               </div>
-              <div className="flex justify-between text-[11px] text-[#71717a]">
+              <div className="flex justify-between text-[11px] text-muted-foreground">
                 <span>{win.count} clientes</span>
                 {win.ouro_total > 0 && (
-                  <span className="text-[#eab308]">
+                  <span className="text-primary">
                     {formatBRL(win.ouro_total)} ouro
                   </span>
                 )}
@@ -73,8 +73,8 @@ export function CarteiraRevenueAtRisk() {
       </div>
 
       {data.top_risk_clients && data.top_risk_clients.length > 0 && (
-        <div className="mt-4 pt-3 border-t border-[#27272a]">
-          <div className="text-[10px] uppercase tracking-wider font-medium text-[#71717a] mb-2">
+        <div className="mt-4 pt-3 border-t border-border">
+          <div className="text-[10px] uppercase tracking-wider font-medium text-muted-foreground mb-2">
             Clientes ouro em risco
           </div>
           <div className="space-y-1.5">
@@ -83,10 +83,10 @@ export function CarteiraRevenueAtRisk() {
                 key={c.id}
                 className="flex items-center justify-between text-xs"
               >
-                <span className="text-[#fafafa] truncate max-w-[160px]">{c.name}</span>
+                <span className="text-foreground truncate max-w-[160px]">{c.name}</span>
                 <div className="flex items-center gap-3">
-                  <span className="text-[#a1a1aa] tabular-nums">{formatBRL(c.avg_ticket)}</span>
-                  <span className="text-[#ef4444] tabular-nums font-medium">
+                  <span className="text-muted-foreground tabular-nums">{formatBRL(c.avg_ticket)}</span>
+                  <span className="text-destructive tabular-nums font-medium">
                     {c.churn_probability}% churn
                   </span>
                 </div>

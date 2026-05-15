@@ -54,17 +54,17 @@ export function CarteiraBulkBar({ selectedClients, onClear }: CarteiraBulkBarPro
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: 80, opacity: 0 }}
           transition={{ type: "spring", stiffness: 300, damping: 30 }}
-          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-xl border border-[#3f3f46] bg-[#18181b] px-4 py-2.5 shadow-2xl"
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-2.5 shadow-2xl"
         >
-          <span className="inline-flex items-center justify-center h-6 min-w-[24px] px-1.5 rounded-md bg-[#eab308] text-black text-xs font-bold tabular-nums">
+          <span className="inline-flex items-center justify-center h-6 min-w-[24px] px-1.5 rounded-md bg-primary text-black text-xs font-bold tabular-nums">
             {count}
           </span>
-          <span className="text-sm text-[#a1a1aa] mr-1">selecionados</span>
+          <span className="text-sm text-muted-foreground mr-1">selecionados</span>
 
           <Button
             size="sm"
             variant="outline"
-            className="border-[#3f3f46] bg-transparent text-[#fafafa] hover:bg-[#27272a]"
+            className="border-border bg-transparent text-foreground hover:bg-muted"
             onClick={() => setAssignOpen(true)}
           >
             <UserPlus className="mr-1.5 h-3.5 w-3.5" />
@@ -73,7 +73,7 @@ export function CarteiraBulkBar({ selectedClients, onClear }: CarteiraBulkBarPro
           <Button
             size="sm"
             variant="outline"
-            className="border-[#3f3f46] bg-transparent text-[#fafafa] hover:bg-[#27272a]"
+            className="border-border bg-transparent text-foreground hover:bg-muted"
             onClick={() => setTagOpen(true)}
           >
             <Tag className="mr-1.5 h-3.5 w-3.5" />
@@ -82,7 +82,7 @@ export function CarteiraBulkBar({ selectedClients, onClear }: CarteiraBulkBarPro
           <Button
             size="sm"
             variant="outline"
-            className="border-[#3f3f46] bg-transparent text-[#fafafa] hover:bg-[#27272a]"
+            className="border-border bg-transparent text-foreground hover:bg-muted"
             onClick={() => setCopilotOpen(true)}
           >
             <Bot className="mr-1.5 h-3.5 w-3.5" />
@@ -92,7 +92,7 @@ export function CarteiraBulkBar({ selectedClients, onClear }: CarteiraBulkBarPro
           <Button
             size="icon"
             variant="ghost"
-            className="h-7 w-7 ml-1 text-[#71717a] hover:text-[#fafafa]"
+            className="h-7 w-7 ml-1 text-muted-foreground hover:text-foreground"
             onClick={onClear}
           >
             <X className="h-3.5 w-3.5" />
@@ -172,14 +172,14 @@ function ReassignDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md bg-[#18181b] border-[#27272a]">
+      <DialogContent className="sm:max-w-md bg-card border-border">
         <DialogHeader>
           <DialogTitle>Reatribuir {count} clientes</DialogTitle>
         </DialogHeader>
         <div className="py-4 space-y-2">
-          <label className="text-sm font-medium text-[#a1a1aa]">Vendedor responsável</label>
+          <label className="text-sm font-medium text-muted-foreground">Vendedor responsável</label>
           <Select value={closerId} onValueChange={setCloserId}>
-            <SelectTrigger className="bg-[#111113] border-[#27272a]">
+            <SelectTrigger className="bg-background border-border">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -196,7 +196,7 @@ function ReassignDialog({
           <Button
             onClick={handleSubmit}
             disabled={mutation.isPending}
-            className="bg-[hsl(47_100%_50%)] hover:bg-[hsl(47_100%_45%)] text-black font-semibold"
+            className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"
           >
             {mutation.isPending && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
             Reatribuir
@@ -252,13 +252,13 @@ function TagDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md bg-[#18181b] border-[#27272a]">
+      <DialogContent className="sm:max-w-md bg-card border-border">
         <DialogHeader>
           <DialogTitle>Tags para {count} clientes</DialogTitle>
         </DialogHeader>
         <div className="py-4">
           {leadIds.length < count && (
-            <p className="text-xs text-[#f59e0b] mb-3">
+            <p className="text-xs text-amber-500 mb-3">
               {count - leadIds.length} cliente(s) sem lead vinculado serão ignorados.
             </p>
           )}
@@ -269,8 +269,8 @@ function TagDialog({
                 onClick={() => toggleTag(tag.id)}
                 className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
                   addTags.includes(tag.id)
-                    ? "border-[#eab308] bg-[#eab308]/10 text-[#eab308]"
-                    : "border-[#3f3f46] text-[#a1a1aa] hover:border-[#eab308]/50"
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-border text-muted-foreground hover:border-primary/50"
                 }`}
               >
                 {addTags.includes(tag.id) && <CheckCircle2 className="h-3 w-3" />}
@@ -287,7 +287,7 @@ function TagDialog({
           <Button
             onClick={handleSubmit}
             disabled={!addTags.length || mutation.isPending}
-            className="bg-[hsl(47_100%_50%)] hover:bg-[hsl(47_100%_45%)] text-black font-semibold"
+            className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"
           >
             {mutation.isPending && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
             Aplicar {addTags.length} tags
@@ -351,28 +351,28 @@ function CopilotDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md bg-[#18181b] border-[#27272a]">
+      <DialogContent className="sm:max-w-md bg-card border-border">
         <DialogHeader>
           <DialogTitle>Acionar Copilot</DialogTitle>
         </DialogHeader>
         <div className="py-4 space-y-3">
-          <p className="text-sm text-[#a1a1aa]">
-            Dispara o workflow <span className="font-mono text-[#eab308]">recompra_atrasada</span> para{" "}
-            <span className="font-bold text-[#fafafa]">{withLead}</span> clientes com lead vinculado.
+          <p className="text-sm text-muted-foreground">
+            Dispara o workflow <span className="font-mono text-primary">recompra_atrasada</span> para{" "}
+            <span className="font-bold text-foreground">{withLead}</span> clientes com lead vinculado.
           </p>
-          <p className="text-xs text-[#71717a]">
+          <p className="text-xs text-muted-foreground">
             Configure um workflow com trigger "recompra_atrasada" para definir a ação automática
             (ex: mensagem WhatsApp via Copilot, follow-up, etc).
           </p>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} className="border-[#3f3f46]">
+          <Button variant="outline" onClick={() => onOpenChange(false)} className="border-border">
             Cancelar
           </Button>
           <Button
             onClick={handleFire}
             disabled={firing || !withLead}
-            className="bg-[hsl(47_100%_50%)] hover:bg-[hsl(47_100%_45%)] text-black font-semibold"
+            className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"
           >
             {firing && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
             Acionar {withLead} clientes

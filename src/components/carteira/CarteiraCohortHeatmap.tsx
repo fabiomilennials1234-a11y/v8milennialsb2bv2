@@ -8,7 +8,7 @@ function heatColor(pct: number): string {
   if (pct >= 40) return "bg-amber-500/40 text-amber-200";
   if (pct >= 20) return "bg-red-500/30 text-red-300";
   if (pct > 0) return "bg-red-500/50 text-red-200";
-  return "bg-zinc-800/50 text-zinc-600";
+  return "bg-muted/50 text-zinc-600";
 }
 
 function formatMonth(iso: string): string {
@@ -36,29 +36,29 @@ export function CarteiraCohortHeatmap() {
 
   if (isLoading) {
     return (
-      <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-5 animate-pulse">
-        <div className="h-4 bg-zinc-800 rounded w-40 mb-4" />
-        <div className="h-48 bg-zinc-800 rounded" />
+      <div className="bg-card border border-border rounded-xl p-5 animate-pulse">
+        <div className="h-4 bg-muted rounded w-40 mb-4" />
+        <div className="h-48 bg-muted rounded" />
       </div>
     );
   }
 
   if (cohorts.length === 0) {
     return (
-      <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-5 text-center text-sm text-[#71717a]">
+      <div className="bg-card border border-border rounded-xl p-5 text-center text-sm text-muted-foreground">
         Dados insuficientes para análise de coorte.
       </div>
     );
   }
 
   return (
-    <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-5">
+    <div className="bg-card border border-border rounded-xl p-5">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-semibold text-[#fafafa]">Retenção por Coorte</h3>
+        <h3 className="text-sm font-semibold text-foreground">Retenção por Coorte</h3>
         <select
           value={segment}
           onChange={(e) => setSegment(e.target.value)}
-          className="bg-[#111113] border border-[#27272a] rounded-md px-2 py-1 text-xs text-[#a1a1aa]"
+          className="bg-background border border-border rounded-md px-2 py-1 text-xs text-muted-foreground"
         >
           <option value="">Todos segmentos</option>
           <option value="ouro">Ouro</option>
@@ -73,13 +73,13 @@ export function CarteiraCohortHeatmap() {
         <table className="w-full text-[11px]">
           <thead>
             <tr>
-              <th className="text-left text-[#71717a] font-medium py-1 pr-3 whitespace-nowrap">
+              <th className="text-left text-muted-foreground font-medium py-1 pr-3 whitespace-nowrap">
                 Coorte
               </th>
               {Array.from({ length: maxOffset + 1 }, (_, i) => (
                 <th
                   key={i}
-                  className="text-center text-[#71717a] font-medium py-1 px-1 min-w-[36px]"
+                  className="text-center text-muted-foreground font-medium py-1 px-1 min-w-[36px]"
                 >
                   M{i}
                 </th>
@@ -91,10 +91,10 @@ export function CarteiraCohortHeatmap() {
               const base = offsets.get(0);
               return (
                 <tr key={month}>
-                  <td className="text-[#a1a1aa] py-0.5 pr-3 whitespace-nowrap">
+                  <td className="text-muted-foreground py-0.5 pr-3 whitespace-nowrap">
                     {formatMonth(month)}
                     {base && (
-                      <span className="text-[#52525b] ml-1">({base.total_clients})</span>
+                      <span className="text-muted-foreground/60 ml-1">({base.total_clients})</span>
                     )}
                   </td>
                   {Array.from({ length: maxOffset + 1 }, (_, i) => {
@@ -123,7 +123,7 @@ export function CarteiraCohortHeatmap() {
         </table>
       </div>
 
-      <div className="flex items-center gap-2 mt-3 text-[10px] text-[#71717a]">
+      <div className="flex items-center gap-2 mt-3 text-[10px] text-muted-foreground">
         <span>Baixa</span>
         <div className="flex gap-0.5">
           {[10, 30, 50, 70, 90].map((p) => (

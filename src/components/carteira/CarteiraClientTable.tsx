@@ -61,28 +61,28 @@ const PAGE_SIZE = 50;
 function healthConfig(status: string | null, score: number | null) {
   const s = score ?? 0;
   if (status === "saudavel" || (!status && s >= 80))
-    return { label: String(s), bg: "bg-[#052e16]", text: "text-[#22c55e]", dot: "bg-[#22c55e]" };
+    return { label: String(s), bg: "bg-emerald-500/10", text: "text-emerald-600 dark:text-emerald-400", dot: "bg-emerald-500" };
   if (status === "atencao" || (!status && s >= 60))
-    return { label: String(s), bg: "bg-[#422006]", text: "text-[#f59e0b]", dot: "bg-[#f59e0b]" };
+    return { label: String(s), bg: "bg-amber-500/10", text: "text-amber-600 dark:text-amber-400", dot: "bg-amber-500" };
   if (status === "risco" || (!status && s > 0))
-    return { label: String(s), bg: "bg-[#450a0a]", text: "text-[#ef4444]", dot: "bg-[#ef4444]" };
+    return { label: String(s), bg: "bg-red-500/10", text: "text-red-600 dark:text-red-400", dot: "bg-red-500" };
   if (status === "inativo")
-    return { label: String(s), bg: "bg-[#172554]", text: "text-[#3b82f6]", dot: "bg-[#3b82f6]" };
-  return { label: "—", bg: "bg-zinc-800", text: "text-zinc-500", dot: "bg-zinc-500" };
+    return { label: String(s), bg: "bg-blue-500/10", text: "text-blue-600 dark:text-blue-400", dot: "bg-blue-500" };
+  return { label: "—", bg: "bg-muted", text: "text-muted-foreground", dot: "bg-muted-foreground" };
 }
 
 function segmentConfig(segment: string | null) {
   switch (segment) {
     case "ouro":
-      return { label: "OURO", className: "bg-[#422006] text-[#eab308]" };
+      return { label: "OURO", className: "bg-primary/10 text-primary" };
     case "prata":
-      return { label: "PRATA", className: "bg-[#1e293b] text-[#94a3b8]" };
+      return { label: "PRATA", className: "bg-slate-500/10 text-slate-500" };
     case "novo":
-      return { label: "NOVO", className: "bg-[#172554] text-[#60a5fa]" };
+      return { label: "NOVO", className: "bg-blue-500/10 text-blue-600 dark:text-blue-400" };
     case "resgate":
-      return { label: "RESGATE", className: "bg-[#450a0a] text-[#f87171]" };
+      return { label: "RESGATE", className: "bg-red-500/10 text-red-600 dark:text-red-400" };
     case "dormindo":
-      return { label: "DORMINDO", className: "bg-zinc-800 text-zinc-400" };
+      return { label: "DORMINDO", className: "bg-muted text-muted-foreground" };
     default:
       return null;
   }
@@ -93,30 +93,30 @@ function recompraCell(
   cycleDays: number | null,
   nextExpected: string | null,
 ) {
-  if (!cycleDays) return { label: "—", className: "text-[#71717a]" };
+  if (!cycleDays) return { label: "—", className: "text-muted-foreground" };
 
   if (nextExpected) {
     const diff = Math.round(
       (new Date(nextExpected).getTime() - Date.now()) / 86_400_000,
     );
     if (diff < 0)
-      return { label: `${Math.abs(diff)} dias atrasado`, className: "text-[#ef4444] font-semibold" };
+      return { label: `${Math.abs(diff)} dias atrasado`, className: "text-destructive font-semibold" };
     if (diff <= 3)
-      return { label: `Em ${diff} dias`, className: "text-[#f59e0b]" };
-    return { label: `Em ${diff} dias`, className: "text-[#22c55e]" };
+      return { label: `Em ${diff} dias`, className: "text-amber-600 dark:text-amber-400" };
+    return { label: `Em ${diff} dias`, className: "text-emerald-600 dark:text-emerald-400" };
   }
 
   if (daysSinceLast !== null && cycleDays) {
     const overdue = daysSinceLast - cycleDays;
     if (overdue > 0)
-      return { label: `${overdue} dias atrasado`, className: "text-[#ef4444] font-semibold" };
+      return { label: `${overdue} dias atrasado`, className: "text-destructive font-semibold" };
     const remaining = cycleDays - daysSinceLast;
     if (remaining <= 3)
-      return { label: `Em ${remaining} dias`, className: "text-[#f59e0b]" };
-    return { label: `Em ${remaining} dias`, className: "text-[#22c55e]" };
+      return { label: `Em ${remaining} dias`, className: "text-amber-600 dark:text-amber-400" };
+    return { label: `Em ${remaining} dias`, className: "text-emerald-600 dark:text-emerald-400" };
   }
 
-  return { label: "—", className: "text-[#71717a]" };
+  return { label: "—", className: "text-muted-foreground" };
 }
 
 async function downloadCSV(
@@ -179,7 +179,7 @@ async function downloadCSV(
 // ─── Component ──────────────────────────────────────────────────────────────
 
 const iconBtnClass =
-  "w-[30px] h-[30px] rounded-md border border-[#3f3f46] bg-transparent text-[#a1a1aa] hover:bg-[#27272a] hover:text-[#fafafa] transition-colors flex items-center justify-center";
+  "w-[30px] h-[30px] rounded-md border border-border bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground transition-colors flex items-center justify-center";
 
 const thBase =
   "h-auto text-[11px] font-semibold uppercase tracking-wider py-2.5";
@@ -276,8 +276,8 @@ export function CarteiraClientTable({
       <TableHead
         className={cn(
           thBase,
-          "cursor-pointer select-none group transition-colors hover:text-[#a1a1aa]",
-          sortBy === col ? "text-[#fafafa]" : "text-[#71717a]",
+          "cursor-pointer select-none group transition-colors hover:text-muted-foreground",
+          sortBy === col ? "text-foreground" : "text-muted-foreground",
           className,
         )}
         onClick={() => handleSort(col)}
@@ -293,8 +293,8 @@ export function CarteiraClientTable({
   // ── Loading skeleton ────────────────────────────────────────────────────
   if (isLoading) {
     return (
-      <div className="rounded-xl border border-[#27272a] bg-[#18181b] overflow-hidden">
-        <div className="divide-y divide-[#27272a]">
+      <div className="rounded-xl border border-border bg-card overflow-hidden">
+        <div className="divide-y divide-border">
           {Array.from({ length: 8 }).map((_, i) => (
             <div key={i} className="flex gap-4 px-4 py-3.5 animate-pulse">
               <div className="h-4 bg-zinc-800 rounded w-40" />
@@ -314,21 +314,21 @@ export function CarteiraClientTable({
   if (rows.length === 0 && !isFetching) {
     const hasActiveFilters = filter !== "all" || searchQuery.length > 0;
     return (
-      <div className="rounded-xl border border-[#27272a] bg-[#18181b] py-20 flex flex-col items-center gap-4">
-        <div className="w-14 h-14 rounded-2xl bg-[#27272a] flex items-center justify-center">
+      <div className="rounded-xl border border-border bg-card py-20 flex flex-col items-center gap-4">
+        <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center">
           {hasActiveFilters ? (
-            <SearchX className="w-6 h-6 text-[#52525b]" />
+            <SearchX className="w-6 h-6 text-muted-foreground/60" />
           ) : (
-            <Users className="w-6 h-6 text-[#52525b]" />
+            <Users className="w-6 h-6 text-muted-foreground/60" />
           )}
         </div>
         <div className="text-center space-y-1">
-          <p className="text-sm font-medium text-[#a1a1aa]">
+          <p className="text-sm font-medium text-muted-foreground">
             {hasActiveFilters
               ? "Nenhum cliente encontrado"
               : "Sua carteira está vazia"}
           </p>
-          <p className="text-[13px] text-[#52525b] max-w-[320px]">
+          <p className="text-[13px] text-muted-foreground/60 max-w-[320px]">
             {hasActiveFilters
               ? "Tente ajustar o filtro ou termo de busca."
               : "Use os botões acima para cadastrar, importar uma planilha ou marcar propostas como vendidas."}
@@ -362,10 +362,10 @@ export function CarteiraClientTable({
         </Button>
       </div>
 
-      <div className="rounded-xl border border-[#27272a] bg-[#18181b] overflow-hidden">
+      <div className="rounded-xl border border-border bg-card overflow-hidden">
         <Table>
           <TableHeader>
-            <TableRow className="border-[#27272a] hover:bg-transparent bg-[#111113]">
+            <TableRow className="border-border hover:bg-transparent bg-muted/50">
               {bulk && (
                 <TableHead className={cn(thBase, "w-10 pl-3 pr-0")}>
                   <button
@@ -373,10 +373,10 @@ export function CarteiraClientTable({
                     className={cn(
                       "w-5 h-5 rounded border flex items-center justify-center transition-all",
                       allChecked
-                        ? "bg-[#eab308] border-[#eab308] text-black"
+                        ? "bg-primary border-primary text-black"
                         : someChecked
-                          ? "border-[#eab308]/60 bg-[#eab308]/20"
-                          : "border-[#3f3f46] hover:border-[#71717a]",
+                          ? "border-primary/60 bg-primary/20"
+                          : "border-border hover:border-muted-foreground",
                     )}
                   >
                     {(allChecked || someChecked) && <Check className="w-3 h-3" />}
@@ -387,14 +387,14 @@ export function CarteiraClientTable({
               <SortableHeader col="health_score" label="Health" />
               <SortableHeader col="days_since_last_order" label="Recompra" />
               <SortableHeader col="avg_ticket" label="Ticket médio" />
-              <TableHead className={cn(thBase, "text-[#71717a]")}>
+              <TableHead className={cn(thBase, "text-muted-foreground")}>
                 Tendência
               </TableHead>
-              <TableHead className={cn(thBase, "text-[#71717a]")}>
+              <TableHead className={cn(thBase, "text-muted-foreground")}>
                 Segmento
               </TableHead>
               <TableHead
-                className={cn(thBase, "text-[#71717a] pr-4 w-[100px]")}
+                className={cn(thBase, "text-muted-foreground pr-4 w-[100px]")}
               />
             </TableRow>
           </TableHeader>
@@ -420,9 +420,9 @@ export function CarteiraClientTable({
                   key={client.id}
                   onClick={() => onSelectClient(isSelected ? null : client)}
                   className={cn(
-                    "border-[#1e1e21] cursor-pointer transition-colors group/row",
-                    isSelected ? "bg-[#232326]" : "hover:bg-[#1c1c1f]",
-                    bulkChecked && "bg-[#eab308]/5",
+                    "border-border cursor-pointer transition-colors group/row",
+                    isSelected ? "bg-muted" : "hover:bg-muted/50",
+                    bulkChecked && "bg-primary/5",
                   )}
                 >
                   {bulk && (
@@ -436,8 +436,8 @@ export function CarteiraClientTable({
                         className={cn(
                           "w-5 h-5 rounded border flex items-center justify-center transition-all",
                           bulkChecked
-                            ? "bg-[#eab308] border-[#eab308] text-black"
-                            : "border-[#3f3f46] opacity-0 group-hover/row:opacity-100",
+                            ? "bg-primary border-primary text-black"
+                            : "border-border opacity-0 group-hover/row:opacity-100",
                         )}
                       >
                         {bulkChecked && <Check className="w-3 h-3" />}
@@ -446,10 +446,10 @@ export function CarteiraClientTable({
                   )}
                   <TableCell className={cn("py-3", bulk ? "" : "pl-4")}>
                     <div className="flex flex-col gap-px min-w-0">
-                      <span className="text-sm font-semibold text-[#fafafa] truncate max-w-[220px]">
+                      <span className="text-sm font-semibold text-foreground truncate max-w-[220px]">
                         {client.name}
                       </span>
-                      <span className="text-xs text-[#71717a] truncate max-w-[220px]">
+                      <span className="text-xs text-muted-foreground truncate max-w-[220px]">
                         {[
                           client.order_count
                             ? `${client.order_count} pedido${client.order_count !== 1 ? "s" : ""}`
@@ -488,8 +488,8 @@ export function CarteiraClientTable({
                       className={cn(
                         "text-sm",
                         client.avg_ticket != null
-                          ? "text-[#fafafa]"
-                          : "text-[#3f3f46]",
+                          ? "text-foreground"
+                          : "text-muted-foreground/30",
                       )}
                     >
                       {client.avg_ticket != null
@@ -500,25 +500,25 @@ export function CarteiraClientTable({
 
                   <TableCell className="py-3">
                     {client.trend === "up" && (
-                      <span className="inline-flex items-center gap-1 text-[13px] font-medium text-[#22c55e]">
+                      <span className="inline-flex items-center gap-1 text-[13px] font-medium text-emerald-600 dark:text-emerald-400">
                         <TrendingUp className="w-3.5 h-3.5" />
                         Subindo
                       </span>
                     )}
                     {client.trend === "down" && (
-                      <span className="inline-flex items-center gap-1 text-[13px] font-medium text-[#ef4444]">
+                      <span className="inline-flex items-center gap-1 text-[13px] font-medium text-destructive">
                         <TrendingDown className="w-3.5 h-3.5" />
                         Caindo
                       </span>
                     )}
                     {client.trend === "stable" && (
-                      <span className="inline-flex items-center gap-1 text-[13px] text-[#71717a]">
+                      <span className="inline-flex items-center gap-1 text-[13px] text-muted-foreground">
                         <Minus className="w-3.5 h-3.5" />
                         Estável
                       </span>
                     )}
                     {!client.trend && (
-                      <span className="text-[13px] text-[#3f3f46]">—</span>
+                      <span className="text-[13px] text-muted-foreground/30">—</span>
                     )}
                   </TableCell>
 
@@ -533,7 +533,7 @@ export function CarteiraClientTable({
                         {segment.label}
                       </span>
                     ) : (
-                      <span className="text-[#71717a] text-sm">—</span>
+                      <span className="text-muted-foreground text-sm">—</span>
                     )}
                   </TableCell>
 
@@ -585,8 +585,8 @@ export function CarteiraClientTable({
 
         {/* Pagination bar */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-between border-t border-[#27272a] px-4 py-2.5">
-            <span className="text-[13px] text-[#71717a] tabular-nums">
+          <div className="flex items-center justify-between border-t border-border px-4 py-2.5">
+            <span className="text-[13px] text-muted-foreground tabular-nums">
               Mostrando {from}–{to} de {total}
             </span>
             <div className="flex items-center gap-2">
@@ -603,7 +603,7 @@ export function CarteiraClientTable({
                 <ChevronLeft className="w-3.5 h-3.5" />
                 Anterior
               </Button>
-              <span className="text-[13px] text-[#a1a1aa] tabular-nums">
+              <span className="text-[13px] text-muted-foreground tabular-nums">
                 {page} / {totalPages}
               </span>
               <Button

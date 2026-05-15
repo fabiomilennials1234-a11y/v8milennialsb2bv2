@@ -10,16 +10,16 @@ interface KPICardProps {
 
 function KPICard({ label, value, sub, valueClassName }: KPICardProps) {
   return (
-    <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-4">
-      <div className="text-xs font-medium text-[#71717a] uppercase tracking-wider">
+    <div className="bg-card border border-border rounded-xl p-4">
+      <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
         {label}
       </div>
       <div
-        className={`text-[28px] font-bold mt-1 tracking-tight leading-tight ${valueClassName ?? "text-white"}`}
+        className={`text-[28px] font-bold mt-1 tracking-tight leading-tight ${valueClassName ?? "text-foreground"}`}
       >
         {value}
       </div>
-      {sub && <div className="text-[13px] mt-1 text-[#a1a1aa]">{sub}</div>}
+      {sub && <div className="text-[13px] mt-1 text-muted-foreground">{sub}</div>}
     </div>
   );
 }
@@ -31,10 +31,10 @@ export function CarteiraKPIs() {
     return (
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         {Array.from({ length: 5 }).map((_, i) => (
-          <div key={i} className="bg-[#18181b] border border-[#27272a] rounded-xl p-4">
+          <div key={i} className="bg-card border border-border rounded-xl p-4">
             <div className="space-y-2 animate-pulse">
-              <div className="h-3 bg-zinc-800 rounded w-2/3" />
-              <div className="h-7 bg-zinc-800 rounded w-1/2" />
+              <div className="h-3 bg-muted rounded w-2/3" />
+              <div className="h-7 bg-muted rounded w-1/2" />
             </div>
           </div>
         ))}
@@ -44,11 +44,11 @@ export function CarteiraKPIs() {
 
   if (!data || data.total_clients === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-[#27272a] bg-[#18181b]/50 px-6 py-8 text-center">
-        <p className="text-sm font-medium text-[#a1a1aa]">
+      <div className="rounded-xl border border-dashed border-border bg-card/50 px-6 py-8 text-center">
+        <p className="text-sm font-medium text-muted-foreground">
           Sua carteira ainda está vazia
         </p>
-        <p className="text-[13px] text-[#52525b] mt-1 max-w-md mx-auto">
+        <p className="text-[13px] text-muted-foreground/60 mt-1 max-w-md mx-auto">
           Cadastre clientes manualmente, importe uma planilha ou marque propostas como vendidas. Os KPIs aparecem automaticamente.
         </p>
       </div>
@@ -70,7 +70,7 @@ export function CarteiraKPIs() {
         label="Receita Recorrente"
         value={formatBRL(totalRecurring)}
         sub="ticket médio mensal"
-        valueClassName={totalRecurring > 0 ? "text-[#eab308]" : undefined}
+        valueClassName={totalRecurring > 0 ? "text-primary" : undefined}
       />
 
       <KPICard
@@ -83,7 +83,7 @@ export function CarteiraKPIs() {
         label="Recompra Atrasada"
         value={overdueCount}
         sub={overdueCount > 0 ? "clientes em atraso" : "tudo em dia"}
-        valueClassName={overdueCount > 0 ? "text-[#ef4444]" : undefined}
+        valueClassName={overdueCount > 0 ? "text-destructive" : undefined}
       />
 
       <KPICard

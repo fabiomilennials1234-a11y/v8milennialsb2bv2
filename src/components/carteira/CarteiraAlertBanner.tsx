@@ -19,17 +19,17 @@ export function CarteiraAlertBanner({ onViewDetails, className }: CarteiraAlertB
     <div
       className={cn(
         "flex items-center justify-between gap-4 rounded-xl px-5 py-4",
-        "bg-gradient-to-br from-[#451a03] to-[#78350f] border border-[#92400e]",
+        "bg-amber-500/10 border border-amber-500/20",
         className,
       )}
     >
       <div className="flex items-center gap-3 min-w-0">
-        <Zap size={20} className="shrink-0 text-[#fbbf24]" aria-hidden="true" />
+        <Zap size={20} className="shrink-0 text-amber-500" aria-hidden="true" />
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-[#fafafa]">
+          <p className="text-sm font-semibold text-foreground">
             {overdueCount} {overdueCount === 1 ? "cliente" : "clientes"} com recompra atrasada — {formatBRL(overdueRevenue)} em risco
           </p>
-          <p className="text-[13px] text-[#fbbf24] mt-0.5">
+          <p className="text-[13px] text-amber-600 dark:text-amber-400 mt-0.5">
             Copilot pode abordar automaticamente. Clientes estratégicos precisam de contato pessoal.
           </p>
         </div>
@@ -38,7 +38,7 @@ export function CarteiraAlertBanner({ onViewDetails, className }: CarteiraAlertB
       {onViewDetails && (
         <button
           onClick={onViewDetails}
-          className="shrink-0 px-3.5 py-1.5 bg-[#eab308] text-[#09090b] rounded-md text-[13px] font-semibold hover:bg-[#facc15] transition-colors"
+          className="shrink-0 px-3.5 py-1.5 bg-primary text-primary-foreground rounded-md text-[13px] font-semibold hover:bg-primary/90 transition-colors"
         >
           Ver detalhes
         </button>
