@@ -388,7 +388,7 @@ export default function Auth() {
                         onChange={(e) => setPassword(e.target.value)}
                         className="pl-10"
                         required
-                        minLength={12}
+                        minLength={isLogin ? undefined : 12}
                       />
                     </div>
                   </div>

@@ -2061,6 +2061,7 @@ export type Database = {
           id: string
           is_resolved: boolean | null
           metadata: Json | null
+          notified_at: string | null
           organization_id: string
           resolved_at: string | null
           severity: string
@@ -2074,6 +2075,7 @@ export type Database = {
           id?: string
           is_resolved?: boolean | null
           metadata?: Json | null
+          notified_at?: string | null
           organization_id: string
           resolved_at?: string | null
           severity?: string
@@ -2087,6 +2089,7 @@ export type Database = {
           id?: string
           is_resolved?: boolean | null
           metadata?: Json | null
+          notified_at?: string | null
           organization_id?: string
           resolved_at?: string | null
           severity?: string
@@ -2102,6 +2105,51 @@ export type Database = {
           },
           {
             foreignKeyName: "client_alerts_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_health_snapshots: {
+        Row: {
+          client_id: string
+          health_score: number
+          health_status: string
+          id: string
+          organization_id: string
+          segment: string
+          snapshot_date: string
+        }
+        Insert: {
+          client_id: string
+          health_score: number
+          health_status: string
+          id?: string
+          organization_id: string
+          segment: string
+          snapshot_date?: string
+        }
+        Update: {
+          client_id?: string
+          health_score?: number
+          health_status?: string
+          id?: string
+          organization_id?: string
+          segment?: string
+          snapshot_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_health_snapshots_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "upsell_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_health_snapshots_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
@@ -8199,6 +8247,7 @@ export type Database = {
           billing_override_at: string | null
           billing_override_by: string | null
           billing_override_reason: string | null
+          capture_groups: boolean
           confirmacao_overdue_days: number
           copilot_engine_version: string
           created_at: string | null
@@ -8229,6 +8278,7 @@ export type Database = {
           billing_override_at?: string | null
           billing_override_by?: string | null
           billing_override_reason?: string | null
+          capture_groups?: boolean
           confirmacao_overdue_days?: number
           copilot_engine_version?: string
           created_at?: string | null
@@ -8259,6 +8309,7 @@ export type Database = {
           billing_override_at?: string | null
           billing_override_by?: string | null
           billing_override_reason?: string | null
+          capture_groups?: boolean
           confirmacao_overdue_days?: number
           copilot_engine_version?: string
           created_at?: string | null
@@ -9857,6 +9908,54 @@ export type Database = {
           },
         ]
       }
+      retention_suggestions: {
+        Row: {
+          action_type: string
+          client_id: string
+          expires_at: string
+          generated_at: string
+          id: string
+          message: string
+          organization_id: string
+          reasoning: string | null
+        }
+        Insert: {
+          action_type: string
+          client_id: string
+          expires_at?: string
+          generated_at?: string
+          id?: string
+          message: string
+          organization_id: string
+          reasoning?: string | null
+        }
+        Update: {
+          action_type?: string
+          client_id?: string
+          expires_at?: string
+          generated_at?: string
+          id?: string
+          message?: string
+          organization_id?: string
+          reasoning?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "retention_suggestions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "upsell_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "retention_suggestions_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       runtime_logs: {
         Row: {
           action: string
@@ -10868,6 +10967,7 @@ export type Database = {
           organization_id: string | null
           ote_base: number | null
           ote_bonus: number | null
+          phone: string | null
           preferred_whatsapp_instance_id: string | null
           role: Database["public"]["Enums"]["app_role"]
           updated_at: string
@@ -10886,6 +10986,7 @@ export type Database = {
           organization_id?: string | null
           ote_base?: number | null
           ote_bonus?: number | null
+          phone?: string | null
           preferred_whatsapp_instance_id?: string | null
           role: Database["public"]["Enums"]["app_role"]
           updated_at?: string
@@ -10904,6 +11005,7 @@ export type Database = {
           organization_id?: string | null
           ote_base?: number | null
           ote_bonus?: number | null
+          phone?: string | null
           preferred_whatsapp_instance_id?: string | null
           role?: Database["public"]["Enums"]["app_role"]
           updated_at?: string
@@ -11487,6 +11589,7 @@ export type Database = {
       upsell_clients: {
         Row: {
           avg_ticket: number | null
+          churn_probability: number | null
           churned_at: string | null
           closer_id: string | null
           company: string | null
@@ -11518,10 +11621,12 @@ export type Database = {
           sale_responsible_id: string | null
           segment: string | null
           tipo_cliente_tempo: string
+          trend: string | null
           updated_at: string
         }
         Insert: {
           avg_ticket?: number | null
+          churn_probability?: number | null
           churned_at?: string | null
           closer_id?: string | null
           company?: string | null
@@ -11553,10 +11658,12 @@ export type Database = {
           sale_responsible_id?: string | null
           segment?: string | null
           tipo_cliente_tempo?: string
+          trend?: string | null
           updated_at?: string
         }
         Update: {
           avg_ticket?: number | null
+          churn_probability?: number | null
           churned_at?: string | null
           closer_id?: string | null
           company?: string | null
@@ -11588,6 +11695,7 @@ export type Database = {
           sale_responsible_id?: string | null
           segment?: string | null
           tipo_cliente_tempo?: string
+          trend?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -12295,6 +12403,53 @@ export type Database = {
           },
         ]
       }
+      whatsapp_health_checks: {
+        Row: {
+          action_taken: string | null
+          checked_at: string
+          drift_ratio: number | null
+          id: string
+          instance_id: string
+          notes: string | null
+          organization_id: string
+          status: string
+          uazapi_inbound_1h: number | null
+          v8_inbound_1h: number
+        }
+        Insert: {
+          action_taken?: string | null
+          checked_at?: string
+          drift_ratio?: number | null
+          id?: string
+          instance_id: string
+          notes?: string | null
+          organization_id: string
+          status: string
+          uazapi_inbound_1h?: number | null
+          v8_inbound_1h: number
+        }
+        Update: {
+          action_taken?: string | null
+          checked_at?: string
+          drift_ratio?: number | null
+          id?: string
+          instance_id?: string
+          notes?: string | null
+          organization_id?: string
+          status?: string
+          uazapi_inbound_1h?: number | null
+          v8_inbound_1h?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_health_checks_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       whatsapp_instance_allowed_members: {
         Row: {
           created_at: string | null
@@ -12475,6 +12630,8 @@ export type Database = {
           provider_config: Json
           qr_code: string | null
           qr_code_expires_at: string | null
+          session_dead_reason: string | null
+          session_dead_since: string | null
           status: string
           updated_at: string | null
         }
@@ -12493,6 +12650,8 @@ export type Database = {
           provider_config?: Json
           qr_code?: string | null
           qr_code_expires_at?: string | null
+          session_dead_reason?: string | null
+          session_dead_since?: string | null
           status?: string
           updated_at?: string | null
         }
@@ -12511,6 +12670,8 @@ export type Database = {
           provider_config?: Json
           qr_code?: string | null
           qr_code_expires_at?: string | null
+          session_dead_reason?: string | null
+          session_dead_since?: string | null
           status?: string
           updated_at?: string | null
         }
@@ -12545,6 +12706,66 @@ export type Database = {
           },
         ]
       }
+      whatsapp_media_jobs: {
+        Row: {
+          attempts: number
+          created_at: string
+          id: string
+          instance_id: string
+          last_attempt_at: string | null
+          last_error: string | null
+          message_id: string
+          message_type: string | null
+          organization_id: string
+          resolved_at: string | null
+          source_url: string
+          storage_path: string | null
+        }
+        Insert: {
+          attempts?: number
+          created_at?: string
+          id?: string
+          instance_id: string
+          last_attempt_at?: string | null
+          last_error?: string | null
+          message_id: string
+          message_type?: string | null
+          organization_id: string
+          resolved_at?: string | null
+          source_url: string
+          storage_path?: string | null
+        }
+        Update: {
+          attempts?: number
+          created_at?: string
+          id?: string
+          instance_id?: string
+          last_attempt_at?: string | null
+          last_error?: string | null
+          message_id?: string
+          message_type?: string | null
+          organization_id?: string
+          resolved_at?: string | null
+          source_url?: string
+          storage_path?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_media_jobs_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_instances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_media_jobs_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       whatsapp_messages: {
         Row: {
           assigned_to: string | null
@@ -12555,6 +12776,7 @@ export type Database = {
           edited: boolean
           id: string
           instance_id: string | null
+          is_group: boolean
           lead_id: string | null
           media_url: string | null
           message_id: string
@@ -12567,6 +12789,7 @@ export type Database = {
           push_name: string | null
           raw_payload: Json | null
           reactions: Json
+          received_via: string
           remote_jid: string
           search_tsv: unknown
           sent_by_ai: boolean | null
@@ -12583,6 +12806,7 @@ export type Database = {
           edited?: boolean
           id?: string
           instance_id?: string | null
+          is_group?: boolean
           lead_id?: string | null
           media_url?: string | null
           message_id: string
@@ -12595,6 +12819,7 @@ export type Database = {
           push_name?: string | null
           raw_payload?: Json | null
           reactions?: Json
+          received_via?: string
           remote_jid: string
           search_tsv?: unknown
           sent_by_ai?: boolean | null
@@ -12611,6 +12836,7 @@ export type Database = {
           edited?: boolean
           id?: string
           instance_id?: string | null
+          is_group?: boolean
           lead_id?: string | null
           media_url?: string | null
           message_id?: string
@@ -12623,6 +12849,7 @@ export type Database = {
           push_name?: string | null
           raw_payload?: Json | null
           reactions?: Json
+          received_via?: string
           remote_jid?: string
           search_tsv?: unknown
           sent_by_ai?: boolean | null
@@ -12711,6 +12938,62 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_webhook_dlq: {
+        Row: {
+          attempts: number
+          created_at: string
+          event: string | null
+          id: string
+          last_attempt_at: string | null
+          last_error: string | null
+          payload: Json
+          reason: string
+          received_at: string
+          resolved_at: string | null
+          resolved_instance_id: string | null
+          source_ip: string | null
+          url_path: string | null
+        }
+        Insert: {
+          attempts?: number
+          created_at?: string
+          event?: string | null
+          id?: string
+          last_attempt_at?: string | null
+          last_error?: string | null
+          payload: Json
+          reason: string
+          received_at?: string
+          resolved_at?: string | null
+          resolved_instance_id?: string | null
+          source_ip?: string | null
+          url_path?: string | null
+        }
+        Update: {
+          attempts?: number
+          created_at?: string
+          event?: string | null
+          id?: string
+          last_attempt_at?: string | null
+          last_error?: string | null
+          payload?: Json
+          reason?: string
+          received_at?: string
+          resolved_at?: string | null
+          resolved_instance_id?: string | null
+          source_ip?: string | null
+          url_path?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_webhook_dlq_resolved_instance_id_fkey"
+            columns: ["resolved_instance_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_instances"
             referencedColumns: ["id"]
           },
         ]
@@ -13301,7 +13584,7 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "pipeline_entries_assigned_to_fkey"
-            columns: ["sdr_id"]
+            columns: ["responsible_id"]
             isOneToOne: false
             referencedRelation: "org_visible_members"
             referencedColumns: ["id"]
@@ -13315,14 +13598,14 @@ export type Database = {
           },
           {
             foreignKeyName: "pipeline_entries_assigned_to_fkey"
-            columns: ["responsible_id"]
+            columns: ["sdr_id"]
             isOneToOne: false
             referencedRelation: "org_visible_members"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "pipeline_entries_assigned_to_fkey"
-            columns: ["sdr_id"]
+            columns: ["responsible_id"]
             isOneToOne: false
             referencedRelation: "team_members"
             referencedColumns: ["id"]
@@ -13336,7 +13619,7 @@ export type Database = {
           },
           {
             foreignKeyName: "pipeline_entries_assigned_to_fkey"
-            columns: ["responsible_id"]
+            columns: ["sdr_id"]
             isOneToOne: false
             referencedRelation: "team_members"
             referencedColumns: ["id"]
@@ -13436,13 +13719,6 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "pipeline_entries_assigned_to_fkey"
-            columns: ["responsible_id"]
-            isOneToOne: false
-            referencedRelation: "org_visible_members"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pipeline_entries_assigned_to_fkey"
             columns: ["closer_id"]
             isOneToOne: false
             referencedRelation: "org_visible_members"
@@ -13451,13 +13727,20 @@ export type Database = {
           {
             foreignKeyName: "pipeline_entries_assigned_to_fkey"
             columns: ["responsible_id"]
+            isOneToOne: false
+            referencedRelation: "org_visible_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pipeline_entries_assigned_to_fkey"
+            columns: ["closer_id"]
             isOneToOne: false
             referencedRelation: "team_members"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "pipeline_entries_assigned_to_fkey"
-            columns: ["closer_id"]
+            columns: ["responsible_id"]
             isOneToOne: false
             referencedRelation: "team_members"
             referencedColumns: ["id"]
@@ -13583,6 +13866,41 @@ export type Database = {
           },
           {
             foreignKeyName: "pipeline_entries_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      portfolio_retention_cohorts: {
+        Row: {
+          active_clients: number | null
+          closer_id: string | null
+          cohort_month: string | null
+          month_offset: number | null
+          organization_id: string | null
+          retention_pct: number | null
+          segment: string | null
+          total_clients: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "upsell_clients_closer_id_fkey"
+            columns: ["closer_id"]
+            isOneToOne: false
+            referencedRelation: "org_visible_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "upsell_clients_closer_id_fkey"
+            columns: ["closer_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "upsell_clients_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
@@ -14166,7 +14484,9 @@ export type Database = {
         }
         Returns: Json
       }
+      get_my_admin_organization_ids: { Args: never; Returns: string[] }
       get_my_org_ids: { Args: never; Returns: string[] }
+      get_my_organization_ids: { Args: never; Returns: string[] }
       get_next_best_actions: {
         Args: { p_limit?: number }
         Returns: {
@@ -14225,6 +14545,19 @@ export type Database = {
         }
         Returns: Json
       }
+      get_portfolio_clients: {
+        Args: {
+          p_filter?: string
+          p_org_id: string
+          p_page?: number
+          p_page_size?: number
+          p_search?: string
+          p_sort_by?: string
+          p_sort_dir?: string
+        }
+        Returns: Json
+      }
+      get_portfolio_kpis: { Args: { p_org_id: string }; Returns: Json }
       get_product_ranking: {
         Args: { p_end_date: string; p_org_id: string; p_start_date: string }
         Returns: Json
@@ -14243,6 +14576,7 @@ export type Database = {
           viewed_at: string
         }[]
       }
+      get_revenue_at_risk: { Args: { p_org_id: string }; Returns: Json }
       get_revenue_attribution: {
         Args: { p_end_date?: string; p_start_date?: string }
         Returns: {
@@ -14330,6 +14664,7 @@ export type Database = {
           instance_name: string
         }[]
       }
+      get_vendedor_ranking: { Args: { p_org_id: string }; Returns: Json }
       get_win_loss_analysis: {
         Args: { p_end_date?: string; p_start_date?: string }
         Returns: {
@@ -14383,6 +14718,7 @@ export type Database = {
         Returns: undefined
       }
       increment_coupon_uses: { Args: { p_coupon_id: string }; Returns: boolean }
+      invoke_calculate_portfolio_health: { Args: never; Returns: undefined }
       invoke_campaign_rule_dispatch: { Args: never; Returns: undefined }
       invoke_cron_health_check: { Args: never; Returns: undefined }
       invoke_history_sync_worker: { Args: never; Returns: undefined }
@@ -14400,6 +14736,9 @@ export type Database = {
       invoke_process_workflow_executions: { Args: never; Returns: undefined }
       invoke_refresh_meta_tokens: { Args: never; Returns: undefined }
       invoke_retry_dead_letter_jobs: { Args: never; Returns: undefined }
+      invoke_whatsapp_dlq_replay: { Args: never; Returns: undefined }
+      invoke_whatsapp_health_monitor: { Args: never; Returns: undefined }
+      invoke_whatsapp_session_watchdog: { Args: never; Returns: undefined }
       invoke_workflow_cron_triggers: { Args: never; Returns: undefined }
       is_admin_or_closer: { Args: never; Returns: boolean }
       is_campanha_member: { Args: { p_campanha_id: string }; Returns: boolean }
@@ -14981,5 +15320,4 @@ export const Constants = {
     },
   },
 } as const
-A new version of Supabase CLI is available: v2.98.2 (currently installed v2.90.0)
-We recommend updating regularly for new features and bug fixes: https://supabase.com/docs/guides/cli/getting-started#updating-the-supabase-cli
+<claude-code-hint v="1" type="plugin" value="supabase@claude-plugins-official" />
