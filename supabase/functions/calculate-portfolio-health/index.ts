@@ -222,6 +222,21 @@ async function processClient(
     return { success: false, error: updateError.message };
   }
 
+  // Snapshot for sparkline history (upsert by client+date)
+  await supabase
+    .from("client_health_snapshots")
+    .upsert(
+      {
+        client_id: client.id,
+        organization_id: client.organization_id,
+        health_score: healthScore,
+        health_status: healthStatus,
+        segment,
+        snapshot_date: now.toISOString().slice(0, 10),
+      },
+      { onConflict: "client_id,snapshot_date" },
+    );
+
   // Detect signals
   const pf = productFrequencies(orderList);
   const lastOrderProducts = lastOrder ? [lastOrder.product_name] : [];
@@ -336,6 +351,7 @@ async function processOrg(
   now: Date,
 ): Promise<{ processed: number; failed: number }> {
   const stats = { processed: 0, failed: 0 };
+  const orgT0 = Date.now();
 
   // Compute org-wide avg ticket for segmentation
   const { data: ticketData } = await supabase
@@ -367,21 +383,32 @@ async function processOrg(
     const batch: ClientRow[] = clients ?? [];
     if (batch.length === 0) break;
 
-    for (const client of batch) {
-      const result = await processClient(supabase, client, orgAvgTicket, now);
-      if (result.success) {
-        stats.processed++;
-      } else {
-        stats.failed++;
-        console.warn(
-          `[calculate-portfolio-health] client ${client.id} failed: ${result.error}`,
-        );
+    const CONCURRENCY = 15;
+    for (let i = 0; i < batch.length; i += CONCURRENCY) {
+      const chunk = batch.slice(i, i + CONCURRENCY);
+      const results = await Promise.all(
+        chunk.map((client) => processClient(supabase, client, orgAvgTicket, now)),
+      );
+      for (let j = 0; j < results.length; j++) {
+        if (results[j].success) {
+          stats.processed++;
+        } else {
+          stats.failed++;
+          console.warn(
+            `[calculate-portfolio-health] client ${chunk[j].id} failed: ${results[j].error}`,
+          );
+        }
       }
     }
 
     if (batch.length < BATCH_SIZE) break;
     offset += BATCH_SIZE;
   }
+
+  const orgDurationMs = Date.now() - orgT0;
+  console.log(
+    `[calculate-portfolio-health] org ${orgId}: ${stats.processed} ok, ${stats.failed} failed, ${orgDurationMs}ms`,
+  );
 
   return stats;
 }
