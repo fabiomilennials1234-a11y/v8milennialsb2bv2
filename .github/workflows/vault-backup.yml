@@ -1,0 +1,123 @@
+name: vault-backup
+
+# =============================================================================
+# Vault backup — espelho orphan branch `vault-only`
+# =============================================================================
+# A cada push em main que tocou em Obsidian/, espelha o vault para uma branch
+# orphan dedicada (`vault-only`). Histórico independente. Recovery point caso
+# main quebre, force-push apague, ou squash perca arquivos.
+#
+# Branch resultado:
+#   - origin/vault-only
+#   - Contém apenas pasta Obsidian/ + README mínimo
+#   - Histórico próprio com 1 commit por mirror
+#
+# Para restaurar:
+#   git fetch origin vault-only
+#   git checkout origin/vault-only -- Obsidian/
+#   git commit -m "fix(vault): restore from backup branch"
+# =============================================================================
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Obsidian/**'
+      - '.github/workflows/vault-backup.yml'
+  workflow_dispatch:
+    # Permite trigger manual via UI do GitHub
+
+permissions:
+  contents: write
+
+concurrency:
+  group: vault-backup
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    name: Espelha vault para branch vault-only
+    steps:
+      - name: Checkout main full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+
+      - name: Configurar identidade do bot
+        run: |
+          git config user.name  "vault-backup-bot"
+          git config user.email "vault-backup-bot@torquecrm.com.br"
+
+      - name: Preparar working tree do backup
+        run: |
+          set -euo pipefail
+          # Snapshot do vault em tempfile para sobreviver ao checkout
+          mkdir -p /tmp/vault-snapshot
+          cp -r "Obsidian" /tmp/vault-snapshot/
+
+          # Mensagem do commit que disparou + hash
+          MAIN_HASH=$(git rev-parse --short HEAD)
+          MAIN_SUBJ=$(git log -1 --pretty=%s)
+          MAIN_DATE=$(git log -1 --pretty=%cI)
+          echo "MAIN_HASH=$MAIN_HASH" >> "$GITHUB_ENV"
+          echo "MAIN_SUBJ=$MAIN_SUBJ" >> "$GITHUB_ENV"
+          echo "MAIN_DATE=$MAIN_DATE" >> "$GITHUB_ENV"
+
+      - name: Checkout / criar orphan vault-only
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --heads origin vault-only >/dev/null 2>&1; then
+            git fetch origin vault-only
+            git checkout vault-only
+          else
+            git checkout --orphan vault-only
+            git rm -rf . --quiet || true
+          fi
+
+      - name: Aplicar snapshot
+        run: |
+          set -euo pipefail
+          # Limpa working tree (preserva .git)
+          find . -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf {} +
+
+          # Restaura vault do snapshot
+          cp -r /tmp/vault-snapshot/Obsidian .
+
+          # README mínimo da branch backup
+          cat > README.md <<'EOF'
+          # vault-only — backup espelho do vault Obsidian
+
+          Branch automática mantida pelo workflow `.github/workflows/vault-backup.yml`.
+
+          A cada push em `main` que toca em `Obsidian/`, o conteúdo é espelhado aqui.
+
+          **Não desenvolver nesta branch.** É read-only. Para restaurar arquivos:
+
+          ```bash
+          git fetch origin vault-only
+          git checkout origin/vault-only -- Obsidian/
+          git commit -m "fix(vault): restore from backup branch"
+          ```
+
+          Histórico: 1 commit por mirror, com hash do commit em main que disparou.
+          EOF
+
+      - name: Commitar snapshot
+        run: |
+          set -euo pipefail
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Nada mudou no vault. Skip."
+            exit 0
+          fi
+          git commit -m "snapshot: ${MAIN_HASH} — ${MAIN_SUBJ}
+
+          Mirror automático do vault Obsidian.
+          Origem: main @ ${MAIN_HASH} (${MAIN_DATE})
+          Subject: ${MAIN_SUBJ}
+          "
+
+      - name: Push para origin/vault-only
+        run: git push origin vault-only --force-with-lease

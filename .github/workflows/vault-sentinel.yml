@@ -1,0 +1,114 @@
+name: vault-sentinel
+
+# =============================================================================
+# Sentinela do vault Obsidian
+# =============================================================================
+# Bloqueia merge se PR deletou arquivos do vault sem flag explícita.
+# Flag = string [vault-delete-ok] presente em qualquer commit message do PR.
+#
+# Motivação: vault concentra contexto crítico do projeto (ADRs, features,
+# changelog, decisões). Perda silenciosa é catastrófica — single source of
+# truth para fluxos como Copilot, WhatsApp, multi-tenancy.
+#
+# Para autorizar deleção legítima:
+#   git commit --allow-empty -m "chore(vault): cleanup obsoletos [vault-delete-ok]
+#
+#   Lista arquivos removidos + razão."
+# =============================================================================
+
+on:
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'Obsidian/**'
+      - '.github/workflows/vault-sentinel.yml'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  vault-integrity-check:
+    runs-on: ubuntu-latest
+    name: Verifica integridade do vault
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Contar arquivos markdown do vault — base vs head
+        id: count
+        run: |
+          set -euo pipefail
+
+          BASE_REF="origin/${{ github.base_ref }}"
+          HEAD_REF="HEAD"
+
+          BASE_COUNT=$(git ls-tree -r "$BASE_REF" --name-only | grep -c '^Obsidian/.*\.md$' || true)
+          HEAD_COUNT=$(git ls-tree -r "$HEAD_REF" --name-only | grep -c '^Obsidian/.*\.md$' || true)
+          DIFF=$((BASE_COUNT - HEAD_COUNT))
+
+          echo "base_count=$BASE_COUNT"   >> "$GITHUB_OUTPUT"
+          echo "head_count=$HEAD_COUNT"   >> "$GITHUB_OUTPUT"
+          echo "diff=$DIFF"               >> "$GITHUB_OUTPUT"
+
+          echo "::notice::Base ($BASE_REF): $BASE_COUNT arquivos .md"
+          echo "::notice::Head ($HEAD_REF): $HEAD_COUNT arquivos .md"
+          echo "::notice::Diff: $DIFF (positivo = perda)"
+
+      - name: Listar arquivos removidos
+        if: steps.count.outputs.diff > 0
+        id: removed
+        run: |
+          set -euo pipefail
+          REMOVED=$(git diff --name-only --diff-filter=D \
+            "origin/${{ github.base_ref }}" "HEAD" \
+            -- 'Obsidian/**/*.md' || true)
+          echo "Arquivos removidos do vault:"
+          echo "$REMOVED"
+          {
+            echo 'removed_list<<EOF'
+            echo "$REMOVED"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Checar autorização [vault-delete-ok]
+        if: steps.count.outputs.diff > 0
+        id: auth
+        run: |
+          set -euo pipefail
+          if git log "origin/${{ github.base_ref }}..HEAD" --format=%B \
+             | grep -q '\[vault-delete-ok\]'; then
+            echo "authorized=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Deleção autorizada via [vault-delete-ok] em commit message"
+          else
+            echo "authorized=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Falhar PR se deleção não autorizada
+        if: steps.count.outputs.diff > 0 && steps.auth.outputs.authorized != 'true'
+        run: |
+          cat <<EOF
+          ::error::Vault perdeu ${{ steps.count.outputs.diff }} arquivo(s) sem autorização.
+
+          Arquivos removidos:
+          ${{ steps.removed.outputs.removed_list }}
+
+          Como autorizar (se intencional):
+            git commit --allow-empty -m "chore(vault): cleanup [vault-delete-ok]
+
+            Razão da remoção..."
+            git push
+
+          Como recuperar (se acidental):
+            git checkout origin/${{ github.base_ref }} -- "<caminho>"
+            git commit -m "fix(vault): restaura arquivo deletado por engano"
+            git push
+          EOF
+          exit 1
+
+      - name: OK
+        if: steps.count.outputs.diff <= 0 || steps.auth.outputs.authorized == 'true'
+        run: |
+          echo "Vault íntegro. Diff: ${{ steps.count.outputs.diff }}."

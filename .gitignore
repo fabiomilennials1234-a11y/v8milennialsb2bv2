@@ -7,9 +7,18 @@
 .windsurf/
 .superpowers/
 
-# Obsidian app config (personal, not project docs)
+# =============================================================================
+# Obsidian — sujeira local fora, conteúdo do vault dentro
+# =============================================================================
+# Toda a pasta .obsidian/ contém estado local (workspace, graph layout, plugins
+# resolvidos, cache). Manter ignorada por padrão — share de plugin config é
+# decisão deliberada em PR separado.
 .obsidian/
-Obsidian/Segundo Cerebro/.obsidian/
+Obsidian/**/.obsidian/
+
+# Lixeira e cache de plugins
+Obsidian/**/.trash/
+Obsidian/**/.smart-env/
 
 # Logs
 logs

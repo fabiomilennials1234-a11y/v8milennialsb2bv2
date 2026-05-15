@@ -1,0 +1,49 @@
+# =============================================================================
+# Git attributes — Torque CRM
+# =============================================================================
+# Diretrizes:
+#   - text=auto: normalização de EOL no checkin
+#   - merge=union em vault Obsidian: concatena ambos os lados em merge,
+#     evita perda silenciosa em conflito. Preferimos duplicação visível a
+#     overwrite invisível.
+# =============================================================================
+
+# Default
+* text=auto eol=lf
+
+# =============================================================================
+# Obsidian vault — proteção anti-perda em merge
+# =============================================================================
+# merge=union: em conflito, concatena lados A+B no arquivo final.
+# Resultado: duplicação visível (corrigível) em vez de perda silenciosa.
+# Aplica-se apenas a markdown. Outros tipos seguem merge default.
+Obsidian/**/*.md         merge=union text eol=lf
+Obsidian/**/*.md         linguist-documentation=true
+
+# Canvas Obsidian: JSON estruturado, usar merge default (sem union — quebraria JSON)
+Obsidian/**/*.canvas     text eol=lf
+
+# =============================================================================
+# Binários do vault (anexos)
+# =============================================================================
+Obsidian/**/*.png        binary
+Obsidian/**/*.jpg        binary
+Obsidian/**/*.jpeg       binary
+Obsidian/**/*.gif        binary
+Obsidian/**/*.webp       binary
+Obsidian/**/*.pdf        binary
+Obsidian/**/*.mp4        binary
+Obsidian/**/*.mov        binary
+Obsidian/**/*.zip        binary
+
+# =============================================================================
+# Repo: linguist hints
+# =============================================================================
+*.md                     linguist-detectable=true
+supabase/migrations/**   linguist-language=SQL
+docs/**                  linguist-documentation=true
+.specs/**                linguist-documentation=true
+
+# Auto-gerados — não computar diff por padrão
+src/integrations/supabase/types.ts linguist-generated=true
+package-lock.json                  linguist-generated=true
