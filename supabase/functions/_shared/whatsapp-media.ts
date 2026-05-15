@@ -171,16 +171,27 @@ export async function downloadAndPersistMedia(
     }
 
     const result = await res.json().catch(() => ({} as any));
-    const rawB64: string = result?.base64 ?? "";
     const mimetype: string = result?.mimetype ?? "application/octet-stream";
-    if (!rawB64) return { ok: false, error: "empty_payload" };
 
-    const pure = rawB64.includes(",") ? rawB64.split(",")[1] : rawB64;
     let bin: Uint8Array;
-    try {
-      bin = Uint8Array.from(atob(pure), (c) => c.charCodeAt(0));
-    } catch (e) {
-      return { ok: false, error: `base64_decode_failed: ${(e as Error).message}` };
+
+    // Uazapi v2 returns fileURL; legacy/Evolution returned base64
+    const fileURL: string = result?.fileURL ?? "";
+    const rawB64: string = result?.base64 ?? "";
+
+    if (fileURL) {
+      const fileRes = await fetch(fileURL, { signal: AbortSignal.timeout(options.timeoutMs ?? DEFAULT_TIMEOUT_MS) });
+      if (!fileRes.ok) return { ok: false, error: `fileurl_http_${fileRes.status}` };
+      bin = new Uint8Array(await fileRes.arrayBuffer());
+    } else if (rawB64) {
+      const pure = rawB64.includes(",") ? rawB64.split(",")[1] : rawB64;
+      try {
+        bin = Uint8Array.from(atob(pure), (c) => c.charCodeAt(0));
+      } catch (e) {
+        return { ok: false, error: `base64_decode_failed: ${(e as Error).message}` };
+      }
+    } else {
+      return { ok: false, error: "empty_payload" };
     }
 
     const ext = MIME_TO_EXT[mimetype] ?? mimetype.split("/")[1] ?? "bin";
