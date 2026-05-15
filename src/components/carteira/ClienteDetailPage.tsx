@@ -12,6 +12,8 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 import { useClientAlerts } from "@/hooks/useClientAlerts";
+import { useHealthHistory } from "@/hooks/useHealthHistory";
+import { HealthSparkline } from "./HealthSparkline";
 
 // ─── Derived types ────────────────────────────────────────────────────────────
 
@@ -96,6 +98,7 @@ export default function ClienteDetailPage() {
   });
 
   const { data: alerts = [] } = useClientAlerts(clientId);
+  const { data: healthHistory = [] } = useHealthHistory(clientId);
 
   // ── Derived ───────────────────────────────────────────────────────────────
 
@@ -178,9 +181,19 @@ export default function ClienteDetailPage() {
           </div>
 
           <div className="flex-1 min-w-0">
-            <h1 className="text-lg font-semibold text-zinc-100 truncate leading-tight">
-              {clientName}
-            </h1>
+            <div className="flex items-center gap-3">
+              <h1 className="text-lg font-semibold text-zinc-100 truncate leading-tight">
+                {clientName}
+              </h1>
+              {healthHistory.length >= 2 && (
+                <HealthSparkline
+                  data={healthHistory}
+                  width={100}
+                  height={24}
+                  className="flex items-center gap-1 shrink-0"
+                />
+              )}
+            </div>
             {clientCompany && (
               <p className="text-xs text-zinc-500 truncate">{clientCompany}</p>
             )}

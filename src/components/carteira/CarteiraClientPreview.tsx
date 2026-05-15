@@ -5,6 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { formatBRL } from "@/lib/format";
 import { useClientAlerts } from "@/hooks/useClientAlerts";
+import { useHealthHistory } from "@/hooks/useHealthHistory";
+import { HealthSparkline } from "./HealthSparkline";
 import type { PortfolioClientRow } from "@/hooks/usePortfolioClients";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -60,6 +62,7 @@ export function CarteiraClientPreview({
 }: CarteiraClientPreviewProps) {
   const navigate = useNavigate();
   const { data: alerts = [], resolveAlert } = useClientAlerts(client.id);
+  const { data: healthHistory = [] } = useHealthHistory(client.id);
 
   const score = client.health_score ?? 0;
   const status = client.health_status ?? null;
@@ -134,6 +137,14 @@ export function CarteiraClientPreview({
             </span>
           </div>
           <span className="mt-2 text-xs text-zinc-500">Health Score</span>
+          {healthHistory.length >= 2 && (
+            <HealthSparkline
+              data={healthHistory}
+              width={140}
+              height={28}
+              className="mt-3 flex items-center gap-1.5"
+            />
+          )}
         </div>
 
         {/* Mini Metrics */}
