@@ -240,11 +240,23 @@ export function useExportLeads(): UseExportLeadsResult {
         a.click();
         URL.revokeObjectURL(url);
       } else {
-        const XLSX = await import("xlsx");
-        const ws = XLSX.utils.json_to_sheet(rows, { header: headers as unknown as string[] });
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Leads");
-        XLSX.writeFile(wb, `${filename}.xlsx`);
+        const ExcelJS = await import("exceljs");
+        const workbook = new ExcelJS.Workbook();
+        const ws = workbook.addWorksheet("Leads");
+        ws.addRow(headers);
+        for (const row of rows) {
+          ws.addRow(headers.map((h) => (row as Record<string, string | number>)[h] ?? ""));
+        }
+        const buffer = await workbook.xlsx.writeBuffer();
+        const blob = new Blob([buffer], {
+          type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${filename}.xlsx`;
+        a.click();
+        URL.revokeObjectURL(url);
       }
 
       return { count: rows.length };

@@ -4,7 +4,7 @@
  * Centraliza a importação de leads no backend.
  * O frontend faz o parse do arquivo (CSV/XLSX) e mapeamento de colunas,
  * depois envia o array de leads parseados para esta Edge Function que:
- * 1. Valida organization_id (sem JWT — autenticação via apikey do Supabase)
+ * 1. Valida JWT e resolve org_id do usuário autenticado (ignora org_id do body)
  * 2. Confirma existência da organização no DB antes de processar
  * 3. Valida cada lead (name obrigatório; phone e email são opcionais — leads sem contato são importados como incompletos)
  * 4. Dedup por phone com merge inteligente
@@ -12,8 +12,7 @@
  * 6. Retorna relatório detalhado
  * 7. Loga execução com logRuntime()
  *
- * Segurança: deployed com --no-verify-jwt. O gateway aceita a apikey pública do Supabase.
- * A função valida o organization_id contra o DB via service role antes de qualquer escrita.
+ * Segurança: JWT obrigatório. org_id derivado do token via team_members.
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -22,6 +21,7 @@ import { getCorsHeaders } from "../_shared/cors.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { trackEvent } from "../_shared/track.ts";
 import { upsertPipeEntry } from "../_shared/pipeline-adapter.ts";
+import { unauthorizedResponse } from "../_shared/auth.ts";
 
 // ─── Types ───────────────────────────────────────────────
 
@@ -1170,7 +1170,39 @@ Deno.serve(
       );
     }
 
-    // 1. Parse body
+    // 1. JWT Authentication — resolve org from authenticated user
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return unauthorizedResponse("Missing Authorization header", corsHeaders);
+    }
+    const jwt = authHeader.slice(7);
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const supabaseUser = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const { data: userData, error: userErr } = await supabaseUser.auth.getUser(jwt);
+    if (userErr || !userData?.user) {
+      return unauthorizedResponse("Invalid token", corsHeaders);
+    }
+
+    const userId = userData.user.id;
+    const supabaseEarly = getServiceClient();
+
+    // Resolve organization from team_members (server-side — ignores body org_id)
+    const { data: membership, error: memberErr } = await supabaseEarly
+      .from("team_members")
+      .select("organization_id")
+      .eq("user_id", userId)
+      .limit(1)
+      .maybeSingle();
+
+    if (memberErr || !membership?.organization_id) {
+      return unauthorizedResponse("User not associated with any organization", corsHeaders);
+    }
+    const organizationId = membership.organization_id;
+
+    // 2. Parse body
     let body: ImportPayload;
     try {
       body = await req.json();
@@ -1178,31 +1210,6 @@ Deno.serve(
       return new Response(
         JSON.stringify({ success: false, error: "JSON inválido" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
-    }
-
-    // 2. Organization validation (sem JWT)
-    if (!body.organization_id) {
-      return new Response(
-        JSON.stringify({ success: false, error: "organization_id é obrigatório" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
-    }
-
-    const organizationId = body.organization_id;
-
-    // 3. Confirm org exists in DB (security gate — prevents writes to fake org IDs)
-    const supabaseEarly = getServiceClient();
-    const { data: orgRow } = await supabaseEarly
-      .from("organizations")
-      .select("id")
-      .eq("id", organizationId)
-      .maybeSingle();
-
-    if (!orgRow) {
-      return new Response(
-        JSON.stringify({ success: false, error: "Organização não encontrada" }),
-        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -1257,7 +1264,7 @@ Deno.serve(
         status: "error",
         errorMessage: (err as Error).message,
         entityType: "user",
-        entityId: undefined,
+        entityId: userId,
         payloadSnapshot: {
           destination: body.destination,
           totalLeads: body.leads.length,
@@ -1278,7 +1285,7 @@ Deno.serve(
       action: "import_leads",
       status: "success",
       entityType: "user",
-      entityId: undefined,
+      entityId: userId,
       payloadSnapshot: {
         destination: body.destination,
         total: report.total,
@@ -1291,7 +1298,7 @@ Deno.serve(
     // Track usage event (fire-and-forget)
     trackEvent({
       organizationId: organizationId,
-      userId: undefined,
+      userId: userId,
       eventType: "import_completed",
       entityType: "lead",
       metadata: {

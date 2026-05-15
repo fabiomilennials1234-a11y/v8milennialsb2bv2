@@ -24,10 +24,10 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { requireAuth, AuthError } from "../_shared/user-auth.ts";
 import { getTimeBasedVariables } from '../_shared/time-variables.ts';
+import { requireCronAuth } from "../_shared/auth.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
 
 const DEFAULT_DELAY_MIN_MS = 30000;
 const DEFAULT_DELAY_MAX_MS = 90000;
@@ -55,10 +55,9 @@ Deno.serve(withSentry('campaign-rule-dispatch', async (req) => {
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-  // --- Auth: CRON_SECRET ou JWT admin via middleware compartilhado ---
+  // --- Auth: CRON_SECRET (fail-closed) ou JWT admin via middleware compartilhado ---
   let authorized = false;
-  const cronSecret = req.headers.get("x-cron-secret");
-  if (!!CRON_SECRET && cronSecret === CRON_SECRET) {
+  if (requireCronAuth(req).authorized) {
     authorized = true;
   }
   if (!authorized) {

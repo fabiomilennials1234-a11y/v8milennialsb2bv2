@@ -86,18 +86,30 @@ const INSTRUCOES_ROWS: (string | number)[][] = [
  * - Aba "Instruções": passos e descrição de cada coluna
  */
 export async function downloadUpsellImportTemplate(): Promise<void> {
-  const XLSX = await import("xlsx");
+  const ExcelJS = await import("exceljs");
   const headers = [...UPSELL_TEMPLATE_HEADERS];
   const dataRow = headers.map((h) => EXAMPLE_ROW[h] ?? "");
-  const clientesData: (string | number)[][] = [headers, dataRow];
 
-  const wsClientes = XLSX.utils.aoa_to_sheet(clientesData);
-  const wsInstrucoes = XLSX.utils.aoa_to_sheet(INSTRUCOES_ROWS);
+  const workbook = new ExcelJS.Workbook();
 
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, wsClientes, "Clientes");
-  XLSX.utils.book_append_sheet(wb, wsInstrucoes, "Instruções");
+  const wsClientes = workbook.addWorksheet("Clientes");
+  wsClientes.addRow(headers);
+  wsClientes.addRow(dataRow);
 
+  const wsInstrucoes = workbook.addWorksheet("Instruções");
+  for (const row of INSTRUCOES_ROWS) {
+    wsInstrucoes.addRow(row);
+  }
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
   const filename = `modelo_importacao_clientes_carteira_${new Date().toISOString().slice(0, 10)}.xlsx`;
-  XLSX.writeFile(wb, filename);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
 }

@@ -23,6 +23,7 @@ import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { runHealthCheck, PROBE_TIMEOUT_MS } from "./health-check.ts";
+import { requireCronAuth } from "../_shared/auth.ts";
 
 function buildProbe(supabaseUrl: string): (secret: string) => Promise<number | null> {
   return async (secret: string) => {
@@ -76,13 +77,7 @@ Deno.serve(
       return new Response(null, { status: 204, headers });
     }
 
-    const cronSecret = req.headers.get("x-cron-secret");
-    const authHeader = req.headers.get("authorization");
-    const isAuthorized =
-      (!!CRON_SECRET && cronSecret === CRON_SECRET) ||
-      (authHeader && authHeader.includes(SUPABASE_SERVICE_ROLE_KEY));
-
-    if (!isAuthorized) {
+    if (!requireCronAuth(req).authorized) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers });
     }
 

@@ -819,8 +819,9 @@ function validateWebhookSecret(
     return null;
   }
 
-  // No secrets configured anywhere — fallback to first active config
-  return configs[0] || null;
+  // No secrets configured anywhere — reject (fail closed)
+  console.error("[SZ Chat Webhook] No webhook_secret configured on any active config — rejecting");
+  return null;
 }
 
 // ─── Main Handler ────────────────────────────────────────────────────────────

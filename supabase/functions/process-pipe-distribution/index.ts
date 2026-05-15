@@ -17,6 +17,7 @@ import { getCorsHeaders } from "../_shared/cors.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { updatePipeEntryById } from "../_shared/pipeline-adapter.ts";
 import type { PipeSlug } from "../_shared/pipeline-adapter.ts";
+import { requireCronAuth } from "../_shared/auth.ts";
 
 const VALID_PIPE_SLUGS: Record<string, PipeSlug> = {
   whatsapp: "whatsapp",
@@ -34,17 +35,8 @@ Deno.serve(
       return new Response(null, { headers: corsHeaders });
     }
 
-    // Auth: cron secret (from trigger) or service role bearer
-    const cronSecret = req.headers.get("x-cron-secret");
-    const expectedSecret = Deno.env.get("CRON_SECRET");
-    const authHeader = req.headers.get("authorization");
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-
-    const isAuthed =
-      (cronSecret && cronSecret === expectedSecret) ||
-      (authHeader === `Bearer ${serviceRoleKey}`);
-
-    if (!isAuthed) {
+    // Auth: cron secret (fail-closed)
+    if (!requireCronAuth(req).authorized) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -53,7 +45,7 @@ Deno.serve(
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
-      serviceRoleKey,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
     const body = await req.json();

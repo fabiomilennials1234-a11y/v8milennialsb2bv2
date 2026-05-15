@@ -472,7 +472,21 @@ export function verifyWebhookSignature(
       .update(payload)
       .digest("hex");
 
-  return signature === expectedSignature;
+  // Timing-safe comparison to prevent timing attacks
+  const encoder = new TextEncoder();
+  const sigBuf = encoder.encode(signature);
+  const expectedBuf = encoder.encode(expectedSignature);
+  if (sigBuf.length !== expectedBuf.length) {
+    // Compare against expectedBuf to avoid leaking length info through timing
+    const dummy = new Uint8Array(expectedBuf.length);
+    try { crypto.subtle.timingSafeEqual(expectedBuf, dummy); } catch { /* ignore */ }
+    return false;
+  }
+  try {
+    return crypto.subtle.timingSafeEqual(sigBuf, expectedBuf);
+  } catch {
+    return false;
+  }
 }
 
 // ---------------------------------------------------------------------------

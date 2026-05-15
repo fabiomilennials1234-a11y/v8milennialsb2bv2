@@ -22,17 +22,30 @@ export interface AuthResult {
 const rateLimitStore = new Map<string, { count: number; resetTime: number }>();
 
 /**
+ * Validates cron requests via x-cron-secret header.
+ * Fail-closed: rejects when CRON_SECRET env var is missing or empty.
+ */
+export function requireCronAuth(req: Request): { authorized: boolean } {
+  const CRON_SECRET = Deno.env.get("CRON_SECRET");
+  const cronSecret = req.headers.get("x-cron-secret");
+  if (!CRON_SECRET || cronSecret !== CRON_SECRET) {
+    return { authorized: false };
+  }
+  return { authorized: true };
+}
+
+/**
  * Validates Evolution API webhook requests
  * Checks for API key in header
  */
 export function validateEvolutionWebhook(req: Request): AuthResult {
   const apiKey = req.headers.get("apikey") || req.headers.get("x-api-key");
   const expectedKey = Deno.env.get("EVOLUTION_WEBHOOK_SECRET");
-  
-  // If no secret configured, allow but log warning (for backward compatibility)
+
+  // Fail closed: if secret not configured, reject all requests
   if (!expectedKey) {
-    console.warn("[AUTH] EVOLUTION_WEBHOOK_SECRET not configured - webhook authentication disabled");
-    return { valid: true };
+    console.error("[AUTH] EVOLUTION_WEBHOOK_SECRET not configured — rejecting request");
+    return { valid: false, error: "EVOLUTION_WEBHOOK_SECRET not configured" };
   }
   
   if (!apiKey) {
