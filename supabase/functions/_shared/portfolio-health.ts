@@ -129,6 +129,42 @@ export function calculateEngagementScore(
   return 50;
 }
 
+export function calculateChurnProbability(input: SignalInput, healthScore: number): number {
+  let score = 0;
+
+  // Cycle stretching: days_since > cycle * 1.15 → +20
+  if (input.cycleDays > 0 && input.daysSinceLastOrder > input.cycleDays * 1.15) {
+    const ratio = input.daysSinceLastOrder / input.cycleDays;
+    score += Math.min(20, Math.round((ratio - 1) * 40));
+  }
+
+  // Ticket declining: 3 consecutive drops → +25
+  const t = input.lastThreeTickets;
+  if (t.length === 3 && t[0] > t[1] && t[1] > t[2]) {
+    const dropPct = (1 - t[2] / t[0]) * 100;
+    score += Math.min(25, Math.round(dropPct * 0.5));
+  }
+
+  // No WhatsApp reply > 7d → +20
+  if (input.daysSinceLastWhatsAppReply != null && input.daysSinceLastWhatsAppReply > 7) {
+    score += Math.min(20, Math.round(input.daysSinceLastWhatsAppReply * 1.5));
+  }
+
+  // Product missing from last order → +10
+  const missingProducts = input.productFrequencies.filter(
+    (pf) => pf.appearsInPct >= 80 && !input.lastOrderProducts.includes(pf.productName),
+  );
+  if (missingProducts.length > 0) score += 10;
+
+  // Health < 40 → +15
+  if (healthScore < 40) score += 15;
+
+  // NPS <= 2 → +10
+  if (input.lastNpsScore != null && input.lastNpsScore <= 2) score += 10;
+
+  return Math.min(100, Math.max(0, score));
+}
+
 export function detectSignals(input: SignalInput): DetectedSignal[] {
   const signals: DetectedSignal[] = [];
 

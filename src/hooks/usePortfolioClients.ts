@@ -18,6 +18,7 @@ export interface PortfolioClientRow {
   lifetime_value: number | null;
   lead_id: string | null;
   trend: string | null;
+  churn_probability: number | null;
 }
 
 export interface PortfolioClientsResponse {
@@ -35,7 +36,8 @@ export type SortColumn =
   | "days_since_last_order"
   | "next_order_expected"
   | "lifetime_value"
-  | "order_count";
+  | "order_count"
+  | "churn_probability";
 
 export interface UsePortfolioClientsParams {
   filter?: string;

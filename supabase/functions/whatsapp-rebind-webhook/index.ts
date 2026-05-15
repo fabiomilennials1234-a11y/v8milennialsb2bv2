@@ -78,7 +78,7 @@ interface RequestBody {
 }
 
 interface Target {
-  instance_id: string;
+  id: string;
   organization_id: string;
   instance_name: string;
   provider: string;
@@ -155,7 +155,7 @@ async function rebindOne(
   target: Target,
 ): Promise<Result> {
   const base: Result = {
-    instance_id: target.instance_id,
+    instance_id: target.id,
     organization_id: target.organization_id,
     instance_name: target.instance_name,
     uazapi_instance_id: null,
@@ -166,18 +166,21 @@ async function rebindOne(
   const { data: secret } = await supabase
     .from("whatsapp_instance_secrets")
     .select("uazapi_instance_id")
-    .eq("instance_id", target.instance_id)
+    .eq("instance_id", target.id)
     .maybeSingle();
   base.uazapi_instance_id = (secret as { uazapi_instance_id?: string } | null)?.uazapi_instance_id ?? null;
 
   try {
-    const provider = await getWhatsAppProvider(supabase, {
-      id: target.instance_id,
-      organization_id: target.organization_id,
-      provider: "uazapi",
-      instance_name: target.instance_name,
-      provider_config: target.provider_config ?? {},
-    });
+    const provider = await getWhatsAppProvider(
+      {
+        id: target.id,
+        organization_id: target.organization_id,
+        provider: "uazapi",
+        instance_name: target.instance_name,
+        provider_config: target.provider_config ?? {},
+      },
+      supabase,
+    );
 
     if (!(provider instanceof UazapiProvider)) {
       return { ...base, skipped_reason: "provider_not_uazapi" };
@@ -257,7 +260,7 @@ Deno.serve(
 
       if (dryRun) {
         const results: Result[] = targets.map((t) => ({
-          instance_id: t.instance_id,
+          instance_id: t.id,
           organization_id: t.organization_id,
           instance_name: t.instance_name,
           uazapi_instance_id: null,
@@ -281,7 +284,7 @@ Deno.serve(
       for (const t of targets) {
         if (controller.signal.aborted) {
           results.push({
-            instance_id: t.instance_id,
+            instance_id: t.id,
             organization_id: t.organization_id,
             instance_name: t.instance_name,
             uazapi_instance_id: null,

@@ -5,6 +5,7 @@ import {
   MessageCircle,
   ShoppingCart,
   AlertTriangle,
+  TrendingDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -199,6 +200,23 @@ export default function ClienteDetailPage() {
             )}
           </div>
 
+          {/* Churn badge */}
+          {client?.churn_probability != null && client.churn_probability > 0 && (
+            <span
+              className={cn(
+                "flex items-center gap-1 shrink-0 px-2.5 py-1 rounded-full text-xs font-bold tabular-nums",
+                client.churn_probability >= 70
+                  ? "bg-red-500/20 text-red-400"
+                  : client.churn_probability >= 40
+                    ? "bg-amber-500/20 text-amber-400"
+                    : "bg-emerald-500/20 text-emerald-400",
+              )}
+            >
+              <TrendingDown size={11} />
+              {client.churn_probability}% churn
+            </span>
+          )}
+
           {/* Action buttons */}
           <div className="flex items-center gap-2 shrink-0">
             {clientPhone && (
@@ -276,6 +294,7 @@ export default function ClienteDetailPage() {
         {/* ── Mid row: Copilot + Products ─────────────────────────────────── */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <ClienteCopilotSuggestion
+            clientId={clientId}
             clientName={clientName}
             phone={clientPhone}
             alerts={alerts}

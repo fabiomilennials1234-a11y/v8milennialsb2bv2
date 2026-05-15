@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Plus, Search, LayoutGrid, List, TrendingUp, ShoppingCart, Upload } from "lucide-react";
+import { Plus, Search, LayoutGrid, List, TrendingUp, ShoppingCart, Upload, BarChart3, Users } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,6 +24,9 @@ import { CarteiraAlertBanner } from "@/components/carteira/CarteiraAlertBanner";
 import { CarteiraClientTable, type PortfolioClientRow } from "@/components/carteira/CarteiraClientTable";
 import { CarteiraClientPreview } from "@/components/carteira/CarteiraClientPreview";
 import { CarteiraBulkBar } from "@/components/carteira/CarteiraBulkBar";
+import { CarteiraRevenueAtRisk } from "@/components/carteira/CarteiraRevenueAtRisk";
+import { CarteiraCohortHeatmap } from "@/components/carteira/CarteiraCohortHeatmap";
+import { CarteiraVendedorRanking } from "@/components/carteira/CarteiraVendedorRanking";
 import { useBulkSelection } from "@/hooks/useBulkSelection";
 
 type ViewMode = "kanban" | "list";
@@ -72,6 +75,7 @@ export default function Upsell() {
   const [carteiraFilter, setCarteiraFilter] = useState("all");
   const [quickOrderClientId, setQuickOrderClientId] = useState<string | null>(null);
   const [currentRows, setCurrentRows] = useState<PortfolioClientRow[]>([]);
+  const [carteiraView, setCarteiraView] = useState<"clientes" | "analytics">("clientes");
   const bulk = useBulkSelection();
   const { data: kpiData } = usePortfolioKPIs();
 
@@ -172,7 +176,7 @@ export default function Upsell() {
           })}
         </div>
 
-        {/* Search */}
+        {/* Search + View toggle */}
         <div className="flex items-center gap-2">
           <div className="relative flex-1 max-w-[320px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#52525b]" />
@@ -183,54 +187,92 @@ export default function Upsell() {
               className="pl-9 bg-[#18181b] border-[#27272a] text-[13px]"
             />
           </div>
-        </div>
-
-        {/* Main content: table + optional sidebar */}
-        <div className="flex gap-4 items-start">
-          <div className="flex-1 min-w-0">
-            <CarteiraClientTable
-              selectedClientId={selectedClient?.id ?? null}
-              onSelectClient={(client) => setSelectedClient(client)}
-              onWhatsApp={(client) => {
-                if (client.lead_id) {
-                  navigate(`/chat?lead=${client.lead_id}`);
-                } else if (client.phone) {
-                  window.open(
-                    `https://wa.me/${client.phone.replace(/\D/g, "")}`,
-                    "_blank",
-                  );
-                }
-              }}
-              onNewOrder={(id) => {
-                setQuickOrderClientId(id);
-                setNovaVendaOpen(true);
-              }}
-              onViewDetail={(id) => navigate(`/carteira/${id}`)}
-              searchQuery={carteiraSearch}
-              filter={carteiraFilter}
-              bulk={bulk}
-              onRowsChange={setCurrentRows}
-            />
+          <div className="flex border border-[#27272a] rounded-md ml-auto">
+            <button
+              onClick={() => setCarteiraView("clientes")}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-l-md transition-colors",
+                carteiraView === "clientes"
+                  ? "bg-[#27272a] text-[#fafafa]"
+                  : "text-[#71717a] hover:text-[#a1a1aa]",
+              )}
+            >
+              <Users className="w-3.5 h-3.5" />
+              Clientes
+            </button>
+            <button
+              onClick={() => setCarteiraView("analytics")}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-r-md transition-colors",
+                carteiraView === "analytics"
+                  ? "bg-[#27272a] text-[#fafafa]"
+                  : "text-[#71717a] hover:text-[#a1a1aa]",
+              )}
+            >
+              <BarChart3 className="w-3.5 h-3.5" />
+              Analytics
+            </button>
           </div>
-
-          {selectedClient && (
-            <CarteiraClientPreview
-              client={selectedClient}
-              onClose={() => setSelectedClient(null)}
-              onViewDetail={(id) => navigate(`/carteira/${id}`)}
-              onNewOrder={(id) => {
-                setQuickOrderClientId(id);
-                setNovaVendaOpen(true);
-              }}
-            />
-          )}
         </div>
 
-        {/* Bulk action bar */}
-        <CarteiraBulkBar
-          selectedClients={currentRows.filter((r) => bulk.isSelected(r.id))}
-          onClear={bulk.clearSelection}
-        />
+        {carteiraView === "clientes" ? (
+          <>
+            {/* Main content: table + optional sidebar */}
+            <div className="flex gap-4 items-start">
+              <div className="flex-1 min-w-0">
+                <CarteiraClientTable
+                  selectedClientId={selectedClient?.id ?? null}
+                  onSelectClient={(client) => setSelectedClient(client)}
+                  onWhatsApp={(client) => {
+                    if (client.lead_id) {
+                      navigate(`/chat?lead=${client.lead_id}`);
+                    } else if (client.phone) {
+                      window.open(
+                        `https://wa.me/${client.phone.replace(/\D/g, "")}`,
+                        "_blank",
+                      );
+                    }
+                  }}
+                  onNewOrder={(id) => {
+                    setQuickOrderClientId(id);
+                    setNovaVendaOpen(true);
+                  }}
+                  onViewDetail={(id) => navigate(`/carteira/${id}`)}
+                  searchQuery={carteiraSearch}
+                  filter={carteiraFilter}
+                  bulk={bulk}
+                  onRowsChange={setCurrentRows}
+                />
+              </div>
+
+              {selectedClient && (
+                <CarteiraClientPreview
+                  client={selectedClient}
+                  onClose={() => setSelectedClient(null)}
+                  onViewDetail={(id) => navigate(`/carteira/${id}`)}
+                  onNewOrder={(id) => {
+                    setQuickOrderClientId(id);
+                    setNovaVendaOpen(true);
+                  }}
+                />
+              )}
+            </div>
+
+            {/* Bulk action bar */}
+            <CarteiraBulkBar
+              selectedClients={currentRows.filter((r) => bulk.isSelected(r.id))}
+              onClear={bulk.clearSelection}
+            />
+          </>
+        ) : (
+          <div className="space-y-6">
+            <CarteiraRevenueAtRisk />
+            <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-6">
+              <CarteiraCohortHeatmap />
+              <CarteiraVendedorRanking />
+            </div>
+          </div>
+        )}
 
         {/* Shared modals */}
         <CreateClientModal open={createClientOpen} onOpenChange={setCreateClientOpen} />

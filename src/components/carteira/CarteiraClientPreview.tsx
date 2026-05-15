@@ -148,7 +148,7 @@ export function CarteiraClientPreview({
         </div>
 
         {/* Mini Metrics */}
-        <div className="grid grid-cols-2 gap-x-4 gap-y-3 px-4 py-4 border-b border-zinc-800">
+        <div className="grid grid-cols-3 gap-x-4 gap-y-3 px-4 py-4 border-b border-zinc-800">
           <MiniMetric
             label="Ciclo"
             value={cycleDays ? `${cycleDays} dias` : "—"}
@@ -183,6 +183,26 @@ export function CarteiraClientPreview({
             label="Ticket"
             value={
               client?.avg_ticket != null ? formatBRL(client.avg_ticket) : "—"
+            }
+          />
+          <MiniMetric
+            label="Churn"
+            value={
+              client?.churn_probability != null ? (
+                <span
+                  className={
+                    client.churn_probability >= 70
+                      ? "text-red-400"
+                      : client.churn_probability >= 40
+                        ? "text-amber-400"
+                        : "text-emerald-400"
+                  }
+                >
+                  {client.churn_probability}%
+                </span>
+              ) : (
+                "—"
+              )
             }
           />
         </div>

@@ -28,6 +28,7 @@ import {
   calculateRecencyScore,
   calculateTicketScore,
   calculateEngagementScore,
+  calculateChurnProbability,
   deriveHealthStatus,
   deriveSegment,
   deriveTrend,
@@ -203,6 +204,21 @@ async function processClient(
     ? new Date(lastOrderAt.getTime() + cycleDays * 24 * 60 * 60 * 1000)
     : null;
 
+  // Churn probability
+  const pf = productFrequencies(orderList);
+  const lastOrderProducts = lastOrder ? [lastOrder.product_name] : [];
+  const signalInput = {
+    daysSinceLastOrder,
+    cycleDays,
+    lastThreeTickets,
+    historicalAvgTicket: avgTicket,
+    productFrequencies: pf,
+    lastOrderProducts,
+    daysSinceLastWhatsAppReply: daysSinceLastIncoming,
+    lastNpsScore: null as number | null,
+  };
+  const churnProbability = orderCount < 3 ? 0 : calculateChurnProbability(signalInput, healthScore);
+
   // Update upsell_clients
   const { error: updateError } = await supabase
     .from("upsell_clients")
@@ -219,6 +235,7 @@ async function processClient(
       lifetime_value: lifetimeValue,
       avg_ticket: avgTicket || null,
       trend,
+      churn_probability: churnProbability,
     })
     .eq("id", client.id);
 
@@ -241,20 +258,8 @@ async function processClient(
       { onConflict: "client_id,snapshot_date" },
     );
 
-  // Detect signals
-  const pf = productFrequencies(orderList);
-  const lastOrderProducts = lastOrder ? [lastOrder.product_name] : [];
-
-  const signals: DetectedSignal[] = detectSignals({
-    daysSinceLastOrder,
-    cycleDays,
-    lastThreeTickets,
-    historicalAvgTicket: avgTicket,
-    productFrequencies: pf,
-    lastOrderProducts,
-    daysSinceLastWhatsAppReply: daysSinceLastIncoming,
-    lastNpsScore: null,               // not wired yet
-  });
+  // Detect signals (reuse signalInput computed above)
+  const signals: DetectedSignal[] = detectSignals(signalInput);
 
   // Sync alerts: resolve stale, create new, notify if enabled
   await syncAlerts(supabase, client, signals, now, healthScore, segment, whatsappAlertsEnabled);

@@ -237,6 +237,10 @@ verify_jwt = false
 [functions.calculate-portfolio-health]
 verify_jwt = false
 
+# suggest-retention-action: AI next-best-action; JWT validated inside function
+[functions.suggest-retention-action]
+verify_jwt = false
+
 
 
 
