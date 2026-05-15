@@ -38,6 +38,7 @@ import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/components/l
 import { LeadPanelLayout } from "@/components/layout/LeadPanelLayout";
 import { LeadModal } from "@/components/leads/LeadModal";
 import { CreateOpportunityModal } from "@/components/kanban/CreateOpportunityModal";
+import { ExportStageDialog } from "@/components/kanban/ExportStageDialog";
 import { AddMeetingModal } from "@/components/confirmacao/AddMeetingModal";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -131,6 +132,7 @@ function PipeWhatsappInner() {
   const { openLead } = useLeadSheet();
   const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; pipeId: string; leadId: string } | null>(null);
   const [stageToDelete, setStageToDelete] = useState<{ id: string; title: string } | null>(null);
+  const [stageToExport, setStageToExport] = useState<{ id: string; title: string; count: number } | null>(null);
   const [meetingModal, setMeetingModal] = useState<{
     open: boolean;
     leadId: string;
@@ -543,6 +545,10 @@ function PipeWhatsappInner() {
           onStatusChange={handleStatusChange}
           disabled={!canMovePipe}
           onDeleteAllLeads={(stageId, stageTitle) => setStageToDelete({ id: stageId, title: stageTitle })}
+          onExportStage={(stageId, stageTitle) => {
+            const col = columns.find((c) => c.id === stageId);
+            setStageToExport({ id: stageId, title: stageTitle, count: col?.items.length ?? 0 });
+          }}
           renderColumnExtra={(col) => {
             const allCounts = workflowCounts["__all__"] || { total: 0, active: 0 };
             const stageCounts = workflowCounts[col.id] || { total: 0, active: 0 };
@@ -676,6 +682,16 @@ function PipeWhatsappInner() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Export leads from a specific stage */}
+      <ExportStageDialog
+        open={!!stageToExport}
+        onOpenChange={(o) => { if (!o) setStageToExport(null); }}
+        stageId={stageToExport?.id ?? ""}
+        stageTitle={stageToExport?.title ?? ""}
+        pipe="whatsapp"
+        leadCount={stageToExport?.count ?? 0}
+      />
 
       {/* Bulk Action Bar */}
       <BulkActionBar selectedIds={bulk.selectedIds} onClear={bulk.clearSelection} leadIds={allLeadIds} />

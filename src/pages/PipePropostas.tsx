@@ -43,6 +43,7 @@ import { usePipelineStages, stagesToColumns } from "@/hooks/usePipelineStages";
 import { PipeSettingsDialog } from "@/components/pipelines/PipeSettingsDialog";
 import { useTeamMembers, useResponsibleMembers } from "@/hooks/useTeamMembers";
 import { CreateProposalModal } from "@/components/proposals/CreateProposalModal";
+import { ExportStageDialog } from "@/components/kanban/ExportStageDialog";
 import { LeadCard, type LeadCardData } from "@/components/leads/LeadCard";
 import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/components/lead-detail";
 import { LeadPanelLayout } from "@/components/layout/LeadPanelLayout";
@@ -261,6 +262,7 @@ function PipePropostasInner() {
   const [deleteAllLeadsDialogOpen, setDeleteAllLeadsDialogOpen] = useState(false);
   const [periodState, setPeriodState] = useState<MetricsPeriodState>(createInitialPeriodState);
   const [stageToDelete, setStageToDelete] = useState<{ id: string; title: string } | null>(null);
+  const [stageToExport, setStageToExport] = useState<{ id: string; title: string; count: number } | null>(null);
 
   const { organizationId } = useOrganization();
   useEffect(() => { trackModuleVisit("pipe_propostas", organizationId); }, []);
@@ -1126,6 +1128,10 @@ function PipePropostasInner() {
               onStatusChange={handleStatusChange}
               disabled={!canMovePipe}
               onDeleteAllLeads={(stageId, stageTitle) => setStageToDelete({ id: stageId, title: stageTitle })}
+              onExportStage={(stageId, stageTitle) => {
+                const col = columns.find((c) => c.id === stageId);
+                setStageToExport({ id: stageId, title: stageTitle, count: col?.items.length ?? 0 });
+              }}
               renderColumnExtra={(col) => {
                 const allCounts = workflowCounts["__all__"] || { total: 0, active: 0 };
                 const stageCounts = workflowCounts[col.id] || { total: 0, active: 0 };
@@ -1414,6 +1420,16 @@ function PipePropostasInner() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Export leads from a specific stage */}
+      <ExportStageDialog
+        open={!!stageToExport}
+        onOpenChange={(o) => { if (!o) setStageToExport(null); }}
+        stageId={stageToExport?.id ?? ""}
+        stageTitle={stageToExport?.title ?? ""}
+        pipe="propostas"
+        leadCount={stageToExport?.count ?? 0}
+      />
 
       {/* Bulk Action Bar */}
       <BulkActionBar selectedIds={bulk.selectedIds} onClear={bulk.clearSelection} leadIds={allLeadIds} />

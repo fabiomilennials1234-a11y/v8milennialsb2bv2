@@ -1,5 +1,6 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { DraggableKanbanBoard, type KanbanColumn } from "@/components/kanban/DraggableKanbanBoard";
+import { ExportStageDialog } from "@/components/kanban/ExportStageDialog";
 import { LeadCard, type LeadCardData } from "@/components/leads/LeadCard";
 import { StageWorkflowsBadge } from "@/components/kanban/StageWorkflowsBadge";
 import { useCustomPipeStageWorkflows, useCustomPipeWorkflowCounts } from "@/hooks/useStageWorkflows";
@@ -66,6 +67,7 @@ export function CustomPipelineKanban({
   const createAcaoDoDia = useCreateAcaoDoDia();
   const { allowed: canMovePipe } = useCanPerformAction("move_pipe_record");
   const { data: workflowCounts = {} } = useCustomPipeWorkflowCounts(pipeline.id);
+  const [stageToExport, setStageToExport] = useState<{ id: string; title: string; count: number } | null>(null);
 
   // Filtrar entries por busca
   const filteredEntries = useMemo(() => {
@@ -134,10 +136,15 @@ export function CustomPipelineKanban({
   };
 
   return (
+    <>
     <DraggableKanbanBoard<LeadCardData>
       columns={columns}
       onStatusChange={handleStatusChange}
       disabled={!canMovePipe}
+      onExportStage={(stageId, stageTitle) => {
+        const col = columns.find((c) => c.id === stageId);
+        setStageToExport({ id: stageId, title: stageTitle, count: col?.items.length ?? 0 });
+      }}
       renderColumnExtra={(col) => {
         const allCounts = workflowCounts["__all__"] || { total: 0, active: 0 };
         const stageCounts = workflowCounts[col.id] || { total: 0, active: 0 };
@@ -169,5 +176,15 @@ export function CustomPipelineKanban({
         />
       )}
     />
+    <ExportStageDialog
+      open={!!stageToExport}
+      onOpenChange={(o) => { if (!o) setStageToExport(null); }}
+      stageId={stageToExport?.id ?? ""}
+      stageTitle={stageToExport?.title ?? ""}
+      pipe="custom"
+      customPipelineId={pipeline.id}
+      leadCount={stageToExport?.count ?? 0}
+    />
+    </>
   );
 }
