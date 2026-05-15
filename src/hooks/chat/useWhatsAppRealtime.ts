@@ -9,7 +9,7 @@
  * - Normalização de telefone
  * - Atualização de contatos (last_message + unread_count)
  */
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
@@ -20,6 +20,7 @@ import { chatQueryKeys } from "./shared/queryKeys";
 import {
   setChannelState,
   recordChannelEvent,
+  getChannelStatus,
 } from "@/lib/realtimeStatusStore";
 
 // Heartbeat + staleness windows. The Supabase realtime client itself pings
@@ -51,11 +52,13 @@ export function useWhatsAppMessagesRealtime(
   const organizationId = teamMember?.organization_id;
   const queryClient = useQueryClient();
 
-  // Ref para acesso estável ao phoneNumber atual sem re-subscribe
   const phoneNumberRef = useRef(phoneNumber);
   phoneNumberRef.current = phoneNumber;
   const instanceIdRef = useRef(instanceId);
   instanceIdRef.current = instanceId;
+
+  // Incrementing forces useEffect re-run → cleanup dead channel + create fresh one
+  const [reconnectEpoch, setReconnectEpoch] = useState(0);
 
   useEffect(() => {
     if (!organizationId) return;
@@ -64,25 +67,15 @@ export function useWhatsAppMessagesRealtime(
     setChannelState(channelName, "joining");
 
     let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
-    let reconnectScheduled = false;
+    let tornDown = false;
 
-    // Force the channel to tear down and resubscribe. Triggered by:
-    //  - heartbeat detecting staleness
-    //  - visibility/online events on the window
-    //  - explicit CHANNEL_ERROR / TIMED_OUT status from supabase-js
     const scheduleReconnect = () => {
-      if (reconnectScheduled) return;
-      reconnectScheduled = true;
+      if (tornDown) return;
+      tornDown = true;
       setChannelState(channelName, "reconnecting");
-      Promise.resolve(supabase.removeChannel(channel)).finally(() => {
-        // Re-trigger the hook by toggling a ref so the channel is rebuilt on
-        // next render. We can't rebuild inline here without reordering hooks,
-        // so we rely on the useEffect cleanup running first.
-        reconnectScheduled = false;
-        // Force re-render by dispatching an event the visibility listener
-        // can pick up. Cheap and avoids restructuring this hook.
-        try { window.dispatchEvent(new Event("focus")); } catch { /* ssr */ }
-      });
+      const { reconnectCount } = getChannelStatus(channelName);
+      const backoffMs = Math.min(1000 * Math.pow(2, reconnectCount), 30_000);
+      setTimeout(() => setReconnectEpoch((e) => e + 1), backoffMs);
     };
 
     const channel = supabase
@@ -198,31 +191,30 @@ export function useWhatsAppMessagesRealtime(
       });
 
     heartbeatTimer = setInterval(() => {
-      // No event for STALE_AFTER_MS while we believe we're joined → reconnect.
-      // joined+stale also flips the UI badge to yellow until reconnect lands.
-      const status = (channel as any).state as string | undefined;
-      const isJoined = status === "joined";
-      const last = (channel as any).socket?.lastHeartbeatTs ?? Date.now();
-      const sinceHeartbeat = Date.now() - last;
-      if (!isJoined || sinceHeartbeat > STALE_AFTER_MS) {
+      const { state, lastEventAt } = getChannelStatus(channelName);
+      if (state !== "joined" && state !== "joining") return;
+      const sinceEvent = Date.now() - (lastEventAt ?? 0);
+      if (sinceEvent > STALE_AFTER_MS) {
         setChannelState(channelName, "stale");
         scheduleReconnect();
       }
     }, HEARTBEAT_INTERVAL_MS);
 
     const onVisibilityOrOnline = () => {
-      const status = (channel as any).state as string | undefined;
-      if (status !== "joined") scheduleReconnect();
+      if (tornDown) return;
+      const { state } = getChannelStatus(channelName);
+      if (state !== "joined" && state !== "joining") scheduleReconnect();
     };
     window.addEventListener("visibilitychange", onVisibilityOrOnline);
     window.addEventListener("online", onVisibilityOrOnline);
 
     return () => {
+      tornDown = true;
       if (heartbeatTimer) clearInterval(heartbeatTimer);
       window.removeEventListener("visibilitychange", onVisibilityOrOnline);
       window.removeEventListener("online", onVisibilityOrOnline);
       setChannelState(channelName, "offline");
       supabase.removeChannel(channel);
     };
-  }, [organizationId, queryClient]);
+  }, [organizationId, queryClient, reconnectEpoch]);
 }
