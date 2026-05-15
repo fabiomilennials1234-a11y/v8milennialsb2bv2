@@ -26,6 +26,12 @@ import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { upsertPipeEntry } from "../_shared/pipeline-adapter.ts";
 import { isCopilotCanceled, logCopilotCancellation } from "../_shared/copilot/cancellation.ts";
+import {
+  downloadAndPersistMedia,
+  enqueueMediaJob,
+  isWhatsAppCdnUrl as isWhatsAppCdnUrlShared,
+  stampMediaJob,
+} from "../_shared/whatsapp-media.ts";
 import { timingSafeCompare, checkRateLimitPersistent } from "../_shared/auth.ts";
 
 // ============================================================================
@@ -44,14 +50,6 @@ const UAZAPI_WEBHOOK_SECRET = Deno.env.get("UAZAPI_WEBHOOK_SECRET") ?? "";
 const UAZAPI_BASE_URL = Deno.env.get("UAZAPI_BASE_URL") ?? "";
 
 const MEDIA_PERSIST_TIMEOUT_MS = 25_000;
-const MIME_TO_EXT: Record<string, string> = {
-  "audio/ogg": "ogg", "audio/ogg; codecs=opus": "ogg",
-  "audio/mpeg": "mp3", "audio/mp4": "m4a", "audio/aac": "aac",
-  "audio/webm": "webm", "audio/wav": "wav",
-  "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp",
-  "video/mp4": "mp4", "video/webm": "webm",
-  "application/pdf": "pdf", "application/octet-stream": "bin",
-};
 
 // ============================================================================
 // In-memory rate limit (follow-up: KV/Redis before prod volume)
@@ -203,74 +201,48 @@ async function enqueueDlq(
   }
 }
 
-function isWhatsAppCdnUrl(url: string): boolean {
-  return url.includes(".whatsapp.net/") || url.includes(".whatsapp.com/");
-}
-
+// Best-effort media persist with DLQ semantics. Always enqueues a
+// whatsapp_media_jobs row first (idempotent UPSERT) so a missed inline
+// attempt is recoverable by the whatsapp-media-retry cron.
 async function persistMediaToStorage(
   sb: ReturnType<typeof createClient>,
   instance: ResolvedInstance,
   messageId: string,
   messageType: string,
+  sourceUrl: string,
 ) {
   if (!UAZAPI_BASE_URL) return;
 
-  const { data: secrets } = await sb
-    .from("whatsapp_instance_secrets")
-    .select("uazapi_token")
-    .eq("instance_id", instance.id)
-    .maybeSingle();
-  if (!secrets?.uazapi_token) return;
+  await enqueueMediaJob(sb, {
+    instanceId: instance.id,
+    organizationId: instance.organization_id,
+    messageId,
+    sourceUrl,
+    messageType,
+  });
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), MEDIA_PERSIST_TIMEOUT_MS);
-  try {
-    const res = await fetch(`${UAZAPI_BASE_URL}/message/download`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        token: secrets.uazapi_token,
-      },
-      body: JSON.stringify({ id: messageId }),
-      signal: controller.signal,
-    });
-    clearTimeout(timer);
-    if (!res.ok) return;
+  const result = await downloadAndPersistMedia(
+    sb,
+    UAZAPI_BASE_URL,
+    {
+      instanceId: instance.id,
+      organizationId: instance.organization_id,
+      messageId,
+      sourceUrl,
+      messageType,
+    },
+    { timeoutMs: MEDIA_PERSIST_TIMEOUT_MS },
+  );
 
-    const result = await res.json();
-    const rawB64: string = result.base64 ?? "";
-    const mimetype: string = result.mimetype ?? "application/octet-stream";
-    if (!rawB64) return;
+  await stampMediaJob(
+    sb,
+    null,
+    { messageId, instanceId: instance.id },
+    result,
+  );
 
-    const pure = rawB64.includes(",") ? rawB64.split(",")[1] : rawB64;
-    const bin = Uint8Array.from(atob(pure), (c) => c.charCodeAt(0));
-
-    const ext = MIME_TO_EXT[mimetype] ?? mimetype.split("/")[1] ?? "bin";
-    const path = `whatsapp-media/${instance.organization_id}/${messageId}.${ext}`;
-
-    const { error: upErr } = await sb.storage
-      .from("media")
-      .upload(path, bin, { contentType: mimetype, upsert: true });
-    if (upErr) {
-      console.error(`[webhook] storage upload failed: ${upErr.message}`);
-      return;
-    }
-
-    const { data: urlData } = sb.storage.from("media").getPublicUrl(path);
-    if (urlData?.publicUrl) {
-      await sb
-        .from("whatsapp_messages")
-        .update({ media_url: urlData.publicUrl })
-        .eq("message_id", messageId)
-        .eq("instance_id", instance.id);
-    }
-  } catch (err) {
-    clearTimeout(timer);
-    if ((err as Error).name === "AbortError") {
-      console.warn(`[webhook] media persist timeout for ${messageId}`);
-    } else {
-      console.error(`[webhook] media persist error for ${messageId}:`, err);
-    }
+  if (!result.ok) {
+    console.warn(`[webhook] media persist failed for ${messageId}: ${result.error}`);
   }
 }
 
@@ -354,6 +326,8 @@ function normalizeMessage(data: any, instance: ResolvedInstance) {
   // Uazapi V2 sends messageTimestamp in milliseconds; detect and convert
   const tsSeconds = Number(tsRaw) > 1e12 ? Math.floor(Number(tsRaw) / 1000) : Number(tsRaw);
 
+  const isGroup = jidStr.endsWith("@g.us") || resolvedJid.endsWith("@g.us");
+
   return {
     organization_id: instance.organization_id,
     instance_id: instance.id,
@@ -368,6 +342,7 @@ function normalizeMessage(data: any, instance: ResolvedInstance) {
     status: direction === "incoming" ? "received" : "sent",
     timestamp: new Date(tsSeconds * 1000).toISOString(),
     raw_payload: data as Record<string, unknown>,
+    is_group: isGroup,
   };
 }
 
@@ -390,22 +365,37 @@ async function handleMessagesEvent(
     return;
   }
 
-  // Skip group messages — phone_number derived from group JID (120363...@g.us)
-  // pollutes the leads table with ghost contacts named after the first speaker.
-  // Parity with history-sync-worker which already filters @g.us.
-  if (String(normalized.remote_jid).endsWith("@g.us")) {
-    await logRuntime({
-      organizationId: instance.organization_id,
-      module: "webhook",
-      action: "uazapi_group_message_skipped",
-      status: "ok",
-      payloadSnapshot: {
-        instance_id: instance.id,
-        remote_jid: normalized.remote_jid,
-        message_id: normalized.message_id,
-      },
-    });
-    return;
+  // Group messages: capture-by-default (BL-WA-05) but skip downstream lead /
+  // copilot / pipeline side-effects. Org can opt out via
+  // organizations.capture_groups = false (restores legacy drop behavior).
+  if (normalized.is_group) {
+    let captureGroups = true;
+    try {
+      const { data: org } = await supabase
+        .from("organizations")
+        .select("capture_groups")
+        .eq("id", instance.organization_id)
+        .maybeSingle();
+      if (org && (org as any).capture_groups === false) captureGroups = false;
+    } catch (_) {
+      // best-effort — default to capture if the lookup fails
+    }
+
+    if (!captureGroups) {
+      await logRuntime({
+        organizationId: instance.organization_id,
+        module: "webhook",
+        action: "uazapi_group_message_skipped",
+        status: "ok",
+        payloadSnapshot: {
+          instance_id: instance.id,
+          remote_jid: normalized.remote_jid,
+          message_id: normalized.message_id,
+          reason: "capture_groups_off",
+        },
+      });
+      return;
+    }
   }
 
   const { error } = await supabase
@@ -426,10 +416,34 @@ async function handleMessagesEvent(
     return;
   }
 
-  // Fire-and-forget: download encrypted WhatsApp CDN media and persist to Storage
-  if (normalized.media_url && isWhatsAppCdnUrl(normalized.media_url) && normalized.message_id) {
-    persistMediaToStorage(supabase, instance, normalized.message_id, normalized.message_type)
-      .catch((err) => console.error(`[webhook] media persist fire-forget:`, err));
+  // Best-effort: download encrypted WhatsApp CDN media and persist to Storage.
+  // Fire-and-forget — webhook still returns 200 immediately. Failures land in
+  // whatsapp_media_jobs which is drained every 2 minutes by whatsapp-media-retry.
+  if (normalized.media_url && isWhatsAppCdnUrlShared(normalized.media_url) && normalized.message_id) {
+    persistMediaToStorage(
+      supabase,
+      instance,
+      normalized.message_id,
+      normalized.message_type,
+      normalized.media_url,
+    ).catch((err) => console.error(`[webhook] media persist fire-forget:`, err));
+  }
+
+  // Group messages: persist + log, then skip lead / workflow / copilot /
+  // pipeline side-effects. They have no individual sender to attach a lead to.
+  if (normalized.is_group) {
+    await logRuntime({
+      organizationId: instance.organization_id,
+      module: "webhook",
+      action: "uazapi_group_message_captured",
+      status: "ok",
+      payloadSnapshot: {
+        instance_id: instance.id,
+        remote_jid: normalized.remote_jid,
+        message_id: normalized.message_id,
+      },
+    });
+    return;
   }
 
   // Resolve any waiting workflow executions for this phone — must run BEFORE

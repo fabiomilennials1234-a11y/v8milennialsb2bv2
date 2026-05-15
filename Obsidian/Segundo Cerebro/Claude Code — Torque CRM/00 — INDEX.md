@@ -92,6 +92,7 @@ SaaS B2B multi-tenant para gestao de leads, pipelines de vendas, campanhas e aut
 
 #### Comunicacao
 - [[Chat WhatsApp]] — Chat multi-canal unificado (WhatsApp, Messenger, Instagram, SZ.Chat)
+- [[whatsapp-stability-plan]] — **Plano de estabilizacao WhatsApp** — 6 componentes deployed (DLQ, watchdog, health monitor, realtime hardening, audit, contract tests). Ver tambem [[whatsapp-stability-100pct]] no backlog + [[2026-05-15-whatsapp-stability-rollout]] no changelog
 - [[chat-bubble]] — Chat Bubble Kanban (FAB flutuante nas Pipe pages)
 - [[chat-bubble-instance-filter]] — Filtro de instancia WhatsApp no Chat Bubble (Popover switcher)
 - [[Mensagens Agendadas]] — Agendar envio de mensagens WhatsApp

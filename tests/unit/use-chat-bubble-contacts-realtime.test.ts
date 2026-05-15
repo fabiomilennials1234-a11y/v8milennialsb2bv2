@@ -103,12 +103,14 @@ function makeContact(phone: string, unread = 0): ChatContact {
     last_message: "old",
     last_message_time: "2026-04-01T00:00:00Z",
     last_message_direction: "incoming",
+    last_message_sent_source: null,
     unread_count: unread,
     lead_id: null,
     lead_name: null,
     conversation_id: null,
     archived_at: null,
     tags: [],
+    is_group: false,
   };
 }
 

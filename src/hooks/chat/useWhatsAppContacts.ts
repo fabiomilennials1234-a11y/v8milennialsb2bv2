@@ -10,6 +10,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
 import { chatQueryKeys } from "./shared/queryKeys";
 import type { ChatContact, ChatContactTag } from "./types";
+import {
+  useWhatsAppRealtimeFallback,
+  FALLBACK_POLL_INTERVAL_MS,
+} from "./useRealtimeFallback";
 
 const normalizePhone = (p: string) => {
   let cleaned = p.replace(/\D/g, "");
@@ -42,6 +46,7 @@ function getLastSeenMap(): Record<string, number> {
 export function useWhatsAppContacts(instanceId: string | null) {
   const { data: teamMember } = useCurrentTeamMember();
   const organizationId = teamMember?.organization_id;
+  const { shouldPoll } = useWhatsAppRealtimeFallback(organizationId);
 
   return useQuery({
     queryKey: chatQueryKeys.contacts(organizationId, instanceId),
@@ -52,7 +57,7 @@ export function useWhatsAppContacts(instanceId: string | null) {
       const [{ data: msgData, error: msgError }, { data: convMeta }] = await Promise.all([
         supabase
           .from("whatsapp_messages")
-          .select("phone_number, push_name, content, timestamp, direction, lead_id, sent_source")
+          .select("phone_number, push_name, content, timestamp, direction, lead_id, sent_source, is_group")
           .eq("organization_id", organizationId)
           .eq("instance_id", instanceId)
           .is("deleted_at", null)
@@ -98,6 +103,7 @@ export function useWhatsAppContacts(instanceId: string | null) {
             conversation_id: null,
             archived_at: null,
             tags: [],
+            is_group: (msg as any).is_group === true,
           });
         } else {
           if (msg.lead_id && !existing.lead_id) {
@@ -252,5 +258,6 @@ export function useWhatsAppContacts(instanceId: string | null) {
     },
     enabled: !!organizationId && !!instanceId,
     staleTime: 30_000,
+    refetchInterval: shouldPoll ? FALLBACK_POLL_INTERVAL_MS : false,
   });
 }

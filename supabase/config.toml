@@ -201,6 +201,10 @@ verify_jwt = false
 # whatsapp-health-monitor: drift v8 vs uazapi + auto-rebind; cron 5min; auth via x-cron-secret
 [functions.whatsapp-health-monitor]
 verify_jwt = false
+
+# whatsapp-media-retry: drena whatsapp_media_jobs (CDN download + Storage upload); cron 2min; auth via x-cron-secret
+[functions.whatsapp-media-retry]
+verify_jwt = false
 # history-sync-worker: chamado por pg_cron via pg_net; auth via x-cron-secret
 [functions.history-sync-worker]
 verify_jwt = false
