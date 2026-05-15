@@ -17,6 +17,8 @@ jobs:
           node-version: '24'
           cache: 'npm'
       - run: npm ci
+      - name: Security audit
+        run: npm audit --audit-level=high
       - run: npm run lint
       - name: Build (prod)
         run: npm run build
@@ -26,7 +28,6 @@ jobs:
           VITE_SUPABASE_PROJECT_ID: ${{ secrets.VITE_SUPABASE_PROJECT_ID }}
           VITE_CALENDAR_SERVICE_URL: ${{ secrets.VITE_CALENDAR_SERVICE_URL }}
           VITE_INVITE_API_URL: ${{ secrets.VITE_INVITE_API_URL }}
-          VITE_INTERNAL_API_KEY: ${{ secrets.VITE_INTERNAL_API_KEY }}
           VITE_META_APP_ID: ${{ secrets.VITE_META_APP_ID }}
           VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
 

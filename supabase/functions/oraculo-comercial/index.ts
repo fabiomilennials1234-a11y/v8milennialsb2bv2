@@ -1,8 +1,10 @@
 import { withSentry } from '../_shared/sentry.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient as createSupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logRuntime } from "../_shared/logger.ts";
+import { validateOrganizationAccess, unauthorizedResponse } from "../_shared/auth.ts";
 
 interface MetricsData {
   role?: "sdr" | "closer"; // deprecated, use metric_type
@@ -692,27 +694,7 @@ async function handleTVAnalysisMode(body: any, corsHeaders: Record<string, strin
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
 
-  // Validate org access: user must belong to this organization
-  const authHeader = body._authHeader || "";
-  if (authHeader) {
-    const userClient = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
-    // Check team_members for auth validation
-    const { data: memberCheck } = await supabase
-      .from("team_members")
-      .select("id")
-      .eq("organization_id", organization_id)
-      .limit(1);
-
-    if (!memberCheck || memberCheck.length === 0) {
-      return new Response(
-        JSON.stringify({ error: "Organization not found" }),
-        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-  }
+  // Auth is already validated in the main handler — organization_id is the verified one from JWT
 
   // Sanitize tv_data input
   const safeTvData = tv_data && typeof tv_data === "object" ? {
@@ -924,8 +906,42 @@ serve(withSentry('oraculo-comercial', async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // ── Auth: validate JWT and resolve caller's org ──
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) {
+    return unauthorizedResponse("Missing Authorization header", corsHeaders);
+  }
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+  const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const jwt = authHeader.slice(7);
+  const supabaseUser = createSupabaseClient(supabaseUrl, supabaseAnonKey, {
+    global: { headers: { Authorization: authHeader } },
+  });
+  const { data: userData, error: userErr } = await supabaseUser.auth.getUser(jwt);
+  if (userErr || !userData?.user) {
+    return unauthorizedResponse("Invalid token", corsHeaders);
+  }
+  const userId = userData.user.id;
+
+  // Resolve caller's organization via team_members
+  const supabaseAdmin = createSupabaseClient(supabaseUrl, supabaseServiceKey);
+  const { data: member } = await supabaseAdmin
+    .from("team_members")
+    .select("organization_id")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (!member?.organization_id) {
+    return unauthorizedResponse("User has no organization", corsHeaders);
+  }
+  const verifiedOrgId = member.organization_id;
+
   try {
     const body = await req.json();
+
+    // Override organization_id with the verified one from JWT — never trust body
+    body.organization_id = verifiedOrgId;
+    body.user_id = userId;
 
     // Route to appropriate mode
     if (body.mode === "chat") {

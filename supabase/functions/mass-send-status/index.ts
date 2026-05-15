@@ -14,6 +14,7 @@ import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { getWhatsAppProvider } from "../_shared/whatsapp-client.ts";
+import { timingSafeCompare } from "../_shared/auth.ts";
 
 // Force bundler to include provider modules (used via dynamic import in whatsapp-client)
 import "../_shared/whatsapp-providers/evolution-provider.ts";
@@ -89,7 +90,7 @@ Deno.serve(
     // Auth: cron secret bypass OR JWT user
     const cronSecret = req.headers.get("x-cron-secret");
     let isCron = false;
-    if (!!CRON_SECRET && cronSecret === CRON_SECRET) {
+    if (!!CRON_SECRET && !!cronSecret && timingSafeCompare(cronSecret, CRON_SECRET)) {
       isCron = true;
     }
 

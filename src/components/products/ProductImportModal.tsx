@@ -85,27 +85,47 @@ function getVal(row: Record<string, unknown>, mapping: Record<string, string>, f
 }
 
 async function sheetToRows(file: File): Promise<{ rows: Record<string, unknown>[]; headers: string[] }> {
-  const XLSX = await import("xlsx");
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const data = e.target?.result;
-        if (!data) { reject(new Error("Arquivo vazio")); return; }
-        const opts = file.name.endsWith(".csv") ? { type: "string" as const, raw: true } : { type: "binary" as const };
-        const workbook = XLSX.read(data, opts);
-        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-        const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(firstSheet);
-        const headerRow = XLSX.utils.sheet_to_json<string[]>(firstSheet, { header: 1 })[0] || [];
-        resolve({ rows, headers: headerRow.map(String) });
-      } catch (err) {
-        reject(err);
-      }
-    };
-    reader.onerror = () => reject(new Error("Erro ao ler arquivo"));
-    if (file.name.endsWith(".csv")) reader.readAsText(file);
-    else reader.readAsBinaryString(file);
+  const ExcelJS = await import("exceljs");
+  const arrayBuffer = await file.arrayBuffer();
+  const workbook = new ExcelJS.Workbook();
+
+  if (file.name.endsWith(".csv")) {
+    const text = new TextDecoder().decode(arrayBuffer);
+    const lines = text.split(/\r?\n/).filter(Boolean);
+    if (lines.length === 0) throw new Error("Arquivo vazio");
+    const headers = lines[0].split(",").map((h) => h.trim().replace(/^"|"$/g, ""));
+    const rows: Record<string, unknown>[] = [];
+    for (let i = 1; i < lines.length; i++) {
+      const values = lines[i].split(",").map((v) => v.trim().replace(/^"|"$/g, ""));
+      const row: Record<string, unknown> = {};
+      headers.forEach((h, j) => { row[h] = values[j] ?? ""; });
+      rows.push(row);
+    }
+    return { rows, headers };
+  }
+
+  await workbook.xlsx.load(arrayBuffer);
+  const worksheet = workbook.worksheets[0];
+  if (!worksheet || worksheet.rowCount === 0) throw new Error("Arquivo vazio");
+
+  const headerRow = worksheet.getRow(1);
+  const headers: string[] = [];
+  headerRow.eachCell((cell, colNumber) => {
+    headers[colNumber - 1] = String(cell.value ?? "").trim();
   });
+
+  const rows: Record<string, unknown>[] = [];
+  worksheet.eachRow((row, rowNumber) => {
+    if (rowNumber === 1) return;
+    const obj: Record<string, unknown> = {};
+    row.eachCell((cell, colNumber) => {
+      const header = headers[colNumber - 1];
+      if (header) obj[header] = cell.value;
+    });
+    rows.push(obj);
+  });
+
+  return { rows, headers: headers.filter(Boolean) };
 }
 
 // -- Validation types --

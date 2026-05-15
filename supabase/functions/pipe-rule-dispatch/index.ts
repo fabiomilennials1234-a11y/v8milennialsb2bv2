@@ -22,10 +22,11 @@ import { getTimeBasedVariables } from '../_shared/time-variables.ts';
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { withSecurityHeaders } from "../_shared/security-headers.ts";
+import { requireCronAuth } from "../_shared/auth.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
 
 const DEFAULT_DELAY_MIN_MS = 30000;
 const DEFAULT_DELAY_MAX_MS = 90000;
@@ -47,7 +48,7 @@ interface ProcessResult {
 
 Deno.serve(withSentry('pipe-rule-dispatch', async (req) => {
   const origin = req.headers.get("origin") ?? req.headers.get("Origin");
-  const corsHeaders = getCorsHeaders(origin);
+  const corsHeaders = withSecurityHeaders(getCorsHeaders(origin));
 
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders });
@@ -55,16 +56,13 @@ Deno.serve(withSentry('pipe-rule-dispatch', async (req) => {
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-  // --- Auth ---
+  // --- Auth: CRON_SECRET (fail-closed) ou JWT admin ---
   let authorized = false;
-  const cronSecret = req.headers.get("x-cron-secret");
-
-  // 1. Cron secret match — reject if env var missing (empty string is falsy)
-  if (!!CRON_SECRET && cronSecret === CRON_SECRET) {
+  if (requireCronAuth(req).authorized) {
     authorized = true;
   }
 
-  // 3. Bearer token auth (frontend calls)
+  // Bearer token auth (frontend calls)
   if (!authorized) {
     try {
       const authHeader = req.headers.get("Authorization");
@@ -86,9 +84,9 @@ Deno.serve(withSentry('pipe-rule-dispatch', async (req) => {
 
   if (!authorized) {
     console.error("[pipe-rule-dispatch] Unauthorized request. Headers:", JSON.stringify({
-      hasCronSecret: !!cronSecret,
+      hasCronSecret: !!req.headers.get("x-cron-secret"),
       hasAuthHeader: !!req.headers.get("Authorization"),
-      envCronSecretSet: !!CRON_SECRET,
+      envCronSecretSet: !!Deno.env.get("CRON_SECRET"),
     }));
     return new Response(
       JSON.stringify({ error: "Unauthorized" }),

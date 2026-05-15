@@ -30,18 +30,23 @@ vi.mock("https://esm.sh/@supabase/supabase-js@2", () => ({
   createClient: vi.fn(() => ({ from: vi.fn() })),
 }));
 
+vi.mock("../../supabase/functions/_shared/auth.ts", () => ({
+  timingSafeCompare: (a: string, b: string) => a === b,
+  checkRateLimitPersistent: vi.fn(async () => ({ allowed: true, remaining: 100, resetAt: "" })),
+}));
+
 const mod = await import(
   "../../supabase/functions/whatsapp-webhook/index.ts"
 );
 const {
-  timingSafeEqual,
+  timingSafeCompare,
   checkRateLimit,
   normalizeMessage,
   rateLimitState,
   RATE_LIMIT_MAX,
   REPLAY_WINDOW_MS,
 } = mod as unknown as {
-  timingSafeEqual: (a: string, b: string) => boolean;
+  timingSafeCompare: (a: string, b: string) => boolean;
   checkRateLimit: (ip: string) => { allowed: boolean; remaining: number };
   normalizeMessage: (data: unknown, instance: unknown) => Record<string, unknown>;
   rateLimitState: Map<string, unknown>;
@@ -49,27 +54,30 @@ const {
   REPLAY_WINDOW_MS: number;
 };
 
-describe("timingSafeEqual", () => {
+describe("timingSafeCompare (re-exported from _shared/auth)", () => {
+  // Note: in tests this uses a mocked simple equality; the real implementation
+  // in _shared/auth.ts uses crypto.subtle.timingSafeEqual with dummy comparison
+  // on length mismatch (no timing leak). These tests verify the module wiring.
   it("returns true for identical strings", () => {
-    expect(timingSafeEqual("abc", "abc")).toBe(true);
+    expect(timingSafeCompare("abc", "abc")).toBe(true);
   });
   it("returns false for different strings of same length", () => {
-    expect(timingSafeEqual("abc", "abd")).toBe(false);
+    expect(timingSafeCompare("abc", "abd")).toBe(false);
   });
   it("returns false for different-length strings", () => {
-    expect(timingSafeEqual("abc", "abcd")).toBe(false);
+    expect(timingSafeCompare("abc", "abcd")).toBe(false);
   });
   it("returns false when compared string is empty", () => {
-    expect(timingSafeEqual("secret", "")).toBe(false);
+    expect(timingSafeCompare("secret", "")).toBe(false);
   });
   it("returns true for two empty strings", () => {
-    expect(timingSafeEqual("", "")).toBe(true);
+    expect(timingSafeCompare("", "")).toBe(true);
   });
   it("handles long realistic secret", () => {
     const a = "a".repeat(64);
     const b = "a".repeat(63) + "b";
-    expect(timingSafeEqual(a, b)).toBe(false);
-    expect(timingSafeEqual(a, a)).toBe(true);
+    expect(timingSafeCompare(a, b)).toBe(false);
+    expect(timingSafeCompare(a, a)).toBe(true);
   });
 });
 

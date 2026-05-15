@@ -18,6 +18,7 @@ import { upsertPipeEntry, getPipeEntry, updatePipeEntryById } from "../_shared/p
 import type { PipeSlug } from "../_shared/pipeline-adapter.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
+import { timingSafeCompare, checkRateLimitPersistent, getClientIdentifier, checkRateLimit, rateLimitedResponse } from "../_shared/auth.ts";
 
 // Destino opcional: colocar o lead em um pipe (funil) em uma etapa específica
 interface PlaceInPipe {
@@ -80,9 +81,16 @@ serve(withSentry('lead-webhook', async (req) => {
     const webhookKey = req.headers.get("x-webhook-key");
     const expectedKey = Deno.env.get("WEBHOOK_API_KEY");
     
-    if (!webhookKey || webhookKey !== expectedKey) {
+    if (!webhookKey || !expectedKey || !timingSafeCompare(webhookKey, expectedKey)) {
       console.error("[lead-webhook] Invalid or missing webhook key");
       return errorResponse(401, "Unauthorized", corsHeaders, { req });
+    }
+
+    // In-memory rate limit — fast first-line defense (resets on cold start)
+    const clientIp = getClientIdentifier(req);
+    const memRl = checkRateLimit(`lead-webhook:${clientIp}`, 60, 60_000); // 60 req/min
+    if (!memRl.allowed) {
+      return rateLimitedResponse(memRl.resetIn, corsHeaders);
     }
 
     // Parse payload
@@ -153,6 +161,13 @@ serve(withSentry('lead-webhook', async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // Persistent rate limit — authoritative check (survives cold starts)
+    const persistentRl = await checkRateLimitPersistent(supabase, `lead-webhook:${clientIp}`, 60, 60);
+    if (!persistentRl.allowed) {
+      console.warn("[lead-webhook] Persistent rate limit hit for:", clientIp);
+      return errorResponse(429, "Rate limit exceeded", corsHeaders, { req });
+    }
 
     // Determinar organization_id
     let organizationId = payload.organization_id;

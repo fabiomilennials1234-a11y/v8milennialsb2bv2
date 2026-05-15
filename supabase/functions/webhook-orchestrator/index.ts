@@ -1,6 +1,7 @@
 import { withSentry } from '../_shared/sentry.ts';
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { validateLeadInput, sanitizeString, isValidUUID, isValidISODate } from "../_shared/validation.ts";
 import { enqueueWebhookDeliveries } from "../_shared/webhook-utils.ts";
 import { logRuntime } from "../_shared/logger.ts";
@@ -41,7 +42,11 @@ async function validateAuth(
   }
 
   // Valida API key (pode ser expandido para verificar em uma tabela de API keys)
-  const validApiKey = Deno.env.get("WEBHOOK_API_KEY") || "default-api-key";
+  const validApiKey = Deno.env.get("WEBHOOK_API_KEY");
+  if (!validApiKey) {
+    console.error("[AUTH] WEBHOOK_API_KEY not configured — rejecting all requests");
+    return { valid: false, error: "Server misconfiguration: API key not set" };
+  }
   if (apiKey !== validApiKey) {
     return { valid: false, error: "API key inválida" };
   }
@@ -342,25 +347,28 @@ async function handleProcessLead(supabase: any, data: any, tenantId: string | nu
 // Handler para SCHEDULE_MEETING (chamado pelo Agent Engine)
 async function handleScheduleMeeting(supabase: any, data: any, tenantId: string | null) {
   const { lead_id, preferred_date, preferred_time } = data;
-  
+
   if (!lead_id || !preferred_date) {
     return { success: false, error: "lead_id e preferred_date são obrigatórios" };
   }
 
-  // Atualizar lead com compromisso_date
+  if (!tenantId) {
+    return { success: false, error: "tenant_id é obrigatório para SCHEDULE_MEETING" };
+  }
+
+  // Atualizar lead com compromisso_date — scoped to tenant
   const { error: updateError } = await supabase
     .from("leads")
     .update({ compromisso_date: preferred_date })
-    .eq("id", lead_id);
+    .eq("id", lead_id)
+    .eq("organization_id", tenantId);
 
   if (updateError) {
     return { success: false, error: "Erro ao atualizar lead", details: updateError.message };
   }
 
   // Criar/atualizar pipeline_entries(confirmacao)
-  // Note: tenantId may be null in handleScheduleMeeting — fall back to lead's org
-  const { data: leadRow } = await supabase.from("leads").select("organization_id").eq("id", lead_id).single();
-  const scheduleOrgId = tenantId || leadRow?.organization_id;
+  const scheduleOrgId = tenantId;
 
   if (scheduleOrgId) {
     const existingConfirmacao = await getPipeEntry(supabase, lead_id, scheduleOrgId, "confirmacao");
@@ -553,25 +561,31 @@ async function handleUpdateLead(supabase: any, data: any, tenantId: string | nul
 // Handler para TRANSFER_HUMAN
 async function handleTransferHuman(supabase: any, data: any, tenantId: string | null) {
   const { lead_id, reason } = data;
-  
+
   if (!lead_id) {
     return { success: false, error: "lead_id é obrigatório" };
   }
 
-  // Desligar IA no lead (redundância: agent-engine também faz via executeAutomationActions)
+  if (!tenantId) {
+    return { success: false, error: "tenant_id é obrigatório para TRANSFER_HUMAN" };
+  }
+
+  // Desligar IA no lead — scoped to tenant
   await supabase
     .from("leads")
     .update({
       ai_disabled: true,
       ai_disabled_at: new Date().toISOString(),
     })
-    .eq("id", lead_id);
+    .eq("id", lead_id)
+    .eq("organization_id", tenantId);
 
-  // Atualizar conversation state para WAITING_HUMAN
+  // Atualizar conversation state para WAITING_HUMAN — scoped to tenant
   const { data: conversation } = await supabase
     .from("conversations")
     .select("id")
     .eq("lead_id", lead_id)
+    .eq("organization_id", tenantId)
     .maybeSingle();
 
   if (conversation) {
@@ -615,7 +629,7 @@ async function routeAction(
 // Main handler
 Deno.serve(withSentry('webhook-orchestrator', async (req) => {
   const origin = req.headers.get("origin");
-  const corsHeaders = getCorsHeaders(origin);
+  const corsHeaders = withSecurityHeaders(getCorsHeaders(origin));
   
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });

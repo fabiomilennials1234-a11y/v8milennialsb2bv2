@@ -16,6 +16,7 @@ import { logRuntime } from "../_shared/logger.ts";
 import { trackEvent } from "../_shared/track.ts";
 import { executeAiAction, type ActionRecord } from "../_shared/ai-action-executor.ts";
 import { startJob, finishJob, failJob } from "../_shared/job-tracker.ts";
+import { timingSafeCompare } from "../_shared/auth.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -35,7 +36,7 @@ Deno.serve(
 
     // Auth via cron secret
     const cronSecret = req.headers.get("x-cron-secret");
-    if (!CRON_SECRET || cronSecret !== CRON_SECRET) {
+    if (!CRON_SECRET || !cronSecret || !timingSafeCompare(cronSecret, CRON_SECRET)) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers });
     }
 

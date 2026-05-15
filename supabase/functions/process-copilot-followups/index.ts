@@ -18,6 +18,7 @@ import { getNextSendTime } from "../_shared/followupSchedule.ts";
 import { sendFollowupMessage } from "../_shared/followup-sender.ts";
 import { AgentEngine } from "../agent-message/agent-engine.ts";
 import { OpenRouterClient } from "../agent-message/openrouter-client.ts";
+import { timingSafeCompare } from "../_shared/auth.ts";
 import { isCopilotCanceled } from "../_shared/copilot/cancellation.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
@@ -43,7 +44,7 @@ Deno.serve(withSentry('process-copilot-followups', async (req) => {
   }
 
   const cronSecret = req.headers.get("x-cron-secret");
-  if (!CRON_SECRET || cronSecret !== CRON_SECRET) {
+  if (!CRON_SECRET || !cronSecret || !timingSafeCompare(cronSecret, CRON_SECRET)) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 401,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

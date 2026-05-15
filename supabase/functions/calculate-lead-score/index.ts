@@ -5,6 +5,7 @@ import { logRuntime } from "../_shared/logger.ts";
 import { getPipeEntriesByLeads } from "../_shared/pipeline-adapter.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
+import { validateOrganizationAccess, unauthorizedResponse } from "../_shared/auth.ts";
 
 interface LeadData {
   id: string;
@@ -43,23 +44,51 @@ serve(withSentry('calculate-lead-score', async (req) => {
   }
 
   try {
-    const { lead_id, batch } = await req.json();
-    
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const openRouterApiKey = Deno.env.get("OPENROUTER_API_KEY");
     const referer = Deno.env.get("OPENROUTER_REFERER_URL") || "https://v8millennials.com";
+
+    // ── Auth: validate JWT and resolve caller's org ──
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return unauthorizedResponse("Missing Authorization header", corsHeaders);
+    }
+    const jwt = authHeader.slice(7);
+    const supabaseUser = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const { data: userData, error: userErr } = await supabaseUser.auth.getUser(jwt);
+    if (userErr || !userData?.user) {
+      return unauthorizedResponse("Invalid token", corsHeaders);
+    }
+    const userId = userData.user.id;
+
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Resolve caller's organization via team_members
+    const { data: member } = await supabase
+      .from("team_members")
+      .select("organization_id")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (!member?.organization_id) {
+      return unauthorizedResponse("User has no organization", corsHeaders);
+    }
+    const callerOrgId = member.organization_id;
 
     if (!openRouterApiKey) {
       throw new Error("OPENROUTER_API_KEY is not configured");
     }
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const { lead_id, batch } = await req.json();
 
-    // Get leads to process
+    // Get leads to process — ALWAYS scoped to caller's org
     let leadsQuery = supabase
       .from("leads")
-      .select("id, name, company, origin, faturamento, urgency, segment, rating, created_at, phone, email, organization_id");
+      .select("id, name, company, origin, faturamento, urgency, segment, rating, created_at, phone, email, organization_id")
+      .eq("organization_id", callerOrgId);
 
     if (lead_id) {
       leadsQuery = leadsQuery.eq("id", lead_id);
@@ -71,7 +100,7 @@ serve(withSentry('calculate-lead-score', async (req) => {
         .gte("last_calculated", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
 
       const recentLeadIds = recentScores?.map(s => s.lead_id) || [];
-      
+
       if (recentLeadIds.length > 0) {
         leadsQuery = leadsQuery.not("id", "in", `(${recentLeadIds.join(",")})`);
       }

@@ -139,20 +139,11 @@ export async function parseExcelSheetNames(file: File): Promise<string[]> {
   const name = (file.name || "").toLowerCase();
   if (name.endsWith(".csv")) return ["CSV"];
   if (name.endsWith(".xlsx") || name.endsWith(".xls")) {
-    const XLSX = await import("xlsx");
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        try {
-          const data = e.target?.result;
-          if (!data) { resolve([]); return; }
-          const wb = XLSX.read(data, { type: "binary" });
-          resolve(wb.SheetNames);
-        } catch (err) { reject(err); }
-      };
-      reader.onerror = () => reject(reader.error);
-      reader.readAsBinaryString(file);
-    });
+    const ExcelJS = await import("exceljs");
+    const workbook = new ExcelJS.Workbook();
+    const arrayBuffer = await file.arrayBuffer();
+    await workbook.xlsx.load(arrayBuffer);
+    return workbook.worksheets.map((ws) => ws.name);
   }
   return [];
 }
@@ -182,47 +173,35 @@ export async function parseFileToRows(file: File, sheetName?: string): Promise<R
     });
   }
   if (name.endsWith(".xlsx") || name.endsWith(".xls")) {
-    const XLSX = await import("xlsx");
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        try {
-          const data = e.target?.result;
-          if (!data) {
-            reject(new Error("Arquivo vazio"));
-            return;
-          }
-          const wb = XLSX.read(data, { type: "binary", cellDates: true });
-          const targetSheet = sheetName && wb.SheetNames.includes(sheetName) ? sheetName : wb.SheetNames[0];
-          const sheet = wb.Sheets[targetSheet];
-          const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
-            header: 1,
-            defval: "",
-            raw: false,
-          }) as unknown[][];
-          if (json.length === 0) {
-            resolve([]);
-            return;
-          }
-          const headers = (json[0] || []).map((h) => String(h ?? "").trim());
-          const rows: Record<string, string>[] = [];
-          for (let i = 1; i < json.length; i++) {
-            const arr = json[i] as unknown[] || [];
-            const row: Record<string, string> = {};
-            headers.forEach((h, j) => {
-              const v = arr[j];
-              row[h] = v != null ? String(v).trim() : "";
-            });
-            rows.push(row);
-          }
-          resolve(rows);
-        } catch (err) {
-          reject(err);
-        }
-      };
-      reader.onerror = () => reject(reader.error);
-      reader.readAsBinaryString(file);
+    const ExcelJS = await import("exceljs");
+    const workbook = new ExcelJS.Workbook();
+    const arrayBuffer = await file.arrayBuffer();
+    await workbook.xlsx.load(arrayBuffer);
+
+    const sheetNames = workbook.worksheets.map((ws) => ws.name);
+    const targetSheetName = sheetName && sheetNames.includes(sheetName) ? sheetName : sheetNames[0];
+    const worksheet = workbook.getWorksheet(targetSheetName);
+    if (!worksheet || worksheet.rowCount === 0) return [];
+
+    const headerRow = worksheet.getRow(1);
+    const headers: string[] = [];
+    headerRow.eachCell((cell, colNumber) => {
+      headers[colNumber - 1] = String(cell.value ?? "").trim();
     });
+
+    const rows: Record<string, string>[] = [];
+    worksheet.eachRow((row, rowNumber) => {
+      if (rowNumber === 1) return;
+      const rowObj: Record<string, string> = {};
+      headers.forEach((h, j) => {
+        const cell = row.getCell(j + 1);
+        const v = cell.value;
+        rowObj[h] = v != null ? String(v).trim() : "";
+      });
+      rows.push(rowObj);
+    });
+
+    return rows;
   }
   return Promise.reject(new Error("Formato não suportado. Use CSV ou XLSX."));
 }
@@ -1095,11 +1074,19 @@ export function useImportLeads() {
     const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
     const functionUrl = `${supabaseUrl}/functions/v1/import-leads`;
 
+    // Get user JWT for authenticated request
+    const { data: sessionData } = await supabase.auth.getSession();
+    const accessToken = sessionData?.session?.access_token;
+    if (!accessToken) {
+      throw new Error("Sessão expirada. Faça login novamente.");
+    }
+
     const response = await fetch(functionUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "apikey": anonKey,
+        "Authorization": `Bearer ${accessToken}`,
       },
       body: JSON.stringify({
         ...payload,

@@ -9,6 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Lock, ArrowRight, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import torqueLogo from '@/assets/torque-logo.png';
+import { validatePassword } from '@/lib/password-validation';
 
 export default function ResetPassword() {
   const [password, setPassword] = useState('');
@@ -52,8 +53,9 @@ export default function ResetPassword() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (password.length < 6) {
-      toast({ title: 'Senha muito curta', description: 'A senha deve ter pelo menos 6 caracteres.', variant: 'destructive' });
+    const pwResult = validatePassword(password);
+    if (!pwResult.valid) {
+      toast({ title: 'Senha fraca', description: pwResult.message, variant: 'destructive' });
       return;
     }
 

@@ -11,8 +11,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { withSentry } from '../_shared/sentry.ts';
 import { logRuntime } from "../_shared/logger.ts";
+import { validateOrganizationAccess, unauthorizedResponse } from "../_shared/auth.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -23,8 +25,9 @@ const ALLOWED_PREFIX = "whatsapp-media/";
 
 serve(withSentry('stream-media', async (req) => {
   const origin = req.headers.get("origin");
-  const corsHeaders = getCorsHeaders(origin);
+  const corsHeaders = withSecurityHeaders(getCorsHeaders(origin));
 
+  // CORS preflight must be handled BEFORE auth
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders });
   }
@@ -35,6 +38,22 @@ serve(withSentry('stream-media', async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
+
+  // ── Auth: validate JWT ──
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) {
+    return unauthorizedResponse("Missing Authorization header", corsHeaders);
+  }
+  const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+  const jwt = authHeader.slice(7);
+  const supabaseUser = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    global: { headers: { Authorization: authHeader } },
+  });
+  const { data: userData, error: userErr } = await supabaseUser.auth.getUser(jwt);
+  if (userErr || !userData?.user) {
+    return unauthorizedResponse("Invalid token", corsHeaders);
+  }
+  const userId = userData.user.id;
 
   const url = new URL(req.url);
   let path = url.searchParams.get("path");
@@ -53,6 +72,17 @@ serve(withSentry('stream-media', async (req) => {
     });
   }
 
+  // ── Auth: extract org_id from path and verify membership ──
+  // Path format: whatsapp-media/{org_id}/...
+  const pathParts = path.split("/");
+  const pathOrgId = pathParts.length >= 2 ? pathParts[1] : null;
+  if (!pathOrgId) {
+    return new Response(JSON.stringify({ error: "Invalid path: missing organization_id", code: "INVALID_PATH" }), {
+      status: 400,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
     console.error("[stream-media] Server misconfiguration: missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
     return new Response(JSON.stringify({ error: "Server misconfiguration", code: "CONFIG" }), {
@@ -63,6 +93,12 @@ serve(withSentry('stream-media', async (req) => {
 
   try {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+    // Verify caller belongs to the org referenced in the file path
+    const hasAccess = await validateOrganizationAccess(supabase, userId, pathOrgId);
+    if (!hasAccess) {
+      return unauthorizedResponse("User does not belong to the file's organization", corsHeaders);
+    }
     const { data, error } = await supabase.storage.from(BUCKET).download(path);
 
     if (error || !data) {

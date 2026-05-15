@@ -11,6 +11,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { withSentry } from "../_shared/sentry.ts";
 import { logRuntime } from "../_shared/logger.ts";
 
@@ -56,7 +57,7 @@ interface PushPayload {
 
 Deno.serve(
   withSentry("cadastro-externo-push", async (req) => {
-    const corsHeaders = getCorsHeaders(req.headers.get("origin"));
+    const corsHeaders = withSecurityHeaders(getCorsHeaders(req.headers.get("origin")));
 
     if (req.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: corsHeaders });

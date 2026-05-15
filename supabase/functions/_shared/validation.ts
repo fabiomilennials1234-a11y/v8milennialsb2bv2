@@ -51,11 +51,25 @@ export function isValidPhone(phone: string | null | undefined): boolean {
  */
 export function sanitizeString(input: string | null | undefined, maxLength = 1000): string | null {
   if (!input) return null;
-  
+
   // Trim and limit length
   let sanitized = input.trim().slice(0, maxLength);
-  
-  // SECURITY: Comprehensive HTML entity encoding
+
+  // SECURITY: Remove null bytes first (can bypass later checks)
+  sanitized = sanitized.replace(/\x00/g, '');
+
+  // SECURITY: Strip dangerous protocols BEFORE HTML encoding (regex must see raw chars)
+  sanitized = sanitized.replace(/javascript\s*:/gi, '');
+  sanitized = sanitized.replace(/data\s*:/gi, '');
+  sanitized = sanitized.replace(/vbscript\s*:/gi, '');
+
+  // SECURITY: Strip event handlers BEFORE HTML encoding (on raw input so `=` is still `=`)
+  sanitized = sanitized.replace(/on\w+\s*=/gi, '');
+
+  // SECURITY: Strip expression() BEFORE HTML encoding
+  sanitized = sanitized.replace(/expression\s*\(/gi, '');
+
+  // SECURITY: HTML entity encoding (AFTER protocol/handler stripping)
   const htmlEntities: Record<string, string> = {
     '&': '&amp;',
     '<': '&lt;',
@@ -66,23 +80,9 @@ export function sanitizeString(input: string | null | undefined, maxLength = 100
     '`': '&#x60;',
     '=': '&#x3D;',
   };
-  
+
   sanitized = sanitized.replace(/[&<>"'`=/]/g, (char) => htmlEntities[char] || char);
-  
-  // SECURITY: Remove javascript: and data: URLs
-  sanitized = sanitized.replace(/javascript\s*:/gi, '');
-  sanitized = sanitized.replace(/data\s*:/gi, '');
-  sanitized = sanitized.replace(/vbscript\s*:/gi, '');
-  
-  // SECURITY: Remove event handlers (onclick, onerror, etc.)
-  sanitized = sanitized.replace(/on\w+\s*=/gi, '');
-  
-  // SECURITY: Remove expression() (IE CSS expression)
-  sanitized = sanitized.replace(/expression\s*\(/gi, '');
-  
-  // SECURITY: Remove null bytes
-  sanitized = sanitized.replace(/\x00/g, '');
-  
+
   return sanitized;
 }
 

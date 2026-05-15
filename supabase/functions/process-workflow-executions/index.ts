@@ -21,10 +21,10 @@ import { startJob, finishJob, failJob } from "../_shared/job-tracker.ts";
 import { executeWorkflow } from "../_shared/workflow-executor.ts";
 import { fireTrigger, processCronTriggers, matchesTriggerConfig } from "../_shared/workflow-trigger.ts";
 import { resolvePipelineId } from "../_shared/pipeline-adapter.ts";
+import { requireCronAuth } from "../_shared/auth.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
 const BATCH_SIZE = 20;
 
 Deno.serve(
@@ -36,15 +36,12 @@ Deno.serve(
       return new Response(null, { status: 204, headers });
     }
 
-    const cronSecret = req.headers.get("x-cron-secret");
     const authHeader = req.headers.get("authorization");
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    let authMode: "cron" | "service_role" | "jwt" | null = null;
-    if (!!CRON_SECRET && cronSecret === CRON_SECRET) {
+    let authMode: "cron" | "jwt" | null = null;
+    if (requireCronAuth(req).authorized) {
       authMode = "cron";
-    } else if (authHeader && authHeader.includes(SUPABASE_SERVICE_ROLE_KEY)) {
-      authMode = "service_role";
     } else if (authHeader?.startsWith("Bearer ")) {
       try {
         const { data: { user } } = await supabase.auth.getUser(authHeader.slice(7));

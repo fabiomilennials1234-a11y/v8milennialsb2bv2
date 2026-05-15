@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Eye, EyeOff, Loader2, Zap, Shield, TrendingUp } from 'lucide-react';
 import torqueLogo from '@/assets/torque-logo.png';
+import { validatePassword } from '@/lib/password-validation';
 
 // ─── Mask helpers ────────────────────────────────────────────────────────────
 
@@ -123,8 +124,9 @@ export default function Signup() {
       setError('Informe um e-mail válido.');
       return;
     }
-    if (password.length < 6) {
-      setError('A senha deve ter no mínimo 6 caracteres.');
+    const pwResult = validatePassword(password);
+    if (!pwResult.valid) {
+      setError(pwResult.message);
       return;
     }
     if (document && !isValidDocument(document)) {
@@ -152,7 +154,7 @@ export default function Signup() {
 
     if (signUpError) {
       if (signUpError.message.toLowerCase().includes('already registered')) {
-        setError('Este e-mail já está cadastrado. Faça login ou recupere sua senha.');
+        setError('Se este e-mail estiver cadastrado, verifique sua caixa de entrada. Caso contrário, tente novamente.');
       } else {
         setError(signUpError.message);
       }
@@ -417,12 +419,12 @@ export default function Signup() {
                   <Input
                     id="password"
                     type={showPassword ? 'text' : 'password'}
-                    placeholder="Mínimo 6 caracteres"
+                    placeholder="Mínimo 12 caracteres"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     autoComplete="new-password"
                     required
-                    minLength={6}
+                    minLength={12}
                     disabled={loading}
                     className="h-11 pr-11"
                   />

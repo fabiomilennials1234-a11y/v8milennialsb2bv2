@@ -7,6 +7,27 @@
 import { createHmac } from "https://deno.land/std@0.177.0/node/crypto.ts";
 
 /**
+ * Constant-time string comparison using Web Crypto API.
+ * Prevents timing side-channel attacks on secret comparisons.
+ */
+export function timingSafeCompare(a: string, b: string): boolean {
+  const encoder = new TextEncoder();
+  const bufA = encoder.encode(a);
+  const bufB = encoder.encode(b);
+  if (bufA.length !== bufB.length) {
+    // Compare against dummy to avoid early-exit timing leak
+    const dummy = new Uint8Array(bufA.length);
+    try { crypto.subtle.timingSafeEqual(bufA, dummy); } catch { /* ignore */ }
+    return false;
+  }
+  try {
+    return crypto.subtle.timingSafeEqual(bufA, bufB);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Result of authentication validation
  */
 export interface AuthResult {
@@ -22,27 +43,40 @@ export interface AuthResult {
 const rateLimitStore = new Map<string, { count: number; resetTime: number }>();
 
 /**
+ * Validates cron requests via x-cron-secret header.
+ * Fail-closed: rejects when CRON_SECRET env var is missing or empty.
+ */
+export function requireCronAuth(req: Request): { authorized: boolean } {
+  const CRON_SECRET = Deno.env.get("CRON_SECRET");
+  const cronSecret = req.headers.get("x-cron-secret");
+  if (!CRON_SECRET || !cronSecret || !timingSafeCompare(cronSecret, CRON_SECRET)) {
+    return { authorized: false };
+  }
+  return { authorized: true };
+}
+
+/**
  * Validates Evolution API webhook requests
  * Checks for API key in header
  */
 export function validateEvolutionWebhook(req: Request): AuthResult {
   const apiKey = req.headers.get("apikey") || req.headers.get("x-api-key");
   const expectedKey = Deno.env.get("EVOLUTION_WEBHOOK_SECRET");
-  
-  // If no secret configured, allow but log warning (for backward compatibility)
+
+  // Fail closed: if secret not configured, reject all requests
   if (!expectedKey) {
-    console.warn("[AUTH] EVOLUTION_WEBHOOK_SECRET not configured - webhook authentication disabled");
-    return { valid: true };
+    console.error("[AUTH] EVOLUTION_WEBHOOK_SECRET not configured — rejecting request");
+    return { valid: false, error: "EVOLUTION_WEBHOOK_SECRET not configured" };
   }
   
   if (!apiKey) {
     return { valid: false, error: "Missing API key in request headers" };
   }
   
-  if (apiKey !== expectedKey) {
+  if (!timingSafeCompare(apiKey, expectedKey)) {
     return { valid: false, error: "Invalid API key" };
   }
-  
+
   return { valid: true };
 }
 
@@ -69,7 +103,7 @@ export function validateCalcomWebhook(req: Request, body: string): AuthResult {
     .update(body)
     .digest("hex");
   
-  if (signature !== expectedSignature && signature !== `sha256=${expectedSignature}`) {
+  if (!timingSafeCompare(signature, expectedSignature) && !timingSafeCompare(signature, `sha256=${expectedSignature}`)) {
     return { valid: false, error: "Invalid Cal.com signature" };
   }
   
@@ -92,10 +126,10 @@ export function validateWebhookApiKey(req: Request): AuthResult {
     return { valid: false, error: "Missing API key" };
   }
   
-  if (apiKey !== expectedKey) {
+  if (!timingSafeCompare(apiKey, expectedKey)) {
     return { valid: false, error: "Invalid API key" };
   }
-  
+
   return { valid: true };
 }
 

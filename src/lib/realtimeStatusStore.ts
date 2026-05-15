@@ -36,6 +36,18 @@ const initialStatus = (): ChannelStatus => ({
 const channels = new Map<string, ChannelStatus>();
 const listeners = new Map<string, Set<() => void>>();
 
+// useSyncExternalStore requires snapshots to be referentially stable across
+// calls when nothing changed. Lazily allocate one ChannelStatus per channel
+// name (including "__none__") so repeated reads return the same object.
+function getOrInitStatus(name: string): ChannelStatus {
+  let st = channels.get(name);
+  if (!st) {
+    st = initialStatus();
+    channels.set(name, st);
+  }
+  return st;
+}
+
 function emit(name: string) {
   const ls = listeners.get(name);
   if (!ls) return;
@@ -43,7 +55,7 @@ function emit(name: string) {
 }
 
 export function setChannelState(name: string, state: RealtimeChannelState): void {
-  const prev = channels.get(name) ?? initialStatus();
+  const prev = getOrInitStatus(name);
   if (prev.state === state) return;
   const next: ChannelStatus = {
     ...prev,
@@ -56,14 +68,14 @@ export function setChannelState(name: string, state: RealtimeChannelState): void
 }
 
 export function recordChannelEvent(name: string): void {
-  const prev = channels.get(name) ?? initialStatus();
+  const prev = getOrInitStatus(name);
   const next: ChannelStatus = { ...prev, lastEventAt: Date.now() };
   channels.set(name, next);
   emit(name);
 }
 
 export function getChannelStatus(name: string): ChannelStatus {
-  return channels.get(name) ?? initialStatus();
+  return getOrInitStatus(name);
 }
 
 export function subscribeChannelStatus(name: string, fn: () => void): () => void {

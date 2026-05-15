@@ -10,6 +10,7 @@ import { Mail, Lock, User, ArrowRight, ArrowLeft, Loader2, Flag, Fuel, Trophy } 
 import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import torqueLogo from '@/assets/torque-logo.png';
+import { validatePassword } from '@/lib/password-validation';
 
 type AuthMode = 'login' | 'signup' | 'forgot';
 
@@ -89,12 +90,23 @@ export default function Auth() {
           return;
         }
 
+        const pwResult = validatePassword(password);
+        if (!pwResult.valid) {
+          toast({
+            title: 'Senha fraca',
+            description: pwResult.message,
+            variant: 'destructive',
+          });
+          setLoading(false);
+          return;
+        }
+
         const { error } = await signUp(email, password, fullName);
         if (error) {
           if (error.message.includes('already registered')) {
             toast({
-              title: 'E-mail já cadastrado',
-              description: 'Este e-mail já está em uso. Tente fazer login.',
+              title: 'Verifique seu e-mail',
+              description: 'Se este e-mail estiver cadastrado, verifique sua caixa de entrada. Caso contrário, tente novamente.',
               variant: 'destructive',
             });
           } else {
@@ -376,7 +388,7 @@ export default function Auth() {
                         onChange={(e) => setPassword(e.target.value)}
                         className="pl-10"
                         required
-                        minLength={6}
+                        minLength={12}
                       />
                     </div>
                   </div>

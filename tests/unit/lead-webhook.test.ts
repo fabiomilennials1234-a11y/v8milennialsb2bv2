@@ -78,6 +78,15 @@ vi.mock("../../supabase/functions/_shared/logger.ts", () => ({
   logRuntime: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock("../../supabase/functions/_shared/auth.ts", () => ({
+  timingSafeCompare: (a: string, b: string) => a === b,
+  checkRateLimit: () => ({ allowed: true, remaining: 59, resetIn: 60000 }),
+  checkRateLimitPersistent: vi.fn(async () => ({ allowed: true, remaining: 59, resetAt: "" })),
+  getClientIdentifier: () => "127.0.0.1",
+  rateLimitedResponse: (_resetIn: number, corsHeaders: Record<string, string>) =>
+    new Response(JSON.stringify({ error: "Too Many Requests" }), { status: 429, headers: corsHeaders }),
+}));
+
 // Response helpers use crypto.randomUUID — available globally in Node 20.
 
 // Mock global fetch for outbound-trigger background call
