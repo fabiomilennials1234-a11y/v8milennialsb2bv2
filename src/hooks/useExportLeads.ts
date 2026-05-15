@@ -62,15 +62,42 @@ export const EXPORT_LEAD_HEADERS = [
 
 type ExportFormat = "csv" | "xlsx";
 
+/**
+ * Filtro por etapa do Kanban: limita a exportação aos leads que estejam na
+ * etapa indicada do pipe especificado. Para pipes fixos (whatsapp/confirmacao/
+ * propostas) `stageId` é o `status` enum. Para `custom`, `stageId` é o UUID
+ * da stage em `custom_pipelines_stages` e `customPipelineId` é obrigatório.
+ */
+export interface ExportStageFilter {
+  pipe: "whatsapp" | "confirmacao" | "propostas" | "custom";
+  stageId: string;
+  customPipelineId?: string;
+}
+
 export interface ExportLeadsOptions {
   format: ExportFormat;
   /** Limite de leads (os mais recentes). Se não informado, exporta até 10.000. */
   limit?: number;
+  /** Quando presente, restringe a exportação aos leads da etapa indicada. */
+  stageFilter?: ExportStageFilter;
+  /** Título legível da etapa — usado apenas para compor o nome do arquivo. */
+  stageTitle?: string;
 }
 
 export interface UseExportLeadsResult {
   exportLeads: (options: ExportLeadsOptions) => Promise<{ count: number }>;
   isExporting: boolean;
+}
+
+function slugify(value: string): string {
+  return (value || "")
+    .toString()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 60) || "etapa";
 }
 
 function ratingToLabel(rating: number | null | undefined): string {
@@ -108,13 +135,77 @@ export function useExportLeads(): UseExportLeadsResult {
     try {
       const limit = Math.min(options.limit ?? 10_000, 50_000);
 
+      // 0) Quando stageFilter está presente, primeiro restringimos ao
+      //    conjunto de lead_ids da etapa indicada — sempre filtrando por
+      //    organization_id como camada de segurança extra (RLS já protege).
+      let stageLeadIds: string[] | null = null;
+      if (options.stageFilter) {
+        const sf = options.stageFilter;
+        if (sf.pipe === "custom") {
+          if (!sf.customPipelineId) {
+            throw new Error("customPipelineId é obrigatório quando pipe='custom'");
+          }
+          const { data: entries, error: entriesError } = await supabase
+            .from("custom_pipe_entries")
+            .select("lead_id")
+            .eq("organization_id", organizationId)
+            .eq("pipeline_id", sf.customPipelineId)
+            .eq("stage_id", sf.stageId);
+          if (entriesError) throw entriesError;
+          stageLeadIds = Array.from(new Set((entries ?? []).map((e: { lead_id: string }) => e.lead_id))).filter(Boolean);
+        } else {
+          // Pipes fixos — branch explícito por nome de tabela para preservar
+          // tipagem do Supabase client.
+          let entries: Array<{ lead_id: string }> | null = null;
+          let entriesError: unknown = null;
+          if (sf.pipe === "whatsapp") {
+            const r = await supabase
+              .from("pipe_whatsapp")
+              .select("lead_id")
+              .eq("organization_id", organizationId)
+              .eq("status", sf.stageId);
+            entries = r.data as Array<{ lead_id: string }> | null;
+            entriesError = r.error;
+          } else if (sf.pipe === "confirmacao") {
+            const r = await supabase
+              .from("pipe_confirmacao")
+              .select("lead_id")
+              .eq("organization_id", organizationId)
+              .eq("status", sf.stageId);
+            entries = r.data as Array<{ lead_id: string }> | null;
+            entriesError = r.error;
+          } else {
+            const r = await supabase
+              .from("pipe_propostas")
+              .select("lead_id")
+              .eq("organization_id", organizationId)
+              .eq("status", sf.stageId);
+            entries = r.data as Array<{ lead_id: string }> | null;
+            entriesError = r.error;
+          }
+          if (entriesError) throw entriesError;
+          stageLeadIds = Array.from(new Set((entries ?? []).map((e) => e.lead_id))).filter(Boolean);
+        }
+
+        // Etapa vazia: nada a exportar — retorna sem gerar arquivo.
+        if (stageLeadIds.length === 0) {
+          return { count: 0 };
+        }
+      }
+
       // 1) Leads com todos os campos
-      const { data: leads, error: leadsError } = await supabase
+      let leadsQuery = supabase
         .from("leads")
         .select(
           "id, name, company, email, phone, faturamento, segment, urgency, notes, rating, origin, responsible_id, sdr_id, closer_id, compromisso_date, utm_campaign, utm_source, utm_medium, utm_content, utm_term, created_at, updated_at, metrics_period_at"
         )
-        .eq("organization_id", organizationId)
+        .eq("organization_id", organizationId);
+
+      if (stageLeadIds) {
+        leadsQuery = leadsQuery.in("id", stageLeadIds);
+      }
+
+      const { data: leads, error: leadsError } = await leadsQuery
         .order("created_at", { ascending: false })
         .limit(limit);
 
@@ -220,7 +311,10 @@ export function useExportLeads(): UseExportLeadsResult {
         };
       });
 
-      const filename = `leads_export_${new Date().toISOString().slice(0, 10)}`;
+      const dateStamp = new Date().toISOString().slice(0, 10);
+      const filename = options.stageFilter
+        ? `leads_${options.stageFilter.pipe}_${slugify(options.stageTitle ?? options.stageFilter.stageId)}_${dateStamp}`
+        : `leads_export_${dateStamp}`;
       const headers = [...EXPORT_LEAD_HEADERS];
 
       if (options.format === "csv") {

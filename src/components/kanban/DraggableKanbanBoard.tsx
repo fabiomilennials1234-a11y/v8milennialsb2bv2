@@ -18,7 +18,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { motion } from "framer-motion";
-import { Plus, MoreHorizontal, GripVertical, Trash2 } from "lucide-react";
+import { Plus, MoreHorizontal, GripVertical, Trash2, FileDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
@@ -50,6 +50,8 @@ interface DraggableKanbanBoardProps<T extends DraggableItem> {
   renderColumnExtra?: (column: KanbanColumn<T>) => React.ReactNode;
   /** When provided, the column header three-dots menu shows "Excluir todos os leads desta etapa" */
   onDeleteAllLeads?: (stageId: string, stageTitle: string) => void;
+  /** When provided, the column header three-dots menu shows "Exportar leads desta etapa" */
+  onExportStage?: (stageId: string, stageTitle: string) => void;
   /** When true, drag-and-drop is disabled (permission denied) */
   disabled?: boolean;
 }
@@ -61,6 +63,7 @@ function DroppableColumn<T extends DraggableItem>({
   renderColumnFooter,
   renderColumnExtra,
   onDeleteAllLeads,
+  onExportStage,
 }: {
   column: KanbanColumn<T>;
   children: React.ReactNode;
@@ -68,6 +71,7 @@ function DroppableColumn<T extends DraggableItem>({
   renderColumnFooter?: (column: KanbanColumn<T>) => React.ReactNode;
   renderColumnExtra?: (column: KanbanColumn<T>) => React.ReactNode;
   onDeleteAllLeads?: (stageId: string, stageTitle: string) => void;
+  onExportStage?: (stageId: string, stageTitle: string) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({
     id: column.id,
@@ -102,7 +106,7 @@ function DroppableColumn<T extends DraggableItem>({
           <button className="p-1.5 rounded-lg hover:bg-background transition-colors">
             <Plus className="w-4 h-4 text-muted-foreground" />
           </button>
-          {onDeleteAllLeads ? (
+          {(onExportStage || onDeleteAllLeads) ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
                 <Button variant="ghost" size="icon" className="h-8 w-8 p-0">
@@ -110,16 +114,29 @@ function DroppableColumn<T extends DraggableItem>({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  className="text-destructive focus:text-destructive"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDeleteAllLeads(column.id, column.title);
-                  }}
-                >
-                  <Trash2 className="w-4 h-4 mr-2" />
-                  Mover todos para lixeira
-                </DropdownMenuItem>
+                {onExportStage && (
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onExportStage(column.id, column.title);
+                    }}
+                  >
+                    <FileDown className="w-4 h-4 mr-2" />
+                    Exportar leads desta etapa
+                  </DropdownMenuItem>
+                )}
+                {onDeleteAllLeads && (
+                  <DropdownMenuItem
+                    className="text-destructive focus:text-destructive"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDeleteAllLeads(column.id, column.title);
+                    }}
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Mover todos para lixeira
+                  </DropdownMenuItem>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (
@@ -191,6 +208,7 @@ export function DraggableKanbanBoard<T extends DraggableItem>({
   renderColumnFooter,
   renderColumnExtra,
   onDeleteAllLeads,
+  onExportStage,
   disabled,
 }: DraggableKanbanBoardProps<T>) {
   const [activeItem, setActiveItem] = useState<T | null>(null);
@@ -327,6 +345,7 @@ export function DraggableKanbanBoard<T extends DraggableItem>({
             renderColumnFooter={renderColumnFooter}
             renderColumnExtra={renderColumnExtra}
             onDeleteAllLeads={onDeleteAllLeads}
+            onExportStage={onExportStage}
           >
             <SortableContext
               items={column.items.map((item) => item.id)}

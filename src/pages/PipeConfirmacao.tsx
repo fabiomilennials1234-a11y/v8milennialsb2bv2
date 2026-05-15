@@ -38,6 +38,7 @@ import { LeadPanelLayout } from "@/components/layout/LeadPanelLayout";
 import { KanbanFilterPanel, FilterChips, type FilterSectionConfig } from "@/components/kanban/KanbanFilterPanel";
 import { MeetingTimeline } from "@/components/confirmacao/MeetingTimeline";
 import { CompareceuModal } from "@/components/confirmacao/CompareceuModal";
+import { ExportStageDialog } from "@/components/kanban/ExportStageDialog";
 import { useConfirmacaoOverdueDays, isConfirmacaoOverdue } from "@/hooks/useOrganizationSettings";
 import { format, isToday, startOfWeek, endOfWeek, isWithinInterval, isTomorrow, isPast, startOfDay, differenceInCalendarDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -260,6 +261,7 @@ function PipeConfirmacaoInner() {
   const [deleteAllLeadsDialogOpen, setDeleteAllLeadsDialogOpen] = useState(false);
   const [periodState, setPeriodState] = useState<MetricsPeriodState>(createInitialPeriodState);
   const [stageToDelete, setStageToDelete] = useState<{ id: string; title: string } | null>(null);
+  const [stageToExport, setStageToExport] = useState<{ id: string; title: string; count: number } | null>(null);
 
   const { organizationId } = useOrganization();
   useEffect(() => { trackModuleVisit("pipe_confirmacao", organizationId); }, []);
@@ -785,6 +787,10 @@ function PipeConfirmacaoInner() {
           onStatusChange={handleStatusChange}
           disabled={!canMovePipe}
           onDeleteAllLeads={(stageId, stageTitle) => setStageToDelete({ id: stageId, title: stageTitle })}
+          onExportStage={(stageId, stageTitle) => {
+            const col = columns.find((c) => c.id === stageId);
+            setStageToExport({ id: stageId, title: stageTitle, count: col?.items.length ?? 0 });
+          }}
           renderColumnExtra={(col) => {
             const allCounts = workflowCounts["__all__"] || { total: 0, active: 0 };
             const stageCounts = workflowCounts[col.id] || { total: 0, active: 0 };
@@ -861,6 +867,16 @@ function PipeConfirmacaoInner() {
         leadName={pendingCompareceuItem?.lead?.name || "Lead"}
         currentResponsibleId={pendingCompareceuItem?.responsible_id || pendingCompareceuItem?.sdr_id || pendingCompareceuItem?.closer_id}
         isLoading={isProcessingCompareceu}
+      />
+
+      {/* Export leads from a specific stage */}
+      <ExportStageDialog
+        open={!!stageToExport}
+        onOpenChange={(o) => { if (!o) setStageToExport(null); }}
+        stageId={stageToExport?.id ?? ""}
+        stageTitle={stageToExport?.title ?? ""}
+        pipe="confirmacao"
+        leadCount={stageToExport?.count ?? 0}
       />
 
       {/* Bulk Action Bar */}
