@@ -10,11 +10,12 @@ import { Badge } from "@/components/ui/badge";
 import { Package } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatBRL } from "@/lib/format";
+import type { Tables } from "@/integrations/supabase/types";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface ClienteProductsTableProps {
-  products: any[];
+  products: Tables<"upsell_client_products">[];
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -79,20 +80,20 @@ export function ClienteProductsTable({ products }: ClienteProductsTableProps) {
           >
             <TableCell className="py-2.5 pl-0">
               <span className="text-sm font-medium text-zinc-200 line-clamp-1">
-                {p.product_name ?? p.name ?? "—"}
+                {p.product_name ?? "—"}
               </span>
             </TableCell>
             <TableCell className="py-2.5">
               <Badge
                 variant="outline"
-                className={cn("text-[10px] px-1.5 py-0 h-5 border", typeBadgeClass(p.product_type ?? p.type))}
+                className={cn("text-[10px] px-1.5 py-0 h-5 border", typeBadgeClass(p.product_type))}
               >
-                {typeLabel(p.product_type ?? p.type)}
+                {typeLabel(p.product_type)}
               </Badge>
             </TableCell>
             <TableCell className="py-2.5 text-right pr-0">
               <span className="text-sm tabular-nums text-zinc-300">
-                {p.unit_price != null ? formatBRL(p.unit_price) : "—"}
+                {p.sale_value != null ? formatBRL(p.sale_value) : "—"}
               </span>
             </TableCell>
           </TableRow>

@@ -1,12 +1,13 @@
 import { ShoppingCart, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatBRL, formatDateTime } from "@/lib/format";
+import type { Tables } from "@/integrations/supabase/types";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface ClienteTimelineProps {
-  orders: any[];
-  alerts: any[];
+  orders: Tables<"upsell_orders">[];
+  alerts: Tables<"client_alerts">[];
 }
 
 interface TimelineItem {
@@ -42,13 +43,13 @@ export function ClienteTimeline({ orders, alerts }: ClienteTimelineProps) {
       description: o.product_name
         ? `Pedido: ${o.product_name}`
         : "Pedido registrado",
-      value: o.total_value ?? null,
+      value: o.sale_value != null ? Number(o.sale_value) : null,
     })),
     ...alerts.map((a) => ({
       id: `alert-${a.id}`,
       type: "alert" as const,
       date: a.created_at ?? "",
-      description: a.message ?? "Alerta gerado",
+      description: a.description ?? a.title ?? "Alerta gerado",
       severity: a.severity,
     })),
   ]

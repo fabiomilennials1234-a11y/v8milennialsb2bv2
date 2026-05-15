@@ -2,11 +2,12 @@ import { ShoppingCart } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { formatBRL, formatDateFull } from "@/lib/format";
+import type { Tables } from "@/integrations/supabase/types";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface ClienteOrderHistoryProps {
-  orders: any[];
+  orders: Tables<"upsell_orders">[];
   cycleDays: number;
 }
 
@@ -112,7 +113,7 @@ export function ClienteOrderHistory({ orders, cycleDays }: ClienteOrderHistoryPr
                 </div>
                 <div className="flex flex-col items-end gap-1 shrink-0">
                   <span className="text-sm font-semibold tabular-nums text-zinc-200">
-                    {order.total_value != null ? formatBRL(order.total_value) : "—"}
+                    {order.sale_value != null ? formatBRL(order.sale_value) : "—"}
                   </span>
                   <Badge
                     variant="outline"

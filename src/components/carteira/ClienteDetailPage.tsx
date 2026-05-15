@@ -10,7 +10,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
+import type { Tables } from "@/integrations/supabase/types";
 import { useClientAlerts } from "@/hooks/useClientAlerts";
+
+// ─── Derived types ────────────────────────────────────────────────────────────
+
+type ClientWithLead = Tables<"upsell_clients"> & {
+  lead: Pick<Tables<"leads">, "name" | "phone" | "email" | "company"> | null;
+};
 import { ClienteMetrics } from "./ClienteMetrics";
 import { ClienteReorderTimeline } from "./ClienteReorderTimeline";
 import { ClienteCopilotSuggestion } from "./ClienteCopilotSuggestion";
@@ -57,7 +64,7 @@ export default function ClienteDetailPage() {
         .select("*, lead:leads(name, phone, email, company)")
         .eq("id", clientId!)
         .single();
-      return data;
+      return data as ClientWithLead | null;
     },
     enabled: !!clientId,
   });
@@ -97,17 +104,9 @@ export default function ClienteDetailPage() {
   const circumference = 220;
   const dashArray = `${Math.round((score / 100) * circumference)} ${circumference}`;
 
-  const clientName =
-    client?.name ??
-    (client?.lead as any)?.name ??
-    "Cliente";
-  const clientCompany =
-    client?.company ??
-    (client?.lead as any)?.company ??
-    null;
-  const clientPhone =
-    (client?.lead as any)?.phone ??
-    null;
+  const clientName = client?.name ?? client?.lead?.name ?? "Cliente";
+  const clientCompany = client?.company ?? client?.lead?.company ?? null;
+  const clientPhone = client?.lead?.phone ?? null;
 
   const cycleDays = client?.reorder_cycle_days ?? 0;
   const daysSinceLast = client?.days_since_last_order ?? 0;
@@ -224,7 +223,7 @@ export default function ClienteDetailPage() {
                 )}
               >
                 <AlertTriangle size={11} />
-                <span className="whitespace-nowrap">{alert.message}</span>
+                <span className="whitespace-nowrap">{alert.description ?? alert.title}</span>
               </div>
             ))}
           </div>

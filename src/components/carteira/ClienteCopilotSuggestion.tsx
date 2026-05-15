@@ -4,14 +4,15 @@ import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { formatDateLong } from "@/lib/format";
 import { toast } from "@/components/ui/use-toast";
+import type { Tables } from "@/integrations/supabase/types";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface ClienteCopilotSuggestionProps {
   clientName: string;
   phone: string | null;
-  alerts: any[];
-  lastOrder: any | null;
+  alerts: Tables<"client_alerts">[];
+  lastOrder: Tables<"upsell_orders"> | null;
   nextOrderExpected: string | null;
 }
 
@@ -24,9 +25,9 @@ const daysSince = (iso: string | null): number => {
 
 function buildSuggestion(
   clientName: string,
-  alerts: any[],
-  lastOrder: any | null,
-  nextOrderExpected: string | null
+  alerts: Tables<"client_alerts">[],
+  lastOrder: Tables<"upsell_orders"> | null,
+  nextOrderExpected: string | null,
 ): string {
   const firstName = clientName.split(" ")[0];
 
