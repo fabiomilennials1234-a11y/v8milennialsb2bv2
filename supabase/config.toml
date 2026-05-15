@@ -182,9 +182,6 @@ verify_jwt = false
 [functions.whatsapp-api-proxy]
 verify_jwt = false
 
-# reconfigure-uazapi-webhooks: one-time admin, auth via x-cron-secret. DELETE AFTER USE.
-[functions.reconfigure-uazapi-webhooks]
-verify_jwt = false
 # whatsapp-webhook: auth via secret in path segment (Uazapi has no HMAC nor customHeaders)
 [functions.whatsapp-webhook]
 verify_jwt = false

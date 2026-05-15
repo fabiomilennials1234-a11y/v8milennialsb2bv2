@@ -1,7 +1,9 @@
 import { withSentry } from '../_shared/sentry.ts';
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logRuntime } from "../_shared/logger.ts";
+import { validateOrganizationAccess, unauthorizedResponse } from "../_shared/auth.ts";
 
 /**
  * Edge Function: summarize-conversation
@@ -29,7 +31,7 @@ interface ConversationSummary {
 }
 
 Deno.serve(withSentry('summarize-conversation', async (req) => {
-  const corsHeaders = getCorsHeaders(req.headers.get("origin"));
+  const corsHeaders = withSecurityHeaders(getCorsHeaders(req.headers.get("origin")));
 
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -37,7 +39,23 @@ Deno.serve(withSentry('summarize-conversation', async (req) => {
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
   const supabase = createClient(supabaseUrl, supabaseKey);
+
+  // ── Auth: validate JWT and resolve caller's org ──
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) {
+    return unauthorizedResponse("Missing Authorization header", corsHeaders);
+  }
+  const jwt = authHeader.slice(7);
+  const supabaseUser = createClient(supabaseUrl, supabaseAnonKey, {
+    global: { headers: { Authorization: authHeader } },
+  });
+  const { data: userData, error: userErr } = await supabaseUser.auth.getUser(jwt);
+  if (userErr || !userData?.user) {
+    return unauthorizedResponse("Invalid token", corsHeaders);
+  }
+  const userId = userData.user.id;
 
   const openRouterApiKey = Deno.env.get("OPENROUTER_API_KEY");
   if (!openRouterApiKey) {
@@ -72,6 +90,12 @@ Deno.serve(withSentry('summarize-conversation', async (req) => {
         status: 404,
         headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
+    }
+
+    // ── Auth: verify caller belongs to lead's organization ──
+    const hasAccess = await validateOrganizationAccess(supabase, userId, lead.organization_id);
+    if (!hasAccess) {
+      return unauthorizedResponse("User does not belong to lead's organization", corsHeaders);
     }
 
     // 2. Buscar a conversa do lead (mais recente)
