@@ -11831,6 +11831,10 @@ export type Database = {
       }
       upsell_orders: {
         Row: {
+          approval_comment: string | null
+          approval_status: string
+          approved_at: string | null
+          approved_by: string | null
           campanha_id: string | null
           client_id: string
           closer_id: string | null
@@ -11851,6 +11855,10 @@ export type Database = {
           source: string | null
         }
         Insert: {
+          approval_comment?: string | null
+          approval_status?: string
+          approved_at?: string | null
+          approved_by?: string | null
           campanha_id?: string | null
           client_id: string
           closer_id?: string | null
@@ -11871,6 +11879,10 @@ export type Database = {
           source?: string | null
         }
         Update: {
+          approval_comment?: string | null
+          approval_status?: string
+          approved_at?: string | null
+          approved_by?: string | null
           campanha_id?: string | null
           client_id?: string
           closer_id?: string | null
@@ -14487,6 +14499,7 @@ export type Database = {
       get_my_admin_organization_ids: { Args: never; Returns: string[] }
       get_my_org_ids: { Args: never; Returns: string[] }
       get_my_organization_ids: { Args: never; Returns: string[] }
+      get_my_team_member_ids: { Args: never; Returns: string[] }
       get_next_best_actions: {
         Args: { p_limit?: number }
         Returns: {
@@ -15320,4 +15333,5 @@ export const Constants = {
     },
   },
 } as const
-<claude-code-hint v="1" type="plugin" value="supabase@claude-plugins-official" />
+A new version of Supabase CLI is available: v2.98.2 (currently installed v2.90.0)
+We recommend updating regularly for new features and bug fixes: https://supabase.com/docs/guides/cli/getting-started#updating-the-supabase-cli
