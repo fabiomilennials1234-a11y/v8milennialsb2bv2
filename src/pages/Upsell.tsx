@@ -23,6 +23,8 @@ import { CarteiraKPIs } from "@/components/carteira/CarteiraKPIs";
 import { CarteiraAlertBanner } from "@/components/carteira/CarteiraAlertBanner";
 import { CarteiraClientTable, type PortfolioClientRow } from "@/components/carteira/CarteiraClientTable";
 import { CarteiraClientPreview } from "@/components/carteira/CarteiraClientPreview";
+import { CarteiraBulkBar } from "@/components/carteira/CarteiraBulkBar";
+import { useBulkSelection } from "@/hooks/useBulkSelection";
 
 type ViewMode = "kanban" | "list";
 
@@ -69,6 +71,8 @@ export default function Upsell() {
   const [carteiraSearch, setCarteiraSearch] = useState("");
   const [carteiraFilter, setCarteiraFilter] = useState("all");
   const [quickOrderClientId, setQuickOrderClientId] = useState<string | null>(null);
+  const [currentRows, setCurrentRows] = useState<PortfolioClientRow[]>([]);
+  const bulk = useBulkSelection();
   const { data: kpiData } = usePortfolioKPIs();
 
   useRealtimeSubscription("upsell_clients", ["portfolio-clients", "portfolio-kpis"]);
@@ -204,6 +208,8 @@ export default function Upsell() {
               onViewDetail={(id) => navigate(`/carteira/${id}`)}
               searchQuery={carteiraSearch}
               filter={carteiraFilter}
+              bulk={bulk}
+              onRowsChange={setCurrentRows}
             />
           </div>
 
@@ -219,6 +225,12 @@ export default function Upsell() {
             />
           )}
         </div>
+
+        {/* Bulk action bar */}
+        <CarteiraBulkBar
+          selectedClients={currentRows.filter((r) => bulk.isSelected(r.id))}
+          onClear={bulk.clearSelection}
+        />
 
         {/* Shared modals */}
         <CreateClientModal open={createClientOpen} onOpenChange={setCreateClientOpen} />

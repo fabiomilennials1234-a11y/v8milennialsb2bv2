@@ -21,6 +21,7 @@ import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { timingSafeCompare } from "../_shared/auth.ts";
 import { fireTrigger } from "../_shared/workflow-trigger.ts";
+import { resolveInstance, sendTextViaInstance } from "../_shared/whatsapp-dispatch.ts";
 import {
   calculateFrequencyScore,
   calculateHealthScore,
@@ -57,6 +58,8 @@ interface ClientRow {
   id: string;
   organization_id: string;
   lead_id: string | null;
+  closer_id: string | null;
+  name: string;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -96,6 +99,7 @@ async function processClient(
   client: ClientRow,
   orgAvgTicket: number,
   now: Date,
+  whatsappAlertsEnabled = false,
 ): Promise<{ success: boolean; error?: string }> {
   // Fetch all orders for this client
   const { data: orders, error: ordersError } = await supabase
@@ -252,8 +256,8 @@ async function processClient(
     lastNpsScore: null,               // not wired yet
   });
 
-  // Sync alerts: resolve stale, create new
-  await syncAlerts(supabase, client, signals, now, healthScore, segment);
+  // Sync alerts: resolve stale, create new, notify if enabled
+  await syncAlerts(supabase, client, signals, now, healthScore, segment, whatsappAlertsEnabled);
 
   return { success: true };
 }
@@ -267,6 +271,7 @@ async function syncAlerts(
   now: Date,
   healthScore: number,
   segment: string,
+  whatsappAlertsEnabled = false,
 ): Promise<void> {
   // Fetch open alerts for this client
   const { data: openAlerts } = await supabase
@@ -317,6 +322,70 @@ async function syncAlerts(
       continue;
     }
 
+    // Send WhatsApp notification to salesperson on critical alerts
+    if (whatsappAlertsEnabled && signal.severity === "critical" && client.closer_id) {
+      try {
+        // Rate limit: 1 notification per client per day
+        const { data: rateCheck } = await supabase.rpc("check_rate_limit", {
+          p_key: `portfolio_alert:${client.id}`,
+          p_max_requests: 1,
+          p_window_seconds: 86400,
+        });
+
+        if (rateCheck?.allowed) {
+          // Look up closer's phone
+          const { data: closer } = await supabase
+            .from("team_members")
+            .select("phone, name")
+            .eq("id", client.closer_id)
+            .maybeSingle();
+
+          if (closer?.phone) {
+            const instance = await resolveInstance(supabase, client.organization_id, {
+              requireConnected: true,
+            });
+
+            if (instance) {
+              const msg = `⚠️ *Alerta Carteira*\n\nCliente *${client.name}* (${segment.toUpperCase()}) precisa de atenção.\n\n${signal.title}\n${signal.description ?? ""}\n\nHealth Score: ${healthScore}/100`;
+
+              const result = await sendTextViaInstance(
+                supabase,
+                instance,
+                closer.phone,
+                msg,
+                { trackSource: "portfolio_alert", trackId: client.id },
+              );
+
+              if (result.success) {
+                // Mark alert as notified
+                const { data: insertedAlert } = await supabase
+                  .from("client_alerts")
+                  .select("id")
+                  .eq("client_id", client.id)
+                  .eq("alert_type", signal.type)
+                  .eq("is_resolved", false)
+                  .order("created_at", { ascending: false })
+                  .limit(1)
+                  .maybeSingle();
+
+                if (insertedAlert) {
+                  await supabase
+                    .from("client_alerts")
+                    .update({ notified_at: now.toISOString() })
+                    .eq("id", insertedAlert.id);
+                }
+              }
+            }
+          }
+        }
+      } catch (notifErr) {
+        console.error(
+          `[portfolio-health] Failed to send WhatsApp alert for client ${client.id}:`,
+          notifErr,
+        );
+      }
+    }
+
     // Fire workflow trigger for reorder_overdue signal if lead exists
     if (signal.type === "reorder_overdue" && client.lead_id) {
       try {
@@ -353,6 +422,15 @@ async function processOrg(
   const stats = { processed: 0, failed: 0 };
   const orgT0 = Date.now();
 
+  // Check if WhatsApp alert notifications are enabled for this org
+  const { data: alertFeature } = await supabase
+    .from("organization_features")
+    .select("enabled")
+    .eq("organization_id", orgId)
+    .eq("feature_key", "portfolio_alerts_whatsapp")
+    .maybeSingle();
+  const whatsappAlertsEnabled = alertFeature?.enabled === true;
+
   // Compute org-wide avg ticket for segmentation
   const { data: ticketData } = await supabase
     .from("upsell_orders")
@@ -370,7 +448,7 @@ async function processOrg(
   while (true) {
     const { data: clients, error: clientsError } = await supabase
       .from("upsell_clients")
-      .select("id, organization_id, lead_id")
+      .select("id, organization_id, lead_id, closer_id, name")
       .eq("organization_id", orgId)
       .eq("is_active", true)
       .range(offset, offset + BATCH_SIZE - 1);
@@ -387,7 +465,7 @@ async function processOrg(
     for (let i = 0; i < batch.length; i += CONCURRENCY) {
       const chunk = batch.slice(i, i + CONCURRENCY);
       const results = await Promise.all(
-        chunk.map((client) => processClient(supabase, client, orgAvgTicket, now)),
+        chunk.map((client) => processClient(supabase, client, orgAvgTicket, now, whatsappAlertsEnabled)),
       );
       for (let j = 0; j < results.length; j++) {
         if (results[j].success) {

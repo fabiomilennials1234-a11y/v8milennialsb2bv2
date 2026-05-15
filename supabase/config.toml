@@ -102,6 +102,10 @@ verify_jwt = false
 [functions.tinyerp-webhook]
 verify_jwt = false
 
+# erp-order-webhook: recebe pedidos do ERP e cria upsell_orders (auth via x-webhook-secret)
+[functions.erp-order-webhook]
+verify_jwt = false
+
 # tinyerp-fetch-nfe: chamado pelo webhook e pelo frontend via service_role
 [functions.tinyerp-fetch-nfe]
 verify_jwt = false

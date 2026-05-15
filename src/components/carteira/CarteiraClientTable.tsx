@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Table,
   TableBody,
@@ -23,6 +23,7 @@ import {
   Loader2,
   Users,
   SearchX,
+  Check,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatBRL } from "@/lib/format";
@@ -33,6 +34,7 @@ import {
 } from "@/hooks/usePortfolioClients";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/hooks/useOrganization";
+import type { useBulkSelection } from "@/hooks/useBulkSelection";
 
 export type { PortfolioClientRow };
 
@@ -46,6 +48,8 @@ interface CarteiraClientTableProps {
   onViewDetail?: (clientId: string) => void;
   searchQuery: string;
   filter: string;
+  bulk?: ReturnType<typeof useBulkSelection>;
+  onRowsChange?: (rows: PortfolioClientRow[]) => void;
 }
 
 // ─── Constants ──────────────────────────────────────────────────────────────
@@ -188,6 +192,8 @@ export function CarteiraClientTable({
   onViewDetail,
   searchQuery,
   filter,
+  bulk,
+  onRowsChange,
 }: CarteiraClientTableProps) {
   const { organizationId } = useOrganization();
   const [sortBy, setSortBy] = useState<SortColumn | null>(null);
@@ -213,6 +219,13 @@ export function CarteiraClientTable({
   const rows = data?.rows ?? [];
   const total = data?.total ?? 0;
   const totalPages = data?.total_pages ?? 1;
+  const rowIds = useMemo(() => rows.map((r) => r.id), [rows]);
+
+  useEffect(() => {
+    onRowsChange?.(rows);
+  }, [rows]);
+  const allChecked = bulk && rows.length > 0 && rows.every((r) => bulk.isSelected(r.id));
+  const someChecked = bulk && rows.some((r) => bulk.isSelected(r.id));
 
   const handleSort = useCallback(
     (col: SortColumn) => {
@@ -353,7 +366,24 @@ export function CarteiraClientTable({
         <Table>
           <TableHeader>
             <TableRow className="border-[#27272a] hover:bg-transparent bg-[#111113]">
-              <SortableHeader col="name" label="Cliente" className="pl-4" />
+              {bulk && (
+                <TableHead className={cn(thBase, "w-10 pl-3 pr-0")}>
+                  <button
+                    onClick={() => bulk.selectAll(rowIds)}
+                    className={cn(
+                      "w-5 h-5 rounded border flex items-center justify-center transition-all",
+                      allChecked
+                        ? "bg-[#eab308] border-[#eab308] text-black"
+                        : someChecked
+                          ? "border-[#eab308]/60 bg-[#eab308]/20"
+                          : "border-[#3f3f46] hover:border-[#71717a]",
+                    )}
+                  >
+                    {(allChecked || someChecked) && <Check className="w-3 h-3" />}
+                  </button>
+                </TableHead>
+              )}
+              <SortableHeader col="name" label="Cliente" className={bulk ? "" : "pl-4"} />
               <SortableHeader col="health_score" label="Health" />
               <SortableHeader col="days_since_last_order" label="Recompra" />
               <SortableHeader col="avg_ticket" label="Ticket médio" />
@@ -383,16 +413,38 @@ export function CarteiraClientTable({
                 client.next_order_expected,
               );
 
+              const bulkChecked = bulk?.isSelected(client.id);
+
               return (
                 <TableRow
                   key={client.id}
                   onClick={() => onSelectClient(isSelected ? null : client)}
                   className={cn(
-                    "border-[#1e1e21] cursor-pointer transition-colors",
+                    "border-[#1e1e21] cursor-pointer transition-colors group/row",
                     isSelected ? "bg-[#232326]" : "hover:bg-[#1c1c1f]",
+                    bulkChecked && "bg-[#eab308]/5",
                   )}
                 >
-                  <TableCell className="py-3 pl-4">
+                  {bulk && (
+                    <TableCell className="py-3 pl-3 pr-0 w-10">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (e.shiftKey) bulk.toggleRange(client.id, rowIds);
+                          else bulk.toggle(client.id);
+                        }}
+                        className={cn(
+                          "w-5 h-5 rounded border flex items-center justify-center transition-all",
+                          bulkChecked
+                            ? "bg-[#eab308] border-[#eab308] text-black"
+                            : "border-[#3f3f46] opacity-0 group-hover/row:opacity-100",
+                        )}
+                      >
+                        {bulkChecked && <Check className="w-3 h-3" />}
+                      </button>
+                    </TableCell>
+                  )}
+                  <TableCell className={cn("py-3", bulk ? "" : "pl-4")}>
                     <div className="flex flex-col gap-px min-w-0">
                       <span className="text-sm font-semibold text-[#fafafa] truncate max-w-[220px]">
                         {client.name}
