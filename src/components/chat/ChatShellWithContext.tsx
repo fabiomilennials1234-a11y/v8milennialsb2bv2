@@ -397,6 +397,16 @@ export function ChatShellWithContext() {
   // ── Conversa selecionada ────────────────────────────────────────────────────
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
 
+  // Reset selection when master user switches shadow org
+  const prevOrgIdRef = useRef(organizationId);
+  useEffect(() => {
+    if (prevOrgIdRef.current && organizationId && prevOrgIdRef.current !== organizationId) {
+      setSelectedInstanceIdRaw(null);
+      setSelectedPhone(null);
+    }
+    prevOrgIdRef.current = organizationId;
+  }, [organizationId]);
+
   // Quando contatos carregam, casa pendingDeepLinkPhone pelo phone normalizado
   // e seta selectedPhone com o phone_number canônico do contato.
   useEffect(() => {
