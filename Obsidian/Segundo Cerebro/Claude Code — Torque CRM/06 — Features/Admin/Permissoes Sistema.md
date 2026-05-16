@@ -10,8 +10,6 @@ owner: gabriel
 related_files: []
 ---
 
-
-
 # Permissões Sistema
 
 ## O que é

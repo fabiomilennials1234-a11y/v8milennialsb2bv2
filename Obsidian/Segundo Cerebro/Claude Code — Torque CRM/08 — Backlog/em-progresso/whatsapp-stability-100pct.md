@@ -9,8 +9,6 @@ related: []
 owner: gabriel
 ---
 
-
-
 # WhatsApp stability — fechar 100%
 
 Backlog dos gaps remanescentes após Fase 1-6 deployed. Estado atual ~82% funcional. Total ~16h trabalho pra ~99% (100% absoluto é ilusão — Uazapi pode mudar schema amanhã).

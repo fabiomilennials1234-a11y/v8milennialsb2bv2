@@ -9,8 +9,6 @@ related: []
 owner: gabriel
 ---
 
-
-
 # 2026-04-30 — Sync meeting_date ⇄ compromisso_date + move_pipe_record fail-closed
 
 ## Problema

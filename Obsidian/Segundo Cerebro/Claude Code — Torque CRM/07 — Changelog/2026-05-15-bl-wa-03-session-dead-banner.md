@@ -9,8 +9,6 @@ related: []
 owner: gabriel
 ---
 
-
-
 # BL-WA-03 — UI banner sessão morta
 
 Banner persistente em todas as páginas autenticadas enquanto a org tem instância WhatsApp com `session_dead_since IS NOT NULL`. Antes, o `whatsapp-session-watchdog` (cron 10min) registrava no DB mas usuário descobria silêncio só pelas mensagens não chegando.

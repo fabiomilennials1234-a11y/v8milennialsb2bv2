@@ -9,8 +9,6 @@ related: []
 owner: gabriel
 ---
 
-
-
 # Etapa C — Frontend (vínculo user ↔ instância de escrita)
 
 > Implementação dos estados visuais de `[[02-ui-states]]`. Backend (Etapa A + B) já completo; flag `user_write_instance_strict` continua **OFF default**. Esta etapa não muda comportamento legado quando flag está OFF e o lead da conversa segue o caminho atual.

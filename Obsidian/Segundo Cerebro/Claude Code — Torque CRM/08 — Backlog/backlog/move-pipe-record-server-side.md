@@ -9,8 +9,6 @@ related: []
 owner: gabriel
 ---
 
-
-
 # move_pipe_record server-side
 
 ## Problema

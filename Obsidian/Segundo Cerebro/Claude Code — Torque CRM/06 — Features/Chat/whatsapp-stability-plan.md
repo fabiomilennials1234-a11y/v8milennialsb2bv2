@@ -9,8 +9,6 @@ related: []
 owner: gabriel
 ---
 
-
-
 # WhatsApp Stability — estado consolidado
 
 Estado atual do plano de estabilização do pipeline WhatsApp (Uazapi → V8 webhook → DB → UI). Gerado após resolução do incidente Uazapi V2 schema change (2026-05-14).

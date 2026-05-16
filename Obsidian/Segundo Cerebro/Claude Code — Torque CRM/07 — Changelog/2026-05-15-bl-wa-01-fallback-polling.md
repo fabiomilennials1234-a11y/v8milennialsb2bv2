@@ -9,8 +9,6 @@ related: []
 owner: gabriel
 ---
 
-
-
 # BL-WA-01 — Fallback polling realtime
 
 Fecha o gap UX onde o frontend ficava silencioso por minutos quando o canal Supabase Realtime não conseguia rejoin (Wi-Fi flaky, proxy corporativo, server hiccup). Agora, após 2 min sem `joined`, `useWhatsAppMessages` e `useWhatsAppContacts` ativam `refetchInterval: 10s` automaticamente. Quando o canal volta a `joined`, o polling para sozinho.

@@ -9,8 +9,6 @@ related: []
 owner: gabriel
 ---
 
-
-
 # Chat Bubble Kanban
 
 ## O que é

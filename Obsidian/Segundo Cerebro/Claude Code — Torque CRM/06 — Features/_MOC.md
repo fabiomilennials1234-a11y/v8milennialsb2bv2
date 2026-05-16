@@ -36,6 +36,7 @@ owner: claude-agent
 ## Vendas
 
 - [[Agenda Interna|Agenda Interna]]
+- [[Export Stage Kanban|Export Stage (Kanban)]]
 - [[Pipe Confirmacao|Pipe Confirmacao]]
 - [[Upsell|Upsell]]
 

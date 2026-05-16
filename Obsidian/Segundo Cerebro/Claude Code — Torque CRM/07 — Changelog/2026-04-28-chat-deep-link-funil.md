@@ -9,8 +9,6 @@ related: []
 owner: gabriel
 ---
 
-
-
 # 2026-04-28 — Fix deep-link funil → chat (instância correta)
 
 ## Problema

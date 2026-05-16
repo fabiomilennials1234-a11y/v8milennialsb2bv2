@@ -9,8 +9,6 @@ related: []
 owner: gabriel
 ---
 
-
-
 # Permissions fallback — converter `allowed: true` para fail-closed
 
 ## Problema

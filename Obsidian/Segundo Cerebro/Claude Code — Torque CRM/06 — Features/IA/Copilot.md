@@ -9,8 +9,6 @@ related: []
 owner: gabriel
 ---
 
-
-
 # Copilot
 
 > [!warning] Area Fragil — agora com refactor + cobertura

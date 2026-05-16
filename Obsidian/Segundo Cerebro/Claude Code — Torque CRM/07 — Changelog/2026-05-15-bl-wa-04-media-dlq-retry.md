@@ -9,8 +9,6 @@ related: []
 owner: gabriel
 ---
 
-
-
 # BL-WA-04 — Mídia DLQ + retry
 
 Antes: `persistMediaToStorage` no `whatsapp-webhook` rodava fire-and-forget. Falha (timeout, CDN error, storage error) = mídia perdida silenciosa. CDN WhatsApp expira ~14d → perda permanente. Estimativa: 10-30% das mídias.

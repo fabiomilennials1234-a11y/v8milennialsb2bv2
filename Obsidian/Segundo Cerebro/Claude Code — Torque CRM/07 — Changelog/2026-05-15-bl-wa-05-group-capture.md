@@ -9,8 +9,6 @@ related: []
 owner: gabriel
 ---
 
-
-
 # BL-WA-05 — Captura mensagens de grupo
 
 Decisão produto **D2=A** (CTO 2026-05-15): capturar mensagens de grupo com `is_group:true`, mostrar em tab separada no chat sidebar, **não** criar lead pra membro de grupo, toggle `organizations.capture_groups` permite opt-out por org (default = true).

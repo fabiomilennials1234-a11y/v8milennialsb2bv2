@@ -9,8 +9,6 @@ related: []
 owner: gabriel
 ---
 
-
-
 # WhatsApp Write Instance — Schema (Etapa A)
 
 ## O que é

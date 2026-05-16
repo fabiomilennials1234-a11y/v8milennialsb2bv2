@@ -9,8 +9,6 @@ related: []
 owner: gabriel
 ---
 
-
-
 # Estados do composer — vínculo user ↔ instância de escrita
 
 > Spec visual + microcopy + estados. Não há código. Engenheiro consome em etapa seguinte.

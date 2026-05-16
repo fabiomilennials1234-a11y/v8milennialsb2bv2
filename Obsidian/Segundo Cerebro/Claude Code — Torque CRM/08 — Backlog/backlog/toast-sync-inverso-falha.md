@@ -9,8 +9,6 @@ related: []
 owner: gabriel
 ---
 
-
-
 # Toast/Sentry quando sync inverso falha
 
 ## Problema

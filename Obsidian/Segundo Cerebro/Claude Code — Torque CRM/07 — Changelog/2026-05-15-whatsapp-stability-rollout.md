@@ -9,8 +9,6 @@ related: []
 owner: gabriel
 ---
 
-
-
 # 2026-05-15 — Incidente Uazapi V2 + rollout estabilização
 
 ## TL;DR

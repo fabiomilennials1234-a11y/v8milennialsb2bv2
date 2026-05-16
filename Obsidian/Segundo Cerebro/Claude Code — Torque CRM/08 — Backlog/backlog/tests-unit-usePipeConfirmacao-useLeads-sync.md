@@ -9,8 +9,6 @@ related: []
 owner: gabriel
 ---
 
-
-
 # Testes unit — useUpdatePipeConfirmacao + useUpdateLead sync paths
 
 ## Problema

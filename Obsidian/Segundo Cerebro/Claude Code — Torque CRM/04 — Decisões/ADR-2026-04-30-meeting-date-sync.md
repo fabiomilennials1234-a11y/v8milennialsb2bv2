@@ -9,8 +9,6 @@ related: []
 owner: gabriel
 ---
 
-
-
 # ADR-2026-04-30 — Sync meeting_date ⇄ compromisso_date + permissão move_pipe_record fail-closed
 
 **Data:** 2026-04-30

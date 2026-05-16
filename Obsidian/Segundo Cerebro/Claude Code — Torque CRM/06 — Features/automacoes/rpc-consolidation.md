@@ -9,8 +9,6 @@ related: []
 owner: gabriel
 ---
 
-
-
 # Automações — RPC Consolidation + Health Check
 
 ## TL;DR

@@ -9,8 +9,6 @@ related: []
 owner: gabriel
 ---
 
-
-
 # Microcopy do RescheduleModal
 
 ## Problema

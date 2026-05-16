@@ -9,8 +9,6 @@ related: []
 owner: gabriel
 ---
 
-
-
 # Chat Onda 2b — fix layout / overflow horizontal
 
 ## Sintoma

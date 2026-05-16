@@ -10,8 +10,6 @@ owner: gabriel
 related_files: []
 ---
 
-
-
 # Pipe Confirmacao
 
 ## O que é
