@@ -320,7 +320,7 @@ export class UazapiClient {
     return raw.map((c: any) => ({
       id: c.wa_chatid ?? c.jid ?? c.chatId ?? c.wa_id ?? c.phone ?? c.id ?? "",
       name: c.wa_contactName ?? c.wa_name ?? c.name ?? c.pushName ?? c.notify ?? undefined,
-      isGroup: c.wa_isGroup === true ?? String(c.wa_chatid ?? c.jid ?? c.id ?? "").endsWith("@g.us"),
+      isGroup: c.wa_isGroup === true || String(c.wa_chatid ?? c.jid ?? c.id ?? "").endsWith("@g.us"),
       lastMessageTimestamp: c.wa_lastMsgTimestamp ?? c.lastMessageTimestamp ?? c.t ?? undefined,
     }));
   }
