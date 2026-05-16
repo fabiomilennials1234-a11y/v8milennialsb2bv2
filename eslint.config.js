@@ -5,7 +5,15 @@ import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist"] },
+  {
+    ignores: [
+      "dist",
+      // Auto-gerado pelo Supabase CLI — regen via `supabase gen types typescript`.
+      // Editar manualmente é proibido (ver CLAUDE.md). Parsing errors aqui
+      // indicam drift de versão CLI ou schema; corrigir é regen, não fix manual.
+      "src/integrations/supabase/types.ts",
+    ],
+  },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],
