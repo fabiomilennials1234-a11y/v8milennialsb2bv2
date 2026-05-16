@@ -79,7 +79,7 @@ function listSubdirs(dir) {
     .sort();
 }
 
-function generateMoc(folderPath, folderName) {
+function generateMoc(folderPath, folderName, existingUpdated) {
   const directFiles = listMdFiles(folderPath);
   const subdirs = listSubdirs(folderPath);
 
@@ -89,7 +89,9 @@ function generateMoc(folderPath, folderName) {
   lines.push(`title: ${folderName} — Map of Content`);
   lines.push("status: active");
   lines.push(`created: 2026-05-15`);
-  lines.push(`updated: ${new Date().toISOString().slice(0, 10)}`);
+  // Preserva `updated` existente para evitar drift em CI quando script roda
+  // em dia diferente do último commit. Caller bumpa explicitamente se quiser.
+  lines.push(`updated: ${existingUpdated || "2026-05-15"}`);
   lines.push("tags: [moc, auto-regenerated]");
   lines.push("related: []");
   lines.push("owner: claude-agent");
@@ -189,7 +191,13 @@ for (const folder of topDirs) {
   const existing = fs.existsSync(mocPath)
     ? fs.readFileSync(mocPath, "utf8")
     : null;
-  const generated = generateMoc(folderPath, folder);
+  // Extrai updated existente para preservar (evita drift de data em CI)
+  let existingUpdated = null;
+  if (existing) {
+    const m = existing.match(/^updated:\s*(\S+)/m);
+    if (m) existingUpdated = m[1].replace(/["']/g, "");
+  }
+  const generated = generateMoc(folderPath, folder, existingUpdated);
   const final = preserveManualSections(existing, generated);
 
   if (existing === final) {
