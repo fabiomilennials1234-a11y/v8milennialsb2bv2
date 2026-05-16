@@ -1,10 +1,12 @@
 ---
-tags: [backlog, security, dba, backend, high]
-created: 2026-04-30
-status: open
-severity: HIGH
-owner: [DBA, Backend]
-origem: "[[ADR-2026-04-30-meeting-date-sync]] — Security S4 + S7 item 7"
+type: backlog
+title: move_pipe_record server-side
+status: backlog
+created: 2026-04-12
+updated: 2026-04-12
+tags: [uncategorized]
+related: []
+owner: gabriel
 ---
 
 # move_pipe_record server-side

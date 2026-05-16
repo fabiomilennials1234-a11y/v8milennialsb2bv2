@@ -1,16 +1,12 @@
 ---
-tags:
-  - backlog
-  - in-progress
-  - chat
-  - whatsapp
-  - stability
-created: 2026-05-15
+type: backlog
+title: WhatsApp stability — fechar 100%
 status: in-progress
-related:
-  - "[[whatsapp-stability-plan]]"
-priority: P0
-estimated_hours_remaining: 16
+created: 2026-04-12
+updated: 2026-04-12
+tags: [uncategorized]
+related: []
+owner: gabriel
 ---
 
 # WhatsApp stability — fechar 100%

@@ -1,12 +1,12 @@
 ---
-tags:
-  - claude-code
-  - feature
-  - torque-crm
-  - ia
-created: 2026-04-12
-last_updated: 2026-04-26
+type: feature
+title: Copilot
 status: active
+created: 2026-04-12
+updated: 2026-04-12
+tags: [uncategorized]
+related: []
+owner: gabriel
 ---
 
 # Copilot

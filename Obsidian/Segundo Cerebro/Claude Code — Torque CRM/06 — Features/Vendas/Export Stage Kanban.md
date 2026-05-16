@@ -1,3 +1,14 @@
+---
+type: feature
+title: Export Stage (Kanban)
+status: active
+created: 2026-04-12
+updated: 2026-04-12
+tags: [uncategorized]
+related: []
+owner: gabriel
+---
+
 # Export Stage (Kanban)
 
 ## O que é

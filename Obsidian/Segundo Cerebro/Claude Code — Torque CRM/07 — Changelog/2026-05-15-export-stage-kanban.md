@@ -1,3 +1,14 @@
+---
+type: changelog
+title: 2026-05-15 — Export Stage Kanban
+status: shipped
+created: 2026-05-15
+updated: 2026-05-15
+tags: [uncategorized]
+related: []
+owner: gabriel
+---
+
 # 2026-05-15 — Export Stage Kanban
 
 ## Mudanças

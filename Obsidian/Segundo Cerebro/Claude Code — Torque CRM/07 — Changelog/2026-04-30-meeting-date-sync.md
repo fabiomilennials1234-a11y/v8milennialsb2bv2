@@ -1,11 +1,12 @@
 ---
-tags: [changelog, fix, pipe-confirmacao, permissoes, security]
+type: changelog
+title: 2026-04-30 — Sync meeting_date ⇄ compromisso_date + move_pipe_record fail-closed
+status: shipped
 created: 2026-04-30
-status: active
-related:
-  - "[[Pipe Confirmacao]]"
-  - "[[Permissoes Sistema]]"
-  - "[[ADR-2026-04-30-meeting-date-sync]]"
+updated: 2026-04-30
+tags: [uncategorized]
+related: []
+owner: gabriel
 ---
 
 # 2026-04-30 — Sync meeting_date ⇄ compromisso_date + move_pipe_record fail-closed

@@ -1,14 +1,12 @@
 ---
-tags:
-  - changelog
-  - chat
-  - whatsapp
-  - stability
-  - bl-wa-05
+type: changelog
+title: BL-WA-05 — Captura mensagens de grupo
+status: shipped
 created: 2026-05-15
-related:
-  - "[[whatsapp-stability-100pct]]"
-  - "[[whatsapp-stability-plan]]"
+updated: 2026-05-15
+tags: [uncategorized]
+related: []
+owner: gabriel
 ---
 
 # BL-WA-05 — Captura mensagens de grupo

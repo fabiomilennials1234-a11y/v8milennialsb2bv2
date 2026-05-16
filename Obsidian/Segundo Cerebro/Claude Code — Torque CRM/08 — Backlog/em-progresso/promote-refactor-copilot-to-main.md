@@ -1,3 +1,14 @@
+---
+type: backlog
+title: Promote refactor copilot → main
+status: in-progress
+created: 2026-04-12
+updated: 2026-04-12
+tags: [uncategorized]
+related: []
+owner: gabriel
+---
+
 # Promote refactor copilot → main
 
 **Status**: Aguardando autorização CTO

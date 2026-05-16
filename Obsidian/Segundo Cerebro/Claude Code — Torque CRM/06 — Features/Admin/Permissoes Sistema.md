@@ -1,14 +1,13 @@
 ---
-feature: Permissoes Sistema
-status: estável
-tags: [permissoes, rbac, segurança, admin]
-created: 2026-04-30
-last_updated: 2026-04-30
-related_files:
-  - src/lib/permissions.ts
-  - supabase/functions/_shared/permission_engine.ts
-  - src/hooks/useUserRole.ts
-  - src/hooks/usePipeConfirmacao.ts
+type: feature
+title: Permissões Sistema
+status: active
+created: 2026-04-12
+updated: 2026-04-12
+tags: [uncategorized]
+related: []
+owner: gabriel
+related_files: []
 ---
 
 # Permissões Sistema
