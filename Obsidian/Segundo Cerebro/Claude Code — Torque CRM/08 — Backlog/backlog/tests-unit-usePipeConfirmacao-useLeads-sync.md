@@ -1,11 +1,15 @@
 ---
-tags: [backlog, qa, frontend, medium]
-created: 2026-04-30
-status: open
-severity: MEDIUM
-owner: [QA, Frontend]
-origem: "[[ADR-2026-04-30-meeting-date-sync]]"
+type: backlog
+title: Testes unit — useUpdatePipeConfirmacao + useUpdateLead sync paths
+status: backlog
+created: 2026-04-12
+updated: 2026-04-12
+tags: [uncategorized]
+related: []
+owner: gabriel
 ---
+
+
 
 # Testes unit — useUpdatePipeConfirmacao + useUpdateLead sync paths
 

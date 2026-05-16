@@ -1,13 +1,15 @@
 ---
-tags:
-  - changelog
-  - chat
-  - whatsapp
-  - bug-fix
-  - frontend
-date: 2026-04-28
-status: shipped-dev
+type: changelog
+title: 2026-04-28 — Fix deep-link funil → chat (instância correta)
+status: shipped
+created: 2026-04-28
+updated: 2026-04-28
+tags: [uncategorized]
+related: []
+owner: gabriel
 ---
+
+
 
 # 2026-04-28 — Fix deep-link funil → chat (instância correta)
 

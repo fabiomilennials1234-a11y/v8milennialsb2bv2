@@ -1,15 +1,15 @@
 ---
-tags:
-  - feature
-  - whatsapp
-  - frontend
-  - composer
-created: 2026-05-08
-last_updated: 2026-05-08
-status: ready-for-rollout
-stage: C — Frontend (vínculo user↔instância)
-depends_on: "[[01-schema]], [[02-ui-states]]"
+type: feature
+title: Etapa C — Frontend (vínculo user ↔ instância de escrita)
+status: active
+created: 2026-04-12
+updated: 2026-04-12
+tags: [uncategorized]
+related: []
+owner: gabriel
 ---
+
+
 
 # Etapa C — Frontend (vínculo user ↔ instância de escrita)
 

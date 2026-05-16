@@ -1,11 +1,15 @@
 ---
-tags: [backlog, security, frontend, medium]
-created: 2026-04-30
-status: open
-severity: MEDIUM
-owner: [Security, Frontend]
-origem: "Security review S4 — [[ADR-2026-04-30-meeting-date-sync]]"
+type: backlog
+title: "Permissions fallback — converter `allowed: true` para fail-closed"
+status: backlog
+created: 2026-04-12
+updated: 2026-04-12
+tags: [uncategorized]
+related: []
+owner: gabriel
 ---
+
+
 
 # Permissions fallback — converter `allowed: true` para fail-closed
 

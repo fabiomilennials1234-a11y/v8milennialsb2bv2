@@ -1,0 +1,58 @@
+name: vault-regen
+
+# =============================================================================
+# Vault regen — abre PR com _MOC.md regenerados quando vault muda em main.
+# =============================================================================
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Obsidian/**/*.md'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  regen:
+    runs-on: ubuntu-latest
+    name: Regenera MOCs do vault
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Regen MOCs
+        run: node scripts/vault-regen-indexes.mjs
+
+      - name: Check if changed
+        id: check
+        run: |
+          if git diff --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create PR with regen
+        if: steps.check.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: 'docs(vault): auto-regen MOCs'
+          title: 'docs(vault): auto-regen MOCs'
+          body: |
+            Regen automático de `_MOC.md` em `Obsidian/.../` após mudança em `main`.
+
+            Gerado por `.github/workflows/vault-regen.yml` via `scripts/vault-regen-indexes.mjs`.
+          branch: vault-regen/auto
+          delete-branch: true
+          labels: |
+            docs
+            vault
+            auto-regen

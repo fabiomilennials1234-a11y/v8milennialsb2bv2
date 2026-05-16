@@ -1,0 +1,137 @@
+name: vault-health
+
+# =============================================================================
+# Vault health monitor — roda semanal, abre issue se vault degradou.
+# =============================================================================
+
+on:
+  schedule:
+    - cron: '0 9 * * MON'  # Segunda 09:00 UTC = 06:00 BRT
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  health-check:
+    runs-on: ubuntu-latest
+    name: Vault health check
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run vault-lint (allow warnings)
+        id: lint
+        run: |
+          set +e
+          node scripts/vault-lint.mjs > /tmp/lint-output.txt 2>&1
+          LINT_EXIT=$?
+          set -e
+          echo "lint_exit=$LINT_EXIT" >> "$GITHUB_OUTPUT"
+          cat /tmp/lint-output.txt
+
+      - name: Count métricas
+        id: metrics
+        run: |
+          TOTAL=$(find Obsidian -name "*.md" | wc -l)
+          ADRS=$(find "Obsidian/Segundo Cerebro/Claude Code — Torque CRM/04 — Decisões" -name "ADR-*.md" 2>/dev/null | wc -l || echo 0)
+          FEATURES=$(find "Obsidian/Segundo Cerebro/Claude Code — Torque CRM/06 — Features" -name "*.md" 2>/dev/null | wc -l || echo 0)
+          CHANGELOG=$(find "Obsidian/Segundo Cerebro/Claude Code — Torque CRM/07 — Changelog" -name "*.md" 2>/dev/null | wc -l || echo 0)
+          BACKLOG=$(find "Obsidian/Segundo Cerebro/Claude Code — Torque CRM/08 — Backlog" -name "*.md" 2>/dev/null | wc -l || echo 0)
+          WARNINGS=$(grep -c '⚠' /tmp/lint-output.txt || echo 0)
+          ERRORS=$(grep -c '✗' /tmp/lint-output.txt || echo 0)
+
+          {
+            echo "total=$TOTAL"
+            echo "adrs=$ADRS"
+            echo "features=$FEATURES"
+            echo "changelog=$CHANGELOG"
+            echo "backlog=$BACKLOG"
+            echo "warnings=$WARNINGS"
+            echo "errors=$ERRORS"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Detectar notas stale (>90 dias sem update + status active)
+        id: stale
+        run: |
+          set +e
+          STALE_COUNT=0
+          NINETY_DAYS_AGO=$(date -d '90 days ago' +%Y-%m-%d 2>/dev/null || date -v-90d +%Y-%m-%d)
+          echo "ninety_days_ago=$NINETY_DAYS_AGO"
+          # Walk vault, count files with status: active and updated > 90 days ago
+          # (best-effort grep — não substitui vault-lint)
+          while IFS= read -r file; do
+            UPDATED=$(grep -m1 '^updated:' "$file" | sed 's/updated:\s*//;s/"//g' || true)
+            STATUS=$(grep -m1 '^status:' "$file" | sed 's/status:\s*//;s/"//g' || true)
+            if [ "$STATUS" = "active" ] && [ -n "$UPDATED" ] && [[ "$UPDATED" < "$NINETY_DAYS_AGO" ]]; then
+              STALE_COUNT=$((STALE_COUNT + 1))
+            fi
+          done < <(find Obsidian -name "*.md")
+          echo "stale_count=$STALE_COUNT" >> "$GITHUB_OUTPUT"
+
+      - name: Create or update health issue
+        if: steps.metrics.outputs.errors != '0' || steps.metrics.outputs.warnings > '50'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const total = '${{ steps.metrics.outputs.total }}';
+            const adrs = '${{ steps.metrics.outputs.adrs }}';
+            const features = '${{ steps.metrics.outputs.features }}';
+            const changelog = '${{ steps.metrics.outputs.changelog }}';
+            const backlog = '${{ steps.metrics.outputs.backlog }}';
+            const warnings = '${{ steps.metrics.outputs.warnings }}';
+            const errors = '${{ steps.metrics.outputs.errors }}';
+            const stale = '${{ steps.stale.outputs.stale_count }}';
+
+            const body = `## Vault Health Report — ${new Date().toISOString().slice(0, 10)}
+
+            ### Métricas
+            - Total arquivos: ${total}
+            - ADRs: ${adrs}
+            - Features: ${features}
+            - Changelog: ${changelog}
+            - Backlog: ${backlog}
+            - Notas stale (>90d sem update, status=active): ${stale}
+
+            ### Lint
+            - Errors: ${errors}
+            - Warnings: ${warnings}
+
+            ${errors !== '0' ? '⚠ **Lint errors detectados.** Rodar \`npm run vault:lint\` local pra reproduzir.' : ''}
+            ${warnings > '50' ? '⚠ Muitos warnings — wikilinks órfãos acumulando.' : ''}
+            ${stale > '10' ? '⚠ Muitas notas active sem update há >90d — revisar status.' : ''}
+
+            ---
+            _Gerado por \`.github/workflows/vault-health.yml\`._
+            `;
+
+            // Procura issue aberta com mesmo título
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'vault-health'
+            });
+
+            const existing = issues.data.find(i => i.title.startsWith('Vault Health'));
+
+            if (existing) {
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                body
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: 'Vault Health — semanal',
+                body,
+                labels: ['vault-health', 'docs']
+              });
+            }

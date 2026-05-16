@@ -1,9 +1,15 @@
 ---
-feature: chat-onda-2b-layout
-domain: Chat
-status: ativa
-flag: VITE_CHAT_ONDA_2B
+type: feature
+title: Chat Onda 2b — contrato de layout
+status: active
+created: 2026-04-12
+updated: 2026-04-12
+tags: [uncategorized]
+related: []
+owner: gabriel
 ---
+
+
 
 # Chat Onda 2b — contrato de layout
 

@@ -1,9 +1,15 @@
 ---
-tags: [feature, automations, workflows, infra]
-status: implemented-dev
-data: 2026-05-12
-branch: fix/automacoes-rpc-consolidation
+type: feature
+title: Automações — RPC Consolidation + Health Check
+status: active
+created: 2026-04-12
+updated: 2026-04-12
+tags: [uncategorized]
+related: []
+owner: gabriel
 ---
+
+
 
 # Automações — RPC Consolidation + Health Check
 

@@ -1,3 +1,14 @@
+---
+type: changelog
+title: 2026-04-27 — PDF chunking + hard limit 8MB pra RAG funcional
+status: shipped
+created: 2026-04-27
+updated: 2026-04-27
+tags: [uncategorized]
+related: []
+owner: gabriel
+---
+
 # 2026-04-27 — PDF chunking + hard limit 8MB pra RAG funcional
 
 ## Problema reportado pelo CTO

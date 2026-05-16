@@ -1,6 +1,19 @@
 # CLAUDE.md — Torque CRM
 
-SaaS B2B multi-tenant. Leads, pipelines, campanhas, automações IA. ~30 orgs ativas. ICP: fábricas/distribuidoras B2B. Domínio: `torquecrm.com.br`. Time: CTO (Gabriel) + 1 dev junior.
+SaaS B2B multi-tenant. Leads, pipelines, campanhas, automações IA. ~30 orgs ativas. ICP: fábricas/distribuidoras B2B. Domínio: `torquecrm.com.br`. Time: CTO (Gabriel) + 1 dev junior + 3 subagentes Claude Code.
+
+## Contexto JIT
+
+Este doc é **mínimo**. Para detalhe, navegar via:
+- **Vault**: `Obsidian/Segundo Cerebro/Claude Code — Torque CRM/00 — INDEX.md`
+- **Sub-CLAUDE.md** em módulos críticos:
+  - `supabase/functions/agent-message/CLAUDE.md` — Copilot turn 🔴
+  - `supabase/functions/whatsapp-webhook/CLAUDE.md` — Uazapi inbound 🔴
+  - `supabase/functions/_shared/CLAUDE.md` — módulos compartilhados
+  - `supabase/migrations/CLAUDE.md` — regras migration
+  - `src/lib/CLAUDE.md` — permissions + helpers frontend 🟠
+- **AGENTS.md** raiz — spec agent-agnostic
+- **llms.txt** raiz — index curado pra LLMs
 
 ## Subagentes (3)
 
@@ -147,8 +160,24 @@ Push main/develop → GitHub Actions: unit-tests → integration-tests (Supabase
 
 ## Obsidian (Segundo Cerebro)
 
-Vault: `Obsidian/Segundo Cerebro/Claude Code — Torque CRM/`. Consultar ANTES de agir em features.
-- `00 — INDEX.md` (visão geral) | `06 — Features/<domínio>/` (regras negócio) | `07 — Changelog/YYYY-MM-DD.md` | `08 — Backlog/<status>/` | `04 — Decisões/`
+Vault: `Obsidian/Segundo Cerebro/Claude Code — Torque CRM/`. Diátaxis-aligned. **Consultar ANTES de agir em features.**
+
+| Pasta | Conteúdo |
+|---|---|
+| `00 — INDEX.md` | Map of content raiz |
+| `01 — Identidade/` | Subagentes, Convenções |
+| `02 — Arquitetura/` | Visao Geral, Multi-tenancy, Areas Frageis, Modulos, Integracoes |
+| `03 — Reference/` | Schema, RLS Policies, Edge Functions, Cron Jobs, Env Vars, RPCs |
+| `04 — Decisões/` | ADRs imutáveis |
+| `05 — How-to/` | deploy-edge-function, aplicar-migration-prod, debug-whatsapp, ... |
+| `06 — Features/` | Regras de negócio por domínio |
+| `07 — Changelog/` | Append-only |
+| `08 — Backlog/` | Work in progress |
+| `09 — Tutorials/` | Onboarding dev, primeiro PR, tour vault, trabalhando com Claude |
+| `99 — Templates/` | Esqueletos para notas novas |
+
+**Vault tem 8 camadas de proteção** contra perda em merge — ver `CONTRIBUTING.md`.
+Deletar arquivo do vault requer flag `[vault-delete-ok]` em commit message.
 
 ## Design
 

@@ -1,12 +1,13 @@
 ---
-tags:
-  - chat
-  - whatsapp
-  - chat-bubble
-  - feature
-created: 2026-05-12
-last_updated: 2026-05-12
+type: feature
+title: Chat Bubble — Filtro de Instancia
 status: active
+created: 2026-05-12
+updated: 2026-05-12
+tags: [chat, whatsapp, chat-bubble, feature]
+related: []
+owner: gabriel
+last_updated: 2026-05-12
 ---
 
 # Chat Bubble — Filtro de Instancia

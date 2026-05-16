@@ -1,17 +1,15 @@
 ---
-tags:
-  - chat
-  - whatsapp
-  - uazapi
-  - stability
-  - claude-code
-  - incident
-created: 2026-05-15
-status: in-progress
-related:
-  - "[[INCIDENT_2026_05_14_UAZAPI_V2]]"
-  - "[[WHATSAPP_STABILITY_PLAN]]"
+type: feature
+title: WhatsApp Stability — estado consolidado
+status: active
+created: 2026-04-12
+updated: 2026-04-12
+tags: [uncategorized]
+related: []
+owner: gabriel
 ---
+
+
 
 # WhatsApp Stability — estado consolidado
 

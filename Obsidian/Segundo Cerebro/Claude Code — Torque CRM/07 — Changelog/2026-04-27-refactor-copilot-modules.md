@@ -1,3 +1,14 @@
+---
+type: changelog
+title: Changelog — 2026-04-27 (sessão tarde) — Refactor Copilot + Wizard Removal + Tabs Playground
+status: shipped
+created: 2026-04-27
+updated: 2026-04-27
+tags: [uncategorized]
+related: []
+owner: gabriel
+---
+
 # Changelog — 2026-04-27 (sessão tarde) — Refactor Copilot + Wizard Removal + Tabs Playground
 
 Sessão long-form, tudo no branch `develop`. **Nada em `main`/prod ainda** — push pra main aguarda decisão explícita do CTO + smoke E2E real após aplicar migrations pendentes em dev.

@@ -1,3 +1,14 @@
+---
+type: adr
+title: ADR 2026-04-27 — Refactor agent-engine modular (Fase B)
+status: accepted
+created: 2026-04-27
+updated: 2026-04-27
+tags: [uncategorized]
+related: []
+owner: gabriel
+---
+
 # ADR 2026-04-27 — Refactor agent-engine modular (Fase B)
 
 **Status**: Aceita

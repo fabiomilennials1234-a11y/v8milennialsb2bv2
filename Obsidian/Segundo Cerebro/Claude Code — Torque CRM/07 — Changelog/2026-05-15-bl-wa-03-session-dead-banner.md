@@ -1,15 +1,15 @@
 ---
-tags:
-  - changelog
-  - chat
-  - whatsapp
-  - stability
-  - bl-wa-03
+type: changelog
+title: BL-WA-03 — UI banner sessão morta
+status: shipped
 created: 2026-05-15
-related:
-  - "[[whatsapp-stability-100pct]]"
-  - "[[whatsapp-stability-plan]]"
+updated: 2026-05-15
+tags: [uncategorized]
+related: []
+owner: gabriel
 ---
+
+
 
 # BL-WA-03 — UI banner sessão morta
 

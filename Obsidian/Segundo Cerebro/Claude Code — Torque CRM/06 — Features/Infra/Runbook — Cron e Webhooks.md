@@ -1,3 +1,14 @@
+---
+type: feature
+title: Runbook — Cron Jobs e Webhooks
+status: active
+created: 2026-04-12
+updated: 2026-04-12
+tags: [uncategorized]
+related: []
+owner: gabriel
+---
+
 # Runbook — Cron Jobs e Webhooks
 
 **Ambiente produção**: `jsjsmuncfkbsbzqzqhfq`
