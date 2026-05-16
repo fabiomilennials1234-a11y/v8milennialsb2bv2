@@ -1,10 +1,12 @@
 ---
-tags: [backlog, automation, backend, low]
-created: 2026-04-30
-status: open
-severity: LOW
-owner: [Automation, Backend]
-origem: "[[ADR-2026-04-30-meeting-date-sync]]"
+type: backlog
+title: Dedupe — triggerStageChangedWorkflows client-side vs trigger server-side
+status: backlog
+created: 2026-04-12
+updated: 2026-04-12
+tags: [uncategorized]
+related: []
+owner: gabriel
 ---
 
 # Dedupe — triggerStageChangedWorkflows client-side vs trigger server-side

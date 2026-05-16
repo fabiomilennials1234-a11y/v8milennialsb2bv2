@@ -1,10 +1,12 @@
 ---
-tags: [feature, chat, whatsapp, bubble, kanban]
-status: ativo
-domínio: Chat
-versao: PR3 + PR4
-data_criacao: 2026-05-08
-last_updated: 2026-05-08
+type: feature
+title: Chat Bubble Kanban
+status: active
+created: 2026-04-12
+updated: 2026-04-12
+tags: [uncategorized]
+related: []
+owner: gabriel
 ---
 
 # Chat Bubble Kanban

@@ -1,3 +1,14 @@
+---
+type: feature
+title: UAT — Roteiro de Testes Presenciais
+status: active
+created: 2026-04-12
+updated: 2026-04-12
+tags: [uncategorized]
+related: []
+owner: gabriel
+---
+
 # UAT — Roteiro de Testes Presenciais
 
 **Feature:** Vínculo user ↔ instância de escrita WhatsApp

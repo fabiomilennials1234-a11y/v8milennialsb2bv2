@@ -1,8 +1,12 @@
 ---
-date: 2026-04-29
-area: chat
-type: bugfix
-tags: [chat, ui, layout, onda-2b]
+type: changelog
+title: Chat Onda 2b — fix layout / overflow horizontal
+status: shipped
+created: 2026-04-29
+updated: 2026-04-29
+tags: [uncategorized]
+related: []
+owner: gabriel
 ---
 
 # Chat Onda 2b — fix layout / overflow horizontal

@@ -1,10 +1,12 @@
 ---
-tags: [backlog, frontend, ux, low]
-created: 2026-04-30
-status: open
-severity: LOW
-owner: [Frontend, UX]
-origem: "[[ADR-2026-04-30-meeting-date-sync]]"
+type: backlog
+title: Microcopy do RescheduleModal
+status: backlog
+created: 2026-04-12
+updated: 2026-04-12
+tags: [uncategorized]
+related: []
+owner: gabriel
 ---
 
 # Microcopy do RescheduleModal

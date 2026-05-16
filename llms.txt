@@ -1,0 +1,69 @@
+# Torque CRM
+
+> SaaS B2B multi-tenant para gestão de leads, pipelines de vendas, campanhas
+> e automações com IA. React + Supabase + Edge Functions. ~30 organizações
+> ativas. ICP: fábricas e distribuidoras B2B. Time: CTO + 1 dev junior + 3
+> subagentes Claude Code. Domínio: torquecrm.com.br.
+
+Important notes:
+- Repositório privado. Acesso restrito.
+- Vault Obsidian em `Obsidian/Segundo Cerebro/Claude Code — Torque CRM/` é o
+  segundo cérebro do projeto — Diátaxis-aligned, ADR Nygard-style.
+- 8 camadas de proteção do vault contra perda em merge (`.gitattributes`
+  `merge=union`, `vault-sentinel` Action, CODEOWNERS, pre-commit hook,
+  PR template, `vault-backup` mirror branch).
+- Default = dev. Deploy em prod exige autorização explícita CTO na sessão.
+
+## Docs
+
+- [README](README.md): overview humano + quick start
+- [CLAUDE.md](CLAUDE.md): spec Claude Code (subagentes + áreas frágeis)
+- [AGENTS.md](AGENTS.md): spec agent-agnostic
+- [CONTRIBUTING.md](CONTRIBUTING.md): branch/commit/PR + protocolo vault
+
+## Arquitetura
+
+- [Visão Geral](Obsidian/Segundo Cerebro/Claude Code — Torque CRM/02 — Arquitetura/Visao Geral.md): stack, princípios, mapa mental
+- [Multi-tenancy](Obsidian/Segundo Cerebro/Claude Code — Torque CRM/02 — Arquitetura/Multi-tenancy.md): shared schema + RLS isolation
+- [Áreas Frágeis](Obsidian/Segundo Cerebro/Claude Code — Torque CRM/02 — Arquitetura/Areas Frageis.md): onde sangra (Copilot, WhatsApp, Permissões)
+- [Subagentes](Obsidian/Segundo Cerebro/Claude Code — Torque CRM/01 — Identidade/Subagentes.md): pipeline arquiteto → design/engenheiro → arquiteto
+
+## Reference
+
+- [Schema](Obsidian/Segundo Cerebro/Claude Code — Torque CRM/03 — Reference/Schema.md): tabelas principais e relações
+- [RLS Policies](Obsidian/Segundo Cerebro/Claude Code — Torque CRM/03 — Reference/RLS Policies.md): policies por tabela
+- [Edge Functions](Obsidian/Segundo Cerebro/Claude Code — Torque CRM/03 — Reference/Edge Functions.md): 94 funções Deno
+- [Cron Jobs](Obsidian/Segundo Cerebro/Claude Code — Torque CRM/03 — Reference/Cron Jobs.md): 8+ pg_cron ativos
+- [Env Vars](Obsidian/Segundo Cerebro/Claude Code — Torque CRM/03 — Reference/Env Vars.md): variáveis frontend/backend
+- [RPCs](Obsidian/Segundo Cerebro/Claude Code — Torque CRM/03 — Reference/RPCs.md): funções SQL chamadas via supabase.rpc
+
+## How-to (procedimentos operacionais)
+
+- [Deploy Edge Function](Obsidian/Segundo Cerebro/Claude Code — Torque CRM/05 — How-to/deploy-edge-function.md)
+- [Aplicar Migration em Prod](Obsidian/Segundo Cerebro/Claude Code — Torque CRM/05 — How-to/aplicar-migration-prod.md)
+- [Regenerar Types Supabase](Obsidian/Segundo Cerebro/Claude Code — Torque CRM/05 — How-to/regenerar-types-supabase.md)
+- [Debug WhatsApp](Obsidian/Segundo Cerebro/Claude Code — Torque CRM/05 — How-to/debug-whatsapp.md)
+- [Rebind Uazapi Webhook](Obsidian/Segundo Cerebro/Claude Code — Torque CRM/05 — How-to/rebind-uazapi-webhook.md)
+- [Criar Nova Org](Obsidian/Segundo Cerebro/Claude Code — Torque CRM/05 — How-to/criar-nova-org.md)
+
+## Decisões arquiteturais
+
+- [ADR Refactor Agent Engine](Obsidian/Segundo Cerebro/Claude Code — Torque CRM/04 — Decisões/ADR-2026-04-27-refactor-agent-engine-modular.md)
+- [ADR Meeting Date Sync](Obsidian/Segundo Cerebro/Claude Code — Torque CRM/04 — Decisões/ADR-2026-04-30-meeting-date-sync.md)
+- [ADR Consolidação Subagentes 10→3](Obsidian/Segundo Cerebro/Claude Code — Torque CRM/04 — Decisões/ADR-2026-05-15-consolidacao-subagentes.md)
+
+## Tutorials
+
+- [Onboarding Dev](Obsidian/Segundo Cerebro/Claude Code — Torque CRM/09 — Tutorials/01-onboarding-dev.md): setup completo ~90min
+- [Primeiro PR](Obsidian/Segundo Cerebro/Claude Code — Torque CRM/09 — Tutorials/02-primeiro-PR.md): convenções na prática ~45min
+- [Tour do Vault](Obsidian/Segundo Cerebro/Claude Code — Torque CRM/09 — Tutorials/03-tour-vault.md): Diátaxis + frontmatter + wikilinks
+- [Trabalhando com Claude](Obsidian/Segundo Cerebro/Claude Code — Torque CRM/09 — Tutorials/04-trabalhando-com-claude.md): subagentes + JIT context
+
+## Optional
+
+- [Convenções do Vault](Obsidian/Segundo Cerebro/Claude Code — Torque CRM/01 — Identidade/Convencoes.md): frontmatter, naming, status lifecycle
+- [Templates README](Obsidian/Segundo Cerebro/Claude Code — Torque CRM/99 — Templates/_README.md): esqueletos pra notas novas
+- [Copilot Feature](Obsidian/Segundo Cerebro/Claude Code — Torque CRM/06 — Features/IA/Copilot.md): IA conversacional pra leads
+- [WhatsApp Stability Plan](Obsidian/Segundo Cerebro/Claude Code — Torque CRM/06 — Features/Chat/whatsapp-stability-plan.md): estado consolidado
+- [Backlog WhatsApp 100%](Obsidian/Segundo Cerebro/Claude Code — Torque CRM/08 — Backlog/em-progresso/whatsapp-stability-100pct.md): BL-WA-01..14
+- [Runbook Cron + Webhooks](Obsidian/Segundo Cerebro/Claude Code — Torque CRM/06 — Features/Infra/Runbook — Cron e Webhooks.md)

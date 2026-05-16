@@ -1,0 +1,28 @@
+name: vault-lint
+
+on:
+  pull_request:
+    paths:
+      - 'Obsidian/**'
+      - 'scripts/vault-lint.mjs'
+      - '.github/workflows/vault-lint.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    name: Lint vault Obsidian
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run vault-lint
+        run: node scripts/vault-lint.mjs
+
+      - name: Check MOCs up-to-date
+        run: node scripts/vault-regen-indexes.mjs --check

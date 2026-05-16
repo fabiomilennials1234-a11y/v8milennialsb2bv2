@@ -1,15 +1,13 @@
 ---
-feature: Pipe Confirmacao
-status: estável
-tags: [pipe, vendas, confirmacao, kanban, meeting]
-created: 2026-04-30
-last_updated: 2026-04-30
-related_files:
-  - src/pages/PipeConfirmacao.tsx
-  - src/hooks/usePipeConfirmacao.ts
-  - src/hooks/useLeads.ts
-  - src/components/leads/funnel-contexts/ConfirmacaoContext.tsx
-  - src/components/leads/RescheduleModal.tsx
+type: feature
+title: Pipe Confirmacao
+status: active
+created: 2026-04-12
+updated: 2026-04-12
+tags: [uncategorized]
+related: []
+owner: gabriel
+related_files: []
 ---
 
 # Pipe Confirmacao
