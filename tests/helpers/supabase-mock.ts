@@ -42,36 +42,83 @@ export function createMockSupabase() {
   function createChain(tableName: string): any {
     let data = [...(tables[tableName] || [])];
     let filters: Array<{ field: string; op: string; value: unknown }> = [];
+    let orFilters: Array<Array<{ field: string; op: string; value: unknown }>> = [];
+    let textSearchFilters: Array<{ field: string; query: string }> = [];
     let orderField: string | null = null;
     let orderAsc = true;
     let limitCount: number | null = null;
     let selectFields: string = '*';
+    let selectOpts: { count?: string; head?: boolean } | null = null;
     let isInsert = false;
     let insertData: unknown = null;
     let isDelete = false;
     let isUpdate = false;
     let updateData: Record<string, unknown> = {};
 
+    const applyOp = (row: Record<string, unknown>, f: { field: string; op: string; value: unknown }): boolean => {
+      const val = row[f.field];
+      switch (f.op) {
+        case 'eq': return val === f.value;
+        case 'neq': return val !== f.value;
+        case 'gt': return (val as number) > (f.value as number);
+        case 'gte': return (val as number) >= (f.value as number);
+        case 'lt': return (val as number) < (f.value as number);
+        case 'lte': return (val as number) <= (f.value as number);
+        case 'is': return val === f.value;
+        case 'ilike': return typeof val === 'string' && typeof f.value === 'string' &&
+          val.toLowerCase() === f.value.toLowerCase();
+        case 'contains': return Array.isArray(val) && Array.isArray(f.value) &&
+          f.value.every((v: unknown) => val.includes(v));
+        case 'in': return Array.isArray(f.value) && (f.value as unknown[]).includes(val);
+        default: return true;
+      }
+    };
+
+    const parseOrFilter = (filterStr: string): Array<{ field: string; op: string; value: unknown }> => {
+      const conditions: Array<{ field: string; op: string; value: unknown }> = [];
+      const parts = filterStr.split(',');
+      for (const part of parts) {
+        // Handle is.null special case: field.is.null
+        const isNullMatch = part.match(/^(.+)\.is\.null$/);
+        if (isNullMatch) {
+          conditions.push({ field: isNullMatch[1], op: 'is', value: null });
+          continue;
+        }
+        // Standard format: field.op.value
+        const match = part.match(/^([^.]+)\.([^.]+)\.(.+)$/);
+        if (match) {
+          const [, field, op, rawValue] = match;
+          let value: unknown = rawValue;
+          // Parse numeric values
+          if (!isNaN(Number(rawValue))) {
+            value = Number(rawValue);
+          } else if (rawValue === 'true') {
+            value = true;
+          } else if (rawValue === 'false') {
+            value = false;
+          }
+          conditions.push({ field, op, value });
+        }
+      }
+      return conditions;
+    };
+
     const applyFilters = () => {
       let result = [...data];
+      // AND filters
       for (const f of filters) {
+        result = result.filter((row) => applyOp(row, f));
+      }
+      // OR filters (each orFilters entry is one .or() call)
+      for (const orGroup of orFilters) {
+        result = result.filter((row) => orGroup.some((f) => applyOp(row, f)));
+      }
+      // Text search filters
+      for (const ts of textSearchFilters) {
         result = result.filter((row) => {
-          const val = row[f.field];
-          switch (f.op) {
-            case 'eq': return val === f.value;
-            case 'neq': return val !== f.value;
-            case 'ilike': return typeof val === 'string' && typeof f.value === 'string' &&
-              val.toLowerCase() === f.value.toLowerCase();
-            case 'contains': return Array.isArray(val) && Array.isArray(f.value) &&
-              f.value.every((v: unknown) => val.includes(v));
-            case 'in': return Array.isArray(f.value) && (f.value as unknown[]).includes(val);
-            case 'gte': return val >= (f.value as any);
-            case 'lte': return val <= (f.value as any);
-            case 'gt': return val > (f.value as any);
-            case 'lt': return val < (f.value as any);
-            case 'is': return val === f.value;
-            default: return true;
-          }
+          const val = row[ts.field];
+          if (typeof val !== 'string') return false;
+          return val.toLowerCase().includes(ts.query.toLowerCase());
         });
       }
       if (orderField) {
@@ -88,7 +135,11 @@ export function createMockSupabase() {
     };
 
     const chain: any = {
-      select: (fields?: string) => { selectFields = fields || '*'; return chain; },
+      select: (fields?: string, opts?: { count?: string; head?: boolean }) => {
+        selectFields = fields || '*';
+        if (opts) selectOpts = opts;
+        return chain;
+      },
       eq: (field: string, value: unknown) => { filters.push({ field, op: 'eq', value }); return chain; },
       neq: (field: string, value: unknown) => { filters.push({ field, op: 'neq', value }); return chain; },
       gte: (field: string, value: unknown) => { filters.push({ field, op: 'gte', value }); return chain; },
@@ -98,6 +149,8 @@ export function createMockSupabase() {
       is: (field: string, value: unknown) => { filters.push({ field, op: 'is', value }); return chain; },
       ilike: (field: string, value: unknown) => { filters.push({ field, op: 'ilike', value }); return chain; },
       contains: (field: string, value: unknown) => { filters.push({ field, op: 'contains', value }); return chain; },
+      or: (filterStr: string) => { orFilters.push(parseOrFilter(filterStr)); return chain; },
+      textSearch: (field: string, query: string) => { textSearchFilters.push({ field, query }); return chain; },
       order: (field: string, opts?: { ascending?: boolean }) => {
         orderField = field;
         orderAsc = opts?.ascending !== false;
@@ -162,11 +215,28 @@ export function createMockSupabase() {
 
     // Make chain thenable (for await without .single/.maybeSingle)
     chain[Symbol.toStringTag] = 'Promise';
-    const defaultPromise = () => Promise.resolve({
-      data: applyFilters(),
-      error: null,
-      count: null,
-    });
+    const defaultPromise = () => {
+      const filtered = applyFilters();
+      if (selectOpts?.head) {
+        return Promise.resolve({
+          data: null,
+          error: null,
+          count: filtered.length,
+        });
+      }
+      if (selectOpts?.count) {
+        return Promise.resolve({
+          data: filtered,
+          error: null,
+          count: filtered.length,
+        });
+      }
+      return Promise.resolve({
+        data: filtered,
+        error: null,
+        count: null,
+      });
+    };
     chain.then = (onFulfilled?: (val: any) => any, onRejected?: (err: any) => any) => {
       return defaultPromise().then(onFulfilled, onRejected);
     };
