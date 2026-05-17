@@ -1,37 +1,26 @@
 import { memo, useState, useRef, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import {
-  Building2,
-  Flame,
-  Clock,
-  MoreVertical,
-  Trash2,
-  MessageCircle,
-  Target,
-  Video,
-  Check,
+  Building2, Clock, MoreVertical, Trash2, MessageCircle, Target, Video, Check,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
-import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
 import { ScheduleMessageModal } from "@/components/chat/ScheduleMessageModal";
 import { useOpenWhatsAppChat, formatPhoneForWhatsApp } from "@/lib/whatsapp";
 import { formatDistanceToNow, isToday, isTomorrow, isPast, differenceInDays, differenceInHours } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import type { DraggableItem } from "@/components/kanban/DraggableKanbanBoard";
+import type { QualificationTier } from "@/components/lead-detail/modal/types";
+import { LeadCardAvatar } from "./card/LeadCardAvatar";
+import { LeadCardLabels } from "./card/LeadCardLabels";
+import { LeadCardMetrics } from "./card/LeadCardMetrics";
+import { LeadCardCalor } from "./card/LeadCardCalor";
+import { formatFaturamento } from "@/lib/format/faturamento";
 
 // ─── Origin Colors (unified across all funnels) ──────────
 
@@ -51,8 +40,6 @@ export const ORIGIN_COLORS: Record<string, { bg: string; text: string; label: st
   outro:           { bg: "#F1EFE8", text: "#5F5E5A", label: "Outros" },
 };
 
-// ─── Urgency Config ──────────────────────────────────────
-
 const URGENCY_COLORS: Record<string, { label: string; className: string }> = {
   imediato:    { label: "Imediato",   className: "bg-red-500/10 text-red-600 border-red-500/30" },
   "1-mes":     { label: "1 mês",      className: "bg-orange-500/10 text-orange-600 border-orange-500/30" },
@@ -63,21 +50,12 @@ const URGENCY_COLORS: Record<string, { label: string; className: string }> = {
 // ─── Variant Config ──────────────────────────────────────
 
 export type LeadCardVariant =
-  | "whatsapp"
-  | "confirmacao"
-  | "propostas"
-  | "followup"
-  | "custom"
-  | "upsell_client"
-  | "upsell_campanha";
+  | "whatsapp" | "confirmacao" | "propostas" | "followup" | "custom"
+  | "upsell_client" | "upsell_campanha";
 
 const VARIANT_CONFIG: Record<LeadCardVariant, {
-  showContact: boolean;
-  showValue: boolean;
-  showDate: boolean;
-  showProducts: boolean;
-  showMeetLink: boolean;
-  showNotes: boolean;
+  showContact: boolean; showValue: boolean; showDate: boolean;
+  showProducts: boolean; showMeetLink: boolean; showNotes: boolean;
 }> = {
   whatsapp:        { showContact: true,  showValue: true,  showDate: false, showProducts: false, showMeetLink: false, showNotes: false },
   confirmacao:     { showContact: false, showValue: true,  showDate: true,  showProducts: false, showMeetLink: true,  showNotes: false },
@@ -124,22 +102,36 @@ export interface LeadCardData extends DraggableItem {
   isInactive?: boolean;
   // Aging
   stageEnteredAt?: string | null;
+  // ── NOVO (Trello-style) ──
+  /** Pré-qualificação tier (metade esquerda do avatar). */
+  preQualTier?: QualificationTier | null;
+  /** Qualificação tier (metade direita). */
+  qualTier?: QualificationTier | null;
+  /** Avatar URL do lead (populado por automação futura). */
+  avatarUrl?: string | null;
+  /** Métricas batched do lead — vindo de useBatchedLeadMetrics. */
+  metrics?: {
+    commentsCount: number;
+    checklistsTotal: number;
+    checklistsCompleted: number;
+    attachmentsCount: number;
+  };
+  /** Responsáveis dual (pre-venda / venda) com avatar. */
+  preSaleResponsible?: { name: string | null; avatar_url?: string | null } | null;
+  saleResponsible?:    { name: string | null; avatar_url?: string | null } | null;
 }
 
 export interface LeadCardProps {
   lead: LeadCardData;
   variant: LeadCardVariant;
-  // Override defaults from VARIANT_CONFIG
   showContact?: boolean;
   showValue?: boolean;
   showDate?: boolean;
   showProducts?: boolean;
   showMeetLink?: boolean;
   showNotes?: boolean;
-  // Selection
   selected?: boolean;
   onSelect?: (e: React.MouseEvent) => void;
-  // Callbacks
   onClick?: () => void;
   onRemove?: () => void;
   onCalorChange?: (calor: number) => void;
@@ -176,69 +168,7 @@ function getDateIndicator(date: Date | null) {
   return { label: `${days} dias`, className: "bg-muted text-muted-foreground border-border" };
 }
 
-// ─── Calor Popover (fire badge + slider) ─────────────────
-
-function getCalorInfo(calor: number) {
-  if (calor >= 8) return { label: "Quente", color: "text-red-500", bg: "bg-red-500/10 border-red-500/30", trackColor: "bg-red-500" };
-  if (calor >= 4) return { label: "Morno", color: "text-amber-500", bg: "bg-amber-500/10 border-amber-500/30", trackColor: "bg-amber-500" };
-  return { label: "Frio", color: "text-blue-500", bg: "bg-blue-500/10 border-blue-500/30", trackColor: "bg-blue-500" };
-}
-
-function CalorPopover({ calor, onChange }: { calor: number; onChange?: (value: number) => void }) {
-  const [open, setOpen] = useState(false);
-  const [value, setValue] = useState(calor);
-  const info = getCalorInfo(calor);
-  const previewInfo = getCalorInfo(value);
-
-  return (
-    <Popover open={open} onOpenChange={(v) => { setOpen(v); if (v) setValue(calor); }}>
-      <PopoverTrigger asChild>
-        <button
-          onClick={(e) => e.stopPropagation()}
-          className={cn("inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold transition-colors", info.bg)}
-        >
-          <Flame className={cn("w-3 h-3", info.color)} />
-          <span className={info.color}>{calor}</span>
-        </button>
-      </PopoverTrigger>
-      <PopoverContent className="w-64 p-4" align="start" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center gap-2 mb-3">
-          <Flame className={cn("w-5 h-5", previewInfo.color)} />
-          <span className="font-semibold text-sm">Calor do Lead</span>
-          <span className={cn("ml-auto text-lg font-bold", previewInfo.color)}>{value}</span>
-        </div>
-        <Slider
-          min={1}
-          max={10}
-          step={1}
-          value={[value]}
-          onValueChange={([v]) => setValue(v)}
-          className="mb-2"
-        />
-        <div className="flex justify-between text-[10px] text-muted-foreground mb-3">
-          <span className={value <= 3 ? "text-blue-500 font-semibold" : ""}>Frio</span>
-          <span className={value >= 4 && value <= 7 ? "text-amber-500 font-semibold" : ""}>Morno</span>
-          <span className={value >= 8 ? "text-red-500 font-semibold" : ""}>Quente</span>
-        </div>
-        <p className="text-[11px] text-muted-foreground mb-3">
-          Probabilidade de fechar este mês. Leads com maior calor aparecem primeiro.
-        </p>
-        <Button
-          size="sm"
-          className="w-full"
-          onClick={() => {
-            onChange?.(value);
-            setOpen(false);
-          }}
-        >
-          Salvar
-        </Button>
-      </PopoverContent>
-    </Popover>
-  );
-}
-
-// ─── Quick Action Popover ────────────────────────────────
+// ─── Quick Action Popover (mantido) ──────────────────────
 
 function QuickActionPopover({ onAction }: { onAction: (title: string) => void }) {
   const [open, setOpen] = useState(false);
@@ -256,29 +186,34 @@ function QuickActionPopover({ onAction }: { onAction: (title: string) => void })
       <PopoverTrigger asChild>
         <button
           onClick={(e) => e.stopPropagation()}
-          className="p-1.5 rounded-md bg-muted hover:bg-muted-foreground/10 text-muted-foreground transition-colors"
-          title="Ação do dia"
+          className="flex items-center gap-1 px-2 py-1.5 rounded-md bg-primary/10 hover:bg-primary/15 text-primary text-xs font-medium transition-colors"
+          title="Ação rápida"
         >
           <Target className="w-3.5 h-3.5" />
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-56 p-2" align="end" onClick={(e) => e.stopPropagation()}>
-        <p className="text-xs font-medium text-muted-foreground mb-1 px-1">Ação do dia</p>
-        {actions.map((a) => (
-          <button
-            key={a.label}
-            className="w-full text-left text-sm px-2 py-1.5 rounded hover:bg-muted transition-colors"
-            onClick={() => { onAction(a.label); setOpen(false); }}
-          >
-            {a.emoji} {a.label}
-          </button>
-        ))}
-        <div className="flex gap-1 mt-1 pt-1 border-t">
+        <div className="text-[10px] uppercase tracking-wider text-muted-foreground/60 font-semibold px-1 pb-1.5">
+          Ação do dia
+        </div>
+        <div className="space-y-0.5">
+          {actions.map((a) => (
+            <button
+              key={a.label}
+              type="button"
+              onClick={() => { onAction(a.label); setOpen(false); }}
+              className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs hover:bg-muted text-left"
+            >
+              <span>{a.emoji}</span> {a.label}
+            </button>
+          ))}
+        </div>
+        <div className="mt-1.5 pt-1.5 border-t border-border/40">
           <Input
-            placeholder="Ação personalizada..."
-            className="h-7 text-xs"
             value={custom}
             onChange={(e) => setCustom(e.target.value)}
+            placeholder="Outra ação..."
+            className="h-7 text-xs"
             onKeyDown={(e) => {
               if (e.key === "Enter" && custom.trim()) {
                 onAction(custom.trim());
@@ -287,14 +222,6 @@ function QuickActionPopover({ onAction }: { onAction: (title: string) => void })
               }
             }}
           />
-          <Button
-            size="sm"
-            className="h-7 px-2"
-            disabled={!custom.trim()}
-            onClick={() => { onAction(custom.trim()); setCustom(""); setOpen(false); }}
-          >
-            +
-          </Button>
         </div>
       </PopoverContent>
     </Popover>
@@ -307,26 +234,14 @@ function formatCurrency(value: number): string {
   if (value >= 1_000_000) {
     return `R$ ${(value / 1_000_000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}M`;
   }
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-    minimumFractionDigits: 0,
-  }).format(value);
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 0 }).format(value);
 }
 
 // ─── Main Component ──────────────────────────────────────
 
 export const LeadCard = memo(function LeadCard({
-  lead,
-  variant,
-  selected,
-  onSelect,
-  onClick,
-  onRemove,
-  onCalorChange,
-  onQuickAction,
-  onInlineEdit,
-  ...overrides
+  lead, variant, selected, onSelect, onClick, onRemove,
+  onCalorChange, onQuickAction, onInlineEdit, ...overrides
 }: LeadCardProps) {
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [editingField, setEditingField] = useState<string | null>(null);
@@ -358,368 +273,331 @@ export const LeadCard = memo(function LeadCard({
     setEditingField(null);
   }, [editingField, editValue, onInlineEdit, lead.name, lead.company]);
 
-  const cancelEdit = useCallback(() => {
-    setEditingField(null);
-  }, []);
+  const cancelEdit = useCallback(() => setEditingField(null), []);
+
   const origin = ORIGIN_COLORS[lead.origin || "outro"] || ORIGIN_COLORS.outro;
   const urgency = lead.urgency ? URGENCY_COLORS[lead.urgency] : null;
   const hasPhone = !!formatPhoneForWhatsApp(lead.phone ?? undefined);
   const openWhatsApp = useOpenWhatsAppChat();
-  const parsedDate = lead.date
-    ? (lead.date instanceof Date ? lead.date : new Date(lead.date))
-    : null;
+  const parsedDate = lead.date ? (lead.date instanceof Date ? lead.date : new Date(lead.date)) : null;
   const dateIndicator = config.showDate ? getDateIndicator(parsedDate) : null;
 
-  // Decide which data rows to show
-  const hasContactData = (config.showContact && (lead.phone || lead.email)) ||
+  const hasContactData =
+    (config.showContact && (lead.phone || lead.email)) ||
     (config.showValue && (lead.faturamento || lead.value != null)) ||
     (config.showDate && parsedDate);
 
   return (
     <>
-    <motion.div
-      whileHover={{ scale: 1.01, y: -1 }}
-      transition={{ type: "spring", stiffness: 400, damping: 30 }}
-      data-lead-id={lead.id}
-      className={cn(
-        "kanban-card group cursor-pointer relative",
-        lead.isInactive && "opacity-60",
-        selected && "ring-2 ring-primary/50"
-      )}
-      style={{
-        '--card-accent': lead.calor != null && lead.calor >= 8
-          ? 'hsl(0 80% 55%)'
-          : lead.calor != null && lead.calor >= 4
+      <motion.div
+        whileHover={{ scale: 1.005, y: -1 }}
+        transition={{ type: "spring", stiffness: 400, damping: 30 }}
+        data-lead-id={lead.id}
+        className={cn(
+          "kanban-card group cursor-pointer relative",
+          lead.isInactive && "opacity-60",
+          selected && "ring-2 ring-primary/50",
+        )}
+        style={{
+          '--card-accent': lead.calor != null && lead.calor >= 8
+            ? 'hsl(0 80% 55%)'
+            : lead.calor != null && lead.calor >= 4
             ? 'hsl(38 92% 50%)'
             : lead.calor != null && lead.calor > 0
-              ? 'hsl(210 80% 55%)'
-              : undefined,
-      } as React.CSSProperties}
-      onClick={onClick}
-    >
-      {/* ── Selection checkbox ── */}
-      {onSelect && (
-        <button
-          onClick={(e) => { e.stopPropagation(); onSelect(e); }}
-          className={cn(
-            "absolute top-2 left-2 z-10 w-5 h-5 rounded border flex items-center justify-center transition-all",
-            selected
-              ? "bg-primary border-primary text-primary-foreground"
-              : "border-muted-foreground/40 bg-background/80 opacity-0 group-hover:opacity-100"
-          )}
-        >
-          {selected && <Check className="w-3.5 h-3.5" />}
-        </button>
-      )}
+            ? 'hsl(210 80% 55%)'
+            : undefined,
+        } as React.CSSProperties}
+        onClick={onClick}
+      >
+        {/* ── Color stripes (Trello-style) ── */}
+        <LeadCardLabels tags={lead.tags} />
 
-      {/* ── Row 1: Name + ⋮ Menu ── */}
-      <div className="flex items-start justify-between gap-2 mb-0.5">
-        {editingField === "name" ? (
-          <input
-            ref={editRef}
-            value={editValue}
-            onChange={(e) => setEditValue(e.target.value)}
-            onBlur={commitEdit}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") commitEdit();
-              if (e.key === "Escape") cancelEdit();
-            }}
-            onClick={(e) => e.stopPropagation()}
-            className={cn(
-              "font-semibold text-[13px] leading-tight flex-1 min-w-0 bg-transparent border-b border-primary outline-none px-0 py-0",
-              onSelect && "pl-6"
-            )}
-          />
-        ) : (
-          <h4
-            className={cn(
-              "font-semibold text-[13px] leading-tight line-clamp-2 group-hover:text-primary transition-colors flex-1 min-w-0",
-              onSelect && "pl-6",
-              onInlineEdit && "cursor-text"
-            )}
-            onDoubleClick={(e) => startEdit("name", lead.name, e)}
-          >
-            {lead.name}
-          </h4>
-        )}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-            <button className="p-0.5 rounded hover:bg-muted text-muted-foreground shrink-0">
-              <MoreVertical className="h-4 w-4" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            {hasPhone && (
-              <DropdownMenuItem onClick={(e) => openWhatsApp(lead.phone ?? undefined, e)}>
-                <MessageCircle className="w-4 h-4 mr-2 text-[#25D366]" />
-                WhatsApp
-              </DropdownMenuItem>
-            )}
-            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setScheduleOpen(true); }}>
-              <Clock className="w-4 h-4 mr-2" />
-              Agendar mensagem
-            </DropdownMenuItem>
-            {onRemove && (
-              <DropdownMenuItem
-                className="text-destructive focus:text-destructive"
-                onClick={(e) => { e.stopPropagation(); onRemove(); }}
-              >
-                <Trash2 className="w-4 h-4 mr-2" />
-                Remover do funil
-              </DropdownMenuItem>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-
-      {/* ── Row 2: Company ── */}
-      {lead.company && (
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1.5">
-          <Building2 className="w-3.5 h-3.5 shrink-0 opacity-60" />
-          {editingField === "company_name" ? (
-            <input
-              ref={editRef}
-              value={editValue}
-              onChange={(e) => setEditValue(e.target.value)}
-              onBlur={commitEdit}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") commitEdit();
-                if (e.key === "Escape") cancelEdit();
-              }}
-              onClick={(e) => e.stopPropagation()}
-              className="flex-1 min-w-0 bg-transparent border-b border-primary outline-none text-xs px-0 py-0"
-            />
-          ) : (
-            <span
-              className={cn("truncate", onInlineEdit && "cursor-text")}
-              onDoubleClick={(e) => startEdit("company_name", lead.company ?? "", e)}
-            >
-              {lead.company}
-            </span>
-          )}
-        </div>
-      )}
-
-      {/* ── Row 3: Badges (Origin + Urgency + Tags + Date + Potencial) ── */}
-      <div className="flex flex-wrap gap-1 mb-2">
-        <Badge
-          variant="outline"
-          className="text-[10px] px-1.5 py-0 h-[18px] border font-medium"
-          style={{ backgroundColor: origin.bg, color: origin.text, borderColor: `${origin.text}30` }}
-        >
-          {origin.label}
-        </Badge>
-        {urgency && (
-          <Badge variant="outline" className={cn("text-[10px] px-1.5 py-0 h-[18px] font-medium", urgency.className)}>
-            {urgency.label}
-          </Badge>
-        )}
-        {lead.tags && lead.tags.length > 0 && lead.tags.slice(0, 3).map((tag) => (
-          <Badge
-            key={tag.name}
-            variant="secondary"
-            className="text-[10px] px-1.5 py-0 h-[18px] font-medium"
-            style={{ backgroundColor: `${tag.color}20`, color: tag.color }}
-          >
-            {tag.name}
-          </Badge>
-        ))}
-        {lead.tags && lead.tags.length > 3 && (
-          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-[18px]">
-            +{lead.tags.length - 3}
-          </Badge>
-        )}
-        {lead.potencial && (
-          <Badge variant="outline" className={cn("text-[10px] px-1.5 py-0 h-[18px] font-medium", getPotencialClass(lead.potencial))}>
-            {lead.potencial.charAt(0).toUpperCase() + lead.potencial.slice(1)}
-          </Badge>
-        )}
-        {lead.isInactive && (
-          <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-[18px] font-medium bg-destructive/10 text-destructive border-destructive/30">
-            Inativo
-          </Badge>
-        )}
-        {lead.stageEnteredAt && (() => {
-          const days = Math.floor((Date.now() - new Date(lead.stageEnteredAt).getTime()) / 86400000);
-          if (days < 3) return null;
-          const cls = days >= 14
-            ? "bg-red-500/10 text-red-500 border-red-500/30"
-            : days >= 7
-              ? "bg-amber-500/10 text-amber-500 border-amber-500/30"
-              : "bg-blue-500/10 text-blue-500 border-blue-500/30";
-          return (
-            <Badge variant="outline" className={cn("text-[10px] px-1.5 py-0 h-[18px] font-medium", cls)}>
-              {days}d
-            </Badge>
-          );
-        })()}
-        {dateIndicator && (
-          <Badge variant="outline" className={cn("text-[10px] px-1.5 py-0 h-[18px] font-medium", dateIndicator.className)}>
-            {dateIndicator.label}
-          </Badge>
-        )}
-        {lead.rating != null && lead.rating > 0 && (
-          <CalorPopover calor={lead.rating} onChange={onCalorChange} />
-        )}
-      </div>
-
-      {/* ── Row 5: Contact data with LEFT BORDER accent ── */}
-      {hasContactData && (
-        <div className="border-l-2 border-primary/60 pl-3 py-1 space-y-1 mb-2">
-          {config.showContact && lead.phone && (
-            <div className="flex items-center justify-between gap-2 text-xs">
-              <span className="text-muted-foreground">Telefone</span>
-              <span className="font-medium">{lead.phone}</span>
-            </div>
-          )}
-          {config.showContact && lead.email && (
-            <div className="flex items-center justify-between gap-2 text-xs">
-              <span className="text-muted-foreground">Email</span>
-              <span className="font-medium truncate max-w-[160px]">{lead.email}</span>
-            </div>
-          )}
-          {config.showValue && (lead.faturamento || lead.value != null) && (
-            <div className="flex items-center justify-between gap-2 text-xs">
-              <span className="text-muted-foreground">
-                {lead.value != null ? "Valor" : "Faturamento"}
-              </span>
-              <span className="font-semibold text-emerald-500">
-                {lead.value != null
-                  ? formatCurrency(lead.value)
-                  : typeof lead.faturamento === "number"
-                    ? formatCurrency(lead.faturamento)
-                    : `R$ ${lead.faturamento}`}
-              </span>
-            </div>
-          )}
-          {config.showDate && parsedDate && (
-            <div className="flex items-center justify-between gap-2 text-xs">
-              <span className="text-muted-foreground">{lead.dateLabel || "Data"}</span>
-              <span className="font-medium">{parsedDate.toLocaleDateString("pt-BR")}</span>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── Meet link ── */}
-      {config.showMeetLink && lead.meetLink && (
-        <a
-          href={lead.meetLink}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={(e) => e.stopPropagation()}
-          className="flex items-center gap-1.5 text-[11px] text-primary hover:underline mb-2"
-        >
-          <Video className="w-3 h-3 shrink-0" />
-          Entrar no Google Meet
-        </a>
-      )}
-
-      {/* ── Products (max 3) ── */}
-      {config.showProducts && lead.products && lead.products.length > 0 && (
-        <div className="space-y-1 mb-2">
-          {lead.products.slice(0, 3).map((p, i) => (
-            <div key={i} className="flex items-center justify-between gap-2 p-1.5 rounded bg-muted/50 text-xs">
-              <div className="flex items-center gap-1 min-w-0">
-                {p.type && (
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      "text-[9px] px-1 py-0 h-4 shrink-0",
-                      p.type === "mrr" ? "bg-blue-500/10 text-blue-600 border-blue-500/20" :
-                      p.type === "unitario" ? "bg-amber-500/10 text-amber-600 border-amber-500/20" :
-                      "bg-primary/10 text-primary border-primary/20"
-                    )}
-                  >
-                    {p.type === "mrr" ? "Rec." : p.type === "unitario" ? "Unit" : "Proj"}
-                  </Badge>
-                )}
-                <span className="truncate">{p.name}</span>
-              </div>
-              <span className="font-medium text-emerald-500 shrink-0">{formatCurrency(p.value)}</span>
-            </div>
-          ))}
-          {lead.products.length > 3 && (
-            <p className="text-[10px] text-muted-foreground text-center">
-              +{lead.products.length - 3} produto(s)
-            </p>
-          )}
-        </div>
-      )}
-
-      {/* ── Notes ── */}
-      {config.showNotes && lead.notes && (
-        <p className="text-xs text-muted-foreground line-clamp-2 mb-2 p-1.5 rounded bg-muted/30 border border-border/50">
-          {lead.notes}
-        </p>
-      )}
-
-      {/* ── Quick Actions Row: WhatsApp (filled green) + Ação do Dia ── */}
-      {(hasPhone || !!onQuickAction) && (
-        <div className="flex items-center gap-1.5 mb-2">
-          {hasPhone && (
+        <div className="p-3 pt-2.5 flex flex-col gap-2">
+          {/* ── Selection checkbox ── */}
+          {onSelect && (
             <button
-              onClick={(e) => openWhatsApp(lead.phone ?? undefined, e)}
-              className="flex items-center gap-1.5 flex-1 justify-center px-2 py-1.5 rounded-md bg-[#25D366] hover:bg-[#1da851] text-white text-xs font-medium transition-colors"
-              title="Abrir WhatsApp"
+              onClick={(e) => { e.stopPropagation(); onSelect(e); }}
+              className={cn(
+                "absolute top-2 left-2 z-10 w-5 h-5 rounded border flex items-center justify-center transition-all",
+                selected
+                  ? "bg-primary border-primary text-primary-foreground"
+                  : "border-muted-foreground/40 bg-background/80 opacity-0 group-hover:opacity-100",
+              )}
             >
-              <MessageCircle className="w-3.5 h-3.5" />
-              WhatsApp
+              {selected && <Check className="w-3.5 h-3.5" />}
             </button>
           )}
-          {onQuickAction && (
-            <QuickActionPopover onAction={onQuickAction} />
-          )}
-        </div>
-      )}
 
-      {/* ── Footer: Responsible avatars + Clock time ── */}
-      <div className="flex items-center justify-between pt-2 border-t border-border/60 mt-auto">
-        {(() => {
-          const names = lead.assignees?.length ? lead.assignees : lead.responsible ? [lead.responsible] : [];
-          return names.length > 0 ? (
-            <div className="flex items-center gap-1.5 min-w-0">
-              <div className="flex -space-x-1.5">
-                {names.map((name) => (
-                  <div
-                    key={name}
-                    className="w-5 h-5 rounded-full bg-primary/15 flex items-center justify-center shrink-0 ring-1 ring-background"
-                    title={name}
-                  >
-                    <span className="text-[9px] font-bold text-primary leading-none">
-                      {name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
+          {/* ── Header: Avatar + Name + Calor + Kebab ── */}
+          <div className="flex items-start gap-2.5">
+            <LeadCardAvatar
+              preQualTier={lead.preQualTier}
+              qualTier={lead.qualTier}
+              avatarUrl={lead.avatarUrl}
+              name={lead.name}
+              size={32}
+            />
+            <div className="flex-1 min-w-0">
+              {editingField === "name" ? (
+                <input
+                  ref={editRef}
+                  value={editValue}
+                  onChange={(e) => setEditValue(e.target.value)}
+                  onBlur={commitEdit}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") commitEdit();
+                    if (e.key === "Escape") cancelEdit();
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="font-semibold text-[13px] leading-tight w-full bg-transparent border-b border-primary outline-none px-0 py-0"
+                />
+              ) : (
+                <h4
+                  className={cn(
+                    "font-semibold text-[13px] leading-tight line-clamp-2 group-hover:text-primary transition-colors",
+                    onInlineEdit && "cursor-text",
+                  )}
+                  onDoubleClick={(e) => startEdit("name", lead.name, e)}
+                >
+                  {lead.name}
+                </h4>
+              )}
+              {lead.company && (
+                <div className="flex items-center gap-1 text-[11px] text-muted-foreground mt-0.5 min-w-0">
+                  <Building2 className="w-3 h-3 shrink-0 opacity-60" />
+                  {editingField === "company_name" ? (
+                    <input
+                      ref={editRef}
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      onBlur={commitEdit}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") commitEdit();
+                        if (e.key === "Escape") cancelEdit();
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      className="flex-1 min-w-0 bg-transparent border-b border-primary outline-none text-[11px] px-0 py-0"
+                    />
+                  ) : (
+                    <span
+                      className={cn("truncate", onInlineEdit && "cursor-text")}
+                      onDoubleClick={(e) => startEdit("company_name", lead.company ?? "", e)}
+                    >
+                      {lead.company}
                     </span>
-                  </div>
-                ))}
-              </div>
-              {names.length === 1 && (
-                <span className="text-[11px] text-muted-foreground truncate max-w-[90px]">
-                  {names[0]}
-                </span>
+                  )}
+                </div>
               )}
             </div>
-          ) : (
-            <span />
-          );
-        })()}
-        {lead.createdAt && (
-          <div className="flex items-center gap-1 text-[10px] text-muted-foreground shrink-0">
-            <Clock className="w-3 h-3" />
-            <span>{formatDistanceToNow(new Date(lead.createdAt), { addSuffix: true, locale: ptBR })}</span>
+            <div className="flex items-center gap-1 shrink-0">
+              {lead.rating != null && lead.rating > 0 && (
+                <LeadCardCalor calor={lead.rating} onChange={onCalorChange} />
+              )}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                  <button className="p-0.5 rounded hover:bg-muted text-muted-foreground">
+                    <MoreVertical className="h-4 w-4" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {hasPhone && (
+                    <DropdownMenuItem onClick={(e) => openWhatsApp(lead.phone ?? undefined, e)}>
+                      <MessageCircle className="w-4 h-4 mr-2 text-[#25D366]" /> WhatsApp
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setScheduleOpen(true); }}>
+                    <Clock className="w-4 h-4 mr-2" /> Agendar mensagem
+                  </DropdownMenuItem>
+                  {onRemove && (
+                    <DropdownMenuItem
+                      className="text-destructive focus:text-destructive"
+                      onClick={(e) => { e.stopPropagation(); onRemove(); }}
+                    >
+                      <Trash2 className="w-4 h-4 mr-2" /> Remover do funil
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
-        )}
-      </div>
-    </motion.div>
 
-    {scheduleOpen && (
-      <ScheduleMessageModal
-        open={scheduleOpen}
-        onOpenChange={setScheduleOpen}
-        leadId={lead.leadId || ""}
-        leadName={lead.name}
-        phoneNumber={lead.phone || ""}
-      />
-    )}
+          {/* ── Badges discretos (urgência + idade no stage + date indicator + potencial) ── */}
+          {(urgency || dateIndicator || lead.potencial || lead.isInactive || lead.stageEnteredAt) && (
+            <div className="flex flex-wrap gap-1">
+              <Badge
+                variant="outline"
+                className="text-[9px] px-1.5 py-0 h-[16px] border font-medium"
+                style={{ backgroundColor: origin.bg, color: origin.text, borderColor: `${origin.text}30` }}
+              >
+                {origin.label}
+              </Badge>
+              {urgency && (
+                <Badge variant="outline" className={cn("text-[9px] px-1.5 py-0 h-[16px] font-medium", urgency.className)}>
+                  {urgency.label}
+                </Badge>
+              )}
+              {lead.potencial && (
+                <Badge variant="outline" className={cn("text-[9px] px-1.5 py-0 h-[16px] font-medium", getPotencialClass(lead.potencial))}>
+                  {lead.potencial.charAt(0).toUpperCase() + lead.potencial.slice(1)}
+                </Badge>
+              )}
+              {lead.isInactive && (
+                <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-[16px] font-medium bg-destructive/10 text-destructive border-destructive/30">
+                  Inativo
+                </Badge>
+              )}
+              {lead.stageEnteredAt && (() => {
+                const days = Math.floor((Date.now() - new Date(lead.stageEnteredAt).getTime()) / 86400000);
+                if (days < 3) return null;
+                const cls = days >= 14 ? "bg-red-500/10 text-red-500 border-red-500/30"
+                  : days >= 7 ? "bg-amber-500/10 text-amber-500 border-amber-500/30"
+                  : "bg-blue-500/10 text-blue-500 border-blue-500/30";
+                return (
+                  <Badge variant="outline" className={cn("text-[9px] px-1.5 py-0 h-[16px] font-medium", cls)}>
+                    {days}d
+                  </Badge>
+                );
+              })()}
+              {dateIndicator && (
+                <Badge variant="outline" className={cn("text-[9px] px-1.5 py-0 h-[16px] font-medium", dateIndicator.className)}>
+                  {dateIndicator.label}
+                </Badge>
+              )}
+            </div>
+          )}
+
+          {/* ── Contact data with left accent ── */}
+          {hasContactData && (
+            <div className="border-l-2 border-primary/50 pl-3 py-0.5 space-y-0.5">
+              {config.showContact && lead.phone && (
+                <div className="flex items-center justify-between gap-2 text-xs">
+                  <span className="text-muted-foreground">Telefone</span>
+                  <span className="font-medium">{lead.phone}</span>
+                </div>
+              )}
+              {config.showContact && lead.email && (
+                <div className="flex items-center justify-between gap-2 text-xs">
+                  <span className="text-muted-foreground">Email</span>
+                  <span className="font-medium truncate max-w-[160px]">{lead.email}</span>
+                </div>
+              )}
+              {config.showValue && (lead.faturamento || lead.value != null) && (
+                <div className="flex items-center justify-between gap-2 text-xs">
+                  <span className="text-muted-foreground">{lead.value != null ? "Valor" : "Faturamento"}</span>
+                  <span className="font-semibold text-emerald-500 text-right">
+                    {lead.value != null
+                      ? formatCurrency(lead.value)
+                      : formatFaturamento(lead.faturamento)}
+                  </span>
+                </div>
+              )}
+              {config.showDate && parsedDate && (
+                <div className="flex items-center justify-between gap-2 text-xs">
+                  <span className="text-muted-foreground">{lead.dateLabel || "Data"}</span>
+                  <span className="font-medium">{parsedDate.toLocaleDateString("pt-BR")}</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Meet link ── */}
+          {config.showMeetLink && lead.meetLink && (
+            <a
+              href={lead.meetLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="flex items-center gap-1.5 text-[11px] text-primary hover:underline"
+            >
+              <Video className="w-3 h-3 shrink-0" /> Entrar no Google Meet
+            </a>
+          )}
+
+          {/* ── Products (max 3) ── */}
+          {config.showProducts && lead.products && lead.products.length > 0 && (
+            <div className="space-y-1">
+              {lead.products.slice(0, 3).map((p, i) => (
+                <div key={i} className="flex items-center justify-between gap-2 p-1.5 rounded bg-muted/50 text-xs">
+                  <div className="flex items-center gap-1 min-w-0">
+                    {p.type && (
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "text-[9px] px-1 py-0 h-4 shrink-0",
+                          p.type === "mrr" ? "bg-blue-500/10 text-blue-600 border-blue-500/20"
+                            : p.type === "unitario" ? "bg-amber-500/10 text-amber-600 border-amber-500/20"
+                            : "bg-primary/10 text-primary border-primary/20",
+                        )}
+                      >
+                        {p.type === "mrr" ? "Rec." : p.type === "unitario" ? "Unit" : "Proj"}
+                      </Badge>
+                    )}
+                    <span className="truncate">{p.name}</span>
+                  </div>
+                  <span className="font-medium text-emerald-500 shrink-0">{formatCurrency(p.value)}</span>
+                </div>
+              ))}
+              {lead.products.length > 3 && (
+                <p className="text-[10px] text-muted-foreground text-center">
+                  +{lead.products.length - 3} produto(s)
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* ── Notes ── */}
+          {config.showNotes && lead.notes && (
+            <p className="text-xs text-muted-foreground line-clamp-2 p-1.5 rounded bg-muted/30 border border-border/50">
+              {lead.notes}
+            </p>
+          )}
+
+          {/* ── Quick Actions Row ── */}
+          {(hasPhone || !!onQuickAction) && (
+            <div className="flex items-center gap-1.5">
+              {hasPhone && (
+                <button
+                  onClick={(e) => openWhatsApp(lead.phone ?? undefined, e)}
+                  className="flex items-center gap-1.5 flex-1 justify-center px-2 py-1.5 rounded-md bg-[#25D366] hover:bg-[#1da851] text-white text-xs font-medium transition-colors"
+                  title="Abrir WhatsApp"
+                >
+                  <MessageCircle className="w-3.5 h-3.5" /> WhatsApp
+                </button>
+              )}
+              {onQuickAction && <QuickActionPopover onAction={onQuickAction} />}
+            </div>
+          )}
+
+          {/* ── Footer: Inline metrics (Trello-style) ── */}
+          <div className="flex items-center justify-between pt-2 mt-auto border-t border-border/40">
+            <LeadCardMetrics
+              commentsCount={lead.metrics?.commentsCount ?? 0}
+              checklistsCompleted={lead.metrics?.checklistsCompleted ?? 0}
+              checklistsTotal={lead.metrics?.checklistsTotal ?? 0}
+              attachmentsCount={lead.metrics?.attachmentsCount ?? 0}
+              preSaleResponsible={lead.preSaleResponsible}
+              saleResponsible={lead.saleResponsible}
+              className="flex-1"
+            />
+            {lead.createdAt && (
+              <div className="flex items-center gap-1 text-[10px] text-muted-foreground shrink-0 ml-2">
+                <Clock className="w-3 h-3" />
+                <span>{formatDistanceToNow(new Date(lead.createdAt), { addSuffix: true, locale: ptBR })}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      </motion.div>
+
+      {scheduleOpen && (
+        <ScheduleMessageModal
+          open={scheduleOpen}
+          onOpenChange={setScheduleOpen}
+          leadId={lead.leadId || ""}
+          leadName={lead.name}
+          phoneNumber={lead.phone || ""}
+        />
+      )}
     </>
   );
 });

@@ -353,6 +353,15 @@ function PipePropostasInner() {
       products: productsForCard,
       createdAt: item.created_at,
       stageEnteredAt: item.stage_entered_at || item.updated_at,
+      preQualTier: lead?.pre_qualification_tier ?? null,
+      qualTier:    lead?.qualification_tier    ?? null,
+      avatarUrl:   lead?.avatar_url ?? null,
+      preSaleResponsible: (item.pre_sale_responsible ?? lead?.pre_sale_responsible)
+        ? { name: (item.pre_sale_responsible ?? lead?.pre_sale_responsible)?.name, avatar_url: (item.pre_sale_responsible ?? lead?.pre_sale_responsible)?.avatar_url }
+        : null,
+      saleResponsible: (item.sale_responsible ?? lead?.sale_responsible)
+        ? { name: (item.sale_responsible ?? lead?.sale_responsible)?.name, avatar_url: (item.sale_responsible ?? lead?.sale_responsible)?.avatar_url }
+        : null,
     };
   };
 

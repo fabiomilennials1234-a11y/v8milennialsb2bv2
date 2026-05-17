@@ -29,6 +29,18 @@ const FULL_BLEED_PATTERNS = [
   /^\/chat-whatsapp/,
 ];
 
+// Rotas wide: kanbans ocupam largura quase total (sem max-w-[1600px])
+const WIDE_LAYOUT_PATTERNS = [
+  /^\/pipe-whatsapp/,
+  /^\/pipe-confirmacao/,
+  /^\/pipe-propostas/,
+  /^\/leads(\/|$)/,
+  /^\/custom-pipeline/,
+  /^\/campanhas/,
+  /^\/upsell/,
+  /^\/follow-ups/,
+];
+
 interface MainLayoutProps {
   children: ReactNode;
 }
@@ -62,6 +74,9 @@ export function MainLayout({ children }: MainLayoutProps) {
   const isFullBleed = FULL_BLEED_PATTERNS.some((pattern) =>
     pattern.test(location.pathname),
   );
+  const isWide = WIDE_LAYOUT_PATTERNS.some((pattern) =>
+    pattern.test(location.pathname),
+  );
 
   const layout = (
     <div className="flex flex-col h-screen bg-background" data-layout="main">
@@ -92,6 +107,8 @@ export function MainLayout({ children }: MainLayoutProps) {
             "w-full flex flex-col",
             isFullBleed
               ? "h-full px-0 py-0"
+              : isWide
+              ? "px-4 lg:px-6 py-5 lg:py-6 min-h-full"
               : "px-6 lg:px-10 xl:px-12 py-6 lg:py-8 max-w-[1600px] mx-auto min-h-full",
           )}
         >

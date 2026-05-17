@@ -391,6 +391,8 @@ function PipeConfirmacaoInner() {
 
   const transformToCard = (item: any): LeadCardData => {
     const lead = item.lead;
+    const preSale = item.pre_sale_responsible ?? lead?.pre_sale_responsible ?? null;
+    const sale    = item.sale_responsible    ?? lead?.sale_responsible    ?? null;
     return {
       id: item.id,
       name: lead?.name || "Sem nome",
@@ -412,6 +414,11 @@ function PipeConfirmacaoInner() {
       meetLink: item.meet_link ?? null,
       createdAt: item.created_at,
       stageEnteredAt: item.stage_entered_at || item.updated_at,
+      preQualTier: lead?.pre_qualification_tier ?? null,
+      qualTier:    lead?.qualification_tier    ?? null,
+      avatarUrl:   lead?.avatar_url ?? null,
+      preSaleResponsible: preSale ? { name: preSale.name, avatar_url: preSale.avatar_url } : null,
+      saleResponsible:    sale    ? { name: sale.name,    avatar_url: sale.avatar_url    } : null,
     };
   };
 

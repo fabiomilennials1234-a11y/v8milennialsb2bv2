@@ -90,3 +90,6 @@ services/**/venv/
 services/**/.venv/
 **/__pycache__/
 *.pyc
+
+# Playwright MCP screenshots/logs (local, ephemeral)
+.playwright-mcp/
