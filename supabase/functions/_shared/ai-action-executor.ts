@@ -7,11 +7,11 @@
  *   - actions/log-history.ts    logger lead_history + map de descrições
  *   - actions/schedule-meeting.ts
  *   - actions/update-lead.ts
- *   - actions/move-card.ts
  *   - actions/qualify-lead.ts
  *   - actions/transfer-human.ts (inclui immediateTransferHuman)
  *   - actions/send-document.ts
  *   - actions/_helpers.ts       helpers internos (upsertPipeWhatsapp, executeMoveToPipe)
+ *   - action-handlers/move-stage.ts  shared move_stage handler (replaces old move-card.ts)
  *
  * Este arquivo existe apenas para manter os imports históricos
  * funcionando sem churn cross-codebase:

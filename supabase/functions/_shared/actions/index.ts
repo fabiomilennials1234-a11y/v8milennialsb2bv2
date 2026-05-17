@@ -5,10 +5,10 @@
  * Cada capability vive num arquivo próprio:
  *   - schedule-meeting.ts
  *   - update-lead.ts
- *   - move-card.ts
  *   - qualify-lead.ts
  *   - transfer-human.ts
  *   - send-document.ts
+ *   - ../action-handlers/move-stage.ts (shared between AI and Workflow dispatchers)
  *
  * O wrapper público (executeAiAction) preserva o contrato externo:
  *   process-ai-actions/index.ts → executeAiAction(supabase, action)
@@ -31,10 +31,6 @@ import {
   executeUpdateLead,
   executeCreateCustomField,
 } from "./update-lead.ts";
-import {
-  executeAdvanceStage,
-  executeUpdatePipelineStage,
-} from "./move-card.ts";
 import { moveStage } from "../action-handlers/move-stage.ts";
 import {
   executeUpdateQualificationScore,
