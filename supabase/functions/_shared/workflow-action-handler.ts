@@ -12,6 +12,7 @@ import { getWhatsAppProvider } from "./whatsapp-client.ts";
 import { getTimeBasedVariables } from "./time-variables.ts";
 import { getPipeEntry, upsertPipeEntry, updatePipeEntryById, deletePipeEntry } from "./pipeline-adapter.ts";
 import { sendMessage } from "./message-gateway.ts";
+import { moveStage as sharedMoveStage } from "./action-handlers/move-stage.ts";
 
 export interface ActionResult {
   success: boolean;
@@ -379,9 +380,20 @@ export async function executeWorkflowAction(ctx: ActionContext): Promise<ActionR
       break;
 
     // ── Lead Management ──
-    case "move_stage":
-      result = await handleMoveStage(ctx);
+    case "move_stage": {
+      const pipeType = ctx.nodeData.pipeType as string || "whatsapp";
+      const targetStage = ctx.nodeData.targetStage as string;
+      if (!targetStage) { result = { success: false, error: "No target stage configured" }; break; }
+      result = await sharedMoveStage({
+        supabase: ctx.supabase, organizationId: ctx.organizationId, leadId: ctx.leadId,
+        conversationId: null,
+        params: { target_stage: targetStage, target_pipe: pipeType },
+      });
+      if (result.success && result.data) {
+        result.data = { pipeType, targetStage: result.data.target_stage };
+      }
       break;
+    }
     case "add_tag":
       result = await handleAddTag(ctx);
       break;

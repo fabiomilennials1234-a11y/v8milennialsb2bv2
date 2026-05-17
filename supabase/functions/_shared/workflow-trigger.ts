@@ -23,6 +23,7 @@ interface FireTriggerParams {
   triggerType: string;
   leadId: string;
   context?: Record<string, unknown>;
+  source?: string;
 }
 
 /**
@@ -32,12 +33,13 @@ interface FireTriggerParams {
  * Returns the number of executions created.
  */
 export async function fireTrigger(params: FireTriggerParams): Promise<number> {
-  const { supabase, organizationId, triggerType, leadId, context } = params;
+  const { supabase, organizationId, triggerType, leadId, context, source } = params;
 
   try {
+    const selectFields = source === "copilot" ? "id, trigger_config, definition" : "id, trigger_config";
     const { data: workflows, error } = await supabase
       .from("workflows")
-      .select("id, trigger_config")
+      .select(selectFields)
       .eq("organization_id", organizationId)
       .eq("trigger_type", triggerType)
       .eq("is_active", true);
@@ -45,9 +47,18 @@ export async function fireTrigger(params: FireTriggerParams): Promise<number> {
     if (error || !workflows?.length) return 0;
 
     // Filter by trigger_config match
-    const matching = workflows.filter((w: { id: string; trigger_config: Record<string, unknown> }) =>
+    let matching = workflows.filter((w: { id: string; trigger_config: Record<string, unknown> }) =>
       matchesTriggerConfig(triggerType, w.trigger_config, context || {}),
     );
+
+    // Origin guard: skip workflows with copilot nodes when triggered by copilot
+    if (source === "copilot" && matching.length > 0) {
+      const before = matching.length;
+      matching = matching.filter((w: Record<string, unknown>) => !workflowHasCopilotNode(w.definition as { nodes: { type: string }[] } | null));
+      if (matching.length < before) {
+        console.log(`[workflow-trigger] Origin guard: skipped ${before - matching.length} copilot-containing workflows (source=copilot)`);
+      }
+    }
 
     if (matching.length === 0) return 0;
 
@@ -339,4 +350,9 @@ function matchesCronField(expr: string, value: number): boolean {
   }
 
   return false;
+}
+
+function workflowHasCopilotNode(definition: { nodes: { type: string }[] } | null | undefined): boolean {
+  if (!definition?.nodes) return false;
+  return definition.nodes.some((n) => n.type === "copilot");
 }
