@@ -36,3 +36,5 @@ owner: claude-agent
 - [[2026-05-15-bl-wa-05-group-capture|BL-WA-05 — Captura mensagens de grupo]]
 - [[2026-05-15-export-stage-kanban|2026-05-15 — Export Stage Kanban]]
 - [[2026-05-15-whatsapp-stability-rollout|2026-05-15 — Incidente Uazapi V2 + rollout estabilização]]
+- [[2026-05-17-lead-card-trello-style|2026-05-17-lead-card-trello-style]] (implementado-dev)
+- [[2026-05-17-lead-detail-modal-redesign|2026-05-17-lead-detail-modal-redesign]] (implementado-dev)

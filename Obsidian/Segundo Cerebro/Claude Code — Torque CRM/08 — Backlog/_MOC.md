@@ -25,5 +25,6 @@ owner: claude-agent
 
 ## em-progresso
 
+- [[lead-detail-modal-redesign|Lead Detail Modal — Redesign (Trello-inspired)]] (spec-pending-approval)
 - [[promote-refactor-copilot-to-main|Promote refactor copilot → main]] 🔵 wip
 - [[whatsapp-stability-100pct|WhatsApp stability — fechar 100%]] 🔵 wip
