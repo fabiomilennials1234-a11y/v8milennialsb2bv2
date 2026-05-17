@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
+import {
+  setChannelState,
+  incrementFailures,
+  resetFailures,
+  openCircuitBreaker,
+} from "@/lib/realtimeStatusStore";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -8,7 +14,12 @@ export type ChannelState = "idle" | "joining" | "joined" | "errored" | "polling"
 
 export interface DiagnosticEvent {
   timestamp: number;
-  state: ChannelState;
+  channelName: string;
+  table: string;
+  oldState: ChannelState;
+  newState: ChannelState;
+  failureCount: number;
+  type?: "circuit_open" | "circuit_close" | "transition";
   error?: string;
 }
 
@@ -47,10 +58,11 @@ export function useRealtimeChannel(
   const threshold = circuitBreaker?.threshold ?? DEFAULT_THRESHOLD;
   const cooldownMs = circuitBreaker?.cooldownMs ?? DEFAULT_COOLDOWN_MS;
 
-  const [state, setState] = useState<ChannelState>(enabled ? "joining" : "idle");
+  const [state, setState] = useState<ChannelState>("idle");
   const [diagnostics, setDiagnostics] = useState<DiagnosticEvent[]>([]);
 
   const failureCountRef = useRef(0);
+  const channelNameRef = useRef("");
   const onEventRef = useRef(onEvent);
   onEventRef.current = onEvent;
 
@@ -71,18 +83,24 @@ export function useRealtimeChannel(
   const dedupPendingRef = useRef(false);
 
   const pushDiagnostic = useCallback(
-    (newState: ChannelState, error?: string) => {
+    (newState: ChannelState, opts?: { error?: string; type?: DiagnosticEvent["type"] }) => {
+      const oldState = stateRef.current;
       setDiagnostics((prev) => {
         const entry: DiagnosticEvent = {
           timestamp: Date.now(),
-          state: newState,
-          ...(error && { error }),
+          channelName: channelNameRef.current,
+          table,
+          oldState,
+          newState,
+          failureCount: failureCountRef.current,
+          type: opts?.type ?? "transition",
+          ...(opts?.error && { error: opts.error }),
         };
         const next = [...prev, entry];
         return next.length > MAX_DIAGNOSTICS ? next.slice(-MAX_DIAGNOSTICS) : next;
       });
     },
-    []
+    [table]
   );
 
   // ─── Backoff calculator ───────────────────────────────────────────────────
@@ -138,9 +156,13 @@ export function useRealtimeChannel(
       return;
     }
 
-    setState("joining");
-
     const channelName = `rt_${table}_${filter ?? "all"}_${Date.now()}`;
+    channelNameRef.current = channelName;
+
+    setChannelState(channelName, "joining", undefined);
+    pushDiagnostic("joining");
+    stateRef.current = "joining";
+    setState("joining");
 
     const pgChangesConfig: Record<string, string> = {
       event: "*",
@@ -159,13 +181,21 @@ export function useRealtimeChannel(
       })
       .subscribe((status: string, err?: Error) => {
         if (status === "SUBSCRIBED") {
+          const wasPolling = stateRef.current === "polling";
           failureCountRef.current = 0;
           circuitOpenRef.current = false;
+
+          resetFailures(channelName);
+          setChannelState(channelName, "joined", undefined);
+
+          if (wasPolling) {
+            pushDiagnostic("joined", { type: "circuit_close" });
+          } else {
+            pushDiagnostic("joined");
+          }
           setState("joined");
           stateRef.current = "joined";
-          pushDiagnostic("joined");
 
-          // Clear any pending timers since we're healthy
           if (backoffTimerRef.current) {
             clearTimeout(backoffTimerRef.current);
             backoffTimerRef.current = null;
@@ -178,19 +208,21 @@ export function useRealtimeChannel(
           const errorMsg = err?.message ?? status;
           failureCountRef.current += 1;
 
+          incrementFailures(channelName, errorMsg);
+
           if (circuitOpenRef.current || failureCountRef.current >= threshold) {
-            // Circuit is open (or just tripped)
             circuitOpenRef.current = true;
+            openCircuitBreaker(channelName, errorMsg);
+            setChannelState(channelName, "polling", errorMsg);
+            pushDiagnostic("polling", { error: errorMsg, type: "circuit_open" });
             setState("polling");
             stateRef.current = "polling";
-            pushDiagnostic("polling", errorMsg);
-            // Schedule cooldown probe
             scheduleCooldownProbe();
           } else {
+            setChannelState(channelName, "errored", errorMsg);
+            pushDiagnostic("errored", { error: errorMsg });
             setState("errored");
             stateRef.current = "errored";
-            pushDiagnostic("errored", errorMsg);
-            // Schedule exponential backoff reconnect
             scheduleBackoff(failureCountRef.current);
           }
         }

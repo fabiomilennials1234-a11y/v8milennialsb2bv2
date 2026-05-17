@@ -31,6 +31,14 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
+vi.mock("@/lib/realtimeStatusStore", () => ({
+  setChannelState: vi.fn(),
+  incrementFailures: vi.fn().mockReturnValue(1),
+  resetFailures: vi.fn(),
+  openCircuitBreaker: vi.fn(),
+  recordChannelEvent: vi.fn(),
+}));
+
 // ─── Import after mock ────────────────────────────────────────────────────────
 
 import { useRealtimeChannel } from "@/hooks/useRealtimeChannel";
@@ -78,7 +86,7 @@ describe("useRealtimeChannel", () => {
     expect(mockChannel.subscribe).not.toHaveBeenCalled();
   });
 
-  // 2. Mount → joining
+  // 2. Mount → joining (via effect — initial render is idle, effect transitions)
   it("transitions to joining on mount when enabled", () => {
     const { result } = renderHook(() =>
       useRealtimeChannel({
@@ -104,8 +112,9 @@ describe("useRealtimeChannel", () => {
     });
 
     expect(result.current.state).toBe("joined");
-    expect(result.current.diagnostics).toHaveLength(1);
-    expect(result.current.diagnostics[0].state).toBe("joined");
+    // diagnostics: idle→joining + joining→joined
+    expect(result.current.diagnostics).toHaveLength(2);
+    expect(result.current.diagnostics[1].newState).toBe("joined");
   });
 
   // 4. onEvent fires on postgres_changes
@@ -144,9 +153,10 @@ describe("useRealtimeChannel", () => {
     });
 
     expect(result.current.state).toBe("errored");
-    expect(result.current.diagnostics).toHaveLength(1);
-    expect(result.current.diagnostics[0].state).toBe("errored");
-    expect(result.current.diagnostics[0].error).toBe("timeout");
+    // diagnostics: idle→joining + joining→errored
+    expect(result.current.diagnostics).toHaveLength(2);
+    expect(result.current.diagnostics[1].newState).toBe("errored");
+    expect(result.current.diagnostics[1].error).toBe("timeout");
   });
 
   // 6. Circuit breaker opens after threshold errors → polling
@@ -169,7 +179,7 @@ describe("useRealtimeChannel", () => {
     expect(result.current.state).toBe("polling");
     // Diagnostics should have entries for each error + the polling transition
     const pollingEntries = result.current.diagnostics.filter(
-      (d) => d.state === "polling"
+      (d) => d.newState === "polling"
     );
     expect(pollingEntries.length).toBeGreaterThanOrEqual(1);
   });
