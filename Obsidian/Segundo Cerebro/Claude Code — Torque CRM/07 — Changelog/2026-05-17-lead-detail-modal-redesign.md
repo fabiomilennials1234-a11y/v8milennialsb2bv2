@@ -1,7 +1,10 @@
 ---
+title: 2026-05-17 — Lead Detail Modal Redesign
+type: changelog
+status: shipped
+created: 2026-05-17
+updated: 2026-05-17
 date: 2026-05-17
-type: feature
-status: implementado-dev
 related:
   - "[[ADR-2026-05-17-lead-detail-modal-redesign]]"
   - "[[Lead Detail Modal]]"
