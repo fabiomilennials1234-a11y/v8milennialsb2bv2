@@ -65,6 +65,11 @@ export function createMockSupabase() {
             case 'contains': return Array.isArray(val) && Array.isArray(f.value) &&
               f.value.every((v: unknown) => val.includes(v));
             case 'in': return Array.isArray(f.value) && (f.value as unknown[]).includes(val);
+            case 'gte': return val >= (f.value as any);
+            case 'lte': return val <= (f.value as any);
+            case 'gt': return val > (f.value as any);
+            case 'lt': return val < (f.value as any);
+            case 'is': return val === f.value;
             default: return true;
           }
         });
@@ -86,6 +91,11 @@ export function createMockSupabase() {
       select: (fields?: string) => { selectFields = fields || '*'; return chain; },
       eq: (field: string, value: unknown) => { filters.push({ field, op: 'eq', value }); return chain; },
       neq: (field: string, value: unknown) => { filters.push({ field, op: 'neq', value }); return chain; },
+      gte: (field: string, value: unknown) => { filters.push({ field, op: 'gte', value }); return chain; },
+      lte: (field: string, value: unknown) => { filters.push({ field, op: 'lte', value }); return chain; },
+      gt: (field: string, value: unknown) => { filters.push({ field, op: 'gt', value }); return chain; },
+      lt: (field: string, value: unknown) => { filters.push({ field, op: 'lt', value }); return chain; },
+      is: (field: string, value: unknown) => { filters.push({ field, op: 'is', value }); return chain; },
       ilike: (field: string, value: unknown) => { filters.push({ field, op: 'ilike', value }); return chain; },
       contains: (field: string, value: unknown) => { filters.push({ field, op: 'contains', value }); return chain; },
       order: (field: string, opts?: { ascending?: boolean }) => {
