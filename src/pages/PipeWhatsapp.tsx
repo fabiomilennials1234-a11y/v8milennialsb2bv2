@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { usePersistedState } from "@/hooks/usePersistedState";
 import { motion } from "framer-motion";
-import { Search, Plus, Calendar, Settings2, AlertCircle, LayoutGrid, List } from "lucide-react";
+import { Search, Plus, Calendar, Settings2, AlertCircle, LayoutGrid, List, ChevronUp, ChevronDown } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -46,6 +46,7 @@ import { toast } from "sonner";
 import { useOrganization } from "@/hooks/useOrganization";
 import { track, trackModuleVisit } from "@/lib/analytics";
 import { useLeadsWithScheduledMessages } from "@/hooks/useScheduledMessages";
+import { useBatchedLeadMetrics } from "@/hooks/useBatchedLeadMetrics";
 import { useTags } from "@/hooks/useTags";
 import { useBulkSelection } from "@/hooks/useBulkSelection";
 import { BulkActionBar } from "@/components/bulk-actions/BulkActionBar";
@@ -140,6 +141,7 @@ function PipeWhatsappInner() {
     closerId: string | null;
   } | null>(null);
   const [periodState, setPeriodState] = useState<MetricsPeriodState>(createInitialPeriodState);
+  const [metricsCollapsed, setMetricsCollapsed] = usePersistedState<boolean>("pipe-whatsapp-metrics-collapsed", false);
 
   const { organizationId } = useOrganization();
   useEffect(() => { trackModuleVisit("pipe_whatsapp", organizationId); }, []);
@@ -189,9 +191,18 @@ function PipeWhatsappInner() {
     }));
   }, [setFilterState]);
 
+  // Build IDs list pra fetch batched metrics
+  const allRawLeadIds = useMemo(() => {
+    if (!pipeData) return [] as string[];
+    return [...new Set(pipeData.filter((it: any) => it.lead).map((it: any) => it.lead_id as string))];
+  }, [pipeData]);
+  const { data: metricsMap = {} } = useBatchedLeadMetrics(allRawLeadIds);
+
   // Transform pipe data to LeadCardData format
   const transformToCard = (item: any): LeadCardData => {
     const lead = item.lead;
+    const preSale = item.pre_sale_responsible ?? lead?.pre_sale_responsible ?? null;
+    const sale    = item.sale_responsible    ?? lead?.sale_responsible    ?? null;
     return {
       id: item.id,
       name: lead?.name || "Sem nome",
@@ -210,6 +221,13 @@ function PipeWhatsappInner() {
       leadId: item.lead_id,
       origin: lead?.origin,
       stageEnteredAt: item.stage_entered_at || item.updated_at,
+      // Trello-style additions
+      preQualTier: lead?.pre_qualification_tier ?? null,
+      qualTier:    lead?.qualification_tier    ?? null,
+      avatarUrl:   lead?.avatar_url ?? null,
+      metrics: metricsMap[item.lead_id],
+      preSaleResponsible: preSale ? { name: preSale.name, avatar_url: preSale.avatar_url } : null,
+      saleResponsible:    sale    ? { name: sale.name,    avatar_url: sale.avatar_url    } : null,
     };
   };
 
@@ -461,32 +479,54 @@ function PipeWhatsappInner() {
       {/* Ghost leads (RLS divergente entre pipe e leads) */}
       <GhostLeadsBanner pipeType="whatsapp" ghostCount={ghostLeadsCount} />
 
-      {/* Período das métricas */}
-      <MetricsPeriodSelector state={periodState} onChange={setPeriodState} />
+      {/* Período + toggle recolher métricas */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <MetricsPeriodSelector state={periodState} onChange={setPeriodState} />
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 text-xs gap-1.5 text-muted-foreground"
+          onClick={() => setMetricsCollapsed(!metricsCollapsed)}
+          aria-expanded={!metricsCollapsed}
+        >
+          {metricsCollapsed ? (
+            <>
+              <ChevronDown className="w-3.5 h-3.5" /> Mostrar métricas
+            </>
+          ) : (
+            <>
+              <ChevronUp className="w-3.5 h-3.5" /> Recolher métricas
+            </>
+          )}
+        </Button>
+      </div>
 
-      {/* Stats Bar - Updated based on filters and period */}
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="grid grid-cols-2 md:grid-cols-4 gap-4"
-      >
-        <div className="bg-card rounded-lg border border-border p-4">
-          <p className="text-sm text-muted-foreground">Total Leads</p>
-          <p className="text-2xl font-bold mt-1">{displayStats.total}</p>
-        </div>
-        <div className="bg-card rounded-lg border border-border p-4">
-          <p className="text-sm text-muted-foreground">Abordados</p>
-          <p className="text-2xl font-bold text-success mt-1">{displayStats.abordado}</p>
-        </div>
-        <div className="bg-card rounded-lg border border-border p-4">
-          <p className="text-sm text-muted-foreground">Respondeu</p>
-          <p className="text-2xl font-bold text-blue-500 mt-1">{displayStats.respondeu}</p>
-        </div>
-        <div className="bg-card rounded-lg border border-border p-4">
-          <p className="text-sm text-muted-foreground">Agendados</p>
-          <p className="text-2xl font-bold text-primary mt-1">{displayStats.scheduled}</p>
-        </div>
-      </motion.div>
+      {/* Stats Bar - colapsível */}
+      {!metricsCollapsed && (
+        <motion.div
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: "auto" }}
+          exit={{ opacity: 0, height: 0 }}
+          className="grid grid-cols-2 md:grid-cols-4 gap-4"
+        >
+          <div className="bg-card rounded-lg border border-border p-4">
+            <p className="text-sm text-muted-foreground">Total Leads</p>
+            <p className="text-2xl font-bold mt-1">{displayStats.total}</p>
+          </div>
+          <div className="bg-card rounded-lg border border-border p-4">
+            <p className="text-sm text-muted-foreground">Abordados</p>
+            <p className="text-2xl font-bold text-success mt-1">{displayStats.abordado}</p>
+          </div>
+          <div className="bg-card rounded-lg border border-border p-4">
+            <p className="text-sm text-muted-foreground">Respondeu</p>
+            <p className="text-2xl font-bold text-blue-500 mt-1">{displayStats.respondeu}</p>
+          </div>
+          <div className="bg-card rounded-lg border border-border p-4">
+            <p className="text-sm text-muted-foreground">Agendados</p>
+            <p className="text-2xl font-bold text-primary mt-1">{displayStats.scheduled}</p>
+          </div>
+        </motion.div>
+      )}
 
       {/* Filters */}
       <div className="flex flex-col gap-3">

@@ -7,12 +7,13 @@ export type PipelineType = "whatsapp" | "confirmacao" | "propostas";
 
 const LEAD_SELECT = `
   id, name, company, email, phone, rating, origin, segment, faturamento, urgency, notes, compromisso_date, ai_disabled,
+  avatar_url, pre_qualification_tier, qualification_tier,
   sdr_id, closer_id, responsible_id, pre_sale_responsible_id, sale_responsible_id,
-  responsible:team_members!leads_responsible_id_fkey(id, name),
-  sdr:team_members!leads_sdr_id_fkey(id, name),
-  closer:team_members!leads_closer_id_fkey(id, name),
-  pre_sale_responsible:team_members!leads_pre_sale_responsible_id_fkey(id, name),
-  sale_responsible:team_members!leads_sale_responsible_id_fkey(id, name),
+  responsible:team_members!leads_responsible_id_fkey(id, name, avatar_url),
+  sdr:team_members!leads_sdr_id_fkey(id, name, avatar_url),
+  closer:team_members!leads_closer_id_fkey(id, name, avatar_url),
+  pre_sale_responsible:team_members!leads_pre_sale_responsible_id_fkey(id, name, avatar_url),
+  sale_responsible:team_members!leads_sale_responsible_id_fkey(id, name, avatar_url),
   lead_tags(tag:tags(id, name, color))
 `;
 
