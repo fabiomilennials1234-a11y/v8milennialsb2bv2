@@ -245,6 +245,54 @@ export function createMockSupabase() {
     return chain;
   }
 
+  // Realtime channel support
+  type RealtimeHandler = (payload: { new: unknown; old: unknown; eventType: string }) => void;
+  interface ChannelRegistration {
+    table: string;
+    event: string;
+    filter?: string;
+    callback: RealtimeHandler;
+  }
+  const channels: Record<string, { handlers: ChannelRegistration[]; subscribed: boolean }> = {};
+
+  function createChannel(name: string) {
+    if (!channels[name]) {
+      channels[name] = { handlers: [], subscribed: false };
+    }
+    const ch = channels[name];
+
+    const channelObj: any = {
+      on: (_type: string, opts: { event: string; schema?: string; table: string; filter?: string }, callback: RealtimeHandler) => {
+        ch.handlers.push({ table: opts.table, event: opts.event, filter: opts.filter, callback });
+        return channelObj;
+      },
+      subscribe: (statusCallback?: (status: string) => void) => {
+        ch.subscribed = true;
+        if (statusCallback) statusCallback('SUBSCRIBED');
+        return channelObj;
+      },
+      unsubscribe: () => {
+        ch.subscribed = false;
+        return channelObj;
+      },
+    };
+    return channelObj;
+  }
+
+  function emitEvent(channelName: string, table: string, event: string, payload: { new?: unknown; old?: unknown }) {
+    const ch = channels[channelName];
+    if (!ch || !ch.subscribed) return;
+    for (const handler of ch.handlers) {
+      if (handler.table === table && (handler.event === '*' || handler.event === event)) {
+        handler.callback({
+          new: payload.new ?? null,
+          old: payload.old ?? null,
+          eventType: event,
+        });
+      }
+    }
+  }
+
   const sb = {
     from: (table: string) => createChain(table),
     rpc: (name: string, params?: unknown) => {
@@ -264,7 +312,8 @@ export function createMockSupabase() {
         }),
       }),
     },
+    channel: (name: string) => createChannel(name),
   };
 
-  return { sb: sb as any, mockTable, mockRpc, getInserted, getUpsertOpts };
+  return { sb: sb as any, mockTable, mockRpc, getInserted, getUpsertOpts, emitEvent };
 }
