@@ -13,13 +13,6 @@ import { Save, Loader2, ChevronLeft, Bot, Power, Star, AlertTriangle } from "luc
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { FileText, Wrench, BookOpen, Sparkles, GitBranch, Plug, SlidersHorizontal, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -60,7 +53,6 @@ import {
   type ConexaoState,
   type ComportamentoState,
 } from "./conexao-comportamento-mapping";
-import { TEMPLATE_PRESETS, getTemplatePreset } from "./template-presets";
 import {
   PLAYGROUND_TOOLS,
   createDefaultPlaygroundData,
@@ -218,7 +210,7 @@ function playgroundToAgentPayload(data: PlaygroundData, conexaoState?: ConexaoSt
       skills: activeTools,
       allowed_topics: [],
       forbidden_topics: [],
-      operation_mode: data.operationMode,
+      operation_mode: "inbound",
       activation_triggers: data.isProactive ? data.activationTriggers : null,
       outbound_config: data.isProactive ? {
         ...data.outboundConfig,
@@ -453,31 +445,6 @@ export function CopilotPlayground() {
     [bumpConfigVersion]
   );
 
-  // Template selection
-  const handleTemplateChange = useCallback(
-    (type: string) => {
-      if (type === "blank") {
-        setData(createDefaultPlaygroundData());
-        return;
-      }
-      const preset = getTemplatePreset(type);
-      if (!preset) return;
-
-      const base = createDefaultPlaygroundData();
-      setData({
-        ...base,
-        ...preset.data,
-        promptSections: {
-          ...base.promptSections,
-          ...(preset.data.promptSections || {}),
-        },
-        name: data.name, // keep current name
-      } as PlaygroundData);
-      bumpConfigVersion();
-    },
-    [data.name, bumpConfigVersion]
-  );
-
   // Build system prompt for preview
   const systemPromptForPreview = useMemo(() => buildSystemPrompt(data), [data]);
 
@@ -603,25 +570,7 @@ export function CopilotPlayground() {
             <ChevronLeft className="w-4 h-4" />
           </Button>
 
-          <div className="flex items-center gap-2">
-            <Bot className="w-5 h-5 text-primary" />
-            <Select
-              value={data.templateType || "blank"}
-              onValueChange={handleTemplateChange}
-            >
-              <SelectTrigger className="w-48 h-8 text-xs">
-                <SelectValue placeholder="Selecione template" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="blank">Em branco</SelectItem>
-                {TEMPLATE_PRESETS.map((t) => (
-                  <SelectItem key={t.type} value={t.type}>
-                    {t.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          <Bot className="w-5 h-5 text-primary" />
 
           <Input
             value={data.name}
