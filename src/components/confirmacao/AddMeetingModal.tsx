@@ -12,7 +12,7 @@ import { CalendarIcon, Loader2, CheckCircle2, AlertCircle, Video } from "lucide-
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
-import { useLeads } from "@/hooks/useLeads";
+import { useLeads, useUpdateLead } from "@/hooks/useLeads";
 import { useResponsibleMembers } from "@/hooks/useTeamMembers";
 import { useCreatePipeConfirmacao, PipeConfirmacaoStatus } from "@/hooks/usePipeConfirmacao";
 import { useLogLeadAction } from "@/hooks/useLogLeadAction";
@@ -27,7 +27,14 @@ interface AddMeetingModalProps {
   onSuccess?: () => void;
   /** When provided, the lead is pre-selected and locked (no email search / dropdown) */
   prefilledLeadId?: string;
-  /** When provided, the responsible member is pre-selected */
+  /**
+   * When provided, pre-selects the SDR (pre-sale responsible) for the meeting.
+   * Semantically this is the lead's `pre_sale_responsible_id`. If omitted, the
+   * value is auto-populated from the lead when one is selected. Submitting
+   * with a different value updates the lead before creating the pipe entry —
+   * the DB trigger `snapshot_responsible_from_lead` then captures it into
+   * `pipeline_entries.metadata.pre_sale_responsible_id`.
+   */
   prefilledResponsibleId?: string | null;
 }
 
@@ -42,7 +49,9 @@ export function AddMeetingModal({
   const [selectedLeadId, setSelectedLeadId] = useState<string>(prefilledLeadId ?? "");
   const [meetingDate, setMeetingDate] = useState<Date | undefined>();
   const [meetingTime, setMeetingTime] = useState("10:00");
-  const [responsibleId, setResponsibleId] = useState<string>(prefilledResponsibleId ?? "");
+  // `sdrId` is the lead's pre_sale_responsible_id. The DB trigger snapshots
+  // this into pipeline_entries.metadata.pre_sale_responsible_id at INSERT.
+  const [sdrId, setSdrId] = useState<string>(prefilledResponsibleId ?? "");
   const [notes, setNotes] = useState("");
   const [status, setStatus] = useState<PipeConfirmacaoStatus>("reuniao_marcada");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -55,6 +64,7 @@ export function AddMeetingModal({
   const { data: leads, isLoading: leadsLoading } = useLeads();
   const responsibleMembers = useResponsibleMembers();
   const createPipeConfirmacao = useCreatePipeConfirmacao();
+  const updateLead = useUpdateLead();
   const logAction = useLogLeadAction();
 
   // Google Calendar hooks
@@ -103,13 +113,30 @@ export function AddMeetingModal({
     }
   }, [foundLeadByEmail]);
 
-  // Sync prefilled values when the modal opens or prefilled props change
+  // Resolved lead for the currently selected id (used to pre-fill the SDR
+  // field from the lead's `pre_sale_responsible_id`).
+  const resolvedLead = useMemo(() => {
+    if (!selectedLeadId || !leads) return null;
+    return leads.find((l) => l.id === selectedLeadId) ?? null;
+  }, [selectedLeadId, leads]);
+
+  // Sync prefilled values when the modal opens or prefilled props change.
   useEffect(() => {
     if (open) {
       if (prefilledLeadId) setSelectedLeadId(prefilledLeadId);
-      if (prefilledResponsibleId) setResponsibleId(prefilledResponsibleId);
+      if (prefilledResponsibleId) setSdrId(prefilledResponsibleId);
     }
   }, [open, prefilledLeadId, prefilledResponsibleId]);
+
+  // Auto-populate SDR from the lead's pre_sale_responsible_id whenever the
+  // selected lead changes — unless the caller has explicitly pre-filled the
+  // SDR via prefilledResponsibleId (we respect that override).
+  useEffect(() => {
+    if (!open) return;
+    if (prefilledResponsibleId) return;
+    const leadPreSale = (resolvedLead?.pre_sale_responsible_id as string | null) ?? "";
+    setSdrId(leadPreSale);
+  }, [open, resolvedLead, prefilledResponsibleId]);
 
   // Reset form when modal closes
   useEffect(() => {
@@ -118,7 +145,7 @@ export function AddMeetingModal({
       setSelectedLeadId(prefilledLeadId ?? "");
       setMeetingDate(undefined);
       setMeetingTime("10:00");
-      setResponsibleId(prefilledResponsibleId ?? "");
+      setSdrId(prefilledResponsibleId ?? "");
       setNotes("");
       setStatus("reuniao_marcada");
       setCreateGoogleEvent(true);
@@ -145,10 +172,25 @@ export function AddMeetingModal({
       const meetingDateTime = new Date(meetingDate);
       meetingDateTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
 
+      // If the SDR selected here differs from what the lead currently has, write
+      // it to the lead FIRST. The DB trigger `snapshot_responsible_from_lead`
+      // then captures it into `pipeline_entries.metadata.pre_sale_responsible_id`
+      // when we insert below. Lead = source of truth; metadata = snapshot.
+      const desiredSdr = sdrId || null;
+      const currentLeadSdr = (resolvedLead?.pre_sale_responsible_id as string | null) ?? null;
+      if (desiredSdr !== currentLeadSdr) {
+        await updateLead.mutateAsync({
+          id: selectedLeadId,
+          pre_sale_responsible_id: desiredSdr,
+        });
+      }
+
       const pipeData = await createPipeConfirmacao.mutateAsync({
         lead_id: selectedLeadId,
         meeting_date: meetingDateTime.toISOString(),
-        responsible_id: responsibleId || null,
+        // Redundant client-side hint. Authoritative snapshot is still produced
+        // by the DB trigger reading from `leads`.
+        pre_sale_responsible_id: desiredSdr,
         notes: notes || null,
         status,
       });
@@ -387,10 +429,10 @@ export function AddMeetingModal({
             </Select>
           </div>
 
-          {/* Responsável */}
+          {/* SDR (pré-venda) — captured by trigger into metadata.pre_sale_responsible_id */}
           <div className="space-y-2">
-            <Label>Responsável</Label>
-            <Select value={responsibleId || "none"} onValueChange={(v) => setResponsibleId(v === "none" ? "" : v)}>
+            <Label>SDR (pré-venda)</Label>
+            <Select value={sdrId || "none"} onValueChange={(v) => setSdrId(v === "none" ? "" : v)}>
               <SelectTrigger>
                 <SelectValue placeholder="Selecione" />
               </SelectTrigger>

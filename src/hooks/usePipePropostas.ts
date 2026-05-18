@@ -42,9 +42,11 @@ export function useCreatePipeProposta() {
         throw new Error("Cannot create proposta: pipeline ID not resolved");
       }
 
+      // Fase A descomissionamento (PRD #211 / Issue #214):
+      // Legacy fields (closer_id, responsible_id) are NOT written to metadata.
+      // Source of truth for crédito de venda é dual `sale_responsible_id`,
+      // capturado pelo trigger DB na transição para `vendido`.
       const metadata: Record<string, unknown> = {};
-      if (item.closer_id !== undefined) metadata.closer_id = item.closer_id;
-      if (item.responsible_id !== undefined) metadata.responsible_id = item.responsible_id;
       if (item.pre_sale_responsible_id !== undefined) metadata.pre_sale_responsible_id = item.pre_sale_responsible_id;
       if (item.sale_responsible_id !== undefined) metadata.sale_responsible_id = item.sale_responsible_id;
       if (item.sale_value !== undefined) metadata.sale_value = item.sale_value;
@@ -56,13 +58,17 @@ export function useCreatePipeProposta() {
       if (item.contract_duration !== undefined) metadata.contract_duration = item.contract_duration;
       if (item.metrics_period_at !== undefined) metadata.metrics_period_at = item.metrics_period_at;
 
+      // assigned_to: dual fields first; legacy retained as transition fallback.
+      const assignedToValue =
+        item.sale_responsible_id ?? item.pre_sale_responsible_id ?? item.responsible_id ?? item.closer_id ?? null;
+
       const { data, error } = await supabase
         .from("pipeline_entries")
         .insert({
           pipeline_id: pipelineId,
           lead_id: item.lead_id!,
           stage_key: item.status ?? "marcar_compromisso",
-          assigned_to: item.responsible_id || item.closer_id || null,
+          assigned_to: assignedToValue,
           organization_id: organizationId,
           metadata,
         })
@@ -72,7 +78,7 @@ export function useCreatePipeProposta() {
       if (error) throw error;
 
       const stage = data.stage_key;
-      const assignedTo = (item.responsible_id || item.closer_id) as string | undefined;
+      const assignedTo = assignedToValue as string | undefined;
 
       // Trigger automation for the initial status
       await triggerFollowUpAutomation({
@@ -117,9 +123,7 @@ export function useUpdatePipeProposta() {
       const existingMeta = (current.metadata as Record<string, unknown>) ?? {};
       const mergedMeta = { ...existingMeta };
 
-      // Merge pipe-specific fields into metadata
-      if (updates.closer_id !== undefined) mergedMeta.closer_id = updates.closer_id;
-      if (updates.responsible_id !== undefined) mergedMeta.responsible_id = updates.responsible_id;
+      // Fase A: merge dual fields only — legacy keys never enter the metadata write.
       if (updates.pre_sale_responsible_id !== undefined) mergedMeta.pre_sale_responsible_id = updates.pre_sale_responsible_id;
       if (updates.sale_responsible_id !== undefined) mergedMeta.sale_responsible_id = updates.sale_responsible_id;
       if (updates.sale_value !== undefined) mergedMeta.sale_value = updates.sale_value;
@@ -133,8 +137,20 @@ export function useUpdatePipeProposta() {
 
       const entryUpdate: Record<string, unknown> = { metadata: mergedMeta };
       if (updates.status !== undefined) entryUpdate.stage_key = updates.status;
-      if (updates.responsible_id !== undefined || updates.closer_id !== undefined) {
-        entryUpdate.assigned_to = (updates.responsible_id ?? mergedMeta.responsible_id) || (updates.closer_id ?? mergedMeta.closer_id) || null;
+      // assigned_to: recompute when caller touched a responsibility field.
+      // Dual fields first; legacy retained as transition fallback (existing entries' metadata).
+      if (
+        updates.pre_sale_responsible_id !== undefined ||
+        updates.sale_responsible_id !== undefined ||
+        updates.responsible_id !== undefined ||
+        updates.closer_id !== undefined
+      ) {
+        entryUpdate.assigned_to =
+          (updates.sale_responsible_id ?? (mergedMeta.sale_responsible_id as string | null | undefined) ?? null) ||
+          (updates.pre_sale_responsible_id ?? (mergedMeta.pre_sale_responsible_id as string | null | undefined) ?? null) ||
+          (updates.responsible_id ?? (mergedMeta.responsible_id as string | null | undefined) ?? null) ||
+          (updates.closer_id ?? (mergedMeta.closer_id as string | null | undefined) ?? null) ||
+          null;
       }
 
       const { data, error } = await supabase
@@ -191,12 +207,19 @@ export function useUpdatePipeProposta() {
         }
       }
 
-      // Trigger automation if status changed
+      // Trigger automation if status changed.
+      // Prefer dual snapshot fields; fall back to legacy keys on historical entries.
       if (updates.status && effectiveLeadId) {
-        const effectiveCloserId = closerId || (mergedMeta.closer_id as string | null);
+        const effectiveAssignedTo =
+          closerId ||
+          (mergedMeta.sale_responsible_id as string | null | undefined) ||
+          (mergedMeta.pre_sale_responsible_id as string | null | undefined) ||
+          (mergedMeta.closer_id as string | null | undefined) ||
+          (mergedMeta.responsible_id as string | null | undefined) ||
+          null;
         await triggerFollowUpAutomation({
           leadId: effectiveLeadId,
-          assignedTo: effectiveCloserId ?? null,
+          assignedTo: effectiveAssignedTo,
           pipeType: "propostas",
           stage: updates.status,
           sourcePipeId: data.id,

@@ -244,4 +244,88 @@ describe.skipIf(shouldSkip)('SDR mérito comparecimento — get_ranking_data', (
     const closerRow = meetingsRanking.find((r) => r.id === closerB);
     expect(closerRow?.meetings ?? 0).toBe(0);
   });
+
+  // ────────────────────────────────────────────────────────────────────────
+  // PRD #211 / #212 regression guard:
+  // After snapshot_responsible_from_lead landed, get_ranking_data MUST NOT
+  // fall back to legacy metadata.sdr_id either. Case 2 in this suite has
+  // metadata.sdr_id = SDR_A but pre_sale_responsible_id = NULL. Under the
+  // new RPC, case 2 stops being credited.
+  //
+  // We use a dedicated, isolated entry that mimics scenario 10 of the
+  // snapshot lifecycle suite — legacy-only metadata, no dual key.
+  // ────────────────────────────────────────────────────────────────────────
+  it('does NOT fall back to legacy metadata.sdr_id (#212 regression guard)', async () => {
+    // Locate pipeline once more inside this block — beforeAll already verified
+    // its existence, so this is just a re-fetch.
+    const { data: pipeline } = await supabase
+      .from('pipelines')
+      .select('id')
+      .eq('organization_id', TEST_ORG_ID)
+      .eq('slug', 'confirmacao')
+      .eq('type', 'system')
+      .maybeSingle();
+    const pipelineId = pipeline!.id as string;
+
+    // Use a date OUTSIDE the suite's pinned window to avoid polluting the
+    // existing scenarios.
+    const isolatedMonth = 9;
+    const isolatedPeriodAt = `${TEST_YEAR}-0${isolatedMonth}-15T12:00:00Z`;
+
+    const isolatedLead = await supabase
+      .from('leads')
+      .insert({
+        name: 'PRD #212 — legacy-only regression',
+        phone: `+5511${Math.floor(Math.random() * 900000000 + 100000000)}`,
+        organization_id: TEST_ORG_ID,
+        // Intentionally NULL dual fields so the trigger writes a NULL snapshot.
+        pre_sale_responsible_id: null,
+        sale_responsible_id: null,
+      })
+      .select('id')
+      .single();
+    expect(isolatedLead.error).toBeNull();
+    const isolatedLeadId = isolatedLead.data!.id as string;
+
+    const isolatedEntry = await supabase
+      .from('pipeline_entries')
+      .insert({
+        lead_id: isolatedLeadId,
+        organization_id: TEST_ORG_ID,
+        pipeline_id: pipelineId,
+        stage_key: 'compareceu',
+        // Legacy-only payload — sdr_id present, pre_sale_responsible_id absent
+        // at write-time. After the trigger fires, pre_sale_responsible_id will
+        // be JSON null (lead has none); sdr_id stays.
+        metadata: {
+          meeting_date: isolatedPeriodAt,
+          metrics_period_at: isolatedPeriodAt,
+          sdr_id: sdrA,
+        },
+      })
+      .select('id')
+      .single();
+    expect(isolatedEntry.error).toBeNull();
+    const isolatedEntryId = isolatedEntry.data!.id as string;
+
+    try {
+      const { data, error } = await supabase.rpc('get_ranking_data', {
+        p_month: isolatedMonth,
+        p_year: TEST_YEAR,
+        p_organization_id: TEST_ORG_ID,
+      });
+      expect(error).toBeNull();
+
+      const meetingsRanking = (data as any).meetingsRanking as Array<{
+        id: string;
+        meetings: number;
+      }>;
+      const sdrRow = meetingsRanking.find((r) => r.id === sdrA);
+      // No credit must reach sdrA from this legacy-only row.
+      expect(sdrRow?.meetings ?? 0).toBe(0);
+    } finally {
+      await supabase.from('pipeline_entries').delete().eq('id', isolatedEntryId);
+      await supabase.from('leads').delete().eq('id', isolatedLeadId);
+    }
+  });
 });

@@ -39,12 +39,18 @@ export function useCreatePipeWhatsapp() {
         throw new Error("Cannot create pipe_whatsapp: Pipeline ID not resolved");
       }
 
+      // Fase A descomissionamento (PRD #211 / Issue #214):
+      // Legacy fields (sdr_id, responsible_id) are NOT written to metadata.
+      // pipe_whatsapp não alimenta ranking de crédito; este cleanup mantém
+      // simetria com confirmacao/propostas e elimina escrita legacy do harness.
       const metadata: Record<string, unknown> = {};
-      if (item.sdr_id !== undefined) metadata.sdr_id = item.sdr_id;
-      if (item.responsible_id !== undefined) metadata.responsible_id = item.responsible_id;
       if (item.pre_sale_responsible_id !== undefined) metadata.pre_sale_responsible_id = item.pre_sale_responsible_id;
       if (item.sale_responsible_id !== undefined) metadata.sale_responsible_id = item.sale_responsible_id;
       if ((item as any).scheduled_date !== undefined) metadata.scheduled_date = (item as any).scheduled_date;
+
+      // assigned_to: dual fields first; legacy retained as transition fallback.
+      const assignedToValue =
+        item.pre_sale_responsible_id ?? item.responsible_id ?? item.sdr_id ?? null;
 
       const { data, error } = await supabase
         .from("pipeline_entries")
@@ -52,7 +58,7 @@ export function useCreatePipeWhatsapp() {
           pipeline_id: pipelineId,
           lead_id: item.lead_id!,
           stage_key: item.status ?? "novo",
-          assigned_to: item.responsible_id ?? item.sdr_id ?? null,
+          assigned_to: assignedToValue,
           notes: item.notes ?? null,
           metadata,
           organization_id: organizationId,
@@ -62,12 +68,11 @@ export function useCreatePipeWhatsapp() {
 
       if (error) throw error;
 
-      const meta = (data.metadata as Record<string, any>) ?? {};
-
-      // Trigger automation for the initial status
+      // Trigger automation for the initial status. Prefer dual; fall back to
+      // caller-supplied legacy for transition.
       await triggerFollowUpAutomation({
         leadId: data.lead_id,
-        assignedTo: meta.sdr_id ?? item.sdr_id ?? null,
+        assignedTo: assignedToValue,
         pipeType: "whatsapp",
         stage: data.stage_key,
         sourcePipeId: data.id,
@@ -103,9 +108,8 @@ export function useUpdatePipeWhatsapp() {
       if (fetchError) throw fetchError;
 
       const currentMetadata = (current.metadata as Record<string, any>) ?? {};
+      // Fase A: dual-only metadata writes.
       const newMetadata: Record<string, unknown> = {};
-      if (updates.sdr_id !== undefined) newMetadata.sdr_id = updates.sdr_id;
-      if (updates.responsible_id !== undefined) newMetadata.responsible_id = updates.responsible_id;
       if (updates.pre_sale_responsible_id !== undefined) newMetadata.pre_sale_responsible_id = updates.pre_sale_responsible_id;
       if (updates.sale_responsible_id !== undefined) newMetadata.sale_responsible_id = updates.sale_responsible_id;
       if ((updates as any).scheduled_date !== undefined) newMetadata.scheduled_date = (updates as any).scheduled_date;
@@ -121,9 +125,20 @@ export function useUpdatePipeWhatsapp() {
       if (updates.notes !== undefined) {
         updatePayload.notes = updates.notes;
       }
-      // Compute assigned_to from the merged result
-      const assignedTo = mergedMetadata.responsible_id ?? mergedMetadata.sdr_id ?? null;
-      if (updates.responsible_id !== undefined || updates.sdr_id !== undefined) {
+      // assigned_to: prefer dual on the merged result; legacy retained as
+      // transition fallback so historical entries still produce a usable FK.
+      const assignedTo =
+        mergedMetadata.pre_sale_responsible_id ??
+        mergedMetadata.sale_responsible_id ??
+        mergedMetadata.responsible_id ??
+        mergedMetadata.sdr_id ??
+        null;
+      if (
+        updates.pre_sale_responsible_id !== undefined ||
+        updates.sale_responsible_id !== undefined ||
+        updates.responsible_id !== undefined ||
+        updates.sdr_id !== undefined
+      ) {
         updatePayload.assigned_to = assignedTo;
       }
 
@@ -142,13 +157,20 @@ export function useUpdatePipeWhatsapp() {
         await supabase.from("leads").update({ sdr_id: updates.sdr_id || null }).eq("id", effectiveLeadId);
       }
 
-      // Trigger automation if status changed
+      // Trigger automation if status changed.
+      // Prefer dual snapshot fields; fall back to legacy keys on historical entries.
       if (updates.status && effectiveLeadId) {
         const meta = (data.metadata as Record<string, any>) ?? {};
 
         await triggerFollowUpAutomation({
           leadId: effectiveLeadId,
-          assignedTo: sdrId || meta.sdr_id || null,
+          assignedTo:
+            sdrId ||
+            meta.pre_sale_responsible_id ||
+            meta.sale_responsible_id ||
+            meta.sdr_id ||
+            meta.responsible_id ||
+            null,
           pipeType: "whatsapp",
           stage: updates.status,
           sourcePipeId: data.id,

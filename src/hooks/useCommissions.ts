@@ -174,13 +174,18 @@ export function useCommissionSummary(teamMemberId: string, month: number, year: 
       const startStr = new Date(Date.UTC(year, month - 1, 1)).toISOString();
       const endStr = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999)).toISOString();
 
-      // Período: COALESCE(metrics_period_at, closed_at) no intervalo do mês
+      // Período: COALESCE(metrics_period_at, closed_at) no intervalo do mês.
+      // Fase A descomissionamento (PRD #211 / Issue #214): crédito de venda
+      // lê EXCLUSIVAMENTE `sale_responsible_id`. Fallback para `closer_id`
+      // legacy removido — o trigger DB garante snapshot dual no momento da
+      // transição para `vendido`, e backfill (`e3ac4599`) já preencheu
+      // histórico onde dual era nulo.
       const [salesQ1, salesQ2] = await Promise.all([
         supabase
           .from("pipe_propostas")
           .select("sale_value, product_type")
           .eq("organization_id", organizationId)
-          .or(`sale_responsible_id.eq.${teamMemberId},closer_id.eq.${teamMemberId}`)
+          .eq("sale_responsible_id", teamMemberId)
           .eq("status", "vendido")
           .not("metrics_period_at", "is", null)
           .gte("metrics_period_at", startStr)
@@ -189,7 +194,7 @@ export function useCommissionSummary(teamMemberId: string, month: number, year: 
           .from("pipe_propostas")
           .select("sale_value, product_type")
           .eq("organization_id", organizationId)
-          .or(`sale_responsible_id.eq.${teamMemberId},closer_id.eq.${teamMemberId}`)
+          .eq("sale_responsible_id", teamMemberId)
           .eq("status", "vendido")
           .is("metrics_period_at", null)
           .gte("closed_at", startStr)
@@ -268,13 +273,16 @@ export function useCommissionSummary(teamMemberId: string, month: number, year: 
         // Meta de reuniões (quantidade)
         goalTarget = await fetchGoalTarget("reunioes");
 
-        // Contar reuniões comparecidas do SDR: COALESCE(metrics_period_at, created_at) no intervalo (alinhado ao dashboard)
+        // Contar reuniões comparecidas do SDR: COALESCE(metrics_period_at, created_at) no intervalo (alinhado ao dashboard).
+        // Fase A descomissionamento: crédito de comparecimento lê EXCLUSIVAMENTE
+        // `pre_sale_responsible_id`. Fallback para `sdr_id` legacy removido —
+        // mesma regra do `get_ranking_data` corrigido em `e3ac4599`.
         const [confQ1, confQ2] = await Promise.all([
           supabase
             .from("pipe_confirmacao")
             .select("id")
             .eq("organization_id", organizationId)
-            .or(`pre_sale_responsible_id.eq.${teamMemberId},sdr_id.eq.${teamMemberId}`)
+            .eq("pre_sale_responsible_id", teamMemberId)
             .eq("status", "compareceu")
             .not("metrics_period_at", "is", null)
             .gte("metrics_period_at", startStr)
@@ -283,7 +291,7 @@ export function useCommissionSummary(teamMemberId: string, month: number, year: 
             .from("pipe_confirmacao")
             .select("id")
             .eq("organization_id", organizationId)
-            .or(`pre_sale_responsible_id.eq.${teamMemberId},sdr_id.eq.${teamMemberId}`)
+            .eq("pre_sale_responsible_id", teamMemberId)
             .eq("status", "compareceu")
             .is("metrics_period_at", null)
             .gte("created_at", startStr)

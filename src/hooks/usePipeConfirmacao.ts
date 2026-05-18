@@ -45,12 +45,20 @@ export function useCreatePipeConfirmacao() {
         throw new Error("Pipeline 'confirmacao' not found for this organization");
       }
 
-      const { lead_id, status, organization_id, sdr_id, closer_id, responsible_id, pre_sale_responsible_id, sale_responsible_id, meeting_date, meet_link, is_confirmed, metrics_period_at, ...rest } = item;
+      // Fase A descomissionamento (PRD #211 / Issue #214):
+      // Legacy fields (sdr_id, closer_id, responsible_id) are destructured here only
+      // to keep the public hook signature backward-compatible — they are NOT written
+      // into metadata. Source of truth for crédito is now the dual snapshot captured
+      // by the DB trigger (`snapshot_responsible_from_lead`).
+      const {
+        lead_id, status, organization_id,
+        sdr_id, closer_id, responsible_id,
+        pre_sale_responsible_id, sale_responsible_id,
+        meeting_date, meet_link, is_confirmed, metrics_period_at,
+        ...rest
+      } = item;
 
       const metadata = {
-        ...(sdr_id !== undefined && { sdr_id }),
-        ...(closer_id !== undefined && { closer_id }),
-        ...(responsible_id !== undefined && { responsible_id }),
         ...(pre_sale_responsible_id !== undefined && { pre_sale_responsible_id }),
         ...(sale_responsible_id !== undefined && { sale_responsible_id }),
         ...(meeting_date !== undefined && { meeting_date }),
@@ -59,13 +67,18 @@ export function useCreatePipeConfirmacao() {
         ...(metrics_period_at !== undefined && { metrics_period_at }),
       };
 
+      // assigned_to: dual fields first; legacy retained only as transition fallback
+      // so existing callers that haven't migrated to dual still produce a usable FK.
+      const assignedToValue =
+        pre_sale_responsible_id ?? sale_responsible_id ?? responsible_id ?? sdr_id ?? closer_id ?? null;
+
       const { data, error } = await supabase
         .from("pipeline_entries")
         .insert({
           pipeline_id: pipelineId,
           lead_id: lead_id!,
           stage_key: status || "reuniao_marcada",
-          assigned_to: responsible_id || sdr_id || closer_id || null,
+          assigned_to: assignedToValue,
           metadata,
           organization_id: organizationId,
         })
@@ -74,10 +87,10 @@ export function useCreatePipeConfirmacao() {
 
       if (error) throw error;
 
-      // Trigger automation for the initial status — use input values for assignedTo
+      // Trigger automation for the initial status — prefer dual values.
       await triggerFollowUpAutomation({
         leadId: data.lead_id,
-        assignedTo: responsible_id || sdr_id || closer_id,
+        assignedTo: assignedToValue,
         pipeType: "confirmacao",
         stage: data.stage_key,
         sourcePipeId: data.id,
@@ -149,13 +162,12 @@ export function useUpdatePipeConfirmacao() {
 
       const existingMetadata = (currentEntry.metadata as Record<string, unknown>) || {};
 
-      // Extract metadata fields from updates, keep non-metadata fields separate
+      // Extract metadata fields from updates, keep non-metadata fields separate.
+      // Fase A: legacy fields are destructured to be excluded from `nonMetaUpdates`
+      // and from the metadata write, but kept usable for `assigned_to` fallback.
       const { status, sdr_id, closer_id, responsible_id, pre_sale_responsible_id, sale_responsible_id, meeting_date, meet_link, is_confirmed, metrics_period_at, ...nonMetaUpdates } = updates;
 
       const metadataUpdates: Record<string, unknown> = {};
-      if (sdr_id !== undefined) metadataUpdates.sdr_id = sdr_id;
-      if (closer_id !== undefined) metadataUpdates.closer_id = closer_id;
-      if (responsible_id !== undefined) metadataUpdates.responsible_id = responsible_id;
       if (pre_sale_responsible_id !== undefined) metadataUpdates.pre_sale_responsible_id = pre_sale_responsible_id;
       if (sale_responsible_id !== undefined) metadataUpdates.sale_responsible_id = sale_responsible_id;
       if (meeting_date !== undefined) metadataUpdates.meeting_date = meeting_date;
@@ -168,8 +180,17 @@ export function useUpdatePipeConfirmacao() {
       const payload: Record<string, unknown> = {};
       if (status !== undefined) payload.stage_key = status;
       if (Object.keys(metadataUpdates).length > 0) payload.metadata = mergedMetadata;
-      if (responsible_id !== undefined || sdr_id !== undefined || closer_id !== undefined) {
-        payload.assigned_to = responsible_id || sdr_id || closer_id || null;
+      // assigned_to recompute only when caller touched a responsibility field
+      // (dual or legacy). Dual takes precedence; legacy retained as transition fallback.
+      if (
+        pre_sale_responsible_id !== undefined ||
+        sale_responsible_id !== undefined ||
+        responsible_id !== undefined ||
+        sdr_id !== undefined ||
+        closer_id !== undefined
+      ) {
+        payload.assigned_to =
+          pre_sale_responsible_id ?? sale_responsible_id ?? responsible_id ?? sdr_id ?? closer_id ?? null;
       }
 
       // Only update if there's something to update
@@ -211,12 +232,19 @@ export function useUpdatePipeConfirmacao() {
           .eq("organization_id", organizationId);
       }
 
-      // Trigger automation só quando status mudou de fato
+      // Trigger automation só quando status mudou de fato.
+      // Prefer dual snapshot fields; fall back to legacy keys on historical entries.
       if (isStatusChange && updates.status && leadId) {
         const meta = (data.metadata as Record<string, unknown>) || {};
         await triggerFollowUpAutomation({
           leadId: leadId,
-          assignedTo: assignedTo || (meta.responsible_id as string) || (meta.sdr_id as string) || (meta.closer_id as string),
+          assignedTo:
+            assignedTo ||
+            (meta.pre_sale_responsible_id as string) ||
+            (meta.sale_responsible_id as string) ||
+            (meta.responsible_id as string) ||
+            (meta.sdr_id as string) ||
+            (meta.closer_id as string),
           pipeType: "confirmacao",
           stage: updates.status,
           sourcePipeId: data.id,
