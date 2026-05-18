@@ -1,7 +1,7 @@
-import { useEffect, useRef, useCallback } from "react";
+import { useRef, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "./useOrganization";
+import { useRealtimeChannel } from "./useRealtimeChannel";
 import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 
 /**
@@ -44,18 +44,12 @@ export function useRealtimeSubscription<T = any>(
   const queryClient = useQueryClient();
   const { organizationId } = useOrganization();
 
-  // Manter referência estável das queryKeys para evitar subscribe/unsubscribe
-  // constante no useEffect (arrays criam referência nova a cada render)
   const queryKeysRef = useRef(queryKeys);
   queryKeysRef.current = queryKeys;
   const handlersRef = useRef(handlers);
   handlersRef.current = handlers;
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const staggerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Serializar para usar como dependência estável
-  const queryKeysKey = JSON.stringify(queryKeys);
-  const hasHandlers = !!handlers;
 
   const handleRealtimeEvent = useCallback(
     (payload: RealtimePostgresChangesPayload<any>) => {
@@ -66,7 +60,6 @@ export function useRealtimeSubscription<T = any>(
       // Surgical update: UPDATE with handler
       if (eventType === "UPDATE" && currentHandlers?.onUpdate && keys.length > 0) {
         const updatedRecord = payload.new;
-        // Apply surgical update to all matching query caches
         queryClient.setQueriesData(
           { queryKey: [keys[0]] },
           (oldData: any) => {
@@ -114,43 +107,17 @@ export function useRealtimeSubscription<T = any>(
       }, DEBOUNCE_MS);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [queryClient, hasHandlers]
+    [queryClient]
   );
 
-  useEffect(() => {
-    // Filtrar por organization_id quando a tabela suporta
-    const canFilter = !TABLES_WITHOUT_ORG_ID.has(table) && !!organizationId;
+  // Compute filter — org-based for most tables, none for TABLES_WITHOUT_ORG_ID
+  const canFilter = !TABLES_WITHOUT_ORG_ID.has(table) && !!organizationId;
+  const filter = canFilter ? `organization_id=eq.${organizationId}` : undefined;
 
-    const channelName = `${table}_realtime_${organizationId ?? "global"}`;
-
-    const pgChangesConfig: Record<string, string> = {
-      event: "*",
-      schema: "public",
-      table,
-    };
-
-    if (canFilter) {
-      pgChangesConfig.filter = `organization_id=eq.${organizationId}`;
-    }
-
-    const channel = supabase
-      .channel(channelName)
-      .on(
-        "postgres_changes",
-        pgChangesConfig as any,
-        handleRealtimeEvent
-      )
-      .subscribe();
-
-    return () => {
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current);
-      }
-      if (staggerTimerRef.current) {
-        clearTimeout(staggerTimerRef.current);
-      }
-      supabase.removeChannel(channel);
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [table, queryClient, queryKeysKey, organizationId, handleRealtimeEvent]);
+  useRealtimeChannel({
+    table,
+    filter,
+    onEvent: handleRealtimeEvent,
+    enabled: true,
+  });
 }
