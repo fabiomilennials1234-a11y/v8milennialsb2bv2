@@ -20,6 +20,23 @@ vi.mock("../../supabase/functions/_shared/whatsapp-dispatch.ts", () => ({
 
 vi.mock("../../supabase/functions/_shared/audio-sender.ts", () => ({
   sendWhatsAppAudio: vi.fn().mockResolvedValue({ success: true, messageId: "mock-audio-direct-id" }),
+  sendAudioViaProvider: vi.fn().mockResolvedValue({ success: true, messageId: "mock-audio-provider-id" }),
+}));
+
+// Mock message-gateway (used by extracted send_* action handlers)
+vi.mock("../../supabase/functions/_shared/message-gateway.ts", () => ({
+  sendMessage: vi.fn().mockResolvedValue({ delegated: false, success: true }),
+}));
+
+// Mock instance-write-guard (dynamic import in whatsapp-helpers)
+vi.mock("../../supabase/functions/_shared/instance-write-guard.ts", () => ({
+  resolveStrictInstanceForCaller: vi.fn().mockResolvedValue(null),
+  StrictWriteResolutionError: class extends Error { errorCode = "test"; },
+}));
+
+// Mock whatsapp-client (used by extracted audio handler)
+vi.mock("../../supabase/functions/_shared/whatsapp-client.ts", () => ({
+  getWhatsAppProvider: vi.fn().mockResolvedValue({ sendAudio: vi.fn() }),
 }));
 
 const mockFetch = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({}), text: () => Promise.resolve("") });
@@ -480,17 +497,11 @@ function setupSupabaseEnv() {
 
 describe("handleSendWhatsApp — deep", () => {
   it("succeeds with instance + phone + message template", async () => {
-    setupEvolutionEnv();
     const { sb, mockTable } = createMockSupabase();
     mockTable("leads", [LEAD_WITH_PHONE]);
     mockTable("whatsapp_instances", [WA_INSTANCE]);
     mockTable("whatsapp_messages", []);
     mockTable("lead_history", []);
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve({ key: { id: "msg-1" } }),
-      text: () => Promise.resolve(""),
-    });
 
     const result = await executeWorkflowAction({
       supabase: sb, organizationId: "org-1", leadId: "lead-1",
@@ -531,16 +542,14 @@ describe("handleSendWhatsApp — deep", () => {
     expect(result.error).toContain("Empty message");
   });
 
-  it("fails when Evolution fetch returns !ok", async () => {
-    setupEvolutionEnv();
+  it("fails when dispatch returns failure", async () => {
+    const { sendTextViaInstance } = await import("../../supabase/functions/_shared/whatsapp-dispatch");
+    vi.mocked(sendTextViaInstance).mockResolvedValueOnce({ success: false, error: "Gateway Timeout" });
+
     const { sb, mockTable } = createMockSupabase();
     mockTable("leads", [LEAD_WITH_PHONE]);
     mockTable("whatsapp_instances", [WA_INSTANCE]);
-    mockFetch.mockResolvedValueOnce({
-      ok: false,
-      text: () => Promise.resolve("Gateway Timeout"),
-      json: () => Promise.resolve({}),
-    });
+    mockTable("whatsapp_messages", []);
 
     const result = await executeWorkflowAction({
       supabase: sb, organizationId: "org-1", leadId: "lead-1",
@@ -552,17 +561,11 @@ describe("handleSendWhatsApp — deep", () => {
   });
 
   it("resolves executionContext variables in template", async () => {
-    setupEvolutionEnv();
     const { sb, mockTable } = createMockSupabase();
     mockTable("leads", [LEAD_WITH_PHONE]);
     mockTable("whatsapp_instances", [WA_INSTANCE]);
     mockTable("whatsapp_messages", []);
     mockTable("lead_history", []);
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve({ key: { id: "msg-2" } }),
-      text: () => Promise.resolve(""),
-    });
 
     const result = await executeWorkflowAction({
       supabase: sb, organizationId: "org-1", leadId: "lead-1",
@@ -572,18 +575,12 @@ describe("handleSendWhatsApp — deep", () => {
     expect(result.success).toBe(true);
   });
 
-  it("records whatsapp_messages with Evolution message_id + sent_by_ai=true (no duplicate with webhook echo)", async () => {
-    setupEvolutionEnv();
+  it("records whatsapp_messages via dispatch with sent_by_ai=true (no duplicate with webhook echo)", async () => {
     const { sb, mockTable, getInserted, getUpsertOpts } = createMockSupabase();
     mockTable("leads", [LEAD_WITH_PHONE]);
     mockTable("whatsapp_instances", [WA_INSTANCE]);
     mockTable("whatsapp_messages", []);
     mockTable("lead_history", []);
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve({ key: { id: "evolution-real-id-42" } }),
-      text: () => Promise.resolve(""),
-    });
 
     await executeWorkflowAction({
       supabase: sb, organizationId: "org-1", leadId: "lead-1",
@@ -594,12 +591,13 @@ describe("handleSendWhatsApp — deep", () => {
     const inserted = getInserted("whatsapp_messages");
     expect(inserted.length).toBe(1);
     const row = inserted[0] as Record<string, unknown>;
-    expect(row.message_id).toBe("evolution-real-id-42");
+    // message_id comes from sendTextViaInstance mock
+    expect(row.message_id).toBe("mock-text-id");
     expect(row.sent_by_ai).toBe(true);
     expect(row.direction).toBe("outgoing");
 
     // Idempotency contract: must upsert on (message_id, instance_id) so the
-    // Evolution send.message echo cannot duplicate the row.
+    // inbound webhook echo cannot duplicate the row.
     const opts = getUpsertOpts("whatsapp_messages") as Array<{
       onConflict?: string;
       ignoreDuplicates?: boolean;
@@ -612,18 +610,11 @@ describe("handleSendWhatsApp — deep", () => {
 
 describe("handleSendWhatsAppAudio — deep", () => {
   it("succeeds with instance + phone + audioUrl", async () => {
-    setupEvolutionEnv();
     const { sb, mockTable } = createMockSupabase();
     mockTable("leads", [LEAD_WITH_PHONE]);
     mockTable("whatsapp_instances", [WA_INSTANCE]);
     mockTable("whatsapp_messages", []);
     mockTable("lead_history", []);
-    // sendWhatsAppAudio internally calls fetch
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve({ key: { id: "audio-1" } }),
-      text: () => Promise.resolve(""),
-    });
 
     const result = await executeWorkflowAction({
       supabase: sb, organizationId: "org-1", leadId: "lead-1",
@@ -667,16 +658,11 @@ describe("handleSendWhatsAppAudio — deep", () => {
 
 describe("handleSendWhatsAppImage — deep", () => {
   it("succeeds with instance + phone + imageUrl", async () => {
-    setupEvolutionEnv();
     const { sb, mockTable } = createMockSupabase();
     mockTable("leads", [LEAD_WITH_PHONE]);
     mockTable("whatsapp_instances", [WA_INSTANCE]);
+    mockTable("whatsapp_messages", []);
     mockTable("lead_history", []);
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve({}),
-      text: () => Promise.resolve(""),
-    });
 
     const result = await executeWorkflowAction({
       supabase: sb, organizationId: "org-1", leadId: "lead-1",
@@ -688,7 +674,6 @@ describe("handleSendWhatsAppImage — deep", () => {
   });
 
   it("fails when imageUrl is missing", async () => {
-    setupEvolutionEnv();
     const { sb, mockTable } = createMockSupabase();
     mockTable("leads", [LEAD_WITH_PHONE]);
     mockTable("whatsapp_instances", [WA_INSTANCE]);
@@ -717,16 +702,14 @@ describe("handleSendWhatsAppImage — deep", () => {
     expect(result.error).toContain("phone");
   });
 
-  it("fails when Evolution fetch returns !ok", async () => {
-    setupEvolutionEnv();
+  it("fails when dispatch returns failure", async () => {
+    const { sendMediaViaInstance } = await import("../../supabase/functions/_shared/whatsapp-dispatch");
+    vi.mocked(sendMediaViaInstance).mockResolvedValueOnce({ success: false, error: "500 Internal Server Error" });
+
     const { sb, mockTable } = createMockSupabase();
     mockTable("leads", [LEAD_WITH_PHONE]);
     mockTable("whatsapp_instances", [WA_INSTANCE]);
-    mockFetch.mockResolvedValueOnce({
-      ok: false,
-      text: () => Promise.resolve("500 Internal Server Error"),
-      json: () => Promise.resolve({}),
-    });
+    mockTable("whatsapp_messages", []);
 
     const result = await executeWorkflowAction({
       supabase: sb, organizationId: "org-1", leadId: "lead-1",
@@ -740,17 +723,12 @@ describe("handleSendWhatsAppImage — deep", () => {
 
 describe("handleSendWhatsAppTemplate — deep", () => {
   it("succeeds with template found in DB", async () => {
-    setupEvolutionEnv();
     const { sb, mockTable } = createMockSupabase();
     mockTable("leads", [LEAD_WITH_PHONE]);
     mockTable("whatsapp_instances", [WA_INSTANCE]);
+    mockTable("whatsapp_messages", []);
     mockTable("whatsapp_templates", [{ id: "tpl-1", name: "Welcome", content: "Olá {{nome}}, bem-vindo!" }]);
     mockTable("lead_history", []);
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve({}),
-      text: () => Promise.resolve(""),
-    });
 
     const result = await executeWorkflowAction({
       supabase: sb, organizationId: "org-1", leadId: "lead-1",

@@ -11,6 +11,42 @@ import "../../tests/helpers/deno-mock";
 import { setDenoEnv, clearDenoEnv } from "../../tests/helpers/deno-mock";
 import { createMockSupabase } from "../helpers/supabase-mock";
 
+// Mock dependencies used by extracted send_* action handlers
+vi.mock("../../supabase/functions/_shared/whatsapp-dispatch.ts", () => ({
+  sendTextViaInstance: vi.fn().mockResolvedValue({ success: true, messageId: "mock-text-id" }),
+  sendMediaViaInstance: vi.fn().mockResolvedValue({ success: true, messageId: "mock-media-id" }),
+  sendMenuViaInstance: vi.fn().mockResolvedValue({ success: true, messageId: "mock-menu-id" }),
+  sendPixButtonViaInstance: vi.fn().mockResolvedValue({ success: true, messageId: "mock-pix-id" }),
+  sendAudioViaInstance: vi.fn().mockResolvedValue({ success: true, messageId: "mock-audio-id" }),
+}));
+
+vi.mock("../../supabase/functions/_shared/audio-sender.ts", () => ({
+  sendAudioViaProvider: vi.fn().mockResolvedValue({ success: true, messageId: "mock-audio-provider-id" }),
+}));
+
+vi.mock("../../supabase/functions/_shared/message-gateway.ts", () => ({
+  sendMessage: vi.fn().mockResolvedValue({ delegated: false, success: true }),
+}));
+
+vi.mock("../../supabase/functions/_shared/instance-write-guard.ts", () => ({
+  resolveStrictInstanceForCaller: vi.fn().mockResolvedValue(null),
+  StrictWriteResolutionError: class extends Error { errorCode = "test"; },
+}));
+
+vi.mock("../../supabase/functions/_shared/whatsapp-client.ts", () => ({
+  getWhatsAppProvider: vi.fn().mockResolvedValue({ sendAudio: vi.fn() }),
+}));
+
+// Mock pipeline-adapter used by resolveVariables (whatsapp-helpers) and move-stage
+vi.mock("../../supabase/functions/_shared/pipeline-adapter.ts", () => ({
+  getPipeEntry: vi.fn().mockResolvedValue(null),
+  getPipeEntriesByLeads: vi.fn().mockResolvedValue([]),
+  resolvePipelineId: vi.fn().mockResolvedValue("mock-pipeline-id"),
+  upsertPipeEntry: vi.fn().mockResolvedValue("mock-entry-id"),
+  updatePipeEntryById: vi.fn().mockResolvedValue(undefined),
+  deletePipeEntry: vi.fn().mockResolvedValue(undefined),
+}));
+
 const mockFetch = vi.fn();
 global.fetch = mockFetch as any;
 
@@ -21,6 +57,8 @@ beforeEach(() => {
 });
 
 import { executeWorkflowAction } from "../../supabase/functions/_shared/workflow-action-handler";
+import { sendTextViaInstance } from "../../supabase/functions/_shared/whatsapp-dispatch";
+import { getPipeEntry } from "../../supabase/functions/_shared/pipeline-adapter";
 
 const LEAD_FULL = {
   id: "lead-1",
@@ -91,11 +129,11 @@ describe("resolveVariables — template substitution", () => {
   };
 
   const getSentMessage = (): string => {
-    const lastCall = mockFetch.mock.calls[mockFetch.mock.calls.length - 1];
-    const init = lastCall?.[1] as { body?: string } | undefined;
-    if (!init?.body) return "";
-    const parsed = JSON.parse(init.body);
-    return parsed.text ?? parsed.message ?? "";
+    // After extraction, send_whatsapp delegates to sendTextViaInstance(supabase, instance, phone, message, opts)
+    const mockedSend = vi.mocked(sendTextViaInstance);
+    const lastCall = mockedSend.mock.calls[mockedSend.mock.calls.length - 1];
+    // 4th argument is the resolved message text
+    return (lastCall?.[3] as string) ?? "";
   };
 
   it("resolves standard lead variables", async () => {
@@ -174,6 +212,10 @@ describe("resolveVariables — template substitution", () => {
     setDenoEnv("EVOLUTION_API_URL", "https://evo");
     setDenoEnv("EVOLUTION_API_KEY", "key");
     okFetch();
+    // Configure getPipeEntry to return meeting date and sale value
+    vi.mocked(getPipeEntry)
+      .mockResolvedValueOnce({ metadata: { meeting_date: "2026-05-15T14:00:00Z" } } as any) // confirmacao
+      .mockResolvedValueOnce({ metadata: { sale_value: 5500.75 } } as any); // propostas
     await executeWorkflowAction({
       supabase: setupSupabase(),
       organizationId: "org-1",

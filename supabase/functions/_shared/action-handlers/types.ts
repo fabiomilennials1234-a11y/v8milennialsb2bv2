@@ -6,6 +6,8 @@ export interface ActionInput {
   leadId: string | null;
   conversationId: string | null;
   params: Record<string, unknown>;
+  /** Workflow execution context — carries variables from upstream nodes. */
+  executionContext?: Record<string, unknown>;
 }
 
 export interface ActionResult {

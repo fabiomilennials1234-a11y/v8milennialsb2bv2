@@ -26,6 +26,7 @@ vi.stubGlobal("Deno", {
 vi.mock("../../supabase/functions/_shared/sentry.ts", () => ({
   withSentry: (_n: string, fn: unknown) => fn,
   captureError: vi.fn(async () => {}),
+  captureMessage: vi.fn(async () => {}),
 }));
 vi.mock("../../supabase/functions/_shared/logger.ts", () => ({
   logRuntime: vi.fn(async () => {}),

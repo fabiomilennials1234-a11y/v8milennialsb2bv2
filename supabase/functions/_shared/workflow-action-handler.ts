@@ -7,12 +7,24 @@
  */
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { sendAudioViaProvider } from "./audio-sender.ts";
-import { getWhatsAppProvider } from "./whatsapp-client.ts";
 import { getTimeBasedVariables } from "./time-variables.ts";
-import { getPipeEntry, upsertPipeEntry, updatePipeEntryById, deletePipeEntry } from "./pipeline-adapter.ts";
-import { sendMessage } from "./message-gateway.ts";
+import { getPipeEntry } from "./pipeline-adapter.ts";
 import { moveStage as sharedMoveStage } from "./action-handlers/move-stage.ts";
+import { addTag as sharedAddTag, removeTag as sharedRemoveTag } from "./action-handlers/tag-operations.ts";
+import { updateLeadField as sharedUpdateLeadField, updateCustomField as sharedUpdateCustomField, updateRating as sharedUpdateRating } from "./action-handlers/lead-field-operations.ts";
+import { duplicateToPipe as sharedDuplicateToPipe, removeFromPipe as sharedRemoveFromPipe, markAsLost as sharedMarkAsLost } from "./action-handlers/pipe-operations.ts";
+import { sendWhatsApp as sharedSendWhatsApp } from "./action-handlers/send-whatsapp.ts";
+import { sendWhatsAppAudio as sharedSendWhatsAppAudio, sendWhatsAppImage as sharedSendWhatsAppImage, sendWhatsAppSticker as sharedSendWhatsAppSticker } from "./action-handlers/send-whatsapp-media.ts";
+import { sendWhatsAppTemplate as sharedSendWhatsAppTemplate, sendWhatsAppMenu as sharedSendWhatsAppMenu, sendWhatsAppPixButton as sharedSendWhatsAppPixButton } from "./action-handlers/send-whatsapp-rich.ts";
+import { sendMetaMessage as sharedSendMetaMessage, sendSemiAutomatic as sharedSendSemiAutomatic } from "./action-handlers/send-meta.ts";
+import { addToCampaign as sharedAddToCampaign, removeFromCampaign as sharedRemoveFromCampaign, moveCampaignStage as sharedMoveCampaignStage, pauseCampaignSequence as sharedPauseCampaignSequence, resumeCampaignSequence as sharedResumeCampaignSequence } from "./action-handlers/campaign-operations.ts";
+import { createCalendarEvent as sharedCreateCalendarEvent } from "./action-handlers/calendar-operations.ts";
+import { createTinyerpOrder as sharedCreateTinyerpOrder, createTinyerpUpsellOrder as sharedCreateTinyerpUpsellOrder } from "./action-handlers/tinyerp-operations.ts";
+import { assignResponsible as sharedAssignResponsible, assignSdr as sharedAssignSdr, assignCloser as sharedAssignCloser, notifyTeamMember as sharedNotifyTeamMember } from "./action-handlers/team-operations.ts";
+import { createFollowup as sharedCreateFollowup } from "./action-handlers/followup-operations.ts";
+import { applyChecklist as sharedApplyChecklist } from "./action-handlers/checklist-operations.ts";
+import { sendCampaignMessage as sharedSendCampaignMessage } from "./action-handlers/send-campaign-message.ts";
+import { generateAiMessage as sharedGenerateAiMessage, summarizeConversation as sharedSummarizeConversation, evaluateConversation as sharedEvaluateConversation, queueScheduleMeeting as sharedQueueScheduleMeeting } from "./action-handlers/ai-operations.ts";
 
 export interface ActionResult {
   success: boolean;
@@ -222,98 +234,7 @@ async function resolveVariables(
   return result;
 }
 
-// ─── WhatsApp helpers ───────────────────────────────────────────────────────
-
-async function getWhatsAppInstance(
-  supabase: SupabaseClient,
-  organizationId: string,
-  instanceId?: string,
-  // Etapa B: lead_id opcional. Quando flag user_write_instance_strict ON,
-  // força vínculo via responsável. OFF ⇒ comportamento legado.
-  leadId?: string | null,
-): Promise<{ instanceId: string; instanceName: string; instance: any } | null> {
-  let resolved: any = null;
-
-  if (leadId) {
-    const { resolveStrictInstanceForCaller, StrictWriteResolutionError } = await import(
-      "./instance-write-guard.ts"
-    );
-    try {
-      const strict = await resolveStrictInstanceForCaller(
-        supabase as unknown as Parameters<typeof resolveStrictInstanceForCaller>[0],
-        organizationId,
-        leadId,
-      );
-      if (strict) resolved = strict;
-    } catch (err) {
-      if (err instanceof StrictWriteResolutionError) {
-        console.warn(
-          "[workflow-action] strict_write_fallback lead=%s code=%s — using legacy instance resolution",
-          leadId, err.errorCode,
-        );
-      } else {
-        throw err;
-      }
-    }
-  }
-
-  if (!resolved && instanceId) {
-    const { data } = await supabase
-      .from("whatsapp_instances")
-      .select("*")
-      .eq("id", instanceId)
-      .maybeSingle();
-    resolved = data;
-  }
-
-  if (!resolved) {
-    const { data } = await supabase
-      .from("whatsapp_instances")
-      .select("*")
-      .eq("organization_id", organizationId)
-      .in("status", ["open", "connected"])
-      .limit(1)
-      .maybeSingle();
-    resolved = data;
-  }
-
-  if (!resolved) return null;
-  return {
-    instanceId: resolved.id,
-    instanceName: resolved.instance_name,
-    instance: resolved,
-  };
-}
-
-async function getLeadPhone(supabase: SupabaseClient, leadId: string): Promise<string | null> {
-  const { data } = await supabase.from("leads").select("phone").eq("id", leadId).maybeSingle();
-  if (!data?.phone) return null;
-  let phone = String(data.phone).replace(/\D/g, "");
-  if (!phone.startsWith("55")) phone = "55" + phone;
-  return phone;
-}
-
-async function enforceWhatsAppRateLimit(
-  supabase: SupabaseClient,
-  instanceId: string,
-): Promise<void> {
-  const MIN_INTERVAL_MS = 3000;
-  const { data: lastMsg } = await supabase
-    .from("whatsapp_messages")
-    .select("timestamp")
-    .eq("instance_id", instanceId)
-    .eq("direction", "outgoing")
-    .order("timestamp", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (lastMsg?.timestamp) {
-    const elapsed = Date.now() - new Date(lastMsg.timestamp).getTime();
-    if (elapsed < MIN_INTERVAL_MS) {
-      await new Promise(r => setTimeout(r, MIN_INTERVAL_MS - elapsed));
-    }
-  }
-}
+// getWhatsAppInstance, getLeadPhone, enforceWhatsAppRateLimit — REMOVED: now in action-handlers/whatsapp-helpers.ts
 
 // ─── Lead history logger ────────────────────────────────────────────────────
 
@@ -340,6 +261,22 @@ async function logToHistory(
   }
 }
 
+// ─── Context → ActionInput adapter ─────────────────────────────────────────
+
+function toActionInput(ctx: ActionContext) {
+  return {
+    supabase: ctx.supabase,
+    organizationId: ctx.organizationId,
+    leadId: ctx.leadId,
+    conversationId: null as string | null,
+    params: {
+      ...ctx.nodeData,
+      _executionId: (ctx as unknown as { executionId?: string }).executionId,
+    },
+    executionContext: ctx.executionContext,
+  };
+}
+
 // ─── Main Router ────────────────────────────────────────────────────────────
 
 export async function executeWorkflowAction(ctx: ActionContext): Promise<ActionResult> {
@@ -348,35 +285,35 @@ export async function executeWorkflowAction(ctx: ActionContext): Promise<ActionR
   let result: ActionResult;
 
   switch (actionType) {
-    // ── Communication ──
+    // ── Communication (delegated to action-handlers/) ──
     case "send_whatsapp":
-      result = await handleSendWhatsApp(ctx);
+      result = await sharedSendWhatsApp(toActionInput(ctx));
       break;
     case "send_whatsapp_audio":
-      result = await handleSendWhatsAppAudio(ctx);
+      result = await sharedSendWhatsAppAudio(toActionInput(ctx));
       break;
     case "send_whatsapp_image":
-      result = await handleSendWhatsAppImage(ctx);
+      result = await sharedSendWhatsAppImage(toActionInput(ctx));
       break;
     case "send_whatsapp_sticker":
-      result = await handleSendWhatsAppSticker(ctx);
+      result = await sharedSendWhatsAppSticker(toActionInput(ctx));
       break;
     case "send_whatsapp_template":
-      result = await handleSendWhatsAppTemplate(ctx);
+      result = await sharedSendWhatsAppTemplate(toActionInput(ctx));
       break;
     case "send_meta_message":
-      result = await handleSendMetaMessage(ctx);
+      result = await sharedSendMetaMessage(toActionInput(ctx));
       break;
     case "send_semi_automatic":
-      result = await handleSendSemiAutomatic(ctx);
+      result = await sharedSendSemiAutomatic(toActionInput(ctx));
       break;
 
-    // ── Uazapi-only interactive messages ──
+    // ── Uazapi-only interactive messages (delegated to action-handlers/) ──
     case "send_whatsapp_menu":
-      result = await handleSendWhatsAppMenu(ctx);
+      result = await sharedSendWhatsAppMenu(toActionInput(ctx));
       break;
     case "send_whatsapp_pix_button":
-      result = await handleSendWhatsAppPixButton(ctx);
+      result = await sharedSendWhatsAppPixButton(toActionInput(ctx));
       break;
 
     // ── Lead Management ──
@@ -395,99 +332,215 @@ export async function executeWorkflowAction(ctx: ActionContext): Promise<ActionR
       break;
     }
     case "add_tag":
-      result = await handleAddTag(ctx);
+      result = await sharedAddTag({
+        supabase: ctx.supabase, organizationId: ctx.organizationId, leadId: ctx.leadId,
+        conversationId: null,
+        params: { tagId: ctx.nodeData.tagId, tagName: ctx.nodeData.tagName },
+      });
       break;
     case "remove_tag":
-      result = await handleRemoveTag(ctx);
+      result = await sharedRemoveTag({
+        supabase: ctx.supabase, organizationId: ctx.organizationId, leadId: ctx.leadId,
+        conversationId: null,
+        params: { tagId: ctx.nodeData.tagId, tagName: ctx.nodeData.tagName },
+      });
       break;
-    case "update_lead_field":
-      result = await handleUpdateLeadField(ctx);
+    case "update_lead_field": {
+      const ulfFieldValue = ctx.nodeData.fieldValue as string || "";
+      const ulfResolved = await resolveVariables(ctx.supabase, ctx.leadId, ulfFieldValue);
+      result = await sharedUpdateLeadField({
+        supabase: ctx.supabase, organizationId: ctx.organizationId, leadId: ctx.leadId,
+        conversationId: null,
+        params: { fieldName: ctx.nodeData.fieldName, fieldValue: ulfResolved },
+      });
       break;
-    case "update_custom_field":
-      result = await handleUpdateCustomField(ctx);
+    }
+    case "update_custom_field": {
+      const ucfFieldValue = ctx.nodeData.customFieldValue as string || "";
+      const ucfResolved = await resolveVariables(ctx.supabase, ctx.leadId, ucfFieldValue);
+      result = await sharedUpdateCustomField({
+        supabase: ctx.supabase, organizationId: ctx.organizationId, leadId: ctx.leadId,
+        conversationId: null,
+        params: { customFieldName: ctx.nodeData.customFieldName, customFieldValue: ucfResolved },
+      });
       break;
+    }
     case "update_rating":
-      result = await handleUpdateRating(ctx);
+      result = await sharedUpdateRating({
+        supabase: ctx.supabase, organizationId: ctx.organizationId, leadId: ctx.leadId,
+        conversationId: null,
+        params: { ratingValue: ctx.nodeData.ratingValue },
+      });
       break;
     case "calculate_score":
       result = await handleCalculateScore(ctx);
       break;
     case "duplicate_to_pipe":
-      result = await handleDuplicateToPipe(ctx);
+      result = await sharedDuplicateToPipe({
+        supabase: ctx.supabase, organizationId: ctx.organizationId, leadId: ctx.leadId,
+        conversationId: null,
+        params: { targetPipeType: ctx.nodeData.targetPipeType, targetPipeStage: ctx.nodeData.targetPipeStage },
+      });
       break;
     case "remove_from_pipe":
-      result = await handleRemoveFromPipe(ctx);
+      result = await sharedRemoveFromPipe({
+        supabase: ctx.supabase, organizationId: ctx.organizationId, leadId: ctx.leadId,
+        conversationId: null,
+        params: { pipeType: ctx.nodeData.pipeType },
+      });
       break;
     case "mark_as_lost":
-      result = await handleMarkAsLost(ctx);
+      result = await sharedMarkAsLost({
+        supabase: ctx.supabase, organizationId: ctx.organizationId, leadId: ctx.leadId,
+        conversationId: null,
+        params: { pipeType: ctx.nodeData.pipeType, lostReason: ctx.nodeData.lostReason },
+      });
       break;
 
     // ── Campaigns ──
     case "add_to_campaign":
-      result = await handleAddToCampaign(ctx);
+      result = await sharedAddToCampaign({
+        supabase: ctx.supabase, organizationId: ctx.organizationId, leadId: ctx.leadId,
+        conversationId: null,
+        params: { campaignId: ctx.nodeData.campaignId, campaignName: ctx.nodeData.campaignName },
+      });
       break;
     case "remove_from_campaign":
-      result = await handleRemoveFromCampaign(ctx);
+      result = await sharedRemoveFromCampaign({
+        supabase: ctx.supabase, organizationId: ctx.organizationId, leadId: ctx.leadId,
+        conversationId: null,
+        params: { campaignId: ctx.nodeData.campaignId },
+      });
       break;
     case "move_campaign_stage":
-      result = await handleMoveCampaignStage(ctx);
+      result = await sharedMoveCampaignStage({
+        supabase: ctx.supabase, organizationId: ctx.organizationId, leadId: ctx.leadId,
+        conversationId: null,
+        params: { campaignId: ctx.nodeData.campaignId, campaignStageName: ctx.nodeData.campaignStageName, campaignStageId: ctx.nodeData.campaignStageId },
+      });
       break;
     case "send_campaign_message":
-      result = await handleSendCampaignMessage(ctx);
+      result = await sharedSendCampaignMessage(toActionInput(ctx));
       break;
     case "pause_campaign_sequence":
-      result = await handlePauseCampaignSequence(ctx);
+      result = await sharedPauseCampaignSequence({
+        supabase: ctx.supabase, organizationId: ctx.organizationId, leadId: ctx.leadId,
+        conversationId: null,
+        params: { campaignId: ctx.nodeData.campaignId },
+      });
       break;
     case "resume_campaign_sequence":
-      result = await handleResumeCampaignSequence(ctx);
+      result = await sharedResumeCampaignSequence({
+        supabase: ctx.supabase, organizationId: ctx.organizationId, leadId: ctx.leadId,
+        conversationId: null,
+        params: { campaignId: ctx.nodeData.campaignId },
+      });
       break;
 
     // ── Calendar ──
-    case "create_calendar_event":
-      result = await handleCreateCalendarEvent(ctx);
+    case "create_calendar_event": {
+      const evtTitle = await resolveVariables(ctx.supabase, ctx.leadId, ctx.nodeData.eventTitle as string || "Evento");
+      const evtDesc = await resolveVariables(ctx.supabase, ctx.leadId, ctx.nodeData.eventDescription as string || "");
+      result = await sharedCreateCalendarEvent({
+        supabase: ctx.supabase, organizationId: ctx.organizationId, leadId: ctx.leadId,
+        conversationId: null,
+        params: { eventTitle: evtTitle, eventDescription: evtDesc, eventDurationMinutes: ctx.nodeData.eventDurationMinutes },
+      });
       break;
+    }
     case "schedule_meeting":
-      result = await handleScheduleMeeting(ctx);
+      result = await sharedQueueScheduleMeeting(toActionInput(ctx));
       break;
 
     // ── TinyERP ──
     case "create_tinyerp_order":
-      result = await handleTinyErpOrder(ctx, "tinyerp-push-order");
+      result = await sharedCreateTinyerpOrder({
+        supabase: ctx.supabase, organizationId: ctx.organizationId, leadId: ctx.leadId,
+        conversationId: null,
+        params: { tinyProductId: ctx.nodeData.tinyProductId },
+      });
       break;
     case "create_tinyerp_upsell_order":
-      result = await handleTinyErpOrder(ctx, "tinyerp-push-upsell-order");
+      result = await sharedCreateTinyerpUpsellOrder({
+        supabase: ctx.supabase, organizationId: ctx.organizationId, leadId: ctx.leadId,
+        conversationId: null,
+        params: { tinyProductId: ctx.nodeData.tinyProductId },
+      });
       break;
 
     // ── Team ──
     case "assign_responsible":
-      result = await handleAssignResponsible(ctx);
+      result = await sharedAssignResponsible({
+        supabase: ctx.supabase, organizationId: ctx.organizationId, leadId: ctx.leadId,
+        conversationId: null,
+        params: { assigneeId: ctx.nodeData.assigneeId, assignMode: ctx.nodeData.assignMode },
+      });
       break;
     case "assign_sdr":
-      result = await handleAssign(ctx, "sdr");
+      result = await sharedAssignSdr({
+        supabase: ctx.supabase, organizationId: ctx.organizationId, leadId: ctx.leadId,
+        conversationId: null,
+        params: { assigneeId: ctx.nodeData.assigneeId, assignMode: ctx.nodeData.assignMode, campaignId: ctx.nodeData.campaignId, pipeType: ctx.nodeData.pipeType },
+      });
       break;
     case "assign_closer":
-      result = await handleAssign(ctx, "closer");
+      result = await sharedAssignCloser({
+        supabase: ctx.supabase, organizationId: ctx.organizationId, leadId: ctx.leadId,
+        conversationId: null,
+        params: { assigneeId: ctx.nodeData.assigneeId, assignMode: ctx.nodeData.assignMode, campaignId: ctx.nodeData.campaignId, pipeType: ctx.nodeData.pipeType },
+      });
       break;
-    case "notify_team_member":
-      result = await handleNotifyTeamMember(ctx);
+    case "notify_team_member": {
+      const notifyMsg = await resolveVariables(ctx.supabase, ctx.leadId, ctx.nodeData.notifyMessage as string || "");
+      result = await sharedNotifyTeamMember({
+        supabase: ctx.supabase, organizationId: ctx.organizationId, leadId: ctx.leadId,
+        conversationId: null,
+        params: { notifyMemberId: ctx.nodeData.notifyMemberId, notifyMessage: notifyMsg },
+      });
       break;
+    }
 
     // ── Follow-up ──
-    case "create_followup":
-      result = await handleCreateFollowup(ctx);
+    case "create_followup": {
+      const fuTitle = await resolveVariables(ctx.supabase, ctx.leadId, ctx.nodeData.followupTitle as string || "Follow-up");
+      const fuDesc = await resolveVariables(ctx.supabase, ctx.leadId, ctx.nodeData.followupDescription as string || "");
+      result = await sharedCreateFollowup({
+        supabase: ctx.supabase, organizationId: ctx.organizationId, leadId: ctx.leadId,
+        conversationId: null,
+        params: { followupTitle: fuTitle, followupDescription: fuDesc, followupPriority: ctx.nodeData.followupPriority },
+      });
       break;
+    }
 
     // ── Checklists ──
     case "apply_checklist":
-      result = await handleApplyChecklist(ctx);
+      result = await sharedApplyChecklist({
+        supabase: ctx.supabase, organizationId: ctx.organizationId, leadId: ctx.leadId,
+        conversationId: null,
+        params: { checklistTemplateId: ctx.nodeData.checklistTemplateId },
+      });
       break;
 
-    // ── AI ──
-    case "generate_ai_message":
-      result = await handleGenerateAiMessage(ctx);
+    // ── AI (delegated to action-handlers/ai-operations.ts) ──
+    case "generate_ai_message": {
+      const aiInput = toActionInput(ctx);
+      // Pre-resolve variables in aiPrompt before passing to handler
+      const aiPromptRaw = (ctx.nodeData.aiPrompt as string) || "";
+      if (aiPromptRaw && ctx.leadId) {
+        aiInput.params.aiPrompt = await resolveVariables(ctx.supabase, ctx.leadId, aiPromptRaw, ctx.executionContext);
+      }
+      result = await sharedGenerateAiMessage(aiInput);
+      // Propagate output variable to execution context
+      if (result.success && result.data) {
+        const outputVar = (ctx.nodeData.aiOutputVariable as string) || "ai_message";
+        if (result.data[outputVar]) {
+          ctx.executionContext[outputVar] = result.data[outputVar];
+        }
+      }
       break;
+    }
     case "summarize_conversation":
-      result = await handleInvokeEdgeFunction(ctx, "summarize-conversation");
+      result = await sharedSummarizeConversation(toActionInput(ctx));
       // Store AI summary variables in execution context for downstream nodes
       if (result.success && result.data) {
         const d = result.data as Record<string, unknown>;
@@ -498,7 +551,7 @@ export async function executeWorkflowAction(ctx: ActionContext): Promise<ActionR
       }
       break;
     case "evaluate_conversation":
-      result = await handleInvokeEdgeFunction(ctx, "evaluate-agent-conversation");
+      result = await sharedEvaluateConversation(toActionInput(ctx));
       break;
 
     default:
@@ -523,590 +576,27 @@ export async function executeWorkflowAction(ctx: ActionContext): Promise<ActionR
 }
 
 // ─── Communication Handlers ─────────────────────────────────────────────────
-
-async function handleSendWhatsApp(ctx: ActionContext): Promise<ActionResult> {
-  const wa = await getWhatsAppInstance(ctx.supabase, ctx.organizationId, ctx.nodeData.whatsappInstanceId as string, ctx.leadId);
-  if (!wa) return { success: false, error: "WhatsApp instance not available" };
-  await enforceWhatsAppRateLimit(ctx.supabase, wa.instanceId);
-
-  const phone = await getLeadPhone(ctx.supabase, ctx.leadId);
-  if (!phone) return { success: false, error: "Lead has no phone", retryable: false };
-
-  const template = ctx.nodeData.messageTemplate as string || "";
-  const message = await resolveVariables(ctx.supabase, ctx.leadId, template, ctx.executionContext);
-  if (!message) return { success: false, error: "Empty message template", retryable: false };
-
-  // ── Gateway dual-path ──
-  const gwResult = await sendMessage(ctx.supabase, {
-    organization_id: ctx.organizationId,
-    phone,
-    content: message,
-    message_type: "text",
-    source: "workflow",
-    instance_id: wa.instanceId,
-    lead_id: ctx.leadId,
-    track_id: `wf-${ctx.executionId}-${ctx.nodeData._nodeId || "action"}`,
-    triggered_by: "workflow",
-  });
-
-  if (!gwResult.delegated) {
-    // ── Legacy path (unchanged) ──
-    const { sendTextViaInstance } = await import("./whatsapp-dispatch.ts");
-    const sendResult = await sendTextViaInstance(ctx.supabase, wa.instance, phone, message, {
-      trackSource: "workflow-action",
-      trackId: ctx.executionId,
-    });
-
-    if (!sendResult.success) {
-      return { success: false, error: `WhatsApp send failed: ${sendResult.error}` };
-    }
-
-    // Use provider's real message ID so the inbound webhook echo UPSERTs this same row
-    // instead of creating a duplicate. Preserves sent_by_ai: true.
-    const messageId = sendResult.messageId || `wf_${crypto.randomUUID()}`;
-
-    await ctx.supabase.from("whatsapp_messages").upsert({
-      organization_id: ctx.organizationId,
-      instance_id: wa.instanceId,
-      message_id: messageId,
-      remote_jid: phone + "@s.whatsapp.net",
-      phone_number: phone,
-      direction: "outgoing",
-      message_type: "conversation",
-      content: message,
-      timestamp: new Date().toISOString(),
-      status: "sent",
-      sent_by_ai: true,
-      sent_source: "workflow",
-    }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
-  } else if (!gwResult.success) {
-    console.error("[workflow-action-handler] Gateway send failed:", gwResult.error);
-    return { success: false, error: `WhatsApp send failed: ${gwResult.error}` };
-  }
-
-  return { success: true, message: "WhatsApp text sent" };
-}
-
-async function handleSendWhatsAppAudio(ctx: ActionContext): Promise<ActionResult> {
-  const wa = await getWhatsAppInstance(ctx.supabase, ctx.organizationId, ctx.nodeData.whatsappInstanceId as string, ctx.leadId);
-  if (!wa) return { success: false, error: "WhatsApp instance not available" };
-  await enforceWhatsAppRateLimit(ctx.supabase, wa.instanceId);
-
-  const phone = await getLeadPhone(ctx.supabase, ctx.leadId);
-  if (!phone) return { success: false, error: "Lead has no phone", retryable: false };
-
-  const audioUrl = ctx.nodeData.audioUrl as string;
-  if (!audioUrl) return { success: false, error: "No audio URL configured", retryable: false };
-
-  // ── Gateway dual-path ──
-  const gwResult = await sendMessage(ctx.supabase, {
-    organization_id: ctx.organizationId,
-    phone,
-    content: "[Áudio]",
-    message_type: "audio",
-    source: "workflow",
-    media_url: audioUrl,
-    instance_id: wa.instanceId,
-    lead_id: ctx.leadId,
-    track_id: `wf-${ctx.executionId}-${ctx.nodeData._nodeId || "action"}`,
-    triggered_by: "workflow",
-  });
-
-  if (!gwResult.delegated) {
-    // ── Legacy path (unchanged) ──
-    let provider;
-    try {
-      provider = await getWhatsAppProvider(wa.instance, ctx.supabase);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : (err as any)?.message ?? JSON.stringify(err);
-      return { success: false, error: `WhatsApp provider error: ${msg}` };
-    }
-
-    const result = await sendAudioViaProvider(provider, phone, audioUrl, {
-      trackSource: "workflow-action-audio",
-      trackId: (ctx as unknown as { executionId?: string }).executionId,
-    });
-    if (!result.success) return { success: false, error: result.error || "Audio send failed" };
-
-    const messageId = result.messageId || `wf_${crypto.randomUUID()}`;
-
-    await ctx.supabase.from("whatsapp_messages").upsert({
-      organization_id: ctx.organizationId,
-      instance_id: wa.instanceId,
-      message_id: messageId,
-      remote_jid: phone + "@s.whatsapp.net",
-      phone_number: phone,
-      direction: "outgoing",
-      message_type: "audio",
-      content: null,
-      media_url: audioUrl,
-      timestamp: new Date().toISOString(),
-      status: "sent",
-      sent_by_ai: true,
-      sent_source: "workflow",
-    }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
-  } else if (!gwResult.success) {
-    console.error("[workflow-action-handler] Gateway audio send failed:", gwResult.error);
-    return { success: false, error: `Audio send failed: ${gwResult.error}` };
-  }
-
-  return { success: true, message: "WhatsApp audio sent" };
-}
-
-async function handleSendWhatsAppImage(ctx: ActionContext): Promise<ActionResult> {
-  const wa = await getWhatsAppInstance(ctx.supabase, ctx.organizationId, ctx.nodeData.whatsappInstanceId as string, ctx.leadId);
-  if (!wa) return { success: false, error: "WhatsApp instance not available" };
-  await enforceWhatsAppRateLimit(ctx.supabase, wa.instanceId);
-
-  const phone = await getLeadPhone(ctx.supabase, ctx.leadId);
-  if (!phone) return { success: false, error: "Lead has no phone", retryable: false };
-
-  const imageUrl = ctx.nodeData.imageUrl as string;
-  if (!imageUrl) return { success: false, error: "No image URL configured", retryable: false };
-
-  const caption = ctx.nodeData.imageCaption as string || "";
-  const resolvedCaption = await resolveVariables(ctx.supabase, ctx.leadId, caption, ctx.executionContext);
-
-  // ── Gateway dual-path ──
-  const gwResult = await sendMessage(ctx.supabase, {
-    organization_id: ctx.organizationId,
-    phone,
-    content: resolvedCaption || null,
-    message_type: "image",
-    source: "workflow",
-    media_url: imageUrl,
-    caption: resolvedCaption || undefined,
-    instance_id: wa.instanceId,
-    lead_id: ctx.leadId,
-    track_id: `wf-${ctx.executionId}-${ctx.nodeData._nodeId || "action"}`,
-    triggered_by: "workflow",
-  });
-
-  if (!gwResult.delegated) {
-    // ── Legacy path (unchanged) ──
-    const { sendMediaViaInstance } = await import("./whatsapp-dispatch.ts");
-    const sendResult = await sendMediaViaInstance(
-      ctx.supabase,
-      wa.instance,
-      phone,
-      { type: "image", file: imageUrl, caption: resolvedCaption },
-      { trackSource: "workflow-action", trackId: ctx.executionId }
-    );
-
-    if (!sendResult.success) return { success: false, error: `Image send failed: ${sendResult.error}` };
-  } else if (!gwResult.success) {
-    console.error("[workflow-action-handler] Gateway image send failed:", gwResult.error);
-    return { success: false, error: `Image send failed: ${gwResult.error}` };
-  }
-
-  return { success: true, message: "WhatsApp image sent" };
-}
-
-async function handleSendWhatsAppSticker(ctx: ActionContext): Promise<ActionResult> {
-  const wa = await getWhatsAppInstance(ctx.supabase, ctx.organizationId, ctx.nodeData.whatsappInstanceId as string, ctx.leadId);
-  if (!wa) return { success: false, error: "WhatsApp instance not available" };
-  await enforceWhatsAppRateLimit(ctx.supabase, wa.instanceId);
-
-  const phone = await getLeadPhone(ctx.supabase, ctx.leadId);
-  if (!phone) return { success: false, error: "Lead has no phone", retryable: false };
-
-  const stickerUrl = ctx.nodeData.stickerUrl as string;
-  if (!stickerUrl) return { success: false, error: "No sticker URL configured", retryable: false };
-
-  // ── Gateway dual-path ──
-  const gwResult = await sendMessage(ctx.supabase, {
-    organization_id: ctx.organizationId,
-    phone,
-    content: null,
-    message_type: "sticker",
-    source: "workflow",
-    media_url: stickerUrl,
-    instance_id: wa.instanceId,
-    lead_id: ctx.leadId,
-    track_id: `wf-${ctx.executionId}-${ctx.nodeData._nodeId || "action"}`,
-    triggered_by: "workflow",
-  });
-
-  if (!gwResult.delegated) {
-    // ── Legacy path (unchanged) ──
-    const { sendMediaViaInstance } = await import("./whatsapp-dispatch.ts");
-    const sendResult = await sendMediaViaInstance(
-      ctx.supabase,
-      wa.instance,
-      phone,
-      { type: "sticker", file: stickerUrl },
-      { trackSource: "workflow-action", trackId: ctx.executionId }
-    );
-
-    if (!sendResult.success) return { success: false, error: `Sticker send failed: ${sendResult.error}` };
-  } else if (!gwResult.success) {
-    console.error("[workflow-action-handler] Gateway sticker send failed:", gwResult.error);
-    return { success: false, error: `Sticker send failed: ${gwResult.error}` };
-  }
-
-  return { success: true, message: "WhatsApp sticker sent" };
-}
-
-async function handleSendWhatsAppTemplate(ctx: ActionContext): Promise<ActionResult> {
-  const wa = await getWhatsAppInstance(ctx.supabase, ctx.organizationId, ctx.nodeData.whatsappInstanceId as string, ctx.leadId);
-  if (!wa) return { success: false, error: "WhatsApp instance not available" };
-  await enforceWhatsAppRateLimit(ctx.supabase, wa.instanceId);
-
-  const phone = await getLeadPhone(ctx.supabase, ctx.leadId);
-  if (!phone) return { success: false, error: "Lead has no phone", retryable: false };
-
-  const templateId = ctx.nodeData.templateId as string;
-  if (!templateId) return { success: false, error: "No template configured", retryable: false };
-
-  // Fetch template from DB
-  const { data: tpl } = await ctx.supabase
-    .from("whatsapp_templates")
-    .select("name, content")
-    .eq("id", templateId)
-    .maybeSingle();
-
-  if (!tpl) return { success: false, error: "Template not found" };
-
-  const message = await resolveVariables(ctx.supabase, ctx.leadId, tpl.content || "", ctx.executionContext);
-
-  // ── Gateway dual-path ──
-  const gwResult = await sendMessage(ctx.supabase, {
-    organization_id: ctx.organizationId,
-    phone,
-    content: message,
-    message_type: "text",
-    source: "workflow",
-    instance_id: wa.instanceId,
-    lead_id: ctx.leadId,
-    track_id: `wf-${ctx.executionId}-${ctx.nodeData._nodeId || "action"}`,
-    triggered_by: "workflow",
-  });
-
-  if (!gwResult.delegated) {
-    // ── Legacy path (unchanged) ──
-    const { sendTextViaInstance } = await import("./whatsapp-dispatch.ts");
-    const sendResult = await sendTextViaInstance(ctx.supabase, wa.instance, phone, message, {
-      trackSource: "workflow-action-template",
-      trackId: ctx.executionId,
-    });
-
-    if (!sendResult.success) return { success: false, error: `Template send failed: ${sendResult.error}` };
-  } else if (!gwResult.success) {
-    console.error("[workflow-action-handler] Gateway template send failed:", gwResult.error);
-    return { success: false, error: `Template send failed: ${gwResult.error}` };
-  }
-
-  return { success: true, message: `Template "${tpl.name}" sent` };
-}
-
-// ─── Uazapi-only interactive messages ──────────────────────────────────────
-
-async function handleSendWhatsAppMenu(ctx: ActionContext): Promise<ActionResult> {
-  const wa = await getWhatsAppInstance(ctx.supabase, ctx.organizationId, ctx.nodeData.whatsappInstanceId as string, ctx.leadId);
-  if (!wa) return { success: false, error: "WhatsApp instance not available" };
-  await enforceWhatsAppRateLimit(ctx.supabase, wa.instanceId);
-
-  const phone = await getLeadPhone(ctx.supabase, ctx.leadId);
-  if (!phone) return { success: false, error: "Lead has no phone", retryable: false };
-
-  const menuType = (ctx.nodeData.menuType as string) || "button";
-  if (!["button", "list", "poll", "carousel"].includes(menuType)) {
-    return { success: false, error: `Invalid menuType: ${menuType}` };
-  }
-
-  const rawText = (ctx.nodeData.menuText as string) || "";
-  const text = await resolveVariables(ctx.supabase, ctx.leadId, rawText, ctx.executionContext);
-  if (!text) return { success: false, error: "Empty menu text", retryable: false };
-
-  const rawChoices = ctx.nodeData.menuChoices as string[] | undefined;
-  if (!Array.isArray(rawChoices) || rawChoices.length === 0) {
-    return { success: false, error: "Menu requires at least one choice", retryable: false };
-  }
-  const choices = await Promise.all(
-    rawChoices.map((c) => resolveVariables(ctx.supabase, ctx.leadId, c, ctx.executionContext))
-  );
-
-  const footer = ctx.nodeData.menuFooter
-    ? await resolveVariables(ctx.supabase, ctx.leadId, ctx.nodeData.menuFooter as string, ctx.executionContext)
-    : undefined;
-
-  // ── Gateway dual-path ──
-  const gwResult = await sendMessage(ctx.supabase, {
-    organization_id: ctx.organizationId,
-    phone,
-    content: text,
-    message_type: "menu",
-    source: "workflow",
-    instance_id: wa.instanceId,
-    lead_id: ctx.leadId,
-    track_id: `wf-${ctx.executionId}-${ctx.nodeData._nodeId || "action"}`,
-    triggered_by: "workflow",
-    menu_options: {
-      type: menuType as "button" | "list" | "poll" | "carousel",
-      choices,
-      footer,
-      selectableCount: ctx.nodeData.menuSelectableCount as number | undefined,
-    },
-  });
-
-  if (!gwResult.delegated) {
-    // ── Legacy path (unchanged) ──
-    const { sendMenuViaInstance } = await import("./whatsapp-dispatch.ts");
-    const sendResult = await sendMenuViaInstance(
-      ctx.supabase,
-      wa.instance,
-      phone,
-      {
-        type: menuType as "button" | "list" | "poll" | "carousel",
-        text,
-        choices,
-        footer,
-        selectableCount: ctx.nodeData.menuSelectableCount as number | undefined,
-      },
-      { trackSource: "workflow-action-menu", trackId: ctx.executionId }
-    );
-
-    if (!sendResult.success) return { success: false, error: `Menu send failed: ${sendResult.error}` };
-
-    const messageId = sendResult.messageId || `wf_menu_${crypto.randomUUID()}`;
-    await ctx.supabase.from("whatsapp_messages").upsert({
-      organization_id: ctx.organizationId,
-      instance_id: wa.instanceId,
-      message_id: messageId,
-      remote_jid: `${phone}@s.whatsapp.net`,
-      phone_number: phone,
-      direction: "outgoing",
-      message_type: menuType,
-      content: text,
-      status: "sent",
-      lead_id: ctx.leadId,
-      timestamp: new Date().toISOString(),
-      sent_by_ai: true,
-      sent_source: "workflow",
-    }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
-  } else if (!gwResult.success) {
-    console.error("[workflow-action-handler] Gateway menu send failed:", gwResult.error);
-    return { success: false, error: `Menu send failed: ${gwResult.error}` };
-  }
-
-  return { success: true, message: `WhatsApp ${menuType} menu sent` };
-}
-
-async function handleSendWhatsAppPixButton(ctx: ActionContext): Promise<ActionResult> {
-  const wa = await getWhatsAppInstance(ctx.supabase, ctx.organizationId, ctx.nodeData.whatsappInstanceId as string, ctx.leadId);
-  if (!wa) return { success: false, error: "WhatsApp instance not available" };
-  await enforceWhatsAppRateLimit(ctx.supabase, wa.instanceId);
-
-  const phone = await getLeadPhone(ctx.supabase, ctx.leadId);
-  if (!phone) return { success: false, error: "Lead has no phone", retryable: false };
-
-  const pixkey = ctx.nodeData.pixkey as string;
-  const pixkeyType = ctx.nodeData.pixkeyType as string;
-  const amount = Number(ctx.nodeData.pixAmount ?? 0);
-  const merchantName = ctx.nodeData.pixMerchantName as string;
-
-  if (!pixkey || !pixkeyType || !merchantName || !(amount > 0)) {
-    return { success: false, error: "Missing PIX config (pixkey/pixkeyType/pixAmount/merchantName)" };
-  }
-  if (!["cpf", "cnpj", "email", "phone", "random"].includes(pixkeyType)) {
-    return { success: false, error: `Invalid pixkeyType: ${pixkeyType}` };
-  }
-
-  const rawText = (ctx.nodeData.pixText as string) || "";
-  const text = rawText
-    ? await resolveVariables(ctx.supabase, ctx.leadId, rawText, ctx.executionContext)
-    : undefined;
-
-  // ── Gateway dual-path ──
-  const gwResult = await sendMessage(ctx.supabase, {
-    organization_id: ctx.organizationId,
-    phone,
-    content: text || `[PIX R$ ${amount.toFixed(2)}]`,
-    message_type: "pix_button",
-    source: "workflow",
-    instance_id: wa.instanceId,
-    lead_id: ctx.leadId,
-    track_id: `wf-${ctx.executionId}-${ctx.nodeData._nodeId || "action"}`,
-    triggered_by: "workflow",
-    pix_payload: {
-      pixkey,
-      pixkeyType: pixkeyType as "cpf" | "cnpj" | "email" | "phone" | "random",
-      amount,
-      merchantName,
-    },
-  });
-
-  if (!gwResult.delegated) {
-    // ── Legacy path (unchanged) ──
-    const { sendPixButtonViaInstance } = await import("./whatsapp-dispatch.ts");
-    const sendResult = await sendPixButtonViaInstance(
-      ctx.supabase,
-      wa.instance,
-      phone,
-      {
-        pixkey,
-        pixkeyType: pixkeyType as "cpf" | "cnpj" | "email" | "phone" | "random",
-        amount,
-        merchantName,
-        text,
-      },
-      { trackSource: "workflow-action-pix", trackId: ctx.executionId }
-    );
-
-    if (!sendResult.success) return { success: false, error: `PIX button failed: ${sendResult.error}` };
-
-    const messageId = sendResult.messageId || `wf_pix_${crypto.randomUUID()}`;
-    await ctx.supabase.from("whatsapp_messages").upsert({
-      organization_id: ctx.organizationId,
-      instance_id: wa.instanceId,
-      message_id: messageId,
-      remote_jid: `${phone}@s.whatsapp.net`,
-      phone_number: phone,
-      direction: "outgoing",
-      message_type: "pix_button",
-      content: text || `[PIX R$ ${amount.toFixed(2)}]`,
-      status: "sent",
-      lead_id: ctx.leadId,
-      timestamp: new Date().toISOString(),
-      sent_by_ai: true,
-      sent_source: "workflow",
-    }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
-  } else if (!gwResult.success) {
-    console.error("[workflow-action-handler] Gateway PIX button send failed:", gwResult.error);
-    return { success: false, error: `PIX button failed: ${gwResult.error}` };
-  }
-
-  return { success: true, message: "PIX button sent" };
-}
-
-async function handleSendMetaMessage(ctx: ActionContext): Promise<ActionResult> {
-  const channel = ctx.nodeData.metaChannel as string || "instagram";
-  const message = ctx.nodeData.metaMessage as string || "";
-  const resolved = await resolveVariables(ctx.supabase, ctx.leadId, message, ctx.executionContext);
-
-  const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-
-  const res = await fetch(`${supabaseUrl}/functions/v1/send-meta-message`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` },
-    body: JSON.stringify({
-      organization_id: ctx.organizationId,
-      lead_id: ctx.leadId,
-      channel,
-      message: resolved,
-    }),
-  });
-
-  if (!res.ok) return { success: false, error: `Meta message failed: ${await res.text()}` };
-  return { success: true, message: `Meta ${channel} message sent` };
-}
-
-async function handleSendSemiAutomatic(ctx: ActionContext): Promise<ActionResult> {
-  const message = ctx.nodeData.semiAutoMessage as string || "";
-  const resolved = await resolveVariables(ctx.supabase, ctx.leadId, message, ctx.executionContext);
-
-  const { error } = await ctx.supabase.from("scheduled_pipe_messages").insert({
-    lead_id: ctx.leadId,
-    organization_id: ctx.organizationId,
-    message_content: resolved,
-    status: "waiting_approval",
-    approver_id: ctx.nodeData.semiAutoApprover || null,
-    source: "workflow",
-    scheduled_at: new Date().toISOString(),
-  });
-
-  if (error) return { success: false, error: error.message };
-  return { success: true, message: "Semi-automatic message queued for approval" };
-}
+// handleSendWhatsApp — REMOVED: replaced by sharedSendWhatsApp (action-handlers/send-whatsapp.ts)
+
+// handleSendWhatsAppAudio — REMOVED: replaced by sharedSendWhatsAppAudio (action-handlers/send-whatsapp-media.ts)
+// handleSendWhatsAppImage — REMOVED: replaced by sharedSendWhatsAppImage (action-handlers/send-whatsapp-media.ts)
+// handleSendWhatsAppSticker — REMOVED: replaced by sharedSendWhatsAppSticker (action-handlers/send-whatsapp-media.ts)
+// handleSendWhatsAppTemplate — REMOVED: replaced by sharedSendWhatsAppTemplate (action-handlers/send-whatsapp-rich.ts)
+// handleSendWhatsAppMenu — REMOVED: replaced by sharedSendWhatsAppMenu (action-handlers/send-whatsapp-rich.ts)
+// handleSendWhatsAppPixButton — REMOVED: replaced by sharedSendWhatsAppPixButton (action-handlers/send-whatsapp-rich.ts)
+// handleSendMetaMessage — REMOVED: replaced by sharedSendMetaMessage (action-handlers/send-meta.ts)
+// handleSendSemiAutomatic — REMOVED: replaced by sharedSendSemiAutomatic (action-handlers/send-meta.ts)
 
 // ─── Lead Management Handlers ───────────────────────────────────────────────
 // handleMoveStage — REMOVED: replaced by sharedMoveStage (action-handlers/move-stage.ts)
-// Callers: case "move_stage" in executeWorkflowAction now delegates directly.
-
-async function handleAddTag(ctx: ActionContext): Promise<ActionResult> {
-  const tagName = ctx.nodeData.tagName as string;
-  const tagId = ctx.nodeData.tagId as string;
-
-  let resolvedTagId = tagId;
-  if (!resolvedTagId && tagName) {
-    let { data: tag } = await ctx.supabase.from("tags").select("id")
-      .eq("name", tagName).eq("organization_id", ctx.organizationId).maybeSingle();
-    if (!tag) {
-      const { data: newTag } = await ctx.supabase
-        .from("tags").insert({ name: tagName, color: "#6366f1", organization_id: ctx.organizationId }).select("id").single();
-      tag = newTag;
-    }
-    resolvedTagId = tag?.id;
-  }
-  if (!resolvedTagId) return { success: false, error: "No tag configured" };
-
-  await ctx.supabase.from("lead_tags").upsert(
-    { lead_id: ctx.leadId, tag_id: resolvedTagId },
-    { onConflict: "lead_id,tag_id", ignoreDuplicates: true },
-  );
-
-  return { success: true, message: `Tag "${tagName || tagId}" added` };
-}
-
-async function handleRemoveTag(ctx: ActionContext): Promise<ActionResult> {
-  const tagId = ctx.nodeData.tagId as string;
-  const tagName = ctx.nodeData.tagName as string;
-
-  let resolvedTagId = tagId;
-  if (!resolvedTagId && tagName) {
-    const { data: tag } = await ctx.supabase.from("tags").select("id")
-      .eq("name", tagName).eq("organization_id", ctx.organizationId).maybeSingle();
-    resolvedTagId = tag?.id;
-  }
-  if (!resolvedTagId) return { success: false, error: "Tag not found" };
-
-  await ctx.supabase.from("lead_tags").delete().eq("lead_id", ctx.leadId).eq("tag_id", resolvedTagId);
-  return { success: true, message: `Tag "${tagName || tagId}" removed` };
-}
-
-async function handleUpdateLeadField(ctx: ActionContext): Promise<ActionResult> {
-  const fieldName = ctx.nodeData.fieldName as string;
-  const fieldValue = ctx.nodeData.fieldValue as string;
-  if (!fieldName) return { success: false, error: "No field name configured" };
-
-  const resolved = await resolveVariables(ctx.supabase, ctx.leadId, fieldValue || "");
-  await ctx.supabase.from("leads").update({ [fieldName]: resolved }).eq("id", ctx.leadId);
-
-  return { success: true, message: `Field "${fieldName}" updated`, data: { fieldName, fieldValue: resolved } };
-}
-
-async function handleUpdateCustomField(ctx: ActionContext): Promise<ActionResult> {
-  const fieldName = ctx.nodeData.customFieldName as string;
-  const fieldValue = ctx.nodeData.customFieldValue as string || "";
-  if (!fieldName) return { success: false, error: "No custom field name configured" };
-
-  const { data: field } = await ctx.supabase
-    .from("lead_custom_fields")
-    .select("id")
-    .eq("organization_id", ctx.organizationId)
-    .eq("field_name", fieldName)
-    .maybeSingle();
-
-  if (!field) return { success: false, error: `Custom field "${fieldName}" not found` };
-
-  const resolved = await resolveVariables(ctx.supabase, ctx.leadId, fieldValue);
-
-  await ctx.supabase.from("lead_custom_field_values").upsert(
-    { lead_id: ctx.leadId, field_id: field.id, value: resolved, updated_at: new Date().toISOString() },
-    { onConflict: "lead_id,field_id" },
-  );
-
-  return { success: true, message: `Custom field "${fieldName}" updated to "${resolved}"` };
-}
-
-async function handleUpdateRating(ctx: ActionContext): Promise<ActionResult> {
-  const rating = Number(ctx.nodeData.ratingValue ?? 0);
-  const clamped = Math.min(10, Math.max(0, rating));
-
-  await ctx.supabase.from("leads").update({ rating: clamped }).eq("id", ctx.leadId);
-  return { success: true, message: `Rating updated to ${clamped}` };
-}
+// handleAddTag — REMOVED: replaced by sharedAddTag (action-handlers/tag-operations.ts)
+// handleRemoveTag — REMOVED: replaced by sharedRemoveTag (action-handlers/tag-operations.ts)
+// handleUpdateLeadField — REMOVED: replaced by sharedUpdateLeadField (action-handlers/lead-field-operations.ts)
+// handleUpdateCustomField — REMOVED: replaced by sharedUpdateCustomField (action-handlers/lead-field-operations.ts)
+// handleUpdateRating — REMOVED: replaced by sharedUpdateRating (action-handlers/lead-field-operations.ts)
+// handleDuplicateToPipe — REMOVED: replaced by sharedDuplicateToPipe (action-handlers/pipe-operations.ts)
+// handleRemoveFromPipe — REMOVED: replaced by sharedRemoveFromPipe (action-handlers/pipe-operations.ts)
+// handleMarkAsLost — REMOVED: replaced by sharedMarkAsLost (action-handlers/pipe-operations.ts)
 
 async function handleCalculateScore(ctx: ActionContext): Promise<ActionResult> {
   const { error } = await ctx.supabase.from("pending_ai_actions").insert({
@@ -1121,631 +611,7 @@ async function handleCalculateScore(ctx: ActionContext): Promise<ActionResult> {
   return { success: true, message: "Score calculation queued" };
 }
 
-async function handleDuplicateToPipe(ctx: ActionContext): Promise<ActionResult> {
-  const targetPipeType = ctx.nodeData.targetPipeType as string || "whatsapp";
-  const targetPipeStage = ctx.nodeData.targetPipeStage as string || "novo";
-
-  // Copy lead data to target pipe
-  const { data: lead } = await ctx.supabase
-    .from("leads")
-    .select("*")
-    .eq("id", ctx.leadId)
-    .maybeSingle();
-
-  if (!lead) return { success: false, error: "Lead not found" };
-
-  if (targetPipeType === "whatsapp" || targetPipeType === "confirmacao" || targetPipeType === "propostas") {
-    await upsertPipeEntry(ctx.supabase, {
-      leadId: ctx.leadId, orgId: ctx.organizationId,
-      slug: targetPipeType, stageKey: targetPipeStage,
-    });
-    if (targetPipeType === "whatsapp") {
-      await ctx.supabase.from("leads").update({ pipe_whatsapp: targetPipeStage }).eq("id", ctx.leadId);
-    }
-  }
-
-  return { success: true, message: `Duplicated to ${targetPipeType}/${targetPipeStage}` };
-}
-
-async function handleRemoveFromPipe(ctx: ActionContext): Promise<ActionResult> {
-  const pipeType = ctx.nodeData.pipeType as string || "whatsapp";
-
-  if (pipeType === "whatsapp" || pipeType === "confirmacao" || pipeType === "propostas") {
-    await deletePipeEntry(ctx.supabase, ctx.leadId, ctx.organizationId, pipeType);
-    if (pipeType === "whatsapp") {
-      await ctx.supabase.from("leads").update({ pipe_whatsapp: null }).eq("id", ctx.leadId);
-    }
-  }
-
-  return { success: true, message: `Removed from ${pipeType}` };
-}
-
-async function handleMarkAsLost(ctx: ActionContext): Promise<ActionResult> {
-  const pipeType = ctx.nodeData.pipeType as string || "propostas";
-  const reason = ctx.nodeData.lostReason as string || "";
-
-  if (pipeType === "propostas" || pipeType === "whatsapp" || pipeType === "confirmacao") {
-    const entry = await getPipeEntry(ctx.supabase, ctx.leadId, ctx.organizationId, pipeType as "propostas" | "whatsapp" | "confirmacao");
-    if (entry) {
-      const metaUpdate = pipeType === "propostas" ? { loss_reason_id: reason } : {};
-      await updatePipeEntryById(ctx.supabase, entry.id, { stageKey: "perdido", metadata: metaUpdate });
-    }
-  }
-
-  await logToHistory(ctx.supabase, ctx.leadId, ctx.organizationId, "marked_lost",
-    `Marcado como perdido em ${pipeType}: ${reason}`, { pipeType, reason });
-
-  return { success: true, message: `Marked as lost in ${pipeType}` };
-}
-
-// ─── Campaign Handlers ──────────────────────────────────────────────────────
-
-async function handleAddToCampaign(ctx: ActionContext): Promise<ActionResult> {
-  const campaignId = ctx.nodeData.campaignId as string;
-  if (!campaignId) return { success: false, error: "No campaign configured" };
-
-  // Get first stage of campaign
-  const { data: firstStage } = await ctx.supabase
-    .from("campanha_stages")
-    .select("id")
-    .eq("campanha_id", campaignId)
-    .order("position", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-
-  const { error } = await ctx.supabase.from("campanha_leads").upsert(
-    {
-      campanha_id: campaignId,
-      lead_id: ctx.leadId,
-      stage_id: firstStage?.id || null,
-    },
-    { onConflict: "campanha_id,lead_id", ignoreDuplicates: true },
-  );
-
-  if (error) return { success: false, error: error.message };
-  return { success: true, message: `Added to campaign ${ctx.nodeData.campaignName || campaignId}` };
-}
-
-async function handleRemoveFromCampaign(ctx: ActionContext): Promise<ActionResult> {
-  const campaignId = ctx.nodeData.campaignId as string;
-  if (!campaignId) return { success: false, error: "No campaign configured" };
-
-  await ctx.supabase.from("campanha_leads").delete()
-    .eq("campanha_id", campaignId).eq("lead_id", ctx.leadId);
-
-  return { success: true, message: `Removed from campaign` };
-}
-
-async function handleMoveCampaignStage(ctx: ActionContext): Promise<ActionResult> {
-  const campaignId = ctx.nodeData.campaignId as string;
-  const stageName = ctx.nodeData.campaignStageName as string;
-  const stageId = ctx.nodeData.campaignStageId as string;
-
-  if (!campaignId) return { success: false, error: "No campaign configured" };
-
-  let resolvedStageId = stageId;
-  if (!resolvedStageId && stageName) {
-    const { data: stage } = await ctx.supabase
-      .from("campanha_stages")
-      .select("id")
-      .eq("campanha_id", campaignId)
-      .ilike("name", stageName)
-      .maybeSingle();
-    resolvedStageId = stage?.id;
-  }
-
-  if (!resolvedStageId) return { success: false, error: "Campaign stage not found" };
-
-  await ctx.supabase.from("campanha_leads")
-    .update({ stage_id: resolvedStageId })
-    .eq("campanha_id", campaignId)
-    .eq("lead_id", ctx.leadId);
-
-  return { success: true, message: `Moved to campaign stage "${stageName || stageId}"` };
-}
-
-async function handleSendCampaignMessage(ctx: ActionContext): Promise<ActionResult> {
-  const campaignId = ctx.nodeData.campaignId as string;
-  const templateId = ctx.nodeData.campaignTemplateId as string;
-  if (!campaignId) return { success: false, error: "No campaign configured" };
-  if (!templateId) return { success: false, error: "No template configured", retryable: false };
-
-  const { data: template } = await ctx.supabase
-    .from("campaign_templates")
-    .select("content, message_type, audio_url")
-    .eq("id", templateId)
-    .maybeSingle();
-
-  if (!template) return { success: false, error: "Template not found" };
-
-  const message = await resolveVariables(ctx.supabase, ctx.leadId, template.content || "", ctx.executionContext);
-
-  const wa = await getWhatsAppInstance(ctx.supabase, ctx.organizationId, ctx.nodeData.whatsappInstanceId as string, ctx.leadId);
-  if (!wa) return { success: false, error: "WhatsApp instance not available" };
-  await enforceWhatsAppRateLimit(ctx.supabase, wa.instanceId);
-
-  const phone = await getLeadPhone(ctx.supabase, ctx.leadId);
-  if (!phone) return { success: false, error: "Lead has no phone", retryable: false };
-
-  const isAudio = template.message_type === "audio" && template.audio_url;
-
-  // ── Gateway dual-path ──
-  const gwResult = await sendMessage(ctx.supabase, {
-    organization_id: ctx.organizationId,
-    phone,
-    content: isAudio ? "[Áudio]" : message,
-    message_type: isAudio ? "audio" : "text",
-    source: "workflow",
-    media_url: isAudio ? template.audio_url : undefined,
-    instance_id: wa.instanceId,
-    lead_id: ctx.leadId,
-    track_id: `wf-${ctx.executionId}-${ctx.nodeData._nodeId || "action"}`,
-    triggered_by: "workflow",
-  });
-
-  if (!gwResult.delegated) {
-    // ── Legacy path (unchanged) ──
-    const { sendTextViaInstance, sendAudioViaInstance } = await import("./whatsapp-dispatch.ts");
-    const sendResult = isAudio
-      ? await sendAudioViaInstance(ctx.supabase, wa.instance, phone, template.audio_url, {
-          trackSource: "workflow-campaign-message",
-          trackId: ctx.executionId,
-        })
-      : await sendTextViaInstance(ctx.supabase, wa.instance, phone, message, {
-          trackSource: "workflow-campaign-message",
-          trackId: ctx.executionId,
-        });
-
-    if (!sendResult.success) return { success: false, error: `Campaign message send failed: ${sendResult.error}` };
-
-    const messageId = sendResult.messageId || `wf_camp_${crypto.randomUUID()}`;
-
-    await ctx.supabase.from("whatsapp_messages").upsert({
-      organization_id: ctx.organizationId,
-      instance_id: wa.instanceId,
-      message_id: messageId,
-      remote_jid: phone + "@s.whatsapp.net",
-      phone_number: phone,
-      direction: "outgoing",
-      message_type: isAudio ? "audio" : "conversation",
-      content: isAudio ? null : message,
-      media_url: isAudio ? template.audio_url : null,
-      timestamp: new Date().toISOString(),
-      status: "sent",
-      sent_by_ai: true,
-      sent_source: "workflow",
-    }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
-  } else if (!gwResult.success) {
-    console.error("[workflow-action-handler] Gateway campaign message send failed:", gwResult.error);
-    return { success: false, error: `Campaign message send failed: ${gwResult.error}` };
-  }
-
-  return { success: true, message: `Campaign message sent` };
-}
-
-async function handlePauseCampaignSequence(ctx: ActionContext): Promise<ActionResult> {
-  const campaignId = ctx.nodeData.campaignId as string;
-  if (!campaignId) return { success: false, error: "No campaign configured" };
-
-  const { error } = await ctx.supabase
-    .from("scheduled_campaign_messages")
-    .update({ status: "cancelled" })
-    .eq("lead_id", ctx.leadId)
-    .eq("campanha_id", campaignId)
-    .eq("status", "scheduled");
-
-  if (error) return { success: false, error: error.message };
-  return { success: true, message: "Campaign sequence paused" };
-}
-
-async function handleResumeCampaignSequence(ctx: ActionContext): Promise<ActionResult> {
-  const campaignId = ctx.nodeData.campaignId as string;
-  if (!campaignId) return { success: false, error: "No campaign configured" };
-
-  const { error } = await ctx.supabase
-    .from("scheduled_campaign_messages")
-    .update({
-      status: "scheduled",
-      scheduled_at: new Date().toISOString(),
-    })
-    .eq("lead_id", ctx.leadId)
-    .eq("campanha_id", campaignId)
-    .eq("status", "cancelled");
-
-  if (error) return { success: false, error: error.message };
-  return { success: true, message: "Campaign sequence resumed" };
-}
-
-// ─── Calendar Handlers ──────────────────────────────────────────────────────
-
-async function handleCreateCalendarEvent(ctx: ActionContext): Promise<ActionResult> {
-  const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-
-  const title = await resolveVariables(ctx.supabase, ctx.leadId, ctx.nodeData.eventTitle as string || "Evento");
-  const description = await resolveVariables(ctx.supabase, ctx.leadId, ctx.nodeData.eventDescription as string || "");
-
-  const res = await fetch(`${supabaseUrl}/functions/v1/google-calendar-events`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` },
-    body: JSON.stringify({
-      organization_id: ctx.organizationId,
-      lead_id: ctx.leadId,
-      title,
-      description,
-      duration_minutes: ctx.nodeData.eventDurationMinutes || 60,
-    }),
-  });
-
-  if (!res.ok) return { success: false, error: `Calendar event failed: ${await res.text()}` };
-  return { success: true, message: "Calendar event created" };
-}
-
-async function handleScheduleMeeting(ctx: ActionContext): Promise<ActionResult> {
-  const { error } = await ctx.supabase.from("pending_ai_actions").insert({
-    organization_id: ctx.organizationId,
-    lead_id: ctx.leadId,
-    action_type: "schedule_meeting",
-    payload: {
-      source: "workflow",
-      preferred_date: ctx.nodeData.meetingDate || null,
-      closer_id: ctx.nodeData.meetingCloserId || null,
-    },
-    status: "pending",
-  });
-
-  if (error) return { success: false, error: error.message };
-  return { success: true, message: "Meeting scheduling queued" };
-}
-
-// ─── TinyERP Handler ────────────────────────────────────────────────────────
-
-async function handleTinyErpOrder(ctx: ActionContext, functionName: string): Promise<ActionResult> {
-  const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-
-  const res = await fetch(`${supabaseUrl}/functions/v1/${functionName}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` },
-    body: JSON.stringify({
-      organization_id: ctx.organizationId,
-      lead_id: ctx.leadId,
-      product_id: ctx.nodeData.tinyProductId || null,
-    }),
-  });
-
-  if (!res.ok) return { success: false, error: `TinyERP order failed: ${await res.text()}` };
-  return { success: true, message: `TinyERP order created via ${functionName}` };
-}
-
-// ─── Team Handlers ──────────────────────────────────────────────────────────
-
-/**
- * Atribui responsável ao lead (sdr_id, closer_id, responsible_id).
- * Node único que substitui assign_sdr e assign_closer separados.
- */
-async function handleAssignResponsible(ctx: ActionContext): Promise<ActionResult> {
-  let assigneeId = ctx.nodeData.assigneeId as string;
-  const assignMode = ctx.nodeData.assignMode as string || "specific";
-
-  if (assignMode === "round_robin") {
-    // Org-scoped least-loaded distribution
-    const { data: members } = await ctx.supabase
-      .from("team_members")
-      .select("id")
-      .eq("organization_id", ctx.organizationId)
-      .eq("is_active", true);
-
-    if (members && members.length > 0) {
-      const counts = await Promise.all(
-        members.map(async (m: { id: string }) => {
-          const { count } = await ctx.supabase
-            .from("leads")
-            .select("*", { count: "exact", head: true })
-            .eq("responsible_id", m.id)
-            .eq("organization_id", ctx.organizationId);
-          return { id: m.id, count: count ?? 0 };
-        }),
-      );
-      counts.sort((a, b) => a.count - b.count);
-      assigneeId = counts[0].id;
-    }
-  }
-
-  if (!assigneeId) return { success: false, error: "No team member to assign" };
-
-  await ctx.supabase.from("leads").update({
-    sdr_id: assigneeId,
-    closer_id: assigneeId,
-    responsible_id: assigneeId,
-    pre_sale_responsible_id: assigneeId,
-    sale_responsible_id: assigneeId,
-  }).eq("id", ctx.leadId);
-
-  return { success: true, message: `Responsável atribuído`, data: { assigneeId } };
-}
-
-async function handleAssign(ctx: ActionContext, role: "sdr" | "closer"): Promise<ActionResult> {
-  let assigneeId = ctx.nodeData.assigneeId as string;
-  const assignMode = ctx.nodeData.assignMode as string || "specific";
-  const field = role === "sdr" ? "sdr_id" : "closer_id";
-  const newField = role === "sdr" ? "pre_sale_responsible_id" : "sale_responsible_id";
-
-  if (assignMode === "round_robin") {
-    // Check if workflow node has campaign context
-    const campaignId = ctx.nodeData.campaignId as string | undefined;
-    // Check if workflow node has pipe context
-    const pipeType = ctx.nodeData.pipeType as string | undefined;
-
-    if (campaignId) {
-      // Campaign-scoped distribution via atomic RPC
-      const rpcName = role === "closer" ? "get_next_campaign_closer" : "get_next_campaign_sdr";
-      const { data: nextId } = await ctx.supabase.rpc(rpcName, { p_campaign_id: campaignId });
-      if (nextId) assigneeId = nextId;
-    } else if (pipeType) {
-      // Pipe-scoped distribution via atomic RPC
-      const { data: nextId } = await ctx.supabase.rpc("get_next_pipe_sdr", {
-        p_pipe_type: pipeType,
-        p_organization_id: ctx.organizationId,
-      });
-      if (nextId) assigneeId = nextId;
-    } else {
-      // Fallback: org-scoped least-loaded (adds organization_id filter)
-      const targetMetric = role === "sdr" ? "meetings" : "sales";
-      const { data: members } = await ctx.supabase
-        .from("team_members")
-        .select("id")
-        .eq("organization_id", ctx.organizationId)
-        .eq("is_active", true)
-        .eq("metric_type", targetMetric);
-
-      if (members && members.length > 0) {
-        const counts = await Promise.all(
-          members.map(async (m: { id: string }) => {
-            const { count } = await ctx.supabase
-              .from("leads")
-              .select("*", { count: "exact", head: true })
-              .eq("responsible_id", m.id)
-              .eq("organization_id", ctx.organizationId);
-            return { id: m.id, count: count ?? 0 };
-          }),
-        );
-        counts.sort((a, b) => a.count - b.count);
-        assigneeId = counts[0].id;
-      }
-    }
-  }
-
-  if (!assigneeId) return { success: false, error: `No ${role} to assign` };
-
-  await ctx.supabase.from("leads").update({ [field]: assigneeId, [newField]: assigneeId, responsible_id: assigneeId }).eq("id", ctx.leadId);
-
-  return { success: true, message: `Responsável atribuído`, data: { assigneeId, role } };
-}
-
-async function handleNotifyTeamMember(ctx: ActionContext): Promise<ActionResult> {
-  const memberId = ctx.nodeData.notifyMemberId as string;
-  if (!memberId) return { success: false, error: "No team member configured" };
-
-  const message = await resolveVariables(ctx.supabase, ctx.leadId, ctx.nodeData.notifyMessage as string || "");
-
-  // Get user_id from team_member
-  const { data: member } = await ctx.supabase
-    .from("team_members")
-    .select("user_id, name")
-    .eq("id", memberId)
-    .maybeSingle();
-
-  if (!member?.user_id) return { success: false, error: "Team member not found" };
-
-  await ctx.supabase.from("notifications").insert({
-    organization_id: ctx.organizationId,
-    user_id: member.user_id,
-    type: "workflow_notification",
-    title: "Notificação de Workflow",
-    description: message || "Ação de workflow executada",
-    lead_id: ctx.leadId,
-    link: "/pipe-whatsapp",
-  });
-
-  return { success: true, message: `Notification sent to ${member.name || memberId}` };
-}
-
-// ─── Follow-up Handler ──────────────────────────────────────────────────────
-
-async function handleCreateFollowup(ctx: ActionContext): Promise<ActionResult> {
-  const title = await resolveVariables(ctx.supabase, ctx.leadId, ctx.nodeData.followupTitle as string || "Follow-up");
-  const description = await resolveVariables(ctx.supabase, ctx.leadId, ctx.nodeData.followupDescription as string || "");
-  const priority = ctx.nodeData.followupPriority as string || "normal";
-
-  // Get lead's responsible as assignee (fallback to legacy sdr_id/closer_id)
-  const { data: lead } = await ctx.supabase
-    .from("leads")
-    .select("responsible_id, sdr_id, closer_id")
-    .eq("id", ctx.leadId)
-    .maybeSingle();
-
-  const assignedTo = lead?.responsible_id || lead?.sdr_id || lead?.closer_id || null;
-
-  const { error } = await ctx.supabase.from("follow_ups").insert({
-    lead_id: ctx.leadId,
-    assigned_to: assignedTo,
-    title,
-    description,
-    priority,
-    due_date: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // +1 day
-    is_automated: true,
-    organization_id: ctx.organizationId,
-  });
-
-  if (error) return { success: false, error: error.message };
-  return { success: true, message: `Follow-up "${title}" created` };
-}
-
-// ─── Checklist Handlers ─────────────────────────────────────────────────────
-
-async function handleApplyChecklist(ctx: ActionContext): Promise<ActionResult> {
-  const templateId = (ctx.nodeData.checklistTemplateId as string | undefined)?.trim();
-  if (!templateId) {
-    return { success: false, error: "checklistTemplateId não configurado no nó" };
-  }
-
-  // Load template (must belong to same org and be a template — lead_id IS NULL)
-  const { data: template, error: tErr } = await ctx.supabase
-    .from("checklists")
-    .select("id, organization_id, title, description, lead_id")
-    .eq("id", templateId)
-    .maybeSingle();
-
-  if (tErr) return { success: false, error: tErr.message };
-  if (!template) {
-    return { success: false, error: `Template de checklist não encontrado (id=${templateId})` };
-  }
-  if (template.organization_id !== ctx.organizationId) {
-    return { success: false, error: "Template pertence a outra organização" };
-  }
-  if (template.lead_id !== null) {
-    return { success: false, error: "Registro alvo não é um template (lead_id não é null)" };
-  }
-
-  // Load template items
-  const { data: templateItems, error: iErr } = await ctx.supabase
-    .from("checklist_items")
-    .select("title, position")
-    .eq("checklist_id", templateId)
-    .order("position", { ascending: true });
-
-  if (iErr) return { success: false, error: iErr.message };
-
-  // Insert new checklist tied to the lead
-  const { data: newChecklist, error: cErr } = await ctx.supabase
-    .from("checklists")
-    .insert({
-      organization_id: ctx.organizationId,
-      created_by: null,
-      title: template.title,
-      description: template.description,
-      lead_id: ctx.leadId,
-    })
-    .select("id")
-    .single();
-
-  if (cErr) return { success: false, error: cErr.message };
-
-  // Insert items (if any)
-  if (templateItems && templateItems.length > 0) {
-    const itemsToInsert = templateItems.map((it) => ({
-      checklist_id: newChecklist.id,
-      title: it.title,
-      position: it.position,
-    }));
-
-    const { error: insErr } = await ctx.supabase
-      .from("checklist_items")
-      .insert(itemsToInsert);
-
-    if (insErr) {
-      // Best-effort rollback so we don't leave a partial checklist
-      await ctx.supabase.from("checklists").delete().eq("id", newChecklist.id);
-      return { success: false, error: insErr.message };
-    }
-  }
-
-  return {
-    success: true,
-    message: `Checklist "${template.title}" aplicado (${templateItems?.length ?? 0} itens)`,
-    data: { checklist_id: newChecklist.id, template_id: templateId },
-  };
-}
-
-// ─── AI Handlers ────────────────────────────────────────────────────────────
-
-async function handleGenerateAiMessage(ctx: ActionContext): Promise<ActionResult> {
-  const openRouterApiKey = Deno.env.get("OPENROUTER_API_KEY");
-  if (!openRouterApiKey) {
-    return { success: false, error: "OPENROUTER_API_KEY não configurada" };
-  }
-
-  const rawPrompt = (ctx.nodeData.aiPrompt as string) || "";
-  if (!rawPrompt) {
-    return { success: false, error: "Prompt de IA não configurado no nó" };
-  }
-
-  // Resolve variables in the prompt (e.g., {{nome}}, {{empresa}})
-  const prompt = await resolveVariables(ctx.supabase, ctx.leadId, rawPrompt);
-
-  try {
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${openRouterApiKey}`,
-        "HTTP-Referer": Deno.env.get("OPENROUTER_REFERER_URL") || "https://v8millennials.com",
-        "X-Title": "V8 Millennials CRM - Workflow AI Message",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.0-flash-001",
-        messages: [
-          {
-            role: "system",
-            content:
-              "Você é um assistente de vendas B2B. Gere uma mensagem curta, natural e adequada para WhatsApp. " +
-              "Não use saudações formais como 'Prezado' ou 'Caro'. Seja direto e conversacional. " +
-              "Responda APENAS com o texto da mensagem, sem explicações.",
-          },
-          { role: "user", content: prompt },
-        ],
-        temperature: 0.7,
-        max_tokens: 500,
-      }),
-    });
-
-    if (!response.ok) {
-      const errText = await response.text();
-      return { success: false, error: `OpenRouter API error: ${response.status} ${errText}` };
-    }
-
-    const data = await response.json();
-    const generatedMessage = data.choices?.[0]?.message?.content?.trim() || "";
-
-    if (!generatedMessage) {
-      return { success: false, error: "IA retornou mensagem vazia" };
-    }
-
-    // Store in execution context so next nodes can use {{ai_message}}
-    const outputVar = (ctx.nodeData.aiOutputVariable as string) || "ai_message";
-    ctx.executionContext[outputVar] = generatedMessage;
-
-    return {
-      success: true,
-      message: `Mensagem gerada com sucesso (${generatedMessage.length} chars)`,
-      data: { [outputVar]: generatedMessage },
-    };
-  } catch (err) {
-    return { success: false, error: `Erro ao gerar mensagem: ${err instanceof Error ? err.message : (err as any)?.message ?? JSON.stringify(err)}` };
-  }
-}
-
-async function handleInvokeEdgeFunction(ctx: ActionContext, functionName: string): Promise<ActionResult> {
-  const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-
-  const res = await fetch(`${supabaseUrl}/functions/v1/${functionName}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` },
-    body: JSON.stringify({
-      lead_id: ctx.leadId,
-    }),
-  });
-
-  if (!res.ok) return { success: false, error: `${functionName} failed: ${await res.text()}` };
-
-  let data: Record<string, unknown> | undefined;
-  try {
-    data = await res.json();
-  } catch {
-    // response may not be JSON
-  }
-
-  return { success: true, message: `${functionName} completed`, data };
-}
+// handleSendCampaignMessage — REMOVED: replaced by sharedSendCampaignMessage (action-handlers/send-campaign-message.ts)
+// handleScheduleMeeting — REMOVED: replaced by sharedQueueScheduleMeeting (action-handlers/ai-operations.ts)
+// handleGenerateAiMessage — REMOVED: replaced by sharedGenerateAiMessage (action-handlers/ai-operations.ts)
+// handleInvokeEdgeFunction (summarize/evaluate) — REMOVED: replaced by sharedSummarizeConversation / sharedEvaluateConversation (action-handlers/ai-operations.ts)
