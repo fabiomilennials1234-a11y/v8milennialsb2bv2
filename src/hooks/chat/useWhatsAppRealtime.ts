@@ -134,5 +134,6 @@ export function useWhatsAppMessagesRealtime(
     filter: organizationId ? `organization_id=eq.${organizationId}` : undefined,
     onEvent,
     enabled: !!organizationId,
+    statusKey: organizationId ? `whatsapp-messages-patched-${organizationId}` : undefined,
   });
 }
