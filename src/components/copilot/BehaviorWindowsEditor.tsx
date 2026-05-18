@@ -2,8 +2,8 @@
  * Editor de janelas de comportamento (Time-Aware Behavior).
  *
  * Standalone, props-based. Usado por:
- *  - PlaygroundSettings (criação + edição via /copilot/novo e /copilot/:id/editar)
- *  - AgentConfigModal (edição rápida via tab "Comportamento")
+ *  - PlaygroundSettings (criacao + edicao via /copilot/novo e /copilot/:id/editar)
+ *  - PlaygroundComportamento (tab Comportamento no Playground)
  *
  * Modelo:
  *  - Até 6 janelas { id, name, days, start, end, behavior }
