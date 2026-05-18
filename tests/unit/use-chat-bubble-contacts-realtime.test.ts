@@ -170,12 +170,16 @@ describe("useChatBubbleContactsRealtime", () => {
     expect(mocks.supabaseMock.channel).not.toHaveBeenCalled();
   });
 
-  it("usa channel name chat-bubble-contacts-${orgId}", () => {
+  it("creates a channel when org + instances are available", () => {
     const qc = newQc();
     renderHook(() => useChatBubbleContactsRealtime(["i1"], null), {
       wrapper: wrapper(qc),
     });
-    expect(mocks.supabaseMock.channel).toHaveBeenCalledWith("chat-bubble-contacts-org-A");
+    // Channel name is now managed by useRealtimeChannel (includes table + filter)
+    expect(mocks.supabaseMock.channel).toHaveBeenCalledTimes(1);
+    const channelName = mocks.supabaseMock.channel.mock.calls[0][0] as string;
+    expect(channelName).toContain("whatsapp_messages");
+    expect(channelName).toContain("org-A");
   });
 
   it("INSERT em msg cuja instance_id ∈ instanceIds patcheia queryKey correta", () => {
