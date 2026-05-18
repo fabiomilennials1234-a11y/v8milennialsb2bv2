@@ -5,7 +5,7 @@ import { triggerFollowUpAutomation } from "./useAutoFollowUp";
 
 import { useOrganization } from "./useOrganization";
 import { useCanPerformActionAsync } from "@/lib/permissions";
-import { usePipelineEntries, usePipelineId } from "./usePipelineEntries";
+import { usePipelineEntries, usePipelineId, findOrCreatePipelineEntry } from "./usePipelineEntries";
 
 export type PipeWhatsapp = Tables<"pipe_whatsapp">;
 export type PipeWhatsappInsert = Partial<PipeWhatsapp> & { lead_id: string };
@@ -52,32 +52,28 @@ export function useCreatePipeWhatsapp() {
       const assignedToValue =
         item.pre_sale_responsible_id ?? item.responsible_id ?? item.sdr_id ?? null;
 
-      const { data, error } = await supabase
-        .from("pipeline_entries")
-        .insert({
-          pipeline_id: pipelineId,
-          lead_id: item.lead_id!,
-          stage_key: item.status ?? "novo",
-          assigned_to: assignedToValue,
-          notes: item.notes ?? null,
-          metadata,
-          organization_id: organizationId,
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      // Trigger automation for the initial status. Prefer dual; fall back to
-      // caller-supplied legacy for transition.
-      await triggerFollowUpAutomation({
-        leadId: data.lead_id,
+      const { entry: data, created } = await findOrCreatePipelineEntry({
+        pipelineId,
+        leadId: item.lead_id!,
+        organizationId,
+        stageKey: item.status ?? "novo",
         assignedTo: assignedToValue,
-        pipeType: "whatsapp",
-        stage: data.stage_key,
-        sourcePipeId: data.id,
-        organizationId: data.organization_id,
+        metadata,
+        notes: item.notes ?? null,
       });
+
+      // Fire automation only for new entries — if we returned an existing one,
+      // the original create already fired it.
+      if (created) {
+        await triggerFollowUpAutomation({
+          leadId: data.lead_id,
+          assignedTo: assignedToValue,
+          pipeType: "whatsapp",
+          stage: data.stage_key,
+          sourcePipeId: data.id,
+          organizationId: data.organization_id,
+        });
+      }
 
       return data;
     },
