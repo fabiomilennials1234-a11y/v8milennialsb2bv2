@@ -136,8 +136,8 @@ export function useCanPerformAction(action: AppAction): ActionResult {
     return { allowed: true, reason: "open", isLoading: false };
   }
 
-  // Fallback — usa feature_permissions default
-  return { allowed: true, reason: "fallback", isLoading: false };
+  // Fallback — deny unmapped actions (fail-closed)
+  return { allowed: false, reason: "unmapped_action", isLoading: false };
 }
 
 // ─── useCanPerformActionAsync ────────────────────────────
@@ -204,7 +204,7 @@ export function useCanPerformActionAsync(action: AppAction) {
         return { allowed: true, reason: `matrix_${value}` };
       }
 
-      return { allowed: true, reason: "fallback" };
+      return { allowed: false, reason: "unmapped_action" };
     },
     enabled: isReady && !roleLoading && !tmLoading && !masterLoading && !!role,
     staleTime: 5 * 60 * 1000,
