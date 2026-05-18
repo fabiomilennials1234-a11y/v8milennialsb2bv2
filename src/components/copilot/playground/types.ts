@@ -4,6 +4,7 @@
 
 import type { AgentTemplateType, AgentOperationMode, OutboundConfig, ActivationTriggers, AutomationActions } from "@/types/copilot";
 import type { BehaviorEnforcement, BehaviorWindow } from "@/components/copilot/BehaviorWindowsEditor";
+import type { FunisState } from "./funis-mapping";
 
 // =====================================================
 // TOOL DEFINITIONS
@@ -133,6 +134,9 @@ export interface PlaygroundData {
   documents: KnowledgeDocument[];
   links: KnowledgeLink[];
 
+  // Funis & Etapas (pipes, stages, move rules)
+  funis: FunisState;
+
   // Existing agent ID (edit mode)
   agentId?: string;
 }
@@ -226,6 +230,7 @@ export function createDefaultPlaygroundData(): PlaygroundData {
     tools: {},
     documents: [],
     links: [],
+    funis: { activePipes: [], activeStages: {}, moveRules: [] },
   };
 }
 

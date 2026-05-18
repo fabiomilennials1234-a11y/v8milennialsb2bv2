@@ -798,6 +798,10 @@ export function useCopilotAgentForEdit(agentId?: string) {
         // Playground structured prompt data (round-trip)
         promptSections: conversationStyle.promptSections || undefined,
         toolInstructions: conversationStyle.toolInstructions || undefined,
+        // Pipeline config (funis tab round-trip)
+        activePipes: (agent as any).active_pipes || [],
+        activeStages: (agent as any).active_stages || {},
+        moveRules: (agent as any).move_rules || [],
       } as any;
 
       return { wizardData, existingDocuments: documents };
@@ -896,6 +900,13 @@ export function useUpdateCopilotAgentFromWizard() {
       (agentUpdate as any).natural_messaging_config = data.naturalMessagingEnabled
         ? { enabled: true, intensity: data.naturalMessagingIntensity ?? 'natural' }
         : null;
+
+      // Pipeline config (funis tab)
+      if ((data as any).activePipes !== undefined) {
+        (agentUpdate as any).active_pipes = (data as any).activePipes;
+        (agentUpdate as any).active_stages = (data as any).activeStages;
+        (agentUpdate as any).move_rules = (data as any).moveRules;
+      }
 
       const { data: updatedAgent, error: agentError } = await supabase
         .from("copilot_agents")
