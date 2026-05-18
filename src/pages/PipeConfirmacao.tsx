@@ -56,6 +56,7 @@ import { useBulkSelection } from "@/hooks/useBulkSelection";
 import { BulkActionBar } from "@/components/bulk-actions/BulkActionBar";
 import { SavedViewsDropdown } from "@/components/saved-views/SavedViewsDropdown";
 import { useSearchParams } from "react-router-dom";
+import { matchesResponsibleFilter } from "@/lib/kanban-filters";
 
 // Filter type aliases (previously from ConfirmacaoFilters)
 type OriginFilter = "all" | "whatsapp" | "meta_ads" | "instagram" | "tiktok" | "google_ads" | "site" | "landing_page" | "remarketing" | "indicacao" | "evento" | "prospeccao_ativa" | "cal" | "outro";
@@ -460,13 +461,9 @@ function PipeConfirmacaoInner() {
       }
 
       const matchesStatus = selectedStatuses.length === 0 || selectedStatuses.includes(item.status);
-      const matchesResponsible = selectedResponsibleId === "all" ||
-        item.responsible_id === selectedResponsibleId ||
-        item.sdr_id === selectedResponsibleId ||
-        item.closer_id === selectedResponsibleId ||
-        lead?.responsible_id === selectedResponsibleId ||
-        lead?.sdr_id === selectedResponsibleId ||
-        lead?.closer_id === selectedResponsibleId;
+      // Shared helper covers all 9 responsibility fields (entry + lead),
+      // including pre_sale_responsible_id / sale_responsible_id.
+      const matchesResponsible = matchesResponsibleFilter(item, selectedResponsibleId);
 
       const matchesTags = selectedTags.length === 0 ||
         (lead?.lead_tags?.some((lt: any) => selectedTags.includes(lt.tag?.id)) ?? false);

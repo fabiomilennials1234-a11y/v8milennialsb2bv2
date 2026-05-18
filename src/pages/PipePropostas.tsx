@@ -76,6 +76,7 @@ import { BulkActionBar } from "@/components/bulk-actions/BulkActionBar";
 import { SavedViewsDropdown } from "@/components/saved-views/SavedViewsDropdown";
 import { useLossReasons } from "@/hooks/useLossReasons";
 import { useSearchParams } from "react-router-dom";
+import { matchesResponsibleFilter } from "@/lib/kanban-filters";
 
 const MONTHS_PT = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 function formatPeriodLabel(range: { startStr: string; endStr: string }): string {
@@ -400,12 +401,9 @@ function PipePropostasInner() {
         lead?.company?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         lead?.phone?.includes(searchTerm);
 
-      const matchesResponsible = filterResponsible === "all" ||
-        item.responsible_id === filterResponsible ||
-        item.closer_id === filterResponsible ||
-        lead?.responsible_id === filterResponsible ||
-        lead?.sdr_id === filterResponsible ||
-        lead?.closer_id === filterResponsible;
+      // Shared helper covers all 9 responsibility fields (entry + lead),
+      // including pre_sale_responsible_id / sale_responsible_id.
+      const matchesResponsible = matchesResponsibleFilter(item, filterResponsible);
 
       let matchesType = filterProductType === "all";
       if (!matchesType) {

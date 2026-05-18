@@ -53,6 +53,7 @@ import { BulkActionBar } from "@/components/bulk-actions/BulkActionBar";
 import { PipeTableView } from "@/components/kanban/PipeTableView";
 import { SavedViewsDropdown } from "@/components/saved-views/SavedViewsDropdown";
 import { useSearchParams } from "react-router-dom";
+import { matchesResponsibleFilter } from "@/lib/kanban-filters";
 
 
 const MONTHS_PT = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
@@ -251,8 +252,9 @@ function PipeWhatsappInner() {
       lead?.company?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       lead?.phone?.includes(searchTerm);
 
-    // Responsible filter
-    const matchesResponsible = filterResponsible === "all" || item.responsible_id === filterResponsible || item.lead?.responsible_id === filterResponsible;
+    // Responsible filter — shared helper covers entry + lead, including
+    // pre_sale_responsible_id / sale_responsible_id / sdr_id / closer_id.
+    const matchesResponsible = matchesResponsibleFilter(item, filterResponsible);
 
     // Origin filter
     const matchesOrigin = filterOrigin === "all" || lead?.origin === filterOrigin;

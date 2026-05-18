@@ -71,11 +71,15 @@ export function useRecentActivity(limit: number = 10) {
         .limit(5);
 
       meetings?.forEach((meeting: any) => {
+        // Crédito de comparecimento é do SDR:
+        // COALESCE(pre_sale_responsible, sdr). NÃO usar responsible — em
+        // muitas orgs ele guarda o closer e atribuiria o evento ao time errado.
+        const sdrName = meeting.lead?.pre_sale_responsible?.name || meeting.lead?.sdr?.name;
         activities.push({
           id: `meeting-${meeting.id}`,
           type: "meeting",
           title: "Reunião realizada",
-          description: `${meeting.lead?.name}${(meeting.lead?.responsible?.name || meeting.lead?.sdr?.name) ? ` com ${meeting.lead?.responsible?.name || meeting.lead?.sdr?.name}` : ""}`,
+          description: `${meeting.lead?.name}${sdrName ? ` com ${sdrName}` : ""}`,
           timestamp: meeting.updated_at,
           relativeTime: formatDistanceToNow(new Date(meeting.updated_at), {
             addSuffix: true,
@@ -83,7 +87,7 @@ export function useRecentActivity(limit: number = 10) {
           }),
           icon: "calendar",
           color: "success",
-          personName: meeting.lead?.pre_sale_responsible?.name || meeting.lead?.responsible?.name || meeting.lead?.sdr?.name || meeting.lead?.name,
+          personName: sdrName || meeting.lead?.name,
         });
       });
 
