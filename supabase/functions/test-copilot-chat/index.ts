@@ -31,6 +31,21 @@ interface Attachment {
   fileName: string;
 }
 
+interface OpenRouterToolDef {
+  type: "function";
+  function: {
+    name: string;
+    description: string;
+    parameters: Record<string, unknown>;
+  };
+}
+
+interface DryRunToolCall {
+  name: string;
+  parameters: Record<string, unknown>;
+  humanDescription: string;
+}
+
 interface TestCopilotChatRequest {
   systemPrompt: string;
   messages: ChatMessage[];
@@ -43,10 +58,74 @@ interface TestCopilotChatRequest {
   agentId?: string;
   /** Attachment (imagem ou PDF) enviado pelo usuario */
   attachment?: Attachment;
+  /** Dry-run tools — OpenRouter function-calling format. When present, enables tool preview. */
+  tools?: OpenRouterToolDef[];
 }
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+
+/**
+ * Generates human-readable description from tool name + params.
+ * Mirrors src/lib/copilot/dry-run-engine.ts#buildHumanDescription — keep in sync.
+ */
+function buildHumanDescription(name: string, params: Record<string, any>): string {
+  switch (name) {
+    case "advance_stage":
+      return `MOVER_CARD → stage ${params.target_stage || "?"}${params.target_pipe ? ` (${params.target_pipe})` : ""}`;
+    case "update_qualification_score":
+      return `QUALIFICAR_LEAD → score ${params.score ?? "?"}${params.reason ? `, motivo: ${params.reason}` : ""}`;
+    case "qualify_lead":
+      return `QUALIFICAR_LEAD → qualificado${params.reason ? ` (${params.reason})` : ""}`;
+    case "disqualify_lead":
+      return `DESQUALIFICAR_LEAD → desqualificado${params.reason ? ` (${params.reason})` : ""}`;
+    case "schedule_meeting":
+      return `AGENDAR_REUNIAO → ${params.preferred_date || "?"}${params.preferred_time ? ` ${params.preferred_time}` : ""}`;
+    case "confirm_meeting":
+      return `CONFIRMAR_REUNIAO → ${params.confirmation_type || "?"}`;
+    case "advance_confirmation_stage":
+      return `MOVER_CONFIRMACAO → stage ${params.target_stage || "?"}`;
+    case "transfer_to_human":
+      return `TRANSFERIR_HUMANO → ${params.reason || "sem motivo"}`;
+    case "update_lead":
+      return `PREENCHER_CAMPOS → ${Object.entries(params.updates || params).map(([k, v]) => `${k}: ${v}`).join(", ") || "?"}`;
+    case "create_lead":
+      return `CRIAR_LEAD → ${params.name || "?"}`;
+    case "search_knowledge":
+      return `BUSCAR_KB → "${params.query || "?"}"`;
+    case "send_document":
+      return `ENVIAR_DOCUMENTO → ${params.document_id || "?"}${params.caption ? ` (${params.caption})` : ""}`;
+    case "send_product_material":
+      return `ENVIAR_MATERIAL → ${params.material_id || "?"}`;
+    case "create_custom_field":
+      return `CRIAR_CAMPO → ${params.field_name || "?"} (${params.field_type || "text"})`;
+    case "transfer_sz_chat":
+      return `TRANSFERIR_SETOR → ${params.target_team_name || "?"}`;
+    default:
+      return `${name} → ${JSON.stringify(params)}`;
+  }
+}
+
+/**
+ * Converts raw OpenRouter tool_calls into dry-run results.
+ * ZERO side effects — intercept only.
+ */
+function formatToolCallsFromResponse(
+  toolCalls: Array<{ function: { name: string; arguments: string } }> | undefined,
+): DryRunToolCall[] {
+  if (!toolCalls || toolCalls.length === 0) return [];
+
+  return toolCalls.map((tc) => {
+    const name = tc.function.name;
+    let parameters: Record<string, any> = {};
+    try {
+      parameters = JSON.parse(tc.function.arguments);
+    } catch {
+      parameters = { _raw: tc.function.arguments };
+    }
+    return { name, parameters, humanDescription: buildHumanDescription(name, parameters) };
+  });
+}
 
 /**
  * Build multimodal content array when attachment is present.
@@ -90,7 +169,20 @@ async function callOpenRouter(
   llmMessages: Array<Record<string, unknown>>,
   maxTokens: number,
   temperature: number,
+  tools?: OpenRouterToolDef[],
 ): Promise<Record<string, unknown>> {
+  const payload: Record<string, unknown> = {
+    model,
+    messages: llmMessages,
+    temperature,
+    max_tokens: maxTokens,
+  };
+
+  if (tools && tools.length > 0) {
+    payload.tools = tools;
+    payload.tool_choice = "auto";
+  }
+
   const response = await fetch(OPENROUTER_API_URL, {
     method: "POST",
     headers: {
@@ -99,12 +191,7 @@ async function callOpenRouter(
       "HTTP-Referer": Deno.env.get("OPENROUTER_REFERER_URL") || "https://torquecrm.com.br",
       "X-Title": "Torque CRM - Test Chat",
     },
-    body: JSON.stringify({
-      model,
-      messages: llmMessages,
-      temperature,
-      max_tokens: maxTokens,
-    }),
+    body: JSON.stringify(payload),
   });
 
   if (!response.ok) {
@@ -141,7 +228,7 @@ Deno.serve(withSentry('test-copilot-chat', async (req) => {
     }
 
     const body: TestCopilotChatRequest = await req.json();
-    const { messages = [], userMessage, generateFirstMessage = false, firstMessageTemplate, agentId, attachment } = body;
+    const { messages = [], userMessage, generateFirstMessage = false, firstMessageTemplate, agentId, attachment, tools: dryRunTools } = body;
     let { systemPrompt } = body;
 
     // Modelo e temperatura padrão — podem ser sobrescritos pelo agente do DB
@@ -287,11 +374,41 @@ Deno.serve(withSentry('test-copilot-chat', async (req) => {
       { role: "user", content: userContent },
     ];
 
-    const result = await callOpenRouter(OPENROUTER_API_KEY, model, llmMessages, 500, temperature);
+    const result = await callOpenRouter(OPENROUTER_API_KEY, model, llmMessages, 500, temperature, dryRunTools);
 
-    const rawContent: string = (result as any).choices?.[0]?.message?.content || "";
+    const choice = (result as any).choices?.[0]?.message;
+    const rawContent: string = choice?.content || "";
+    const rawToolCalls = choice?.tool_calls;
 
-    const sanitizedContent = sanitizeAssistantMessage(rawContent, false).text;
+    // Parse dry-run tool calls (zero execution)
+    const toolCalls = formatToolCallsFromResponse(rawToolCalls);
+
+    // If LLM returned tool_calls WITHOUT text, do a second call to get the text
+    // response the agent would send after "executing" the tools. We simulate
+    // tool results so the LLM generates the natural language response.
+    let finalContent = rawContent;
+    if (toolCalls.length > 0 && !rawContent.trim()) {
+      try {
+        const simulatedToolResults = rawToolCalls.map((tc: any) => ({
+          role: "tool",
+          tool_call_id: tc.id || `sim_${tc.function.name}`,
+          content: JSON.stringify({ success: true, dry_run: true }),
+        }));
+
+        const followUpMessages = [
+          ...llmMessages,
+          choice,
+          ...simulatedToolResults,
+        ];
+
+        const followUp = await callOpenRouter(OPENROUTER_API_KEY, model, followUpMessages, 500, temperature);
+        finalContent = (followUp as any).choices?.[0]?.message?.content || "";
+      } catch (followUpErr) {
+        console.warn("[test-copilot-chat] Follow-up call after tool_calls failed:", followUpErr);
+      }
+    }
+
+    const sanitizedContent = sanitizeAssistantMessage(finalContent, false).text;
     const messageParts = splitByDelimiter(sanitizedContent);
 
     const cleanMessage = messageParts.join(" ");
@@ -300,13 +417,14 @@ Deno.serve(withSentry('test-copilot-chat', async (req) => {
       module: "copilot",
       action: "test_chat",
       status: "success",
-      payloadSnapshot: { mode: "reactive", model, historyLength: recentHistory.length, hasAttachment },
+      payloadSnapshot: { mode: "reactive", model, historyLength: recentHistory.length, hasAttachment, toolCallCount: toolCalls.length },
     });
 
     return new Response(
       JSON.stringify({
         message: cleanMessage,
         messages: messageParts.length > 1 ? messageParts : [cleanMessage],
+        ...(toolCalls.length > 0 ? { toolCalls } : {}),
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
