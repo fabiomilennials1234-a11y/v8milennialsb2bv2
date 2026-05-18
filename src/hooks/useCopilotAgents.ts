@@ -755,6 +755,15 @@ export function useCopilotAgentForEdit(agentId?: string) {
           triggerDelayHours: r.trigger_delay_hours,
           triggerDelayMinutes: r.trigger_delay_minutes,
           maxFollowups: r.max_followups,
+          sequenceSteps: Array.isArray(r.sequence_steps) && r.sequence_steps.length > 0
+            ? r.sequence_steps.map((s: any) => ({
+                order: s.order,
+                delayHours: s.delay_hours,
+                delayMinutes: s.delay_minutes,
+                style: s.style,
+                messageTemplate: s.message_template || undefined,
+              }))
+            : undefined,
           filterTags: r.filter_tags || [],
           filterTagsExclude: r.filter_tags_exclude || [],
           filterOrigins: r.filter_origins || [],
