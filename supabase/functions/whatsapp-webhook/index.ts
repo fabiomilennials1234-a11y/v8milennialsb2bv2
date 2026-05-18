@@ -112,6 +112,7 @@ export interface ReactionContext {
   shouldResolveWaitResponse: boolean;
   isGroup: boolean;
   replaySource: string | null;
+  conversationId?: string | null;
 }
 
 // ============================================================================
@@ -468,9 +469,37 @@ export async function triggerReactions(
       });
   }
 
-  // 2. Copilot dispatch — agent-message + chunked delivery
+  // 2. Copilot dispatch — queue for batching instead of direct call
   if (!context.shouldTriggerCopilot) return;
 
+  // Try queue INSERT first; fall back to direct agent-message on failure
+  const { error: queueError } = await supabase
+    .from("copilot_message_queue")
+    .insert({
+      organization_id: persisted.organization_id,
+      conversation_id: context.conversationId ?? null,
+      message_id: persisted.message_id,
+      phone: persisted.phone_number,
+    });
+
+  if (!queueError) {
+    void logRuntime({
+      organizationId: persisted.organization_id,
+      module: "webhook",
+      action: "copilot_queued",
+      status: "success",
+      payloadSnapshot: {
+        instance_id: persisted.instance_id,
+        message_id: persisted.message_id,
+        channel: "whatsapp",
+      },
+    });
+    return;
+  }
+
+  console.error("[whatsapp-webhook] Queue insert failed, falling back to direct call:", queueError.message);
+
+  // FALLBACK: call agent-message directly (existing code)
   const agentMessagePayload = {
     from: persisted.phone_number,
     message: persisted.content,

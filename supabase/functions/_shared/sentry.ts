@@ -154,6 +154,75 @@ export function withSentry(
   };
 }
 
+/**
+ * Sends an info-level event to Sentry with tags for observability.
+ * Use on success paths where you want structured metrics in Sentry
+ * without triggering error alerts.
+ * Never throws — silently fails if Sentry is unreachable or misconfigured.
+ */
+export async function captureMessage(
+  message: string,
+  context?: SentryContext & { tags?: Record<string, string | number | boolean> },
+): Promise<void> {
+  try {
+    const dsn = Deno.env.get("SENTRY_DSN");
+    if (!dsn) return;
+
+    const parsed = parseDsn(dsn);
+    if (!parsed) return;
+
+    const environment = Deno.env.get("ENVIRONMENT") || "production";
+    const timestamp = Date.now() / 1000;
+    const eventId = crypto.randomUUID().replace(/-/g, "");
+
+    const event: Record<string, unknown> = {
+      event_id: eventId,
+      timestamp,
+      platform: "node",
+      level: "info",
+      server_name: "supabase-edge-functions",
+      environment,
+      message: { formatted: message },
+      tags: {
+        runtime: "deno",
+        ...(context?.functionName && { function_name: context.functionName }),
+        ...(context?.organizationId && { organization_id: context.organizationId }),
+        ...context?.tags,
+      },
+      user: context?.userId ? { id: context.userId } : undefined,
+      extra: {
+        ...(context?.functionName && { function_name: context.functionName }),
+        ...(context?.organizationId && { organization_id: context.organizationId }),
+        ...context?.extra,
+      },
+    };
+
+    const envelopeHeader = JSON.stringify({
+      event_id: eventId,
+      dsn,
+      sent_at: new Date().toISOString(),
+    });
+    const itemHeader = JSON.stringify({
+      type: "event",
+      content_type: "application/json",
+    });
+    const payload = `${envelopeHeader}\n${itemHeader}\n${JSON.stringify(event)}`;
+
+    const url = `${parsed.uri}/api/${parsed.projectId}/envelope/`;
+
+    await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-sentry-envelope",
+        "X-Sentry-Auth": `Sentry sentry_version=7, sentry_client=edge-functions/1.0, sentry_key=${parsed.publicKey}`,
+      },
+      body: payload,
+    });
+  } catch {
+    // Silently ignore — never let Sentry reporting break the function
+  }
+}
+
 // --- Internal helpers ---
 
 interface ParsedDsn {

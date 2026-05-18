@@ -14,30 +14,7 @@ import { isCopilotCanceled, logCopilotCancellation } from "../_shared/copilot/ca
 import "../_shared/whatsapp-providers/evolution-provider.ts";
 import "../_shared/whatsapp-providers/uazapi-provider.ts";
 
-// In-memory dedup: prevents processing the same phone+org twice within 30s.
-// Covers the common case where Evolution/Uazapi fire duplicate webhook events
-// that both dispatch to agent-message within milliseconds of each other.
-const inFlightMap = new Map<string, number>();
-const DEDUP_WINDOW_MS = 30_000;
-
-function acquireProcessingLock(phone: string, orgId: string): boolean {
-  const key = `${phone}:${orgId}`;
-  const now = Date.now();
-  const prev = inFlightMap.get(key);
-  if (prev && now - prev < DEDUP_WINDOW_MS) return false;
-  inFlightMap.set(key, now);
-  // Prune stale entries
-  if (inFlightMap.size > 500) {
-    for (const [k, ts] of inFlightMap) {
-      if (now - ts > DEDUP_WINDOW_MS * 2) inFlightMap.delete(k);
-    }
-  }
-  return true;
-}
-
-function releaseProcessingLock(phone: string, orgId: string) {
-  inFlightMap.delete(`${phone}:${orgId}`);
-}
+import { buildBatchContent, absorbPendingMessages } from "./batch-helpers.ts";
 
 /**
  * Webhook receptor de mensagens de leads
@@ -76,7 +53,31 @@ Deno.serve(withSentry('agent-message', async (req) => {
   try {
     // Parse webhook de Twilio ou formato genérico
     const body = await req.json();
-    const { from, message, channel, organization_id, push_name, incoming_message_type } = body; // from = phone number ou user_id
+    const { from, channel, organization_id, push_name, incoming_message_type } = body; // from = phone number ou user_id
+
+    // A. Batch mode: message_ids array → load + concat from channel_messages
+    const isBatchMode = body.batch_mode === true && Array.isArray(body.message_ids) && body.message_ids.length > 0;
+    let message: string;
+
+    if (isBatchMode) {
+      const { data: batchMsgs, error: batchErr } = await supabase
+        .from("channel_messages")
+        .select("content")
+        .in("id", body.message_ids)
+        .order("created_at", { ascending: true });
+
+      if (batchErr || !batchMsgs || batchMsgs.length === 0) {
+        console.warn('[agent-message] Batch mode: failed to load messages', { ids: body.message_ids, error: batchErr });
+        return new Response(
+          JSON.stringify({ error: "Failed to load batch messages", code: "BATCH_LOAD_FAILED" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+      message = buildBatchContent(batchMsgs);
+      console.log('[agent-message] Batch mode: combined', batchMsgs.length, 'messages into', message.length, 'chars');
+    } else {
+      message = body.message;
+    }
 
     // 1. IDENTIFY TENANT — organization_id is REQUIRED (security boundary).
     if (!organization_id || typeof organization_id !== 'string') {
@@ -98,9 +99,12 @@ Deno.serve(withSentry('agent-message', async (req) => {
       );
     }
 
-    // 0.9. DEDUP GATE — prevent duplicate processing from concurrent webhook events
-    if (!acquireProcessingLock(from, organization_id)) {
-      console.log('[agent-message] Skipping duplicate — already processing:', { from, organization_id });
+    // 0.9. DEDUP GATE — DB-level lock, cross-isolate safe (replaces in-memory inFlightMap)
+    const { data: lockAcquired } = await supabase
+      .rpc("acquire_copilot_lock", { p_phone: from, p_organization_id: organization_id });
+
+    if (!lockAcquired) {
+      console.log('[agent-message] Lock denied — already processing:', { from, organization_id });
       return new Response(
         JSON.stringify({ skipped: true, reason: "dedup_concurrent", from }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
@@ -346,15 +350,31 @@ Deno.serve(withSentry('agent-message', async (req) => {
       payloadSnapshot: { channel, action: response.action, hasMessage: !!response.message },
     });
 
-    // 5. RETURN RESPONSE (strip internal _eval_meta before sending)
+    // 5.5. POST-LLM ABSORB LOOP — pick up messages that arrived during LLM processing
+    try {
+      const { iterations, messagesProcessed } = await absorbPendingMessages({
+        supabase,
+        engine,
+        leadId: lead.id,
+        from,
+        organizationId,
+      });
+      if (iterations > 0) {
+        console.log('[agent-message] Absorb loop:', { iterations, messagesProcessed });
+      }
+    } catch (absorbErr) {
+      // Absorb loop failure is non-fatal — primary response already generated
+      console.warn('[agent-message] Absorb loop failed (non-fatal):', absorbErr);
+    }
+
+    // 6. RETURN RESPONSE (strip internal _eval_meta before sending)
     const { _eval_meta: _unused, ...publicResponse } = response as any;
     return new Response(JSON.stringify(publicResponse), {
       headers: { ...corsHeaders, "Content-Type": "application/json" }
     });
 
   } catch (error) {
-    // Release dedup lock on error so retries can work
-    releaseProcessingLock(from, organization_id);
+    // DB lock expires naturally after 60s — no manual release needed
     console.error('[agent-message] Error:', error);
     await logRuntime({
       module: 'copilot',

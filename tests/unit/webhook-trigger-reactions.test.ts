@@ -88,10 +88,14 @@ vi.mock("../../supabase/functions/_shared/whatsapp-dispatch.ts", () => ({
 const mockRpc = vi.fn(async () => ({ error: null }));
 const mockUpsert = vi.fn(async () => ({ error: null }));
 const mockInsert = vi.fn(async () => ({ error: null }));
+const mockQueueInsert = vi.fn(async () => ({ error: null }));
 
 const mockSupabase = {
   rpc: mockRpc,
   from: vi.fn((table: string) => {
+    if (table === "copilot_message_queue") {
+      return { insert: mockQueueInsert };
+    }
     if (table === "whatsapp_messages") {
       return { upsert: mockUpsert };
     }
@@ -144,6 +148,7 @@ const { triggerReactions } = mod as unknown as {
       shouldResolveWaitResponse: boolean;
       isGroup: boolean;
       replaySource: string | null;
+      conversationId?: string | null;
     },
   ) => Promise<void>;
 };
@@ -153,6 +158,7 @@ const { triggerReactions } = mod as unknown as {
 describe("triggerReactions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockQueueInsert.mockResolvedValue({ error: null });
     mockFetch.mockResolvedValue({
       ok: true,
       json: async () => ({ messages: ["Oi! Como posso ajudar?"] }),
@@ -176,9 +182,11 @@ describe("triggerReactions", () => {
     push_name: "Lead Test",
   };
 
-  // ─── Scenario 1: Copilot dispatched ──────────────────────────────────────
+  // ─── Scenario 1: Copilot fallback (queue fails → direct fetch) ───────────
 
-  it("dispatches copilot (agent-message fetch) with correct payload for valid incoming message", async () => {
+  it("falls back to agent-message fetch when queue insert fails", async () => {
+    mockQueueInsert.mockResolvedValueOnce({ error: { message: "queue_down" } });
+
     await triggerReactions(mockSupabase, basePersisted, {
       shouldTriggerCopilot: true,
       shouldResolveWaitResponse: true,
@@ -299,8 +307,9 @@ describe("triggerReactions", () => {
 
   // ─── Scenario 6: Copilot cancellation mid-delivery ──────────────────────
 
-  it("aborts delivery when isCopilotCanceled returns canceled after first chunk", async () => {
+  it("aborts delivery when isCopilotCanceled returns canceled after first chunk (fallback path)", async () => {
     vi.useFakeTimers();
+    mockQueueInsert.mockResolvedValueOnce({ error: { message: "queue_down" } });
 
     // Agent returns 2 parts
     mockFetch.mockResolvedValueOnce({
@@ -365,7 +374,26 @@ describe("triggerReactions", () => {
 
   // ─── Additional: logs copilot dispatch action ───────────────────────────
 
-  it("logs uazapi_agent_message_dispatched on copilot dispatch", async () => {
+  it("logs copilot_queued on successful queue insert", async () => {
+    await triggerReactions(mockSupabase, basePersisted, {
+      shouldTriggerCopilot: true,
+      shouldResolveWaitResponse: false,
+      isGroup: false,
+      replaySource: null,
+    });
+
+    expect(mockLogRuntime).toHaveBeenCalledWith(
+      expect.objectContaining({
+        module: "webhook",
+        action: "copilot_queued",
+        status: "success",
+      }),
+    );
+  });
+
+  it("logs uazapi_agent_message_dispatched on fallback dispatch", async () => {
+    mockQueueInsert.mockResolvedValueOnce({ error: { message: "queue_down" } });
+
     await triggerReactions(mockSupabase, basePersisted, {
       shouldTriggerCopilot: true,
       shouldResolveWaitResponse: false,
@@ -380,5 +408,87 @@ describe("triggerReactions", () => {
         status: "success",
       }),
     );
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Queue-based copilot dispatch tests (#203)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  describe("copilot queue dispatch", () => {
+    it("does NOT insert into queue when shouldTriggerCopilot is false", async () => {
+      await triggerReactions(mockSupabase, basePersisted, {
+        shouldTriggerCopilot: false,
+        shouldResolveWaitResponse: true,
+        isGroup: false,
+        replaySource: null,
+        conversationId: "conv-abc-123",
+      });
+
+      expect(mockQueueInsert).not.toHaveBeenCalled();
+    });
+
+    it("does NOT insert into queue for group messages", async () => {
+      await triggerReactions(mockSupabase, basePersisted, {
+        shouldTriggerCopilot: true,
+        shouldResolveWaitResponse: true,
+        isGroup: true,
+        replaySource: null,
+        conversationId: "conv-abc-123",
+      });
+
+      expect(mockQueueInsert).not.toHaveBeenCalled();
+    });
+
+    it("inserts into copilot_message_queue with correct fields for eligible message", async () => {
+      await triggerReactions(mockSupabase, basePersisted, {
+        shouldTriggerCopilot: true,
+        shouldResolveWaitResponse: false,
+        isGroup: false,
+        replaySource: null,
+        conversationId: "conv-abc-123",
+      });
+
+      expect(mockSupabase.from).toHaveBeenCalledWith("copilot_message_queue");
+      expect(mockQueueInsert).toHaveBeenCalledWith({
+        organization_id: "org-1",
+        conversation_id: "conv-abc-123",
+        message_id: "msg-123",
+        phone: "5547999999999",
+      });
+    });
+
+    it("does NOT call agent-message directly when queue insert succeeds", async () => {
+      // mockQueueInsert returns { error: null } by default (success)
+      await triggerReactions(mockSupabase, basePersisted, {
+        shouldTriggerCopilot: true,
+        shouldResolveWaitResponse: false,
+        isGroup: false,
+        replaySource: null,
+        conversationId: "conv-abc-123",
+      });
+
+      expect(mockQueueInsert).toHaveBeenCalled();
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it("falls back to direct agent-message fetch when queue insert fails", async () => {
+      mockQueueInsert.mockResolvedValueOnce({ error: { message: "relation does not exist" } });
+
+      await triggerReactions(mockSupabase, basePersisted, {
+        shouldTriggerCopilot: true,
+        shouldResolveWaitResponse: false,
+        isGroup: false,
+        replaySource: null,
+        conversationId: "conv-abc-123",
+      });
+
+      // Queue was attempted
+      expect(mockQueueInsert).toHaveBeenCalled();
+      // Fallback fetch fired
+      expect(mockFetch).toHaveBeenCalledWith(
+        "https://local.supabase.test/functions/v1/agent-message",
+        expect.objectContaining({ method: "POST" }),
+      );
+    });
   });
 });

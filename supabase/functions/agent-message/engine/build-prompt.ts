@@ -37,6 +37,29 @@ export interface BuildPromptParams {
   currentLeadId: string | null;
   conversationContext: ConversationContextSummary | null;
   incomingMessageType: string;
+  sentDocuments?: Array<{ fileName: string; documentId: string }>;
+}
+
+/**
+ * Gera a seção de prompt que lista documentos já enviados nesta conversa.
+ * Retorna string vazia se nenhum documento foi enviado (seção omitida).
+ */
+export function buildSentDocumentsSection(
+  sentDocuments?: { fileName: string; documentId: string }[],
+): string {
+  if (!sentDocuments || sentDocuments.length === 0) return "";
+
+  const lines: string[] = [];
+  lines.push("## Documentos já enviados nesta conversa");
+  lines.push("");
+  lines.push(
+    "Os seguintes documentos já foram enviados ao lead nesta conversa. Não reenvie os mesmos documentos. Se o lead perguntar novamente sobre o conteúdo, confirme que já enviou e ofereça esclarecer dúvidas.",
+  );
+  lines.push("");
+  for (const doc of sentDocuments) {
+    lines.push(`- ${doc.fileName} (ID: ${doc.documentId})`);
+  }
+  return lines.join("\n");
 }
 
 export async function buildDynamicPrompt(params: BuildPromptParams): Promise<string> {
@@ -51,6 +74,7 @@ export async function buildDynamicPrompt(params: BuildPromptParams): Promise<str
     currentLeadId,
     conversationContext,
     incomingMessageType,
+    sentDocuments,
   } = params;
 
   const sections: string[] = [];
@@ -370,6 +394,16 @@ export async function buildDynamicPrompt(params: BuildPromptParams): Promise<str
     sections.push(
       "- Fale naturalmente — nunca mencione 'base de conhecimento', 'documento' ou 'ferramenta de busca'.",
     );
+    sections.push("");
+  }
+
+  // =====================================================
+  // 1.51 DOCUMENTOS JÁ ENVIADOS (soft dedup — LLM awareness)
+  // =====================================================
+  const sentDocsSection = buildSentDocumentsSection(sentDocuments);
+  if (sentDocsSection) {
+    sections.push("");
+    sections.push(sentDocsSection);
     sections.push("");
   }
 

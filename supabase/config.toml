@@ -122,7 +122,11 @@ verify_jwt = false
 [functions.retry-dead-letter-jobs]
 verify_jwt = false
 
-# process-ai-actions: chamado por pg_cron; autenticação via x-cron-secret  
+# copilot-batch-processor: chamado por trigger pg_net; autenticação via x-cron-secret
+[functions.copilot-batch-processor]
+verify_jwt = false
+
+# process-ai-actions: chamado por pg_cron; autenticação via x-cron-secret
 [functions.process-ai-actions]
 verify_jwt = false
 
