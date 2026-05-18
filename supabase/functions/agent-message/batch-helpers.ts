@@ -5,6 +5,8 @@
  * without spinning up the full Deno edge function.
  */
 
+import { captureMessage } from "../_shared/sentry.ts";
+
 /**
  * Concatenate an array of channel_messages into a single string
  * for the LLM to process as one turn.
@@ -75,6 +77,17 @@ export async function absorbPendingMessages(opts: {
       .in("id", claimed.map((r: any) => r.id));
 
     iterations++;
+  }
+
+  if (iterations > 0) {
+    captureMessage("copilot_absorb_completed", {
+      functionName: "agent-message",
+      organizationId,
+      tags: {
+        "copilot.absorb_iterations": iterations,
+        "copilot.lock_source": "db",
+      },
+    }).catch(() => {});
   }
 
   return { iterations, messagesProcessed };

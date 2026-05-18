@@ -12,6 +12,7 @@ import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import type { ActionResult } from "./types.ts";
 import { resolveDispatchContext, DispatchResolutionError } from "../whatsapp-dispatch.ts";
 import { isCopilotCanceled, logCopilotCancellation } from "../copilot/cancellation.ts";
+import { captureMessage } from "../sentry.ts";
 
 /**
  * Checks if a document was already sent (status=completed) in a conversation.
@@ -34,9 +35,20 @@ export async function checkDocumentAlreadySent(
   if (!data || data.length === 0) return false;
 
   // Filter by document_id in payload (JSONB — can't filter server-side with .eq)
-  return data.some(
+  const isDuplicate = data.some(
     (row: any) => (row.payload as Record<string, unknown>)?.document_id === documentId,
   );
+
+  if (isDuplicate) {
+    captureMessage("copilot_duplicate_document_blocked", {
+      tags: {
+        "copilot.document_id": documentId,
+        "copilot.conversation_id": conversationId,
+      },
+    }).catch(() => {});
+  }
+
+  return isDuplicate;
 }
 
 export async function executeSendDocument(
