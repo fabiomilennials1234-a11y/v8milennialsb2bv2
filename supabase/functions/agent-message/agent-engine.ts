@@ -174,6 +174,26 @@ export class AgentEngine {
 
     this.conversationContext = contextResult;
 
+    // 2.5 Query sent documents for dedup awareness (depends on conversation.id)
+    let sentDocuments: Array<{ fileName: string; documentId: string }> = [];
+    if (conversation.id && !conversation.id.startsWith("temp_")) {
+      try {
+        const { data: sentDocs } = await this.supabase
+          .from("pending_ai_actions")
+          .select("payload")
+          .eq("conversation_id", conversation.id)
+          .eq("action_type", "send_document")
+          .eq("status", "completed");
+
+        sentDocuments = (sentDocs || []).map((d: any) => ({
+          fileName: d.payload?.file_name || d.payload?.document_id || "unknown",
+          documentId: d.payload?.document_id || "",
+        }));
+      } catch (e) {
+        console.warn("[AgentEngine] Failed to load sent documents (non-fatal):", e);
+      }
+    }
+
     // 3. Update Short-Term Memory
     console.log('[AgentEngine] Step 3: Adding message to memory...');
     await this.addMessageToMemory(conversation.id, 'user', userMessage);
@@ -192,6 +212,7 @@ export class AgentEngine {
       currentLeadId: this.currentLeadId,
       conversationContext: this.conversationContext,
       incomingMessageType: this.incomingMessageType,
+      sentDocuments,
     });
 
     // Onda 1 / T1.3.3: log tamanho do prompt para detectar truncagem silenciosa

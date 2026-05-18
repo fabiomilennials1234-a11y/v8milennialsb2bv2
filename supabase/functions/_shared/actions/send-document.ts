@@ -13,6 +13,32 @@ import type { ActionResult } from "./types.ts";
 import { resolveDispatchContext, DispatchResolutionError } from "../whatsapp-dispatch.ts";
 import { isCopilotCanceled, logCopilotCancellation } from "../copilot/cancellation.ts";
 
+/**
+ * Checks if a document was already sent (status=completed) in a conversation.
+ * Used as hard dedup gate before dispatching the actual send.
+ *
+ * Scope: per conversation_id — same doc blocked for entire conversation lifetime.
+ */
+export async function checkDocumentAlreadySent(
+  supabase: SupabaseClient,
+  conversationId: string,
+  documentId: string,
+): Promise<boolean> {
+  const { data } = await supabase
+    .from("pending_ai_actions")
+    .select("id, payload")
+    .eq("conversation_id", conversationId)
+    .eq("action_type", "send_document")
+    .eq("status", "completed");
+
+  if (!data || data.length === 0) return false;
+
+  // Filter by document_id in payload (JSONB — can't filter server-side with .eq)
+  return data.some(
+    (row: any) => (row.payload as Record<string, unknown>)?.document_id === documentId,
+  );
+}
+
 export async function executeSendDocument(
   supabase: SupabaseClient,
   payload: Record<string, unknown>,
@@ -28,6 +54,19 @@ export async function executeSendDocument(
   }
   if (!leadId) {
     return { success: false, error: "lead_id is required to send document" };
+  }
+
+  // 0. Dedup gate — block duplicate document sends per conversation lifetime.
+  if (conversationId) {
+    const alreadySent = await checkDocumentAlreadySent(supabase, conversationId, documentId);
+    if (alreadySent) {
+      console.debug("[executeSendDocument] Duplicate document skipped:", { conversationId, documentId });
+      return {
+        success: true,
+        message: "Document already sent in this conversation — skipped",
+        data: { skipped: true, reason: "duplicate_document" },
+      };
+    }
   }
 
   // 1. Buscar documento e metadados
