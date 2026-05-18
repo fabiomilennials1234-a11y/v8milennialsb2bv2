@@ -75,6 +75,46 @@ function checkRateLimit(ip: string): { allowed: boolean; remaining: number } {
 // ============================================================================
 
 // ============================================================================
+// Interfaces — pipeline types
+// ============================================================================
+
+export interface NormalizedMessage {
+  organization_id: string;
+  instance_id: string;
+  message_id: string | null;
+  remote_jid: string;
+  phone_number: string | null;
+  direction: string;
+  message_type: string;
+  content: string | null;
+  media_url: string | null;
+  push_name: string | null;
+  status: string;
+  timestamp: string;
+  raw_payload: Record<string, unknown>;
+  is_group: boolean;
+  received_via?: string;
+}
+
+export interface PersistedMessage {
+  organization_id: string;
+  instance_id: string;
+  message_id: string;
+  phone_number: string;
+  content: string | null;
+  direction: string;
+  message_type: string;
+  push_name: string | null;
+}
+
+export interface ReactionContext {
+  shouldTriggerCopilot: boolean;
+  shouldResolveWaitResponse: boolean;
+  isGroup: boolean;
+  replaySource: string | null;
+}
+
+// ============================================================================
 // Event handlers
 // ============================================================================
 
@@ -183,16 +223,19 @@ async function enqueueDlq(
     event: string;
     reason: string;
     payload: unknown;
+    resolved_instance_id?: string;
   },
 ): Promise<void> {
   try {
-    const { error } = await supabase.from("whatsapp_webhook_dlq").insert({
+    const row: Record<string, unknown> = {
       source_ip: input.source_ip,
       url_path: input.url_path,
       event: input.event,
       reason: input.reason,
       payload: input.payload as Record<string, unknown>,
-    });
+    };
+    if (input.resolved_instance_id) row.resolved_instance_id = input.resolved_instance_id;
+    const { error } = await supabase.from("whatsapp_webhook_dlq").insert(row);
     if (error) {
       console.error("[whatsapp-webhook] dlq insert failed:", error.message);
     }
@@ -385,25 +428,236 @@ function normalizeMessage(data: any, instance: ResolvedInstance) {
   };
 }
 
-async function handleMessagesEvent(
+// ============================================================================
+// triggerReactions — fire-and-forget reactions after message persistence
+// ============================================================================
+
+/**
+ * Dispatches post-persist reactions: workflow resolution + copilot AI response.
+ * All errors are swallowed — webhook always returns 200.
+ */
+export async function triggerReactions(
   supabase: ReturnType<typeof createClient>,
-  instance: ResolvedInstance,
-  data: any,
-  receivedVia: "webhook" | "dlq_replay" = "webhook",
-) {
-  const normalized: any = normalizeMessage(data, instance);
-  normalized.received_via = receivedVia;
-  if (!normalized.message_id) {
-    await logRuntime({
-      organizationId: instance.organization_id,
-      module: "webhook",
-      action: "uazapi_missing_message_id",
-      status: "error",
-      payloadSnapshot: { instance_id: instance.id, type: normalized.message_type },
-    });
-    return;
+  persisted: PersistedMessage,
+  context: ReactionContext,
+): Promise<void> {
+  // Groups: persist-only, no downstream reactions
+  if (context.isGroup) return;
+
+  // 1. Resolve waiting workflow executions (fire-and-forget)
+  if (context.shouldResolveWaitResponse) {
+    supabase
+      .rpc("resolve_wait_response_by_phone", {
+        p_phone: persisted.phone_number,
+        p_organization_id: persisted.organization_id,
+        p_channel: "whatsapp",
+      })
+      .then(({ error }) => {
+        if (error) {
+          void logRuntime({
+            organizationId: persisted.organization_id,
+            module: "workflow",
+            action: "resolve_wait_response_failed",
+            status: "error",
+            payloadSnapshot: {
+              instance_id: persisted.instance_id,
+              error: error.message,
+            },
+          });
+        }
+      });
   }
 
+  // 2. Copilot dispatch — agent-message + chunked delivery
+  if (!context.shouldTriggerCopilot) return;
+
+  const agentMessagePayload = {
+    from: persisted.phone_number,
+    message: persisted.content,
+    channel: "whatsapp",
+    organization_id: persisted.organization_id,
+    push_name: persisted.push_name,
+    incoming_message_type: persisted.message_type,
+  };
+
+  fetch(`${SUPABASE_URL}/functions/v1/agent-message`, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${SERVICE_ROLE_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(agentMessagePayload),
+  })
+    .then(async (res) => {
+      if (!res.ok) {
+        console.error(
+          `[whatsapp-webhook] agent-message returned ${res.status} for message ${persisted.message_id}`,
+        );
+        void logRuntime({
+          organizationId: persisted.organization_id,
+          module: "webhook",
+          action: "uazapi_agent_message_failed",
+          status: "error",
+          payloadSnapshot: {
+            instance_id: persisted.instance_id,
+            message_id: persisted.message_id,
+            http_status: res.status,
+          },
+        });
+        return;
+      }
+
+      const agentData = await res.json().catch(() => null);
+      if (!agentData || agentData.skipped) return;
+
+      const parts: string[] = agentData.messages ?? (agentData.message ? [agentData.message] : []);
+      if (parts.length === 0) return;
+
+      try {
+        const { sendTextViaInstance } = await import("../_shared/whatsapp-dispatch.ts");
+        const { data: fullInstance } = await supabase
+          .from("whatsapp_instances")
+          .select("*")
+          .eq("id", persisted.instance_id)
+          .maybeSingle();
+        if (!fullInstance) {
+          console.error("[whatsapp-webhook] Instance not found for AI response delivery:", persisted.instance_id);
+          return;
+        }
+
+        let chunksSent = 0;
+        let canceledMidDelivery = false;
+        for (let i = 0; i < parts.length; i++) {
+          const text = parts[i]?.trim();
+          if (!text) continue;
+
+          if (i > 0) await new Promise((r) => setTimeout(r, 1200 + Math.random() * 800));
+
+          // RC-cancel: per-part cancellation gate
+          const cancelCheck = await isCopilotCanceled(
+            supabase,
+            persisted.organization_id,
+            persisted.phone_number,
+          );
+          if (cancelCheck.canceled) {
+            canceledMidDelivery = true;
+            logCopilotCancellation({
+              organizationId: persisted.organization_id,
+              gate: "outbound_chunks",
+              phone: persisted.phone_number,
+              chunksSent,
+              chunksTotal: parts.length,
+              source: cancelCheck.source,
+            });
+            console.log(
+              `[whatsapp-webhook] Copilot canceled mid-delivery; aborting after ${chunksSent} of ${parts.length} part(s)`,
+            );
+            break;
+          }
+
+          const sendResult = await sendTextViaInstance(
+            supabase, fullInstance, persisted.phone_number, text,
+            { trackSource: "copilot" },
+          );
+
+          const msgId = sendResult.messageId
+            ?? `agent_wh_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+
+          await supabase.from("whatsapp_messages").upsert({
+            organization_id: persisted.organization_id,
+            instance_id: persisted.instance_id,
+            message_id: msgId,
+            remote_jid: `${persisted.phone_number}@s.whatsapp.net`,
+            phone_number: persisted.phone_number,
+            direction: "outgoing",
+            message_type: "text",
+            content: text,
+            status: sendResult.success ? "sent" : "failed",
+            timestamp: new Date().toISOString(),
+            sent_by_ai: true,
+            sent_source: "copilot",
+          }, { onConflict: "message_id,instance_id", ignoreDuplicates: true });
+
+          if (!sendResult.success) {
+            console.error("[whatsapp-webhook] AI response send failed:", sendResult.error);
+            void logRuntime({
+              organizationId: persisted.organization_id,
+              module: "webhook",
+              action: "copilot_response_send_failed",
+              status: "error",
+              payloadSnapshot: {
+                instance_id: persisted.instance_id,
+                phone: persisted.phone_number,
+                error: sendResult.error,
+                part: i,
+              },
+            });
+          } else {
+            chunksSent++;
+          }
+        }
+
+        if (canceledMidDelivery) {
+          console.log(`[whatsapp-webhook] AI response partial: ${chunksSent} of ${parts.length} part(s) delivered before cancellation`);
+        } else {
+          console.log(`[whatsapp-webhook] AI response delivered: ${parts.length} part(s) to ${persisted.phone_number}`);
+        }
+      } catch (deliveryErr) {
+        console.error("[whatsapp-webhook] AI response delivery error:", deliveryErr);
+        void logRuntime({
+          organizationId: persisted.organization_id,
+          module: "webhook",
+          action: "copilot_response_delivery_error",
+          status: "error",
+          payloadSnapshot: {
+            instance_id: persisted.instance_id,
+            phone: persisted.phone_number,
+            error: deliveryErr instanceof Error ? deliveryErr.message : String(deliveryErr),
+          },
+        });
+      }
+    })
+    .catch((err) => {
+      console.error(
+        `[whatsapp-webhook] agent-message fetch threw for message ${persisted.message_id}:`,
+        err,
+      );
+      void logRuntime({
+        organizationId: persisted.organization_id,
+        module: "webhook",
+        action: "uazapi_agent_message_error",
+        status: "error",
+        payloadSnapshot: {
+          instance_id: persisted.instance_id,
+          message_id: persisted.message_id,
+          error: err instanceof Error ? err.message : String(err),
+        },
+      });
+    });
+
+  void logRuntime({
+    organizationId: persisted.organization_id,
+    module: "webhook",
+    action: "uazapi_agent_message_dispatched",
+    status: "success",
+    payloadSnapshot: {
+      instance_id: persisted.instance_id,
+      message_id: persisted.message_id,
+      channel: "whatsapp",
+    },
+  });
+}
+
+// ============================================================================
+// persistMessage — upsert normalized message into whatsapp_messages
+// ============================================================================
+
+export async function persistMessage(
+  supabase: ReturnType<typeof createClient>,
+  instance: ResolvedInstance,
+  normalized: NormalizedMessage,
+  replayTag: string | null,
+): Promise<PersistedMessage | null> {
   // Group messages: capture-by-default (BL-WA-05) but skip downstream lead /
   // copilot / pipeline side-effects. Org can opt out via
   // organizations.capture_groups = false (restores legacy drop behavior).
@@ -433,7 +687,7 @@ async function handleMessagesEvent(
           reason: "capture_groups_off",
         },
       });
-      return;
+      return null;
     }
   }
 
@@ -452,12 +706,18 @@ async function handleMessagesEvent(
       status: "error",
       payloadSnapshot: { instance_id: instance.id, error: error.message },
     });
-    return;
+    await enqueueDlq(supabase, {
+      source_ip: null,
+      url_path: "",
+      event: "messages",
+      reason: "upsert_failed",
+      payload: normalized as unknown as Record<string, unknown>,
+      resolved_instance_id: instance.id,
+    });
+    return null;
   }
 
   // Best-effort: download encrypted WhatsApp CDN media and persist to Storage.
-  // Fire-and-forget — webhook still returns 200 immediately. Failures land in
-  // whatsapp_media_jobs which is drained every 2 minutes by whatsapp-media-retry.
   if (normalized.media_url && isWhatsAppCdnUrlShared(normalized.media_url) && normalized.message_id) {
     persistMediaToStorage(
       supabase,
@@ -468,8 +728,7 @@ async function handleMessagesEvent(
     ).catch((err) => console.error(`[webhook] media persist fire-forget:`, err));
   }
 
-  // Group messages: persist + log, then skip lead / workflow / copilot /
-  // pipeline side-effects. They have no individual sender to attach a lead to.
+  // Group messages: persist + log, then signal "no reactions"
   if (normalized.is_group) {
     await logRuntime({
       organizationId: instance.organization_id,
@@ -482,233 +741,59 @@ async function handleMessagesEvent(
         message_id: normalized.message_id,
       },
     });
+    return null;
+  }
+
+  return {
+    organization_id: normalized.organization_id,
+    instance_id: normalized.instance_id,
+    message_id: normalized.message_id!,
+    phone_number: normalized.phone_number!,
+    content: normalized.content,
+    direction: normalized.direction,
+    message_type: normalized.message_type,
+    push_name: normalized.push_name,
+  };
+}
+
+// ============================================================================
+// handleMessagesEvent — ~20 LOC pipeline
+// ============================================================================
+
+async function handleMessagesEvent(
+  supabase: ReturnType<typeof createClient>,
+  instance: ResolvedInstance,
+  data: any,
+  receivedVia: "webhook" | "dlq_replay" = "webhook",
+) {
+  const normalized = normalizeMessage(data, instance) as NormalizedMessage;
+  normalized.received_via = receivedVia;
+
+  if (!normalized.message_id) {
+    await logRuntime({
+      organizationId: instance.organization_id,
+      module: "webhook",
+      action: "uazapi_missing_message_id",
+      status: "error",
+      payloadSnapshot: { instance_id: instance.id, type: normalized.message_type },
+    });
     return;
   }
 
-  // Resolve any waiting workflow executions for this phone — must run BEFORE
-  // agent-message dispatch so the workflow advances to its "replied" branch
-  // before further automation kicks in. Fire-and-forget; failures are logged
-  // but never break the webhook (idempotent — RPC is safe to call when nothing waits).
-  if (normalized.direction === "incoming" && normalized.phone_number) {
-    supabase
-      .rpc("resolve_wait_response_by_phone", {
-        p_phone: normalized.phone_number,
-        p_organization_id: instance.organization_id,
-        p_channel: "whatsapp",
-      })
-      .then(({ error }) => {
-        if (error) {
-          void logRuntime({
-            organizationId: instance.organization_id,
-            module: "workflow",
-            action: "resolve_wait_response_failed",
-            status: "error",
-            payloadSnapshot: {
-              instance_id: instance.id,
-              error: error.message,
-            },
-          });
-        }
-      });
-  }
+  const persisted = await persistMessage(
+    supabase, instance, normalized,
+    receivedVia === "dlq_replay" ? "dlq_replay" : null,
+  );
+  if (!persisted) return; // DLQ'd, group-only, or upsert failed
 
-  // Bridge to Copilot — previously missing: whatsapp-webhook only persisted
-  // messages and never invoked agent-message, leaving Uazapi-backed orgs with
-  // a silent Copilot. Parity with sz-chat-webhook and evolution-webhook.
-  //
-  // Rules:
-  //   - only incoming messages (outgoing echoes are already filtered by
-  //     excludeMessages in Uazapi, but guard defensively)
-  //   - must have text content (media without caption is skipped for now)
-  //   - fire-and-forget: we do not await to keep webhook latency low.
-  //     agent-message itself handles ai_disabled / WAITING_HUMAN / batching.
-  if (
-    normalized.direction === "incoming" &&
-    normalized.content &&
-    normalized.content.trim().length > 0 &&
-    normalized.phone_number
-  ) {
-    const agentMessagePayload = {
-      from: normalized.phone_number,
-      message: normalized.content,
-      channel: "whatsapp",
-      organization_id: instance.organization_id,
-      push_name: normalized.push_name,
-      incoming_message_type: normalized.message_type,
-    };
+  if (normalized.is_group) return; // groups: persist only
 
-    // Dispatch to agent-message and deliver AI response via WhatsApp.
-    // The webhook returns 200 immediately; this runs in the background.
-    fetch(`${SUPABASE_URL}/functions/v1/agent-message`, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${SERVICE_ROLE_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(agentMessagePayload),
-    })
-      .then(async (res) => {
-        if (!res.ok) {
-          console.error(
-            `[whatsapp-webhook] agent-message returned ${res.status} for message ${normalized.message_id}`,
-          );
-          void logRuntime({
-            organizationId: instance.organization_id,
-            module: "webhook",
-            action: "uazapi_agent_message_failed",
-            status: "error",
-            payloadSnapshot: {
-              instance_id: instance.id,
-              message_id: normalized.message_id,
-              http_status: res.status,
-            },
-          });
-          return;
-        }
-
-        const agentData = await res.json().catch(() => null);
-        if (!agentData || agentData.skipped) return;
-
-        const parts: string[] = agentData.messages ?? (agentData.message ? [agentData.message] : []);
-        if (parts.length === 0) return;
-
-        try {
-          const { sendTextViaInstance } = await import("../_shared/whatsapp-dispatch.ts");
-          const { data: fullInstance } = await supabase
-            .from("whatsapp_instances")
-            .select("*")
-            .eq("id", instance.id)
-            .maybeSingle();
-          if (!fullInstance) {
-            console.error("[whatsapp-webhook] Instance not found for AI response delivery:", instance.id);
-            return;
-          }
-
-          let chunksSent = 0;
-          let canceledMidDelivery = false;
-          for (let i = 0; i < parts.length; i++) {
-            const text = parts[i]?.trim();
-            if (!text) continue;
-
-            if (i > 0) await new Promise((r) => setTimeout(r, 1200 + Math.random() * 800));
-
-            // RC-cancel: per-part cancellation gate. User may toggle "IA
-            // desligada" between agent-message return and full delivery; abort
-            // remaining parts so the lead does not keep receiving AI messages
-            // after the switch was flipped off.
-            const cancelCheck = await isCopilotCanceled(
-              supabase,
-              instance.organization_id,
-              normalized.phone_number,
-            );
-            if (cancelCheck.canceled) {
-              canceledMidDelivery = true;
-              logCopilotCancellation({
-                organizationId: instance.organization_id,
-                gate: "outbound_chunks",
-                phone: normalized.phone_number,
-                chunksSent,
-                chunksTotal: parts.length,
-                source: cancelCheck.source,
-              });
-              console.log(
-                `[whatsapp-webhook] Copilot canceled mid-delivery; aborting after ${chunksSent} of ${parts.length} part(s)`,
-              );
-              break;
-            }
-
-            const sendResult = await sendTextViaInstance(
-              supabase, fullInstance, normalized.phone_number, text,
-              { trackSource: "copilot" },
-            );
-
-            const msgId = sendResult.messageId
-              ?? `agent_wh_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-
-            await supabase.from("whatsapp_messages").upsert({
-              organization_id: instance.organization_id,
-              instance_id: instance.id,
-              message_id: msgId,
-              remote_jid: `${normalized.phone_number}@s.whatsapp.net`,
-              phone_number: normalized.phone_number,
-              direction: "outgoing",
-              message_type: "text",
-              content: text,
-              status: sendResult.success ? "sent" : "failed",
-              timestamp: new Date().toISOString(),
-              sent_by_ai: true,
-              sent_source: "copilot",
-            }, { onConflict: "message_id,instance_id", ignoreDuplicates: true });
-
-            if (!sendResult.success) {
-              console.error("[whatsapp-webhook] AI response send failed:", sendResult.error);
-              void logRuntime({
-                organizationId: instance.organization_id,
-                module: "webhook",
-                action: "copilot_response_send_failed",
-                status: "error",
-                payloadSnapshot: {
-                  instance_id: instance.id,
-                  phone: normalized.phone_number,
-                  error: sendResult.error,
-                  part: i,
-                },
-              });
-            } else {
-              chunksSent++;
-            }
-          }
-
-          if (canceledMidDelivery) {
-            console.log(`[whatsapp-webhook] AI response partial: ${chunksSent} of ${parts.length} part(s) delivered before cancellation`);
-          } else {
-            console.log(`[whatsapp-webhook] AI response delivered: ${parts.length} part(s) to ${normalized.phone_number}`);
-          }
-        } catch (deliveryErr) {
-          console.error("[whatsapp-webhook] AI response delivery error:", deliveryErr);
-          void logRuntime({
-            organizationId: instance.organization_id,
-            module: "webhook",
-            action: "copilot_response_delivery_error",
-            status: "error",
-            payloadSnapshot: {
-              instance_id: instance.id,
-              phone: normalized.phone_number,
-              error: deliveryErr instanceof Error ? deliveryErr.message : String(deliveryErr),
-            },
-          });
-        }
-      })
-      .catch((err) => {
-        console.error(
-          `[whatsapp-webhook] agent-message fetch threw for message ${normalized.message_id}:`,
-          err,
-        );
-        void logRuntime({
-          organizationId: instance.organization_id,
-          module: "webhook",
-          action: "uazapi_agent_message_error",
-          status: "error",
-          payloadSnapshot: {
-            instance_id: instance.id,
-            message_id: normalized.message_id,
-            error: err instanceof Error ? err.message : String(err),
-          },
-        });
-      });
-
-    void logRuntime({
-      organizationId: instance.organization_id,
-      module: "webhook",
-      action: "uazapi_agent_message_dispatched",
-      status: "success",
-      payloadSnapshot: {
-        instance_id: instance.id,
-        message_id: normalized.message_id,
-        channel: "whatsapp",
-      },
-    });
-  }
+  await triggerReactions(supabase, persisted, {
+    shouldTriggerCopilot: normalized.direction === "incoming" && !!normalized.content && normalized.content.trim().length > 0 && !!normalized.phone_number,
+    shouldResolveWaitResponse: normalized.direction === "incoming" && !!normalized.phone_number,
+    isGroup: normalized.is_group,
+    replaySource: receivedVia === "dlq_replay" ? "dlq_replay" : null,
+  });
 }
 
 async function handlePaymentResponseEvent(
