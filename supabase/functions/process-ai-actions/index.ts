@@ -17,6 +17,7 @@ import { trackEvent } from "../_shared/track.ts";
 import { executeAiAction, type ActionRecord } from "../_shared/ai-action-executor.ts";
 import { startJob, finishJob, failJob } from "../_shared/job-tracker.ts";
 import { timingSafeCompare } from "../_shared/auth.ts";
+import { logToolCall } from "../_shared/copilot/tool-call-logger.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -142,6 +143,19 @@ async function processAction(
       timeoutPromise,
     ]).catch((e) => ({ success: false, error: e instanceof Error ? e.message : String(e) }));
     const actionDurationMs = Date.now() - actionStart;
+
+    // RAG observability: log tool call (fire-and-forget)
+    logToolCall(supabase, {
+      conversationId: conversation_id || id, // fallback to action id if no conversation
+      organizationId: organization_id,
+      agentId: (payload as Record<string, unknown>)?.agent_id as string | undefined,
+      toolName: action_type,
+      toolInput: (payload as Record<string, unknown>) || {},
+      toolOutputSummary: result.success
+        ? { success: true, message: result.message }
+        : { success: false, error: result.error },
+      durationMs: actionDurationMs,
+    }).catch(() => {}); // fire-and-forget
 
     if (result.success) {
       // 5a. Sucesso → completed
