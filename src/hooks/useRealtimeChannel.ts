@@ -32,6 +32,7 @@ export interface UseRealtimeChannelOptions {
     cooldownMs?: number;  // default: 120_000
   };
   enabled?: boolean;      // default: true
+  statusKey?: string;     // stable key for realtimeStatusStore (defaults to channel name)
 }
 
 export interface UseRealtimeChannelResult {
@@ -53,7 +54,7 @@ const DEDUP_WINDOW_MS = 1_000;
 export function useRealtimeChannel(
   options: UseRealtimeChannelOptions
 ): UseRealtimeChannelResult {
-  const { table, filter, onEvent, circuitBreaker, enabled = true } = options;
+  const { table, filter, onEvent, circuitBreaker, enabled = true, statusKey } = options;
 
   const threshold = circuitBreaker?.threshold ?? DEFAULT_THRESHOLD;
   const cooldownMs = circuitBreaker?.cooldownMs ?? DEFAULT_COOLDOWN_MS;
@@ -75,6 +76,9 @@ export function useRealtimeChannel(
 
   // Track circuit open state
   const circuitOpenRef = useRef(false);
+
+  // Stable key for status store (falls back to channel name)
+  const statusKeyRef = useRef(statusKey);
 
   // Timer refs for cleanup
   const backoffTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -158,8 +162,10 @@ export function useRealtimeChannel(
 
     const channelName = `rt_${table}_${filter ?? "all"}_${Date.now()}`;
     channelNameRef.current = channelName;
+    statusKeyRef.current = statusKey;
+    const storeKey = statusKey ?? channelName;
 
-    setChannelState(channelName, "joining", undefined);
+    setChannelState(storeKey, "joining", undefined);
     pushDiagnostic("joining");
     stateRef.current = "joining";
     setState("joining");
@@ -180,13 +186,15 @@ export function useRealtimeChannel(
         onEventRef.current(payload);
       })
       .subscribe((status: string, err?: Error) => {
+        const sk = statusKeyRef.current ?? channelNameRef.current;
+
         if (status === "SUBSCRIBED") {
           const wasPolling = stateRef.current === "polling";
           failureCountRef.current = 0;
           circuitOpenRef.current = false;
 
-          resetFailures(channelName);
-          setChannelState(channelName, "joined", undefined);
+          resetFailures(sk);
+          setChannelState(sk, "joined", undefined);
 
           if (wasPolling) {
             pushDiagnostic("joined", { type: "circuit_close" });
@@ -208,18 +216,18 @@ export function useRealtimeChannel(
           const errorMsg = err?.message ?? status;
           failureCountRef.current += 1;
 
-          incrementFailures(channelName, errorMsg);
+          incrementFailures(sk, errorMsg);
 
           if (circuitOpenRef.current || failureCountRef.current >= threshold) {
             circuitOpenRef.current = true;
-            openCircuitBreaker(channelName, errorMsg);
-            setChannelState(channelName, "polling", errorMsg);
+            openCircuitBreaker(sk, errorMsg);
+            setChannelState(sk, "polling", errorMsg);
             pushDiagnostic("polling", { error: errorMsg, type: "circuit_open" });
             setState("polling");
             stateRef.current = "polling";
             scheduleCooldownProbe();
           } else {
-            setChannelState(channelName, "errored", errorMsg);
+            setChannelState(sk, "errored", errorMsg);
             pushDiagnostic("errored", { error: errorMsg });
             setState("errored");
             stateRef.current = "errored";
@@ -232,7 +240,7 @@ export function useRealtimeChannel(
       supabase.removeChannel(channel);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [table, filter, enabled, threshold, cooldownMs, reconnectEpoch]);
+  }, [table, filter, enabled, threshold, cooldownMs, reconnectEpoch, statusKey]);
 
   // ─── Visibility + Online reconnect effect ─────────────────────────────────
 

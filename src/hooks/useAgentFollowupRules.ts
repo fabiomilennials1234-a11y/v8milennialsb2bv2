@@ -12,7 +12,16 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import type { FollowupRule, CustomFieldFilter } from "@/types/copilot";
+import type { FollowupRule, CustomFieldFilter, SequenceStep } from "@/types/copilot";
+
+// DB-level shape for a single cadence step (snake_case)
+interface SequenceStepDB {
+  order: number;
+  delay_hours: number;
+  delay_minutes: number;
+  style: string;
+  message_template: string | null;
+}
 
 // Interface para regra do banco de dados
 interface FollowupRuleDB {
@@ -26,6 +35,7 @@ interface FollowupRuleDB {
   trigger_delay_hours: number;
   trigger_delay_minutes: number;
   max_followups: number;
+  sequence_steps: SequenceStepDB[] | null;
   filter_tags: string[];
   filter_tags_exclude: string[];
   filter_origins: string[];
@@ -47,6 +57,17 @@ interface FollowupRuleDB {
 
 // Converter de DB para frontend
 function dbToFollowupRule(db: FollowupRuleDB): FollowupRule {
+  const sequenceSteps: SequenceStep[] | undefined =
+    db.sequence_steps && db.sequence_steps.length > 0
+      ? db.sequence_steps.map((s) => ({
+          order: s.order,
+          delayHours: s.delay_hours,
+          delayMinutes: s.delay_minutes,
+          style: s.style as SequenceStep["style"],
+          messageTemplate: s.message_template || undefined,
+        }))
+      : undefined;
+
   return {
     id: db.id,
     name: db.name,
@@ -57,6 +78,7 @@ function dbToFollowupRule(db: FollowupRuleDB): FollowupRule {
     triggerDelayHours: db.trigger_delay_hours,
     triggerDelayMinutes: db.trigger_delay_minutes,
     maxFollowups: db.max_followups,
+    sequenceSteps,
     filterTags: db.filter_tags || [],
     filterTagsExclude: db.filter_tags_exclude || [],
     filterOrigins: db.filter_origins || [],
@@ -88,6 +110,17 @@ export function followupRuleToDB(rule: Partial<FollowupRule>, agentId: string): 
     });
   }
 
+  const sequenceStepsDB: SequenceStepDB[] | null =
+    rule.sequenceSteps && rule.sequenceSteps.length > 0
+      ? rule.sequenceSteps.map((s) => ({
+          order: s.order,
+          delay_hours: s.delayHours,
+          delay_minutes: s.delayMinutes,
+          style: s.style,
+          message_template: s.messageTemplate || null,
+        }))
+      : null;
+
   return {
     agent_id: agentId,
     name: rule.name,
@@ -98,6 +131,7 @@ export function followupRuleToDB(rule: Partial<FollowupRule>, agentId: string): 
     trigger_delay_hours: rule.triggerDelayHours ?? 24,
     trigger_delay_minutes: rule.triggerDelayMinutes ?? 0,
     max_followups: rule.maxFollowups ?? 3,
+    sequence_steps: sequenceStepsDB,
     filter_tags: rule.filterTags || [],
     filter_tags_exclude: rule.filterTagsExclude || [],
     filter_origins: rule.filterOrigins || [],

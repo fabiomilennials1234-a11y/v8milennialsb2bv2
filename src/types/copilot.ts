@@ -58,7 +58,12 @@ export type NaturalMessagingIntensity = "suave" | "natural" | "conversacional";
 export type TriggerOperator = "=" | "!=" | ">" | "<" | ">=" | "<=" | "contains" | "not_contains";
 
 // Tipos para Follow-up Rules
-export type FollowupTriggerType = "no_response" | "scheduled" | "event";
+export type FollowupTriggerType =
+  | "no_response"
+  | "after_qualification"
+  | "after_meeting_scheduled"
+  | "post_sale"
+  | "proposal_no_response";
 export type FollowupStyle = "direct" | "value" | "curiosity" | "breakup";
 export type LeadTemperature = "cold" | "warm" | "hot";
 
@@ -570,6 +575,18 @@ export interface CustomFieldFilter {
 }
 
 /**
+ * Single step in a multi-step follow-up cadence.
+ * Stored as JSONB array in copilot_agent_followup_rules.sequence_steps.
+ */
+export interface SequenceStep {
+  order: number;
+  delayHours: number;
+  delayMinutes: number;
+  style: FollowupStyle;
+  messageTemplate?: string;
+}
+
+/**
  * Regra de follow-up para agentes
  */
 export interface FollowupRule {
@@ -578,13 +595,16 @@ export interface FollowupRule {
   description?: string;
   isActive: boolean;
   priority: number;
-  
+
   // Gatilhos de tempo
   triggerType: FollowupTriggerType;
   triggerDelayHours: number;
   triggerDelayMinutes: number;
   maxFollowups: number;
-  
+
+  // Cadencia multi-step (quando presente, sobrescreve single-shot)
+  sequenceSteps?: SequenceStep[];
+
   // Filtros de leads
   filterTags: string[];
   filterTagsExclude: string[];
@@ -592,13 +612,13 @@ export interface FollowupRule {
   filterPipes: string[];
   filterStages: string[];
   filterCustomFields: CustomFieldFilter[];
-  
+
   // Comportamento
   useLastContext: boolean;
   contextLookbackDays: number;
   followupStyle: FollowupStyle;
   messageTemplate?: string;
-  
+
   // Horários
   sendOnlyBusinessHours: boolean;
   businessHoursStart: string;
