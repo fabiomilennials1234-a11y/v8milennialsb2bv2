@@ -962,26 +962,24 @@ export function useUpdateCopilotAgentFromWizard() {
         if (rulesError) throw rulesError;
       }
 
-      // 4. Sincronizar Follow-up Rules (delete all + insert) — se template followup
-      if (updatedAgent.template_type === "followup") {
-        await supabase
+      // 4. Sincronizar Follow-up Rules (delete all + insert) — todos os tipos de agente
+      await supabase
+        .from("copilot_agent_followup_rules")
+        .delete()
+        .eq("agent_id", agentId);
+
+      if (data.followupRules && data.followupRules.length > 0) {
+        const followupToInsert = data.followupRules.map((rule, index) =>
+          followupRuleToDB(
+            { ...rule, priority: rule.priority ?? index, name: rule.name || `Regra ${index + 1}` },
+            agentId
+          )
+        );
+        const { error: followupError } = await supabase
           .from("copilot_agent_followup_rules")
-          .delete()
-          .eq("agent_id", agentId);
+          .insert(followupToInsert as any);
 
-        if (data.followupRules && data.followupRules.length > 0) {
-          const followupToInsert = data.followupRules.map((rule, index) =>
-            followupRuleToDB(
-              { ...rule, priority: rule.priority ?? index, name: rule.name || `Regra ${index + 1}` },
-              agentId
-            )
-          );
-          const { error: followupError } = await supabase
-            .from("copilot_agent_followup_rules")
-            .insert(followupToInsert as any);
-
-          if (followupError) throw followupError;
-        }
+        if (followupError) throw followupError;
       }
 
       // 5. Remover documentos marcados para exclusão
