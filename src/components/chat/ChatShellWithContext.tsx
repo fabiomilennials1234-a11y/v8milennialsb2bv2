@@ -29,6 +29,7 @@ import { Loader2, WifiOff, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { normalizePhone } from "@/lib/normalizePhone";
 import { useResolveChatDeepLink } from "@/hooks/chat/useResolveChatDeepLink";
+import { computeNeedsDeepLinkResolve } from "@/lib/computeNeedsDeepLinkResolve";
 import { useCopilotToggle } from "@/hooks/useCopilotToggle";
 import { ChatShell } from "@/components/chat/layout/ChatShell";
 import { MobileChatLayout } from "@/components/chat/layout/MobileChatLayout";
@@ -307,12 +308,14 @@ export function ChatShellWithContext() {
 
   // Resolver server-side: encontra instância permitida onde existe conversa
   // para o phone alvo. Só roda quando temos phone na URL e ainda não resolvemos.
-  const needsResolve =
-    hasDeepLinkPhone &&
-    !deepLinkProcessed &&
-    instances.length > 0 &&
-    // Se já temos instance válida do path acima, podemos pular o resolver.
-    !(deepLink.instance && instances.some((i) => i.id === deepLink.instance));
+  // Lógica extraída em `computeNeedsDeepLinkResolve` para ser pure-testable.
+  const needsResolve = computeNeedsDeepLinkResolve({
+    hasDeepLinkPhone,
+    deepLinkProcessed,
+    instancesCount: instances.length,
+    deepLinkInstance: deepLink.instance,
+    allowedInstanceIds: instances.map((i) => i.id),
+  });
 
   const { data: resolved, isFetched: resolveFetched } = useResolveChatDeepLink({
     phone: deepLink.phone,
