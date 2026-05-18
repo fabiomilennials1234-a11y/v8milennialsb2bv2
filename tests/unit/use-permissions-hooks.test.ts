@@ -65,6 +65,14 @@ vi.mock('@/hooks/useMasterAuth', () => ({
   useMasterAuth: (...args: unknown[]) => mockUseMasterAuth(...args),
 }));
 
+// ─── Mock: useTeamMemberMatrixPermissions ───────────────
+
+const mockUseTeamMemberMatrixPermissions = vi.fn();
+vi.mock('@/hooks/useTeamMemberMatrixPermissions', () => ({
+  useTeamMemberMatrixPermissions: (...args: unknown[]) =>
+    mockUseTeamMemberMatrixPermissions(...args),
+}));
+
 // ─── Mock: AuthContext (needed by useHasPermission's transitive deps) ──
 
 vi.mock('@/contexts/AuthContext', () => ({
@@ -104,6 +112,7 @@ function mockAdmin() {
   mockUseOrganization.mockReturnValue({ organizationId: 'org-1', isReady: true });
   mockUseCurrentTeamMember.mockReturnValue({ data: { id: 'tm-1', role: 'admin' }, isLoading: false });
   mockUseFeaturePermissions.mockReturnValue({ data: {}, isLoading: false });
+  mockUseTeamMemberMatrixPermissions.mockReturnValue({ data: new Map(), isLoading: false });
 }
 
 function mockMaster() {
@@ -112,14 +121,16 @@ function mockMaster() {
   mockUseOrganization.mockReturnValue({ organizationId: 'org-1', isReady: true });
   mockUseCurrentTeamMember.mockReturnValue({ data: { id: 'tm-1', role: 'member' }, isLoading: false });
   mockUseFeaturePermissions.mockReturnValue({ data: {}, isLoading: false });
+  mockUseTeamMemberMatrixPermissions.mockReturnValue({ data: new Map(), isLoading: false });
 }
 
-function mockMember(featurePerms: Record<string, boolean> = {}) {
+function mockMember(featurePerms: Record<string, boolean> = {}, matrix: Map<string, 'allowed' | 'denied'> = new Map()) {
   mockUseUserRole.mockReturnValue({ data: { role: 'member' }, isLoading: false });
   mockUseMasterAuth.mockReturnValue({ isMaster: false, isLoading: false });
   mockUseOrganization.mockReturnValue({ organizationId: 'org-1', isReady: true });
   mockUseCurrentTeamMember.mockReturnValue({ data: { id: 'tm-1', role: 'member' }, isLoading: false });
   mockUseFeaturePermissions.mockReturnValue({ data: featurePerms, isLoading: false });
+  mockUseTeamMemberMatrixPermissions.mockReturnValue({ data: matrix, isLoading: false });
 }
 
 function mockLoading() {
@@ -128,6 +139,7 @@ function mockLoading() {
   mockUseOrganization.mockReturnValue({ organizationId: null, isReady: false });
   mockUseCurrentTeamMember.mockReturnValue({ data: null, isLoading: true });
   mockUseFeaturePermissions.mockReturnValue({ data: null, isLoading: true });
+  mockUseTeamMemberMatrixPermissions.mockReturnValue({ data: undefined, isLoading: true });
 }
 
 function mockNoOrg() {
@@ -136,6 +148,7 @@ function mockNoOrg() {
   mockUseOrganization.mockReturnValue({ organizationId: null, isReady: true });
   mockUseCurrentTeamMember.mockReturnValue({ data: { id: 'tm-1', role: 'member' }, isLoading: false });
   mockUseFeaturePermissions.mockReturnValue({ data: {}, isLoading: false });
+  mockUseTeamMemberMatrixPermissions.mockReturnValue({ data: new Map(), isLoading: false });
 }
 
 // ─── Tests ──────────────────────────────────────────────
@@ -255,12 +268,34 @@ describe('useCanPerformAction (sync)', () => {
     expect(result.current).toEqual({ allowed: true, reason: 'open', isLoading: false });
   });
 
-  it('11. non-mapped action: denied via fail-closed fallback', () => {
+  it('11. matrix action (export_leads) without explicit denial: allowed via matrix_default_allowed (#254 parity with server engine)', () => {
     mockMember();
-    // export_leads is NOT in ACTION_TO_FEATURE, so it hits the fail-closed fallback
+    // export_leads is in ACTION_TO_MATRIX (resource:leads, action:export).
+    // Server engine defaults to allowed when no explicit denial — sync hook now matches.
     const { result } = renderHook(() => useCanPerformAction('export_leads'), {
       wrapper: createWrapper(),
     });
+    expect(result.current.allowed).toBe(true);
+    expect(result.current.reason).toMatch(/matrix/i);
+  });
+
+  it('11b. matrix action with explicit denial: blocked', () => {
+    const matrix = new Map<string, 'allowed' | 'denied'>();
+    matrix.set('leads:export', 'denied');
+    mockMember({}, matrix);
+    const { result } = renderHook(() => useCanPerformAction('export_leads'), {
+      wrapper: createWrapper(),
+    });
+    expect(result.current.allowed).toBe(false);
+    expect(result.current.reason).toMatch(/denied/);
+  });
+
+  it('11c. truly unmapped action: denied via fail-closed fallback', () => {
+    mockMember();
+    const { result } = renderHook(
+      () => useCanPerformAction('totally_unknown_action' as never),
+      { wrapper: createWrapper() },
+    );
     expect(result.current.allowed).toBe(false);
     expect(result.current.reason).toBe('unmapped_action');
   });
@@ -448,17 +483,20 @@ describe('CONVERGENCE: sync and async both fail-closed', () => {
   // import_leads is in ACTION_TO_MATRIX -> { resource: "leads", action: "create" }
   // Sync: hits fail-closed. Async: checks matrix and may deny.
 
-  it('24. import_leads — both sync and async deny for member (matrix denied)', async () => {
-    mockMember();
+  it('24. import_leads with matrix denial — both sync and async deny for member', async () => {
+    // #254: sync now consults matrix in cache. Inject explicit denial.
+    const matrix = new Map<string, 'allowed' | 'denied'>();
+    matrix.set('leads:create', 'denied');
+    mockMember({}, matrix);
 
-    // Sync: denies via fail-closed
+    // Sync: denies via matrix
     const { result: syncResult } = renderHook(() => useCanPerformAction('import_leads'), {
       wrapper: createWrapper(),
     });
     expect(syncResult.current.allowed).toBe(false);
-    expect(syncResult.current.reason).toBe('unmapped_action');
+    expect(syncResult.current.reason).toMatch(/denied/);
 
-    // Async: checks matrix and denies
+    // Async: checks matrix RPC and denies
     mockMaybeSingle.mockResolvedValue({ data: { value: 'denied' }, error: null });
     const { result: asyncResult } = renderHook(() => useCanPerformActionAsync('import_leads'), {
       wrapper: createWrapper(),
