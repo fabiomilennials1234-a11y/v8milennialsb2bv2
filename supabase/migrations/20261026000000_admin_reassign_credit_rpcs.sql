@@ -86,14 +86,16 @@ AS $$
     WHERE tm.user_id = auth.uid()
       AND tm.organization_id = p_organization_id
       AND tm.is_active = TRUE
-      AND tm.role IN ('admin', 'master')
+      AND tm.role = 'admin'
   );
 $$;
 
 COMMENT ON FUNCTION public.is_org_admin_or_master(UUID) IS
-  'Returns TRUE if auth.uid() is a global active master OR an active '
-  'team_member with role admin/master in the given organization. '
-  'Introduced 2026-05-18 (PRD #211 / #213) for admin_reassign_*_credit RPCs.';
+  'Returns TRUE if auth.uid() is a global active master (master_users.is_active=true) '
+  'OR an active team_member with role=admin in the given organization. '
+  'NB: app_role enum does not include a literal master value — global master path '
+  'is the master_users branch above. Introduced 2026-05-18 (PRD #211 / #213) for '
+  'admin_reassign_*_credit RPCs.';
 
 GRANT EXECUTE ON FUNCTION public.is_org_admin_or_master(UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.is_org_admin_or_master(UUID) TO service_role;
