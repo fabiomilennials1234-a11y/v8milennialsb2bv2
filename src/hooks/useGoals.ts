@@ -237,7 +237,11 @@ export function useIndividualGoals(month?: number, year?: number) {
         const goal = goals?.find(
           (g) => g.team_member_id === member.id && g.type === "reunioes"
         );
-        const currentValue = confData.filter((c) => (c.pre_sale_responsible_id || c.responsible_id || c.sdr_id) === member.id).length;
+        // Crédito de comparecimento é exclusivo do SDR:
+        // COALESCE(pre_sale_responsible_id, sdr_id). NÃO usar responsible_id
+        // como fallback — em muitas orgs ele é populado com o closer e
+        // creditaria o time errado.
+        const currentValue = confData.filter((c) => (c.pre_sale_responsible_id || c.sdr_id) === member.id).length;
         const targetValue = goal?.target_value || 0;
         return {
           id: member.id,

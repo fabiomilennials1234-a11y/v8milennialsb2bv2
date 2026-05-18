@@ -179,10 +179,13 @@ export function useConversionRates(month?: number, year?: number) {
         .eq("organization_id", organizationId);
 
       // Calculate meetings conversion (reuniões marcadas -> comparecidas)
+      // Crédito de comparecimento é exclusivo do SDR:
+      // COALESCE(pre_sale_responsible_id, sdr_id). NÃO usar responsible_id —
+      // em muitas orgs ele guarda o closer e creditaria o time errado.
       const meetingsRates: ConversionRate[] = meetingsMembers.map((member) => {
-        const total = confirmacaoData?.filter((c) => ((c as any).pre_sale_responsible_id || c.responsible_id || c.sdr_id) === member.id).length || 0;
+        const total = confirmacaoData?.filter((c) => ((c as any).pre_sale_responsible_id || c.sdr_id) === member.id).length || 0;
         const comparecidas = confirmacaoData?.filter(
-          (c) => ((c as any).pre_sale_responsible_id || c.responsible_id || c.sdr_id) === member.id && c.status === "compareceu"
+          (c) => ((c as any).pre_sale_responsible_id || c.sdr_id) === member.id && c.status === "compareceu"
         ).length || 0;
         return {
           id: member.id,
