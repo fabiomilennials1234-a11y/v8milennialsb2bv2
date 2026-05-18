@@ -176,7 +176,7 @@ function sectionsToFlatText(data: PlaygroundData): string {
 // HELPER: Convert playground data to agent payload
 // =============================================================
 
-function playgroundToAgentPayload(data: PlaygroundData) {
+function playgroundToAgentPayload(data: PlaygroundData, conexaoState?: ConexaoState) {
   const activeTools = Object.entries(data.tools)
     .filter(([_, state]) => state.enabled)
     .map(([id]) => id);
@@ -236,6 +236,8 @@ function playgroundToAgentPayload(data: PlaygroundData) {
         ),
       },
       custom_instructions: sectionsToFlatText(data),
+      // Conexao fields
+      ...(conexaoState ? conexaoStateToPayload(conexaoState) : {}),
     },
     faqs: [],
     kanbanRules: [],
@@ -339,6 +341,22 @@ export function CopilotPlayground() {
         sendWhen: d.send_when || "",
       })),
     }));
+
+    // Load conexao state from agent
+    setConexao(payloadToConexaoState({
+      whatsapp_instance_id: wd.whatsappInstanceId ?? (editData as any)?.agent?.whatsapp_instance_id ?? null,
+      retention_enabled: wd.retentionEnabled ?? (editData as any)?.agent?.retention_enabled ?? false,
+      retention_config: wd.retentionConfig ?? (editData as any)?.agent?.retention_config ?? {},
+    }));
+
+    // Load comportamento state from existing data
+    setComportamento(payloadToComportamentoState({
+      availability: wd.availability,
+      behavior_windows: wd.behaviorWindows,
+      behavior_enforcement: wd.behaviorEnforcement,
+      response_delay_ms: wd.responseDelayMs,
+      llm_temperature_mode: wd.llmTemperatureMode,
+    }));
   }, [editData, editId]);
 
   // Update config version (debounced) — triggers chat reset
@@ -355,6 +373,34 @@ export function CopilotPlayground() {
   const updateData = useCallback(
     (updates: Partial<PlaygroundData>) => {
       setData((prev) => ({ ...prev, ...updates }));
+      bumpConfigVersion();
+    },
+    [bumpConfigVersion]
+  );
+
+  // Conexao updater
+  const updateConexao = useCallback(
+    (updates: Partial<ConexaoState>) => {
+      setConexao((prev) => ({ ...prev, ...updates }));
+      bumpConfigVersion();
+    },
+    [bumpConfigVersion]
+  );
+
+  // Comportamento updater — also sync into PlaygroundData for prompt preview
+  const updateComportamento = useCallback(
+    (updates: Partial<ComportamentoState>) => {
+      setComportamento((prev) => ({ ...prev, ...updates }));
+      // Sync availability/behavior into PlaygroundData for system prompt & save
+      const syncFields: Partial<PlaygroundData> = {};
+      if (updates.availability) syncFields.availability = updates.availability;
+      if (updates.behaviorWindows !== undefined) syncFields.behaviorWindows = updates.behaviorWindows;
+      if (updates.behaviorEnforcement !== undefined) syncFields.behaviorEnforcement = updates.behaviorEnforcement;
+      if (updates.responseDelayMs !== undefined) syncFields.responseDelayMs = updates.responseDelayMs;
+      if (updates.llmTemperatureMode !== undefined) syncFields.llmTemperatureMode = updates.llmTemperatureMode;
+      if (Object.keys(syncFields).length > 0) {
+        setData((prev) => ({ ...prev, ...syncFields }));
+      }
       bumpConfigVersion();
     },
     [bumpConfigVersion]
@@ -417,7 +463,7 @@ export function CopilotPlayground() {
         await updateAgent.mutateAsync({
           agentId: editId,
           data: {
-            ...createWizardDataFromPlayground(data),
+            ...createWizardDataFromPlayground(data, conexao),
           },
           documentsToRemove: [],
         });
@@ -445,7 +491,7 @@ export function CopilotPlayground() {
         navigate("/copilot");
       } else {
         // Create new agent
-        const payload = playgroundToAgentPayload(data);
+        const payload = playgroundToAgentPayload(data, conexao);
         const agent = await createAgent.mutateAsync(payload as any);
 
         // Upload pending documents
@@ -558,26 +604,34 @@ export function CopilotPlayground() {
         {/* ===== Left Column: Tabs (Prompt | Tools | Conhecimento) ===== */}
         <div className="flex flex-col w-[60%] border-r min-h-0">
           <Tabs defaultValue="prompt" className="flex flex-col flex-1 min-h-0">
-            <TabsList className="grid w-full grid-cols-5 rounded-none border-b bg-background h-11 shrink-0">
-              <TabsTrigger value="prompt" className="gap-2 data-[state=active]:bg-muted/50">
-                <FileText className="w-4 h-4" />
+            <TabsList className="grid w-full grid-cols-7 rounded-none border-b bg-background h-11 shrink-0">
+              <TabsTrigger value="prompt" className="gap-1.5 data-[state=active]:bg-muted/50 text-xs">
+                <FileText className="w-3.5 h-3.5" />
                 Prompt
               </TabsTrigger>
-              <TabsTrigger value="tools" className="gap-2 data-[state=active]:bg-muted/50">
-                <Wrench className="w-4 h-4" />
+              <TabsTrigger value="tools" className="gap-1.5 data-[state=active]:bg-muted/50 text-xs">
+                <Wrench className="w-3.5 h-3.5" />
                 Tools
               </TabsTrigger>
-              <TabsTrigger value="funis" className="gap-2 data-[state=active]:bg-muted/50">
-                <GitBranch className="w-4 h-4" />
+              <TabsTrigger value="funis" className="gap-1.5 data-[state=active]:bg-muted/50 text-xs">
+                <GitBranch className="w-3.5 h-3.5" />
                 Funis
               </TabsTrigger>
-              <TabsTrigger value="knowledge" className="gap-2 data-[state=active]:bg-muted/50">
-                <BookOpen className="w-4 h-4" />
+              <TabsTrigger value="knowledge" className="gap-1.5 data-[state=active]:bg-muted/50 text-xs">
+                <BookOpen className="w-3.5 h-3.5" />
                 Conhecimento
               </TabsTrigger>
-              <TabsTrigger value="analysis" className="gap-2 data-[state=active]:bg-muted/50">
-                <Sparkles className="w-4 h-4" />
-                Análise
+              <TabsTrigger value="conexao" className="gap-1.5 data-[state=active]:bg-muted/50 text-xs">
+                <Plug className="w-3.5 h-3.5" />
+                Conexao
+              </TabsTrigger>
+              <TabsTrigger value="comportamento" className="gap-1.5 data-[state=active]:bg-muted/50 text-xs">
+                <SlidersHorizontal className="w-3.5 h-3.5" />
+                Comportamento
+              </TabsTrigger>
+              <TabsTrigger value="analysis" className="gap-1.5 data-[state=active]:bg-muted/50 text-xs">
+                <Sparkles className="w-3.5 h-3.5" />
+                Analise
               </TabsTrigger>
             </TabsList>
 
@@ -632,6 +686,21 @@ export function CopilotPlayground() {
               />
             </TabsContent>
 
+            <TabsContent value="conexao" className="flex-1 overflow-y-auto m-0 p-4 data-[state=inactive]:hidden">
+              <PlaygroundConexao
+                state={conexao}
+                onChange={updateConexao}
+                agentId={editId}
+              />
+            </TabsContent>
+
+            <TabsContent value="comportamento" className="flex-1 overflow-y-auto m-0 p-4 data-[state=inactive]:hidden">
+              <PlaygroundComportamento
+                state={comportamento}
+                onChange={updateComportamento}
+              />
+            </TabsContent>
+
             <TabsContent value="analysis" className="flex-1 overflow-y-auto m-0 p-4 data-[state=inactive]:hidden">
               <PromptAnalysisTab agentId={editId ?? undefined} />
             </TabsContent>
@@ -659,7 +728,7 @@ export function CopilotPlayground() {
 // HELPER: Convert playground data to CopilotWizardData for update
 // =============================================================
 
-function createWizardDataFromPlayground(data: PlaygroundData): any {
+function createWizardDataFromPlayground(data: PlaygroundData, conexaoState?: ConexaoState): any {
   const flatPrompt = sectionsToFlatText(data);
   const objectiveText = data.promptSections.objective || data.promptSections.personality;
 
@@ -745,6 +814,12 @@ function createWizardDataFromPlayground(data: PlaygroundData): any {
     // Structured data for round-trip (edit mode)
     promptSections: data.promptSections,
     toolInstructions,
+    // Conexao fields
+    ...(conexaoState ? {
+      whatsappInstanceId: conexaoState.whatsappInstanceId,
+      retentionEnabled: conexaoState.retentionEnabled,
+      retentionConfig: conexaoState.retentionConfig,
+    } : {}),
     // Funis (pipeline config)
     ...(() => {
       const fp = funisStateToPayload(data.funis);

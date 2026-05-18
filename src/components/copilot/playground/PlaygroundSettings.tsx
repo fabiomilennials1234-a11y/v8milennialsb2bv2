@@ -2,67 +2,32 @@
  * PlaygroundSettings — Painel colapsavel de Settings
  *
  * Contem:
- * - Horario de funcionamento
- * - Delay de resposta + Temperature LLM
  * - Toggle Agente Proativo + config de gatilhos/disparos/audios
+ * - Audiencia (atender contatos sem lead)
+ *
+ * NOTE: Disponibilidade, delay, temperatura e behavior windows foram movidos
+ * para a tab Comportamento (PlaygroundComportamento).
  */
 
 import { useState } from "react";
 import {
-  Clock,
-  Zap,
   Radio,
-  ChevronDown,
-  ChevronUp,
-  Thermometer,
-  Timer,
   Mic,
-  Plus,
-  X,
-  Sparkles,
   Users,
 } from "lucide-react";
-import {
-  BehaviorWindowsEditor,
-  hasFullBehaviorCoverage,
-} from "@/components/copilot/BehaviorWindowsEditor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import type { PlaygroundData } from "./types";
 
 interface PlaygroundSettingsProps {
   data: PlaygroundData;
   onChange: (updates: Partial<PlaygroundData>) => void;
 }
-
-const TEMP_MODES = [
-  { value: "criativo", label: "Criativo", desc: "Respostas variadas e expressivas", temp: "0.9", color: "bg-purple-500/10 text-purple-600 border-purple-300" },
-  { value: "balanceado", label: "Balanceado", desc: "Equilibrio entre criatividade e precisao", temp: "0.7", color: "bg-blue-500/10 text-blue-600 border-blue-300" },
-  { value: "preciso", label: "Preciso", desc: "Respostas consistentes e diretas", temp: "0.2", color: "bg-green-500/10 text-green-600 border-green-300" },
-] as const;
-
-const DAYS = [
-  { value: "mon", label: "Seg" },
-  { value: "tue", label: "Ter" },
-  { value: "wed", label: "Qua" },
-  { value: "thu", label: "Qui" },
-  { value: "fri", label: "Sex" },
-  { value: "sat", label: "Sab" },
-  { value: "sun", label: "Dom" },
-];
 
 const TRIGGER_OPTIONS = [
   { id: "lead_added", label: "Lead adicionado ao sistema" },
@@ -79,199 +44,12 @@ const ORIGIN_OPTIONS = [
 const AVAILABLE_VARIABLES = ["nome", "empresa", "email", "telefone", "origem", "interesse", "segmento", "campanha"];
 
 export function PlaygroundSettings({ data, onChange }: PlaygroundSettingsProps) {
-  const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
   const [selectedTriggers, setSelectedTriggers] = useState<string[]>([]);
   const [noResponseMinutes, setNoResponseMinutes] = useState(60);
 
-  const toggleSection = (section: string) => {
-    setOpenSections((prev) => ({ ...prev, [section]: !prev[section] }));
-  };
-
-  const SectionHeader = ({ id, icon: Icon, title, badge }: { id: string; icon: any; title: string; badge?: string }) => (
-    <button
-      type="button"
-      className="flex items-center justify-between w-full px-4 py-3 hover:bg-muted/50 transition-colors"
-      onClick={() => toggleSection(id)}
-    >
-      <div className="flex items-center gap-2">
-        <Icon className="w-4 h-4 text-muted-foreground" />
-        <span className="text-sm font-medium">{title}</span>
-        {badge && (
-          <Badge variant="secondary" className="text-xs px-1.5 py-0">
-            {badge}
-          </Badge>
-        )}
-      </div>
-      {openSections[id] ? (
-        <ChevronUp className="w-4 h-4 text-muted-foreground" />
-      ) : (
-        <ChevronDown className="w-4 h-4 text-muted-foreground" />
-      )}
-    </button>
-  );
-
   return (
     <div className="border rounded-lg divide-y">
-      {/* ===== Horario de Funcionamento ===== */}
-      <div>
-        <SectionHeader
-          id="hours"
-          icon={Clock}
-          title="Horario de Funcionamento"
-          badge={data.availability.mode === "always" ? "Sempre ativo" : "Horario definido"}
-        />
-        {openSections.hours && (
-          <div className="px-4 pb-4 space-y-3">
-            <div className="flex items-center gap-3">
-              <Label className="text-sm">Modo</Label>
-              <Select
-                value={data.availability.mode}
-                onValueChange={(v) =>
-                  onChange({ availability: { ...data.availability, mode: v as "always" | "scheduled" } })
-                }
-              >
-                <SelectTrigger className="w-48">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="always">Sempre ativo</SelectItem>
-                  <SelectItem value="scheduled">Horario definido</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {data.availability.mode === "scheduled" && (
-              <>
-                <div className="flex flex-wrap gap-2">
-                  {DAYS.map((day) => (
-                    <button
-                      key={day.value}
-                      type="button"
-                      className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
-                        data.availability.days.includes(day.value)
-                          ? "bg-primary text-primary-foreground border-primary"
-                          : "bg-background hover:bg-muted border-border"
-                      }`}
-                      onClick={() => {
-                        const days = data.availability.days.includes(day.value)
-                          ? data.availability.days.filter((d) => d !== day.value)
-                          : [...data.availability.days, day.value];
-                        onChange({ availability: { ...data.availability, days } });
-                      }}
-                    >
-                      {day.label}
-                    </button>
-                  ))}
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-2">
-                    <Label className="text-xs">De</Label>
-                    <Input
-                      type="time"
-                      value={data.availability.start}
-                      onChange={(e) => onChange({ availability: { ...data.availability, start: e.target.value } })}
-                      className="w-28 h-8 text-xs"
-                    />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Label className="text-xs">Ate</Label>
-                    <Input
-                      type="time"
-                      value={data.availability.end}
-                      onChange={(e) => onChange({ availability: { ...data.availability, end: e.target.value } })}
-                      className="w-28 h-8 text-xs"
-                    />
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* ===== Time-Aware Behavior (janelas customizáveis) ===== */}
-      <div>
-        <SectionHeader
-          id="time-aware"
-          icon={Sparkles}
-          title="Comportamento por horario (Time-Aware)"
-          badge={
-            hasFullBehaviorCoverage(data.behaviorWindows)
-              ? `${data.behaviorWindows.length} janela(s) - 24/7`
-              : "Cobertura incompleta"
-          }
-        />
-        {openSections["time-aware"] && (
-          <div className="px-4 pb-4">
-            <BehaviorWindowsEditor
-              windows={data.behaviorWindows}
-              enforcement={data.behaviorEnforcement}
-              timezone={data.availability.timezone}
-              onWindowsChange={(behaviorWindows) => onChange({ behaviorWindows })}
-              onEnforcementChange={(behaviorEnforcement) =>
-                onChange({ behaviorEnforcement })
-              }
-              hideHeader
-            />
-          </div>
-        )}
-      </div>
-
-      {/* ===== Comportamento de Resposta ===== */}
-      <div>
-        <SectionHeader id="behavior" icon={Zap} title="Comportamento de Resposta" />
-        {openSections.behavior && (
-          <div className="px-4 pb-4 space-y-4">
-            {/* Delay */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label className="text-sm flex items-center gap-1.5">
-                  <Timer className="w-3.5 h-3.5" />
-                  Delay de resposta
-                </Label>
-                <span className="text-xs text-muted-foreground">
-                  {(data.responseDelayMs / 1000).toFixed(1)}s
-                </span>
-              </div>
-              <Slider
-                value={[data.responseDelayMs]}
-                onValueChange={([v]) => onChange({ responseDelayMs: v })}
-                min={0}
-                max={45000}
-                step={500}
-                className="w-full"
-              />
-            </div>
-
-            {/* Temperature */}
-            <div className="space-y-2">
-              <Label className="text-sm flex items-center gap-1.5">
-                <Thermometer className="w-3.5 h-3.5" />
-                Temperatura do LLM
-              </Label>
-              <div className="grid grid-cols-3 gap-2">
-                {TEMP_MODES.map((mode) => (
-                  <button
-                    key={mode.value}
-                    type="button"
-                    className={`p-2 rounded-lg border text-center transition-all ${
-                      data.llmTemperatureMode === mode.value
-                        ? `${mode.color} border-current ring-1 ring-current`
-                        : "border-border hover:bg-muted"
-                    }`}
-                    onClick={() => onChange({ llmTemperatureMode: mode.value })}
-                  >
-                    <p className="text-xs font-medium">{mode.label}</p>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">{mode.desc}</p>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* ===== Audiência ===== */}
+      {/* ===== Audiencia ===== */}
       <div className="border-b border-border/40">
         <div className="flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-2 min-w-0">
@@ -280,8 +58,8 @@ export function PlaygroundSettings({ data, onChange }: PlaygroundSettingsProps) 
               <p className="text-sm font-medium">Atender contatos sem lead</p>
               <p className="text-[11px] text-muted-foreground mt-0.5">
                 {data.attendUnknownContacts
-                  ? "IA responde qualquer número que mandar mensagem"
-                  : "IA só responde números que já são lead no sistema"}
+                  ? "IA responde qualquer numero que mandar mensagem"
+                  : "IA so responde numeros que ja sao lead no sistema"}
               </p>
             </div>
           </div>
