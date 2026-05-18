@@ -16,6 +16,7 @@ import { useOrganization } from "@/hooks/useOrganization";
 import { useUserRole, useFeaturePermissions } from "@/hooks/useUserRole";
 import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
 import { useMasterAuth } from "@/hooks/useMasterAuth";
+import { useTeamMemberMatrixPermissions } from "@/hooks/useTeamMemberMatrixPermissions";
 import type { PermissionKey } from "@/hooks/usePermissions";
 
 // ─── Types ───────────────────────────────────────────────
@@ -69,6 +70,62 @@ const ACTION_TO_FEATURE: Partial<Record<AppAction, string>> = {
   manage_copilot: "copilot.create",
 };
 
+// ─── resolveAction (pure) ─────────────────────────────────
+
+export interface ResolveActionContext {
+  isMaster: boolean;
+  role: string | null | undefined;
+  featurePermissions: Record<string, boolean>;
+  matrixPermissions: Map<string, "allowed" | "denied">;
+}
+
+export interface ResolveActionResult {
+  allowed: boolean;
+  reason: string;
+}
+
+/**
+ * Pure permission resolver. No React, no IO.
+ *
+ * Cascade: master → admin → ACTION_TO_FEATURE → ACTION_TO_MATRIX
+ *          → open actions (send_message) → fail-closed (unmapped_action).
+ *
+ * Default for matrix actions without an explicit entry is "allowed",
+ * mirroring the server-side engine (supabase/functions/_shared/permission_engine.ts).
+ */
+export function resolveAction(
+  action: AppAction,
+  ctx: ResolveActionContext,
+): ResolveActionResult {
+  if (ctx.isMaster) return { allowed: true, reason: "admin" };
+  if (ctx.role === "admin") return { allowed: true, reason: "admin" };
+
+  const featureKey = ACTION_TO_FEATURE[action];
+  if (featureKey) {
+    const allowed = ctx.featurePermissions[featureKey] === true;
+    return {
+      allowed,
+      reason: allowed ? `feature:${featureKey}` : `Sem permissão: ${featureKey}`,
+    };
+  }
+
+  const matrixMapping = ACTION_TO_MATRIX[action];
+  if (matrixMapping) {
+    const key = `${matrixMapping.resource}:${matrixMapping.action}`;
+    const value = ctx.matrixPermissions.get(key);
+    if (value === "denied") {
+      return { allowed: false, reason: `matrix_denied:${matrixMapping.resource}.${matrixMapping.action}` };
+    }
+    return { allowed: true, reason: value === "allowed" ? "matrix_allowed" : "matrix_default_allowed" };
+  }
+
+  if (action === "send_message") {
+    return { allowed: true, reason: "open" };
+  }
+
+  return { allowed: false, reason: "unmapped_action" };
+}
+
 // ─── usePermission ───────────────────────────────────────
 
 /**
@@ -107,37 +164,25 @@ export function usePermission(permissionKey: PermissionKey) {
 export function useCanPerformAction(action: AppAction): ActionResult {
   const { data: userRole, isLoading: roleLoading } = useUserRole();
   const { data: teamMember, isLoading: tmLoading } = useCurrentTeamMember();
-  const { organizationId, isReady } = useOrganization();
+  const { isReady } = useOrganization();
   const { isMaster, isLoading: masterLoading } = useMasterAuth();
   const { data: featurePerms, isLoading: featureLoading } = useFeaturePermissions();
+  const { data: matrixPerms, isLoading: matrixLoading } = useTeamMemberMatrixPermissions(teamMember?.id);
 
-  const isLoading = roleLoading || tmLoading || masterLoading || !isReady || featureLoading;
-  const role = userRole?.role ?? teamMember?.role;
-  const isAdmin = isMaster || role === "admin";
+  const isLoading =
+    roleLoading || tmLoading || masterLoading || !isReady || featureLoading || matrixLoading;
 
   if (isLoading) return { allowed: false, isLoading: true };
 
-  // Master/admin sempre pode
-  if (isAdmin) return { allowed: true, reason: "admin", isLoading: false };
+  const role = userRole?.role ?? teamMember?.role ?? null;
+  const result = resolveAction(action, {
+    isMaster,
+    role,
+    featurePermissions: featurePerms ?? {},
+    matrixPermissions: matrixPerms ?? new Map(),
+  });
 
-  // Feature-based actions
-  const featureKey = ACTION_TO_FEATURE[action];
-  if (featureKey) {
-    const allowed = featurePerms?.[featureKey] === true;
-    return {
-      allowed,
-      reason: allowed ? `feature:${featureKey}` : `Sem permissão: ${featureKey}`,
-      isLoading: false,
-    };
-  }
-
-  // Ações abertas
-  if (action === "send_message") {
-    return { allowed: true, reason: "open", isLoading: false };
-  }
-
-  // Fallback — deny unmapped actions (fail-closed)
-  return { allowed: false, reason: "unmapped_action", isLoading: false };
+  return { allowed: result.allowed, reason: result.reason, isLoading: false };
 }
 
 // ─── useCanPerformActionAsync ────────────────────────────

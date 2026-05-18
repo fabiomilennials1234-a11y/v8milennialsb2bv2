@@ -57,6 +57,14 @@ vi.mock('@/hooks/useMasterAuth', () => ({
   useMasterAuth: (...args: unknown[]) => mockUseMasterAuth(...args),
 }));
 
+// ─── Mock: useTeamMemberMatrixPermissions ───────────────
+
+const mockUseTeamMemberMatrixPermissions = vi.fn();
+vi.mock('@/hooks/useTeamMemberMatrixPermissions', () => ({
+  useTeamMemberMatrixPermissions: (...args: unknown[]) =>
+    mockUseTeamMemberMatrixPermissions(...args),
+}));
+
 // ─── Import under test ──────────────────────────────────
 
 import {
@@ -95,6 +103,7 @@ function mockMaster() {
   mockUseOrganization.mockReturnValue({ organizationId: 'org-1', isReady: true });
   mockUseCurrentTeamMember.mockReturnValue({ data: { id: 'tm-1', role: 'member' }, isLoading: false });
   mockUseFeaturePermissions.mockReturnValue({ data: {}, isLoading: false });
+  mockUseTeamMemberMatrixPermissions.mockReturnValue({ data: new Map(), isLoading: false });
 }
 
 function mockMember(featurePerms: Record<string, boolean> = {}) {
@@ -103,6 +112,7 @@ function mockMember(featurePerms: Record<string, boolean> = {}) {
   mockUseOrganization.mockReturnValue({ organizationId: 'org-1', isReady: true });
   mockUseCurrentTeamMember.mockReturnValue({ data: { id: 'tm-1', role: 'member' }, isLoading: false });
   mockUseFeaturePermissions.mockReturnValue({ data: featurePerms, isLoading: false });
+  mockUseTeamMemberMatrixPermissions.mockReturnValue({ data: new Map(), isLoading: false });
 }
 
 // ─── Tests ──────────────────────────────────────────────
