@@ -2,6 +2,7 @@ import { withSentry } from "../_shared/sentry.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { buildEvaluationContext, formatEvaluationContext } from "./evaluation-context.ts";
 
 const GEMINI_MODEL = "gemini-2.5-flash-preview-05-20";
 const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta";
@@ -9,7 +10,8 @@ const MAX_CONVERSATIONS = 50;
 const MAX_MESSAGES_PER_CONVERSATION = 30;
 const MIN_CONVERSATIONS = 5;
 const LOOKBACK_DAYS = 7;
-const RATE_LIMIT_HOURS = 24;
+const RATE_LIMIT_HOURS = 12;
+const EVAL_LOOKBACK_DAYS = 30;
 
 interface Suggestion {
   id: string;
@@ -26,6 +28,7 @@ interface Suggestion {
 function buildMetaPrompt(
   agentConfig: Record<string, unknown>,
   conversations: unknown[],
+  opts?: { evaluationSection?: string; singleConversation?: boolean },
 ): string {
   const promptSections = (agentConfig.conversation_style as any)?.promptSections || {};
   const businessContext = agentConfig.business_context || {};
@@ -63,13 +66,15 @@ ${JSON.stringify(conversationStyle, null, 2)}
 
 ### Custom Instructions
 ${agentConfig.custom_instructions || "(empty)"}
-
-## Recent Conversations (last ${LOOKBACK_DAYS} days)
+${opts?.evaluationSection ? `\n${opts.evaluationSection}\n` : ""}
+## ${opts?.singleConversation ? "Conversa Analisada" : `Recent Conversations (last ${LOOKBACK_DAYS} days)`}
 ${JSON.stringify(conversations, null, 2)}
 
-## Task
+## Task${opts?.singleConversation ? " (Análise de Conversa Única)" : ""}
 
-Analyze these conversations and identify:
+${opts?.singleConversation
+    ? "Analyze this specific conversation in depth and identify:"
+    : "Analyze these conversations and identify:"}
 1. **Knowledge gaps** — questions customers ask that the agent cannot answer well or at all
 2. **Behavioral failures** — responses that don't match the configured personality/style/tone
 3. **Flow issues** — conversations that deviate from the intended flow or get stuck
@@ -175,13 +180,14 @@ Deno.serve(
     }
     const orgId = membership.organization_id;
 
-    const { agent_id } = await req.json();
+    const { agent_id, conversation_id } = await req.json();
     if (!agent_id) {
       return new Response(JSON.stringify({ error: "agent_id required" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    const isSingleConversation = !!conversation_id;
 
     const { data: agent } = await db
       .from("copilot_agents")
@@ -197,54 +203,76 @@ Deno.serve(
       });
     }
 
-    // Rate limit: 1 analysis per agent per 24h
-    const { data: recentAnalysis } = await db
-      .from("copilot_prompt_analyses")
-      .select("id, created_at")
-      .eq("agent_id", agent_id)
-      .gte("created_at", new Date(Date.now() - RATE_LIMIT_HOURS * 3600_000).toISOString())
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    // Rate limit: 1 full analysis per agent per 12h (skip for single-conversation quick analysis)
+    if (!isSingleConversation) {
+      const { data: recentAnalysis } = await db
+        .from("copilot_prompt_analyses")
+        .select("id, created_at")
+        .eq("agent_id", agent_id)
+        .gte("created_at", new Date(Date.now() - RATE_LIMIT_HOURS * 3600_000).toISOString())
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-    if (recentAnalysis) {
-      const nextAvailable = new Date(
-        new Date(recentAnalysis.created_at).getTime() + RATE_LIMIT_HOURS * 3600_000,
-      ).toISOString();
-      return new Response(
-        JSON.stringify({ error: "rate_limited", next_available_at: nextAvailable }),
-        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+      if (recentAnalysis) {
+        const nextAvailable = new Date(
+          new Date(recentAnalysis.created_at).getTime() + RATE_LIMIT_HOURS * 3600_000,
+        ).toISOString();
+        return new Response(
+          JSON.stringify({ error: "rate_limited", next_available_at: nextAvailable }),
+          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
     }
 
-    // Fetch conversations (last 7 days, min 2 turns, max 50)
-    const lookbackDate = new Date(Date.now() - LOOKBACK_DAYS * 86400_000).toISOString();
-    const { data: conversations, error: convError } = await db
-      .from("conversations")
-      .select("id, state, context, turn_count, created_at")
-      .eq("agent_id", agent_id)
-      .eq("organization_id", orgId)
-      .gte("created_at", lookbackDate)
-      .gte("turn_count", 2)
-      .order("created_at", { ascending: false })
-      .limit(MAX_CONVERSATIONS);
+    // Fetch conversations: single-conversation mode or full analysis
+    let conversations: any[];
+    if (isSingleConversation) {
+      const { data: conv, error: convError } = await db
+        .from("conversations")
+        .select("id, state, context, turn_count, created_at")
+        .eq("id", conversation_id)
+        .eq("agent_id", agent_id)
+        .eq("organization_id", orgId)
+        .maybeSingle();
 
-    if (convError) {
-      return new Response(JSON.stringify({ error: "Failed to fetch conversations" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+      if (convError || !conv) {
+        return new Response(JSON.stringify({ error: "Conversation not found" }), {
+          status: 404,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      conversations = [conv];
+    } else {
+      const lookbackDate = new Date(Date.now() - LOOKBACK_DAYS * 86400_000).toISOString();
+      const { data: convs, error: convError } = await db
+        .from("conversations")
+        .select("id, state, context, turn_count, created_at")
+        .eq("agent_id", agent_id)
+        .eq("organization_id", orgId)
+        .gte("created_at", lookbackDate)
+        .gte("turn_count", 2)
+        .order("created_at", { ascending: false })
+        .limit(MAX_CONVERSATIONS);
 
-    if (!conversations || conversations.length < MIN_CONVERSATIONS) {
-      return new Response(
-        JSON.stringify({
-          error: "insufficient_data",
-          min_required: MIN_CONVERSATIONS,
-          found: conversations?.length ?? 0,
-        }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+      if (convError) {
+        return new Response(JSON.stringify({ error: "Failed to fetch conversations" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      if (!convs || convs.length < MIN_CONVERSATIONS) {
+        return new Response(
+          JSON.stringify({
+            error: "insufficient_data",
+            min_required: MIN_CONVERSATIONS,
+            found: convs?.length ?? 0,
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+      conversations = convs;
     }
 
     // Fetch messages for each conversation
@@ -268,8 +296,27 @@ Deno.serve(
       });
     }
 
+    // Fetch evaluation context (last 30 days)
+    let evaluationSection = "";
+    const evalLookback = new Date(Date.now() - EVAL_LOOKBACK_DAYS * 86400_000).toISOString();
+    const { data: rawEvals } = await db
+      .from("copilot_conversation_evaluations")
+      .select("score_relevance, score_tone, score_goal_align, score_conciseness, score_overall, weaknesses, user_message, agent_response")
+      .eq("agent_id", agent_id)
+      .gte("created_at", evalLookback)
+      .order("created_at", { ascending: false })
+      .limit(200);
+
+    if (rawEvals && rawEvals.length > 0) {
+      const evalCtx = buildEvaluationContext(rawEvals);
+      evaluationSection = formatEvaluationContext(evalCtx);
+    }
+
     // Build meta-prompt and call Gemini
-    const metaPrompt = buildMetaPrompt(agent, conversationsWithMessages);
+    const metaPrompt = buildMetaPrompt(agent, conversationsWithMessages, {
+      evaluationSection,
+      singleConversation: isSingleConversation,
+    });
 
     const geminiResponse = await fetch(
       `${GEMINI_API_URL}/models/${GEMINI_MODEL}:generateContent?key=${geminiKey}`,
