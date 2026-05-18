@@ -5,11 +5,12 @@
  *
  * Verifies:
  * 1. Copilot dispatch is called for valid incoming messages
- * 2. Workflow resolve_wait_response RPC fires for incoming messages
- * 3. Group messages skip reactions entirely
- * 4. Outgoing messages skip copilot but may resolve workflow
- * 5. Empty content skips copilot dispatch
+ * 2. Copilot skipped when shouldTriggerCopilot is false (no content)
+ * 3. Copilot skipped for outgoing messages
+ * 4. Workflow resolve_wait_response RPC fires for incoming messages
+ * 5. Group messages skip all reactions entirely
  * 6. Cancellation gate aborts mid-delivery
+ * 7. Errors swallowed gracefully (fire-and-forget)
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -77,23 +78,22 @@ vi.mock("../../supabase/functions/_shared/auth.ts", () => ({
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
 
-// Mock createClient
+// Mock sendTextViaInstance
+const mockSendTextViaInstance = vi.fn(async () => ({ success: true, messageId: "msg-ai-1" }));
+vi.mock("../../supabase/functions/_shared/whatsapp-dispatch.ts", () => ({
+  sendTextViaInstance: (...args: unknown[]) => mockSendTextViaInstance(...args),
+}));
+
+// Mock supabase client
 const mockRpc = vi.fn(async () => ({ error: null }));
 const mockUpsert = vi.fn(async () => ({ error: null }));
-const mockSelect = vi.fn(() => ({
-  eq: vi.fn(() => ({
-    maybeSingle: vi.fn(async () => ({ data: null })),
-    eq: vi.fn(() => ({
-      maybeSingle: vi.fn(async () => ({ data: null })),
-    })),
-  })),
-}));
+const mockInsert = vi.fn(async () => ({ error: null }));
 
 const mockSupabase = {
   rpc: mockRpc,
   from: vi.fn((table: string) => {
     if (table === "whatsapp_messages") {
-      return { upsert: mockUpsert, select: mockSelect() };
+      return { upsert: mockUpsert };
     }
     if (table === "whatsapp_instances") {
       return {
@@ -115,17 +115,12 @@ const mockSupabase = {
         })),
       };
     }
-    return { upsert: mockUpsert, insert: vi.fn(async () => ({ error: null })) };
+    return { upsert: mockUpsert, insert: mockInsert };
   }),
 };
 
 vi.mock("https://esm.sh/@supabase/supabase-js@2", () => ({
   createClient: vi.fn(() => mockSupabase),
-}));
-
-// Mock whatsapp-dispatch dynamic import
-vi.mock("../../supabase/functions/_shared/whatsapp-dispatch.ts", () => ({
-  sendTextViaInstance: vi.fn(async () => ({ success: true, messageId: "msg-ai-1" })),
 }));
 
 // ─── Import module under test ────────────────────────────────────────────────
@@ -134,8 +129,22 @@ const mod = await import("../../supabase/functions/whatsapp-webhook/index.ts");
 const { triggerReactions } = mod as unknown as {
   triggerReactions: (
     supabase: typeof mockSupabase,
-    persisted: { organization_id: string; instance_id: string; message_id: string; phone_number: string; content: string; direction: string; message_type: string; push_name: string | null },
-    context: { shouldTriggerCopilot: boolean; shouldResolveWaitResponse: boolean; isGroup: boolean; replaySource: string | null },
+    persisted: {
+      organization_id: string;
+      instance_id: string;
+      message_id: string;
+      phone_number: string;
+      content: string | null;
+      direction: string;
+      message_type: string;
+      push_name: string | null;
+    },
+    context: {
+      shouldTriggerCopilot: boolean;
+      shouldResolveWaitResponse: boolean;
+      isGroup: boolean;
+      replaySource: string | null;
+    },
   ) => Promise<void>;
 };
 
@@ -148,6 +157,12 @@ describe("triggerReactions", () => {
       ok: true,
       json: async () => ({ messages: ["Oi! Como posso ajudar?"] }),
     });
+    mockIsCopilotCanceled.mockResolvedValue({
+      canceled: false,
+      source: "default" as const,
+      ai_disabled: false,
+    });
+    mockSendTextViaInstance.mockResolvedValue({ success: true, messageId: "msg-ai-1" });
   });
 
   const basePersisted = {
@@ -155,13 +170,15 @@ describe("triggerReactions", () => {
     instance_id: "inst-1",
     message_id: "msg-123",
     phone_number: "5547999999999",
-    content: "Olá, quero comprar",
-    direction: "incoming",
+    content: "Ola, quero comprar",
+    direction: "incoming" as const,
     message_type: "text",
     push_name: "Lead Test",
   };
 
-  it("dispatches copilot (agent-message fetch) for valid incoming message", async () => {
+  // ─── Scenario 1: Copilot dispatched ──────────────────────────────────────
+
+  it("dispatches copilot (agent-message fetch) with correct payload for valid incoming message", async () => {
     await triggerReactions(mockSupabase, basePersisted, {
       shouldTriggerCopilot: true,
       shouldResolveWaitResponse: true,
@@ -170,31 +187,30 @@ describe("triggerReactions", () => {
     });
 
     expect(mockFetch).toHaveBeenCalledWith(
-      expect.stringContaining("/functions/v1/agent-message"),
+      "https://local.supabase.test/functions/v1/agent-message",
       expect.objectContaining({
         method: "POST",
-        body: expect.stringContaining("5547999999999"),
+        headers: expect.objectContaining({
+          "Authorization": "Bearer test-service-key",
+          "Content-Type": "application/json",
+        }),
       }),
     );
-  });
 
-  it("calls resolve_wait_response_by_phone RPC for incoming message", async () => {
-    await triggerReactions(mockSupabase, basePersisted, {
-      shouldTriggerCopilot: true,
-      shouldResolveWaitResponse: true,
-      isGroup: false,
-      replaySource: null,
+    // Verify payload contains required fields
+    const callArgs = mockFetch.mock.calls[0];
+    const body = JSON.parse(callArgs[1].body);
+    expect(body).toEqual({
+      from: "5547999999999",
+      message: "Ola, quero comprar",
+      channel: "whatsapp",
+      organization_id: "org-1",
+      push_name: "Lead Test",
+      incoming_message_type: "text",
     });
-
-    expect(mockRpc).toHaveBeenCalledWith(
-      "resolve_wait_response_by_phone",
-      expect.objectContaining({
-        p_phone: "5547999999999",
-        p_organization_id: "org-1",
-        p_channel: "whatsapp",
-      }),
-    );
   });
+
+  // ─── Scenario 2: Copilot skipped (no content / shouldTriggerCopilot false)
 
   it("skips copilot when shouldTriggerCopilot is false", async () => {
     await triggerReactions(mockSupabase, basePersisted, {
@@ -205,6 +221,55 @@ describe("triggerReactions", () => {
     });
 
     expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it("does not call agent-message for message with null content", async () => {
+    await triggerReactions(
+      mockSupabase,
+      { ...basePersisted, content: null },
+      {
+        shouldTriggerCopilot: false, // caller sets false when content is null
+        shouldResolveWaitResponse: true,
+        isGroup: false,
+        replaySource: null,
+      },
+    );
+
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  // ─── Scenario 3: Copilot skipped (outgoing message) ─────────────────────
+
+  it("does not call agent-message for outgoing message", async () => {
+    await triggerReactions(
+      mockSupabase,
+      { ...basePersisted, direction: "outgoing" },
+      {
+        shouldTriggerCopilot: false, // caller sets false for outgoing
+        shouldResolveWaitResponse: false,
+        isGroup: false,
+        replaySource: null,
+      },
+    );
+
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  // ─── Scenario 4: Workflow wait_response resolved ─────────────────────────
+
+  it("calls resolve_wait_response_by_phone RPC with correct params", async () => {
+    await triggerReactions(mockSupabase, basePersisted, {
+      shouldTriggerCopilot: false,
+      shouldResolveWaitResponse: true,
+      isGroup: false,
+      replaySource: null,
+    });
+
+    expect(mockRpc).toHaveBeenCalledWith("resolve_wait_response_by_phone", {
+      p_phone: "5547999999999",
+      p_organization_id: "org-1",
+      p_channel: "whatsapp",
+    });
   });
 
   it("skips workflow resolve when shouldResolveWaitResponse is false", async () => {
@@ -218,7 +283,9 @@ describe("triggerReactions", () => {
     expect(mockRpc).not.toHaveBeenCalled();
   });
 
-  it("does nothing when isGroup is true", async () => {
+  // ─── Scenario 5: Group message skips all reactions ───────────────────────
+
+  it("skips all reactions (copilot + workflow) when isGroup is true", async () => {
     await triggerReactions(mockSupabase, basePersisted, {
       shouldTriggerCopilot: true,
       shouldResolveWaitResponse: true,
@@ -230,7 +297,75 @@ describe("triggerReactions", () => {
     expect(mockRpc).not.toHaveBeenCalled();
   });
 
-  it("logs copilot dispatch action", async () => {
+  // ─── Scenario 6: Copilot cancellation mid-delivery ──────────────────────
+
+  it("aborts delivery when isCopilotCanceled returns canceled after first chunk", async () => {
+    vi.useFakeTimers();
+
+    // Agent returns 2 parts
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ messages: ["Parte 1", "Parte 2"] }),
+    });
+
+    // First chunk: not canceled. Second chunk: canceled.
+    let callCount = 0;
+    mockIsCopilotCanceled.mockImplementation(async () => {
+      callCount++;
+      if (callCount === 1) {
+        return { canceled: false, source: "default", ai_disabled: false };
+      }
+      return { canceled: true, source: "lead_toggle", ai_disabled: true };
+    });
+
+    await triggerReactions(mockSupabase, basePersisted, {
+      shouldTriggerCopilot: true,
+      shouldResolveWaitResponse: false,
+      isGroup: false,
+      replaySource: null,
+    });
+
+    // Flush the .then() chain: microtasks for fetch resolution
+    await vi.advanceTimersByTimeAsync(0);
+    // Advance past the inter-chunk delay (1200 + 800 max)
+    await vi.advanceTimersByTimeAsync(2100);
+
+    // sendTextViaInstance called only once (first chunk delivered, second aborted)
+    expect(mockSendTextViaInstance).toHaveBeenCalledTimes(1);
+
+    // logCopilotCancellation called with correct metadata
+    expect(mockLogCopilotCancellation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        organizationId: "org-1",
+        gate: "outbound_chunks",
+        phone: "5547999999999",
+        chunksSent: 1,
+        chunksTotal: 2,
+        source: "lead_toggle",
+      }),
+    );
+
+    vi.useRealTimers();
+  });
+
+  // ─── Scenario 7: Error swallowed (fire-and-forget) ──────────────────────
+
+  it("swallows fetch errors gracefully", async () => {
+    mockFetch.mockRejectedValueOnce(new Error("network down"));
+
+    await expect(
+      triggerReactions(mockSupabase, basePersisted, {
+        shouldTriggerCopilot: true,
+        shouldResolveWaitResponse: true,
+        isGroup: false,
+        replaySource: null,
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  // ─── Additional: logs copilot dispatch action ───────────────────────────
+
+  it("logs uazapi_agent_message_dispatched on copilot dispatch", async () => {
     await triggerReactions(mockSupabase, basePersisted, {
       shouldTriggerCopilot: true,
       shouldResolveWaitResponse: false,
@@ -245,19 +380,5 @@ describe("triggerReactions", () => {
         status: "success",
       }),
     );
-  });
-
-  it("swallows errors gracefully (fire-and-forget)", async () => {
-    mockFetch.mockRejectedValueOnce(new Error("network down"));
-
-    // Should not throw
-    await expect(
-      triggerReactions(mockSupabase, basePersisted, {
-        shouldTriggerCopilot: true,
-        shouldResolveWaitResponse: true,
-        isGroup: false,
-        replaySource: null,
-      }),
-    ).resolves.toBeUndefined();
   });
 });
