@@ -401,7 +401,12 @@ export const LeadCard = memo(function LeadCard({
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   {hasPhone && (
-                    <DropdownMenuItem onClick={(e) => openWhatsApp(lead.phone ?? undefined, e)}>
+                    <DropdownMenuItem
+                      onClick={(e) => openWhatsApp(lead.phone ?? undefined, e)}
+                      onMouseEnter={openWhatsApp.prefetchRoute}
+                      onFocus={openWhatsApp.prefetchRoute}
+                      onMouseDown={() => openWhatsApp.prefetchData(lead.phone ?? undefined)}
+                    >
                       <MessageCircle className="w-4 h-4 mr-2 text-[#25D366]" /> WhatsApp
                     </DropdownMenuItem>
                   )}
@@ -558,6 +563,9 @@ export const LeadCard = memo(function LeadCard({
               {hasPhone && (
                 <button
                   onClick={(e) => openWhatsApp(lead.phone ?? undefined, e)}
+                  onMouseEnter={openWhatsApp.prefetchRoute}
+                  onFocus={openWhatsApp.prefetchRoute}
+                  onMouseDown={() => openWhatsApp.prefetchData(lead.phone ?? undefined)}
                   className="flex items-center gap-1.5 flex-1 justify-center px-2 py-1.5 rounded-md bg-[#25D366] hover:bg-[#1da851] text-white text-xs font-medium transition-colors"
                   title="Abrir WhatsApp"
                 >

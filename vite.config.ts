@@ -59,6 +59,10 @@ export default defineConfig(({ mode }) => {
           motion: ['framer-motion'],
           query: ['@tanstack/react-query'],
           dnd: ['@dnd-kit/core', '@dnd-kit/sortable', '@dnd-kit/utilities'],
+          // date-fns é compartilhado por chat, kanban, agenda, follow-ups.
+          // Isolá-lo em chunk próprio permite cache cross-rota e evita
+          // duplicação no bundle do chat (que importa muitos formatters).
+          'date-fns': ['date-fns'],
         },
       },
     },
