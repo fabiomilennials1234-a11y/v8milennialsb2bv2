@@ -21,14 +21,28 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { FileText, Wrench, BookOpen, Sparkles } from "lucide-react";
+import { FileText, Wrench, BookOpen, Sparkles, GitBranch, Plug, SlidersHorizontal } from "lucide-react";
 
 import { PromptEditor } from "./PromptEditor";
 import { PlaygroundSettings } from "./PlaygroundSettings";
 import { PlaygroundTools } from "./PlaygroundTools";
 import { PlaygroundKnowledge } from "./PlaygroundKnowledge";
+import { PlaygroundFunis } from "./PlaygroundFunis";
+import { PlaygroundConexao } from "./PlaygroundConexao";
+import { PlaygroundComportamento } from "./PlaygroundComportamento";
 import { LivePreviewChat } from "./LivePreviewChat";
 import { PromptAnalysisTab } from "./PromptAnalysisTab";
+import { funisStateToPayload, payloadToFunisState } from "./funis-mapping";
+import {
+  conexaoStateToPayload,
+  payloadToConexaoState,
+  comportamentoStateToPayload,
+  payloadToComportamentoState,
+  createDefaultConexaoState,
+  createDefaultComportamentoState,
+  type ConexaoState,
+  type ComportamentoState,
+} from "./conexao-comportamento-mapping";
 import { TEMPLATE_PRESETS, getTemplatePreset } from "./template-presets";
 import {
   PLAYGROUND_TOOLS,
@@ -169,6 +183,8 @@ function playgroundToAgentPayload(data: PlaygroundData) {
 
   const systemPrompt = buildSystemPrompt(data);
 
+  const funisPayload = funisStateToPayload(data.funis);
+
   return {
     agent: {
       name: data.name,
@@ -205,6 +221,9 @@ function playgroundToAgentPayload(data: PlaygroundData) {
       can_move_cards: data.tools.MOVER_CARD?.enabled ?? false,
       can_send_document: data.tools.ENVIAR_DOCUMENTO?.enabled ?? false,
       can_transfer_sz_chat: data.tools.TRANSFERIR_SZ_CHAT?.enabled ?? false,
+      active_pipes: funisPayload.activePipes,
+      active_stages: funisPayload.activeStages,
+      move_rules: funisPayload.moveRules,
       max_conversation_turns: 20,
       business_context: {},
       conversation_style: {
@@ -233,6 +252,8 @@ export function CopilotPlayground() {
   const isEditMode = !!editId;
 
   const [data, setData] = useState<PlaygroundData>(createDefaultPlaygroundData());
+  const [conexao, setConexao] = useState<ConexaoState>(createDefaultConexaoState());
+  const [comportamento, setComportamento] = useState<ComportamentoState>(createDefaultComportamentoState());
   const [isEditorExpanded, setIsEditorExpanded] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [configVersion, setConfigVersion] = useState(0);
@@ -291,6 +312,11 @@ export function CopilotPlayground() {
       audioSendOrder: wd.outboundConfig?.audioSendOrder || "text_first",
       attendUnknownContacts: wd.attendUnknownContacts ?? true,
       agentId: editId,
+      funis: payloadToFunisState({
+        active_pipes: wd.activePipes || [],
+        active_stages: wd.activeStages || {},
+        move_rules: wd.moveRules || [],
+      }),
       tools: filterLegacyTools({
         QUALIFICAR_LEAD: toolState(wd.canQualifyLead, "QUALIFICAR_LEAD"),
         AGENDAR_REUNIAO: toolState(wd.canScheduleMeeting, "AGENDAR_REUNIAO"),
@@ -532,7 +558,7 @@ export function CopilotPlayground() {
         {/* ===== Left Column: Tabs (Prompt | Tools | Conhecimento) ===== */}
         <div className="flex flex-col w-[60%] border-r min-h-0">
           <Tabs defaultValue="prompt" className="flex flex-col flex-1 min-h-0">
-            <TabsList className="grid w-full grid-cols-4 rounded-none border-b bg-background h-11 shrink-0">
+            <TabsList className="grid w-full grid-cols-5 rounded-none border-b bg-background h-11 shrink-0">
               <TabsTrigger value="prompt" className="gap-2 data-[state=active]:bg-muted/50">
                 <FileText className="w-4 h-4" />
                 Prompt
@@ -540,6 +566,10 @@ export function CopilotPlayground() {
               <TabsTrigger value="tools" className="gap-2 data-[state=active]:bg-muted/50">
                 <Wrench className="w-4 h-4" />
                 Tools
+              </TabsTrigger>
+              <TabsTrigger value="funis" className="gap-2 data-[state=active]:bg-muted/50">
+                <GitBranch className="w-4 h-4" />
+                Funis
               </TabsTrigger>
               <TabsTrigger value="knowledge" className="gap-2 data-[state=active]:bg-muted/50">
                 <BookOpen className="w-4 h-4" />
@@ -575,6 +605,13 @@ export function CopilotPlayground() {
               <PlaygroundTools
                 tools={data.tools}
                 onChange={(tools) => updateData({ tools })}
+              />
+            </TabsContent>
+
+            <TabsContent value="funis" className="flex-1 overflow-y-auto m-0 p-4 data-[state=inactive]:hidden">
+              <PlaygroundFunis
+                state={data.funis}
+                onChange={(funis) => updateData({ funis })}
               />
             </TabsContent>
 
@@ -708,5 +745,14 @@ function createWizardDataFromPlayground(data: PlaygroundData): any {
     // Structured data for round-trip (edit mode)
     promptSections: data.promptSections,
     toolInstructions,
+    // Funis (pipeline config)
+    ...(() => {
+      const fp = funisStateToPayload(data.funis);
+      return {
+        activePipes: fp.activePipes,
+        activeStages: fp.activeStages,
+        moveRules: fp.moveRules,
+      };
+    })(),
   };
 }
