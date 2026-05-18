@@ -1,29 +1,38 @@
-# Onboarding System — Design Spec
+# Onboarding System — Design Spec (v2 — post-grill)
 
 **Data:** 2026-05-18
-**Status:** Draft
+**Status:** Approved
 **Autor:** Gabriel (CTO) + Claude Code
+**Revisão:** Grelhada completa contra codebase. 10 decisões técnicas resolvidas.
 
 ## Sumário
 
-Rebuild completo do onboarding. Sistema de gates obrigatórios com state machine no backend. Master controla templates de pipeline e automação via Admin UI dedicada. Cliente só customiza texto de mensagens. App 100% bloqueado até completar onboarding.
+Rebuild completo do onboarding. State machine em `organizations.onboarding_state`. Hard block total até completar. Master controla templates de pipeline e automação via `/master/onboarding`. Edge function `onboarding-advance` orquestra transições. Templates acessíveis só via RPC.
 
 ## Contexto
 
-Onboarding atual: wizard 8 etapas com quiz → sugestões de pipeline → WhatsApp → primeiro lead. Problemas: tudo pulável, zero automações ativadas, nenhum workflow criado, cliente entra no sistema vazio. Nenhuma padronização entre orgs.
+Onboarding atual: wizard 8 etapas, tabela `org_onboarding` separada, tudo pulável, zero automações criadas. Problemas: dessincronização, sem enforcement, cliente entra no sistema vazio.
 
-## Decisões
+## Decisões (brainstorming + grelhada)
 
-| Decisão | Escolha | Alternativas descartadas |
-|---------|---------|--------------------------|
-| Escopo | Rebuild completo | Evoluir wizard / Híbrido |
-| Enforcement | Hard block total | Block gradual / Nag persistente |
-| Sequência | WhatsApp → Perfil → Pipelines → Automações | Perfil primeiro |
-| Templates | Master controla tudo | Quiz decide / Cliente ajusta |
-| Admin | UI dedicada completa | Seed via migration / UI simples |
-| Orgs existentes | Só novas | Todas obrigatórias / Opt-in |
-| Copilot | Fora do escopo | Obrigatório / Opcional |
-| Editor automação | Workflow canvas existente (React Flow) | Cards simplificados |
+| Decisão | Escolha | Razão |
+|---------|---------|-------|
+| Escopo | Rebuild completo | Wizard atual não atende |
+| Enforcement | Hard block total | App inacessível até completar |
+| Sequência | WhatsApp → Perfil → Pipelines → Automações | WhatsApp primeiro força compromisso |
+| Templates | Master controla tudo | Padronização entre orgs |
+| Admin | UI dedicada `/master/onboarding` | Padrão existente: `/master/*` |
+| Orgs existentes | Só novas (migration seta completed) | Zero impacto |
+| Copilot | Fora do escopo | Tratado separadamente |
+| Data model | Consolidar em `organizations` (deprecar `org_onboarding`) | Sem dessincronização |
+| match_criteria | Dot notation (`"perfil.sells": ["produto"]`) | Casa com JSONB aninhado do quiz |
+| RLS templates | Só master + RPC SECURITY DEFINER | Templates são config de sistema |
+| Atomicidade | RPC simples + edge function complexa | PL/pgSQL pra gates simples, edge fn pra pipeline/workflow creation |
+| Editor automação | Import JSON + preview read-only | Sem refactor do WorkflowCanvas pro MVP |
+| Pipelines | Ambos: default_pipelines_config + custom_pipelines | Compatível com código existente |
+| Edge function | Uma `onboarding-advance` com action dispatch | Padrão do codebase |
+| Refs org-específicas | Aceitar limitação MVP | Templates simples sem UUIDs |
+| Waves | Tudo junto | Ship completo |
 
 ## Arquitetura
 
@@ -31,7 +40,7 @@ Onboarding atual: wizard 8 etapas com quiz → sugestões de pipeline → WhatsA
 
 ```
 checkout-provision-org
-  └→ onboarding_state = 'pending_whatsapp'
+  └→ organizations.onboarding_state = 'pending_whatsapp'
        └→ WhatsApp conectado → 'pending_profile'
             └→ Quiz respondido → 'pending_pipelines'
                  └→ Pipelines confirmados → 'pending_automations'
@@ -39,7 +48,7 @@ checkout-provision-org
                            └→ APP LIBERADO
 ```
 
-Transições unidirecionais. Só master pode resetar state via admin. Backend valida cada transição — impossível burlar pelo frontend.
+Transições unidirecionais. Master pode resetar state via admin. Backend valida cada transição.
 
 ### Componentes
 
@@ -47,31 +56,34 @@ Transições unidirecionais. Só master pode resetar state via admin. Backend va
 ┌─────────────────────────────────────────────────────────┐
 │                    FRONTEND                              │
 │                                                          │
-│  OnboardingGate ─── renderiza step baseado em state      │
-│  ├── StepWhatsApp     (QR code, polling status)          │
+│  OnboardingGate (refatorado) ── lê organizations.       │
+│  │  onboarding_state (não mais org_onboarding)           │
+│  ├── StepWhatsApp     (QR code, polling)                 │
 │  ├── StepPerfil       (quiz 4 perguntas)                 │
 │  ├── StepPipelines    (read-only, mostra resultado)      │
 │  └── StepAutomacoes   (toggle + customizar mensagem)     │
 │                                                          │
-│  AdminOnboarding ─── /admin/onboarding (master only)     │
-│  ├── Tab: Pipeline Templates (CRUD + stages editor)      │
-│  ├── Tab: Automação Templates (workflow canvas)          │
+│  MasterOnboarding ─── /master/onboarding                 │
+│  ├── Tab: Pipeline Templates (CRUD + stages + criteria)  │
+│  ├── Tab: Automação Templates (import + JSON preview)    │
 │  └── Tab: Preview (simulador quiz)                       │
 │                                                          │
 ├─────────────────────────────────────────────────────────┤
 │                    BACKEND                                │
 │                                                          │
-│  RPC: advance_onboarding_state()                         │
-│    - Valida transição (current → next)                   │
-│    - pending_profile → pending_pipelines:                │
-│      cruza onboarding_answers × match_criteria           │
-│      → cria custom_pipelines + stages                    │
-│    - pending_automations → completed:                    │
-│      cria workflows reais a partir dos templates         │
-│      com textos customizados pelo cliente                │
+│  Edge function: onboarding-advance (action dispatch)     │
+│  ├── advance_whatsapp: verifica → advance state          │
+│  ├── advance_profile: salva answers → advance state      │
+│  ├── apply_pipelines: match→cria pipelines→advance       │
+│  └── activate_automations: cria workflows→advance→done   │
+│                                                          │
+│  RPC: advance_onboarding_state() — helper interno        │
+│  RPC: get_matched_onboarding_templates() — onboarding    │
+│  RPC: get_onboarding_pipeline_templates() — admin CRUD   │
+│  RPC: get_onboarding_automation_templates() — admin CRUD │
 │                                                          │
 │  checkout-provision-org (alterado):                       │
-│    - Seta onboarding_state = 'pending_whatsapp'          │
+│    Seta onboarding_state = 'pending_whatsapp'            │
 │                                                          │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -81,8 +93,9 @@ Transições unidirecionais. Só master pode resetar state via admin. Backend va
 ### Alteração: organizations
 
 ```sql
+-- Novas colunas
 ALTER TABLE organizations ADD COLUMN
-  onboarding_state text NOT NULL DEFAULT 'pending_whatsapp'
+  onboarding_state text NOT NULL DEFAULT 'completed'
     CHECK (onboarding_state IN (
       'pending_whatsapp',
       'pending_profile',
@@ -96,10 +109,13 @@ ALTER TABLE organizations ADD COLUMN
 
 ALTER TABLE organizations ADD COLUMN
   onboarding_answers jsonb;
-  -- Respostas do quiz, usado para match com templates
 ```
 
-Orgs existentes: migration seta `onboarding_state = 'completed'` e `onboarding_completed_at = now()` para todas as orgs que já existem.
+**IMPORTANTE:** Default = 'completed' na coluna. Migration NÃO precisa UPDATE em orgs existentes — elas já nascem completed. `checkout-provision-org` seta explicitamente 'pending_whatsapp' pra novas orgs.
+
+### Deprecação: org_onboarding
+
+Tabela `org_onboarding` mantida temporariamente (não dropar). Trigger `auto_create_org_onboarding` desativado. Hook `useOnboarding()` refatorado pra ler de `organizations`.
 
 ### Nova tabela: onboarding_pipeline_templates
 
@@ -108,17 +124,33 @@ CREATE TABLE onboarding_pipeline_templates (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   name text NOT NULL,
   description text,
-  icon text,                    -- lucide icon name
-  color text,                   -- hex color
-  stages jsonb NOT NULL,        -- [{name, color, position, is_final_positive, is_final_negative}]
-  match_criteria jsonb NOT NULL,-- regras de match com quiz: {venda_tipo: ["whatsapp_direto"], segment: ["industria"]}
-  priority int DEFAULT 0,       -- desempate quando múltiplos templates fazem match
+  icon text,
+  color text,
+  default_pipelines_config jsonb NOT NULL DEFAULT '{}',
+  -- { "pipe_whatsapp": {"visible": true, "label": "Oportunidades"},
+  --   "pipe_confirmacao": {"visible": false},
+  --   "pipe_propostas": {"visible": true, "label": "Propostas"} }
+  custom_pipelines jsonb NOT NULL DEFAULT '[]',
+  -- [{ "name": "Qualificação SDR", "icon": "Users", "color": "#7dc4e4",
+  --    "stages": [{"name":"Novo","color":"#7dc4e4","position":0,"is_final_positive":false,"is_final_negative":false}] }]
+  match_criteria jsonb NOT NULL,
+  -- Dot notation: {"perfil.sells": ["produto","servico"], "estrutura.has_sdr": [true]}
+  -- Semântica: AND entre campos, OR dentro do array
+  priority int DEFAULT 0,
   is_active boolean DEFAULT true,
   created_at timestamptz DEFAULT now(),
   updated_at timestamptz DEFAULT now()
 );
--- Sem organization_id — templates são globais (master-only)
--- RLS: SELECT para authenticated, INSERT/UPDATE/DELETE apenas master
+
+-- SEM organization_id — tabela global
+-- RLS: DENY ALL pra authenticated. Acesso via RPC apenas.
+ALTER TABLE onboarding_pipeline_templates ENABLE ROW LEVEL SECURITY;
+
+-- Master pode tudo (ghost master policy)
+CREATE POLICY "master_pipeline_templates_all"
+  ON onboarding_pipeline_templates FOR ALL
+  USING (public.is_master_user())
+  WITH CHECK (public.is_master_user());
 ```
 
 ### Nova tabela: onboarding_automation_templates
@@ -128,28 +160,41 @@ CREATE TABLE onboarding_automation_templates (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   name text NOT NULL,
   description text,
-  type text NOT NULL,              -- 'boas_vindas' | 'follow_up' | 'confirmacao_reuniao'
-  icon text,                       -- emoji ou lucide icon
-  workflow_definition jsonb NOT NULL, -- DAG completo (nodes + edges) no formato do WorkflowCanvas
-  trigger_type text NOT NULL,      -- 'lead_created' | 'lead_no_reply' | 'meeting_confirmed'
+  type text NOT NULL,
+  -- 'boas_vindas' | 'follow_up' | 'confirmacao_reuniao'
+  icon text,
+  workflow_definition jsonb NOT NULL,
+  -- DAG completo (nodes + edges) formato WorkflowCanvas
+  trigger_type text NOT NULL,
   trigger_config jsonb DEFAULT '{}',
   customizable_fields jsonb NOT NULL DEFAULT '[]',
-  -- [{field_path: "nodes.action_1.data.message", label: "Mensagem de boas-vindas", type: "textarea", default_value: "...", placeholder: "..."}]
-  match_criteria jsonb,            -- NULL = universal, ou filtro por quiz answers
+  -- [{ "field_path": "nodes.action_1.data.message",
+  --    "label": "Mensagem de boas-vindas",
+  --    "type": "textarea",
+  --    "default_value": "Olá {{nome}}!...",
+  --    "placeholder": "Digite a mensagem..." }]
+  match_criteria jsonb,
+  -- NULL = universal (aparece pra todo quiz result)
   is_active boolean DEFAULT true,
   created_at timestamptz DEFAULT now(),
   updated_at timestamptz DEFAULT now()
 );
--- Sem organization_id — templates são globais (master-only)
--- RLS: SELECT para authenticated, INSERT/UPDATE/DELETE apenas master
+
+ALTER TABLE onboarding_automation_templates ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "master_automation_templates_all"
+  ON onboarding_automation_templates FOR ALL
+  USING (public.is_master_user())
+  WITH CHECK (public.is_master_user());
 ```
 
-### RPC: advance_onboarding_state
+### RPC: advance_onboarding_state (helper interno)
 
 ```sql
 CREATE OR REPLACE FUNCTION advance_onboarding_state(
   p_org_id uuid,
   p_expected_state text,
+  p_next_state text DEFAULT NULL,
   p_payload jsonb DEFAULT NULL
 ) RETURNS jsonb
 LANGUAGE plpgsql
@@ -157,278 +202,226 @@ SECURITY DEFINER
 AS $$
 DECLARE
   v_current_state text;
-  v_next_state text;
-  v_result jsonb;
+  v_next text;
+  v_valid_transitions jsonb := '{
+    "pending_whatsapp": "pending_profile",
+    "pending_profile": "pending_pipelines",
+    "pending_pipelines": "pending_automations",
+    "pending_automations": "completed"
+  }'::jsonb;
 BEGIN
-  -- Lock row
   SELECT onboarding_state INTO v_current_state
   FROM organizations WHERE id = p_org_id FOR UPDATE;
 
-  -- Validate current state matches expected
+  IF v_current_state IS NULL THEN
+    RAISE EXCEPTION 'Organization not found: %', p_org_id;
+  END IF;
+
   IF v_current_state != p_expected_state THEN
     RAISE EXCEPTION 'State mismatch: expected %, got %', p_expected_state, v_current_state;
   END IF;
 
-  -- Determine next state
-  v_next_state := CASE v_current_state
-    WHEN 'pending_whatsapp' THEN 'pending_profile'
-    WHEN 'pending_profile' THEN 'pending_pipelines'
-    WHEN 'pending_pipelines' THEN 'pending_automations'
-    WHEN 'pending_automations' THEN 'completed'
-    ELSE RAISE EXCEPTION 'Cannot advance from state: %', v_current_state
-  END;
+  v_next := COALESCE(p_next_state, v_valid_transitions ->> v_current_state);
+  IF v_next IS NULL THEN
+    RAISE EXCEPTION 'No valid transition from: %', v_current_state;
+  END IF;
 
-  -- State-specific logic
-  CASE v_current_state
-    WHEN 'pending_profile' THEN
-      -- Save quiz answers
-      UPDATE organizations SET onboarding_answers = p_payload WHERE id = p_org_id;
+  -- Save quiz answers if provided during profile step
+  IF v_current_state = 'pending_profile' AND p_payload IS NOT NULL THEN
+    UPDATE organizations SET onboarding_answers = p_payload WHERE id = p_org_id;
+  END IF;
 
-    WHEN 'pending_pipelines' THEN
-      -- Pipelines already created by separate RPC call during this step
-      NULL;
+  -- Mark completion
+  IF v_next = 'completed' THEN
+    UPDATE organizations SET onboarding_completed_at = now() WHERE id = p_org_id;
+  END IF;
 
-    WHEN 'pending_automations' THEN
-      -- Mark completion timestamp
-      UPDATE organizations SET onboarding_completed_at = now() WHERE id = p_org_id;
-  END CASE;
-
-  -- Advance state
-  UPDATE organizations SET onboarding_state = v_next_state, updated_at = now()
+  UPDATE organizations SET onboarding_state = v_next, updated_at = now()
   WHERE id = p_org_id;
 
-  RETURN jsonb_build_object('new_state', v_next_state);
+  RETURN jsonb_build_object('previous_state', v_current_state, 'new_state', v_next);
 END;
 $$;
 ```
 
-### RPC: apply_onboarding_pipelines
+### RPC: get_matched_onboarding_templates
 
 ```sql
--- Chamado durante transição pending_profile → pending_pipelines
--- Cruza onboarding_answers com match_criteria dos templates
--- Cria custom_pipelines + custom_pipeline_stages para a org
-CREATE OR REPLACE FUNCTION apply_onboarding_pipelines(p_org_id uuid)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER;
-```
-
-### RPC: apply_onboarding_automations
-
-```sql
--- Chamado durante transição pending_automations → completed
--- Recebe: array de {template_id, customized_fields: {field_path: value}}
--- Cria workflows reais na org com textos customizados
-CREATE OR REPLACE FUNCTION apply_onboarding_automations(
+-- Retorna templates que matcham com onboarding_answers da org
+-- Chamado durante onboarding, via SECURITY DEFINER (cliente não precisa SELECT na tabela)
+CREATE OR REPLACE FUNCTION get_matched_onboarding_templates(
   p_org_id uuid,
-  p_selections jsonb  -- [{template_id, enabled: bool, customizations: {field_path: value}}]
+  p_template_type text  -- 'pipeline' | 'automation'
 ) RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER;
+-- Lógica: busca onboarding_answers da org, cruza com match_criteria usando dot notation
+-- Retorna templates ordenados por priority DESC
 ```
+
+## Edge Function: onboarding-advance
+
+```
+POST /onboarding-advance
+Headers: Authorization: Bearer <jwt>
+Body: { action: string, org_id?: string, payload?: object }
+```
+
+**Actions:**
+
+### advance_whatsapp
+- Verifica que org tem whatsapp_instance com status = 'connected'
+- Chama `advance_onboarding_state(org_id, 'pending_whatsapp')`
+
+### advance_profile
+- Payload: `{ answers: OnboardingAnswers }`
+- Chama `advance_onboarding_state(org_id, 'pending_profile', null, answers)`
+
+### apply_pipelines
+- Busca matched pipeline templates via `get_matched_onboarding_templates`
+- Cria `pipeline_display_config` entries pra defaults
+- Cria `custom_pipelines` + `custom_pipeline_stages` pra customs
+- Chama `advance_onboarding_state(org_id, 'pending_pipelines')`
+- Retorna pipelines criados pro frontend mostrar
+
+### get_automation_templates
+- Busca matched automation templates via `get_matched_onboarding_templates`
+- Retorna com customizable_fields e default_values
+- NÃO avança state — só retorna dados pro frontend
+
+### activate_automations
+- Payload: `{ selections: [{ template_id, enabled, customizations: {field_path: value} }] }`
+- Valida pelo menos 1 enabled
+- Pra cada enabled: clona workflow_definition, aplica customizations nos field_paths, cria workflow real na org
+- Chama `advance_onboarding_state(org_id, 'pending_automations')`
 
 ## UI — Fluxo do Cliente
 
 ### Estrutura geral
 
 - Fullscreen, sem sidebar, sem navegação
-- Progress bar no topo: 4 segmentos coloridos
-- Labels: WhatsApp · Perfil · Pipelines · Automações
-- Dark theme, estilo Linear/Stripe
-- `OnboardingGate` wrappa toda app — se `onboarding_state !== 'completed'`, renderiza step correspondente
+- Progress bar 4 segmentos: WhatsApp · Perfil · Pipelines · Automações
+- `OnboardingGate` lê `organizations.onboarding_state`
+- Master bypassa gate (comportamento existente mantido)
+- Non-admin member vê "Configuração em andamento" (comportamento existente mantido)
 
 ### Gate 1: Conectar WhatsApp
 
-- Input: nome da instância (ex: "principal", "vendas")
+- Input: nome da instância
 - QR code centralizado (200x200, fundo branco)
-- Polling status a cada 4 segundos
-- QR expira em 60s → botão refresh
-- Auto-avança quando status = connected
-- Sem botão pular. Sem navegação alternativa.
-- Fallback: erro persistente → link para suporte
+- Polling status a cada 4s
+- QR expira 60s → refresh
+- Auto-avança quando connected (chama `onboarding-advance?action=advance_whatsapp`)
+- Sem botão pular
 
 ### Gate 2: Perfil da Operação (Quiz)
 
-- Uma pergunta por vez, formato de cards selecionáveis
-- Indicador "Pergunta X de 4"
+- Uma pergunta por vez, cards selecionáveis
 - 4 perguntas:
-  1. **Tipo de venda**: Consultiva B2B / WhatsApp direto / Híbrido
-  2. **Segmento**: Indústria / Distribuição / Serviços / SaaS / Agência / Outro
-  3. **Estrutura do time**: Solo / Time sem SDR / Time com SDR+Closer
-  4. **Processo**: Usa reuniões? / Envia propostas formais?
-- Respostas salvas em `organizations.onboarding_answers` como JSONB
-- Transição animada entre perguntas
+  1. Tipo de venda: Consultiva B2B / WhatsApp direto / Híbrido
+  2. Segmento: Indústria / Distribuição / Serviços / SaaS / Agência / Outro
+  3. Estrutura time: Solo / Time sem SDR / Time com SDR+Closer
+  4. Processo: Usa reuniões? / Envia propostas formais?
+- No submit: chama `onboarding-advance?action=advance_profile`
 
 ### Gate 3: Pipelines Aplicados
 
-- Título: "Seus pipelines estão prontos"
-- Subtítulo: "Baseado no seu perfil, configuramos os pipelines ideais"
-- Read-only: mostra pipelines criados com seus stages como badges coloridos
-- Stages mostram setas entre eles (→)
-- Stages finais positivos (verde ✓) e negativos (vermelho ✗) diferenciados
-- Único botão: "Confirmar e continuar"
-- Backend já criou pipelines via `apply_onboarding_pipelines()` durante transição anterior
+- OnboardingGate detecta state=pending_pipelines
+- Chama `onboarding-advance?action=apply_pipelines` (cria pipelines + avança)
+- Mostra resultado read-only: default pipelines ativos + custom pipelines criados
+- Botão "Confirmar e continuar" (state já avançou, botão navega pro próximo step)
 
 ### Gate 4: Ativação de Automações
 
-- Título: "Ative suas automações"
-- Subtítulo: "Personalize as mensagens e ative"
-- Lista de automações disponíveis (matched por quiz ou universal)
-- Cada automação:
-  - Ícone + nome + descrição
-  - Toggle ativar/desativar
-  - Quando ativado: expande textarea com mensagem default (editável)
-  - Suporta variáveis: `{{nome}}`, `{{empresa}}`, etc.
-- Requisito: pelo menos 1 automação ativa para prosseguir
-- Botão: "Finalizar configuração"
-- Nota: "Você pode editar depois nas configurações"
+- Busca templates via `onboarding-advance?action=get_automation_templates`
+- Lista com toggle + textarea customizável
+- Mínimo 1 ativa
+- Submit: `onboarding-advance?action=activate_automations`
+- App liberado
 
 ## UI — Admin (Master)
 
-### Localização: /admin/onboarding
+### Rota: /master/onboarding
 
-Acessível apenas por master. 3 tabs.
+Componente `MasterOnboarding.tsx`. 3 tabs.
 
 ### Tab 1: Pipeline Templates
 
-- Header: "Pipeline Templates" + botão "+ Novo Template"
-- Lista de cards com:
-  - Nome + cor + badge ATIVO/INATIVO
-  - Stages como badges inline
-  - Match criteria como código inline
-  - Prioridade
-  - Ações: Editar / Remover
-- **Editor** (drawer ou página):
-  - Nome, descrição, ícone, cor
-  - Stages: lista draggable (nome, cor, posição, flags final +/-)
-  - "+ Adicionar etapa"
-  - Match criteria: builder visual (campo + operador + valor)
-  - "+ Adicionar condição (AND)"
-  - Prioridade (número)
+- CRUD list: nome, cor, stages badges, match_criteria, prioridade, ativo/inativo
+- Editor (dialog/drawer):
+  - Nome, descrição, ícone (lucide picker), cor (palette)
+  - Default pipelines config: toggles pra pipe_whatsapp/confirmacao/propostas + label customizável
+  - Custom pipelines: list de pipelines, cada um com stages draggable
+  - Match criteria: builder visual (dot notation path + operator + values)
+  - Prioridade (number)
 
 ### Tab 2: Automação Templates
 
-- Header: "Automação Templates" + botões "Importar de org" + "+ Criar do zero"
-- Lista de cards com:
-  - Ícone + nome + trigger + contagem de nodes + campos editáveis
-  - Badge ATIVO/INATIVO
-  - Ação: "Abrir editor"
-- **Editor**: WorkflowCanvas existente (React Flow) com overlay de templates:
-  - Toolbar adicional: "Marcar campos editáveis" + "Salvar template"
-  - Modo "marcar campos": click em node → popup pra definir campo editável (label, tipo, JSON path, default, placeholder)
-  - Nodes com campo editável: borda roxa + badge ✎
-  - Legenda na bottom bar
-- **Importar de org** (modal):
-  - Step 1: dropdown seleciona organização
-  - Step 2: lista workflows ativos da org selecionada (radio select)
-  - Botão "Importar como template"
-  - Aviso: "Cópia independente — alterações não afetam org original"
+- CRUD list: ícone, nome, type, trigger, node count, campos editáveis count
+- Actions: "Importar de org" + "Criar do zero"
+- **Importar de org** (dialog):
+  - Dropdown: lista todas orgs (master tem acesso cross-org)
+  - Lista workflows da org selecionada (query via ghost master policy)
+  - Importa como cópia: salva workflow_definition no template
+  - Nota: master deve limpar referências org-específicas manualmente
+- **Editor** (page ou dialog):
+  - Metadados: nome, tipo, ícone, trigger_type, trigger_config, match_criteria
+  - JSON preview: mostra workflow_definition formatado
+  - Campos editáveis: form pra definir field_path + label + type + default + placeholder
+  - NÃO usa WorkflowCanvas visual (MVP — import JSON + preview read-only)
 
 ### Tab 3: Preview
 
-- Simulador do quiz: master responde perguntas de teste
-- Mostra resultado: quais pipeline templates matcharam + quais automações seriam oferecidas
-- Útil para testar match_criteria sem criar org real
+- Simulador: master responde quiz de teste
+- Mostra: quais pipeline templates matcham + quais automação templates matcham
+- Testa match_criteria sem criar org real
 
-## Fluxo de Dados
+## Migração
 
-### Provisão → Onboarding
+### organizations (novas colunas)
 
-```
-1. checkout-provision-org cria org
-2. org.onboarding_state = 'pending_whatsapp'
-3. Frontend: OnboardingGate detecta state, renderiza StepWhatsApp
-```
-
-### WhatsApp → Profile
-
-```
-1. Cliente escaneia QR, WhatsApp conecta
-2. Frontend chama advance_onboarding_state('pending_whatsapp')
-3. State → 'pending_profile'
-4. OnboardingGate renderiza StepPerfil (quiz)
+```sql
+-- Default = 'completed' — orgs existentes ficam completed automaticamente
+ALTER TABLE organizations ADD COLUMN
+  onboarding_state text NOT NULL DEFAULT 'completed' ...;
 ```
 
-### Profile → Pipelines
+### org_onboarding (deprecação)
 
-```
-1. Cliente responde 4 perguntas
-2. Frontend chama advance_onboarding_state('pending_profile', {answers})
-3. Backend salva answers em onboarding_answers
-4. State → 'pending_pipelines'
-5. Frontend chama apply_onboarding_pipelines(org_id)
-6. Backend: cruza answers × match_criteria → cria custom_pipelines + stages
-7. OnboardingGate renderiza StepPipelines (read-only)
-```
+- Não dropar tabela (pode ter dados úteis)
+- Desativar trigger `auto_create_org_onboarding`
+- `useOnboarding()` refatorado pra ler `organizations.onboarding_state`
 
-### Pipelines → Automações
+### checkout-provision-org (alteração)
 
-```
-1. Cliente confirma pipelines
-2. Frontend chama advance_onboarding_state('pending_pipelines')
-3. State → 'pending_automations'
-4. Frontend busca automation templates (matched por answers ou universal)
-5. OnboardingGate renderiza StepAutomacoes
-```
-
-### Automações → Completed
-
-```
-1. Cliente customiza mensagens + ativa automações
-2. Frontend chama apply_onboarding_automations(org_id, selections)
-3. Backend cria workflows reais com textos customizados + is_active=true
-4. Frontend chama advance_onboarding_state('pending_automations')
-5. State → 'completed', onboarding_completed_at = now()
-6. OnboardingGate libera app
-```
+- Após criar org: `UPDATE organizations SET onboarding_state = 'pending_whatsapp' WHERE id = new_org_id`
 
 ## Segurança
 
 - State machine no backend: frontend não pode pular steps
-- RPC `advance_onboarding_state` é SECURITY DEFINER com validação de transição
-- Templates são globais (sem org_id) — RLS: SELECT para todos, write apenas master
-- `apply_onboarding_pipelines` e `apply_onboarding_automations` validam que org está no state correto antes de agir
-- Orgs existentes: migration seta `completed` — zero impacto
-- OnboardingGate no frontend é UX convenience — enforcement real é no backend
+- Edge function `onboarding-advance` valida state antes de cada ação
+- Templates: RLS deny-all + master-only policy. Onboarding via RPC SECURITY DEFINER
+- `advance_onboarding_state` usa FOR UPDATE (row lock)
+- Master bypass em OnboardingGate mantido
+- Orgs existentes: default='completed' na migration
 
-## Migração
+## Escopo fora
 
-### Orgs existentes (~30)
-
-```sql
-UPDATE organizations
-SET onboarding_state = 'completed',
-    onboarding_completed_at = now()
-WHERE onboarding_state IS NULL OR onboarding_state != 'completed';
-```
-
-### Wizard antigo
-
-- `OnboardingWizard.tsx` e steps existentes: mantém temporariamente, mas `OnboardingGate` assume controle
-- Deprecar wizard antigo após validação do novo fluxo em produção
-- `useOnboarding()` hook: refatorar para ler `onboarding_state` ao invés de estado local
-
-## Escopo explicitamente fora
-
-- Copilot (agentes IA) — será tratado separadamente
-- Edição de pipeline pelo cliente durante onboarding (read-only)
-- Onboarding para orgs existentes (só novas)
-- Templates de tags, produtos ou equipe
+- Copilot (agentes IA)
+- Edição de pipeline pelo cliente
+- Onboarding para orgs existentes
+- Templates de tags/produtos/equipe
 - Notificações/emails durante onboarding
+- WorkflowCanvas visual pra edição de templates (MVP = JSON preview)
+- Sanitização de referências org-específicas em workflow importados
 
 ## Riscos e Mitigações
 
 | Risco | Mitigação |
 |-------|-----------|
-| Cliente não consegue conectar WhatsApp (celular com problema) | Link suporte no step. Master pode resetar state via admin. |
-| Nenhum pipeline template faz match com respostas do quiz | Fallback: template "default" com prioridade mais baixa que sempre matcha |
-| Workflow template inválido causa erro ao criar workflow | Validação do workflow definition no save do template |
-| Cliente fecha browser no meio do onboarding | State machine persiste. Retoma de onde parou no próximo login. |
-
-## Métricas de sucesso
-
-- 100% das novas orgs completam onboarding (vs ~40% hoje que completam wizard)
-- Tempo médio de onboarding < 10 minutos
-- 0 orgs com WhatsApp desconectado na primeira semana
-- Todas novas orgs com pelo menos 1 automação ativa desde dia 1
+| WhatsApp não conecta | Link suporte. Master resetar state. |
+| Nenhum template faz match | Template "default" com priority 0 que sempre matcha |
+| Workflow template inválido | Validação JSON no save |
+| Browser fecha mid-onboarding | State persiste. Retoma no login. |
+| org_onboarding legado causa confusão | Desativar trigger, doc no CLAUDE.md |
+| Edge fn falha após criar pipelines mas antes de avançar state | Edge fn faz advance como última ação. Se falha antes, pipelines criados mas state não avançou — retry é safe (idempotent check) |
