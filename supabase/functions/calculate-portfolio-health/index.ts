@@ -21,6 +21,7 @@ import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { timingSafeCompare } from "../_shared/auth.ts";
 import { fireTrigger } from "../_shared/workflow-trigger.ts";
+import { shouldFireRetentionTrigger, type RetentionAgent } from "../_shared/retention-gate.ts";
 import { resolveInstance, sendTextViaInstance } from "../_shared/whatsapp-dispatch.ts";
 import {
   calculateFrequencyScore,
@@ -101,6 +102,7 @@ async function processClient(
   orgAvgTicket: number,
   now: Date,
   whatsappAlertsEnabled = false,
+  retentionAgent: RetentionAgent | null = null,
 ): Promise<{ success: boolean; error?: string }> {
   // Fetch all orders for this client
   const { data: orders, error: ordersError } = await supabase
@@ -263,7 +265,7 @@ async function processClient(
   const signals: DetectedSignal[] = detectSignals(signalInput);
 
   // Sync alerts: resolve stale, create new, notify if enabled
-  await syncAlerts(supabase, client, signals, now, healthScore, segment, whatsappAlertsEnabled);
+  await syncAlerts(supabase, client, signals, now, healthScore, segment, whatsappAlertsEnabled, retentionAgent);
 
   return { success: true };
 }
@@ -278,6 +280,7 @@ async function syncAlerts(
   healthScore: number,
   segment: string,
   whatsappAlertsEnabled = false,
+  retentionAgent: RetentionAgent | null = null,
 ): Promise<void> {
   // Fetch open alerts for this client
   const { data: openAlerts } = await supabase
@@ -395,19 +398,48 @@ async function syncAlerts(
     // Fire workflow trigger for reorder_overdue signal if lead exists
     if (signal.type === "reorder_overdue" && client.lead_id) {
       try {
-        await fireTrigger({
-          supabase,
-          organizationId: client.organization_id,
-          triggerType: "recompra_atrasada",
-          leadId: client.lead_id,
-          context: {
-            client_id: client.id,
-            days_overdue: signal.metadata.daysOverdue,
-            cycle_days: signal.metadata.cycleDays,
-            health_score: healthScore,
-            segment,
-          },
+        // Retention gate: check copilot agent config before firing
+        let lastDispatchAt: Date | null = null;
+        if (retentionAgent?.retention_config?.max_frequency_days) {
+          const { data: lastDispatch } = await supabase
+            .from("outbound_dispatch_log")
+            .select("dispatched_at")
+            .eq("lead_id", client.lead_id)
+            .order("dispatched_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (lastDispatch?.dispatched_at) {
+            lastDispatchAt = new Date(lastDispatch.dispatched_at);
+          }
+        }
+
+        const gate = shouldFireRetentionTrigger({
+          retentionAgent,
+          alertSeverity: signal.severity,
+          lastDispatchAt,
+          now,
         });
+
+        if (!gate.fire) {
+          console.log(
+            `[portfolio-health] Retention gate suppressed recompra_atrasada for lead ${client.lead_id}: ${gate.reason}`,
+          );
+        } else {
+          await fireTrigger({
+            supabase,
+            organizationId: client.organization_id,
+            triggerType: "recompra_atrasada",
+            leadId: client.lead_id,
+            context: {
+              client_id: client.id,
+              days_overdue: signal.metadata.daysOverdue,
+              cycle_days: signal.metadata.cycleDays,
+              health_score: healthScore,
+              segment,
+            },
+          });
+        }
       } catch (err) {
         console.error(
           `[portfolio-health] Failed to fire recompra_atrasada trigger for lead ${client.lead_id}:`,
@@ -436,6 +468,21 @@ async function processOrg(
     .eq("feature_key", "portfolio_alerts_whatsapp")
     .maybeSingle();
   const whatsappAlertsEnabled = alertFeature?.enabled === true;
+
+  // Look up active retention agent for this org (once per org)
+  let retentionAgent: RetentionAgent | null = null;
+  const { data: agentRow } = await supabase
+    .from("copilot_agents")
+    .select("retention_config")
+    .eq("organization_id", orgId)
+    .eq("is_active", true)
+    .eq("retention_enabled", true)
+    .limit(1)
+    .maybeSingle();
+
+  if (agentRow?.retention_config) {
+    retentionAgent = { retention_config: agentRow.retention_config };
+  }
 
   // Compute org-wide avg ticket for segmentation
   const { data: ticketData } = await supabase
@@ -472,7 +519,7 @@ async function processOrg(
     for (let i = 0; i < batch.length; i += CONCURRENCY) {
       const chunk = batch.slice(i, i + CONCURRENCY);
       const results = await Promise.all(
-        chunk.map((client) => processClient(supabase, client, orgAvgTicket, now, whatsappAlertsEnabled)),
+        chunk.map((client) => processClient(supabase, client, orgAvgTicket, now, whatsappAlertsEnabled, retentionAgent)),
       );
       for (let j = 0; j < results.length; j++) {
         if (results[j].success) {
