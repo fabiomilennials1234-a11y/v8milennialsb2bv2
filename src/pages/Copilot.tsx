@@ -56,7 +56,6 @@ import { useMasterAuth } from "@/hooks/useMasterAuth";
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
 import { useOrgQuotas } from "@/hooks/useOrgQuotas";
 import { toast } from "sonner";
-import { AgentConfigModal } from "@/components/copilot/AgentConfigModal";
 import type { CopilotAgentWithRelations } from "@/types/copilot";
 
 export default function Copilot() {
@@ -71,16 +70,13 @@ export default function Copilot() {
   const setDefault = useSetDefaultCopilotAgent();
 
   const [agentToDelete, setAgentToDelete] = useState<string | null>(null);
-  const [selectedAgent, setSelectedAgent] = useState<CopilotAgentWithRelations | null>(null);
-  const [configModalOpen, setConfigModalOpen] = useState(false);
   const [pendingActivation, setPendingActivation] = useState<{ id: string; name: string } | null>(null);
   const { checkLimit } = useOrgFeatures();
   const { getQuota } = useOrgQuotas();
   const copilotQuota = getQuota("max_copilot_agents");
 
   const handleOpenConfig = (agent: CopilotAgentWithRelations) => {
-    setSelectedAgent(agent);
-    setConfigModalOpen(true);
+    navigate(`/copilot/${agent.id}/editar`);
   };
 
   const handleCreateAgent = () => {
@@ -444,12 +440,6 @@ export default function Copilot() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Agent Config Modal */}
-      <AgentConfigModal
-        agent={selectedAgent}
-        open={configModalOpen}
-        onOpenChange={setConfigModalOpen}
-      />
     </div>
   );
 }
