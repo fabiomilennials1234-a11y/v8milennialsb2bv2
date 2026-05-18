@@ -255,26 +255,26 @@ describe('useCanPerformAction (sync)', () => {
     expect(result.current).toEqual({ allowed: true, reason: 'open', isLoading: false });
   });
 
-  it('11. non-mapped action: falls through to allowed (permissive fallback)', () => {
+  it('11. non-mapped action: denied via fail-closed fallback', () => {
     mockMember();
-    // export_leads is NOT in ACTION_TO_FEATURE, so it hits the fallback
+    // export_leads is NOT in ACTION_TO_FEATURE, so it hits the fail-closed fallback
     const { result } = renderHook(() => useCanPerformAction('export_leads'), {
       wrapper: createWrapper(),
     });
-    expect(result.current.allowed).toBe(true);
-    expect(result.current.reason).toBe('fallback');
+    expect(result.current.allowed).toBe(false);
+    expect(result.current.reason).toBe('unmapped_action');
   });
 
-  // DIVERGENCE: sync version never checks ACTION_TO_ORG_PERMISSION
-  it('12. CRITICAL: delete_lead for member — allowed via fallback (sync does NOT check org permission)', () => {
+  // Sync version never checks ACTION_TO_ORG_PERMISSION — now denies via fail-closed
+  it('12. delete_lead for member — denied via fail-closed (sync does NOT check org permission)', () => {
     mockMember();
     const { result } = renderHook(() => useCanPerformAction('delete_lead'), {
       wrapper: createWrapper(),
     });
     // delete_lead is mapped in ACTION_TO_ORG_PERMISSION to "can_delete_leads",
-    // but the sync hook skips straight to fallback = allowed.
-    expect(result.current.allowed).toBe(true);
-    expect(result.current.reason).toBe('fallback');
+    // but the sync hook has no async RPC path — hits fail-closed fallback.
+    expect(result.current.allowed).toBe(false);
+    expect(result.current.reason).toBe('unmapped_action');
     // No RPC call made
     expect(mockRpc).not.toHaveBeenCalled();
   });
@@ -395,7 +395,7 @@ describe('useCanPerformActionAsync', () => {
     expect(result.current.data?.reason).toBe('matrix_allowed');
   });
 
-  it('22. matrix without teamMember.id: skips check, falls through to allowed', async () => {
+  it('22. matrix without teamMember.id: skips check, denied via fail-closed', async () => {
     // Member with no teamMember.id
     mockUseUserRole.mockReturnValue({ data: { role: 'member' }, isLoading: false });
     mockUseMasterAuth.mockReturnValue({ isMaster: false, isLoading: false });
@@ -408,8 +408,8 @@ describe('useCanPerformActionAsync', () => {
     });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    // matrixMapping exists but teamMember.id is undefined -> condition fails -> fallback
-    expect(result.current.data).toEqual({ allowed: true, reason: 'fallback' });
+    // matrixMapping exists but teamMember.id is undefined -> condition fails -> fail-closed
+    expect(result.current.data).toEqual({ allowed: false, reason: 'unmapped_action' });
     expect(mockFrom).not.toHaveBeenCalled();
   });
 });
@@ -418,26 +418,22 @@ describe('useCanPerformActionAsync', () => {
 // DIVERGENCE documentation
 // ═══════════════════════════════════════════════════════════
 
-describe('DIVERGENCE: sync vs async permission checks', () => {
-  // DIVERGENCE: delete_lead
-  // useCanPerformAction (sync):  admin/master -> feature -> send_message -> **fallback: allowed**
-  // useCanPerformActionAsync:    admin/master -> feature -> send_message -> **RPC org permission** -> matrix -> fallback
-  //
+describe('CONVERGENCE: sync and async both fail-closed', () => {
+  // After fail-closed fix (#186), both sync and async deny unmapped paths.
   // delete_lead is in ACTION_TO_ORG_PERMISSION -> "can_delete_leads"
-  // The sync version NEVER checks ACTION_TO_ORG_PERMISSION, so it returns allowed=true via fallback.
-  // The async version calls supabase.rpc("user_has_org_permission") and may deny.
+  // The sync version still never calls RPC, but now denies instead of allowing.
 
-  it('23. DIVERGENCE: delete_lead — sync allows (fallback), async may deny (checks RPC)', async () => {
+  it('23. delete_lead — both sync and async deny for member', async () => {
     mockMember();
 
-    // Sync: always allows via fallback
+    // Sync: denies via fail-closed
     const { result: syncResult } = renderHook(() => useCanPerformAction('delete_lead'), {
       wrapper: createWrapper(),
     });
-    expect(syncResult.current.allowed).toBe(true);
-    expect(syncResult.current.reason).toBe('fallback');
+    expect(syncResult.current.allowed).toBe(false);
+    expect(syncResult.current.reason).toBe('unmapped_action');
 
-    // Async: checks RPC and denies
+    // Async: checks RPC and also denies
     mockRpc.mockResolvedValue({ data: false, error: null });
     const { result: asyncResult } = renderHook(() => useCanPerformActionAsync('delete_lead'), {
       wrapper: createWrapper(),
@@ -445,24 +441,22 @@ describe('DIVERGENCE: sync vs async permission checks', () => {
     await waitFor(() => expect(asyncResult.current.isSuccess).toBe(true));
     expect(asyncResult.current.data?.allowed).toBe(false);
 
-    // DIVERGENCE CONFIRMED: same action, same user, different outcome
-    expect(syncResult.current.allowed).not.toBe(asyncResult.current.data?.allowed);
+    // CONVERGENCE: both deny
+    expect(syncResult.current.allowed).toBe(asyncResult.current.data?.allowed);
   });
 
-  // DIVERGENCE: import_leads
   // import_leads is in ACTION_TO_MATRIX -> { resource: "leads", action: "create" }
-  // The sync version skips to fallback (allowed=true).
-  // The async version queries team_member_permissions and may deny.
+  // Sync: hits fail-closed. Async: checks matrix and may deny.
 
-  it('24. DIVERGENCE: import_leads — sync allows (fallback), async checks matrix', async () => {
+  it('24. import_leads — both sync and async deny for member (matrix denied)', async () => {
     mockMember();
 
-    // Sync: always allows via fallback
+    // Sync: denies via fail-closed
     const { result: syncResult } = renderHook(() => useCanPerformAction('import_leads'), {
       wrapper: createWrapper(),
     });
-    expect(syncResult.current.allowed).toBe(true);
-    expect(syncResult.current.reason).toBe('fallback');
+    expect(syncResult.current.allowed).toBe(false);
+    expect(syncResult.current.reason).toBe('unmapped_action');
 
     // Async: checks matrix and denies
     mockMaybeSingle.mockResolvedValue({ data: { value: 'denied' }, error: null });
@@ -472,8 +466,8 @@ describe('DIVERGENCE: sync vs async permission checks', () => {
     await waitFor(() => expect(asyncResult.current.isSuccess).toBe(true));
     expect(asyncResult.current.data?.allowed).toBe(false);
 
-    // DIVERGENCE CONFIRMED: same action, same user, different outcome
-    expect(syncResult.current.allowed).not.toBe(asyncResult.current.data?.allowed);
+    // CONVERGENCE: both deny
+    expect(syncResult.current.allowed).toBe(asyncResult.current.data?.allowed);
   });
 });
 

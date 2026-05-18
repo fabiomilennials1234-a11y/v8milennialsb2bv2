@@ -390,14 +390,14 @@ describe("canUserPerformAction — move_pipe_record", () => {
     ]);
   };
 
-  it("falls through to fallback when resourceId missing", async () => {
+  it("denies when resourceId missing (fail-closed)", async () => {
     const { sb, mockTable } = createMockSupabase();
     asMember(mockTable);
     const result = await canUserPerformAction({
       supabase: sb, userId: "u1", organizationId: "org-1", action: "move_pipe_record",
     });
-    expect(result.allowed).toBe(true);
-    expect(result.reason).toBe("fallback_allowed");
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toBe("permission_not_defined");
   });
 
   it("allows move with resourceId when matrix has no denial", async () => {

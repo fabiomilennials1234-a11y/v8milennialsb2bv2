@@ -23,6 +23,7 @@ import {
   decideDispatchRoute,
   runUazapiSenderJob,
 } from "../_shared/dispatch-router.ts";
+import { assertPermission, permissionDeniedResponse } from "../_shared/assert-permission.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -75,6 +76,12 @@ Deno.serve(
       return jsonResponse(403, { error: "Admin role required" }, corsHeaders);
     }
     const orgId = member.organization_id;
+
+    // Permission gate — server-side enforcement (#189)
+    const permission = await assertPermission(supabaseAdmin, user.id, orgId, "mass_send");
+    if (!permission.allowed) {
+      return permissionDeniedResponse(permission.reason, corsHeaders);
+    }
 
     const body = await req.json().catch(() => null);
     if (!body) return jsonResponse(400, { error: "Invalid JSON" }, corsHeaders);
