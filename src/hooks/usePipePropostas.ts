@@ -5,7 +5,7 @@ import { triggerFollowUpAutomation } from "./useAutoFollowUp";
 
 import { useOrganization } from "./useOrganization";
 import { useCanPerformActionAsync } from "@/lib/permissions";
-import { usePipelineEntries, usePipelineId } from "./usePipelineEntries";
+import { usePipelineEntries, usePipelineId, findOrCreatePipelineEntry } from "./usePipelineEntries";
 
 export type PipeProposta = Tables<"pipe_propostas">;
 export type PipePropostaInsert = Partial<PipeProposta> & { lead_id: string };
@@ -62,33 +62,27 @@ export function useCreatePipeProposta() {
       const assignedToValue =
         item.sale_responsible_id ?? item.pre_sale_responsible_id ?? item.responsible_id ?? item.closer_id ?? null;
 
-      const { data, error } = await supabase
-        .from("pipeline_entries")
-        .insert({
-          pipeline_id: pipelineId,
-          lead_id: item.lead_id!,
-          stage_key: item.status ?? "marcar_compromisso",
-          assigned_to: assignedToValue,
-          organization_id: organizationId,
-          metadata,
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      const stage = data.stage_key;
-      const assignedTo = assignedToValue as string | undefined;
-
-      // Trigger automation for the initial status
-      await triggerFollowUpAutomation({
-        leadId: data.lead_id,
-        assignedTo: assignedTo ?? null,
-        pipeType: "propostas",
-        stage,
-        sourcePipeId: data.id,
-        organizationId: data.organization_id,
+      const { entry: data, created } = await findOrCreatePipelineEntry({
+        pipelineId,
+        leadId: item.lead_id!,
+        organizationId,
+        stageKey: item.status ?? "marcar_compromisso",
+        assignedTo: assignedToValue,
+        metadata,
       });
+
+      // Fire follow-up automation only for genuinely new entries — if we returned
+      // an existing one, the original create already fired it.
+      if (created) {
+        await triggerFollowUpAutomation({
+          leadId: data.lead_id,
+          assignedTo: assignedToValue ?? null,
+          pipeType: "propostas",
+          stage: data.stage_key,
+          sourcePipeId: data.id,
+          organizationId: data.organization_id,
+        });
+      }
 
       return data;
     },

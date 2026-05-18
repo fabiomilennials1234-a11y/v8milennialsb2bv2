@@ -26,6 +26,68 @@ const realtimeHandlers: RealtimeHandlers = {
     oldData.filter((item) => item.id !== deleted.id),
 };
 
+/**
+ * Idempotent create for `pipeline_entries`.
+ *
+ * `pipeline_entries` has `UNIQUE (pipeline_id, lead_id) WHERE lead_id IS NOT NULL`.
+ * Multiple call sites (Kanban move, modals, auto-create on `compareceu`) can race
+ * or repeat the create. To keep "Criar Proposta" idempotent we pre-check, then
+ * fall back to fetching the existing row on a 23505 race.
+ *
+ * Returns `{ entry, created }` so the caller can decide whether to fire
+ * follow-up automations (only on `created`).
+ */
+export async function findOrCreatePipelineEntry(params: {
+  pipelineId: string;
+  leadId: string;
+  organizationId: string;
+  stageKey: string;
+  assignedTo: string | null;
+  metadata: Record<string, unknown>;
+  notes?: string | null;
+}): Promise<{ entry: any; created: boolean }> {
+  const { pipelineId, leadId, organizationId, stageKey, assignedTo, metadata, notes } = params;
+
+  const { data: existing } = await supabase
+    .from("pipeline_entries")
+    .select("*")
+    .eq("pipeline_id", pipelineId)
+    .eq("lead_id", leadId)
+    .maybeSingle();
+
+  if (existing) return { entry: existing, created: false };
+
+  const insertPayload: Record<string, unknown> = {
+    pipeline_id: pipelineId,
+    lead_id: leadId,
+    stage_key: stageKey,
+    assigned_to: assignedTo,
+    organization_id: organizationId,
+    metadata,
+  };
+  if (notes !== undefined) insertPayload.notes = notes;
+
+  const { data, error } = await supabase
+    .from("pipeline_entries")
+    .insert(insertPayload)
+    .select()
+    .single();
+
+  if (!error) return { entry: data, created: true };
+
+  if ((error as { code?: string }).code === "23505") {
+    const { data: raced } = await supabase
+      .from("pipeline_entries")
+      .select("*")
+      .eq("pipeline_id", pipelineId)
+      .eq("lead_id", leadId)
+      .maybeSingle();
+    if (raced) return { entry: raced, created: false };
+  }
+
+  throw error;
+}
+
 export function usePipelineId(slug: PipelineType) {
   const { organizationId, isReady } = useOrganization();
 

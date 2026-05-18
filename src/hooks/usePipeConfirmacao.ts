@@ -5,7 +5,7 @@ import { triggerFollowUpAutomation } from "./useAutoFollowUp";
 
 import { useOrganization } from "./useOrganization";
 import { useCanPerformActionAsync } from "@/lib/permissions";
-import { usePipelineEntries, usePipelineId } from "./usePipelineEntries";
+import { usePipelineEntries, usePipelineId, findOrCreatePipelineEntry } from "./usePipelineEntries";
 
 export type PipeConfirmacao = Tables<"pipe_confirmacao">;
 export type PipeConfirmacaoInsert = Partial<PipeConfirmacao> & { lead_id: string };
@@ -72,30 +72,27 @@ export function useCreatePipeConfirmacao() {
       const assignedToValue =
         pre_sale_responsible_id ?? sale_responsible_id ?? responsible_id ?? sdr_id ?? closer_id ?? null;
 
-      const { data, error } = await supabase
-        .from("pipeline_entries")
-        .insert({
-          pipeline_id: pipelineId,
-          lead_id: lead_id!,
-          stage_key: status || "reuniao_marcada",
-          assigned_to: assignedToValue,
-          metadata,
-          organization_id: organizationId,
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      // Trigger automation for the initial status — prefer dual values.
-      await triggerFollowUpAutomation({
-        leadId: data.lead_id,
+      const { entry: data, created } = await findOrCreatePipelineEntry({
+        pipelineId,
+        leadId: lead_id!,
+        organizationId,
+        stageKey: status || "reuniao_marcada",
         assignedTo: assignedToValue,
-        pipeType: "confirmacao",
-        stage: data.stage_key,
-        sourcePipeId: data.id,
-        organizationId: data.organization_id,
+        metadata,
       });
+
+      // Fire automation only for new entries — if we returned an existing one,
+      // the original create already fired it.
+      if (created) {
+        await triggerFollowUpAutomation({
+          leadId: data.lead_id,
+          assignedTo: assignedToValue,
+          pipeType: "confirmacao",
+          stage: data.stage_key,
+          sourcePipeId: data.id,
+          organizationId: data.organization_id,
+        });
+      }
 
       // stage_changed workflows are fired by the PG trigger on pipeline_entries
       // (via pg_net → process-workflow-executions). No need to fire from frontend.
