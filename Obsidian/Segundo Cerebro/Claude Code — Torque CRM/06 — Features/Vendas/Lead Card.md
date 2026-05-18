@@ -1,11 +1,14 @@
 ---
 title: Lead Card (Kanban) — Trello-style
-status: implementado-dev
+type: feature
+status: shipped
 created: 2026-05-17
+updated: 2026-05-17
 diataxis: reference
 related:
   - "[[Lead Detail Modal]]"
   - "[[Modulos]]"
+  - "[[ADR-2026-05-17-lead-detail-modal-redesign]]"
 ---
 
 # Lead Card (Trello-style)

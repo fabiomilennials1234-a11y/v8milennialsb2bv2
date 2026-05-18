@@ -1,8 +1,15 @@
 ---
 title: ADR-2026-05-17 — Lead Detail Modal Redesign
-date: 2026-05-17
+type: adr
 status: accepted
+created: 2026-05-17
+updated: 2026-05-17
+date: 2026-05-17
 authors: [CTO, claude-arquiteto]
+related:
+  - "[[Lead Detail Modal]]"
+  - "[[Lead Card]]"
+  - "[[lead-detail-modal-redesign]]"
 ---
 
 # ADR-2026-05-17 — Lead Detail Modal Redesign

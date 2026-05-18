@@ -1,9 +1,10 @@
 ---
 title: Lead Detail Modal — Redesign (Trello-inspired)
-status: spec-pending-approval
+type: backlog
+status: in-progress
 created: 2026-05-17
+updated: 2026-05-17
 owner: CTO
-type: design+engenharia
 ---
 
 # Lead Detail Modal — Redesign
