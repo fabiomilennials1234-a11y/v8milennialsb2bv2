@@ -9,7 +9,7 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Save, Loader2, ChevronLeft, Bot } from "lucide-react";
+import { Save, Loader2, ChevronLeft, Bot, Power, Star, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
@@ -21,7 +21,23 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { FileText, Wrench, BookOpen, Sparkles, GitBranch, Plug, SlidersHorizontal } from "lucide-react";
+import { FileText, Wrench, BookOpen, Sparkles, GitBranch, Plug, SlidersHorizontal, RefreshCw } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 import { PromptEditor } from "./PromptEditor";
 import { PlaygroundSettings } from "./PlaygroundSettings";
@@ -30,6 +46,7 @@ import { PlaygroundKnowledge } from "./PlaygroundKnowledge";
 import { PlaygroundFunis } from "./PlaygroundFunis";
 import { PlaygroundConexao } from "./PlaygroundConexao";
 import { PlaygroundComportamento } from "./PlaygroundComportamento";
+import { PlaygroundFollowup } from "./PlaygroundFollowup";
 import { LivePreviewChat } from "./LivePreviewChat";
 import { PromptAnalysisTab } from "./PromptAnalysisTab";
 import { funisStateToPayload, payloadToFunisState } from "./funis-mapping";
@@ -56,6 +73,9 @@ import {
   useCreateCopilotAgent,
   useCopilotAgentForEdit,
   useUpdateCopilotAgentFromWizard,
+  useCopilotAgents,
+  useToggleCopilotAgent,
+  useSetDefaultCopilotAgent,
 } from "@/hooks/useCopilotAgents";
 import { useUploadAgentDocument, useAgentDocuments, useDeleteAgentDocument } from "@/hooks/useAgentDocuments";
 
@@ -258,14 +278,41 @@ export function CopilotPlayground() {
   const [configVersion, setConfigVersion] = useState(0);
   const configVersionTimerRef = useRef<NodeJS.Timeout>();
 
+  const [pendingActivation, setPendingActivation] = useState(false);
+
   const createAgent = useCreateCopilotAgent();
   const updateAgent = useUpdateCopilotAgentFromWizard();
   const uploadDocument = useUploadAgentDocument();
   const deleteDocument = useDeleteAgentDocument();
+  const toggleAgent = useToggleCopilotAgent();
+  const setDefault = useSetDefaultCopilotAgent();
   const { data: editData, isLoading: isLoadingEdit } = useCopilotAgentForEdit(editId);
+  const { data: allAgents } = useCopilotAgents();
   const { data: existingDocs = [] } = useAgentDocuments(editId);
   const { data: teamMember } = useCurrentTeamMember();
   const organizationId = teamMember?.organization_id;
+
+  // Live agent status from the agents list (is_active, is_default, active_pipes)
+  const currentAgent = useMemo(
+    () => (isEditMode && allAgents ? allAgents.find((a) => a.id === editId) : null),
+    [isEditMode, allAgents, editId],
+  );
+
+  const handleToggleActive = useCallback(() => {
+    if (!editId || !currentAgent) return;
+    const activating = !currentAgent.is_active;
+    const hasNoPipes = !((currentAgent.active_pipes as string[]) || []).length;
+    if (activating && hasNoPipes) {
+      setPendingActivation(true);
+    } else {
+      toggleAgent.mutate({ id: editId, isActive: activating });
+    }
+  }, [editId, currentAgent, toggleAgent]);
+
+  const handleSetDefault = useCallback(() => {
+    if (!editId) return;
+    setDefault.mutate(editId);
+  }, [editId, setDefault]);
 
   // Load edit data
   useEffect(() => {
@@ -581,19 +628,79 @@ export function CopilotPlayground() {
           />
         </div>
 
-        <Button
-          onClick={handleSave}
-          disabled={isSaving}
-          size="sm"
-          className="gap-2"
-        >
-          {isSaving ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
-            <Save className="w-4 h-4" />
+        <div className="flex items-center gap-2">
+          {/* Status badge + activate/deactivate + set-as-default (edit mode only) */}
+          {isEditMode && currentAgent && (
+            <>
+              <Badge
+                variant={currentAgent.is_active ? "default" : "secondary"}
+                className={currentAgent.is_active ? "bg-success text-success-foreground" : ""}
+              >
+                {currentAgent.is_active ? "Ativo" : "Inativo"}
+              </Badge>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 gap-1.5"
+                    onClick={handleToggleActive}
+                    disabled={toggleAgent.isPending}
+                  >
+                    <Power className="w-3.5 h-3.5" />
+                    {currentAgent.is_active ? "Desativar" : "Ativar"}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {currentAgent.is_active ? "Desativar agente" : "Ativar agente"}
+                </TooltipContent>
+              </Tooltip>
+
+              {!currentAgent.is_default && currentAgent.is_active && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 gap-1.5"
+                      onClick={handleSetDefault}
+                      disabled={setDefault.isPending}
+                    >
+                      <Star className="w-3.5 h-3.5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Definir como padrao</TooltipContent>
+                </Tooltip>
+              )}
+
+              {currentAgent.is_default && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Star className="w-4 h-4 fill-primary text-primary" />
+                  </TooltipTrigger>
+                  <TooltipContent>Agente padrao</TooltipContent>
+                </Tooltip>
+              )}
+
+              <div className="w-px h-6 bg-border" />
+            </>
           )}
-          {isSaving ? "Salvando..." : "Salvar"}
-        </Button>
+
+          <Button
+            onClick={handleSave}
+            disabled={isSaving}
+            size="sm"
+            className="gap-2"
+          >
+            {isSaving ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Save className="w-4 h-4" />
+            )}
+            {isSaving ? "Salvando..." : "Salvar"}
+          </Button>
+        </div>
       </div>
 
       {/* ===== Main Content ===== */}
@@ -601,7 +708,7 @@ export function CopilotPlayground() {
         {/* ===== Left Column: Tabs (Prompt | Tools | Conhecimento) ===== */}
         <div className="flex flex-col w-[60%] border-r min-h-0">
           <Tabs defaultValue="prompt" className="flex flex-col flex-1 min-h-0">
-            <TabsList className="grid w-full grid-cols-7 rounded-none border-b bg-background h-11 shrink-0">
+            <TabsList className="grid w-full grid-cols-8 rounded-none border-b bg-background h-11 shrink-0">
               <TabsTrigger value="prompt" className="gap-1.5 data-[state=active]:bg-muted/50 text-xs">
                 <FileText className="w-3.5 h-3.5" />
                 Prompt
@@ -617,6 +724,10 @@ export function CopilotPlayground() {
               <TabsTrigger value="knowledge" className="gap-1.5 data-[state=active]:bg-muted/50 text-xs">
                 <BookOpen className="w-3.5 h-3.5" />
                 Conhecimento
+              </TabsTrigger>
+              <TabsTrigger value="followup" className="gap-1.5 data-[state=active]:bg-muted/50 text-xs">
+                <RefreshCw className="w-3.5 h-3.5" />
+                Follow-up
               </TabsTrigger>
               <TabsTrigger value="conexao" className="gap-1.5 data-[state=active]:bg-muted/50 text-xs">
                 <Plug className="w-3.5 h-3.5" />
@@ -683,6 +794,10 @@ export function CopilotPlayground() {
               />
             </TabsContent>
 
+            <TabsContent value="followup" className="flex-1 overflow-y-auto m-0 p-4 data-[state=inactive]:hidden">
+              <PlaygroundFollowup agentId={editId} />
+            </TabsContent>
+
             <TabsContent value="conexao" className="flex-1 overflow-y-auto m-0 p-4 data-[state=inactive]:hidden">
               <PlaygroundConexao
                 state={conexao}
@@ -716,6 +831,44 @@ export function CopilotPlayground() {
           />
         </div>
       </div>
+
+      {/* Activation without pipes — confirmation dialog */}
+      <AlertDialog
+        open={pendingActivation}
+        onOpenChange={(open) => !open && setPendingActivation(false)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-amber-500" />
+              Agente sem funis configurados
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <span className="block">
+                O agente <strong>{data.name}</strong> ainda nao tem funis configurados. Ativado assim, ele pode responder a todos os leads da organizacao sem roteamento.
+              </span>
+              <span className="block">
+                Recomendado: configure a aba <strong>Funis</strong> antes de ativar.
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setPendingActivation(false)}>
+              Cancelar — vou configurar primeiro
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (editId) {
+                  toggleAgent.mutate({ id: editId, isActive: true });
+                  setPendingActivation(false);
+                }
+              }}
+            >
+              Ativar mesmo assim
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </motion.div>
   );
 }
