@@ -119,6 +119,12 @@ export interface LeadCardData extends DraggableItem {
   /** Responsáveis dual (pre-venda / venda) com avatar. */
   preSaleResponsible?: { name: string | null; avatar_url?: string | null } | null;
   saleResponsible?:    { name: string | null; avatar_url?: string | null } | null;
+  /**
+   * Instância WhatsApp default deste lead — pré-resolvida pelo hook que monta
+   * o Kanban. Quando presente, vai como `?instance=` na URL do chat e o
+   * shell pula `useResolveChatDeepLink`. Quando ausente, o resolver decide.
+   */
+  primaryInstanceId?: string | null;
 }
 
 export interface LeadCardProps {
@@ -402,10 +408,10 @@ export const LeadCard = memo(function LeadCard({
                 <DropdownMenuContent align="end">
                   {hasPhone && (
                     <DropdownMenuItem
-                      onClick={(e) => openWhatsApp(lead.phone ?? undefined, e)}
+                      onClick={(e) => openWhatsApp(lead.phone ?? undefined, e, lead.primaryInstanceId ?? undefined)}
                       onMouseEnter={openWhatsApp.prefetchRoute}
                       onFocus={openWhatsApp.prefetchRoute}
-                      onMouseDown={() => openWhatsApp.prefetchData(lead.phone ?? undefined)}
+                      onMouseDown={() => openWhatsApp.prefetchData(lead.phone ?? undefined, lead.primaryInstanceId ?? undefined)}
                     >
                       <MessageCircle className="w-4 h-4 mr-2 text-[#25D366]" /> WhatsApp
                     </DropdownMenuItem>
@@ -562,10 +568,10 @@ export const LeadCard = memo(function LeadCard({
             <div className="flex items-center gap-1.5">
               {hasPhone && (
                 <button
-                  onClick={(e) => openWhatsApp(lead.phone ?? undefined, e)}
+                  onClick={(e) => openWhatsApp(lead.phone ?? undefined, e, lead.primaryInstanceId ?? undefined)}
                   onMouseEnter={openWhatsApp.prefetchRoute}
                   onFocus={openWhatsApp.prefetchRoute}
-                  onMouseDown={() => openWhatsApp.prefetchData(lead.phone ?? undefined)}
+                  onMouseDown={() => openWhatsApp.prefetchData(lead.phone ?? undefined, lead.primaryInstanceId ?? undefined)}
                   className="flex items-center gap-1.5 flex-1 justify-center px-2 py-1.5 rounded-md bg-[#25D366] hover:bg-[#1da851] text-white text-xs font-medium transition-colors"
                   title="Abrir WhatsApp"
                 >

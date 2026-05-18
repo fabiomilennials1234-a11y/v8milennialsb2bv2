@@ -12,6 +12,7 @@
  */
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { noRetryOnTimeout } from "@/integrations/supabase/noRetryOnTimeout";
 import { useCurrentTeamMember } from "@/hooks/useTeamMembers";
 import { normalizePhone } from "@/lib/normalizePhone";
 import type { WhatsAppInstanceForUser } from "./types";
@@ -57,38 +58,32 @@ export function useResolveChatDeepLink({
     queryFn: async () => {
       if (!organizationId || !target || allowedIds.length === 0) return null;
 
-      // Últimos 8 dígitos como filtro server-side (alta especificidade,
-      // robusto a variações 55/sem-55 e 9-fix). Confirmação por igualdade
-      // de phone normalizado é feita client-side abaixo.
-      const last8 = target.slice(-8);
-
+      // Match exato contra coluna `normalized_phone` (preenchida via trigger
+      // `normalize_whatsapp_message_phone` — migration 20260908200000).
+      // Index `(organization_id, normalized_phone)` torna esse lookup O(log n)
+      // em vez do seq scan que `LIKE '%last8%'` causava (timeout 8s em orgs
+      // grandes).
       const { data, error } = await supabase
         .from("whatsapp_messages")
         .select("instance_id, phone_number, timestamp")
         .eq("organization_id", organizationId)
+        .eq("normalized_phone", target)
         .in("instance_id", allowedIds)
-        .like("phone_number", `%${last8}%`)
         .not("instance_id", "is", null)
         .order("timestamp", { ascending: false })
-        .limit(50);
+        .limit(1);
 
       if (error) throw error;
       if (!data?.length) return null;
 
-      // Pega o match mais recente cujo phone normalizado bate com o alvo.
-      // Mensagens já vêm ordenadas desc por timestamp.
-      for (const row of data) {
-        const norm = normalizePhone(row.phone_number);
-        if (norm === target && row.instance_id) {
-          // Defesa em profundidade: instância tem que estar na lista permitida.
-          if (!allowedIds.includes(row.instance_id)) continue;
-          return {
-            instanceId: row.instance_id,
-            phoneNumber: row.phone_number,
-          };
-        }
-      }
-      return null;
+      const row = data[0];
+      // Defesa em profundidade: instância tem que estar na lista permitida,
+      // mesmo após o filtro server-side.
+      if (!row.instance_id || !allowedIds.includes(row.instance_id)) return null;
+      return {
+        instanceId: row.instance_id,
+        phoneNumber: row.phone_number,
+      };
     },
     enabled:
       enabled &&
@@ -96,5 +91,6 @@ export function useResolveChatDeepLink({
       !!target &&
       allowedIds.length > 0,
     staleTime: 30_000,
+    retry: noRetryOnTimeout,
   });
 }

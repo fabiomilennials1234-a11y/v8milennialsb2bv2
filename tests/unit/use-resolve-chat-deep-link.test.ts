@@ -10,15 +10,17 @@ import React from "react";
 type MsgRow = { instance_id: string | null; phone_number: string; timestamp: string };
 
 let messagesData: MsgRow[] = [];
-const captured: { in: string[]; like: string[]; eq: Array<[string, unknown]> } = {
+const captured: { in: string[]; like: string[]; eq: Array<[string, unknown]>; order: Array<[string, unknown]>; limit: number[] } = {
   in: [],
   like: [],
   eq: [],
+  order: [],
+  limit: [],
 };
 
 function createChainMock() {
   const chain: Record<string, any> = {};
-  ["select", "order", "not", "limit"].forEach((m) => {
+  ["select", "not"].forEach((m) => {
     chain[m] = vi.fn().mockReturnValue(chain);
   });
   chain.eq = vi.fn((col: string, val: unknown) => {
@@ -31,6 +33,14 @@ function createChainMock() {
   });
   chain.like = vi.fn((_col: string, pattern: string) => {
     captured.like.push(pattern);
+    return chain;
+  });
+  chain.order = vi.fn((col: string, opts: unknown) => {
+    captured.order.push([col, opts]);
+    return chain;
+  });
+  chain.limit = vi.fn((n: number) => {
+    captured.limit.push(n);
     return chain;
   });
   chain.then = (resolve: any, reject?: any) =>
@@ -74,6 +84,8 @@ beforeEach(() => {
   captured.in = [];
   captured.like = [];
   captured.eq = [];
+  captured.order = [];
+  captured.limit = [];
   mockFrom.mockClear();
 });
 
@@ -134,8 +146,11 @@ describe("useResolveChatDeepLink", () => {
     expect(captured.eq.some(([c, v]) => c === "organization_id" && v === "org-t")).toBe(true);
     // Restringido às instâncias permitidas
     expect(captured.in).toEqual(["i1", "i2"]);
-    // LIKE com últimos 8 dígitos (87654321)
-    expect(captured.like[0]).toBe("%87654321%");
+    // Match exato em normalized_phone (sem LIKE, sem wildcard à esquerda)
+    expect(captured.like).toEqual([]);
+    expect(
+      captured.eq.some(([c, v]) => c === "normalized_phone" && v === "11987654321"),
+    ).toBe(true);
   });
 
   it("compara por phone normalizado (formato com/sem 55 e com/sem 9)", async () => {
@@ -185,15 +200,10 @@ describe("useResolveChatDeepLink", () => {
     expect(result.current.data).toBeNull();
   });
 
-  it("retorna null quando nenhum match exato após normalização", async () => {
-    // Phone diferente, só compartilha últimos 8 dígitos (false positive do LIKE).
-    messagesData = [
-      {
-        instance_id: "i1",
-        phone_number: "5521987654321",
-        timestamp: "2026-04-28T10:00:00Z",
-      },
-    ];
+  it("retorna null quando server não encontra match em normalized_phone", async () => {
+    // Server-side eq("normalized_phone", target) filtra exatamente — sem
+    // resultado significa nenhuma mensagem para esse telefone.
+    messagesData = [];
     const qc = newQc();
     const { result } = renderHook(
       () =>
