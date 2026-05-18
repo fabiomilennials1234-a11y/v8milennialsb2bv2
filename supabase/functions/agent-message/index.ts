@@ -235,6 +235,7 @@ Deno.serve(withSentry('agent-message', async (req) => {
       triggerType: "lead_replied",
       leadId: lead.id,
       context: { trigger: "lead_replied", channel, message },
+      source: "copilot",
     }).catch(() => {});
 
     // 2. ROUTE engine version (Trilha 3.B B3 feature flag)

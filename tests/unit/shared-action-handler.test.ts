@@ -870,7 +870,8 @@ describe("handleDuplicateToPipe — deep", () => {
   it("duplicates to confirmacao pipe", async () => {
     const { sb, mockTable, getInserted } = createMockSupabase();
     mockTable("leads", [LEAD_WITH_PHONE]);
-    mockTable("pipe_confirmacao", []);
+    mockTable("pipelines", [{ id: "pipe-conf", organization_id: "org-1", slug: "confirmacao", type: "system" }]);
+    mockTable("pipeline_entries", []);
 
     const result = await executeWorkflowAction({
       supabase: sb, organizationId: "org-1", leadId: "lead-1",
@@ -879,15 +880,16 @@ describe("handleDuplicateToPipe — deep", () => {
     });
     expect(result.success).toBe(true);
     expect(result.message).toContain("confirmacao");
-    const inserted = getInserted("pipe_confirmacao");
+    const inserted = getInserted("pipeline_entries");
     expect(inserted.length).toBeGreaterThan(0);
-    expect(inserted[0]).toMatchObject({ lead_id: "lead-1", status: "reuniao_marcada" });
+    expect(inserted[0]).toMatchObject({ lead_id: "lead-1", stage_key: "reuniao_marcada" });
   });
 
   it("duplicates to propostas pipe", async () => {
     const { sb, mockTable, getInserted } = createMockSupabase();
     mockTable("leads", [LEAD_WITH_PHONE]);
-    mockTable("pipe_propostas", []);
+    mockTable("pipelines", [{ id: "pipe-prop", organization_id: "org-1", slug: "propostas", type: "system" }]);
+    mockTable("pipeline_entries", []);
 
     const result = await executeWorkflowAction({
       supabase: sb, organizationId: "org-1", leadId: "lead-1",
@@ -896,14 +898,16 @@ describe("handleDuplicateToPipe — deep", () => {
     });
     expect(result.success).toBe(true);
     expect(result.message).toContain("propostas");
-    const inserted = getInserted("pipe_propostas");
+    const inserted = getInserted("pipeline_entries");
     expect(inserted.length).toBeGreaterThan(0);
-    expect(inserted[0]).toMatchObject({ lead_id: "lead-1", status: "proposta_enviada" });
+    expect(inserted[0]).toMatchObject({ lead_id: "lead-1", stage_key: "proposta_enviada" });
   });
 
   it("duplicates to whatsapp (default) updates lead stage", async () => {
     const { sb, mockTable } = createMockSupabase();
     mockTable("leads", [LEAD_WITH_PHONE]);
+    mockTable("pipelines", [{ id: "pipe-wpp", organization_id: "org-1", slug: "whatsapp", type: "system" }]);
+    mockTable("pipeline_entries", []);
 
     const result = await executeWorkflowAction({
       supabase: sb, organizationId: "org-1", leadId: "lead-1",
@@ -914,10 +918,11 @@ describe("handleDuplicateToPipe — deep", () => {
     expect(result.message).toContain("whatsapp");
   });
 
-  it("skips insert when entry already exists in confirmacao", async () => {
+  it("updates existing entry in confirmacao (upsert behavior)", async () => {
     const { sb, mockTable, getInserted } = createMockSupabase();
     mockTable("leads", [LEAD_WITH_PHONE]);
-    mockTable("pipe_confirmacao", [{ id: "pc-existing", lead_id: "lead-1" }]);
+    mockTable("pipelines", [{ id: "pipe-conf", organization_id: "org-1", slug: "confirmacao", type: "system" }]);
+    mockTable("pipeline_entries", [{ id: "pe-existing", pipeline_id: "pipe-conf", lead_id: "lead-1", stage_key: "reuniao_marcada" }]);
 
     const result = await executeWorkflowAction({
       supabase: sb, organizationId: "org-1", leadId: "lead-1",
@@ -925,8 +930,8 @@ describe("handleDuplicateToPipe — deep", () => {
       executionContext: {},
     });
     expect(result.success).toBe(true);
-    // Should NOT have inserted a new row since existing was found
-    const inserted = getInserted("pipe_confirmacao");
+    // Should NOT have inserted a new row since existing was found (update path)
+    const inserted = getInserted("pipeline_entries");
     expect(inserted.length).toBe(0);
   });
 
@@ -1241,7 +1246,9 @@ describe("handleMoveStage — deep", () => {
   it("moves stage in whatsapp pipe (creates new entry)", async () => {
     const { sb, mockTable, getInserted } = createMockSupabase();
     mockTable("leads", [LEAD_WITH_PHONE]);
-    mockTable("pipe_whatsapp", []); // no existing entry
+    mockTable("pipeline_stages", []);
+    mockTable("pipelines", [{ id: "pipe-wpp", organization_id: "org-1", slug: "whatsapp", type: "system" }]);
+    mockTable("pipeline_entries", []);
 
     const result = await executeWorkflowAction({
       supabase: sb, organizationId: "org-1", leadId: "lead-1",
@@ -1250,14 +1257,16 @@ describe("handleMoveStage — deep", () => {
     });
     expect(result.success).toBe(true);
     expect(result.data).toMatchObject({ pipeType: "whatsapp", targetStage: "respondeu" });
-    const inserted = getInserted("pipe_whatsapp");
+    const inserted = getInserted("pipeline_entries");
     expect(inserted.length).toBeGreaterThan(0);
   });
 
   it("moves stage in confirmacao pipe (creates new entry)", async () => {
-    const { sb, mockTable, getInserted } = createMockSupabase();
+    const { sb, mockTable } = createMockSupabase();
     mockTable("leads", [LEAD_WITH_PHONE]);
-    mockTable("pipe_confirmacao", []);
+    mockTable("pipeline_stages", []);
+    mockTable("pipelines", [{ id: "pipe-conf", organization_id: "org-1", slug: "confirmacao", type: "system" }]);
+    mockTable("pipeline_entries", []);
 
     const result = await executeWorkflowAction({
       supabase: sb, organizationId: "org-1", leadId: "lead-1",
@@ -1269,9 +1278,11 @@ describe("handleMoveStage — deep", () => {
   });
 
   it("moves stage in propostas pipe (creates new entry)", async () => {
-    const { sb, mockTable, getInserted } = createMockSupabase();
+    const { sb, mockTable } = createMockSupabase();
     mockTable("leads", [LEAD_WITH_PHONE]);
-    mockTable("pipe_propostas", []);
+    mockTable("pipeline_stages", []);
+    mockTable("pipelines", [{ id: "pipe-prop", organization_id: "org-1", slug: "propostas", type: "system" }]);
+    mockTable("pipeline_entries", []);
 
     const result = await executeWorkflowAction({
       supabase: sb, organizationId: "org-1", leadId: "lead-1",

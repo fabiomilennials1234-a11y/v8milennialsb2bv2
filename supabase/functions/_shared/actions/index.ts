@@ -5,10 +5,10 @@
  * Cada capability vive num arquivo próprio:
  *   - schedule-meeting.ts
  *   - update-lead.ts
- *   - move-card.ts
  *   - qualify-lead.ts
  *   - transfer-human.ts
  *   - send-document.ts
+ *   - ../action-handlers/move-stage.ts (shared between AI and Workflow dispatchers)
  *
  * O wrapper público (executeAiAction) preserva o contrato externo:
  *   process-ai-actions/index.ts → executeAiAction(supabase, action)
@@ -31,10 +31,7 @@ import {
   executeUpdateLead,
   executeCreateCustomField,
 } from "./update-lead.ts";
-import {
-  executeAdvanceStage,
-  executeUpdatePipelineStage,
-} from "./move-card.ts";
+import { moveStage } from "../action-handlers/move-stage.ts";
 import {
   executeUpdateQualificationScore,
   executeAutomation,
@@ -88,7 +85,10 @@ export async function executeAiAction(
       result = await executeUpdateQualificationScore(supabase, payload);
       break;
     case "advance_stage":
-      result = await executeAdvanceStage(supabase, payload, organization_id);
+      result = await moveStage({
+        supabase, organizationId: organization_id, leadId: lead_id || payload.lead_id as string || null,
+        conversationId: conversation_id, params: payload,
+      });
       break;
     case "confirm_meeting":
       result = await executeConfirmMeeting(supabase, payload);
@@ -105,7 +105,11 @@ export async function executeAiAction(
       result = await executeAutomation(supabase, payload, organization_id, lead_id);
       break;
     case "update_pipeline_stage":
-      result = await executeUpdatePipelineStage(supabase, payload, organization_id);
+      result = await moveStage({
+        supabase, organizationId: organization_id, leadId: lead_id || payload.lead_id as string || null,
+        conversationId: conversation_id,
+        params: { target_stage: payload.new_stage || payload.target_stage, target_pipe: payload.target_pipe || "whatsapp" },
+      });
       break;
     case "transfer_sz_chat":
       result = await executeTransferSzChat(supabase, lead_id, organization_id, payload);

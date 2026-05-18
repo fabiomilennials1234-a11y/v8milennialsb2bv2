@@ -12,6 +12,7 @@ import { getWhatsAppProvider } from "./whatsapp-client.ts";
 import { getTimeBasedVariables } from "./time-variables.ts";
 import { getPipeEntry, upsertPipeEntry, updatePipeEntryById, deletePipeEntry } from "./pipeline-adapter.ts";
 import { sendMessage } from "./message-gateway.ts";
+import { moveStage as sharedMoveStage } from "./action-handlers/move-stage.ts";
 
 export interface ActionResult {
   success: boolean;
@@ -379,9 +380,20 @@ export async function executeWorkflowAction(ctx: ActionContext): Promise<ActionR
       break;
 
     // ── Lead Management ──
-    case "move_stage":
-      result = await handleMoveStage(ctx);
+    case "move_stage": {
+      const pipeType = ctx.nodeData.pipeType as string || "whatsapp";
+      const targetStage = ctx.nodeData.targetStage as string;
+      if (!targetStage) { result = { success: false, error: "No target stage configured" }; break; }
+      result = await sharedMoveStage({
+        supabase: ctx.supabase, organizationId: ctx.organizationId, leadId: ctx.leadId,
+        conversationId: null,
+        params: { target_stage: targetStage, target_pipe: pipeType },
+      });
+      if (result.success && result.data) {
+        result.data = { pipeType, targetStage: result.data.target_stage };
+      }
       break;
+    }
     case "add_tag":
       result = await handleAddTag(ctx);
       break;
@@ -1009,124 +1021,8 @@ async function handleSendSemiAutomatic(ctx: ActionContext): Promise<ActionResult
 }
 
 // ─── Lead Management Handlers ───────────────────────────────────────────────
-
-async function handleMoveStage(ctx: ActionContext): Promise<ActionResult> {
-  const pipeType = ctx.nodeData.pipeType as string || "whatsapp";
-  const targetStage = ctx.nodeData.targetStage as string;
-  if (!targetStage) return { success: false, error: "No target stage configured" };
-
-  switch (pipeType) {
-    case "whatsapp": {
-      await ctx.supabase.from("leads").update({ pipe_whatsapp: targetStage }).eq("id", ctx.leadId);
-      const entryId = await upsertPipeEntry(ctx.supabase, {
-        leadId: ctx.leadId, orgId: ctx.organizationId, slug: "whatsapp", stageKey: targetStage,
-      });
-      if (!entryId) return { success: false, error: `Failed to upsert pipeline_entries for whatsapp/${targetStage}` };
-      break;
-    }
-    case "confirmacao": {
-      const entryId = await upsertPipeEntry(ctx.supabase, {
-        leadId: ctx.leadId, orgId: ctx.organizationId, slug: "confirmacao", stageKey: targetStage,
-      });
-      if (!entryId) return { success: false, error: `Failed to upsert pipeline_entries for confirmacao/${targetStage}` };
-      break;
-    }
-    case "propostas": {
-      const entryId = await upsertPipeEntry(ctx.supabase, {
-        leadId: ctx.leadId, orgId: ctx.organizationId, slug: "propostas", stageKey: targetStage,
-      });
-      if (!entryId) return { success: false, error: `Failed to upsert pipeline_entries for propostas/${targetStage}` };
-      break;
-    }
-    case "upsell_base":
-      await ctx.supabase.from("upsell_clients").update({ tipo_cliente_tempo: targetStage }).eq("lead_id", ctx.leadId);
-      break;
-    case "upsell_gestao":
-      await ctx.supabase.from("upsell_clients").update({ gestao_stage: targetStage }).eq("lead_id", ctx.leadId);
-      break;
-    default: {
-      // Custom pipeline — pipeType is the custom pipeline UUID
-      const customPipelineId = pipeType;
-
-      // targetStage is the custom_pipeline_stages.id
-      const { data: stageRow } = await ctx.supabase
-        .from("custom_pipeline_stages")
-        .select("id, is_final_positive, target_pipeline_id, target_stage_id, target_pipe_type, target_stage_key")
-        .eq("id", targetStage)
-        .eq("pipeline_id", customPipelineId)
-        .eq("organization_id", ctx.organizationId)
-        .maybeSingle();
-
-      if (!stageRow) {
-        return { success: false, error: `Custom stage ${targetStage} not found in pipeline ${customPipelineId}` };
-      }
-
-      // Upsert into custom_pipe_entries
-      const { data: existingEntry } = await ctx.supabase
-        .from("custom_pipe_entries")
-        .select("id")
-        .eq("lead_id", ctx.leadId)
-        .eq("pipeline_id", customPipelineId)
-        .maybeSingle();
-
-      if (existingEntry) {
-        await ctx.supabase
-          .from("custom_pipe_entries")
-          .update({ stage_id: targetStage, stage_changed_at: new Date().toISOString() })
-          .eq("id", existingEntry.id);
-      } else {
-        await ctx.supabase.from("custom_pipe_entries").insert({
-          lead_id: ctx.leadId,
-          organization_id: ctx.organizationId,
-          pipeline_id: customPipelineId,
-          stage_id: targetStage,
-          entered_at: new Date().toISOString(),
-          stage_changed_at: new Date().toISOString(),
-        });
-      }
-
-      // Auto-transition on success stage
-      if (stageRow.is_final_positive) {
-        if (stageRow.target_pipeline_id && stageRow.target_stage_id) {
-          // Transition to another custom pipeline
-          const { data: targetEntry } = await ctx.supabase
-            .from("custom_pipe_entries").select("id")
-            .eq("lead_id", ctx.leadId).eq("pipeline_id", stageRow.target_pipeline_id).maybeSingle();
-          if (targetEntry) {
-            await ctx.supabase.from("custom_pipe_entries")
-              .update({ stage_id: stageRow.target_stage_id, stage_changed_at: new Date().toISOString() })
-              .eq("id", targetEntry.id);
-          } else {
-            await ctx.supabase.from("custom_pipe_entries").insert({
-              lead_id: ctx.leadId, organization_id: ctx.organizationId,
-              pipeline_id: stageRow.target_pipeline_id, stage_id: stageRow.target_stage_id,
-              entered_at: new Date().toISOString(), stage_changed_at: new Date().toISOString(),
-            });
-          }
-        } else if (stageRow.target_pipe_type && stageRow.target_stage_key) {
-          // Transition to standard pipeline — reuse handleMoveStage logic
-          const transitionPipe = stageRow.target_pipe_type;
-          const transitionStage = stageRow.target_stage_key;
-          if (transitionPipe === "whatsapp" || transitionPipe === "confirmacao" || transitionPipe === "propostas") {
-            if (transitionPipe === "whatsapp") {
-              await ctx.supabase.from("leads").update({ pipe_whatsapp: transitionStage }).eq("id", ctx.leadId);
-            }
-            const transEntryId = await upsertPipeEntry(ctx.supabase, {
-              leadId: ctx.leadId, orgId: ctx.organizationId, slug: transitionPipe, stageKey: transitionStage,
-            });
-            if (!transEntryId) return { success: false, error: `Auto-transition failed: pipeline_entries upsert for ${transitionPipe}/${transitionStage}` };
-          } else if (transitionPipe === "upsell_base") {
-            await ctx.supabase.from("upsell_clients").update({ tipo_cliente_tempo: transitionStage }).eq("lead_id", ctx.leadId);
-          } else if (transitionPipe === "upsell_gestao") {
-            await ctx.supabase.from("upsell_clients").update({ gestao_stage: transitionStage }).eq("lead_id", ctx.leadId);
-          }
-        }
-      }
-    }
-  }
-
-  return { success: true, message: `Moved to ${targetStage} in ${pipeType}`, data: { pipeType, targetStage } };
-}
+// handleMoveStage — REMOVED: replaced by sharedMoveStage (action-handlers/move-stage.ts)
+// Callers: case "move_stage" in executeWorkflowAction now delegates directly.
 
 async function handleAddTag(ctx: ActionContext): Promise<ActionResult> {
   const tagName = ctx.nodeData.tagName as string;

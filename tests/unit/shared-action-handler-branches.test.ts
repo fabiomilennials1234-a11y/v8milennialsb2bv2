@@ -290,7 +290,9 @@ describe("handleMoveStage — all pipe types", () => {
   it("whatsapp — inserts new pipe_whatsapp row when none exists", async () => {
     const { sb, mockTable } = createMockSupabase();
     mockTable("leads", [LEAD_FULL]);
-    mockTable("pipe_whatsapp", []);
+    mockTable("pipeline_stages", []);
+    mockTable("pipelines", [{ id: "pipe-wpp", organization_id: "org-1", slug: "whatsapp", type: "system" }]);
+    mockTable("pipeline_entries", []);
     const result = await executeWorkflowAction({
       supabase: sb,
       organizationId: "org-1",
@@ -309,7 +311,9 @@ describe("handleMoveStage — all pipe types", () => {
   it("confirmacao — updates existing row", async () => {
     const { sb, mockTable } = createMockSupabase();
     mockTable("leads", [LEAD_FULL]);
-    mockTable("pipe_confirmacao", [{ id: "pc1", lead_id: "lead-1" }]);
+    mockTable("pipeline_stages", []);
+    mockTable("pipelines", [{ id: "pipe-conf", organization_id: "org-1", slug: "confirmacao", type: "system" }]);
+    mockTable("pipeline_entries", []);
     const result = await executeWorkflowAction({
       supabase: sb,
       organizationId: "org-1",
@@ -326,7 +330,9 @@ describe("handleMoveStage — all pipe types", () => {
 
   it("confirmacao — inserts when no row", async () => {
     const { sb, mockTable } = createMockSupabase();
-    mockTable("pipe_confirmacao", []);
+    mockTable("pipeline_stages", []);
+    mockTable("pipelines", [{ id: "pipe-conf", organization_id: "org-1", slug: "confirmacao", type: "system" }]);
+    mockTable("pipeline_entries", []);
     const result = await executeWorkflowAction({
       supabase: sb,
       organizationId: "org-1",
@@ -343,7 +349,9 @@ describe("handleMoveStage — all pipe types", () => {
 
   it("propostas — updates existing row", async () => {
     const { sb, mockTable } = createMockSupabase();
-    mockTable("pipe_propostas", [{ id: "pp1", lead_id: "lead-1" }]);
+    mockTable("pipeline_stages", []);
+    mockTable("pipelines", [{ id: "pipe-prop", organization_id: "org-1", slug: "propostas", type: "system" }]);
+    mockTable("pipeline_entries", []);
     const result = await executeWorkflowAction({
       supabase: sb,
       organizationId: "org-1",
@@ -360,7 +368,9 @@ describe("handleMoveStage — all pipe types", () => {
 
   it("propostas — inserts when no row", async () => {
     const { sb, mockTable } = createMockSupabase();
-    mockTable("pipe_propostas", []);
+    mockTable("pipeline_stages", []);
+    mockTable("pipelines", [{ id: "pipe-prop", organization_id: "org-1", slug: "propostas", type: "system" }]);
+    mockTable("pipeline_entries", []);
     const result = await executeWorkflowAction({
       supabase: sb,
       organizationId: "org-1",
@@ -410,6 +420,7 @@ describe("handleMoveStage — all pipe types", () => {
   it("custom pipeline — target stage not found returns error", async () => {
     const { sb, mockTable } = createMockSupabase();
     mockTable("custom_pipeline_stages", []);
+    mockTable("custom_pipe_entries", []);
     const result = await executeWorkflowAction({
       supabase: sb,
       organizationId: "org-1",
@@ -422,7 +433,7 @@ describe("handleMoveStage — all pipe types", () => {
       executionContext: {},
     });
     expect(result.success).toBe(false);
-    expect(result.error).toContain("not found");
+    expect(result.error).toMatch(/not found|não encontrada/);
   });
 
   it("custom pipeline — inserts new entry on first move", async () => {
@@ -465,7 +476,8 @@ describe("handleMoveStage — all pipe types", () => {
     mockTable("custom_pipe_entries", [
       { id: "cpe1", lead_id: "lead-1", pipeline_id: "pipe-custom" },
     ]);
-    mockTable("pipe_propostas", []);
+    mockTable("pipelines", [{ id: "pipe-prop", organization_id: "org-1", slug: "propostas", type: "system" }]);
+    mockTable("pipeline_entries", []);
     const result = await executeWorkflowAction({
       supabase: sb,
       organizationId: "org-1",

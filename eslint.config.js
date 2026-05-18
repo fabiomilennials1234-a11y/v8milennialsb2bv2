@@ -3,6 +3,7 @@ import globals from "globals";
 import reactHooks from "eslint-plugin-react-hooks";
 import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
+import noBrittleSupabaseMocks from "./eslint-rules/no-brittle-supabase-mocks.js";
 
 export default tseslint.config(
   {
@@ -24,6 +25,7 @@ export default tseslint.config(
     plugins: {
       "react-hooks": reactHooks,
       "react-refresh": reactRefresh,
+      "custom": { rules: { "no-brittle-supabase-mocks": noBrittleSupabaseMocks } },
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
@@ -44,6 +46,51 @@ export default tseslint.config(
       "no-self-assign": "warn",
       "react-hooks/rules-of-hooks": "warn",
       "@typescript-eslint/no-unsafe-function-type": "warn",
+      "custom/no-brittle-supabase-mocks": "warn",
+    },
+  },
+  // Grandfathered files — pre-existing brittle Supabase chain mocks.
+  // New test files MUST use createMockSupabase from tests/helpers/supabase-mock.ts.
+  {
+    files: [
+      "tests/unit/use-workflows.test.ts",
+      "tests/unit/use-tags.test.ts",
+      "tests/unit/use-copilot-prompt-builder.test.ts",
+      "tests/unit/use-commissions.test.ts",
+      "tests/unit/hooks-batch-8-tags.test.ts",
+      "tests/unit/use-products.test.ts",
+      "tests/unit/hooks-batch-1.test.ts",
+      "tests/unit/hooks-sprint2-master-users.test.ts",
+      "tests/unit/hooks-sprint2-stage-workflows.test.ts",
+      "tests/unit/use-webhooks.test.ts",
+      "tests/unit/hooks-sprint2-small.test.ts",
+      "tests/unit/hooks-batch-8-workflows.test.ts",
+      "tests/unit/hooks-batch-8-channel-chat.test.ts",
+      "tests/unit/hooks-batch-8-goals.test.ts",
+      "tests/unit/use-custom-pipelines.test.ts",
+      "tests/unit/hooks-sprint2-pipeline-stages.test.ts",
+      "tests/unit/subscription.test.ts",
+      "tests/unit/hooks-sprint2-team-members.test.ts",
+      "tests/unit/use-follow-ups.test.ts",
+      "tests/unit/hooks-batch-8-commissions.test.ts",
+      "tests/unit/hooks-sprint2-leads.test.ts",
+      "tests/unit/use-whatsapp-chat.test.ts",
+      "tests/unit/use-goals.test.ts",
+      "tests/unit/use-permissions-hooks.test.ts",
+      "tests/unit/hooks-sprint2-campaign-templates.test.ts",
+      "tests/unit/use-organization.test.ts",
+      "tests/unit/use-campanhas.test.ts",
+      "tests/unit/hooks-batch-8-products.test.ts",
+      "tests/unit/hooks-batch-8-followups.test.ts",
+      "tests/unit/use-copilot-agents.test.ts",
+      "tests/unit/permissions.test.ts",
+      "tests/unit/use-master-auth.test.ts",
+      "tests/unit/use-resolve-chat-deep-link.test.ts",
+      "tests/unit/hooks-batch-8-checkout.test.ts",
+      "tests/helpers/hook-test-utils.ts",
+    ],
+    rules: {
+      "custom/no-brittle-supabase-mocks": "off",
     },
   },
 );

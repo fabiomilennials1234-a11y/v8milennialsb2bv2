@@ -1,0 +1,163 @@
+import type { ActionInput, ActionResult } from "./types.ts";
+import { upsertPipeEntry } from "../pipeline-adapter.ts";
+import type { PipeSlug } from "../pipeline-adapter.ts";
+
+const STANDARD_PIPES = ["whatsapp", "confirmacao", "propostas", "upsell_base", "upsell_gestao", "campanha"];
+
+export async function moveStage(input: ActionInput): Promise<ActionResult> {
+  const { supabase, organizationId, leadId, params } = input;
+
+  if (!leadId) {
+    return { success: false, error: "leadId é obrigatório para moveStage" };
+  }
+
+  const targetStage = params.target_stage as string;
+  if (!targetStage) {
+    return { success: false, error: "target_stage é obrigatório" };
+  }
+
+  const targetPipe = (params.target_pipe as string) || "whatsapp";
+  const normalizedStage = String(targetStage).trim().toLowerCase();
+
+  // Stage validation for standard pipes
+  if (STANDARD_PIPES.includes(targetPipe) && targetPipe !== "upsell_base" && targetPipe !== "upsell_gestao" && targetPipe !== "campanha") {
+    const { data: stages } = await supabase
+      .from("pipeline_stages")
+      .select("stage_key")
+      .eq("organization_id", organizationId)
+      .eq("pipeline_type", targetPipe)
+      .eq("is_active", true);
+
+    const validKeys = (stages || []).map((s: { stage_key: string }) => s.stage_key);
+    if (validKeys.length > 0 && !validKeys.some((k: string) => k.toLowerCase() === normalizedStage)) {
+      return {
+        success: false,
+        error: `Etapa inválida para funil ${targetPipe}. Válidas: ${validKeys.join(", ")}`,
+      };
+    }
+  }
+
+  const finalStage = normalizedStage;
+
+  switch (targetPipe) {
+    case "whatsapp": {
+      const entryId = await upsertPipeEntry(supabase, {
+        leadId, orgId: organizationId, slug: "whatsapp", stageKey: finalStage,
+      });
+      if (!entryId) {
+        return { success: false, error: `Falha ao atualizar pipeline_entries para whatsapp/${finalStage}` };
+      }
+      await supabase.from("leads").update({ pipe_whatsapp: finalStage }).eq("id", leadId);
+      break;
+    }
+    case "confirmacao":
+    case "propostas": {
+      const entryId = await upsertPipeEntry(supabase, {
+        leadId, orgId: organizationId, slug: targetPipe as PipeSlug, stageKey: finalStage,
+      });
+      if (!entryId) {
+        return { success: false, error: `Falha ao atualizar pipeline_entries para ${targetPipe}/${finalStage}` };
+      }
+      break;
+    }
+    case "upsell_base":
+      await supabase.from("upsell_clients").update({ tipo_cliente_tempo: finalStage }).eq("lead_id", leadId);
+      break;
+    case "upsell_gestao":
+      await supabase.from("upsell_clients").update({ gestao_stage: finalStage }).eq("lead_id", leadId);
+      break;
+    case "campanha": {
+      const { data: campStage } = await supabase
+        .from("campanha_stages")
+        .select("id")
+        .ilike("name", finalStage)
+        .limit(1)
+        .maybeSingle();
+      if (campStage) {
+        await supabase.from("campanha_leads").update({ stage_id: campStage.id }).eq("lead_id", leadId);
+      }
+      break;
+    }
+    default: {
+      // Custom pipeline — targetPipe is the pipeline UUID
+      const customPipelineId = targetPipe;
+      const { data: stageRow } = await supabase
+        .from("custom_pipeline_stages")
+        .select("id, is_final_positive, target_pipeline_id, target_stage_id, target_pipe_type, target_stage_key")
+        .eq("id", targetStage)
+        .eq("pipeline_id", customPipelineId)
+        .eq("organization_id", organizationId)
+        .maybeSingle();
+
+      if (!stageRow) {
+        return { success: false, error: `Etapa customizada ${targetStage} não encontrada no pipeline ${customPipelineId}` };
+      }
+
+      const { data: existingEntry } = await supabase
+        .from("custom_pipe_entries")
+        .select("id")
+        .eq("lead_id", leadId)
+        .eq("pipeline_id", customPipelineId)
+        .maybeSingle();
+
+      const now = new Date().toISOString();
+      if (existingEntry) {
+        await supabase
+          .from("custom_pipe_entries")
+          .update({ stage_id: targetStage, stage_changed_at: now })
+          .eq("id", existingEntry.id);
+      } else {
+        await supabase.from("custom_pipe_entries").insert({
+          lead_id: leadId,
+          organization_id: organizationId,
+          pipeline_id: customPipelineId,
+          stage_id: targetStage,
+          entered_at: now,
+          stage_changed_at: now,
+        });
+      }
+
+      // Auto-transition on is_final_positive
+      if (stageRow.is_final_positive) {
+        if (stageRow.target_pipeline_id && stageRow.target_stage_id) {
+          const { data: targetEntry } = await supabase
+            .from("custom_pipe_entries").select("id")
+            .eq("lead_id", leadId).eq("pipeline_id", stageRow.target_pipeline_id).maybeSingle();
+          if (targetEntry) {
+            await supabase.from("custom_pipe_entries")
+              .update({ stage_id: stageRow.target_stage_id, stage_changed_at: now })
+              .eq("id", targetEntry.id);
+          } else {
+            await supabase.from("custom_pipe_entries").insert({
+              lead_id: leadId, organization_id: organizationId,
+              pipeline_id: stageRow.target_pipeline_id, stage_id: stageRow.target_stage_id,
+              entered_at: now, stage_changed_at: now,
+            });
+          }
+        } else if (stageRow.target_pipe_type && stageRow.target_stage_key) {
+          const transPipe = stageRow.target_pipe_type;
+          const transStage = stageRow.target_stage_key;
+          if (transPipe === "whatsapp" || transPipe === "confirmacao" || transPipe === "propostas") {
+            if (transPipe === "whatsapp") {
+              await supabase.from("leads").update({ pipe_whatsapp: transStage }).eq("id", leadId);
+            }
+            await upsertPipeEntry(supabase, {
+              leadId, orgId: organizationId, slug: transPipe as PipeSlug, stageKey: transStage,
+            });
+          } else if (transPipe === "upsell_base") {
+            await supabase.from("upsell_clients").update({ tipo_cliente_tempo: transStage }).eq("lead_id", leadId);
+          } else if (transPipe === "upsell_gestao") {
+            await supabase.from("upsell_clients").update({ gestao_stage: transStage }).eq("lead_id", leadId);
+          }
+        }
+      }
+      break;
+    }
+  }
+
+  return {
+    success: true,
+    message: `Lead movido para ${finalStage} no funil ${targetPipe}`,
+    data: { target_stage: finalStage, target_pipe: targetPipe },
+  };
+}
