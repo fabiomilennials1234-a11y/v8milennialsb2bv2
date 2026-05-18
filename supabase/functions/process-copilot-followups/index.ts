@@ -2,10 +2,13 @@ import { withSentry } from '../_shared/sentry.ts';
 import { getTimeBasedVariables as getTimeVars } from '../_shared/time-variables.ts';
 import { getPipeEntriesByLeads } from "../_shared/pipeline-adapter.ts";
 /**
- * Worker: Processa regras de follow-up do Copilot (no_response)
+ * Worker: Processa regras de follow-up do Copilot
  *
- * Leads que qualificam: última mensagem nossa, X tempo sem resposta,
- * filtros OK, max_followups não atingido, horário comercial OK.
+ * Supports:
+ * - Single-shot no_response rules (existing behavior, unchanged)
+ * - Multi-step cadence rules (sequence_steps JSONB)
+ * - New trigger types: after_qualification, after_meeting_scheduled,
+ *   post_sale, proposal_no_response
  *
  * Chamado por pg_cron a cada 5 min ou manualmente com x-cron-secret.
  */
@@ -20,6 +23,8 @@ import { AgentEngine } from "../agent-message/agent-engine.ts";
 import { OpenRouterClient } from "../agent-message/openrouter-client.ts";
 import { timingSafeCompare } from "../_shared/auth.ts";
 import { isCopilotCanceled } from "../_shared/copilot/cancellation.ts";
+import { getNextCadenceStep, type CadenceStep, type StepLogEntry } from "../_shared/copilot/followup-cadence.ts";
+import { isLeadEligibleForTrigger, type TriggerLead } from "../_shared/copilot/followup-triggers.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -56,12 +61,21 @@ Deno.serve(withSentry('process-copilot-followups', async (req) => {
   let totalSent = 0;
   let totalSkipped = 0;
 
+  const SUPPORTED_TRIGGERS = [
+    "no_response",
+    "after_qualification",
+    "after_meeting_scheduled",
+    "post_sale",
+    "proposal_no_response",
+  ];
+
   const { data: rules, error: rulesErr } = await supabase
     .from("copilot_agent_followup_rules")
     .select(
       `
       id,
       agent_id,
+      trigger_type,
       trigger_delay_hours,
       trigger_delay_minutes,
       max_followups,
@@ -78,11 +92,12 @@ Deno.serve(withSentry('process-copilot-followups', async (req) => {
       business_hours_end,
       send_days,
       timezone,
+      sequence_steps,
       copilot_agents(organization_id, whatsapp_instance_id)
     `
     )
     .eq("is_active", true)
-    .eq("trigger_type", "no_response")
+    .in("trigger_type", SUPPORTED_TRIGGERS)
     .order("priority", { ascending: false });
 
   if (rulesErr || !rules?.length) {
@@ -141,11 +156,23 @@ Deno.serve(withSentry('process-copilot-followups', async (req) => {
     const filterPipes = (rule.filter_pipes as string[]) || [];
     const filterStages = (rule.filter_stages as string[]) || [];
 
+    const triggerType = (rule as any).trigger_type || "no_response";
+    const sequenceSteps = (rule as any).sequence_steps as CadenceStep[] | null;
+    const hasCadence = Array.isArray(sequenceSteps) && sequenceSteps.length > 0;
+
     const candidateSlice = candidates.slice(0, BATCH_PER_RULE);
     const leadIds = candidateSlice.map((c: any) => c.lead_id);
 
-    // Batch: buscar todos os leads, pipe entries e contagens de execução de uma vez
-    const [{ data: allLeads }, { data: execRows }, confEntries, propEntries] = await Promise.all([
+    // Batch: buscar todos os leads, pipe entries, contagens e step logs de uma vez
+    const stepLogPromise = hasCadence
+      ? supabase
+          .from("copilot_followup_step_log")
+          .select("rule_id, lead_id, current_step, last_step_sent_at, completed")
+          .eq("rule_id", rule.id)
+          .in("lead_id", leadIds)
+      : Promise.resolve({ data: [] });
+
+    const [{ data: allLeads }, { data: execRows }, confEntries, propEntries, { data: stepLogs }] = await Promise.all([
       supabase
         .from("leads")
         .select(`
@@ -170,6 +197,7 @@ Deno.serve(withSentry('process-copilot-followups', async (req) => {
         .in("lead_id", leadIds),
       getPipeEntriesByLeads(supabase, leadIds, orgId, "confirmacao"),
       getPipeEntriesByLeads(supabase, leadIds, orgId, "propostas"),
+      stepLogPromise,
     ]);
 
     // Build lookup maps for pipe entries
@@ -187,6 +215,12 @@ Deno.serve(withSentry('process-copilot-followups', async (req) => {
     const execCountMap = new Map<string, number>();
     for (const row of execRows || []) {
       execCountMap.set(row.lead_id, (execCountMap.get(row.lead_id) || 0) + 1);
+    }
+
+    // Step log map for cadence rules
+    const stepLogMap = new Map<string, StepLogEntry>();
+    for (const log of (stepLogs || []) as StepLogEntry[]) {
+      stepLogMap.set(log.lead_id, log);
     }
 
     let sentThisRule = 0;
@@ -279,14 +313,70 @@ Deno.serve(withSentry('process-copilot-followups', async (req) => {
         }
       }
 
-      const count = execCountMap.get(c.lead_id) || 0;
-
-      if (count >= (rule.max_followups ?? 3)) {
-        totalSkipped++;
-        continue;
+      // ---- Trigger eligibility for non-no_response types ----
+      if (triggerType !== "no_response") {
+        const confirmacaoEntry = (lead as any).pipe_confirmacao?.[0] || (lead as any).pipe_confirmacao || null;
+        const propostasEntry = (lead as any).pipe_propostas?.[0] || (lead as any).pipe_propostas || null;
+        const triggerLead: TriggerLead = {
+          qualification_score: (lead as any).qualification_score,
+          qualified_at: (lead as any).qualified_at,
+          pipe_stages: {
+            ...(confirmacaoEntry?.status ? { confirmacao: confirmacaoEntry.status } : {}),
+            ...(propostasEntry?.status ? { propostas: propostasEntry.status } : {}),
+          },
+          last_message_at: c.last_outgoing_at,
+          stage_changed_at: (lead as any).stage_changed_at,
+        };
+        const triggerCheck = isLeadEligibleForTrigger({
+          triggerType,
+          lead: triggerLead,
+          triggerDelayHours: rule.trigger_delay_hours ?? 24,
+          triggerDelayMinutes: rule.trigger_delay_minutes ?? 0,
+          now,
+        });
+        if (!triggerCheck.eligible) {
+          totalSkipped++;
+          continue;
+        }
       }
 
-      // Gerar mensagem via AgentEngine (item #3) ou fallback para template fixo
+      // ---- Cadence vs single-shot ----
+      let activeStep: CadenceStep | null = null;
+      let effectiveTemplate = rule.message_template;
+      let effectiveStyle = rule.followup_style;
+      let stepLogForLead: StepLogEntry | null = null;
+
+      if (hasCadence) {
+        stepLogForLead = stepLogMap.get(c.lead_id) || null;
+        const cadenceResult = getNextCadenceStep({
+          sequenceSteps: sequenceSteps!,
+          stepLog: stepLogForLead,
+          now,
+        });
+        if (!cadenceResult.shouldFire) {
+          totalSkipped++;
+          continue;
+        }
+        activeStep = cadenceResult.step;
+        // Override template/style from cadence step if present
+        if (activeStep?.message_template) {
+          effectiveTemplate = activeStep.message_template;
+        }
+        if (activeStep?.style) {
+          effectiveStyle = activeStep.style;
+        }
+      } else {
+        // Single-shot: use execution count as guard
+        const count = execCountMap.get(c.lead_id) || 0;
+        if (count >= (rule.max_followups ?? 3)) {
+          totalSkipped++;
+          continue;
+        }
+      }
+
+      const count = execCountMap.get(c.lead_id) || 0;
+
+      // Gerar mensagem via AgentEngine ou fallback para template fixo
       let messageContent: string;
       if (OPENROUTER_API_KEY) {
         try {
@@ -294,14 +384,14 @@ Deno.serve(withSentry('process-copilot-followups', async (req) => {
           const engine = new AgentEngine(supabase, openRouter, orgId);
           messageContent = await engine.generateFollowupMessage(lead.id, {
             followupCount: count ?? 0,
-            ruleTemplate: rule.message_template || undefined,
-            followupStyle: rule.followup_style || undefined,
+            ruleTemplate: effectiveTemplate || undefined,
+            followupStyle: effectiveStyle || undefined,
           });
           console.log(`[Followup] AgentEngine gerou mensagem para lead ${lead.id}: "${messageContent.substring(0, 60)}..."`);
         } catch (genErr) {
           console.warn('[Followup] AgentEngine falhou, usando template fixo:', genErr);
           const timeVars = getTimeVars(now);
-          const tmpl = rule.message_template || "Oi {nome}! Vi que ficamos sem conversar. Posso te ajudar em algo?";
+          const tmpl = effectiveTemplate || "Oi {nome}! Vi que ficamos sem conversar. Posso te ajudar em algo?";
           messageContent = replaceVariables(tmpl, {
             nome: lead.name || "você",
             empresa: lead.company || "",
@@ -316,7 +406,7 @@ Deno.serve(withSentry('process-copilot-followups', async (req) => {
         }
       } else {
         const timeVars = getTimeVars(now);
-        const tmpl = rule.message_template || "Oi {nome}! Vi que ficamos sem conversar. Posso te ajudar em algo?";
+        const tmpl = effectiveTemplate || "Oi {nome}! Vi que ficamos sem conversar. Posso te ajudar em algo?";
         messageContent = replaceVariables(tmpl, {
           nome: lead.name || "você",
           empresa: lead.company || "",
@@ -343,6 +433,36 @@ Deno.serve(withSentry('process-copilot-followups', async (req) => {
       if (result.success) {
         totalSent++;
         sentThisRule++;
+
+        // ---- Track cadence step progress ----
+        if (hasCadence && activeStep) {
+          const newStep = activeStep.order;
+          const allStepsDone = newStep >= Math.max(...sequenceSteps!.map(s => s.order));
+
+          if (!stepLogForLead) {
+            // First step — insert
+            await supabase
+              .from("copilot_followup_step_log")
+              .insert({
+                rule_id: rule.id,
+                lead_id: c.lead_id,
+                current_step: newStep,
+                last_step_sent_at: now.toISOString(),
+                completed: allStepsDone,
+              });
+          } else {
+            // Subsequent step — update
+            await supabase
+              .from("copilot_followup_step_log")
+              .update({
+                current_step: newStep,
+                last_step_sent_at: now.toISOString(),
+                completed: allStepsDone,
+              })
+              .eq("rule_id", rule.id)
+              .eq("lead_id", c.lead_id);
+          }
+        }
       }
     }
   }
