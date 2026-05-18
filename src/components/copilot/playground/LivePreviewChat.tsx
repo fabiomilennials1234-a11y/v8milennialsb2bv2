@@ -10,7 +10,7 @@
  * - Badge "KB ativa" quando agentId presente
  */
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import {
   Send,
   Loader2,
@@ -25,11 +25,14 @@ import {
   Image,
   Video,
   File,
+  Wrench,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+import type { PlaygroundToolState } from "./types";
+import { buildPreviewTools, type DryRunToolCall } from "@/lib/copilot/dry-run-engine";
 
 // ─── Media card in message bubbles ─────────────────────
 
@@ -104,6 +107,7 @@ interface ChatMessage {
   role: "user" | "assistant";
   content: string;
   toolCall?: string;
+  toolCalls?: DryRunToolCall[];
   attachment?: {
     type: "image" | "pdf";
     previewUrl?: string;
@@ -120,6 +124,8 @@ interface LivePreviewChatProps {
   configVersion: number;
   /** Agent ID for KB injection */
   agentId?: string;
+  /** Playground tool state — converted to OpenRouter tools for dry-run */
+  playgroundTools?: Record<string, PlaygroundToolState>;
 }
 
 const ACCEPTED_FILE_TYPES = [
@@ -154,6 +160,7 @@ export function LivePreviewChat({
   firstMessageTemplate,
   configVersion,
   agentId,
+  playgroundTools,
 }: LivePreviewChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState("");
@@ -167,6 +174,12 @@ export function LivePreviewChat({
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
   const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
   const canTest = systemPrompt.trim().length >= 30;
+
+  // Build OpenRouter tool defs from playground tool state
+  const openRouterTools = useMemo(
+    () => (playgroundTools ? buildPreviewTools(playgroundTools) : []),
+    [playgroundTools],
+  );
 
   // Scroll to bottom
   useEffect(() => {
@@ -223,13 +236,18 @@ export function LivePreviewChat({
     }
   }, []);
 
+  interface EdgeFunctionResult {
+    parts: string[];
+    toolCalls?: DryRunToolCall[];
+  }
+
   const callEdgeFunction = useCallback(
     async (
       currentMessages: ChatMessage[],
       userMsg: string,
       generateFirst: boolean,
       attachment?: ChatAttachment,
-    ): Promise<string[]> => {
+    ): Promise<EdgeFunctionResult> => {
       const response = await fetch(
         `${supabaseUrl}/functions/v1/test-copilot-chat`,
         {
@@ -247,6 +265,7 @@ export function LivePreviewChat({
             ...(generateFirst && firstMessageTemplate ? { firstMessageTemplate } : {}),
             ...(agentId ? { agentId } : {}),
             ...(attachment ? { attachment: { base64: attachment.base64, mimeType: attachment.mimeType, fileName: attachment.fileName } } : {}),
+            ...(openRouterTools.length > 0 && !generateFirst ? { tools: openRouterTools } : {}),
           }),
         }
       );
@@ -258,14 +277,15 @@ export function LivePreviewChat({
         throw new Error(`Resposta invalida (HTTP ${response.status})`);
       }
       if (!response.ok) throw new Error((result?.error as string) || `Erro HTTP ${response.status}`);
-      // Edge function returns HTTP 200 even on errors (Supabase SDK limitation)
       if (result?.error) throw new Error(result.error as string);
 
       const parts = (result?.messages as string[] | undefined) || [result?.message as string];
       if (!parts[0]) throw new Error("Resposta vazia do agente");
-      return parts;
+
+      const toolCalls = result?.toolCalls as DryRunToolCall[] | undefined;
+      return { parts, toolCalls: toolCalls?.length ? toolCalls : undefined };
     },
-    [systemPrompt, firstMessageTemplate, supabaseUrl, anonKey, agentId]
+    [systemPrompt, firstMessageTemplate, supabaseUrl, anonKey, agentId, openRouterTools]
   );
 
   // Send user message
@@ -294,10 +314,18 @@ export function LivePreviewChat({
     setIsSending(true);
 
     try {
-      const parts = await callEdgeFunction(messages, userMessage || "[Arquivo enviado]", false, currentAttachment);
+      const { parts, toolCalls } = await callEdgeFunction(messages, userMessage || "[Arquivo enviado]", false, currentAttachment);
       for (let i = 0; i < parts.length; i++) {
         if (i > 0) await new Promise<void>((r) => setTimeout(r, 700));
-        setMessages((prev) => [...prev, { role: "assistant", content: parts[i] }]);
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content: parts[i],
+            // Attach toolCalls to the first message part only
+            ...(i === 0 && toolCalls ? { toolCalls } : {}),
+          },
+        ]);
       }
     } catch (err: any) {
       toast.error("Erro ao enviar mensagem", { description: err?.message });
@@ -325,7 +353,7 @@ export function LivePreviewChat({
       let currentMessages: ChatMessage[] = [];
 
       if (isProactive) {
-        const firstParts = await callEdgeFunction([], "", true);
+        const { parts: firstParts } = await callEdgeFunction([], "", true);
         for (const part of firstParts) {
           currentMessages.push({ role: "assistant", content: part });
         }
@@ -341,9 +369,13 @@ export function LivePreviewChat({
         setMessages([...currentMessages]);
         await new Promise<void>((r) => setTimeout(r, 800));
 
-        const agentParts = await callEdgeFunction(currentMessages, leadMsg, false);
-        for (const part of agentParts) {
-          currentMessages.push({ role: "assistant", content: part });
+        const { parts: agentParts, toolCalls } = await callEdgeFunction(currentMessages, leadMsg, false);
+        for (let j = 0; j < agentParts.length; j++) {
+          currentMessages.push({
+            role: "assistant",
+            content: agentParts[j],
+            ...(j === 0 && toolCalls ? { toolCalls } : {}),
+          });
         }
         setMessages([...currentMessages]);
         await new Promise<void>((r) => setTimeout(r, 1000));
@@ -450,43 +482,66 @@ export function LivePreviewChat({
         ) : (
           <>
             {messages.map((msg, idx) => (
-              <div
-                key={idx}
-                className={`flex gap-2 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-              >
-                {msg.role === "assistant" && (
-                  <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <Bot className="w-3.5 h-3.5 text-primary" />
+              <div key={idx} className="space-y-1.5">
+                {/* Dry-run tool call cards — rendered ABOVE the message */}
+                {msg.toolCalls && msg.toolCalls.length > 0 && (
+                  <div className="flex gap-2 justify-start">
+                    <div className="w-6 flex-shrink-0" />
+                    <div className="max-w-[85%] space-y-1">
+                      {msg.toolCalls.map((tc, tcIdx) => (
+                        <div
+                          key={`tc-${idx}-${tcIdx}`}
+                          className="flex items-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-2.5 py-1.5"
+                        >
+                          <Wrench className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
+                          <span className="text-xs text-amber-200/90">
+                            <span className="font-semibold">{tc.name}</span>
+                            {" "}
+                            <span className="text-amber-200/60">{tc.humanDescription}</span>
+                          </span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
+
                 <div
-                  className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap ${
-                    msg.role === "user"
-                      ? "bg-primary text-primary-foreground rounded-br-sm"
-                      : "bg-muted rounded-bl-sm"
-                  }`}
+                  className={`flex gap-2 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
                 >
-                  {/* Attachment preview in message */}
-                  {msg.attachment && msg.attachment.type === "image" && msg.attachment.previewUrl && (
-                    <img
-                      src={msg.attachment.previewUrl}
-                      alt={msg.attachment.fileName}
-                      className="max-w-[200px] max-h-[150px] rounded-lg mb-1 object-cover"
-                    />
-                  )}
-                  {msg.attachment && msg.attachment.type === "pdf" && (
-                    <div className="flex items-center gap-1.5 mb-1 px-2 py-1 rounded bg-foreground/10 text-xs">
-                      <FileText className="w-3.5 h-3.5" />
-                      {msg.attachment.fileName}
+                  {msg.role === "assistant" && (
+                    <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <Bot className="w-3.5 h-3.5 text-primary" />
                     </div>
                   )}
-                  <MessageContent content={msg.content} isUser={msg.role === "user"} />
-                </div>
-                {msg.role === "user" && (
-                  <div className="w-6 h-6 rounded-full bg-secondary flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <User className="w-3.5 h-3.5" />
+                  <div
+                    className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap ${
+                      msg.role === "user"
+                        ? "bg-primary text-primary-foreground rounded-br-sm"
+                        : "bg-muted rounded-bl-sm"
+                    }`}
+                  >
+                    {/* Attachment preview in message */}
+                    {msg.attachment && msg.attachment.type === "image" && msg.attachment.previewUrl && (
+                      <img
+                        src={msg.attachment.previewUrl}
+                        alt={msg.attachment.fileName}
+                        className="max-w-[200px] max-h-[150px] rounded-lg mb-1 object-cover"
+                      />
+                    )}
+                    {msg.attachment && msg.attachment.type === "pdf" && (
+                      <div className="flex items-center gap-1.5 mb-1 px-2 py-1 rounded bg-foreground/10 text-xs">
+                        <FileText className="w-3.5 h-3.5" />
+                        {msg.attachment.fileName}
+                      </div>
+                    )}
+                    <MessageContent content={msg.content} isUser={msg.role === "user"} />
                   </div>
-                )}
+                  {msg.role === "user" && (
+                    <div className="w-6 h-6 rounded-full bg-secondary flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <User className="w-3.5 h-3.5" />
+                    </div>
+                  )}
+                </div>
               </div>
             ))}
 

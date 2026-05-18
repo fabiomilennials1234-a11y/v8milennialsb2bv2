@@ -607,6 +607,7 @@ export function CopilotPlayground() {
             firstMessageTemplate={data.outboundConfig.firstMessageTemplate}
             configVersion={configVersion}
             agentId={editId}
+            playgroundTools={data.tools}
           />
         </div>
       </div>
