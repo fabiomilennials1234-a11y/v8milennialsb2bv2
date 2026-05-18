@@ -22,19 +22,16 @@ interface OrderApprovalCardProps {
   order: PendingOrder;
   onApprove: (orderId: string) => void;
   onReject: (orderId: string, comment?: string) => void;
-  isApproving?: boolean;
-  isRejecting?: boolean;
 }
 
 export function OrderApprovalCard({
   order,
   onApprove,
   onReject,
-  isApproving,
-  isRejecting,
 }: OrderApprovalCardProps) {
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectComment, setRejectComment] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   const source = SOURCE_STYLES[order.source ?? ""] ?? SOURCE_STYLES.csv_import;
   const dateStr = new Date(order.created_at).toLocaleDateString("pt-BR", {
@@ -86,7 +83,7 @@ export function OrderApprovalCard({
           variant="ghost"
           className="flex-1 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 hover:text-emerald-300"
           onClick={() => onApprove(order.id)}
-          disabled={isApproving || isRejecting}
+          disabled={submitting}
         >
           <Check className="w-4 h-4 mr-1.5" />
           Aprovar
@@ -97,7 +94,7 @@ export function OrderApprovalCard({
             <Button
               variant="ghost"
               className="flex-1 bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300"
-              disabled={isApproving || isRejecting}
+              disabled={submitting}
             >
               <X className="w-4 h-4 mr-1.5" />
               Rejeitar
@@ -115,8 +112,9 @@ export function OrderApprovalCard({
               variant="destructive"
               size="sm"
               className="w-full"
-              disabled={isRejecting}
+              disabled={submitting}
               onClick={() => {
+                setSubmitting(true);
                 onReject(order.id, rejectComment || undefined);
                 setRejectComment("");
                 setRejectOpen(false);

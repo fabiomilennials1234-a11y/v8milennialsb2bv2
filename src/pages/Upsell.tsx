@@ -28,8 +28,10 @@ import { CarteiraRevenueAtRisk } from "@/components/carteira/CarteiraRevenueAtRi
 import { CarteiraCohortHeatmap } from "@/components/carteira/CarteiraCohortHeatmap";
 import { CarteiraVendedorRanking } from "@/components/carteira/CarteiraVendedorRanking";
 import { CarteiraApprovals } from "@/components/carteira/CarteiraApprovals";
-import { usePendingOrders } from "@/hooks/useOrderApproval";
+import { QuickOrderModal } from "@/components/carteira/QuickOrderModal";
+import { usePendingOrdersCount } from "@/hooks/useOrderApproval";
 import { useBulkSelection } from "@/hooks/useBulkSelection";
+import { useOrderEventNotifications } from "@/hooks/useOrderEventNotifications";
 
 type ViewMode = "kanban" | "list";
 
@@ -81,10 +83,10 @@ export default function Upsell() {
   const bulk = useBulkSelection();
   const { data: kpiData } = usePortfolioKPIs();
 
+  useOrderEventNotifications();
   useRealtimeSubscription("upsell_clients", ["portfolio-clients", "portfolio-kpis"]);
-  useRealtimeSubscription("upsell_orders", ["portfolio-clients", "portfolio-kpis", "pending-orders"]);
-  const { data: pendingOrders = [] } = usePendingOrders();
-  const pendingCount = pendingOrders.length;
+  useRealtimeSubscription("upsell_orders", ["portfolio-clients", "portfolio-kpis", "pending-orders", "pending-orders-count"]);
+  const { data: pendingCount = 0 } = usePendingOrdersCount();
 
   const tabCounts = useMemo(() => {
     if (!kpiData) return {} as Record<string, number>;
@@ -299,7 +301,22 @@ export default function Upsell() {
 
         {/* Shared modals */}
         <CreateClientModal open={createClientOpen} onOpenChange={setCreateClientOpen} />
-        <NovaVendaModal open={novaVendaOpen} onOpenChange={setNovaVendaOpen} />
+        {quickOrderClientId ? (
+          <QuickOrderModal
+            open={novaVendaOpen}
+            onOpenChange={(open) => {
+              setNovaVendaOpen(open);
+              if (!open) setQuickOrderClientId(null);
+            }}
+            clientId={quickOrderClientId}
+            clientName={
+              currentRows.find((r) => r.id === quickOrderClientId)?.name
+              ?? selectedClient?.name
+            }
+          />
+        ) : (
+          <NovaVendaModal open={novaVendaOpen} onOpenChange={setNovaVendaOpen} />
+        )}
         <PipeSettingsDialog
           open={importOpen}
           onOpenChange={setImportOpen}

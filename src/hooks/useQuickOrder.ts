@@ -18,6 +18,7 @@ export function useLastOrder(clientId: string) {
         .from("upsell_orders")
         .select("id, sale_value, sold_at, product_name, product_type")
         .eq("client_id", clientId)
+        .neq("approval_status", "rejected")
         .order("sold_at", { ascending: false })
         .limit(1)
         .single();
@@ -88,6 +89,7 @@ export function useCreateOrder() {
       queryClient.invalidateQueries({ queryKey: ["upsell_clients"] });
       queryClient.invalidateQueries({ queryKey: ["portfolio-health"] });
       queryClient.invalidateQueries({ queryKey: ["last-order"] });
+      queryClient.invalidateQueries({ queryKey: ["pending-orders"] });
     },
   });
 }
