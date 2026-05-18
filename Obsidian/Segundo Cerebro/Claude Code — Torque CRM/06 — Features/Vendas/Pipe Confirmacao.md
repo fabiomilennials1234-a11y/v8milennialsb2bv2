@@ -3,7 +3,7 @@ type: feature
 title: Pipe Confirmacao
 status: active
 created: 2026-04-12
-updated: 2026-04-12
+updated: 2026-05-18
 tags: [uncategorized]
 related: []
 owner: gabriel
@@ -86,6 +86,46 @@ Lógica atual:
 - Permission ainda em loading quando user clica → bloqueia (fail-closed). UX: spinner ou desabilitar até carregar.
 - Race window sub-segundo entre UPDATE no pipe e UPDATE no lead — last-write-wins.
 
+## Atribuição de mérito de comparecimento
+
+> Regra de negócio: **o mérito da reunião comparecida é do SDR (quem agendou)**.
+> O closer continua com mérito de proposta/venda (revenue). Reuniões e vendas têm donos diferentes.
+
+### Campos canônicos
+
+| Atribuição | Campo canônico | Fallback legacy | Use |
+|------------|----------------|-----------------|-----|
+| Comparecimento (SDR) | `pre_sale_responsible_id` | `sdr_id` | Métricas de meetings, ranking SDR, metas reuniões |
+| Venda (Closer) | `sale_responsible_id`  | `closer_id`, `responsible_id` | Métricas de revenue, ranking Closer, metas vendas |
+
+`responsible_id` **NÃO** é fallback válido para crédito de comparecimento. Em várias orgs ele guarda o closer e creditaria o time errado.
+
+Pipe `confirmacao` vive em `pipeline_entries` (slug=`confirmacao`, type=`system`). Frontend lê via view compat `pipe_confirmacao`. Ambos dual e legacy ids ficam em `pipeline_entries.metadata`.
+
+### Bug histórico (corrigido em 2026-05-18)
+
+A migration `20260982000000_drop_legacy_pipe_tables.sql` (Phase 4 da unificação de pipelines) recriou `get_ranking_data` sobre `pipeline_entries` mas **regrediu** o fix de SDR-only que a `20260930000000_dual_responsible_fields.sql` havia aplicado. A versão pós-20260982 expandia cada reunião em 3 rows (`responsible_id`, `sdr_id`, `closer_id`) e contava DISTINCT — creditando o closer.
+
+Fix: `20261024000000_fix_meetings_ranking_sdr_only.sql` recria `get_ranking_data` e `get_dashboard_metrics`:
+
+- Meetings ranking: `COALESCE(pre_sale_responsible_id, sdr_id)` **exclusivamente**.
+- Dashboard meetings filter (`p_filter_member_id`): mesma regra.
+- Reuniões sem `pre_sale_responsible_id` nem `sdr_id` caem no bucket "sem SDR" (não creditadas a ninguém — explicitamente intencional).
+- Backfill: `pipeline_entries.metadata.pre_sale_responsible_id` ← COALESCE com `sdr_id`/`responsible_id` quando faltando; idem `sale_responsible_id` com `closer_id`/`responsible_id`. Idempotente.
+
+### Frontend — hooks que filtram por SDR
+
+| Arquivo | Filtro correto |
+|---------|----------------|
+| `src/hooks/useGoals.ts` (meetingsGoals.currentValue) | `pre_sale_responsible_id \|\| sdr_id` |
+| `src/hooks/useDashboardMetrics.ts` (useConversionRates meetings) | `pre_sale_responsible_id \|\| sdr_id` |
+| `src/hooks/useCommissions.ts` (metric_type=meetings) | `pre_sale_responsible_id \|\| sdr_id` |
+| `src/hooks/useTVDashboardData.ts` (meetingsGoalsCalc) | `pre_sale_responsible_id \|\| sdr_id` |
+| `src/hooks/useRecentActivity.ts` ("Reunião realizada") | `pre_sale_responsible \|\| sdr` |
+
+> Nota: comissões não foram alteradas no aspecto de % por venda. Membros `metric_type='meetings'` (SDR) continuam contando reuniões comparecidas pela mesma regra acima — sem mudança de payout.
+
 ## Histórico de mudanças
 
+- 2026-05-18 — Fix mérito SDR-only para comparecimento. RPC `get_ranking_data` + `get_dashboard_metrics` recriadas (`20261024000000_fix_meetings_ranking_sdr_only.sql` — timestamp pós-`20261023000000` pra sobreviver a replay/reset, já que `20260982` recriava com bug). Backfill de `pre_sale_responsible_id` / `sale_responsible_id` em `pipeline_entries.metadata` e `leads`. Hooks `useGoals`, `useDashboardMetrics` (`useConversionRates`), `useRecentActivity` ajustados pra não usar `responsible_id` como fallback de crédito de reunião. Ver `07 — Changelog/2026-05-18.md`.
 - 2026-04-30 — Fix sync `meeting_date` ⇄ `compromisso_date` + `move_pipe_record` SELECT-then-compare fail-closed. 4 arquivos. 4 causa-raízes identificadas (CR-1 falso bloqueio em edit-só-de-data, CR-2 sem sync cross-tabela, CR-3 selectedItem stale, CR-4 form de Leads não propagava). Ver [[2026-04-30-meeting-date-sync]] e [[ADR-2026-04-30-meeting-date-sync]].
