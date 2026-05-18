@@ -230,6 +230,37 @@ export function createDefaultPlaygroundData(): PlaygroundData {
 }
 
 // =====================================================
+// LEGACY TOOL IDS — removed from registry, kept for graceful migration
+// =====================================================
+
+/** Tool IDs that existed in older agent configs but have no backend action. */
+export const LEGACY_TOOL_IDS: ReadonlySet<string> = new Set([
+  "RESPONDER_FAQ",
+  "ENVIAR_FOLLOWUP",
+]);
+
+/** Strip legacy tool entries from a tools record (e.g. loaded from saved agent). */
+export function filterLegacyTools(
+  tools: Record<string, PlaygroundToolState>,
+): Record<string, PlaygroundToolState> {
+  const result: Record<string, PlaygroundToolState> = {};
+  for (const [id, state] of Object.entries(tools)) {
+    if (!LEGACY_TOOL_IDS.has(id)) {
+      result[id] = state;
+    }
+  }
+  return result;
+}
+
+/**
+ * MOVER_CARD auto-enable: when agent has active pipes configured,
+ * the tool is auto-enabled and non-toggleable in the UI.
+ */
+export function isMoverCardAutoEnabled(activePipes: string[] | undefined | null): boolean {
+  return Array.isArray(activePipes) && activePipes.length > 0;
+}
+
+// =====================================================
 // TOOL REGISTRY
 // =====================================================
 
@@ -280,16 +311,6 @@ export const PLAYGROUND_TOOLS: PlaygroundToolDef[] = [
     ],
   },
   {
-    id: "ENVIAR_FOLLOWUP",
-    name: "Enviar Follow-up",
-    description: "Envia mensagem de follow-up ao lead",
-    icon: "MessageSquare",
-    defaultInstruction: "Envie follow-up quando o lead parar de responder. Respeite o intervalo minimo configurado. Varie a abordagem entre: valor (compartilhar conteudo relevante), curiosidade (pergunta aberta sobre cenario atual), check-in (verificacao amigavel). Na ultima tentativa, use abordagem de 'breakup'.",
-    parameters: [
-      { key: "minIntervalHours", label: "Intervalo minimo (horas)", type: "number", placeholder: "24" },
-    ],
-  },
-  {
     id: "TRANSFERIR_HUMANO",
     name: "Transferir para Humano",
     description: "Transfere a conversa para um atendente humano",
@@ -322,6 +343,25 @@ export const PLAYGROUND_TOOLS: PlaygroundToolDef[] = [
     ],
   },
   {
+    id: "TRANSFERIR_SZ_CHAT",
+    name: "Transferir SZ.Chat",
+    description: "Transfere a conversa para atendimento via SZ.Chat",
+    icon: "ArrowUpRight",
+    defaultInstruction: "Transfira para SZ.Chat quando o assunto estiver fora do escopo comercial — suporte tecnico, financeiro, logistica ou outro setor configurado. Informe o cliente que sera atendido por outro setor e resuma o contexto antes de transferir.",
+    parameters: [],
+  },
+  {
+    id: "ENVIAR_DOCUMENTO",
+    name: "Enviar Documento",
+    description: "Envia documentos da base de conhecimento para o lead via WhatsApp",
+    icon: "FileText",
+    defaultInstruction: "Quando o lead pedir catalogo, tabela de precos, proposta ou qualquer material disponivel na base de conhecimento, envie o documento imediatamente. Se o lead demonstrar interesse em produto/servico e houver material relevante, envie proativamente sem esperar pedido explicito.",
+    parameters: [
+      { key: "document_id", label: "Documento", type: "text", placeholder: "ID do documento na base de conhecimento" },
+      { key: "caption", label: "Mensagem de acompanhamento", type: "text", placeholder: "Ex: Segue nosso catalogo atualizado" },
+    ],
+  },
+  {
     id: "CRIAR_CAMPO",
     name: "Criar Campo Personalizado",
     description: "Cria campos customizados no CRM para registrar informacoes novas",
@@ -341,13 +381,5 @@ export const PLAYGROUND_TOOLS: PlaygroundToolDef[] = [
         ],
       },
     ],
-  },
-  {
-    id: "RESPONDER_FAQ",
-    name: "Responder FAQ",
-    description: "Busca respostas na base de conhecimento",
-    icon: "HelpCircle",
-    defaultInstruction: "SEMPRE consulte a base de conhecimento antes de responder qualquer pergunta sobre produto, servico, preco ou empresa. Se encontrar documento relevante, envie proativamente. Nunca invente informacoes — se nao encontrar na base, diga que vai verificar com a equipe.",
-    parameters: [],
   },
 ];
