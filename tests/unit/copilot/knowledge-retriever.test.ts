@@ -154,10 +154,10 @@ describe("KnowledgeRetriever", () => {
       const retriever = new KnowledgeRetriever(supabase as any);
       const result = await retriever.retrieve("search query", "agent-1", "tool");
 
-      // Tool mode thresholds
+      // Tool mode thresholds (tuned in #229)
       expect(supabase.rpc).toHaveBeenCalledWith("match_document_chunks", expect.objectContaining({
-        match_count: 8,
-        similarity_threshold: 0.45,
+        match_count: 5,
+        similarity_threshold: 0.55,
       }));
       expect(supabase.rpc).toHaveBeenCalledWith("match_faqs", expect.objectContaining({
         match_count: 4,

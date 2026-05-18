@@ -54,8 +54,8 @@ export async function executeSearchKnowledge(
     const { data: chunks } = await (supabase as any).rpc("match_document_chunks", {
       query_embedding: embeddingStr,
       agent_id_filter: agentId,
-      match_count: 8,
-      similarity_threshold: 0.45,
+      match_count: 5,
+      similarity_threshold: 0.55,
     });
 
     if (chunks && chunks.length > 0) {

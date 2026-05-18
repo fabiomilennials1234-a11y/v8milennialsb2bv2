@@ -383,6 +383,9 @@ export async function buildDynamicPrompt(params: BuildPromptParams): Promise<str
     sections.push("");
     sections.push("REGRA CRITICA — CONSULTA OBRIGATORIA:");
     sections.push(
+      "SEMPRE consulte a base de conhecimento via search_knowledge antes de responder perguntas sobre produtos, precos, servicos, especificacoes tecnicas ou informacoes da empresa. Nao responda de memoria quando houver documentos disponiveis.",
+    );
+    sections.push(
       "- Antes de responder QUALQUER pergunta sobre produtos, precos, servicos, especificacoes, politicas, catalogo ou informacoes comerciais, voce DEVE chamar a ferramenta search_knowledge.",
     );
     sections.push("- NAO responda de memoria. NAO improvise. SEMPRE consulte a base primeiro.");
