@@ -86,6 +86,40 @@ Lógica atual:
 - Permission ainda em loading quando user clica → bloqueia (fail-closed). UX: spinner ou desabilitar até carregar.
 - Race window sub-segundo entre UPDATE no pipe e UPDATE no lead — last-write-wins.
 
+## Crédito de comparecimento e snapshot (DB trigger)
+
+> A partir de 2026-05-18 (PRD #211 / #212), o crédito de reunião é
+> **congelado no banco por um trigger**, capturado em dois eventos:
+> criação do entry e transição final para `compareceu`. Lead = fonte da
+> verdade; metadata = snapshot histórico.
+
+### Regra do trigger `snapshot_responsible_from_lead`
+
+| Evento | Ação |
+|--------|------|
+| `INSERT pipeline_entries` (slug=`confirmacao`) | Copia `leads.pre_sale_responsible_id` → `metadata.pre_sale_responsible_id` |
+| `UPDATE OF stage_key` → `compareceu` (slug=`confirmacao`) | Re-lê o lead e sobrescreve `metadata.pre_sale_responsible_id` |
+| `INSERT pipeline_entries` (slug=`propostas`) | Copia `leads.sale_responsible_id` → `metadata.sale_responsible_id` |
+| `UPDATE OF stage_key` → `vendido` (slug=`propostas`) | Re-lê o lead e sobrescreve `metadata.sale_responsible_id` |
+
+O trigger **nunca** lê nem escreve `sdr_id` / `closer_id` / `responsible_id`
+legacy. Detalhes da decisão em [[ADR-2026-05-18-snapshot-responsible]].
+
+### Popup "Nova Reunião" (AddMeetingModal)
+
+O campo era "Responsável" (semântica ambígua). Agora é **"SDR (pré-venda)"**.
+Comportamento:
+
+- Quando o lead é selecionado, o campo é pré-preenchido com
+  `leads.pre_sale_responsible_id` do lead.
+- No submit, se o valor selecionado difere do lead atual, o lead é
+  atualizado **primeiro** (via `useUpdateLead`) e só depois a entry é
+  criada. O trigger captura o valor já atualizado.
+- Caller pode passar `prefilledResponsibleId` para forçar uma escolha
+  inicial (não consultando o lead). O lead é atualizado no submit se o
+  valor escolhido diverge.
+- Não há campo Closer no popup — closer é definido por outros caminhos.
+
 ## Atribuição de mérito de comparecimento
 
 > Regra de negócio: **o mérito da reunião comparecida é do SDR (quem agendou)**.
@@ -127,5 +161,6 @@ Fix: `20261024000000_fix_meetings_ranking_sdr_only.sql` recria `get_ranking_data
 
 ## Histórico de mudanças
 
+- 2026-05-18 (lote 3 — PRD #211 / #212) — Trigger `snapshot_responsible_from_lead` instaurado em `pipeline_entries` (BEFORE INSERT OR UPDATE OF stage_key). Captura `leads.pre_sale_responsible_id` na criação do entry e na transição final para `compareceu`. Análogo para `propostas`/`vendido` com `sale_responsible_id`. `get_ranking_data` e `get_dashboard_metrics` reescritas sem nenhum fallback legacy (sdr_id/closer_id/responsible_id removidos). Backfill idempotente remove keys legacy de metadatas que já têm dual populado. `AddMeetingModal` rotulado "SDR (pré-venda)", pré-preenche a partir do lead e atualiza o lead antes do insert. Ver [[ADR-2026-05-18-snapshot-responsible]] + `supabase/migrations/20261025000000_snapshot_responsible_from_lead.sql`.
 - 2026-05-18 — Fix mérito SDR-only para comparecimento. RPC `get_ranking_data` + `get_dashboard_metrics` recriadas (`20261024000000_fix_meetings_ranking_sdr_only.sql` — timestamp pós-`20261023000000` pra sobreviver a replay/reset, já que `20260982` recriava com bug). Backfill de `pre_sale_responsible_id` / `sale_responsible_id` em `pipeline_entries.metadata` e `leads`. Hooks `useGoals`, `useDashboardMetrics` (`useConversionRates`), `useRecentActivity` ajustados pra não usar `responsible_id` como fallback de crédito de reunião. Ver `07 — Changelog/2026-05-18.md`.
 - 2026-04-30 — Fix sync `meeting_date` ⇄ `compromisso_date` + `move_pipe_record` SELECT-then-compare fail-closed. 4 arquivos. 4 causa-raízes identificadas (CR-1 falso bloqueio em edit-só-de-data, CR-2 sem sync cross-tabela, CR-3 selectedItem stale, CR-4 form de Leads não propagava). Ver [[2026-04-30-meeting-date-sync]] e [[ADR-2026-04-30-meeting-date-sync]].
