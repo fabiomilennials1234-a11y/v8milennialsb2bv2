@@ -37,6 +37,8 @@ owner: claude-agent
 
 - [[Agenda Interna|Agenda Interna]]
 - [[Export Stage Kanban|Export Stage (Kanban)]]
+- [[Lead Card|Lead Card (Kanban) — Trello-style]]
+- [[Lead Detail Modal|Lead Detail Modal]]
 - [[Pipe Confirmacao|Pipe Confirmacao]]
 - [[Upsell|Upsell]]
 

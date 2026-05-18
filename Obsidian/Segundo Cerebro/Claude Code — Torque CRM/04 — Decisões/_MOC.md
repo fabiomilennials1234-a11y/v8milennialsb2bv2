@@ -19,3 +19,4 @@ owner: claude-agent
 - [[ADR-2026-04-27-refactor-agent-engine-modular|ADR 2026-04-27 — Refactor agent-engine modular (Fase B)]]
 - [[ADR-2026-04-30-meeting-date-sync|ADR-2026-04-30 — Sync meeting_date ⇄ compromisso_date + permissão move_pipe_record fail-closed]]
 - [[ADR-2026-05-15-consolidacao-subagentes|ADR-2026-05-15 — Consolidação de subagentes 10→3]]
+- [[ADR-2026-05-17-lead-detail-modal-redesign|ADR-2026-05-17 — Lead Detail Modal Redesign]]
