@@ -1,7 +1,7 @@
 /**
  * ChatShellWithContext — consumer real do ChatShell 3-col.
  *
- * Ativa sob feature flag VITE_CHAT_ONDA_2B=true em /chat.
+ * Componente principal de chat em /chat (legacy WhatsAppChat removido).
  * Onda 2b, C3.
  *
  * Wires hooks reais → ChatShell:

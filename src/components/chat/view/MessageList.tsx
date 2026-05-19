@@ -28,8 +28,8 @@ import { cn } from "@/lib/utils";
 import { ChatEmptyState } from "@/components/chat/ChatEmptyState";
 import { UnreadDivider } from "@/components/chat/UnreadDivider";
 import { ScrollToBottomFab } from "@/components/chat/ScrollToBottomFab";
-import { MessagesAreaErrorBoundary } from "@/components/chat/WhatsAppChat";
-import { MessageBubble } from "@/components/chat/WhatsAppChat";
+import { MessagesAreaErrorBoundary } from "@/components/chat/MessagePrimitives";
+import { MessageBubble } from "@/components/chat/MessagePrimitives";
 import type { WhatsAppMessage, FailedMessage } from "@/hooks/useWhatsAppChat";
 import type { DensityMode } from "@/hooks/chat/useChatDensity";
 

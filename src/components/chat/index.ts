@@ -10,11 +10,11 @@
  */
 
 // Page / shell
-export { WhatsAppChat } from "./WhatsAppChat";
+export { ChatShellWithContext } from "./ChatShellWithContext";
 
 // Message primitives (public contract — used by chat components)
-export { MessageBubble } from "./WhatsAppChat";
-export { MessagesAreaErrorBoundary } from "./WhatsAppChat";
+export { MessageBubble } from "./MessagePrimitives";
+export { MessagesAreaErrorBoundary } from "./MessagePrimitives";
 
 // Media primitives — sourced from dedicated files after C2/C3
 export { AudioPlayer, getAudioPlaybackUrl } from "./media/AudioPlayer";
@@ -23,8 +23,8 @@ export { ImagePreviewModal } from "./media/ImagePreviewModal";
 export { MessageImage, MessageVideo, MessageDocument } from "./media/MessageMedia";
 
 // Helpers
-export { formatMessageTime } from "./WhatsAppChat";
-export { MessageStatusIcon } from "./WhatsAppChat";
+export { formatMessageTime } from "./MessagePrimitives";
+export { MessageStatusIcon } from "./MessagePrimitives";
 
 // Onda 1 primitives
 export { ChatEmptyState } from "./ChatEmptyState";
