@@ -22,8 +22,35 @@ vi.mock("@/integrations/supabase/client", () => ({
 }));
 
 const allPipelinesMock = vi.fn();
+const addStandardMutateAsync = vi.fn().mockResolvedValue({});
 vi.mock("@/hooks/useLeadAllPipelines", () => ({
   useLeadAllPipelines: (...args: unknown[]) => allPipelinesMock(...args),
+  useAddLeadToStandardPipe: () => ({
+    mutateAsync: addStandardMutateAsync,
+    isPending: false,
+  }),
+}));
+
+const logActionMock = vi.fn();
+vi.mock("@/hooks/useLogLeadAction", () => ({
+  useLogLeadAction: () => logActionMock,
+}));
+
+const gatesMock = vi.fn(() => ({
+  canAddToPipe: { allowed: true, isLoading: false },
+  canRemoveFromPipe: { allowed: true, isLoading: false },
+  canMoveMeeting: { allowed: true, isLoading: false },
+  canEditField: { allowed: true, isLoading: false },
+  canMoveProposal: { allowed: true, isLoading: false },
+  canEditProposal: { allowed: true, isLoading: false },
+  canDelete: { allowed: true, isLoading: false },
+  canReassign: { allowed: true, isLoading: false },
+  canManageTags: { allowed: true, isLoading: false },
+  canToggleAi: { allowed: true, isLoading: false },
+  canMention: { allowed: true, isLoading: false },
+}));
+vi.mock("../../../hooks/useLeadActionGates", () => ({
+  useLeadActionGates: (leadId: string) => gatesMock(leadId),
 }));
 
 vi.mock("@/hooks/usePipeConfirmacaoByLeadId", () => ({
@@ -98,6 +125,21 @@ const standardPipe = (overrides: Partial<{ pipeType: "qualificacao" | "confirmac
 beforeEach(() => {
   localStorage.clear();
   allPipelinesMock.mockReset();
+  addStandardMutateAsync.mockReset().mockResolvedValue({});
+  logActionMock.mockReset();
+  gatesMock.mockReset().mockReturnValue({
+    canAddToPipe: { allowed: true, isLoading: false },
+    canRemoveFromPipe: { allowed: true, isLoading: false },
+    canMoveMeeting: { allowed: true, isLoading: false },
+    canEditField: { allowed: true, isLoading: false },
+    canMoveProposal: { allowed: true, isLoading: false },
+    canEditProposal: { allowed: true, isLoading: false },
+    canDelete: { allowed: true, isLoading: false },
+    canReassign: { allowed: true, isLoading: false },
+    canManageTags: { allowed: true, isLoading: false },
+    canToggleAi: { allowed: true, isLoading: false },
+    canMention: { allowed: true, isLoading: false },
+  });
 });
 
 describe("LeadCrossPipeAccordion", () => {
@@ -322,6 +364,113 @@ describe("LeadCrossPipeAccordion", () => {
       fireEvent.click(carteiraBtn);
       expect(qualifBtn.getAttribute("aria-expanded")).toBe("false");
       expect(carteiraBtn.getAttribute("aria-expanded")).toBe("true");
+    });
+  });
+
+  describe("Adicionar a [Pipe] CTA (issue #298)", () => {
+    const emptySystemPipe = (overrides: Partial<{ pipeType: "qualificacao" | "confirmacao" | "propostas"; label: string }>) => ({
+      type: "standard" as const,
+      pipeType: overrides.pipeType ?? "confirmacao",
+      label: overrides.label ?? "Confirmação",
+      color: "#22c55e",
+      pipeId: null,
+      currentStage: null,
+      currentStageLabel: null,
+      stages: [
+        { id: "novo", label: "Novo", color: "#888" },
+        { id: "andamento", label: "Andamento", color: "#888" },
+      ],
+    });
+
+    it("renders 'Não está neste pipe' badge in header when pipe is empty", () => {
+      allPipelinesMock.mockReturnValue({
+        data: [emptySystemPipe({ pipeType: "confirmacao", label: "Confirmação" })],
+        isLoading: false,
+      });
+      renderWithQuery(<LeadCrossPipeAccordion {...baseProps} />);
+      const section = screen.getByTestId("pipe-section-confirmacao");
+      expect(section.textContent ?? "").toMatch(/não está neste pipe/i);
+    });
+
+    it("renders Adicionar CTA in body when pipe is empty and open", () => {
+      allPipelinesMock.mockReturnValue({
+        data: [emptySystemPipe({ pipeType: "confirmacao", label: "Confirmação" })],
+        isLoading: false,
+      });
+      renderWithQuery(<LeadCrossPipeAccordion {...baseProps} />);
+      const cta = screen.getByTestId("add-to-pipe-cta-Confirmação");
+      expect(cta).toBeInTheDocument();
+      expect(cta).not.toBeDisabled();
+    });
+
+    it("disables CTA when canAddToPipe gate denies", () => {
+      gatesMock.mockReturnValue({
+        canAddToPipe: { allowed: false, reason: "denied", isLoading: false },
+        canRemoveFromPipe: { allowed: false, isLoading: false },
+        canMoveMeeting: { allowed: false, isLoading: false },
+        canEditField: { allowed: false, isLoading: false },
+        canMoveProposal: { allowed: false, isLoading: false },
+        canEditProposal: { allowed: false, isLoading: false },
+        canDelete: { allowed: false, isLoading: false },
+        canReassign: { allowed: false, isLoading: false },
+        canManageTags: { allowed: false, isLoading: false },
+        canToggleAi: { allowed: false, isLoading: false },
+        canMention: { allowed: false, isLoading: false },
+      });
+      allPipelinesMock.mockReturnValue({
+        data: [emptySystemPipe({ pipeType: "confirmacao", label: "Confirmação" })],
+        isLoading: false,
+      });
+      renderWithQuery(<LeadCrossPipeAccordion {...baseProps} />);
+      const cta = screen.getByTestId("add-to-pipe-cta-Confirmação");
+      expect(cta).toBeDisabled();
+    });
+
+    it("click CTA calls useAddLeadToStandardPipe with first stage + logs pipe_added", async () => {
+      allPipelinesMock.mockReturnValue({
+        data: [emptySystemPipe({ pipeType: "confirmacao", label: "Confirmação" })],
+        isLoading: false,
+      });
+      renderWithQuery(<LeadCrossPipeAccordion {...baseProps} />);
+      const cta = screen.getByTestId("add-to-pipe-cta-Confirmação");
+      await act(async () => {
+        fireEvent.click(cta);
+      });
+      expect(addStandardMutateAsync).toHaveBeenCalledWith({
+        leadId: "lead-1",
+        pipeType: "confirmacao",
+        stageId: "novo",
+      });
+      expect(logActionMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          leadId: "lead-1",
+          action: "pipe_added",
+          metadata: expect.objectContaining({ pipe_type: "confirmacao", stage_key: "novo" }),
+        }),
+      );
+    });
+
+    it("after successful add, section becomes expanded (forceExpand)", async () => {
+      allPipelinesMock.mockReturnValue({
+        data: [
+          standardPipe({ pipeType: "qualificacao", label: "Qualificação" }),
+          emptySystemPipe({ pipeType: "confirmacao", label: "Confirmação" }),
+        ],
+        isLoading: false,
+      });
+      renderWithQuery(<LeadCrossPipeAccordion {...baseProps} />);
+      // initially qualificacao is expanded (first active)
+      const qualifBtn = screen.getByRole("button", { name: /qualificação/i });
+      expect(qualifBtn.getAttribute("aria-expanded")).toBe("true");
+      // expand confirmacao to surface the CTA
+      const confirmBtn = screen.getByRole("button", { name: /confirmação/i });
+      fireEvent.click(confirmBtn);
+      const cta = screen.getByTestId("add-to-pipe-cta-Confirmação");
+      await act(async () => {
+        fireEvent.click(cta);
+      });
+      // localStorage persists confirmacao as expanded section
+      expect(localStorage.getItem("lead-modal:expanded:user-1:lead-1")).toBe("confirmacao");
     });
   });
 

@@ -1,5 +1,5 @@
 import { memo, useState } from "react";
-import { ChevronDown, Loader2, Trash2 } from "lucide-react";
+import { ChevronDown, Loader2, Plus, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,9 +14,11 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
+  useAddLeadToCustomPipe,
   useMoveLeadInCustomPipe,
   useRemoveLeadFromCustomPipe,
 } from "@/hooks/useCustomPipelines";
+import { useLogLeadAction } from "@/hooks/useLogLeadAction";
 import { useLeadActionGates } from "../../hooks/useLeadActionGates";
 import type { CustomPipelineStatus } from "@/hooks/useLeadAllPipelines";
 
@@ -25,6 +27,8 @@ interface CustomPipeSectionProps {
   leadId: string;
   open: boolean;
   onToggle: () => void;
+  /** Called after a successful add — accordion may force-expand. */
+  onAdded?: () => void;
 }
 
 export const CustomPipeSection = memo(function CustomPipeSection({
@@ -32,12 +36,41 @@ export const CustomPipeSection = memo(function CustomPipeSection({
   leadId,
   open,
   onToggle,
+  onAdded,
 }: CustomPipeSectionProps) {
   const moveMutation = useMoveLeadInCustomPipe();
   const removeMutation = useRemoveLeadFromCustomPipe();
-  const { canRemoveFromPipe, canMoveMeeting } = useLeadActionGates(leadId);
+  const addMutation = useAddLeadToCustomPipe();
+  const logAction = useLogLeadAction();
+  const { canRemoveFromPipe, canMoveMeeting, canAddToPipe } = useLeadActionGates(leadId);
 
   const [removeOpen, setRemoveOpen] = useState(false);
+
+  const handleAdd = async () => {
+    if (!pipe.stages.length) {
+      toast.error("Pipe sem stages configuradas");
+      return;
+    }
+    const stageId = pipe.stages[0].id;
+    try {
+      await addMutation.mutateAsync({
+        lead_id: leadId,
+        pipeline_id: pipe.pipelineId,
+        stage_id: stageId,
+      });
+      void logAction({
+        leadId,
+        action: "pipe_added",
+        description: `Adicionado a ${pipe.pipelineName}`,
+        metadata: { pipe_type: "custom", pipeline_id: pipe.pipelineId, stage_id: stageId },
+      });
+      toast.success(`Adicionado a ${pipe.pipelineName}`);
+      onAdded?.();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Erro ao adicionar";
+      toast.error(msg);
+    }
+  };
 
   const handleStageChange = async (newStageId: string) => {
     if (!pipe.entryId) {
@@ -119,9 +152,54 @@ export const CustomPipeSection = memo(function CustomPipeSection({
       {open && (
         <div className="px-4 pb-4 pt-1 space-y-3">
           {!inPipe ? (
-            <p className="text-xs text-muted-foreground">
-              Lead ainda não está neste pipe. Adicione via kanban para gerenciar.
-            </p>
+            <div className="flex flex-col gap-2">
+              <p className="text-xs text-muted-foreground">
+                Lead ainda não está neste pipe.
+              </p>
+              {canAddToPipe.allowed ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5 w-full"
+                  onClick={handleAdd}
+                  disabled={addMutation.isPending}
+                  aria-label={`Adicionar a ${pipe.pipelineName}`}
+                  data-testid={`add-to-pipe-cta-${pipe.pipelineId}`}
+                >
+                  {addMutation.isPending ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Plus className="w-3.5 h-3.5" />
+                  )}
+                  Adicionar a {pipe.pipelineName}
+                </Button>
+              ) : (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="block w-full">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="gap-1.5 w-full"
+                          disabled
+                          aria-label={`Adicionar a ${pipe.pipelineName}`}
+                          data-testid={`add-to-pipe-cta-${pipe.pipelineId}`}
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          Adicionar a {pipe.pipelineName}
+                        </Button>
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      {canAddToPipe.reason ?? "Sem permissão para adicionar a pipes"}
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
+            </div>
           ) : (
             <>
               <div className="space-y-1">

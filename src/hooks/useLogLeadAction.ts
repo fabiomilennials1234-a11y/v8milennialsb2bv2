@@ -20,12 +20,15 @@ export type LeadActionType =
   | "followup_created"
   | "followup_completed"
   | "ai_toggled"
-  | "copilot_interaction";
+  | "copilot_interaction"
+  | "pipe_added"
+  | "pipe_removed";
 
 interface LogLeadActionParams {
   leadId: string;
   action: LeadActionType;
   description: string;
+  metadata?: Record<string, unknown>;
 }
 
 let cachedUserName: string | null = null;
@@ -64,7 +67,7 @@ export function useLogLeadAction() {
   const queryClient = useQueryClient();
   const { organizationId } = useOrganization();
 
-  const logAction = async ({ leadId, action, description }: LogLeadActionParams) => {
+  const logAction = async ({ leadId, action, description, metadata }: LogLeadActionParams) => {
     try {
       const [userName, userId] = await Promise.all([
         resolveUserName(),
@@ -75,13 +78,18 @@ export function useLogLeadAction() {
         ? `${userName}: ${description}`
         : `Sistema: ${description}`;
 
-      await supabase.from("lead_history").insert({
+      const insertRow: Record<string, unknown> = {
         lead_id: leadId,
         action,
         description: fullDescription,
         created_by: userId,
         organization_id: organizationId,
-      });
+      };
+      if (metadata && Object.keys(metadata).length > 0) {
+        insertRow.metadata = metadata;
+      }
+
+      await supabase.from("lead_history").insert(insertRow as never);
 
       queryClient.invalidateQueries({ queryKey: ["lead_history", leadId] });
       queryClient.invalidateQueries({ queryKey: ["lead-history", leadId] });

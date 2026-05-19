@@ -1,10 +1,14 @@
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronDown, Layers } from "lucide-react";
+import { ChevronDown, Layers, Plus } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import {
+  useAddLeadToStandardPipe,
   useLeadAllPipelines,
   type PipelineStatus,
   type StandardPipelineStatus,
@@ -12,6 +16,8 @@ import {
 } from "@/hooks/useLeadAllPipelines";
 import { usePipeConfirmacaoByLeadId } from "@/hooks/usePipeConfirmacaoByLeadId";
 import { usePipePropostaByLeadId } from "@/hooks/usePipePropostaByLeadId";
+import { useLogLeadAction } from "@/hooks/useLogLeadAction";
+import { useLeadActionGates } from "../../hooks/useLeadActionGates";
 import { MeetingFieldBlock } from "../../cross-pipe/MeetingFieldBlock";
 import { BudgetFieldBlock } from "../../cross-pipe/BudgetFieldBlock";
 import { MoveStageButton } from "../header/MoveStageButton";
@@ -97,6 +103,9 @@ export const LeadCrossPipeAccordion = memo(function LeadCrossPipeAccordion({
   const { data: pipelines = [], isLoading } = useLeadAllPipelines(leadId);
   const { data: confirmacaoData } = usePipeConfirmacaoByLeadId(leadId);
   const { data: propostaData } = usePipePropostaByLeadId(leadId);
+  const addStandardMutation = useAddLeadToStandardPipe();
+  const logAction = useLogLeadAction();
+  const { canAddToPipe } = useLeadActionGates(leadId);
 
   const systemPipes = useMemo(
     () => (pipelines as PipelineStatus[]).filter(isSystemPipe),
@@ -162,6 +171,45 @@ export const LeadCrossPipeAccordion = memo(function LeadCrossPipeAccordion({
     [key],
   );
 
+  const forceExpand = useCallback(
+    (sectionId: string) => {
+      setExpanded(sectionId);
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(key, sectionId);
+      }
+    },
+    [key],
+  );
+
+  const handleAddStandard = useCallback(
+    async (pipe: SystemPipe) => {
+      if (!pipe.stages.length) {
+        toast.error("Pipe sem stages configuradas");
+        return;
+      }
+      const stageId = pipe.stages[0].id;
+      try {
+        await addStandardMutation.mutateAsync({
+          leadId,
+          pipeType: pipe.pipeType,
+          stageId,
+        });
+        void logAction({
+          leadId,
+          action: "pipe_added",
+          description: `Adicionado a ${pipe.label}`,
+          metadata: { pipe_type: pipe.pipeType, stage_key: stageId },
+        });
+        forceExpand(SECTION_ID.system(pipe.pipeType));
+        toast.success(`Adicionado a ${pipe.label}`);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Erro ao adicionar";
+        toast.error(msg);
+      }
+    },
+    [addStandardMutation, leadId, logAction, forceExpand],
+  );
+
   if (isLoading) {
     return (
       <div className="space-y-2 px-6 py-4">
@@ -198,6 +246,9 @@ export const LeadCrossPipeAccordion = memo(function LeadCrossPipeAccordion({
             leadId={leadId}
             organizationId={organizationId}
             onToggle={() => toggle(id)}
+            onAdd={() => handleAddStandard(pipe)}
+            isAdding={addStandardMutation.isPending}
+            canAdd={canAddToPipe}
           />
         );
       })}
@@ -211,6 +262,7 @@ export const LeadCrossPipeAccordion = memo(function LeadCrossPipeAccordion({
             leadId={leadId}
             open={expanded === id}
             onToggle={() => toggle(id)}
+            onAdded={() => forceExpand(id)}
           />
         );
       })}
@@ -236,6 +288,9 @@ interface PipeSectionProps {
   leadId: string;
   organizationId: string;
   onToggle: () => void;
+  onAdd: () => void;
+  isAdding: boolean;
+  canAdd: { allowed: boolean; reason?: string; isLoading: boolean };
 }
 
 function PipeSection({
@@ -247,8 +302,12 @@ function PipeSection({
   leadId,
   organizationId,
   onToggle,
+  onAdd,
+  isAdding,
+  canAdd,
 }: PipeSectionProps) {
   const headerData = renderHeaderKeyData(pipe, confirmacaoData, propostaData);
+  const isEmpty = pipe.pipeId === null;
 
   return (
     <section
@@ -256,6 +315,7 @@ function PipeSection({
         "rounded-xl border border-border/40 bg-card overflow-hidden transition-colors",
         open && "ring-1 ring-primary/20",
       )}
+      data-testid={`pipe-section-${pipe.pipeType}`}
     >
       <button
         type="button"
@@ -273,17 +333,23 @@ function PipeSection({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm font-semibold">{pipe.label}</span>
-            {pipe.currentStageLabel && (
-              <Badge variant="outline" className="text-[10px] font-normal">
-                {pipe.currentStageLabel}
+            {isEmpty ? (
+              <Badge variant="outline" className="text-[10px] bg-muted text-muted-foreground">
+                Não está neste pipe
               </Badge>
+            ) : (
+              pipe.currentStageLabel && (
+                <Badge variant="outline" className="text-[10px] font-normal">
+                  {pipe.currentStageLabel}
+                </Badge>
+              )
             )}
-            {terminated && (
+            {terminated && !isEmpty && (
               <Badge variant="outline" className="text-[10px] bg-muted text-muted-foreground">
                 Encerrado
               </Badge>
             )}
-            {headerData}
+            {!isEmpty && headerData}
           </div>
         </div>
         <ChevronDown
@@ -295,16 +361,82 @@ function PipeSection({
       </button>
       {open && (
         <div className="px-4 pb-4 pt-1">
-          <PipeBody
-            pipe={pipe}
-            confirmacaoData={confirmacaoData}
-            propostaData={propostaData}
-            leadId={leadId}
-            organizationId={organizationId}
-          />
+          {isEmpty ? (
+            <AddToPipeCta
+              label={pipe.label}
+              onAdd={onAdd}
+              isAdding={isAdding}
+              canAdd={canAdd}
+            />
+          ) : (
+            <PipeBody
+              pipe={pipe}
+              confirmacaoData={confirmacaoData}
+              propostaData={propostaData}
+              leadId={leadId}
+              organizationId={organizationId}
+            />
+          )}
         </div>
       )}
     </section>
+  );
+}
+
+// ─── Add-to-pipe CTA ───────────────────────────────────────────────────
+
+interface AddToPipeCtaProps {
+  label: string;
+  onAdd: () => void;
+  isAdding: boolean;
+  canAdd: { allowed: boolean; reason?: string; isLoading: boolean };
+}
+
+export function AddToPipeCta({ label, onAdd, isAdding, canAdd }: AddToPipeCtaProps) {
+  const disabled = !canAdd.allowed || isAdding;
+  const button = (
+    <Button
+      type="button"
+      size="sm"
+      variant="outline"
+      className="gap-1.5 w-full"
+      onClick={onAdd}
+      disabled={disabled}
+      aria-label={`Adicionar a ${label}`}
+      data-testid={`add-to-pipe-cta-${label}`}
+    >
+      <Plus className="w-3.5 h-3.5" />
+      Adicionar a {label}
+    </Button>
+  );
+
+  if (canAdd.allowed) {
+    return (
+      <div className="flex flex-col gap-2">
+        <p className="text-xs text-muted-foreground">
+          Lead ainda não está neste pipe.
+        </p>
+        {button}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-xs text-muted-foreground">
+        Lead ainda não está neste pipe.
+      </p>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="block w-full">{button}</span>
+          </TooltipTrigger>
+          <TooltipContent>
+            {canAdd.reason ?? "Sem permissão para adicionar a pipes"}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    </div>
   );
 }
 
