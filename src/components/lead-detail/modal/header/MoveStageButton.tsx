@@ -5,6 +5,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useLogLeadAction } from "@/hooks/useLogLeadAction";
+import { useLeadActionGates } from "../../hooks/useLeadActionGates";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { DrawerVariant } from "../../hooks/useLeadSheet";
@@ -57,6 +58,7 @@ export const MoveStageButton = memo(function MoveStageButton({
   const [moving, setMoving] = useState(false);
   const qc = useQueryClient();
   const logAction = useLogLeadAction();
+  const { canMoveMeeting } = useLeadActionGates(leadId);
 
   const pipeType = VARIANT_TO_PIPE_TYPE[variant];
   const pipeTable = VARIANT_TO_TABLE[variant];
@@ -150,7 +152,11 @@ export const MoveStageButton = memo(function MoveStageButton({
     }
   };
 
-  const disabled = !pipeTable || !pipeData?.id || (isCustom && !customPipelineId);
+  const disabled =
+    !pipeTable ||
+    !pipeData?.id ||
+    (isCustom && !customPipelineId) ||
+    !canMoveMeeting.allowed;
 
   // StageProgressBar still takes the old `currentStageId` prop. For system
   // pipes we don't have the uuid of the current stage on hand without a

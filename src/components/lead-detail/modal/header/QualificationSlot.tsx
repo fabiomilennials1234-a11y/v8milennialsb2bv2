@@ -4,6 +4,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useUpdateLead } from "@/hooks/useLeads";
 import { useLogLeadAction } from "@/hooks/useLogLeadAction";
+import { useLeadActionGates } from "@/components/lead-detail/hooks/useLeadActionGates";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { QUALIFICATION_TIERS, type QualificationTier } from "../types";
@@ -24,7 +25,9 @@ export const QualificationSlot = memo(function QualificationSlot({
 }: QualificationSlotProps) {
   const updateLead = useUpdateLead();
   const logAction = useLogLeadAction();
+  const { canEditField } = useLeadActionGates(leadId);
   const [open, setOpen] = useState(false);
+  const denied = !canEditField.allowed;
 
   const config = current ? QUALIFICATION_TIER_CONFIG[current] : null;
   const Icon = config?.icon;
@@ -51,12 +54,14 @@ export const QualificationSlot = memo(function QualificationSlot({
             <PopoverTrigger asChild>
               <button
                 type="button"
+                disabled={denied}
                 aria-label={`${label}${current ? `: ${config?.label}` : " — adicionar"}`}
                 className={cn(
                   "w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-all border",
                   config
                     ? cn(config.bgClass, config.borderClass, "hover:scale-105")
-                    : "border-dashed border-border/60 hover:border-primary/60 hover:bg-primary/5"
+                    : "border-dashed border-border/60 hover:border-primary/60 hover:bg-primary/5",
+                  denied && "opacity-50 cursor-not-allowed hover:scale-100",
                 )}
               >
                 {Icon ? (
@@ -68,7 +73,9 @@ export const QualificationSlot = memo(function QualificationSlot({
             </PopoverTrigger>
           </TooltipTrigger>
           <TooltipContent side="left" className="text-xs">
-            {label}{config ? `: ${config.label}` : ""}
+            {denied
+              ? "Sem permissão — peça acesso ao seu admin"
+              : `${label}${config ? `: ${config.label}` : ""}`}
           </TooltipContent>
         </Tooltip>
         <PopoverContent align="end" className="w-52 p-1.5">
