@@ -36,6 +36,7 @@ import { convertAudioBlobToMp3, preloadLamejs } from "@/lib/audioToMp3";
 import type { LeadContext, AttendantContext } from "@/lib/template-variables";
 import type { MessageTemplate } from "@/hooks/useMessageTemplates";
 import type { DensityMode } from "@/components/chat/layout/ChatShell";
+import { ChatQuickActions } from "./ChatQuickActions";
 import { SendMenuDialog } from "./SendMenuDialog";
 import { SendPixDialog } from "./SendPixDialog";
 
@@ -403,6 +404,17 @@ export function ChatComposer({
               </div>
             </div>
           )}
+
+          {/* Quick action bar */}
+          <ChatQuickActions
+            onAudio={() => setIsRecording(true)}
+            onTemplate={() => {
+              setMessage("/");
+              setShowSlashPopover(true);
+            }}
+            onAttach={() => fileInputRef.current?.click()}
+            disabled={sendMessage.isPending || sendMedia.isPending}
+          />
 
           {/* Input row */}
           <div className="relative flex items-center gap-2">
