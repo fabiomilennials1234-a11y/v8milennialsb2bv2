@@ -2,6 +2,7 @@ import { memo, useMemo, useState } from "react";
 import { History, Loader2, Search, MessageSquare } from "lucide-react";
 import { format, isToday, isYesterday, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { useSearchParams } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { TimelineItem } from "@/components/leads/TimelineItem";
 import { useLeadTimeline, type TimelineSource } from "@/hooks/useLeadTimeline";
@@ -30,6 +31,8 @@ export const ActivityFeed = memo(function ActivityFeed({ leadId }: ActivityFeedP
   const timeline = useLeadTimeline(leadId);
   const comments = useLeadComments(leadId);
   const [filter, setFilter] = useState<FilterTab>("all");
+  const [searchParams] = useSearchParams();
+  const highlightCommentId = searchParams.get("comment");
 
   const merged = useMemo(() => {
     const tlEvents = (timeline.data?.events ?? [])
@@ -140,7 +143,14 @@ export const ActivityFeed = memo(function ActivityFeed({ leadId }: ActivityFeedP
             <div className="space-y-3">
               {group.items.map((m, idx) => {
                 if (m.kind === "comment") {
-                  return <CommentItem key={`c-${m.payload.id}`} comment={m.payload} leadId={leadId} />;
+                  return (
+                    <CommentItem
+                      key={`c-${m.payload.id}`}
+                      comment={m.payload}
+                      leadId={leadId}
+                      highlight={m.payload.id === highlightCommentId}
+                    />
+                  );
                 }
                 const icon = getIconForAction(m.payload.action);
                 return (

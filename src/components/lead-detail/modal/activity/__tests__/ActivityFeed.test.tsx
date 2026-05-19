@@ -8,6 +8,10 @@ vi.mock("@/hooks/useLeadTimeline", () => ({
   useLeadTimeline: (...args: unknown[]) => timelineMock(...args),
 }));
 
+vi.mock("react-router-dom", () => ({
+  useSearchParams: () => [new URLSearchParams(), vi.fn()],
+}));
+
 const commentsMock = vi.fn(() => ({ data: [], isLoading: false }));
 vi.mock("../../../hooks/useLeadComments", () => ({
   useLeadComments: () => commentsMock(),
