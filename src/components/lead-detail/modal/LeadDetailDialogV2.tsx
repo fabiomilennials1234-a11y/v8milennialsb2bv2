@@ -3,11 +3,13 @@ import { X } from "lucide-react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { Dialog, DialogPortal, DialogOverlay } from "@/components/ui/dialog";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useViewport } from "@/hooks/use-viewport";
+import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { useLeadSheet } from "../hooks/useLeadSheet";
 import { useLeadDetail } from "../hooks/useLeadDetail";
+import { useLeadDetailRealtime } from "../hooks/useLeadDetailRealtime";
 import { useToggleLeadAI, useDeleteLead } from "@/hooks/useLeads";
 import { useLogLeadAction } from "@/hooks/useLogLeadAction";
 import { toast } from "sonner";
@@ -16,7 +18,9 @@ import { LeadModalToolbar } from "./LeadModalToolbar";
 import { LeadInfoColumn } from "./body/LeadInfoColumn";
 import { LeadActivityColumn } from "./activity/LeadActivityColumn";
 import { LeadCrossPipeAccordion } from "./pipes/LeadCrossPipeAccordion";
-import { LeadDetailMobileTabs } from "./LeadDetailMobileTabs";
+import { LeadModalSkeleton } from "./LeadModalSkeleton";
+import { LeadVisibilityState } from "./LeadVisibilityState";
+import { LeadDetailBanners } from "./LeadDetailBanners";
 import { useAuth } from "@/contexts/AuthContext";
 import { ScheduleMessageModal } from "@/components/chat/ScheduleMessageModal";
 import { LogCallModal } from "@/components/calls/LogCallModal";
@@ -31,10 +35,17 @@ interface LeadDetailDialogProps {
   children?: never;
 }
 
-function LeadDetailContent({ onClose, mobile = false }: { onClose: () => void; mobile?: boolean }) {
+function LeadDetailContent({ onClose, isMobile }: { onClose: () => void; isMobile: boolean }) {
   const { leadId, defaultExpandedPipeEntryId } = useLeadSheet();
-  const { lead, isLoading } = useLeadDetail(leadId, true);
+  const { lead, isLoading, visibility, metadata, isFetching, failureCount } = useLeadDetail(leadId, true);
+  const isOnline = useOnlineStatus();
+  useLeadDetailRealtime(leadId, true, lead?.organization_id ?? null);
   const { user } = useAuth();
+  // PRD #284 #314 — default tab por contexto de abertura:
+  // origem kanban (pipeData via defaultExpandedPipeEntryId) → "pipes"; senão "info".
+  const [mobileTab, setMobileTab] = useState<string>(
+    defaultExpandedPipeEntryId ? "pipes" : "info",
+  );
   const toggleAI = useToggleLeadAI();
   const deleteLead = useDeleteLead();
   const logAction = useLogLeadAction();
@@ -74,6 +85,13 @@ function LeadDetailContent({ onClose, mobile = false }: { onClose: () => void; m
     if (!lead) return;
     if (!window.confirm(`Excluir "${lead.name}"? Ação irreversível.`)) return;
     try {
+      await logAction({
+        leadId: lead.id,
+        action: "lead_deleted",
+        description: `Lead "${lead.name}" excluído`,
+        tier: 1,
+        metadata: { lead_name: lead.name },
+      });
       await deleteLead.mutateAsync(lead.id);
       toast.success("Lead excluído");
       onClose();
@@ -81,24 +99,34 @@ function LeadDetailContent({ onClose, mobile = false }: { onClose: () => void; m
       const msg = err instanceof Error ? err.message : "Erro ao excluir";
       toast.error(msg);
     }
-  }, [lead, deleteLead, onClose]);
+  }, [lead, deleteLead, logAction, onClose]);
 
-  if (isLoading || !lead) {
+  if (visibility === "loading" || isLoading) {
+    return <LeadModalSkeleton />;
+  }
+
+  if (visibility !== "exists" || !lead) {
     return (
-      <div className="flex flex-col h-full">
-        <div className="p-6 space-y-4 border-b border-border/40">
-          <Skeleton className="h-14 w-2/3" />
-          <Skeleton className="h-3 w-1/3" />
-        </div>
-        <div className="flex-1 p-6">
-          <Skeleton className="h-full w-full" />
-        </div>
+      <div className="flex flex-col h-full relative">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onClose}
+          className="absolute right-3 top-3 h-8 w-8 z-10 rounded-full hover:bg-muted"
+          aria-label="Fechar"
+        >
+          <X className="w-4 h-4" />
+        </Button>
+        <LeadVisibilityState
+          visibility={visibility === "exists" ? "not_found" : visibility}
+          metadata={metadata}
+          onClose={onClose}
+        />
       </div>
     );
   }
 
   const leadAny = lead as any;
-  // Adapta tipos esperados pelos componentes (tier columns ainda fora do types.ts)
   const leadForHeader = {
     id: lead.id,
     organization_id: lead.organization_id ?? "",
@@ -124,7 +152,20 @@ function LeadDetailContent({ onClose, mobile = false }: { onClose: () => void; m
       >
         <X className="w-4 h-4" />
       </Button>
+
+      <LeadDetailBanners
+        isOnline={isOnline}
+        isFetching={isFetching}
+        failureCount={failureCount}
+      />
+
       <LeadModalHeader lead={leadForHeader} />
+
+      <fieldset
+        disabled={!isOnline}
+        className="contents"
+        aria-disabled={!isOnline}
+      >
       <LeadModalToolbar
         lead={{
           id: lead.id,
@@ -144,30 +185,6 @@ function LeadDetailContent({ onClose, mobile = false }: { onClose: () => void; m
         onClose={onClose}
       />
     </>
-  );
-
-  const infoBlock = (
-    <>
-      <div className="px-6 pt-5">
-        <LeadCrossPipeAccordion
-          leadId={lead.id}
-          organizationId={lead.organization_id ?? ""}
-          defaultExpandedPipeEntryId={defaultExpandedPipeEntryId}
-          userId={user?.id ?? null}
-        />
-      </div>
-      <LeadInfoColumn lead={lead as Record<string, unknown> & { id: string }} />
-    </>
-  );
-
-  const activityBlock = (
-    <LeadActivityColumn leadId={lead.id} organizationId={lead.organization_id ?? ""} />
-  );
-
-  const chatPlaceholder = (
-    <div className="flex flex-col items-center justify-center gap-3 py-12 text-muted-foreground">
-      <p className="text-sm">Mensagens recentes aparecem aqui.</p>
-    </div>
   );
 
   const subModals = (
@@ -218,37 +235,51 @@ function LeadDetailContent({ onClose, mobile = false }: { onClose: () => void; m
     </>
   );
 
-  if (mobile) {
-    return (
-      <LeadDetailMobileTabs
-        infoContent={
-          <div className="flex flex-col h-full min-h-0 relative">
-            {headerBlock}
-            <div className="flex-1 min-h-0 overflow-y-auto">
-              {infoBlock}
-            </div>
-            {subModals}
-          </div>
-        }
-        historyContent={activityBlock}
-        chatContent={chatPlaceholder}
-        leadPhone={lead.phone ?? null}
-      />
-    );
-  }
-
   return (
     <div className="flex flex-col h-full min-h-0 relative">
       {headerBlock}
 
-      <div className="grid grid-cols-12 flex-1 min-h-0">
-        <div className="col-span-12 md:col-span-7 min-h-0 flex flex-col overflow-y-auto">
-          {infoBlock}
+      {isMobile ? (
+        <Tabs value={mobileTab} onValueChange={setMobileTab} className="flex-1 min-h-0 flex flex-col">
+          <TabsList className="mx-3 mt-2 grid grid-cols-3" data-testid="lead-modal-mobile-tabs">
+            <TabsTrigger value="info" data-testid="tab-info">Info</TabsTrigger>
+            <TabsTrigger value="pipes" data-testid="tab-pipes">Pipes</TabsTrigger>
+            <TabsTrigger value="atividade" data-testid="tab-atividade">Atividade</TabsTrigger>
+          </TabsList>
+          <TabsContent value="info" className="flex-1 min-h-0 overflow-y-auto m-0">
+            <LeadInfoColumn lead={lead as Record<string, unknown> & { id: string }} />
+          </TabsContent>
+          <TabsContent value="pipes" className="flex-1 min-h-0 overflow-y-auto m-0 px-4 pt-4">
+            <LeadCrossPipeAccordion
+              leadId={lead.id}
+              organizationId={lead.organization_id ?? ""}
+              defaultExpandedPipeEntryId={defaultExpandedPipeEntryId}
+              userId={user?.id ?? null}
+            />
+          </TabsContent>
+          <TabsContent value="atividade" className="flex-1 min-h-0 m-0 flex flex-col">
+            <LeadActivityColumn leadId={lead.id} organizationId={lead.organization_id ?? ""} />
+          </TabsContent>
+        </Tabs>
+      ) : (
+        <div className="grid grid-cols-12 flex-1 min-h-0">
+          <div className="col-span-12 md:col-span-7 min-h-0 flex flex-col overflow-y-auto">
+            <div className="px-6 pt-5">
+              <LeadCrossPipeAccordion
+                leadId={lead.id}
+                organizationId={lead.organization_id ?? ""}
+                defaultExpandedPipeEntryId={defaultExpandedPipeEntryId}
+                userId={user?.id ?? null}
+              />
+            </div>
+            <LeadInfoColumn lead={lead as Record<string, unknown> & { id: string }} />
+          </div>
+          <div className="col-span-12 md:col-span-5 min-h-0 flex flex-col">
+            <LeadActivityColumn leadId={lead.id} organizationId={lead.organization_id ?? ""} />
+          </div>
         </div>
-        <div className="col-span-12 md:col-span-5 min-h-0 flex flex-col">
-          {activityBlock}
-        </div>
-      </div>
+      )}
+      </fieldset>
 
       {subModals}
     </div>
@@ -269,7 +300,7 @@ export const LeadDetailDialogV2 = memo(function LeadDetailDialogV2(_props: LeadD
           className="h-[90vh] p-0 overflow-hidden flex flex-col rounded-t-2xl"
           aria-describedby={undefined}
         >
-          <LeadDetailContent onClose={close} mobile />
+          <LeadDetailContent onClose={close} isMobile={isMobile} />
         </SheetContent>
       </Sheet>
     );
@@ -292,7 +323,7 @@ export const LeadDetailDialogV2 = memo(function LeadDetailDialogV2(_props: LeadD
           )}
         >
           <DialogPrimitive.Title className="sr-only">Detalhes do lead</DialogPrimitive.Title>
-          <LeadDetailContent onClose={close} />
+          <LeadDetailContent onClose={close} isMobile={isMobile} />
         </DialogPrimitive.Content>
       </DialogPortal>
     </Dialog>

@@ -562,12 +562,14 @@ export function useCreateCampanha() {
 // Hook to update a campaign
 export function useUpdateCampanha() {
   const queryClient = useQueryClient();
-  const { data: editPermission } = useCanPerformActionAsync("edit_campaign");
+  const editPermission = useCanPerformActionAsync("edit_campaign");
 
   return useMutation({
     mutationFn: async ({ id, ...updates }: Partial<Campanha> & { id: string }) => {
-      if (editPermission && !editPermission.allowed) {
-        throw new Error("Sem permissão para editar campanhas");
+      if (!editPermission.allowed) {
+        throw new Error(editPermission.isLoading
+          ? "Permissões ainda carregando — tente novamente"
+          : "Sem permissão para editar campanhas");
       }
       const newAgentId = updates.agent_id !== undefined ? updates.agent_id : undefined;
 
@@ -616,12 +618,14 @@ export function useUpdateCampanha() {
 // Hook to delete a campaign
 export function useDeleteCampanha() {
   const queryClient = useQueryClient();
-  const { data: deletePermission } = useCanPerformActionAsync("delete_campaign");
+  const deletePermission = useCanPerformActionAsync("delete_campaign");
 
   return useMutation({
     mutationFn: async (id: string) => {
-      if (deletePermission && !deletePermission.allowed) {
-        throw new Error("Sem permissão para excluir campanhas");
+      if (!deletePermission.allowed) {
+        throw new Error(deletePermission.isLoading
+          ? "Permissões ainda carregando — tente novamente"
+          : "Sem permissão para excluir campanhas");
       }
       const { error } = await supabase
         .from("campanhas")

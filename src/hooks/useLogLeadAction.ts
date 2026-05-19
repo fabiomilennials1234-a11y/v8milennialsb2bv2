@@ -1,9 +1,11 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { track } from "@/lib/analytics";
 import { useOrganization } from "./useOrganization";
 
 export type LeadActionType =
   | "lead_created"
+  | "lead_deleted"
   | "stage_changed"
   | "sdr_assigned"
   | "closer_assigned"
@@ -22,13 +24,27 @@ export type LeadActionType =
   | "ai_toggled"
   | "copilot_interaction"
   | "pipe_added"
-  | "pipe_removed";
+  | "pipe_removed"
+  | "comment_added"
+  | "comment_updated"
+  | "comment_deleted"
+  | "tag_added"
+  | "tag_removed";
+
+/**
+ * Audit tier (#310).
+ *   1 — irreversible / compliance (delete lead, permission change). Goes to lead_history.
+ *   2 — default. Mutations that belong on the user-visible timeline. Goes to lead_history.
+ *   3 — telemetry / noise (UI events, redundant signals). Goes to analytics.track() only.
+ */
+export type LeadActionTier = 1 | 2 | 3;
 
 interface LogLeadActionParams {
   leadId: string;
   action: LeadActionType;
   description: string;
   metadata?: Record<string, unknown>;
+  tier?: LeadActionTier;
 }
 
 let cachedUserName: string | null = null;
@@ -67,7 +83,23 @@ export function useLogLeadAction() {
   const queryClient = useQueryClient();
   const { organizationId } = useOrganization();
 
-  const logAction = async ({ leadId, action, description, metadata }: LogLeadActionParams) => {
+  const logAction = async ({ leadId, action, description, metadata, tier = 2 }: LogLeadActionParams) => {
+    // Tier 3 → analytics only, never touches lead_history.
+    if (tier === 3) {
+      try {
+        track({
+          event: "lead_action_telemetry",
+          organizationId: organizationId ?? "",
+          entityType: "lead",
+          entityId: leadId,
+          metadata: { action, description, ...(metadata ?? {}) },
+        });
+      } catch (error) {
+        console.warn("[useLogLeadAction] Tier 3 track falhou:", error);
+      }
+      return;
+    }
+
     try {
       const [userName, userId] = await Promise.all([
         resolveUserName(),

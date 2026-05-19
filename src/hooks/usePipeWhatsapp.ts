@@ -5,6 +5,7 @@ import { triggerFollowUpAutomation } from "./useAutoFollowUp";
 
 import { useOrganization } from "./useOrganization";
 import { useCanPerformActionAsync } from "@/lib/permissions";
+import { OptimisticLockConflictError, isPostgrestNoRows } from "@/lib/optimistic-lock";
 import { usePipelineEntries, usePipelineId, findOrCreatePipelineEntry } from "./usePipelineEntries";
 
 export type PipeWhatsapp = Tables<"pipe_whatsapp">;
@@ -86,12 +87,25 @@ export function useCreatePipeWhatsapp() {
 
 export function useUpdatePipeWhatsapp() {
   const queryClient = useQueryClient();
-  const { data: movePermission } = useCanPerformActionAsync("move_pipe_record");
+  const movePermission = useCanPerformActionAsync("move_pipe_record");
 
   return useMutation({
-    mutationFn: async ({ id, leadId, sdrId, ...updates }: PipeWhatsappUpdate & { id: string; leadId?: string; sdrId?: string | null }) => {
-      if (updates.status && movePermission && !movePermission.allowed) {
-        throw new Error("Sem permissão para mover registros no pipe");
+    mutationFn: async ({
+      id,
+      leadId,
+      sdrId,
+      expectedUpdatedAt,
+      ...updates
+    }: PipeWhatsappUpdate & {
+      id: string;
+      leadId?: string;
+      sdrId?: string | null;
+      expectedUpdatedAt?: string;
+    }) => {
+      if (updates.status && !movePermission.allowed) {
+        throw new Error(movePermission.isLoading
+          ? "Permissões ainda carregando — tente novamente"
+          : "Sem permissão para mover registros no pipe");
       }
 
       // Fetch current entry to merge metadata
@@ -138,14 +152,21 @@ export function useUpdatePipeWhatsapp() {
         updatePayload.assigned_to = assignedTo;
       }
 
-      const { data, error } = await supabase
+      let updateQuery = supabase
         .from("pipeline_entries")
         .update(updatePayload)
-        .eq("id", id)
-        .select()
-        .single();
+        .eq("id", id);
+      if (expectedUpdatedAt) {
+        updateQuery = updateQuery.eq("updated_at", expectedUpdatedAt);
+      }
+      const { data, error } = await updateQuery.select().single();
 
-      if (error) throw error;
+      if (error) {
+        if (expectedUpdatedAt && isPostgrestNoRows(error)) {
+          throw new OptimisticLockConflictError();
+        }
+        throw error;
+      }
 
       // Sync sdr_id back to leads table
       const effectiveLeadId = leadId || data.lead_id;

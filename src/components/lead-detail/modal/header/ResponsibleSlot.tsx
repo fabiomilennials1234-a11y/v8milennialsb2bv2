@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { useResponsibleMembers } from "@/hooks/useTeamMembers";
 import { useUpdateLead } from "@/hooks/useLeads";
 import { useLogLeadAction } from "@/hooks/useLogLeadAction";
+import { useOptimisticConflictHandler } from "@/hooks/useOptimisticConflictHandler";
 import { useLeadActionGates } from "@/components/lead-detail/hooks/useLeadActionGates";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -15,6 +16,12 @@ interface ResponsibleSlotProps {
   field: "pre_sale_responsible_id" | "sale_responsible_id";
   label: string;
   currentMember: { id: string; name: string; avatar_url?: string | null } | null;
+  /**
+   * Lead `updated_at` snapshot at render time. When provided, the
+   * mutation runs with optimistic locking (#307) — a concurrent edit
+   * triggers a toast + force-refetch instead of silent overwrite.
+   */
+  expectedUpdatedAt?: string | null;
 }
 
 function initials(name: string): string {
@@ -32,10 +39,12 @@ export const ResponsibleSlot = memo(function ResponsibleSlot({
   field,
   label,
   currentMember,
+  expectedUpdatedAt,
 }: ResponsibleSlotProps) {
   const members = useResponsibleMembers();
   const updateLead = useUpdateLead();
   const logAction = useLogLeadAction();
+  const handleConflict = useOptimisticConflictHandler();
   const { canReassign } = useLeadActionGates(leadId);
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -48,7 +57,21 @@ export const ResponsibleSlot = memo(function ResponsibleSlot({
   const handleSelect = async (memberId: string | null) => {
     const next = memberId === currentMember?.id ? null : memberId;
     const newName = members.find((m) => m.id === next)?.name ?? "Nenhum";
-    await updateLead.mutateAsync({ id: leadId, [field]: next } as Parameters<typeof updateLead.mutateAsync>[0]);
+    try {
+      await updateLead.mutateAsync({
+        id: leadId,
+        [field]: next,
+        ...(expectedUpdatedAt ? { expectedUpdatedAt } : {}),
+      } as Parameters<typeof updateLead.mutateAsync>[0]);
+    } catch (err) {
+      const handled = handleConflict(err, { leadId });
+      if (handled) {
+        setOpen(false);
+        return;
+      }
+      toast.error("Falha ao atualizar responsável");
+      throw err;
+    }
     logAction({
       leadId,
       action: "field_updated",

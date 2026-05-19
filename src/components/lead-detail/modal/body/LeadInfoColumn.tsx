@@ -15,11 +15,11 @@ export const LeadInfoColumn = memo(function LeadInfoColumn({ lead }: LeadInfoCol
   return (
     <div className="overflow-y-auto px-6 py-5 space-y-6 min-h-0">
       <InfoBlockFilled lead={lead as Parameters<typeof InfoBlockFilled>[0]["lead"]} />
-      <Separator className="opacity-30" />
+      <Separator className="bg-border/60" />
       <LeadCustomFieldsBlock leadId={lead.id} editable={gates.canEditField.allowed} />
-      <Separator className="opacity-30" />
+      <Separator className="bg-border/60" />
       <InfoBlockMissing lead={lead} />
-      <Separator className="opacity-30" />
+      <Separator className="bg-border/60" />
       <InfoBlockTracking lead={lead} />
     </div>
   );

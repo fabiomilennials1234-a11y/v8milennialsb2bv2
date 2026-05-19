@@ -157,7 +157,14 @@ async function upsertMessages(
         remote_jid: remoteJid || "unknown",
         phone_number: phoneNumber,
         direction: fromMe ? "outgoing" : "incoming",
-        message_type: msg.type ?? msg.wa_type ?? (msg.text ? "text" : "unknown"),
+        message_type:
+          msg.type ??
+          msg.wa_type ??
+          (msg.text || msg.body || msg.caption
+            ? "text"
+            : msg.mediaUrl || msg.media_url
+              ? (msg.mediaType ?? msg.mimetype?.split("/")[0] ?? "document")
+              : "unknown"),
         content: msg.text ?? msg.body ?? msg.caption ?? null,
         media_url: msg.mediaUrl ?? msg.media_url ?? null,
         push_name: msg.pushName ?? msg.wa_pushName ?? null,
