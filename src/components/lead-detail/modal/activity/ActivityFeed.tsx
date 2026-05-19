@@ -1,10 +1,13 @@
 import { memo, useMemo, useState } from "react";
 import { History, Loader2, Search, MessageSquare } from "lucide-react";
+import { format, isToday, isYesterday, parseISO } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import { Input } from "@/components/ui/input";
 import { TimelineItem } from "@/components/leads/TimelineItem";
 import { useLeadTimeline, type TimelineSource } from "@/hooks/useLeadTimeline";
 import { useLeadComments } from "../../hooks/useLeadComments";
 import { CommentItem } from "./CommentItem";
+import { getIconForAction } from "./lead-history-icons";
 import { cn } from "@/lib/utils";
 
 type FilterTab = "all" | "comments" | TimelineSource | "pipeline";
@@ -50,6 +53,25 @@ export const ActivityFeed = memo(function ActivityFeed({ leadId }: ActivityFeedP
       filter === "pipeline" ? true : m.payload.source === filter
     ));
   }, [merged, filter]);
+
+  // Group items by ISO day (yyyy-MM-dd). Preserves DESC order from `visible`
+  // both across groups and inside each group, so today's most recent shows up
+  // first under the "Hoje" header.
+  const grouped = useMemo(() => {
+    const byDay = new Map<string, typeof visible>();
+    for (const m of visible) {
+      const dt = parseISO(m.created_at);
+      const key = format(dt, "yyyy-MM-dd");
+      const arr = byDay.get(key) ?? [];
+      arr.push(m);
+      byDay.set(key, arr);
+    }
+    return Array.from(byDay.entries()).map(([dayKey, items]) => ({
+      dayKey,
+      label: dayHeaderLabel(parseISO(items[0].created_at)),
+      items,
+    }));
+  }, [visible]);
 
   const loading = timeline.isLoading || comments.isLoading;
   const isEmpty = !loading && visible.length === 0;
@@ -108,19 +130,43 @@ export const ActivityFeed = memo(function ActivityFeed({ leadId }: ActivityFeedP
             )}
           </div>
         )}
-        {visible.map((m, idx) => {
-          if (m.kind === "comment") {
-            return <CommentItem key={`c-${m.payload.id}`} comment={m.payload} leadId={leadId} />;
-          }
-          return (
-            <TimelineItem
-              key={`e-${m.payload.id}`}
-              event={m.payload}
-              isLast={idx === visible.length - 1}
-            />
-          );
-        })}
+        {grouped.map((group) => (
+          <section key={group.dayKey} data-testid={`activity-day-${group.dayKey}`} className="space-y-2">
+            <div className="sticky top-0 z-[1] bg-card/80 backdrop-blur-sm py-1">
+              <h4 className="text-[10px] uppercase tracking-widest text-muted-foreground/70 font-semibold">
+                {group.label}
+              </h4>
+            </div>
+            <div className="space-y-3">
+              {group.items.map((m, idx) => {
+                if (m.kind === "comment") {
+                  return <CommentItem key={`c-${m.payload.id}`} comment={m.payload} leadId={leadId} />;
+                }
+                const icon = getIconForAction(m.payload.action);
+                return (
+                  <div
+                    key={`e-${m.payload.id}`}
+                    data-action={m.payload.action}
+                    data-inbound={icon.inbound ? "true" : "false"}
+                    className={cn(icon.inbound && "border-l-2 border-emerald-500/40 pl-2")}
+                  >
+                    <TimelineItem
+                      event={m.payload}
+                      isLast={idx === group.items.length - 1}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        ))}
       </div>
     </div>
   );
 });
+
+function dayHeaderLabel(date: Date): string {
+  if (isToday(date)) return "Hoje";
+  if (isYesterday(date)) return "Ontem";
+  return format(date, "dd/MM/yyyy", { locale: ptBR });
+}
