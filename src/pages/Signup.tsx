@@ -97,9 +97,7 @@ export default function Signup() {
         if (data?.organization_id) {
           navigate('/dashboard', { replace: true });
         } else {
-          // Authenticated but no org → go straight to checkout
-          const dest = planParam ? `/checkout?plan=${planParam}` : '/checkout';
-          navigate(dest, { replace: true });
+          navigate('/dashboard', { replace: true });
         }
       } catch {
         // Fail open: let them proceed
@@ -161,8 +159,7 @@ export default function Signup() {
       return;
     }
 
-    const dest = planParam ? `/checkout?plan=${planParam}` : '/checkout';
-    navigate(dest, { replace: true });
+    navigate('/dashboard', { replace: true });
   }
 
   // While auth state is loading, or redirect is in progress, show nothing

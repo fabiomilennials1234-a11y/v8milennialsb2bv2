@@ -19,7 +19,6 @@ const CHECKLIST_HIDDEN_PATTERNS = [
   /^\/reset-password/,
   /^\/_mockup/,
   /^\/master/,
-  /^\/checkout/,
   /^\/tv/,
 ];
 

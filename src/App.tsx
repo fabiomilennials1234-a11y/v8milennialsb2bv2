@@ -78,10 +78,7 @@ const AutomacoesExecucoes = lazy(() => lazyRetry(() => import("./pages/Automacoe
 const NotFound = lazy(() => lazyRetry(() => import("./pages/NotFound")));
 const Landing = lazy(() => lazyRetry(() => import("./pages/Landing")));
 const Signup = lazy(() => lazyRetry(() => import("./pages/Signup")));
-const Onboarding = lazy(() => lazyRetry(() => import("./pages/Onboarding")));
-const Checkout = lazy(() => lazyRetry(() => import("./pages/Checkout")));
 const ResetPassword = lazy(() => lazyRetry(() => import("./pages/ResetPassword")));
-const CheckoutSuccess = lazy(() => lazyRetry(() => import("./pages/CheckoutSuccess")));
 
 // Master Admin — lazy loaded (com retry)
 const MasterDashboard = lazy(() => lazyRetry(() => import("./pages/master/MasterDashboard")));
@@ -95,6 +92,7 @@ const MasterAutomationHealth = lazy(() => lazyRetry(() => import("./pages/master
 const MasterWhatsAppHealth = lazy(() => lazyRetry(() => import("./pages/master/MasterWhatsAppHealth")));
 const CopilotReasoning = lazy(() => lazyRetry(() => import("./pages/master/CopilotReasoning")));
 const CopilotToggleAudit = lazy(() => lazyRetry(() => import("./pages/master/CopilotToggleAudit")));
+const MasterOnboarding = lazy(() => lazyRetry(() => import("./pages/master/MasterOnboarding")));
 const MockupChat = lazy(() => lazyRetry(() => import("./pages/MockupChat")));
 const MockupChatV2 = lazy(() => lazyRetry(() => import("./pages/MockupChatV2")));
 const MockupChatV3 = lazy(() => lazyRetry(() => import("./pages/MockupChatV3")));
@@ -175,11 +173,6 @@ function RootRedirect() {
 
   if (!user) return <Landing />;
 
-  // Authenticated: check if pending payment
-  if (user.user_metadata?.subscription_status === 'pending_payment') {
-    return <Navigate to="/checkout" replace />;
-  }
-
   return <Navigate to="/dashboard" replace />;
 }
 
@@ -210,32 +203,7 @@ function AppRoutes() {
       <Route path="/_mockup/chat" element={<MockupChat />} />
       <Route path="/_mockup/chat-v2" element={<MockupChatV2 />} />
       <Route path="/_mockup/chat-v3" element={<MockupChatV3 />} />
-      <Route
-        path="/checkout"
-        element={
-          <ProtectedRoute requireOrganization={false}>
-            <Checkout />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/checkout/success"
-        element={
-          <ProtectedRoute requireOrganization={false}>
-            <CheckoutSuccess />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/onboarding"
-        element={
-          <ProtectedRoute>
-            <OrgFeaturesProvider>
-              <Onboarding />
-            </OrgFeaturesProvider>
-          </ProtectedRoute>
-        }
-      />
+      {/* Old onboarding/checkout routes removed — OnboardingGate handles inline */}
       <Route path="/" element={<RootRedirect />} />
       <Route path="/pricing" element={<Navigate to="/#pricing" replace />} />
       <Route
@@ -674,6 +642,7 @@ function AppRoutes() {
         <Route path="whatsapp-health" element={<MasterWhatsAppHealth />} />
         <Route path="copilot-reasoning" element={<CopilotReasoning />} />
         <Route path="copilot-toggle-audit" element={<CopilotToggleAudit />} />
+        <Route path="onboarding" element={<MasterOnboarding />} />
       </Route>
 
       <Route path="*" element={<NotFound />} />
