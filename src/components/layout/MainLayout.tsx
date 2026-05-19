@@ -1,10 +1,12 @@
 import { ReactNode, useState, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { TopNavigation } from "./TopNavigation";
+import { MobileBottomNav } from "./MobileBottomNav";
 import { OnboardingChecklist } from "@/components/onboarding/OnboardingChecklist";
 import { KeyboardShortcutsHelp } from "@/components/shared/KeyboardShortcutsHelp";
 import { useGlobalShortcuts, type Shortcut } from "@/hooks/useKeyboardShortcuts";
 import { cn } from "@/lib/utils";
+import { useViewport } from "@/hooks/use-viewport";
 import { useCopilotToggleRealtime } from "@/hooks/useCopilotToggleRealtime";
 import { useIncomingMessageToast } from "@/hooks/useIncomingMessageToast";
 import { featureFlags } from "@/lib/feature-flags";
@@ -48,6 +50,7 @@ interface MainLayoutProps {
 export function MainLayout({ children }: MainLayoutProps) {
   const location = useLocation();
   const navigate = useNavigate();
+  const { isMobile } = useViewport();
   const [shortcutsHelpOpen, setShortcutsHelpOpen] = useState(false);
 
   // Onda 2 U3: subscription único em phone_ai_preferences pra sincronizar
@@ -103,6 +106,7 @@ export function MainLayout({ children }: MainLayoutProps) {
         className={cn(
           "flex-1 min-h-0",
           isFullBleed ? "overflow-hidden" : "overflow-auto",
+          isMobile && "pb-16",
         )}
       >
         <div
@@ -128,6 +132,8 @@ export function MainLayout({ children }: MainLayoutProps) {
       {featureFlags.chatBubble && <ChatBubble />}
 
       <WhatsAppUpdateModal />
+
+      <MobileBottomNav />
     </div>
   );
 
