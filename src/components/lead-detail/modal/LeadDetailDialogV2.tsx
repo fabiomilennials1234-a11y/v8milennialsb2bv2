@@ -73,6 +73,17 @@ function LeadDetailContent({ onClose }: { onClose: () => void }) {
     if (!lead) return;
     if (!window.confirm(`Excluir "${lead.name}"? Ação irreversível.`)) return;
     try {
+      // Tier 1 audit BEFORE delete — irreversible, must be on record.
+      // NOTE: useDeleteLead today hard-deletes lead_history too. The Tier 1
+      // call is the marker we expect future soft-delete work (#284 follow-up)
+      // to preserve in a compliance audit table.
+      await logAction({
+        leadId: lead.id,
+        action: "lead_deleted",
+        description: `Lead "${lead.name}" excluído`,
+        tier: 1,
+        metadata: { lead_name: lead.name },
+      });
       await deleteLead.mutateAsync(lead.id);
       toast.success("Lead excluído");
       onClose();
@@ -80,7 +91,7 @@ function LeadDetailContent({ onClose }: { onClose: () => void }) {
       const msg = err instanceof Error ? err.message : "Erro ao excluir";
       toast.error(msg);
     }
-  }, [lead, deleteLead, onClose]);
+  }, [lead, deleteLead, logAction, onClose]);
 
   if (isLoading || !lead) {
     return (

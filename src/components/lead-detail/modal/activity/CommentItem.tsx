@@ -6,6 +6,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { useDeleteLeadComment, useUpdateLeadComment } from "../../hooks/useLeadComments";
+import { useLogLeadAction } from "@/hooks/useLogLeadAction";
 import { useAuth } from "@/contexts/AuthContext";
 import { useMasterAuth } from "@/hooks/useMasterAuth";
 import { useIsAdmin } from "@/hooks/useUserRole";
@@ -38,6 +39,7 @@ export const CommentItem = memo(function CommentItem({ comment, leadId, highligh
   const { isAdmin } = useIsAdmin();
   const remove = useDeleteLeadComment();
   const edit = useUpdateLeadComment();
+  const logAction = useLogLeadAction();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(comment.body);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -67,6 +69,13 @@ export const CommentItem = memo(function CommentItem({ comment, leadId, highligh
     }
     try {
       await edit.mutateAsync({ commentId: comment.id, leadId, body: trimmed });
+      await logAction({
+        leadId,
+        action: "comment_updated",
+        description: "Comentário editado",
+        tier: 2,
+        metadata: { comment_id: comment.id },
+      });
       toast.success("Comentário atualizado");
       setEditing(false);
     } catch (err) {
@@ -79,6 +88,13 @@ export const CommentItem = memo(function CommentItem({ comment, leadId, highligh
     if (!window.confirm("Apagar este comentário?")) return;
     try {
       await remove.mutateAsync({ commentId: comment.id, leadId });
+      await logAction({
+        leadId,
+        action: "comment_deleted",
+        description: "Comentário apagado",
+        tier: 1,
+        metadata: { comment_id: comment.id },
+      });
       toast.success("Comentário apagado");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Erro ao apagar";
