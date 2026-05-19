@@ -6,6 +6,7 @@ import { KeyboardShortcutsHelp } from "@/components/shared/KeyboardShortcutsHelp
 import { useGlobalShortcuts, type Shortcut } from "@/hooks/useKeyboardShortcuts";
 import { cn } from "@/lib/utils";
 import { useCopilotToggleRealtime } from "@/hooks/useCopilotToggleRealtime";
+import { useIncomingMessageToast } from "@/hooks/useIncomingMessageToast";
 import { featureFlags } from "@/lib/feature-flags";
 import { ChatBubbleProvider } from "@/contexts/ChatBubbleContext";
 import { ChatBubble } from "@/components/chat/bubble";
@@ -52,6 +53,9 @@ export function MainLayout({ children }: MainLayoutProps) {
   // Onda 2 U3: subscription único em phone_ai_preferences pra sincronizar
   // estado do switch copilot entre todas as telas + entre usuários da mesma org.
   useCopilotToggleRealtime();
+
+  // Toast in-app para mensagens WhatsApp inbound — suprimido nas rotas de chat.
+  useIncomingMessageToast();
 
   const toggleHelp = useCallback(() => setShortcutsHelpOpen((v) => !v), []);
 
