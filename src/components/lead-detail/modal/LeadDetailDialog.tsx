@@ -15,10 +15,8 @@ import { LeadModalHeader } from "./header/LeadModalHeader";
 import { LeadModalToolbar } from "./LeadModalToolbar";
 import { LeadInfoColumn } from "./body/LeadInfoColumn";
 import { LeadActivityColumn } from "./activity/LeadActivityColumn";
-import { MeetingFieldBlock } from "../cross-pipe/MeetingFieldBlock";
-import { BudgetFieldBlock } from "../cross-pipe/BudgetFieldBlock";
-import { usePipeConfirmacaoByLeadId } from "@/hooks/usePipeConfirmacaoByLeadId";
-import { usePipePropostaByLeadId } from "@/hooks/usePipePropostaByLeadId";
+import { LeadCrossPipeAccordion } from "./pipes/LeadCrossPipeAccordion";
+import { useAuth } from "@/contexts/AuthContext";
 import { ScheduleMessageModal } from "@/components/chat/ScheduleMessageModal";
 import { LogCallModal } from "@/components/calls/LogCallModal";
 import { EmailComposer } from "@/components/email/EmailComposer";
@@ -35,8 +33,7 @@ interface LeadDetailDialogProps {
 function LeadDetailContent({ onClose }: { onClose: () => void }) {
   const { leadId, variant, pipeData } = useLeadSheet();
   const { lead, isLoading } = useLeadDetail(leadId, true);
-  const { data: confirmacaoData } = usePipeConfirmacaoByLeadId(leadId);
-  const { data: propostaData } = usePipePropostaByLeadId(leadId);
+  const { user } = useAuth();
   const toggleAI = useToggleLeadAI();
   const deleteLead = useDeleteLead();
   const logAction = useLogLeadAction();
@@ -151,18 +148,14 @@ function LeadDetailContent({ onClose }: { onClose: () => void }) {
 
       <div className="grid grid-cols-12 flex-1 min-h-0">
         <div className="col-span-12 md:col-span-7 min-h-0 flex flex-col overflow-y-auto">
-          <div className="px-6 pt-5 space-y-3">
-            <MeetingFieldBlock
+          <div className="px-6 pt-5">
+            <LeadCrossPipeAccordion
               leadId={lead.id}
               organizationId={lead.organization_id ?? ""}
-              pipeData={confirmacaoData ?? null}
-              locked={false}
-            />
-            <BudgetFieldBlock
-              leadId={lead.id}
-              organizationId={lead.organization_id ?? ""}
-              pipeData={propostaData ?? null}
-              locked={false}
+              defaultExpandedPipeEntryId={
+                (pipeData as { id?: string } | null)?.id ?? null
+              }
+              userId={user?.id ?? null}
             />
           </div>
           <LeadInfoColumn lead={lead as Record<string, unknown> & { id: string }} />
