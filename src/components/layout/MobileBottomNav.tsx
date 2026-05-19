@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { MessageSquare, LayoutList, Users, MoreHorizontal, Gauge, CalendarDays, Settings } from "lucide-react";
 import { useViewport } from "@/hooks/use-viewport";
+import { useMobileChatContext } from "@/contexts/MobileChatContext";
 import { cn } from "@/lib/utils";
 import {
   Sheet,
@@ -49,7 +50,10 @@ export function MobileBottomNav() {
   const navigate = useNavigate();
   const [sheetOpen, setSheetOpen] = useState(false);
 
+  const { isChatThreadOpen } = useMobileChatContext();
+
   if (!isMobile) return null;
+  if (isChatThreadOpen) return null;
 
   const isAnyTabActive = TABS.some((t) => isTabActive(t.path, location.pathname));
   const isMaisActive = !isAnyTabActive && SECONDARY_ITEMS.some((s) => isTabActive(s.path, location.pathname));

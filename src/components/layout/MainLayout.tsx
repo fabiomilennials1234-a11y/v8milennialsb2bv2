@@ -11,6 +11,7 @@ import { useCopilotToggleRealtime } from "@/hooks/useCopilotToggleRealtime";
 import { useIncomingMessageToast } from "@/hooks/useIncomingMessageToast";
 import { featureFlags } from "@/lib/feature-flags";
 import { ChatBubbleProvider } from "@/contexts/ChatBubbleContext";
+import { MobileChatProvider, useMobileChatContext } from "@/contexts/MobileChatContext";
 import { ChatBubble } from "@/components/chat/bubble";
 import { WhatsAppUpdateModal } from "@/components/shared/WhatsAppUpdateModal";
 import { SessionDeadBanner } from "@/components/whatsapp/SessionDeadBanner";
@@ -48,23 +49,27 @@ interface MainLayoutProps {
 }
 
 export function MainLayout({ children }: MainLayoutProps) {
+  return (
+    <MobileChatProvider>
+      <MainLayoutInner>{children}</MainLayoutInner>
+    </MobileChatProvider>
+  );
+}
+
+function MainLayoutInner({ children }: MainLayoutProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { isMobile } = useViewport();
+  const { isChatThreadOpen } = useMobileChatContext();
   const [shortcutsHelpOpen, setShortcutsHelpOpen] = useState(false);
 
-  // Onda 2 U3: subscription único em phone_ai_preferences pra sincronizar
-  // estado do switch copilot entre todas as telas + entre usuários da mesma org.
   useCopilotToggleRealtime();
-
-  // Toast in-app para mensagens WhatsApp inbound — suprimido nas rotas de chat.
   useIncomingMessageToast();
 
   const toggleHelp = useCallback(() => setShortcutsHelpOpen((v) => !v), []);
 
   const globalShortcuts = useGlobalShortcuts({
     onNewLead: () => {
-      // Dispatch custom event that pages can listen to
       window.dispatchEvent(new CustomEvent("v8:shortcut:new-lead"));
     },
     onGoDashboard: () => navigate("/dashboard"),
@@ -84,15 +89,16 @@ export function MainLayout({ children }: MainLayoutProps) {
     pattern.test(location.pathname),
   );
 
+  const isChatRoute = FULL_BLEED_PATTERNS.some((p) => p.test(location.pathname));
+  const hideNavbar = isMobile && isChatRoute;
+  const hideBottomNav = isChatThreadOpen;
+
   const layout = (
     <div className="flex flex-col h-screen bg-background" data-layout="main">
-      <TopNavigation />
+      {!hideNavbar && <TopNavigation />}
 
-      {/* Dead-session banner — global pra qualquer página enquanto a org tem
-          instância WhatsApp com sessão morta. Hide silencioso no caminho feliz. */}
       <SessionDeadBanner />
 
-      {/* Checklist de onboarding — pill fixado no top-right, abaixo do topnav */}
       {showChecklist && !isFullBleed && (
         <div
           className="fixed top-[3.75rem] right-4 z-40"
@@ -106,7 +112,7 @@ export function MainLayout({ children }: MainLayoutProps) {
         className={cn(
           "flex-1 min-h-0",
           isFullBleed ? "overflow-hidden" : "overflow-auto",
-          isMobile && "pb-16",
+          isMobile && !hideBottomNav && "pb-16",
         )}
       >
         <div
