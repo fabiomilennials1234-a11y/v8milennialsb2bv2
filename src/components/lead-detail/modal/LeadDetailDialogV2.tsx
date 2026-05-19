@@ -5,7 +5,7 @@ import { Dialog, DialogPortal, DialogOverlay } from "@/components/ui/dialog";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { useIsMobile } from "@/hooks/use-mobile";
+import { useViewport } from "@/hooks/use-viewport";
 import { useLeadSheet } from "../hooks/useLeadSheet";
 import { useLeadDetail } from "../hooks/useLeadDetail";
 import { useToggleLeadAI, useDeleteLead } from "@/hooks/useLeads";
@@ -213,7 +213,7 @@ function LeadDetailContent({ onClose }: { onClose: () => void }) {
 
 export const LeadDetailDialogV2 = memo(function LeadDetailDialogV2(_props: LeadDetailDialogProps) {
   const { isOpen, close } = useLeadSheet();
-  const isMobile = useIsMobile();
+  const { isMobile } = useViewport();
 
   if (!isOpen) return null;
 

@@ -18,8 +18,7 @@ import { ChatBubbleThread } from "./ChatBubbleThread";
 import { ChatBubbleEmptyState } from "./ChatBubbleEmptyState";
 import { ChatBubbleRealtimePill } from "./ChatBubbleRealtimePill";
 import { ChatBubbleInstanceSwitcher } from "./ChatBubbleInstanceSwitcher";
-
-const MOBILE_BREAKPOINT = 768;
+import { useViewport } from "@/hooks/use-viewport";
 
 function useDebouncedValue<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState(value);
@@ -28,20 +27,6 @@ function useDebouncedValue<T>(value: T, delay: number): T {
     return () => window.clearTimeout(t);
   }, [value, delay]);
   return debounced;
-}
-
-function useIsMobile(): boolean {
-  const [mobile, setMobile] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    return window.innerWidth < MOBILE_BREAKPOINT;
-  });
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const onResize = () => setMobile(window.innerWidth < MOBILE_BREAKPOINT);
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
-  return mobile;
 }
 
 function PanelContent() {
@@ -177,7 +162,7 @@ interface ChatBubblePanelProps {
 }
 
 function ChatBubblePanel({ isOpen }: ChatBubblePanelProps) {
-  const isMobile = useIsMobile();
+  const { isMobile } = useViewport();
   const { close } = useChatBubble();
   // pathname watcher fecha em rotas de chat (defesa em profundidade — ChatBubble já tem guard)
   const { pathname } = useLocation();
