@@ -21,7 +21,8 @@ export type EventType =
   | "module_visited"
   | "onboarding_step_completed"
   | "onboarding_completed"
-  | "lead_modal_version_rendered";
+  | "lead_modal_version_rendered"
+  | "lead_action_telemetry";
 
 interface TrackParams {
   event: EventType;
