@@ -86,12 +86,14 @@ export function useCreatePipeWhatsapp() {
 
 export function useUpdatePipeWhatsapp() {
   const queryClient = useQueryClient();
-  const { data: movePermission } = useCanPerformActionAsync("move_pipe_record");
+  const movePermission = useCanPerformActionAsync("move_pipe_record");
 
   return useMutation({
     mutationFn: async ({ id, leadId, sdrId, ...updates }: PipeWhatsappUpdate & { id: string; leadId?: string; sdrId?: string | null }) => {
-      if (updates.status && movePermission && !movePermission.allowed) {
-        throw new Error("Sem permissão para mover registros no pipe");
+      if (updates.status && !movePermission.allowed) {
+        throw new Error(movePermission.isLoading
+          ? "Permissões ainda carregando — tente novamente"
+          : "Sem permissão para mover registros no pipe");
       }
 
       // Fetch current entry to merge metadata

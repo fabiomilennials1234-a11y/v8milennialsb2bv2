@@ -109,7 +109,7 @@ export function useCreatePipeConfirmacao() {
 export function useUpdatePipeConfirmacao() {
   const queryClient = useQueryClient();
   const { organizationId } = useOrganization();
-  const { data: movePermission } = useCanPerformActionAsync("move_pipe_record");
+  const movePermission = useCanPerformActionAsync("move_pipe_record");
   const { data: pipelineId } = usePipelineId("confirmacao");
 
   return useMutation({
@@ -135,10 +135,10 @@ export function useUpdatePipeConfirmacao() {
         isStatusChange = current.stage_key !== updates.status;
 
         if (isStatusChange) {
-          // Fail-closed em loading: enquanto movePermission ainda não chegou
-          // (`undefined`), bloqueia. Só libera com `allowed === true`.
-          if (!movePermission || !movePermission.allowed) {
-            throw new Error("Sem permissão para mover registros no pipe");
+          if (!movePermission.allowed) {
+            throw new Error(movePermission.isLoading
+              ? "Permissões ainda carregando — tente novamente"
+              : "Sem permissão para mover registros no pipe");
           }
         } else {
           // status no payload mas igual ao atual — remove pra evitar UPDATE inútil

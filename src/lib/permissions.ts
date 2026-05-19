@@ -187,11 +187,25 @@ export function useCanPerformAction(action: AppAction): ActionResult {
 
 // ─── useCanPerformActionAsync ────────────────────────────
 
+export interface AsyncActionResult {
+  allowed: boolean;
+  reason: string;
+  isLoading: boolean;
+}
+
 /**
- * Versão assíncrona de useCanPerformAction que consulta a cascata
- * completa incluindo team_member_permissions e org_permissions.
+ * Versão assíncrona de useCanPerformAction. Consulta a cascata completa
+ * incluindo team_member_permissions e org_permissions via RPC.
+ *
+ * **Fail-closed contract** — sempre retorna um objeto estável
+ * `{ allowed, reason, isLoading }`. Enquanto qualquer dependência
+ * (role, team_member, master, org) está carregando, `allowed = false`
+ * e `isLoading = true`. Isso evita o padrão histórico de caller
+ * `if (perm && !perm.allowed)` que silenciosamente liberava a ação quando
+ * `perm` ainda era `undefined` (incidente backlog
+ * `permissions-fallback-fail-closed`).
  */
-export function useCanPerformActionAsync(action: AppAction) {
+export function useCanPerformActionAsync(action: AppAction): AsyncActionResult {
   const { data: userRole, isLoading: roleLoading } = useUserRole();
   const { data: teamMember, isLoading: tmLoading } = useCurrentTeamMember();
   const { organizationId, isReady } = useOrganization();
@@ -201,9 +215,11 @@ export function useCanPerformActionAsync(action: AppAction) {
   const role = userRole?.role ?? teamMember?.role;
   const isAdmin = isMaster || role === "admin";
 
-  return useQuery({
+  const depsLoading = roleLoading || tmLoading || masterLoading || !isReady;
+
+  const query = useQuery({
     queryKey: ["can-perform", action, organizationId, role, teamMember?.id, isMaster],
-    queryFn: async (): Promise<{ allowed: boolean; reason?: string }> => {
+    queryFn: async (): Promise<{ allowed: boolean; reason: string }> => {
       if (!organizationId) return { allowed: false, reason: "no_org" };
       if (isAdmin) return { allowed: true, reason: "admin" };
 
@@ -251,9 +267,21 @@ export function useCanPerformActionAsync(action: AppAction) {
 
       return { allowed: false, reason: "unmapped_action" };
     },
-    enabled: isReady && !roleLoading && !tmLoading && !masterLoading && !!role,
+    enabled: !depsLoading && !!role,
     staleTime: 5 * 60 * 1000,
   });
+
+  // Fail-closed wrapper: while deps OR the query itself is loading, deny.
+  if (depsLoading) {
+    return { allowed: false, reason: "loading", isLoading: true };
+  }
+  if (!role) {
+    return { allowed: false, reason: "no_role", isLoading: false };
+  }
+  if (query.isLoading || query.data === undefined) {
+    return { allowed: false, reason: "loading", isLoading: true };
+  }
+  return { allowed: query.data.allowed, reason: query.data.reason, isLoading: false };
 }
 
 // ─── useAllPermissions ───────────────────────────────────

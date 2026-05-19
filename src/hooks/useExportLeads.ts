@@ -121,15 +121,17 @@ function fmtDate(v: string | null | undefined): string {
 export function useExportLeads(): UseExportLeadsResult {
   const [isExporting, setIsExporting] = useState(false);
   const { organizationId } = useOrganization();
-  const { data: exportPermission } = useCanPerformActionAsync("export_leads");
+  const exportPermission = useCanPerformActionAsync("export_leads");
 
   const exportLeads = async (options: ExportLeadsOptions): Promise<{ count: number }> => {
     if (!organizationId) {
       throw new Error("Organização não encontrada");
     }
-    // Permission check
-    if (exportPermission && !exportPermission.allowed) {
-      throw new Error("Você não tem permissão para exportar leads");
+    // Permission check — fail-closed during loading
+    if (!exportPermission.allowed) {
+      throw new Error(exportPermission.isLoading
+        ? "Permissões ainda carregando — tente novamente"
+        : "Você não tem permissão para exportar leads");
     }
     setIsExporting(true);
     try {
