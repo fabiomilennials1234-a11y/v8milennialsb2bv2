@@ -29,6 +29,8 @@ interface CustomPipeSectionProps {
   onToggle: () => void;
   /** Called after a successful add — accordion may force-expand. */
   onAdded?: () => void;
+  /** Called after a successful remove — accordion may collapse the section. */
+  onRemoved?: () => void;
 }
 
 export const CustomPipeSection = memo(function CustomPipeSection({
@@ -37,6 +39,7 @@ export const CustomPipeSection = memo(function CustomPipeSection({
   open,
   onToggle,
   onAdded,
+  onRemoved,
 }: CustomPipeSectionProps) {
   const moveMutation = useMoveLeadInCustomPipe();
   const removeMutation = useRemoveLeadFromCustomPipe();
@@ -98,8 +101,20 @@ export const CustomPipeSection = memo(function CustomPipeSection({
         entry_id: pipe.entryId,
         pipeline_id: pipe.pipelineId,
       });
+      void logAction({
+        leadId,
+        action: "pipe_removed",
+        description: `Removido de ${pipe.pipelineName}`,
+        metadata: {
+          pipe_type: "custom",
+          pipeline_id: pipe.pipelineId,
+          entry_id: pipe.entryId,
+          stage_at_removal: pipe.currentStageId,
+        },
+      });
       toast.success(`Removido de ${pipe.pipelineName}`);
       setRemoveOpen(false);
+      onRemoved?.();
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Erro ao remover";
       toast.error(msg);

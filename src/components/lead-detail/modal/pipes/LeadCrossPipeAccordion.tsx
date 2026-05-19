@@ -1,15 +1,21 @@
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronDown, Layers, Plus } from "lucide-react";
+import { ChevronDown, Layers, Loader2, Plus, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import {
   useAddLeadToStandardPipe,
   useLeadAllPipelines,
+  useRemoveLeadFromStandardPipe,
   type PipelineStatus,
   type StandardPipelineStatus,
   type CustomPipelineStatus,
@@ -17,7 +23,7 @@ import {
 import { usePipeConfirmacaoByLeadId } from "@/hooks/usePipeConfirmacaoByLeadId";
 import { usePipePropostaByLeadId } from "@/hooks/usePipePropostaByLeadId";
 import { useLogLeadAction } from "@/hooks/useLogLeadAction";
-import { useLeadActionGates } from "../../hooks/useLeadActionGates";
+import { useLeadActionGates, type Gate } from "../../hooks/useLeadActionGates";
 import { MeetingFieldBlock } from "../../cross-pipe/MeetingFieldBlock";
 import { BudgetFieldBlock } from "../../cross-pipe/BudgetFieldBlock";
 import { MoveStageButton } from "../header/MoveStageButton";
@@ -104,8 +110,9 @@ export const LeadCrossPipeAccordion = memo(function LeadCrossPipeAccordion({
   const { data: confirmacaoData } = usePipeConfirmacaoByLeadId(leadId);
   const { data: propostaData } = usePipePropostaByLeadId(leadId);
   const addStandardMutation = useAddLeadToStandardPipe();
+  const removeStandardMutation = useRemoveLeadFromStandardPipe();
   const logAction = useLogLeadAction();
-  const { canAddToPipe } = useLeadActionGates(leadId);
+  const { canAddToPipe, canRemoveFromPipe } = useLeadActionGates(leadId);
 
   const systemPipes = useMemo(
     () => (pipelines as PipelineStatus[]).filter(isSystemPipe),
@@ -181,6 +188,48 @@ export const LeadCrossPipeAccordion = memo(function LeadCrossPipeAccordion({
     [key],
   );
 
+  const collapseSection = useCallback(
+    (sectionId: string) => {
+      setExpanded((cur) => (cur === sectionId ? null : cur));
+      if (typeof window !== "undefined") {
+        const stored = window.localStorage.getItem(key);
+        if (stored === sectionId) window.localStorage.removeItem(key);
+      }
+    },
+    [key],
+  );
+
+  const handleRemoveStandard = useCallback(
+    async (pipe: SystemPipe) => {
+      if (!pipe.pipeId) {
+        toast.error("Lead não está neste pipe");
+        return;
+      }
+      try {
+        await removeStandardMutation.mutateAsync({
+          pipeId: pipe.pipeId,
+          pipeType: pipe.pipeType,
+        });
+        void logAction({
+          leadId,
+          action: "pipe_removed",
+          description: `Removido de ${pipe.label}`,
+          metadata: {
+            pipe_type: pipe.pipeType,
+            entry_id: pipe.pipeId,
+            stage_at_removal: pipe.currentStage,
+          },
+        });
+        toast.success(`Removido de ${pipe.label}`);
+        collapseSection(SECTION_ID.system(pipe.pipeType));
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Erro ao remover";
+        toast.error(msg);
+      }
+    },
+    [removeStandardMutation, leadId, logAction, collapseSection],
+  );
+
   const handleAddStandard = useCallback(
     async (pipe: SystemPipe) => {
       if (!pipe.stages.length) {
@@ -249,6 +298,9 @@ export const LeadCrossPipeAccordion = memo(function LeadCrossPipeAccordion({
             onAdd={() => handleAddStandard(pipe)}
             isAdding={addStandardMutation.isPending}
             canAdd={canAddToPipe}
+            onRemove={() => handleRemoveStandard(pipe)}
+            isRemoving={removeStandardMutation.isPending}
+            canRemove={canRemoveFromPipe}
           />
         );
       })}
@@ -263,6 +315,7 @@ export const LeadCrossPipeAccordion = memo(function LeadCrossPipeAccordion({
             open={expanded === id}
             onToggle={() => toggle(id)}
             onAdded={() => forceExpand(id)}
+            onRemoved={() => collapseSection(id)}
           />
         );
       })}
@@ -290,7 +343,10 @@ interface PipeSectionProps {
   onToggle: () => void;
   onAdd: () => void;
   isAdding: boolean;
-  canAdd: { allowed: boolean; reason?: string; isLoading: boolean };
+  canAdd: Gate;
+  onRemove: () => void;
+  isRemoving: boolean;
+  canRemove: Gate;
 }
 
 function PipeSection({
@@ -305,6 +361,9 @@ function PipeSection({
   onAdd,
   isAdding,
   canAdd,
+  onRemove,
+  isRemoving,
+  canRemove,
 }: PipeSectionProps) {
   const headerData = renderHeaderKeyData(pipe, confirmacaoData, propostaData);
   const isEmpty = pipe.pipeId === null;
@@ -360,7 +419,7 @@ function PipeSection({
         />
       </button>
       {open && (
-        <div className="px-4 pb-4 pt-1">
+        <div className="px-4 pb-4 pt-1 space-y-3">
           {isEmpty ? (
             <AddToPipeCta
               label={pipe.label}
@@ -369,17 +428,85 @@ function PipeSection({
               canAdd={canAdd}
             />
           ) : (
-            <PipeBody
-              pipe={pipe}
-              confirmacaoData={confirmacaoData}
-              propostaData={propostaData}
-              leadId={leadId}
-              organizationId={organizationId}
-            />
+            <>
+              <PipeBody
+                pipe={pipe}
+                confirmacaoData={confirmacaoData}
+                propostaData={propostaData}
+                leadId={leadId}
+                organizationId={organizationId}
+              />
+              {canRemove.allowed && (
+                <RemoveFromPipeAction
+                  pipeLabel={pipe.label}
+                  onRemove={onRemove}
+                  isRemoving={isRemoving}
+                />
+              )}
+            </>
           )}
         </div>
       )}
     </section>
+  );
+}
+
+// ─── Remove-from-pipe action ───────────────────────────────────────────
+
+interface RemoveFromPipeActionProps {
+  pipeLabel: string;
+  onRemove: () => void;
+  isRemoving: boolean;
+}
+
+function RemoveFromPipeAction({ pipeLabel, onRemove, isRemoving }: RemoveFromPipeActionProps) {
+  const [open, setOpen] = useState(false);
+
+  const handleConfirm = async () => {
+    await onRemove();
+    setOpen(false);
+  };
+
+  return (
+    <div className="flex justify-end pt-1 border-t border-border/30 mt-2">
+      <AlertDialog open={open} onOpenChange={setOpen}>
+        <AlertDialogTrigger asChild>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="gap-1.5 h-7 text-xs text-destructive hover:bg-destructive/10"
+            data-testid={`remove-from-pipe-cta-${pipeLabel}`}
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            Remover de {pipeLabel}
+          </Button>
+        </AlertDialogTrigger>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remover de {pipeLabel}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Lead continua existindo. Métricas deste pipe vão ignorar este
+              lead. Ação irreversível.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirm}
+              disabled={isRemoving}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-testid={`remove-from-pipe-confirm-${pipeLabel}`}
+            >
+              {isRemoving ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                "Remover"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
   );
 }
 

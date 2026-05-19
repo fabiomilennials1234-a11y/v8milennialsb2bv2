@@ -23,10 +23,15 @@ vi.mock("@/integrations/supabase/client", () => ({
 
 const allPipelinesMock = vi.fn();
 const addStandardMutateAsync = vi.fn().mockResolvedValue({});
+const removeStandardMutateAsync = vi.fn().mockResolvedValue({});
 vi.mock("@/hooks/useLeadAllPipelines", () => ({
   useLeadAllPipelines: (...args: unknown[]) => allPipelinesMock(...args),
   useAddLeadToStandardPipe: () => ({
     mutateAsync: addStandardMutateAsync,
+    isPending: false,
+  }),
+  useRemoveLeadFromStandardPipe: () => ({
+    mutateAsync: removeStandardMutateAsync,
     isPending: false,
   }),
 }));
@@ -105,6 +110,19 @@ function renderWithQuery(ui: React.ReactElement) {
   return render(<QueryClientProvider client={qc}>{ui}</QueryClientProvider>);
 }
 
+/**
+ * Header buttons share visible text with the Remover-de-Pipe trigger ("Remover
+ * de Qualificação"), so getByRole("button", …) matches both. Disambiguate by
+ * filtering on aria-expanded — only the section header carries that attribute.
+ */
+function headerBtn(re: RegExp): HTMLElement {
+  const found = screen
+    .getAllByRole("button", { name: re })
+    .find((b) => b.hasAttribute("aria-expanded"));
+  if (!found) throw new Error(`No header button matching ${re}`);
+  return found;
+}
+
 const baseProps = {
   leadId: "lead-1",
   organizationId: "org-1",
@@ -126,6 +144,7 @@ beforeEach(() => {
   localStorage.clear();
   allPipelinesMock.mockReset();
   addStandardMutateAsync.mockReset().mockResolvedValue({});
+  removeStandardMutateAsync.mockReset().mockResolvedValue({});
   logActionMock.mockReset();
   gatesMock.mockReset().mockReturnValue({
     canAddToPipe: { allowed: true, isLoading: false },
@@ -162,9 +181,9 @@ describe("LeadCrossPipeAccordion", () => {
         isLoading: false,
       });
       renderWithQuery(<LeadCrossPipeAccordion {...baseProps} />);
-      expect(screen.getByRole("button", { name: /qualificação/i })).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: /confirmação/i })).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: /propostas/i })).toBeInTheDocument();
+      expect(headerBtn(/qualificação/i)).toBeInTheDocument();
+      expect(headerBtn(/confirmação/i)).toBeInTheDocument();
+      expect(headerBtn(/propostas/i)).toBeInTheDocument();
     });
 
     it("opens first non-terminal pipe by default", () => {
@@ -177,7 +196,7 @@ describe("LeadCrossPipeAccordion", () => {
         isLoading: false,
       });
       renderWithQuery(<LeadCrossPipeAccordion {...baseProps} />);
-      const qualifBtn = screen.getByRole("button", { name: /qualificação/i });
+      const qualifBtn = headerBtn(/qualificação/i);
       expect(qualifBtn.getAttribute("aria-expanded")).toBe("true");
     });
   });
@@ -191,7 +210,7 @@ describe("LeadCrossPipeAccordion", () => {
         isLoading: false,
       });
       renderWithQuery(<LeadCrossPipeAccordion {...baseProps} />);
-      const btn = screen.getByRole("button", { name: /propostas/i });
+      const btn = headerBtn(/propostas/i);
       expect(btn.getAttribute("aria-expanded")).toBe("false");
     });
 
@@ -205,10 +224,10 @@ describe("LeadCrossPipeAccordion", () => {
       });
       renderWithQuery(<LeadCrossPipeAccordion {...baseProps} />);
       expect(
-        screen.getByRole("button", { name: /qualificação/i }).getAttribute("aria-expanded"),
+        headerBtn(/qualificação/i).getAttribute("aria-expanded"),
       ).toBe("true");
       expect(
-        screen.getByRole("button", { name: /propostas/i }).getAttribute("aria-expanded"),
+        headerBtn(/propostas/i).getAttribute("aria-expanded"),
       ).toBe("false");
     });
   });
@@ -223,8 +242,8 @@ describe("LeadCrossPipeAccordion", () => {
         isLoading: false,
       });
       renderWithQuery(<LeadCrossPipeAccordion {...baseProps} />);
-      const qualifBtn = screen.getByRole("button", { name: /qualificação/i });
-      const confirmBtn = screen.getByRole("button", { name: /confirmação/i });
+      const qualifBtn = headerBtn(/qualificação/i);
+      const confirmBtn = headerBtn(/confirmação/i);
       expect(qualifBtn.getAttribute("aria-expanded")).toBe("true");
       fireEvent.click(confirmBtn);
       expect(qualifBtn.getAttribute("aria-expanded")).toBe("false");
@@ -239,7 +258,7 @@ describe("LeadCrossPipeAccordion", () => {
         isLoading: false,
       });
       renderWithQuery(<LeadCrossPipeAccordion {...baseProps} />);
-      const btn = screen.getByRole("button", { name: /qualificação/i });
+      const btn = headerBtn(/qualificação/i);
       expect(btn.getAttribute("aria-expanded")).toBe("true");
       fireEvent.click(btn);
       expect(btn.getAttribute("aria-expanded")).toBe("false");
@@ -259,7 +278,7 @@ describe("LeadCrossPipeAccordion", () => {
       });
       renderWithQuery(<LeadCrossPipeAccordion {...baseProps} />);
       act(() => {
-        fireEvent.click(screen.getByRole("button", { name: /confirmação/i }));
+        fireEvent.click(headerBtn(/confirmação/i));
       });
       expect(localStorage.getItem(STORAGE_KEY)).toContain("confirmacao");
     });
@@ -275,10 +294,10 @@ describe("LeadCrossPipeAccordion", () => {
       });
       renderWithQuery(<LeadCrossPipeAccordion {...baseProps} />);
       expect(
-        screen.getByRole("button", { name: /confirmação/i }).getAttribute("aria-expanded"),
+        headerBtn(/confirmação/i).getAttribute("aria-expanded"),
       ).toBe("true");
       expect(
-        screen.getByRole("button", { name: /qualificação/i }).getAttribute("aria-expanded"),
+        headerBtn(/qualificação/i).getAttribute("aria-expanded"),
       ).toBe("false");
     });
   });
@@ -319,7 +338,7 @@ describe("LeadCrossPipeAccordion", () => {
         isLoading: false,
       });
       renderWithQuery(<LeadCrossPipeAccordion {...baseProps} />);
-      const qualifBtn = screen.getByRole("button", { name: /qualificação/i });
+      const qualifBtn = headerBtn(/qualificação/i);
       const customBtn = screen.getByTestId("custom-stub-cp-A");
       expect(qualifBtn.getAttribute("aria-expanded")).toBe("true");
       fireEvent.click(customBtn);
@@ -358,7 +377,7 @@ describe("LeadCrossPipeAccordion", () => {
         isLoading: false,
       });
       renderWithQuery(<LeadCrossPipeAccordion {...baseProps} />);
-      const qualifBtn = screen.getByRole("button", { name: /qualificação/i });
+      const qualifBtn = headerBtn(/qualificação/i);
       const carteiraBtn = screen.getByTestId("upsell-stub");
       expect(qualifBtn.getAttribute("aria-expanded")).toBe("true");
       fireEvent.click(carteiraBtn);
@@ -460,10 +479,10 @@ describe("LeadCrossPipeAccordion", () => {
       });
       renderWithQuery(<LeadCrossPipeAccordion {...baseProps} />);
       // initially qualificacao is expanded (first active)
-      const qualifBtn = screen.getByRole("button", { name: /qualificação/i });
+      const qualifBtn = headerBtn(/qualificação/i);
       expect(qualifBtn.getAttribute("aria-expanded")).toBe("true");
       // expand confirmacao to surface the CTA
-      const confirmBtn = screen.getByRole("button", { name: /confirmação/i });
+      const confirmBtn = headerBtn(/confirmação/i);
       fireEvent.click(confirmBtn);
       const cta = screen.getByTestId("add-to-pipe-cta-Confirmação");
       await act(async () => {
@@ -471,6 +490,76 @@ describe("LeadCrossPipeAccordion", () => {
       });
       // localStorage persists confirmacao as expanded section
       expect(localStorage.getItem("lead-modal:expanded:user-1:lead-1")).toBe("confirmacao");
+    });
+  });
+
+  describe("Remover de [Pipe] CTA (issue #299)", () => {
+    it("does not render Remover button when canRemoveFromPipe is denied", () => {
+      gatesMock.mockReturnValue({
+        canAddToPipe: { allowed: true, isLoading: false },
+        canRemoveFromPipe: { allowed: false, reason: "no_perm", isLoading: false },
+        canMoveMeeting: { allowed: true, isLoading: false },
+        canEditField: { allowed: true, isLoading: false },
+        canMoveProposal: { allowed: true, isLoading: false },
+        canEditProposal: { allowed: true, isLoading: false },
+        canDelete: { allowed: true, isLoading: false },
+        canReassign: { allowed: true, isLoading: false },
+        canManageTags: { allowed: true, isLoading: false },
+        canToggleAi: { allowed: true, isLoading: false },
+        canMention: { allowed: true, isLoading: false },
+      });
+      allPipelinesMock.mockReturnValue({
+        data: [
+          standardPipe({ pipeType: "qualificacao", label: "Qualificação", pipeId: "entry-A" }),
+        ],
+        isLoading: false,
+      });
+      renderWithQuery(<LeadCrossPipeAccordion {...baseProps} />);
+      expect(screen.queryByTestId("remove-from-pipe-cta-Qualificação")).not.toBeInTheDocument();
+    });
+
+    it("renders Remover button when canRemoveFromPipe is allowed", () => {
+      allPipelinesMock.mockReturnValue({
+        data: [
+          standardPipe({ pipeType: "qualificacao", label: "Qualificação", pipeId: "entry-A" }),
+        ],
+        isLoading: false,
+      });
+      renderWithQuery(<LeadCrossPipeAccordion {...baseProps} />);
+      expect(screen.getByTestId("remove-from-pipe-cta-Qualificação")).toBeInTheDocument();
+    });
+
+    it("confirm in AlertDialog triggers remove mutation + logs pipe_removed + collapses", async () => {
+      allPipelinesMock.mockReturnValue({
+        data: [
+          standardPipe({ pipeType: "qualificacao", label: "Qualificação", pipeId: "entry-A", currentStage: "abordado" }),
+        ],
+        isLoading: false,
+      });
+      renderWithQuery(<LeadCrossPipeAccordion {...baseProps} />);
+      const trigger = screen.getByTestId("remove-from-pipe-cta-Qualificação");
+      await act(async () => {
+        fireEvent.click(trigger);
+      });
+      const confirm = await screen.findByTestId("remove-from-pipe-confirm-Qualificação");
+      await act(async () => {
+        fireEvent.click(confirm);
+      });
+      expect(removeStandardMutateAsync).toHaveBeenCalledWith({
+        pipeId: "entry-A",
+        pipeType: "qualificacao",
+      });
+      expect(logActionMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          leadId: "lead-1",
+          action: "pipe_removed",
+          metadata: expect.objectContaining({
+            pipe_type: "qualificacao",
+            entry_id: "entry-A",
+            stage_at_removal: "abordado",
+          }),
+        }),
+      );
     });
   });
 
@@ -487,7 +576,7 @@ describe("LeadCrossPipeAccordion", () => {
         <LeadCrossPipeAccordion {...baseProps} defaultExpandedPipeEntryId="entry-B" />,
       );
       expect(
-        screen.getByRole("button", { name: /propostas/i }).getAttribute("aria-expanded"),
+        headerBtn(/propostas/i).getAttribute("aria-expanded"),
       ).toBe("true");
     });
   });
