@@ -24,6 +24,8 @@ const CHECKLIST_HIDDEN_PATTERNS = [
   /^\/_mockup/,
   /^\/master/,
   /^\/tv/,
+  /^\/chat(\/|$)/,
+  /^\/chat-whatsapp/,
 ];
 
 // Rotas full-bleed: chat ocupa viewport completo (sem padding/max-width)
