@@ -17,6 +17,7 @@ import { GlobalErrorBoundary } from "@/components/GlobalErrorBoundary";
 import { OnboardingGate } from "@/components/onboarding/OnboardingGate";
 import { TorqueLoader } from "@/components/branding/TorqueLoader";
 import { ServiceWorkerUpdater } from "@/components/ServiceWorkerUpdater";
+import { PushPermissionPrompt } from "@/components/PushPermissionPrompt";
 
 // Retry helper para chunks que falham ao carregar (comum após deploy)
 function lazyRetry<T extends { default: any }>(
@@ -669,6 +670,7 @@ const App = () => {
             <BrowserRouter>
               <AuthProvider>
                 <GlobalErrorBoundary>
+                  <PushPermissionPrompt />
                   <CommandPaletteProvider>
                     <GlobalShortcutsProvider>
                       <AppRoutes />
