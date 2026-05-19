@@ -12,6 +12,7 @@ import {
   loadAgentTimeContext,
   resolveActiveWindow,
 } from "../copilot/time-context.ts";
+import { upsertPipeEntry } from "../pipeline-adapter.ts";
 import type { ActionResult } from "./types.ts";
 
 /**
@@ -34,10 +35,82 @@ export async function immediateTransferHuman(
     }
 
     console.log("[immediateTransferHuman] Transfer executed atomically for lead:", leadId);
+
+    // Move lead to human-handoff stage in whatsapp pipeline (if org has one)
+    await moveLeadToHumanStage(supabase, leadId);
+
     return { success: true };
   } catch (err) {
     console.warn("[immediateTransferHuman] Unexpected error:", err);
     return { success: false, error: String(err) };
+  }
+}
+
+const HUMAN_STAGE_KEYS = ["atendimento_humano", "aguardando_humano", "aguardando_atendimento"];
+
+async function moveLeadToHumanStage(
+  supabase: SupabaseClient,
+  leadId: string,
+): Promise<void> {
+  try {
+    const { data: lead } = await supabase
+      .from("leads")
+      .select("organization_id")
+      .eq("id", leadId)
+      .single();
+
+    if (!lead?.organization_id) return;
+
+    // Find human-handoff stage: first by known keys, then by name pattern
+    let stage: { stage_key: string } | null = null;
+
+    const { data: byKey } = await supabase
+      .from("pipeline_stages")
+      .select("stage_key")
+      .eq("organization_id", lead.organization_id)
+      .eq("pipeline_type", "whatsapp")
+      .eq("is_active", true)
+      .in("stage_key", HUMAN_STAGE_KEYS)
+      .limit(1)
+      .maybeSingle();
+
+    if (byKey) {
+      stage = byKey;
+    } else {
+      const { data: byName } = await supabase
+        .from("pipeline_stages")
+        .select("stage_key")
+        .eq("organization_id", lead.organization_id)
+        .eq("pipeline_type", "whatsapp")
+        .eq("is_active", true)
+        .or("name.ilike.%humano%,name.ilike.%atendimento human%")
+        .limit(1)
+        .maybeSingle();
+
+      if (byName) stage = byName;
+    }
+
+    if (!stage) {
+      console.log("[moveLeadToHumanStage] No human-handoff stage found for org, skipping pipeline move");
+      return;
+    }
+
+    await upsertPipeEntry(supabase, {
+      leadId,
+      orgId: lead.organization_id,
+      slug: "whatsapp",
+      stageKey: stage.stage_key,
+    });
+
+    await supabase
+      .from("leads")
+      .update({ pipe_whatsapp: stage.stage_key })
+      .eq("id", leadId);
+
+    console.log(`[moveLeadToHumanStage] Lead ${leadId} moved to stage ${stage.stage_key}`);
+  } catch (err) {
+    // Non-fatal: transfer already succeeded, pipeline move is best-effort
+    console.warn("[moveLeadToHumanStage] Failed (non-fatal):", err);
   }
 }
 
