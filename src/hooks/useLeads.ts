@@ -8,6 +8,7 @@ import { useCanPerformActionAsync } from "@/lib/permissions";
 import { normalizePhone } from "@/lib/normalizePhone";
 import { useMasterAuth } from "./useMasterAuth";
 import { useIsAdmin } from "./useUserRole";
+import { OptimisticLockConflictError, isPostgrestNoRows } from "@/lib/optimistic-lock";
 
 export type Lead = Tables<"leads">;
 export type LeadInsert = TablesInsert<"leads">;
@@ -186,25 +187,40 @@ export function useUpdateLead() {
   const { organizationId } = useOrganization();
   
   return useMutation({
-    mutationFn: async ({ id, ...updates }: LeadUpdate & { id: string }) => {
+    mutationFn: async ({
+      id,
+      expectedUpdatedAt,
+      ...updates
+    }: LeadUpdate & { id: string; expectedUpdatedAt?: string }) => {
       if (!organizationId) {
         throw new Error("Cannot update lead: No organization context");
       }
-      
+
       // SECURITY: Remove organization_id from updates to prevent tampering
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { organization_id: _, ...safeUpdates } = updates as LeadUpdate & { organization_id?: string };
-      
-      const { data, error } = await supabase
+
+      // Optimistic lock (#307): when caller passes the original
+      // updated_at, the UPDATE is conditional on it still matching —
+      // a concurrent write nullifies the row count and PostgREST
+      // returns PGRST116 from .single().
+      let query = supabase
         .from("leads")
         .update(safeUpdates)
         .eq("id", id)
         // SECURITY: Ensure lead belongs to user's organization
-        .eq("organization_id", organizationId)
-        .select()
-        .single();
+        .eq("organization_id", organizationId);
+      if (expectedUpdatedAt) {
+        query = query.eq("updated_at", expectedUpdatedAt);
+      }
+      const { data, error } = await query.select().single();
 
-      if (error) throw error;
+      if (error) {
+        if (expectedUpdatedAt && isPostgrestNoRows(error)) {
+          throw new OptimisticLockConflictError();
+        }
+        throw error;
+      }
 
       // Sync responsible_id to all pipe tables that contain this lead
       if (safeUpdates.responsible_id !== undefined) {
