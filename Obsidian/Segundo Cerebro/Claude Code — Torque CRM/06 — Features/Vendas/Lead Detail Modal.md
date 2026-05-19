@@ -3,7 +3,7 @@ title: Lead Detail Modal
 type: feature
 status: shipped
 created: 2026-05-17
-updated: 2026-05-17
+updated: 2026-05-19
 diataxis: reference
 related:
   - "[[Schema]]"
@@ -79,8 +79,67 @@ Tiers (ordem decrescente): **Diamante 💎** · **Ouro 🏆** · **Prata** · **
 
 Cores em `modal/qualification-config.tsx`.
 
-### Botão Mover
-Popover com lista de stages do pipe atual (variant). Update direto em `pipe_<variant>.stage_id`. Log via `lead_history` action `stage_changed`. Inclui mini `StageProgressBar` no topo.
+### Stage Rails (substitui Botão Mover legado)
+A partir de 2026-05-19 o `MoveStageButton` (popover "Mover") foi **removido** e o controle de stage acontece direto nas **StageRails** do `CrossPipePanel` (ver seção "Cross-Pipe Panel" abaixo).
+
+## Cross-Pipe Panel
+
+Painel horizontal compacto, renderizado no topo da coluna principal do modal (mobile: tab `Pipes`). Substitui o antigo `LeadCrossPipeAccordion` (acordeão vertical) — ~180 px em vez de 300-400 px no caso típico de 2 pipes ativos + 4 inativos.
+
+### Localização
+- Orquestrador: [`src/components/lead-detail/modal/pipes/CrossPipePanel.tsx`](../../../../../src/components/lead-detail/modal/pipes/CrossPipePanel.tsx)
+- `StageRail.tsx` — uma row por pipe ativo, segments role=tablist com keyboard nav
+- `ActionPill.tsx` — chip compacto `Reunião` / `Orçamento` com valor formatado e urgência
+- `ActionPanel.tsx` — wrapper expandido + kebab "Remover de {pipe}" (substitui o antigo `RemoveFromPipeAction`)
+- `InactivePipeChip.tsx` + `OtherPipesStrip.tsx` — chips dashed para pipes onde o lead **não** está
+- `useCrossPipeMove.ts` — hook unificado de move stage (sistema + custom)
+
+### Três zonas (top → bottom)
+- **A. StageRails** — uma row por pipe em que o lead está. Cada segmento é clicável; arrow-left/right move foco; Enter/Space ativa. Auto-scroll do current ao montar. Estados: pending / completed / current / loading / disabled (sem permissão → opacity + tooltip).
+- **B. ActionPills + Panel** — só renderiza se há entrada em `pipe_confirmacao` ou `pipe_propostas`. Click no pill abre painel; click no mesmo fecha; click no outro troca (mutex). Pill closed mostra valor formatado: meeting → `Hoje · 14h30` / `Amanhã · 14h` / `12/05 · 14h`; budget → `R$ 12,5 mil`.
+  - Urgency dot só em meeting: atrasada (vermelho + pulse), hoje (âmbar), amanhã (amarelo). >2d sem dot.
+  - Painel expandido renderiza `MeetingFieldBlock` ou `BudgetFieldBlock` com prop `bare={true}` (sem caixa-dentro-de-caixa). Kebab top-right absorve "Remover de {pipe}" via AlertDialog igual ao antigo.
+- **C. OtherPipesStrip** — chips dashed pros pipes inativos. Click abre popover de confirmação `Adicionar`. Sucesso → chip some, rail aparece, pill auto-expand (`forceExpand`) quando aplicável. Order: sistema (qualificação, carteira, upsell) → custom alfabético. Overflow >8 vira `+N` chip.
+
+### Lógica de move stage
+`useCrossPipeMove(leadId).move(target)`:
+- `kind="system"` → `UPDATE pipe_<tipo> SET status = stageKey WHERE id = pipeId` (compat views sobre `pipeline_entries`).
+- `kind="custom"` → `UPDATE custom_pipe_entries SET stage_id = stageId, stage_changed_at = now() WHERE id = entryId`.
+- Invalida: `["lead_all_pipelines", leadId]`, `["lead-pipes", leadId]`, `["lead-timeline", leadId]`, tabela tocada.
+- Optimistic UI: segment alvo recebe `pendingStageKey` (pulse + spinner). Sucesso → flash `animate-[stage-confirm_250ms_ease-out]`.
+- Logging: `lead_history` action `stage_changed`.
+
+### Pipe terminal (propostas vendido/perdido)
+Continua no rail com a stage final como `current`. Sem badge "Encerrado" — o estado já é visível pelo segment ativo.
+
+### Permissões
+- `useLeadActionGates(leadId).canMoveMeeting` controla habilitação das StageRails.
+- `canAddToPipe` controla chips do strip.
+- `canRemoveFromPipe` esconde o kebab no panel.
+
+### localStorage migration
+Chave: `lead-modal:expanded:{userId}:{leadId}`. Valor agora: `'meeting' | 'budget' | null`. Valores legados são migrados transparentemente no parse:
+- `confirmacao` → `meeting`
+- `propostas` → `budget`
+- qualquer outro → `null`
+
+### Tokens novos (em `src/index.css`)
+- `@keyframes stage-confirm` — flash de sucesso no segment recém-movido (`box-shadow` ring que se expande e dissipa).
+- `@keyframes panel-down` — slide-down do ActionPanel ao abrir.
+Todos os usos respeitam `motion-safe:`.
+
+### Reduce-motion
+`motion-safe:animate-pulse`, `motion-safe:animate-[stage-confirm]`, `motion-safe:animate-[panel-down]` desligam quando `prefers-reduced-motion: reduce`.
+
+### Empty states
+- Lead em 0 pipes ativos + ≥1 inativo → A e B não renderizam, strip ocupa o painel.
+- Lead em 0 pipes ativos + 0 inativos → empty state `Sem pipes ainda` (mantém visual do antigo `LeadCrossPipeAccordion`).
+
+### Tests
+- `__tests__/StageRail.test.tsx` — current/aria-selected, move system + custom, disabled.
+- `__tests__/ActionPill.test.tsx` — formatters, toggle, aria-expanded.
+- `__tests__/InactivePipeChip.test.tsx` — popover + add + disabled-reason.
+- `__tests__/CrossPipePanel.test.tsx` — empty state, terminal proposta no rail, localStorage migration (`confirmacao`→`meeting`, `propostas`→`budget`, unknown → null), pill toggle.
 
 ## Body
 

@@ -37,6 +37,12 @@ interface MeetingFieldBlockProps {
   pipeData: PipeConfirmacao | null;
   locked: boolean;
   onSuccess?: () => void;
+  /**
+   * When `true`, render without the outer rounded card wrapper. Used by
+   * the CrossPipePanel's ActionPanel, which already provides the card
+   * chrome. Default `false` keeps backward compatibility.
+   */
+  bare?: boolean;
 }
 
 export const MeetingFieldBlock = memo(function MeetingFieldBlock({
@@ -44,6 +50,7 @@ export const MeetingFieldBlock = memo(function MeetingFieldBlock({
   pipeData,
   locked,
   onSuccess,
+  bare = false,
 }: MeetingFieldBlockProps) {
   const createPipe = useCreatePipeConfirmacao();
   const updatePipe = useUpdatePipeConfirmacao();
@@ -120,7 +127,11 @@ export const MeetingFieldBlock = memo(function MeetingFieldBlock({
 
   if (locked) {
     return (
-      <div className="rounded-xl border border-border/40 bg-card p-4 space-y-2 relative">
+      <div
+        className={cn(
+          bare ? "space-y-2 relative" : "rounded-xl border border-border/40 bg-card p-4 space-y-2 relative",
+        )}
+      >
         <div
           aria-label="Somente leitura — sem permissão para editar"
           className="absolute top-3 right-3 text-muted-foreground/50"
@@ -184,7 +195,7 @@ export const MeetingFieldBlock = memo(function MeetingFieldBlock({
   };
 
   return (
-    <div className="rounded-xl border border-border/40 bg-card p-4 space-y-3">
+    <div className={cn(bare ? "space-y-3" : "rounded-xl border border-border/40 bg-card p-4 space-y-3")}>
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <CalendarIcon className="w-4 h-4 text-primary" />

@@ -53,6 +53,12 @@ interface BudgetFieldBlockProps {
   pipeData: PipeProposta | null;
   locked: boolean;
   onSuccess?: () => void;
+  /**
+   * When `true`, render without the outer rounded card wrapper. Used by
+   * the CrossPipePanel's ActionPanel, which already provides the card
+   * chrome. Default `false` keeps backward compatibility.
+   */
+  bare?: boolean;
 }
 
 type LocalItem = {
@@ -75,6 +81,7 @@ export const BudgetFieldBlock = memo(function BudgetFieldBlock({
   pipeData,
   locked,
   onSuccess,
+  bare = false,
 }: BudgetFieldBlockProps) {
   const createPipe = useCreatePipeProposta();
   const updateProposta = useUpdatePipeProposta();
@@ -183,7 +190,11 @@ export const BudgetFieldBlock = memo(function BudgetFieldBlock({
   // ─── State: locked ─────────────────────────────────────────────────
   if (locked) {
     return (
-      <div className="rounded-xl border border-border/40 bg-card p-4 space-y-2 relative">
+      <div
+        className={cn(
+          bare ? "space-y-2 relative" : "rounded-xl border border-border/40 bg-card p-4 space-y-2 relative",
+        )}
+      >
         <div
           aria-label="Somente leitura — sem permissão para editar"
           className="absolute top-3 right-3 text-muted-foreground/50"
@@ -385,7 +396,7 @@ export const BudgetFieldBlock = memo(function BudgetFieldBlock({
     }));
 
   return (
-    <div className="rounded-xl border border-border/40 bg-card p-4 space-y-3">
+    <div className={cn(bare ? "space-y-3" : "rounded-xl border border-border/40 bg-card p-4 space-y-3")}>
       <div className="flex items-center gap-2">
         <DollarSign className="w-4 h-4 text-primary" />
         <span className="text-sm font-semibold">Orçamento</span>
