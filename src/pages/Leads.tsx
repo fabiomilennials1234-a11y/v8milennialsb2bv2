@@ -565,7 +565,7 @@ function LeadsInner() {
               </TableRow>
             ) : (
               leads.map((lead: Lead) => (
-                <TableRow key={lead.id} className={cn("cursor-pointer hover:bg-muted/50", bulk.isSelected(lead.id) && "bg-primary/5")} onClick={() => openLead(lead.id, "leads")}>
+                <TableRow key={lead.id} className={cn("cursor-pointer hover:bg-muted/50", bulk.isSelected(lead.id) && "bg-primary/5")} onClick={() => openLead(lead.id)}>
                   <TableCell onClick={(e) => e.stopPropagation()}>
                     <Checkbox
                       checked={bulk.isSelected(lead.id)}

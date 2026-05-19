@@ -219,7 +219,7 @@ function UpsellCampanhasKanbanInner({ searchQuery, filterStatus, filterResponsib
                       onClick={() => {
                         setSelectedCampanha(campanha);
                         const leadId = (campanha.client as any)?.lead_id;
-                        if (leadId) openLead(leadId, "upsell_campanha", campanha.client);
+                        if (leadId) openLead(leadId);
                       }}
                       onQuickAction={(title) => {
                         createAcaoDoDia.mutate({ title, lead_id: (campanha.client as any)?.lead_id || undefined });

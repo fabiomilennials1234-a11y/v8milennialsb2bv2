@@ -1,26 +1,23 @@
 import { memo } from "react";
 import { ResponsibleSlot } from "./ResponsibleSlot";
 import { QualificationSlot } from "./QualificationSlot";
-import { MoveStageButton, type MoveStagePipeData } from "./MoveStageButton";
-import type { DrawerVariant } from "../../hooks/useLeadSheet";
 import type { QualificationTier } from "../types";
 
 interface LeadActionsBlockProps {
   leadId: string;
-  organizationId: string;
-  variant: DrawerVariant;
-  pipeData: MoveStagePipeData | null;
   preSaleResponsible: { id: string; name: string; avatar_url?: string | null } | null;
   saleResponsible:    { id: string; name: string; avatar_url?: string | null } | null;
   preQualificationTier: QualificationTier | null;
   qualificationTier:    QualificationTier | null;
 }
 
+/**
+ * Header actions sem MoveStageButton — pós-#300 o stage move acontece
+ * dentro do LeadCrossPipeAccordion (pipe-scoped). Header só carrega
+ * responsáveis + qualificação tiers.
+ */
 export const LeadActionsBlock = memo(function LeadActionsBlock({
   leadId,
-  organizationId,
-  variant,
-  pipeData,
   preSaleResponsible,
   saleResponsible,
   preQualificationTier,
@@ -68,17 +65,6 @@ export const LeadActionsBlock = memo(function LeadActionsBlock({
             current={qualificationTier}
           />
         </div>
-      </div>
-
-      <div className="h-px bg-border/40" aria-hidden />
-
-      <div className="flex justify-end pt-0.5">
-        <MoveStageButton
-          leadId={leadId}
-          organizationId={organizationId}
-          variant={variant}
-          pipeData={pipeData}
-        />
       </div>
     </div>
   );

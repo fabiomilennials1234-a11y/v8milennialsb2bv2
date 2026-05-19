@@ -124,7 +124,7 @@ function UtmsTabInner() {
         <AnalyticsErrorBoundary>
           <UtmLeadsList
             leads={data.leads}
-            onOpenLead={(id) => openLead(id, "leads")}
+            onOpenLead={(id) => openLead(id)}
           />
         </AnalyticsErrorBoundary>
       ) : (

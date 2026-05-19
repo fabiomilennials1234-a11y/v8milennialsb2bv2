@@ -232,7 +232,7 @@ function PipeFollowUpsInner() {
   };
 
   const handleOpenLead = (leadId: string) => {
-    openLead(leadId, "followup");
+    openLead(leadId);
   };
 
   const overdueIds = useMemo(() => {

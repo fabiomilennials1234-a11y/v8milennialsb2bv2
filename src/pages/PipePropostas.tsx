@@ -1160,7 +1160,7 @@ function PipePropostasInner() {
                   onClick={() => {
                     const item = pipeData?.find(p => p.id === card.id);
                     if (item) {
-                      openLead(item.lead_id || item.lead?.id, "propostas", item);
+                      openLead(item.lead_id || item.lead?.id, item.id);
                     }
                   }}
                   onRemove={canDeleteCards ? () => handleOpenDeleteDialog(card.id, card.leadId || "") : undefined}

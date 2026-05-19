@@ -740,7 +740,7 @@ function CampanhaKanbanInner({
   const handleDragOver = (event: DragOverEvent) => {};
 
   const handleCardClick = (leadId: string) => {
-    openLead(leadId, "leads");
+    openLead(leadId);
   };
 
   const handleEdit = (leadId: string) => {

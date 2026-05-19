@@ -16,7 +16,7 @@ import { ORIGIN_COLORS } from "@/components/leads/LeadCard";
 import { StageProgressBar } from "./StageProgressBar";
 import { cn } from "@/lib/utils";
 import { useOpenWhatsAppChat, formatPhoneForWhatsApp } from "@/lib/whatsapp";
-import type { DrawerVariant } from "./hooks/useLeadSheet";
+import type { DrawerVariant } from "./legacy/drawer-variant";
 
 const VARIANT_LABELS: Record<DrawerVariant, string> = {
   whatsapp: "Qualificação", confirmacao: "Confirmação", propostas: "Propostas",

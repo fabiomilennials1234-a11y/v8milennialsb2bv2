@@ -31,7 +31,7 @@ interface LeadDetailDialogProps {
 }
 
 function LeadDetailContent({ onClose }: { onClose: () => void }) {
-  const { leadId, variant, pipeData } = useLeadSheet();
+  const { leadId, defaultExpandedPipeEntryId } = useLeadSheet();
   const { lead, isLoading } = useLeadDetail(leadId, true);
   const { user } = useAuth();
   const toggleAI = useToggleLeadAI();
@@ -125,7 +125,7 @@ function LeadDetailContent({ onClose }: { onClose: () => void }) {
         <X className="w-4 h-4" />
       </Button>
 
-      <LeadModalHeader lead={leadForHeader} variant={variant} pipeData={pipeData} />
+      <LeadModalHeader lead={leadForHeader} />
 
       <LeadModalToolbar
         lead={{
@@ -152,9 +152,7 @@ function LeadDetailContent({ onClose }: { onClose: () => void }) {
             <LeadCrossPipeAccordion
               leadId={lead.id}
               organizationId={lead.organization_id ?? ""}
-              defaultExpandedPipeEntryId={
-                (pipeData as { id?: string } | null)?.id ?? null
-              }
+              defaultExpandedPipeEntryId={defaultExpandedPipeEntryId}
               userId={user?.id ?? null}
             />
           </div>

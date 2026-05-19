@@ -140,7 +140,7 @@ function RevisaoInner() {
   };
 
   const handleOpenLead = (leadId: string) => {
-    openLead(leadId, "followup");
+    openLead(leadId);
   };
 
   const handleScheduleNew = (

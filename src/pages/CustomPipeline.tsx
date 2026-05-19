@@ -183,7 +183,7 @@ function CustomPipelinePageInner() {
           searchQuery={searchQuery}
           onRemoveEntry={canDeleteCards ? (id) => setRemoveEntryId(id) : undefined}
           onClickEntry={(entry) => {
-            openLead(entry.lead_id, "custom", entry);
+            openLead(entry.lead_id, entry.id);
           }}
         />
       ) : (
