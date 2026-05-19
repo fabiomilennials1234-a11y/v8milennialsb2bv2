@@ -9,6 +9,9 @@ export default defineConfig({
       'https://esm.sh/@supabase/supabase-js@2': '@supabase/supabase-js',
       // Map Deno std library imports to Node equivalents
       'https://deno.land/std@0.177.0/node/crypto.ts': 'crypto',
+      // PWA virtual module — resolved by vite-plugin-pwa in build,
+      // needs a stub in test so vi.mock can intercept it.
+      'virtual:pwa-register': path.resolve(__dirname, 'tests/helpers/__pwa-register-stub.ts'),
     },
   },
   test: {

@@ -16,6 +16,7 @@ import { SubscriptionProtectedRoute } from "@/components/SubscriptionProtectedRo
 import { GlobalErrorBoundary } from "@/components/GlobalErrorBoundary";
 import { OnboardingGate } from "@/components/onboarding/OnboardingGate";
 import { TorqueLoader } from "@/components/branding/TorqueLoader";
+import { ServiceWorkerUpdater } from "@/components/ServiceWorkerUpdater";
 
 // Retry helper para chunks que falham ao carregar (comum após deploy)
 function lazyRetry<T extends { default: any }>(
@@ -664,6 +665,7 @@ const App = () => {
           <TooltipProvider>
             <Toaster />
             <Sonner />
+            <ServiceWorkerUpdater />
             <BrowserRouter>
               <AuthProvider>
                 <GlobalErrorBoundary>

@@ -216,6 +216,8 @@
     /* cv11: alterna numeral "1" com serif (legível em timestamps 11:11); ss01: "a" alternativo */
     font-feature-settings: "cv11", "ss01";
     min-height: 100vh;
+    /* PWA safe-area: respeita home indicator (iPhone) e barras de navegação */
+    padding-bottom: env(safe-area-inset-bottom);
   }
 
   #root {
