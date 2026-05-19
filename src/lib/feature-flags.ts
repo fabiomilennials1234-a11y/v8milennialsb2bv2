@@ -6,20 +6,10 @@
  *
  * Uso:
  *   import { featureFlags } from '@/lib/feature-flags';
- *   if (featureFlags.chatOnda2b) { ... }
+ *   if (featureFlags.chatBubble) { ... }
  */
 
 export const featureFlags = {
-  /**
-   * chatOnda2b — ativa o ChatShell 3-col em /chat.
-   *
-   * Quando true: <ChatShellWithContext> substitui <WhatsAppChat>.
-   * Quando false (padrão): <WhatsAppChat> legacy continua renderizando.
-   *
-   * Ativar: VITE_CHAT_ONDA_2B=true no .env ou variável de ambiente do build.
-   */
-  chatOnda2b: import.meta.env.VITE_CHAT_ONDA_2B === "true",
-
   /**
    * chatBubble — widget flutuante (FAB + painel) nas Pipe pages.
    *

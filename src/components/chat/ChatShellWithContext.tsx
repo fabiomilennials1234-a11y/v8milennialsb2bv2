@@ -1,7 +1,7 @@
 /**
  * ChatShellWithContext — consumer real do ChatShell 3-col.
  *
- * Ativa sob feature flag VITE_CHAT_ONDA_2B=true em /chat.
+ * Componente principal de chat em /chat (legacy WhatsAppChat removido).
  * Onda 2b, C3.
  *
  * Wires hooks reais → ChatShell:
@@ -33,7 +33,7 @@ import { computeNeedsDeepLinkResolve } from "@/lib/computeNeedsDeepLinkResolve";
 import { useCopilotToggle } from "@/hooks/useCopilotToggle";
 import { ChatShell } from "@/components/chat/layout/ChatShell";
 import { MobileChatLayout } from "@/components/chat/layout/MobileChatLayout";
-import { useChatViewport } from "@/hooks/chat/useChatViewport";
+import { useViewport } from "@/hooks/use-viewport";
 import { ConversationList } from "@/components/chat/list/ConversationList";
 import { ChatHeader } from "@/components/chat/view/ChatHeader";
 import { MessageList } from "@/components/chat/view/MessageList";
@@ -533,8 +533,8 @@ export function ChatShellWithContext() {
   // ── mountTime estável (capturado uma vez no mount) ───────────────────────────
   const mountTimeRef = useRef(Date.now());
 
-  // ── Viewport: mobile <780px usa MobileChatLayout ─────────────────────────────
-  const { isMobile } = useChatViewport();
+  // ── Viewport: mobile <768px usa MobileChatLayout ─────────────────────────────
+  const { isMobile } = useViewport();
   const ShellComponent = isMobile ? MobileChatLayout : ChatShell;
 
   // ── Loading state ────────────────────────────────────────────────────────────

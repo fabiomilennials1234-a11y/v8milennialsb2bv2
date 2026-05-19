@@ -93,3 +93,4 @@ services/**/.venv/
 
 # Playwright MCP screenshots/logs (local, ephemeral)
 .playwright-mcp/
+.claude/worktrees/
