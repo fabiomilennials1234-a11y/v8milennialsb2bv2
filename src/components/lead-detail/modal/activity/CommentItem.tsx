@@ -1,4 +1,4 @@
-import { memo, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { MoreHorizontal, Trash2, Edit2, Check, X, Loader2 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -18,6 +18,8 @@ import type { LeadCommentWithAuthor } from "../types";
 interface CommentItemProps {
   comment: LeadCommentWithAuthor;
   leadId: string;
+  /** Quando true, scrolla pra esse comentário no mount e aplica pulse 2s. */
+  highlight?: boolean;
 }
 
 function initials(name?: string | null): string {
@@ -30,7 +32,7 @@ function colorFromName(name: string): string {
   return `hsl(${hash % 360}, 60%, 45%)`;
 }
 
-export const CommentItem = memo(function CommentItem({ comment, leadId }: CommentItemProps) {
+export const CommentItem = memo(function CommentItem({ comment, leadId, highlight }: CommentItemProps) {
   const { user } = useAuth();
   const { isMaster } = useMasterAuth();
   const { isAdmin } = useIsAdmin();
@@ -38,6 +40,16 @@ export const CommentItem = memo(function CommentItem({ comment, leadId }: Commen
   const edit = useUpdateLeadComment();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(comment.body);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [pulsing, setPulsing] = useState(false);
+
+  useEffect(() => {
+    if (!highlight) return;
+    setPulsing(true);
+    rootRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    const timeout = setTimeout(() => setPulsing(false), 2000);
+    return () => clearTimeout(timeout);
+  }, [highlight]);
 
   const isAuthor = comment.author_user_id === user?.id;
   const canEdit = isAuthor;
@@ -76,7 +88,14 @@ export const CommentItem = memo(function CommentItem({ comment, leadId }: Commen
 
   if (isDeleted) {
     return (
-      <div className="flex gap-3 opacity-50 italic">
+      <div
+        ref={rootRef}
+        data-comment-id={comment.id}
+        className={cn(
+          "flex gap-3 opacity-50 italic rounded-md transition-shadow",
+          pulsing && "animate-pulse ring-2 ring-primary/40 ring-offset-2 ring-offset-card",
+        )}
+      >
         <div className="w-8 h-8 rounded-full bg-muted shrink-0" />
         <div className="flex-1 text-xs text-muted-foreground">
           Comentário apagado · {formatDistanceToNow(new Date(comment.deleted_at!), { addSuffix: true, locale: ptBR })}
@@ -86,7 +105,13 @@ export const CommentItem = memo(function CommentItem({ comment, leadId }: Commen
   }
 
   return (
-    <div className="flex gap-3">
+    <div
+      ref={rootRef}
+      data-comment-id={comment.id}
+      className={cn(
+        "flex gap-3 rounded-md transition-shadow",
+        pulsing && "animate-pulse ring-2 ring-primary/40 ring-offset-2 ring-offset-card",
+      )}>
       <div
         className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 overflow-hidden"
         style={!avatarUrl ? { backgroundColor: colorFromName(authorName) } : undefined}

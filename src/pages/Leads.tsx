@@ -222,6 +222,15 @@ function LeadsInner() {
   const { organizationId } = useOrganization();
   useEffect(() => { trackModuleVisit("leads", organizationId); }, []);
 
+  // #313 — deep link via mention notification:
+  // /leads?lead=<id>&comment=<id> opens the modal automatically. The
+  // `comment` param is consumed inside ActivityFeed (highlight + scroll).
+  // Only fires once per lead-id transition to avoid reopening on hot-reload.
+  const deepLinkLeadId = searchParams.get("lead");
+  useEffect(() => {
+    if (deepLinkLeadId) openLead(deepLinkLeadId);
+  }, [deepLinkLeadId, openLead]);
+
   const [page, setPage] = useState(0);
   const filterParams = { page, searchQuery, filterOrigin, filterRating };
   const { data: leads = [], isLoading } = useLeads(filterParams);
