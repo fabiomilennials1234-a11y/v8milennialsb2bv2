@@ -16,6 +16,7 @@ import { LeadModalToolbar } from "./LeadModalToolbar";
 import { LeadInfoColumn } from "./body/LeadInfoColumn";
 import { LeadActivityColumn } from "./activity/LeadActivityColumn";
 import { LeadCrossPipeAccordion } from "./pipes/LeadCrossPipeAccordion";
+import { LeadDetailMobileTabs } from "./LeadDetailMobileTabs";
 import { useAuth } from "@/contexts/AuthContext";
 import { ScheduleMessageModal } from "@/components/chat/ScheduleMessageModal";
 import { LogCallModal } from "@/components/calls/LogCallModal";
@@ -30,7 +31,7 @@ interface LeadDetailDialogProps {
   children?: never;
 }
 
-function LeadDetailContent({ onClose }: { onClose: () => void }) {
+function LeadDetailContent({ onClose, mobile = false }: { onClose: () => void; mobile?: boolean }) {
   const { leadId, defaultExpandedPipeEntryId } = useLeadSheet();
   const { lead, isLoading } = useLeadDetail(leadId, true);
   const { user } = useAuth();
@@ -112,9 +113,8 @@ function LeadDetailContent({ onClose }: { onClose: () => void }) {
     qualification_tier:     (leadAny.qualification_tier ?? null) as QualificationTier | null,
   };
 
-  return (
-    <div className="flex flex-col h-full min-h-0 relative">
-      {/* Close button absoluto top-right */}
+  const headerBlock = (
+    <>
       <Button
         variant="ghost"
         size="icon"
@@ -124,9 +124,7 @@ function LeadDetailContent({ onClose }: { onClose: () => void }) {
       >
         <X className="w-4 h-4" />
       </Button>
-
       <LeadModalHeader lead={leadForHeader} />
-
       <LeadModalToolbar
         lead={{
           id: lead.id,
@@ -145,25 +143,35 @@ function LeadDetailContent({ onClose }: { onClose: () => void }) {
         onDelete={handleDelete}
         onClose={onClose}
       />
+    </>
+  );
 
-      <div className="grid grid-cols-12 flex-1 min-h-0">
-        <div className="col-span-12 md:col-span-7 min-h-0 flex flex-col overflow-y-auto">
-          <div className="px-6 pt-5">
-            <LeadCrossPipeAccordion
-              leadId={lead.id}
-              organizationId={lead.organization_id ?? ""}
-              defaultExpandedPipeEntryId={defaultExpandedPipeEntryId}
-              userId={user?.id ?? null}
-            />
-          </div>
-          <LeadInfoColumn lead={lead as Record<string, unknown> & { id: string }} />
-        </div>
-        <div className="col-span-12 md:col-span-5 min-h-0 flex flex-col">
-          <LeadActivityColumn leadId={lead.id} organizationId={lead.organization_id ?? ""} />
-        </div>
+  const infoBlock = (
+    <>
+      <div className="px-6 pt-5">
+        <LeadCrossPipeAccordion
+          leadId={lead.id}
+          organizationId={lead.organization_id ?? ""}
+          defaultExpandedPipeEntryId={defaultExpandedPipeEntryId}
+          userId={user?.id ?? null}
+        />
       </div>
+      <LeadInfoColumn lead={lead as Record<string, unknown> & { id: string }} />
+    </>
+  );
 
-      {/* Sub-modais */}
+  const activityBlock = (
+    <LeadActivityColumn leadId={lead.id} organizationId={lead.organization_id ?? ""} />
+  );
+
+  const chatPlaceholder = (
+    <div className="flex flex-col items-center justify-center gap-3 py-12 text-muted-foreground">
+      <p className="text-sm">Mensagens recentes aparecem aqui.</p>
+    </div>
+  );
+
+  const subModals = (
+    <>
       {scheduleOpen && lead.phone && (
         <ScheduleMessageModal
           open={scheduleOpen}
@@ -207,6 +215,42 @@ function LeadDetailContent({ onClose }: { onClose: () => void }) {
           leadName={lead.name}
         />
       )}
+    </>
+  );
+
+  if (mobile) {
+    return (
+      <LeadDetailMobileTabs
+        infoContent={
+          <div className="flex flex-col h-full min-h-0 relative">
+            {headerBlock}
+            <div className="flex-1 min-h-0 overflow-y-auto">
+              {infoBlock}
+            </div>
+            {subModals}
+          </div>
+        }
+        historyContent={activityBlock}
+        chatContent={chatPlaceholder}
+        leadPhone={lead.phone ?? null}
+      />
+    );
+  }
+
+  return (
+    <div className="flex flex-col h-full min-h-0 relative">
+      {headerBlock}
+
+      <div className="grid grid-cols-12 flex-1 min-h-0">
+        <div className="col-span-12 md:col-span-7 min-h-0 flex flex-col overflow-y-auto">
+          {infoBlock}
+        </div>
+        <div className="col-span-12 md:col-span-5 min-h-0 flex flex-col">
+          {activityBlock}
+        </div>
+      </div>
+
+      {subModals}
     </div>
   );
 }
@@ -222,10 +266,10 @@ export const LeadDetailDialogV2 = memo(function LeadDetailDialogV2(_props: LeadD
       <Sheet open={isOpen} onOpenChange={(open) => !open && close()}>
         <SheetContent
           side="bottom"
-          className="h-[95vh] p-0 overflow-hidden flex flex-col"
+          className="h-[90vh] p-0 overflow-hidden flex flex-col rounded-t-2xl"
           aria-describedby={undefined}
         >
-          <LeadDetailContent onClose={close} />
+          <LeadDetailContent onClose={close} mobile />
         </SheetContent>
       </Sheet>
     );
