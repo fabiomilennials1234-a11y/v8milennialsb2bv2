@@ -171,7 +171,7 @@ export function usePipelineEntries(slug: PipelineType) {
         .select(`*, lead:leads!pipeline_entries_lead_id_fkey(${LEAD_SELECT})`)
         .eq("pipeline_id", pipelineId)
         .order("created_at", { ascending: false })
-        .limit(10000)
+        .limit(500)
         .abortSignal(signal);
 
       if (error) throw error;
