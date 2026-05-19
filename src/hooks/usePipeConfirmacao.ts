@@ -5,6 +5,7 @@ import { triggerFollowUpAutomation } from "./useAutoFollowUp";
 
 import { useOrganization } from "./useOrganization";
 import { useCanPerformActionAsync } from "@/lib/permissions";
+import { OptimisticLockConflictError, isPostgrestNoRows } from "@/lib/optimistic-lock";
 import { usePipelineEntries, usePipelineId, findOrCreatePipelineEntry } from "./usePipelineEntries";
 
 export type PipeConfirmacao = Tables<"pipe_confirmacao">;
@@ -113,7 +114,18 @@ export function useUpdatePipeConfirmacao() {
   const { data: pipelineId } = usePipelineId("confirmacao");
 
   return useMutation({
-    mutationFn: async ({ id, leadId, assignedTo, ...updates }: PipeConfirmacaoUpdate & { id: string; leadId?: string; assignedTo?: string | null }) => {
+    mutationFn: async ({
+      id,
+      leadId,
+      assignedTo,
+      expectedUpdatedAt,
+      ...updates
+    }: PipeConfirmacaoUpdate & {
+      id: string;
+      leadId?: string;
+      assignedTo?: string | null;
+      expectedUpdatedAt?: string;
+    }) => {
       if (!organizationId) {
         throw new Error("Cannot update pipe_confirmacao: No organization context");
       }
@@ -201,14 +213,24 @@ export function useUpdatePipeConfirmacao() {
         return unchanged;
       }
 
-      const { data, error } = await supabase
+      // Optimistic lock (#307) — when caller passes expectedUpdatedAt
+      // the UPDATE is conditional, and PostgREST returns PGRST116 if
+      // the row was already touched by someone else.
+      let entryUpdateQuery = supabase
         .from("pipeline_entries")
         .update(payload)
-        .eq("id", id)
-        .select()
-        .single();
+        .eq("id", id);
+      if (expectedUpdatedAt) {
+        entryUpdateQuery = entryUpdateQuery.eq("updated_at", expectedUpdatedAt);
+      }
+      const { data, error } = await entryUpdateQuery.select().single();
 
-      if (error) throw error;
+      if (error) {
+        if (expectedUpdatedAt && isPostgrestNoRows(error)) {
+          throw new OptimisticLockConflictError();
+        }
+        throw error;
+      }
 
       // Sync meeting_date → leads.compromisso_date (espelho).
       // Só dispara quando meeting_date foi explicitamente passado (inclusive null = deletando reunião).
