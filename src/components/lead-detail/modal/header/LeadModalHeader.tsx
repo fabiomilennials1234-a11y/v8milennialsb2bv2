@@ -1,6 +1,8 @@
 import { memo } from "react";
 import { LeadIdentityBlock } from "./LeadIdentityBlock";
 import { LeadActionsBlock } from "./LeadActionsBlock";
+import { LeadTagsBar } from "./LeadTagsBar";
+import { useLeadActionGates } from "../../hooks/useLeadActionGates";
 import type { MoveStagePipeData } from "./MoveStageButton";
 import type { DrawerVariant } from "../../hooks/useLeadSheet";
 import type { QualificationTier } from "../types";
@@ -28,6 +30,7 @@ export const LeadModalHeader = memo(function LeadModalHeader({
   variant,
   pipeData,
 }: LeadModalHeaderProps) {
+  const gates = useLeadActionGates(lead.id);
   return (
     <div className="pl-6 pr-14 py-5 border-b border-border/40 bg-gradient-to-br from-primary/[0.03] via-transparent to-transparent">
       <div className="flex items-start gap-6">
@@ -43,6 +46,9 @@ export const LeadModalHeader = memo(function LeadModalHeader({
           preQualificationTier={lead.pre_qualification_tier ?? null}
           qualificationTier={lead.qualification_tier ?? null}
         />
+      </div>
+      <div className="mt-3">
+        <LeadTagsBar leadId={lead.id} editable={gates.canManageTags.allowed} />
       </div>
     </div>
   );
