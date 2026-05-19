@@ -1,21 +1,21 @@
 import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
 
-export type DrawerVariant =
-  | "whatsapp"
-  | "confirmacao"
-  | "propostas"
-  | "followup"
-  | "custom"
-  | "upsell_client"
-  | "upsell_campanha"
-  | "leads";
-
+/**
+ * Lead-centric modal context.
+ *
+ * The old `DrawerVariant` + `pipeData` payload was eliminated in PRD #284
+ * (issue #300). Callers no longer indicate a pipe variant; instead they pass
+ * an optional `defaultExpandedPipeEntryId` so the modal opens with that
+ * pipe section already expanded inside the cross-pipe accordion.
+ *
+ * Call from a kanban card → pass the entry id you clicked on.
+ * Call from a list/page without pipe origin → call with one arg.
+ */
 interface LeadSheetState {
   isOpen: boolean;
   leadId: string | null;
-  variant: DrawerVariant;
-  pipeData: any;
-  openLead: (leadId: string, variant: DrawerVariant, pipeData?: any) => void;
+  defaultExpandedPipeEntryId: string | null;
+  openLead: (leadId: string, defaultExpandedPipeEntryId?: string | null) => void;
   close: () => void;
 }
 
@@ -25,21 +25,26 @@ export function LeadPanelProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<{
     isOpen: boolean;
     leadId: string | null;
-    variant: DrawerVariant;
-    pipeData: any;
+    defaultExpandedPipeEntryId: string | null;
   }>({
     isOpen: false,
     leadId: null,
-    variant: "leads",
-    pipeData: null,
+    defaultExpandedPipeEntryId: null,
   });
 
-  const openLead = useCallback((leadId: string, variant: DrawerVariant, pipeData?: any) => {
-    setState({ isOpen: true, leadId, variant, pipeData: pipeData ?? null });
-  }, []);
+  const openLead = useCallback(
+    (leadId: string, defaultExpandedPipeEntryId?: string | null) => {
+      setState({
+        isOpen: true,
+        leadId,
+        defaultExpandedPipeEntryId: defaultExpandedPipeEntryId ?? null,
+      });
+    },
+    [],
+  );
 
   const close = useCallback(() => {
-    setState({ isOpen: false, leadId: null, variant: "leads", pipeData: null });
+    setState({ isOpen: false, leadId: null, defaultExpandedPipeEntryId: null });
   }, []);
 
   return (

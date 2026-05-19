@@ -8,8 +8,18 @@ import { useLogLeadAction } from "@/hooks/useLogLeadAction";
 import { useLeadActionGates } from "../../hooks/useLeadActionGates";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import type { DrawerVariant } from "../../hooks/useLeadSheet";
 import { StageProgressBar } from "../../StageProgressBar";
+
+/**
+ * Pipe family identifier — replaces the old `MoveStageVariant` enum that
+ * leaked through `useLeadSheet`. Local to MoveStageButton; callers in the
+ * accordion pass the relevant family directly per pipe section.
+ */
+export type MoveStageVariant =
+  | "whatsapp"
+  | "confirmacao"
+  | "propostas"
+  | "custom";
 
 /**
  * pipeData shape varies by pipe family:
@@ -27,18 +37,18 @@ export type MoveStagePipeData =
 interface MoveStageButtonProps {
   leadId: string;
   organizationId: string;
-  variant: DrawerVariant;
+  variant: MoveStageVariant;
   pipeData: MoveStagePipeData | null;
 }
 
-const VARIANT_TO_PIPE_TYPE: Partial<Record<DrawerVariant, string>> = {
+const VARIANT_TO_PIPE_TYPE: Partial<Record<MoveStageVariant, string>> = {
   whatsapp: "whatsapp",
   confirmacao: "confirmacao",
   propostas: "propostas",
 };
 
 const VARIANT_TO_TABLE: Partial<
-  Record<DrawerVariant, "pipe_whatsapp" | "pipe_confirmacao" | "pipe_propostas" | "custom_pipe_entries">
+  Record<MoveStageVariant, "pipe_whatsapp" | "pipe_confirmacao" | "pipe_propostas" | "custom_pipe_entries">
 > = {
   whatsapp: "pipe_whatsapp",
   confirmacao: "pipe_confirmacao",

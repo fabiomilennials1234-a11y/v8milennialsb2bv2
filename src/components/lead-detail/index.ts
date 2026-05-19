@@ -1,14 +1,13 @@
 /**
- * Lead Detail — modal centralizado redesenhado (2026-05-17).
+ * Lead Detail — modal lead-centric (PRD #284, pós-#300).
  *
- * `LeadDetailDialog` substitui `LeadDetailSheet` (split-pane lateral legado).
- * Mantém alias `LeadDetailSheet = LeadDetailDialog` para minimizar churn nos
- * call sites enquanto migramos.
- *
- * Provider e hook permanecem com mesma API: `openLead(id, variant, pipeData?)`.
+ * API pública: `openLead(leadId, defaultExpandedPipeEntryId?)` + `close()`
+ * via `useLeadSheet()`. `DrawerVariant` e `pipeData` foram eliminados;
+ * callers que precisavam abrir num pipe específico agora passam só a
+ * entry id desse pipe — o `LeadCrossPipeAccordion` expande a section
+ * correspondente.
  */
 
 export { LeadDetailDialog } from "./modal/LeadDetailDialog";
 export { LeadDetailDialog as LeadDetailSheet } from "./modal/LeadDetailDialog";
 export { LeadPanelProvider, useLeadSheet } from "./hooks/useLeadSheet";
-export type { DrawerVariant } from "./hooks/useLeadSheet";

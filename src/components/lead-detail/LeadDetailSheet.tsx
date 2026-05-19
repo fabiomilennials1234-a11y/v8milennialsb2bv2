@@ -3,6 +3,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useLeadSheet } from "./hooks/useLeadSheet";
 import { useLeadDetail } from "./hooks/useLeadDetail";
+import type { DrawerVariant } from "./legacy/drawer-variant";
 import { useToggleLeadAI, useDeleteLead } from "@/hooks/useLeads";
 import { useLogLeadAction } from "@/hooks/useLogLeadAction";
 import { useQuery } from "@tanstack/react-query";
@@ -22,7 +23,12 @@ import { toast } from "sonner";
 import { useToast } from "@/hooks/use-toast";
 
 export const LeadDetailSheet = memo(function LeadDetailSheet() {
-  const { isOpen, leadId, variant, pipeData, close } = useLeadSheet();
+  const { isOpen, leadId, close } = useLeadSheet();
+  // Legacy modal — pre-#300 DrawerVariant payload no longer travels through
+  // the context. The legacy sheet renders the generic "leads" view; pipe-
+  // specific behaviors live exclusively in LeadCrossPipeAccordion (V2).
+  const variant: DrawerVariant = "leads";
+  const pipeData: { id?: string; stage_id?: string } | null = null;
   const { lead, isLoading, pipelineData } = useLeadDetail(leadId, isOpen);
   const toggleAIMutation = useToggleLeadAI();
   const deleteLead = useDeleteLead();

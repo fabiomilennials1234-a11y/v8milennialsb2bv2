@@ -1,6 +1,6 @@
 import { memo, lazy, Suspense } from "react";
 import { Loader2 } from "lucide-react";
-import type { DrawerVariant } from "./hooks/useLeadSheet";
+import type { DrawerVariant } from "./legacy/drawer-variant";
 
 const WhatsAppContext = lazy(() =>
   import("@/components/leads/funnel-contexts/WhatsAppContext").then((m) => ({ default: m.WhatsAppContext }))

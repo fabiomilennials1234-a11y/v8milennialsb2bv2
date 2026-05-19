@@ -620,7 +620,7 @@ function PipeWhatsappInner() {
               onClick={() => {
                 const item = pipeData?.find(p => p.id === card.id);
                 if (item) {
-                  openLead(item.lead_id, "whatsapp", item);
+                  openLead(item.lead_id, item.id);
                 }
               }}
               onRemove={canDeleteCards ? () => handleOpenDeleteDialog(card.id, card.leadId || "") : undefined}
@@ -643,7 +643,7 @@ function PipeWhatsappInner() {
           onRowClick={(card) => {
             const item = pipeData?.find(p => p.id === card.id);
             if (item) {
-              openLead(item.lead_id, "whatsapp", item);
+              openLead(item.lead_id, item.id);
             }
           }}
           selectedIds={bulk.selectedIds}

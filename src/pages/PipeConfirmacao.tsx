@@ -633,7 +633,7 @@ function PipeConfirmacaoInner() {
   const handleCardClick = (card: LeadCardData) => {
     const item = pipeData?.find(p => p.id === card.id);
     if (item) {
-      openLead(item.lead_id, "confirmacao", item);
+      openLead(item.lead_id, item.id);
     }
   };
 
@@ -831,7 +831,7 @@ function PipeConfirmacaoInner() {
         <MeetingTimeline
           meetings={pipeData || []}
           onMeetingClick={(meeting) => {
-            openLead(meeting.lead_id, "confirmacao", meeting);
+            openLead(meeting.lead_id, meeting.id);
           }}
         />
       )}

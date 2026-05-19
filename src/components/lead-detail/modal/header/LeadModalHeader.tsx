@@ -3,8 +3,6 @@ import { LeadIdentityBlock } from "./LeadIdentityBlock";
 import { LeadActionsBlock } from "./LeadActionsBlock";
 import { LeadTagsBar } from "./LeadTagsBar";
 import { useLeadActionGates } from "../../hooks/useLeadActionGates";
-import type { MoveStagePipeData } from "./MoveStageButton";
-import type { DrawerVariant } from "../../hooks/useLeadSheet";
 import type { QualificationTier } from "../types";
 
 interface LeadModalHeaderProps {
@@ -21,14 +19,10 @@ interface LeadModalHeaderProps {
     pre_qualification_tier?: QualificationTier | null;
     qualification_tier?: QualificationTier | null;
   };
-  variant: DrawerVariant;
-  pipeData: MoveStagePipeData | null;
 }
 
 export const LeadModalHeader = memo(function LeadModalHeader({
   lead,
-  variant,
-  pipeData,
 }: LeadModalHeaderProps) {
   const gates = useLeadActionGates(lead.id);
   return (
@@ -38,9 +32,6 @@ export const LeadModalHeader = memo(function LeadModalHeader({
         <div className="h-20 w-px bg-border/40 shrink-0 self-center" aria-hidden />
         <LeadActionsBlock
           leadId={lead.id}
-          organizationId={lead.organization_id}
-          variant={variant}
-          pipeData={pipeData}
           preSaleResponsible={lead.pre_sale_responsible ?? null}
           saleResponsible={lead.sale_responsible ?? null}
           preQualificationTier={lead.pre_qualification_tier ?? null}

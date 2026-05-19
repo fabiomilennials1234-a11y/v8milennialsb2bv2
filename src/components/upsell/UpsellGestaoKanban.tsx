@@ -114,7 +114,7 @@ function UpsellGestaoKanbanInner({ searchQuery, filterPotencial }: UpsellGestaoK
 
   const openDetail = (client: any) => {
     const leadId = (client as any).lead_id || client?.lead?.id;
-    if (leadId) openLead(leadId, "upsell_client", client);
+    if (leadId) openLead(leadId);
   };
 
   return (
