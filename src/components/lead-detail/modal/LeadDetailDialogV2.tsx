@@ -8,6 +8,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { useLeadSheet } from "../hooks/useLeadSheet";
 import { useLeadDetail } from "../hooks/useLeadDetail";
+import { useLeadDetailRealtime } from "../hooks/useLeadDetailRealtime";
 import { useToggleLeadAI, useDeleteLead } from "@/hooks/useLeads";
 import { useLogLeadAction } from "@/hooks/useLogLeadAction";
 import { toast } from "sonner";
@@ -37,6 +38,7 @@ function LeadDetailContent({ onClose }: { onClose: () => void }) {
   const { leadId, defaultExpandedPipeEntryId } = useLeadSheet();
   const { lead, isLoading, visibility, metadata, isFetching, failureCount } = useLeadDetail(leadId, true);
   const isOnline = useOnlineStatus();
+  useLeadDetailRealtime(leadId, true, lead?.organization_id ?? null);
   const { user } = useAuth();
   const toggleAI = useToggleLeadAI();
   const deleteLead = useDeleteLead();
