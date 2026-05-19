@@ -48,14 +48,6 @@ interface MainLayoutProps {
   children: ReactNode;
 }
 
-export function MainLayout({ children }: MainLayoutProps) {
-  return (
-    <MobileChatProvider>
-      <MainLayoutInner>{children}</MainLayoutInner>
-    </MobileChatProvider>
-  );
-}
-
 function MainLayoutInner({ children }: MainLayoutProps) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -147,4 +139,12 @@ function MainLayoutInner({ children }: MainLayoutProps) {
     return <ChatBubbleProvider>{layout}</ChatBubbleProvider>;
   }
   return layout;
+}
+
+export function MainLayout({ children }: MainLayoutProps) {
+  return (
+    <MobileChatProvider>
+      <MainLayoutInner>{children}</MainLayoutInner>
+    </MobileChatProvider>
+  );
 }
