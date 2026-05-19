@@ -50,7 +50,7 @@ export function useLeadComments(leadId: string | null | undefined) {
 export function useCreateLeadComment() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: { leadId: string; organizationId: string; body: string }) => {
+    mutationFn: async (input: { leadId: string; organizationId: string; body: string; mentions?: string[] }) => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Sem usuário autenticado");
 
@@ -68,6 +68,7 @@ export function useCreateLeadComment() {
           author_user_id: user.id,
           author_team_member_id: member?.id ?? null,
           body: input.body.trim(),
+          mentions: input.mentions && input.mentions.length > 0 ? input.mentions : [],
         })
         .select("*")
         .single();
