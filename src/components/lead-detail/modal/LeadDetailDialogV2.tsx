@@ -3,9 +3,9 @@ import { X } from "lucide-react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { Dialog, DialogPortal, DialogOverlay } from "@/components/ui/dialog";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { useLeadSheet } from "../hooks/useLeadSheet";
 import { useLeadDetail } from "../hooks/useLeadDetail";
 import { useToggleLeadAI, useDeleteLead } from "@/hooks/useLeads";
@@ -16,6 +16,9 @@ import { LeadModalToolbar } from "./LeadModalToolbar";
 import { LeadInfoColumn } from "./body/LeadInfoColumn";
 import { LeadActivityColumn } from "./activity/LeadActivityColumn";
 import { LeadCrossPipeAccordion } from "./pipes/LeadCrossPipeAccordion";
+import { LeadModalSkeleton } from "./LeadModalSkeleton";
+import { LeadVisibilityState } from "./LeadVisibilityState";
+import { LeadDetailBanners } from "./LeadDetailBanners";
 import { useAuth } from "@/contexts/AuthContext";
 import { ScheduleMessageModal } from "@/components/chat/ScheduleMessageModal";
 import { LogCallModal } from "@/components/calls/LogCallModal";
@@ -32,7 +35,8 @@ interface LeadDetailDialogProps {
 
 function LeadDetailContent({ onClose }: { onClose: () => void }) {
   const { leadId, defaultExpandedPipeEntryId } = useLeadSheet();
-  const { lead, isLoading } = useLeadDetail(leadId, true);
+  const { lead, isLoading, visibility, metadata, isFetching, failureCount } = useLeadDetail(leadId, true);
+  const isOnline = useOnlineStatus();
   const { user } = useAuth();
   const toggleAI = useToggleLeadAI();
   const deleteLead = useDeleteLead();
@@ -93,16 +97,29 @@ function LeadDetailContent({ onClose }: { onClose: () => void }) {
     }
   }, [lead, deleteLead, logAction, onClose]);
 
-  if (isLoading || !lead) {
+  // Visibility gate (#305): show structured error states instead of
+  // a generic "loading" or "not found" toast.
+  if (visibility === "loading" || isLoading) {
+    return <LeadModalSkeleton />;
+  }
+
+  if (visibility !== "exists" || !lead) {
     return (
-      <div className="flex flex-col h-full">
-        <div className="p-6 space-y-4 border-b border-border/40">
-          <Skeleton className="h-14 w-2/3" />
-          <Skeleton className="h-3 w-1/3" />
-        </div>
-        <div className="flex-1 p-6">
-          <Skeleton className="h-full w-full" />
-        </div>
+      <div className="flex flex-col h-full relative">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onClose}
+          className="absolute right-3 top-3 h-8 w-8 z-10 rounded-full hover:bg-muted"
+          aria-label="Fechar"
+        >
+          <X className="w-4 h-4" />
+        </Button>
+        <LeadVisibilityState
+          visibility={visibility === "exists" ? "not_found" : visibility}
+          metadata={metadata}
+          onClose={onClose}
+        />
       </div>
     );
   }
@@ -136,8 +153,19 @@ function LeadDetailContent({ onClose }: { onClose: () => void }) {
         <X className="w-4 h-4" />
       </Button>
 
+      <LeadDetailBanners
+        isOnline={isOnline}
+        isFetching={isFetching}
+        failureCount={failureCount}
+      />
+
       <LeadModalHeader lead={leadForHeader} />
 
+      <fieldset
+        disabled={!isOnline}
+        className="contents"
+        aria-disabled={!isOnline}
+      >
       <LeadModalToolbar
         lead={{
           id: lead.id,
@@ -173,6 +201,7 @@ function LeadDetailContent({ onClose }: { onClose: () => void }) {
           <LeadActivityColumn leadId={lead.id} organizationId={lead.organization_id ?? ""} />
         </div>
       </div>
+      </fieldset>
 
       {/* Sub-modais */}
       {scheduleOpen && lead.phone && (
