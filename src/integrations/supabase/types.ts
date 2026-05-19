@@ -6188,7 +6188,7 @@ export type Database = {
           entity_type: string | null
           id: string
           lead_id: string
-          metadata: Json | null
+          metadata: Json
           organization_id: string | null
           source: string
         }
@@ -6201,7 +6201,7 @@ export type Database = {
           entity_type?: string | null
           id?: string
           lead_id: string
-          metadata?: Json | null
+          metadata?: Json
           organization_id?: string | null
           source?: string
         }
@@ -6214,7 +6214,7 @@ export type Database = {
           entity_type?: string | null
           id?: string
           lead_id?: string
-          metadata?: Json | null
+          metadata?: Json
           organization_id?: string | null
           source?: string
         }
