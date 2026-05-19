@@ -4,6 +4,7 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { Dialog, DialogPortal, DialogOverlay } from "@/components/ui/dialog";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { useLeadSheet } from "../hooks/useLeadSheet";
@@ -34,12 +35,17 @@ interface LeadDetailDialogProps {
   children?: never;
 }
 
-function LeadDetailContent({ onClose }: { onClose: () => void }) {
+function LeadDetailContent({ onClose, isMobile }: { onClose: () => void; isMobile: boolean }) {
   const { leadId, defaultExpandedPipeEntryId } = useLeadSheet();
   const { lead, isLoading, visibility, metadata, isFetching, failureCount } = useLeadDetail(leadId, true);
   const isOnline = useOnlineStatus();
   useLeadDetailRealtime(leadId, true, lead?.organization_id ?? null);
   const { user } = useAuth();
+  // PRD #284 #314 — default tab por contexto de abertura:
+  // origem kanban (pipeData via defaultExpandedPipeEntryId) → "pipes"; senão "info".
+  const [mobileTab, setMobileTab] = useState<string>(
+    defaultExpandedPipeEntryId ? "pipes" : "info",
+  );
   const toggleAI = useToggleLeadAI();
   const deleteLead = useDeleteLead();
   const logAction = useLogLeadAction();
@@ -187,22 +193,46 @@ function LeadDetailContent({ onClose }: { onClose: () => void }) {
         onClose={onClose}
       />
 
-      <div className="grid grid-cols-12 flex-1 min-h-0">
-        <div className="col-span-12 md:col-span-7 min-h-0 flex flex-col overflow-y-auto">
-          <div className="px-6 pt-5">
+      {isMobile ? (
+        <Tabs value={mobileTab} onValueChange={setMobileTab} className="flex-1 min-h-0 flex flex-col">
+          <TabsList className="mx-3 mt-2 grid grid-cols-3" data-testid="lead-modal-mobile-tabs">
+            <TabsTrigger value="info" data-testid="tab-info">Info</TabsTrigger>
+            <TabsTrigger value="pipes" data-testid="tab-pipes">Pipes</TabsTrigger>
+            <TabsTrigger value="atividade" data-testid="tab-atividade">Atividade</TabsTrigger>
+          </TabsList>
+          <TabsContent value="info" className="flex-1 min-h-0 overflow-y-auto m-0">
+            <LeadInfoColumn lead={lead as Record<string, unknown> & { id: string }} />
+          </TabsContent>
+          <TabsContent value="pipes" className="flex-1 min-h-0 overflow-y-auto m-0 px-4 pt-4">
             <LeadCrossPipeAccordion
               leadId={lead.id}
               organizationId={lead.organization_id ?? ""}
               defaultExpandedPipeEntryId={defaultExpandedPipeEntryId}
               userId={user?.id ?? null}
             />
+          </TabsContent>
+          <TabsContent value="atividade" className="flex-1 min-h-0 m-0 flex flex-col">
+            <LeadActivityColumn leadId={lead.id} organizationId={lead.organization_id ?? ""} />
+          </TabsContent>
+        </Tabs>
+      ) : (
+        <div className="grid grid-cols-12 flex-1 min-h-0">
+          <div className="col-span-12 md:col-span-7 min-h-0 flex flex-col overflow-y-auto">
+            <div className="px-6 pt-5">
+              <LeadCrossPipeAccordion
+                leadId={lead.id}
+                organizationId={lead.organization_id ?? ""}
+                defaultExpandedPipeEntryId={defaultExpandedPipeEntryId}
+                userId={user?.id ?? null}
+              />
+            </div>
+            <LeadInfoColumn lead={lead as Record<string, unknown> & { id: string }} />
           </div>
-          <LeadInfoColumn lead={lead as Record<string, unknown> & { id: string }} />
+          <div className="col-span-12 md:col-span-5 min-h-0 flex flex-col">
+            <LeadActivityColumn leadId={lead.id} organizationId={lead.organization_id ?? ""} />
+          </div>
         </div>
-        <div className="col-span-12 md:col-span-5 min-h-0 flex flex-col">
-          <LeadActivityColumn leadId={lead.id} organizationId={lead.organization_id ?? ""} />
-        </div>
-      </div>
+      )}
       </fieldset>
 
       {/* Sub-modais */}
@@ -267,7 +297,7 @@ export const LeadDetailDialogV2 = memo(function LeadDetailDialogV2(_props: LeadD
           className="h-[95vh] p-0 overflow-hidden flex flex-col"
           aria-describedby={undefined}
         >
-          <LeadDetailContent onClose={close} />
+          <LeadDetailContent onClose={close} isMobile={isMobile} />
         </SheetContent>
       </Sheet>
     );
@@ -290,7 +320,7 @@ export const LeadDetailDialogV2 = memo(function LeadDetailDialogV2(_props: LeadD
           )}
         >
           <DialogPrimitive.Title className="sr-only">Detalhes do lead</DialogPrimitive.Title>
-          <LeadDetailContent onClose={close} />
+          <LeadDetailContent onClose={close} isMobile={isMobile} />
         </DialogPrimitive.Content>
       </DialogPortal>
     </Dialog>
