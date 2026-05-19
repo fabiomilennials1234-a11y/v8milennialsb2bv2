@@ -141,15 +141,17 @@ export { LEADS_PAGE_SIZE };
 export function useCreateLead() {
   const queryClient = useQueryClient();
   const { organizationId } = useOrganization();
-  const { data: createPermission } = useCanPerformActionAsync("create_lead");
+  const createPermission = useCanPerformActionAsync("create_lead");
 
   return useMutation({
     mutationFn: async (lead: LeadInsert) => {
       if (!organizationId) {
         throw new Error("Cannot create lead: No organization context");
       }
-      if (createPermission && !createPermission.allowed) {
-        throw new Error("Sem permissão para criar leads");
+      if (!createPermission.allowed) {
+        throw new Error(createPermission.isLoading
+          ? "Permissões ainda carregando — tente novamente"
+          : "Sem permissão para criar leads");
       }
       
       // SECURITY: Always override organization_id with current user's org

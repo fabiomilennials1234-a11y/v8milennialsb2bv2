@@ -52,7 +52,7 @@ vi.mock("@/hooks/useTeamMemberMatrixPermissions", () => ({
 
 vi.mock("@/lib/permissions", () => ({
   useCanPerformAction: () => ({ allowed: true, isLoading: false }),
-  useCanPerformActionAsync: () => async () => ({ allowed: true }),
+  useCanPerformActionAsync: () => ({ allowed: true, reason: "admin", isLoading: false }),
 }));
 
 vi.mock("@/hooks/usePipelineEntries", () => ({

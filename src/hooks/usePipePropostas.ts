@@ -96,13 +96,15 @@ export function useCreatePipeProposta() {
 
 export function useUpdatePipeProposta() {
   const queryClient = useQueryClient();
-  const { data: movePermission } = useCanPerformActionAsync("move_pipe_record");
+  const movePermission = useCanPerformActionAsync("move_pipe_record");
   const { data: pipelineId } = usePipelineId("propostas");
 
   return useMutation({
     mutationFn: async ({ id, leadId, closerId, skip_auto_push, ...updates }: PipePropostaUpdate & { id: string; leadId?: string; closerId?: string | null; skip_auto_push?: boolean }) => {
-      if (updates.status && movePermission && !movePermission.allowed) {
-        throw new Error("Sem permissão para mover registros no pipe");
+      if (updates.status && !movePermission.allowed) {
+        throw new Error(movePermission.isLoading
+          ? "Permissões ainda carregando — tente novamente"
+          : "Sem permissão para mover registros no pipe");
       }
 
       // Fetch current entry to get existing metadata for merge

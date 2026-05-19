@@ -849,7 +849,7 @@ export function useAddLeadToCustomPipe() {
 /** Mover lead entre etapas (drag-and-drop) */
 export function useMoveLeadInCustomPipe() {
   const queryClient = useQueryClient();
-  const { data: movePermission } = useCanPerformActionAsync("move_pipe_record");
+  const movePermission = useCanPerformActionAsync("move_pipe_record");
 
   return useMutation({
     mutationFn: async ({
@@ -861,8 +861,10 @@ export function useMoveLeadInCustomPipe() {
       pipeline_id: string;
       stage_id: string;
     }) => {
-      if (movePermission && !movePermission.allowed) {
-        throw new Error("Sem permissão para mover registros no pipe");
+      if (!movePermission.allowed) {
+        throw new Error(movePermission.isLoading
+          ? "Permissões ainda carregando — tente novamente"
+          : "Sem permissão para mover registros no pipe");
       }
       const { data, error } = await supabase
         .from("custom_pipe_entries")
