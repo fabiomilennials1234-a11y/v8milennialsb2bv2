@@ -7733,6 +7733,7 @@ export type Database = {
           copilot_engine_version: string
           created_at: string | null
           elevenlabs_api_key: string | null
+          feature_flags: Json
           id: string
           is_sandbox: boolean
           limit_overrides: Json | null
@@ -7764,6 +7765,7 @@ export type Database = {
           copilot_engine_version?: string
           created_at?: string | null
           elevenlabs_api_key?: string | null
+          feature_flags?: Json
           id?: string
           is_sandbox?: boolean
           limit_overrides?: Json | null
@@ -7795,6 +7797,7 @@ export type Database = {
           copilot_engine_version?: string
           created_at?: string | null
           elevenlabs_api_key?: string | null
+          feature_flags?: Json
           id?: string
           is_sandbox?: boolean
           limit_overrides?: Json | null
