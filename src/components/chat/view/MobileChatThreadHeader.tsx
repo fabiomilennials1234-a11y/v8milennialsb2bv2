@@ -1,7 +1,6 @@
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { useLeadSheet } from "@/components/lead-detail/hooks/useLeadSheet";
 
 export interface MobileChatThreadHeaderProps {
   contactName: string;
@@ -9,25 +8,18 @@ export interface MobileChatThreadHeaderProps {
   hasLead: boolean;
   leadId?: string;
   onBack: () => void;
+  onTapContact: () => void;
 }
 
 export function MobileChatThreadHeader({
   contactName,
   phoneNumber,
   hasLead,
-  leadId,
   onBack,
+  onTapContact,
 }: MobileChatThreadHeaderProps) {
-  const { openLead } = useLeadSheet();
-
   const displayName = contactName || phoneNumber;
   const initial = (displayName.charAt(0) || "?").toUpperCase();
-
-  const handleTapContact = () => {
-    if (leadId) {
-      openLead(leadId);
-    }
-  };
 
   return (
     <div className="flex items-center gap-3 h-12 px-3 border-b border-border/60 bg-background shrink-0">
@@ -45,9 +37,9 @@ export function MobileChatThreadHeader({
         role="button"
         tabIndex={0}
         className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer rounded-lg -my-1 py-1 hover:bg-muted/50 transition-colors"
-        onClick={handleTapContact}
+        onClick={onTapContact}
         onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") handleTapContact();
+          if (e.key === "Enter" || e.key === " ") onTapContact();
         }}
       >
         <Avatar className="w-8 h-8 shrink-0">

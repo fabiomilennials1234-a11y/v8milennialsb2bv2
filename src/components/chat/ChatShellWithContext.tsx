@@ -186,6 +186,7 @@ function ChatView({
           hasLead={!!selectedContact?.lead_id}
           leadId={selectedContact?.lead_id ?? undefined}
           onBack={onBack}
+          onTapContact={onOpenLeadModal}
         />
       ) : (
         <ChatHeader
