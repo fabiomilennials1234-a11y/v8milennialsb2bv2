@@ -222,6 +222,14 @@ export function MessageBubble({
   const isReaction = messageType === "reaction" || messageType === "ReactionMessage";
   const isPoll = messageType === "poll";
   const isSystem = messageType === "system" || messageType === "PinInChatMessage";
+  const isInteractive =
+    messageType === "interactive" ||
+    messageType === "buttonResponse" ||
+    messageType === "buttonResponseMessage" ||
+    messageType === "listResponse" ||
+    messageType === "listResponseMessage";
+  const isTemplate = messageType === "template" || messageType === "TemplateMessage";
+  const isUnknown = messageType === "unknown" || !messageType;
   const hasMedia = isAudio || isImage || isVideo || isDocument || isSticker;
 
   const meta = message as unknown as {
@@ -454,8 +462,29 @@ export function MessageBubble({
               </p>
             )}
 
-            {/* Truly unsupported — only for types we don't handle */}
-            {!message.content && !hasMedia && !isLocation && !isContact && !isPoll && !isReaction && !isSystem && (
+            {/* Interactive (buttons/list/native flow) without resolved content */}
+            {isInteractive && !message.content && (
+              <p className="text-sm italic text-muted-foreground">
+                Mensagem interativa
+              </p>
+            )}
+
+            {/* Template message without content */}
+            {isTemplate && !message.content && (
+              <p className="text-sm italic text-muted-foreground">
+                Mensagem de template
+              </p>
+            )}
+
+            {/* Unknown / missing type — content unavailable */}
+            {isUnknown && !message.content && !hasMedia && (
+              <p className="text-sm italic text-muted-foreground/70">
+                Conteúdo indisponível
+              </p>
+            )}
+
+            {/* Truly unsupported — type recognized but no renderer */}
+            {!message.content && !hasMedia && !isLocation && !isContact && !isPoll && !isReaction && !isSystem && !isInteractive && !isTemplate && !isUnknown && (
               <p className="text-sm italic text-muted-foreground">
                 [Mensagem não suportada]
               </p>

@@ -1,6 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
 import path from 'path';
+import { fileURLToPath } from 'node:url';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const authFile = path.join(__dirname, '.playwright-auth/user.json');
 
 export default defineConfig({
