@@ -9,12 +9,12 @@ export interface Viewport {
 }
 
 export function useViewport(): Viewport {
-  const [width, setWidth] = useState<number | undefined>(undefined);
+  const [width, setWidth] = useState<number | undefined>(
+    () => typeof window !== "undefined" ? window.innerWidth : undefined,
+  );
 
   useEffect(() => {
     const update = () => setWidth(window.innerWidth);
-
-    update();
 
     const observer =
       typeof ResizeObserver !== "undefined"

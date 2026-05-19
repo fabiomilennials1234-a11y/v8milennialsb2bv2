@@ -222,16 +222,18 @@ export function ChatHeader({
         </Tooltip>
       )}
 
-      {/* TakeoverControls — FSM IA↔humano (C30) — posição: antes do AI toggle */}
-      <TakeoverControls
-        conversationId={conversationId}
-        onOpenTimeline={onOpenTimeline}
-      />
+      {/* TakeoverControls — FSM IA↔humano (C30) — desktop only */}
+      <div className="hidden md:block">
+        <TakeoverControls
+          conversationId={conversationId}
+          onOpenTimeline={onOpenTimeline}
+        />
+      </div>
 
-      {/* AI Toggle */}
+      {/* AI Toggle — desktop only */}
       <div
         className={cn(
-          "flex items-center gap-1.5 px-2 py-1 rounded-full border border-border/40 shrink-0",
+          "hidden md:flex items-center gap-1.5 px-2 py-1 rounded-full border border-border/40 shrink-0",
           aiDisabled ? "bg-muted/30" : "bg-primary/8"
         )}
         onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
@@ -248,22 +250,24 @@ export function ChatHeader({
         </div>
       </div>
 
-      {/* Transfer / AI state badges */}
+      {/* Transfer / AI state badges — desktop only */}
       {hasLead && leadId && isWaitingHuman && (
-        <Badge variant="outline" className="border-amber-400 text-amber-600 gap-1.5 text-xs">
+        <Badge variant="outline" className="hidden md:inline-flex border-amber-400 text-amber-600 gap-1.5 text-xs">
           <UserPlus className="h-3 w-3" />
           Aguardando humano
         </Badge>
       )}
       {aiDisabled && !isWaitingHuman && (
-        <Badge variant="outline" className="text-muted-foreground gap-1.5 text-xs">
+        <Badge variant="outline" className="hidden md:inline-flex text-muted-foreground gap-1.5 text-xs">
           IA desativada
         </Badge>
       )}
 
-      {/* Density toggle — 3 botões ghost: compact / comfortable / spacious */}
+      {/* Density toggle — desktop only */}
       {onDensityChange && (
-        <DensityToggle density={density ?? "comfortable"} onDensityChange={onDensityChange} />
+        <div className="hidden md:block">
+          <DensityToggle density={density ?? "comfortable"} onDensityChange={onDensityChange} />
+        </div>
       )}
 
       {/* SZ.chat transfer dropdown */}
