@@ -37,6 +37,21 @@ vi.mock("@/hooks/useLogLeadAction", () => ({
   useLogLeadAction: () => vi.fn(),
 }));
 
+vi.mock("@/components/lead-detail/hooks/useLeadActionGates", () => ({
+  useLeadActionGates: () => ({
+    canEditField: { allowed: true, isLoading: false },
+    canMoveMeeting: { allowed: true, isLoading: false },
+    canEditProposal: { allowed: true, isLoading: false },
+    canDelete: { allowed: true, isLoading: false },
+    canReassign: { allowed: true, isLoading: false },
+    canRemoveFromPipe: { allowed: true, isLoading: false },
+    canAddToPipe: { allowed: true, isLoading: false },
+    canManageTags: { allowed: true, isLoading: false },
+    canToggleAi: { allowed: true, isLoading: false },
+    canMention: { allowed: true, isLoading: false },
+  }),
+}));
+
 function renderWithProviders(ui: React.ReactElement) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(<QueryClientProvider client={qc}>{ui}</QueryClientProvider>);

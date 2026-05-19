@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ScheduleFollowUpButton } from "@/components/followups/ScheduleFollowUpButton";
 import { useOpenWhatsAppChat, formatPhoneForWhatsApp } from "@/lib/whatsapp";
+import { useLeadActionGates } from "@/components/lead-detail/hooks/useLeadActionGates";
 import { cn } from "@/lib/utils";
 
 interface LeadModalToolbarProps {
@@ -39,10 +40,15 @@ export const LeadModalToolbar = memo(function LeadModalToolbar({
   onOpenScheduleModal, onOpenSmsDialog, onDelete, onClose,
 }: LeadModalToolbarProps) {
   const openWhatsApp = useOpenWhatsAppChat();
+  const gates = useLeadActionGates(lead.id);
+  // "Send message" gate (granular key pending) — for now derive from canEditField:
+  // an active member who can edit a lead can also send outbound messages.
+  // canMention is reserved for collaboration features (comment mentions).
+  const canSendMessage = gates.canEditField.allowed;
 
   return (
     <div className="flex items-center gap-1.5 px-6 py-2.5 border-b border-border/40 bg-card/20">
-      {lead.phone && (
+      {lead.phone && canSendMessage && (
         <Button
           variant="outline"
           size="sm"
@@ -52,14 +58,14 @@ export const LeadModalToolbar = memo(function LeadModalToolbar({
           <MessageSquare className="w-3.5 h-3.5" /> WhatsApp
         </Button>
       )}
-      {lead.phone && (
+      {lead.phone && canSendMessage && (
         <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" asChild>
           <a href={`tel:${lead.phone.replace(/\D/g, "")}`}>
             <Phone className="w-3.5 h-3.5" /> Ligar
           </a>
         </Button>
       )}
-      {lead.email && (
+      {lead.email && canSendMessage && (
         <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={onOpenEmailComposer}>
           <Mail className="w-3.5 h-3.5" /> Email
         </Button>
@@ -90,13 +96,17 @@ export const LeadModalToolbar = memo(function LeadModalToolbar({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuItem onClick={onOpenCallModal}>
-              <PhoneCall className="w-3.5 h-3.5 mr-2" /> Registrar ligação
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={onOpenEmailWriter}>
-              <Mail className="w-3.5 h-3.5 mr-2" /> Email com IA
-            </DropdownMenuItem>
-            {lead.phone && (
+            {canSendMessage && (
+              <>
+                <DropdownMenuItem onClick={onOpenCallModal}>
+                  <PhoneCall className="w-3.5 h-3.5 mr-2" /> Registrar ligação
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={onOpenEmailWriter}>
+                  <Mail className="w-3.5 h-3.5 mr-2" /> Email com IA
+                </DropdownMenuItem>
+              </>
+            )}
+            {lead.phone && canSendMessage && (
               <>
                 <DropdownMenuItem onClick={onOpenScheduleModal}>
                   <Clock className="w-3.5 h-3.5 mr-2" /> Agendar mensagem
@@ -111,10 +121,14 @@ export const LeadModalToolbar = memo(function LeadModalToolbar({
                 </DropdownMenuItem>
               </>
             )}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={onDelete} className="text-destructive focus:text-destructive">
-              <Trash2 className="w-3.5 h-3.5 mr-2" /> Excluir lead
-            </DropdownMenuItem>
+            {gates.canDelete.allowed && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={onDelete} className="text-destructive focus:text-destructive">
+                  <Trash2 className="w-3.5 h-3.5 mr-2" /> Excluir lead
+                </DropdownMenuItem>
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

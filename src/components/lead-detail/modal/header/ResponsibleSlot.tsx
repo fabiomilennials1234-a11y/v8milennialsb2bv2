@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { useResponsibleMembers } from "@/hooks/useTeamMembers";
 import { useUpdateLead } from "@/hooks/useLeads";
 import { useLogLeadAction } from "@/hooks/useLogLeadAction";
+import { useLeadActionGates } from "@/components/lead-detail/hooks/useLeadActionGates";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -35,8 +36,10 @@ export const ResponsibleSlot = memo(function ResponsibleSlot({
   const members = useResponsibleMembers();
   const updateLead = useUpdateLead();
   const logAction = useLogLeadAction();
+  const { canReassign } = useLeadActionGates(leadId);
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const denied = !canReassign.allowed;
 
   const filtered = members.filter((m) =>
     m.name.toLowerCase().includes(search.toLowerCase())
@@ -65,12 +68,14 @@ export const ResponsibleSlot = memo(function ResponsibleSlot({
             <PopoverTrigger asChild>
               <button
                 type="button"
+                disabled={denied}
                 aria-label={`${label}${hasMember ? `: ${currentMember.name}` : " — adicionar"}`}
                 className={cn(
                   "w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-all",
                   hasMember
                     ? "shadow-sm hover:scale-105"
-                    : "border border-dashed border-border/60 hover:border-primary/60 hover:bg-primary/5"
+                    : "border border-dashed border-border/60 hover:border-primary/60 hover:bg-primary/5",
+                  denied && "opacity-50 cursor-not-allowed hover:scale-100",
                 )}
                 style={hasMember ? { backgroundColor: colorFromName(currentMember.name) } : undefined}
               >
@@ -90,7 +95,9 @@ export const ResponsibleSlot = memo(function ResponsibleSlot({
             </PopoverTrigger>
           </TooltipTrigger>
           <TooltipContent side="left" className="text-xs">
-            {label}{hasMember ? `: ${currentMember.name}` : ""}
+            {denied
+              ? "Sem permissão — peça acesso ao seu admin"
+              : `${label}${hasMember ? `: ${currentMember.name}` : ""}`}
           </TooltipContent>
         </Tooltip>
         <PopoverContent align="end" className="w-64 p-2">
