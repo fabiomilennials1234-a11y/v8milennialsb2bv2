@@ -20,7 +20,8 @@ export type EventType =
   | "import_completed"
   | "module_visited"
   | "onboarding_step_completed"
-  | "onboarding_completed";
+  | "onboarding_completed"
+  | "lead_modal_version_rendered";
 
 interface TrackParams {
   event: EventType;
