@@ -166,24 +166,25 @@ function LeadDetailContent({ onClose, isMobile }: { onClose: () => void; isMobil
         className="contents"
         aria-disabled={!isOnline}
       >
-      <LeadModalToolbar
-        lead={{
-          id: lead.id,
-          name: lead.name,
-          phone: lead.phone,
-          email: lead.email,
-          responsible_id: lead.responsible_id,
-        }}
-        aiDisabled={aiDisabled}
-        onToggleAI={handleToggleAI}
-        onOpenCallModal={() => setCallOpen(true)}
-        onOpenEmailComposer={() => setEmailComposerOpen(true)}
-        onOpenEmailWriter={() => setEmailWriterOpen(true)}
-        onOpenScheduleModal={() => setScheduleOpen(true)}
-        onOpenSmsDialog={() => setSmsOpen(true)}
-        onDelete={handleDelete}
-        onClose={onClose}
-      />
+        <LeadModalToolbar
+          lead={{
+            id: lead.id,
+            name: lead.name,
+            phone: lead.phone,
+            email: lead.email,
+            responsible_id: lead.responsible_id,
+          }}
+          aiDisabled={aiDisabled}
+          onToggleAI={handleToggleAI}
+          onOpenCallModal={() => setCallOpen(true)}
+          onOpenEmailComposer={() => setEmailComposerOpen(true)}
+          onOpenEmailWriter={() => setEmailWriterOpen(true)}
+          onOpenScheduleModal={() => setScheduleOpen(true)}
+          onOpenSmsDialog={() => setSmsOpen(true)}
+          onDelete={handleDelete}
+          onClose={onClose}
+        />
+      </fieldset>
     </>
   );
 
@@ -279,7 +280,6 @@ function LeadDetailContent({ onClose, isMobile }: { onClose: () => void; isMobil
           </div>
         </div>
       )}
-      </fieldset>
 
       {subModals}
     </div>
