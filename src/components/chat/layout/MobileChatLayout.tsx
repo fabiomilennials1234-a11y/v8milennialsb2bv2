@@ -26,6 +26,7 @@ import {
   DrawerTitle,
 } from "@/components/ui/drawer";
 import { cn } from "@/lib/utils";
+import { useKeyboardOffset } from "@/hooks/use-keyboard-offset";
 import type { ChatShellProps } from "./ChatShell";
 
 // ─── Swipe-back threshold ─────────────────────────────────────────────────────
@@ -59,6 +60,7 @@ export function MobileChatLayout({
 }: ChatShellProps) {
   const [contextDrawerOpen, setContextDrawerOpen] = useState(false);
   const dragControls = useDragControls();
+  const { offset: kbOffset } = useKeyboardOffset();
 
   const handleDragEnd = useCallback(
     (_: unknown, info: { offset: { x: number }; velocity: { x: number } }) => {
@@ -138,8 +140,10 @@ export function MobileChatLayout({
 
             {/* Área de chat */}
             <div
-              className="flex-1 flex flex-col min-h-0 overflow-hidden"
-              style={{ paddingBottom: "max(env(safe-area-inset-bottom), 0.5rem)" }}
+              className="flex-1 flex flex-col min-h-0 overflow-hidden transition-[padding-bottom] duration-150 ease-out motion-reduce:transition-none"
+              style={{
+                paddingBottom: `calc(max(env(safe-area-inset-bottom), 0.5rem) + ${kbOffset}px)`,
+              }}
             >
               {view}
             </div>
