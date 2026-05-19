@@ -1,7 +1,7 @@
 import { memo } from "react";
 import { ResponsibleSlot } from "./ResponsibleSlot";
 import { QualificationSlot } from "./QualificationSlot";
-import { MoveStageButton } from "./MoveStageButton";
+import { MoveStageButton, type MoveStagePipeData } from "./MoveStageButton";
 import type { DrawerVariant } from "../../hooks/useLeadSheet";
 import type { QualificationTier } from "../types";
 
@@ -9,7 +9,7 @@ interface LeadActionsBlockProps {
   leadId: string;
   organizationId: string;
   variant: DrawerVariant;
-  pipeData: { id?: string; stage_id?: string } | null;
+  pipeData: MoveStagePipeData | null;
   preSaleResponsible: { id: string; name: string; avatar_url?: string | null } | null;
   saleResponsible:    { id: string; name: string; avatar_url?: string | null } | null;
   preQualificationTier: QualificationTier | null;

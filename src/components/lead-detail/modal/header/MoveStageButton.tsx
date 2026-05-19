@@ -10,11 +10,24 @@ import { cn } from "@/lib/utils";
 import type { DrawerVariant } from "../../hooks/useLeadSheet";
 import { StageProgressBar } from "../../StageProgressBar";
 
+/**
+ * pipeData shape varies by pipe family:
+ *   - System pipes (whatsapp/confirmacao/propostas): `{ id, status }`
+ *     where `status` is the stage_key slug (via compat views over
+ *     pipeline_entries.stage_key). Migration 20260982 dropped legacy
+ *     pipe_* tables and replaced them with views.
+ *   - Custom pipes: `{ id, stage_id, pipeline_id }` where `stage_id`
+ *     is the uuid FK to `custom_pipeline_stages.id`.
+ */
+export type MoveStagePipeData =
+  | { id?: string; status?: string }
+  | { id?: string; stage_id?: string; pipeline_id?: string };
+
 interface MoveStageButtonProps {
   leadId: string;
   organizationId: string;
   variant: DrawerVariant;
-  pipeData: { id?: string; stage_id?: string } | null;
+  pipeData: MoveStagePipeData | null;
 }
 
 const VARIANT_TO_PIPE_TYPE: Partial<Record<DrawerVariant, string>> = {
@@ -23,11 +36,16 @@ const VARIANT_TO_PIPE_TYPE: Partial<Record<DrawerVariant, string>> = {
   propostas: "propostas",
 };
 
-const VARIANT_TO_TABLE: Partial<Record<DrawerVariant, "pipe_whatsapp" | "pipe_confirmacao" | "pipe_propostas">> = {
+const VARIANT_TO_TABLE: Partial<
+  Record<DrawerVariant, "pipe_whatsapp" | "pipe_confirmacao" | "pipe_propostas" | "custom_pipe_entries">
+> = {
   whatsapp: "pipe_whatsapp",
   confirmacao: "pipe_confirmacao",
   propostas: "pipe_propostas",
+  custom: "custom_pipe_entries",
 };
+
+type StageRow = { id: string; name: string; position: number; stage_key: string };
 
 export const MoveStageButton = memo(function MoveStageButton({
   leadId,
@@ -42,48 +60,86 @@ export const MoveStageButton = memo(function MoveStageButton({
 
   const pipeType = VARIANT_TO_PIPE_TYPE[variant];
   const pipeTable = VARIANT_TO_TABLE[variant];
+  const isCustom = variant === "custom";
 
-  const { data: stages = [] } = useQuery({
-    queryKey: ["pipeline-stages-for-move", variant, organizationId],
+  // Custom pipes need pipeline_id from pipeData to fetch their stages.
+  const customPipelineId = isCustom
+    ? (pipeData as { pipeline_id?: string } | null)?.pipeline_id ?? null
+    : null;
+
+  const canFetch = open && (isCustom ? !!customPipelineId : !!pipeType);
+
+  const { data: stages = [] } = useQuery<StageRow[]>({
+    queryKey: isCustom
+      ? ["custom-pipeline-stages-for-move", customPipelineId]
+      : ["pipeline-stages-for-move", variant, organizationId],
     queryFn: async () => {
+      if (isCustom) {
+        const { data } = await supabase
+          .from("custom_pipeline_stages")
+          .select("id, name, position, stage_key")
+          .eq("organization_id", organizationId)
+          .eq("pipeline_id", customPipelineId!)
+          .order("position");
+        return (data ?? []) as StageRow[];
+      }
       if (!pipeType) return [];
       const { data } = await supabase
         .from("pipeline_stages")
-        .select("id, name, position")
+        .select("id, name, position, stage_key")
         .eq("organization_id", organizationId)
         .eq("pipe_type", pipeType)
         .order("position");
-      return data ?? [];
+      return (data ?? []) as StageRow[];
     },
-    enabled: open && !!pipeType,
+    enabled: canFetch,
   });
 
-  const currentStageId = pipeData?.stage_id ?? null;
+  // Current stage identifier:
+  //   - System pipes: pipeData.status (slug, matches stage.stage_key)
+  //   - Custom pipes: pipeData.stage_id (uuid, matches stage.id)
+  const currentStageKey = isCustom
+    ? null
+    : (pipeData as { status?: string } | null)?.status ?? null;
+  const currentStageUuid = isCustom
+    ? (pipeData as { stage_id?: string } | null)?.stage_id ?? null
+    : null;
 
-  const handleMove = async (stageId: string) => {
+  const isCurrent = (s: StageRow) =>
+    isCustom ? s.id === currentStageUuid : s.stage_key === currentStageKey;
+
+  const handleMove = async (stage: StageRow) => {
     if (!pipeTable || !pipeData?.id) {
       toast.error("Pipe sem registro pra mover");
       return;
     }
-    if (stageId === currentStageId) {
+    if (isCurrent(stage)) {
       setOpen(false);
       return;
     }
     setMoving(true);
     try {
+      // System pipes: write stage_key into the view's `status` column.
+      // Custom pipes: write uuid into custom_pipe_entries.stage_id.
+      const payload: Record<string, string> = isCustom
+        ? { stage_id: stage.id }
+        : { status: stage.stage_key };
+
       const { error } = await (supabase
         .from(pipeTable) as any)
-        .update({ stage_id: stageId })
+        .update(payload)
         .eq("id", pipeData.id);
       if (error) throw error;
+
       logAction({
         leadId,
         action: "stage_changed",
-        description: `Movido para "${stages.find((s) => s.id === stageId)?.name ?? "—"}"`,
+        description: `Movido para "${stage.name}"`,
       });
       qc.invalidateQueries({ queryKey: ["lead-pipes", leadId] });
       qc.invalidateQueries({ queryKey: ["lead-timeline", leadId] });
       qc.invalidateQueries({ queryKey: [pipeTable] });
+      qc.invalidateQueries({ queryKey: ["lead_all_pipelines", leadId] });
       toast.success("Stage atualizado");
       setOpen(false);
     } catch (err: unknown) {
@@ -94,7 +150,12 @@ export const MoveStageButton = memo(function MoveStageButton({
     }
   };
 
-  const disabled = !pipeTable || !pipeData?.id;
+  const disabled = !pipeTable || !pipeData?.id || (isCustom && !customPipelineId);
+
+  // StageProgressBar still takes the old `currentStageId` prop. For system
+  // pipes we don't have the uuid of the current stage on hand without a
+  // lookup, so pass the matching stage's `id` if found.
+  const currentStageIdForBar = stages.find(isCurrent)?.id ?? null;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -116,26 +177,26 @@ export const MoveStageButton = memo(function MoveStageButton({
           </div>
           {stages.length > 0 && (
             <div className="px-1">
-              <StageProgressBar stages={stages} currentStageId={currentStageId} />
+              <StageProgressBar stages={stages} currentStageId={currentStageIdForBar} />
             </div>
           )}
           <div className="max-h-64 overflow-y-auto space-y-0.5">
             {stages.map((s) => {
-              const isCurrent = s.id === currentStageId;
+              const current = isCurrent(s);
               return (
                 <button
                   key={s.id}
                   type="button"
                   disabled={moving}
-                  onClick={() => handleMove(s.id)}
+                  onClick={() => handleMove(s)}
                   className={cn(
                     "w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded text-xs hover:bg-muted transition-colors",
-                    isCurrent && "bg-muted text-foreground"
+                    current && "bg-muted text-foreground",
                   )}
                 >
                   <span className="truncate">{s.name}</span>
-                  {isCurrent && <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />}
-                  {moving && !isCurrent && (
+                  {current && <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />}
+                  {moving && !current && (
                     <Loader2 className="w-3 h-3 animate-spin text-muted-foreground/40 shrink-0" />
                   )}
                 </button>

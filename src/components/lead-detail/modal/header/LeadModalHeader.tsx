@@ -1,6 +1,7 @@
 import { memo } from "react";
 import { LeadIdentityBlock } from "./LeadIdentityBlock";
 import { LeadActionsBlock } from "./LeadActionsBlock";
+import type { MoveStagePipeData } from "./MoveStageButton";
 import type { DrawerVariant } from "../../hooks/useLeadSheet";
 import type { QualificationTier } from "../types";
 
@@ -19,7 +20,7 @@ interface LeadModalHeaderProps {
     qualification_tier?: QualificationTier | null;
   };
   variant: DrawerVariant;
-  pipeData: { id?: string; stage_id?: string } | null;
+  pipeData: MoveStagePipeData | null;
 }
 
 export const LeadModalHeader = memo(function LeadModalHeader({
