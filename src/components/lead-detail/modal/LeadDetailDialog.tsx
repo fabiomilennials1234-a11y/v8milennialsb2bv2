@@ -8,7 +8,7 @@ import { LeadDetailDialogV2 } from "./LeadDetailDialogV2";
 
 /**
  * Router entre o modal V1 (legado split-pane via `LeadDetailSheet`) e o V2
- * (lead-centric com `LeadCrossPipeAccordion`).
+ * (lead-centric com `CrossPipePanel`).
  *
  * Critério: `useFeatureFlag("new_lead_modal_v2")` consulta
  * `organizations.feature_flags` da org atual. Default false → V1.

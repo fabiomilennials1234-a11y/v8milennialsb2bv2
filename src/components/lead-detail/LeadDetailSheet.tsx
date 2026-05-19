@@ -26,7 +26,7 @@ export const LeadDetailSheet = memo(function LeadDetailSheet() {
   const { isOpen, leadId, close } = useLeadSheet();
   // Legacy modal — pre-#300 DrawerVariant payload no longer travels through
   // the context. The legacy sheet renders the generic "leads" view; pipe-
-  // specific behaviors live exclusively in LeadCrossPipeAccordion (V2).
+  // specific behaviors live exclusively in CrossPipePanel (V2).
   const variant: DrawerVariant = "leads";
   const pipeData: { id?: string; stage_id?: string } | null = null;
   const { lead, isLoading, pipelineData } = useLeadDetail(leadId, isOpen);
