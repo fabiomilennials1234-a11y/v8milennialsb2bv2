@@ -173,7 +173,7 @@ function RootRedirect() {
 
   if (loading) return <PageLoader />;
 
-  if (!user) return <Landing />;
+  if (!user) return <Navigate to="/auth" replace />;
 
   // Authenticated: check if pending payment
   if (user.user_metadata?.subscription_status === 'pending_payment') {
@@ -201,10 +201,11 @@ function AppRoutes() {
   return (
     <Suspense fallback={<PageLoader />}>
     <Routes>
-      <Route path="/landing" element={<Landing />} />
+      {/* Landing + Signup temporariamente ocultos — redirecionam pra /auth */}
+      <Route path="/landing" element={<Navigate to="/auth" replace />} />
       <Route path="/auth" element={<AuthRoute />} />
       <Route path="/reset-password" element={<ResetPassword />} />
-      <Route path="/signup" element={<Signup />} />
+      <Route path="/signup" element={<Navigate to="/auth" replace />} />
       <Route path="/privacidade" element={<Privacidade />} />
       <Route path="/docs" element={<ApiDocs />} />
       <Route path="/_mockup/chat" element={<MockupChat />} />
