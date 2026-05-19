@@ -6,7 +6,8 @@
  *
  * C22: virtualização para listas >100 msgs via @tanstack/react-virtual.
  * Threshold: messages.length > 100 → virtualizer ativo. ≤100 → render plain.
- * Mobile fallback: window.innerWidth < 780 → render plain sempre.
+ * Mobile: virtualizer ativo com overscan maior (5) para momentum scroll suave.
+ * Desktop: overscan padrão (3).
  *
  * PRESERVA 100% dos wins da Onda 1:
  * - Grouping por autor + janela 120s (radius adaptativo, gap 2px / 12px)
@@ -25,6 +26,7 @@ import { ptBR } from "date-fns/locale";
 import { Loader2, UserPlus } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
+import { useViewport } from "@/hooks/use-viewport";
 import { ChatEmptyState } from "@/components/chat/ChatEmptyState";
 import { UnreadDivider } from "@/components/chat/UnreadDivider";
 import { ScrollToBottomFab } from "@/components/chat/ScrollToBottomFab";
@@ -71,7 +73,8 @@ export interface MessageListProps {
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const VIRTUALIZE_THRESHOLD = 100;
-const MOBILE_BREAKPOINT = 780;
+const DESKTOP_OVERSCAN = 3;
+const MOBILE_OVERSCAN = 5;
 
 type TimelineItem =
   | ({ _type: "message" } & WhatsAppMessage & Partial<FailedMessage> & { message_type: string; content: string | null; media_url: string | null })
@@ -138,14 +141,17 @@ export function MessageList({
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [newMessagesCount, setNewMessagesCount] = useState(0);
 
+  const { isMobile } = useViewport();
+
   const timeline = useMemo(
     () => buildTimeline(messages, transferEvents, failedMessages),
     [messages, transferEvents, failedMessages]
   );
 
-  // Determina se virtualizar: threshold e mobile fallback
-  const isMobile = typeof window !== "undefined" && window.innerWidth < MOBILE_BREAKPOINT;
-  const shouldVirtualize = !isMobile && timeline.length > VIRTUALIZE_THRESHOLD;
+  // Virtualiza tanto mobile quanto desktop acima do threshold.
+  // Mobile ganha overscan maior para momentum scroll suave.
+  const shouldVirtualize = timeline.length > VIRTUALIZE_THRESHOLD;
+  const overscan = isMobile ? MOBILE_OVERSCAN : DESKTOP_OVERSCAN;
 
   // Pré-computa unread divider position
   const { firstUnreadIndex, unreadCount } = useMemo(() => {
@@ -176,7 +182,7 @@ export function MessageList({
     count: shouldVirtualize ? timeline.length : 0,
     getScrollElement,
     estimateSize: () => estimateDensitySize(density),
-    overscan: 5,
+    overscan,
   });
 
   // Scroll listener for FAB visibility
@@ -371,8 +377,10 @@ export function MessageList({
                 onOpenTemplates={onOpenTemplates}
               />
             ) : shouldVirtualize ? (
-              // ── Modo virtualizado ────────────────────────────────────────
+              // ── Modo virtualizado (mobile + desktop) ───────────────────
               <div
+                data-testid="virtual-container"
+                data-mobile={isMobile ? "true" : "false"}
                 style={{ height: virtualizer.getTotalSize(), position: "relative" }}
                 className="space-y-0 pb-4"
               >
@@ -394,7 +402,7 @@ export function MessageList({
                 ))}
               </div>
             ) : (
-              // ── Modo plain (≤100 msgs ou mobile) ────────────────────────
+              // ── Modo plain (≤100 msgs) ────────────────────────────────
               <div className="space-y-1 pb-4">
                 {timeline.map((item, index) => renderTimelineItem(item, index))}
                 <div ref={messagesEndRef} />
