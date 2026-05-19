@@ -347,14 +347,6 @@ function PipeWhatsappInner() {
     if (item) openLead(item.lead_id, item.id);
   }, [pipeData, openLead]);
 
-  const handleMobileMove = useCallback(
-    async (leadId: string, newStageKey: string) => {
-      const item = pipeData?.find((p) => p.lead_id === leadId);
-      if (item) await handleStatusChange(item.id, newStageKey);
-    },
-    [pipeData, handleStatusChange]
-  );
-
   // Count "ghost leads" — rows do pipe que o usuário enxerga mas cujo join
   // com `leads` retornou null. Indica divergência entre RLS do pipe e de
   // `leads` (ex.: responsible_id do pipe aponta para o usuário, mas sdr_id
@@ -435,6 +427,14 @@ function PipeWhatsappInner() {
       console.error(error);
     }
   };
+
+  const handleMobileMove = useCallback(
+    async (leadId: string, newStageKey: string) => {
+      const item = pipeData?.find((p) => p.lead_id === leadId);
+      if (item) await handleStatusChange(item.id, newStageKey);
+    },
+    [pipeData, handleStatusChange]
+  );
 
   // Handle delete — always removes only from this pipe, never deletes the full lead
   const handleDelete = async () => {
