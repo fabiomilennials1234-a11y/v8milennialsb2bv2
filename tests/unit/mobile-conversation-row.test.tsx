@@ -82,16 +82,15 @@ describe("MobileConversationRow", () => {
     expect(screen.getByText("Abordado")).toBeInTheDocument();
   });
 
-  it("shows AI badge when copilot active", () => {
+  it("does not show AI badge on mobile rows", () => {
     render(
       <MobileConversationRow
-        contact={baseContact}
+        contact={{ ...baseContact, last_message_sent_source: "copilot" }}
         isSelected={false}
         onPress={vi.fn()}
-        hasActiveCopilot
       />,
     );
-    expect(screen.getByLabelText("IA ativa")).toBeInTheDocument();
+    expect(screen.queryByLabelText("IA ativa")).not.toBeInTheDocument();
   });
 
   it("fires onPress with phone number", () => {

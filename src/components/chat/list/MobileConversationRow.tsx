@@ -4,7 +4,6 @@
  * Pure presentational: no state, no dropdown menus, no complex interactions.
  * Just avatar + text + badges + tap handler.
  */
-import { Bot } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -20,7 +19,6 @@ export interface MobileConversationRowProps {
   onLongPress?: (phone: string) => void;
   stageName?: string | null;
   stageColor?: string | null;
-  hasActiveCopilot?: boolean;
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -32,7 +30,6 @@ export function MobileConversationRow({
   onLongPress,
   stageName,
   stageColor,
-  hasActiveCopilot,
 }: MobileConversationRowProps) {
   const name = contactDisplayName(contact);
   const initials = (name.charAt(0) || "?").toUpperCase();
@@ -42,10 +39,6 @@ export function MobileConversationRow({
     contact.last_message_direction === "outgoing" &&
     (!contact.last_message_sent_source ||
       contact.last_message_sent_source === "manual");
-
-  const isOutgoingCopilot =
-    contact.last_message_direction === "outgoing" &&
-    contact.last_message_sent_source === "copilot";
 
   const isOutgoingWorkflow =
     contact.last_message_direction === "outgoing" &&
@@ -90,14 +83,8 @@ export function MobileConversationRow({
       <div className="flex-1 min-w-0">
         {/* Top row: name + timestamp */}
         <div className="flex items-center justify-between gap-2">
-          <span className="font-semibold text-sm text-foreground truncate flex items-center gap-1.5">
-            <span className="truncate">{name}</span>
-            {hasActiveCopilot && (
-              <Bot
-                className="h-3.5 w-3.5 text-amber-400 shrink-0"
-                aria-label="IA ativa"
-              />
-            )}
+          <span className="font-semibold text-sm text-foreground truncate">
+            {name}
           </span>
           <time
             dateTime={contact.last_message_time || ""}
@@ -113,9 +100,6 @@ export function MobileConversationRow({
         {/* Bottom row: preview + badges */}
         <div className="flex items-center justify-between gap-2 mt-0.5">
           <p className="text-xs text-muted-foreground/60 truncate flex-1 min-w-0 flex items-center gap-1">
-            {isOutgoingCopilot && (
-              <Bot className="h-2.5 w-2.5 text-amber-400 shrink-0" />
-            )}
             {isOutgoingWorkflow && (
               <span className="text-purple-400 shrink-0 text-[10px]">Auto:</span>
             )}

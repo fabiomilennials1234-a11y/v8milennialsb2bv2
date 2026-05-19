@@ -416,7 +416,7 @@ export function ConversationList({
                   contact={contact}
                   isSelected={selectedPhone === contact.phone_number}
                   onPress={onSelectContact}
-                  hasActiveCopilot={contact.last_message_sent_source === "copilot"}
+
                 />
               ) : (
                 <ConversationListItem
