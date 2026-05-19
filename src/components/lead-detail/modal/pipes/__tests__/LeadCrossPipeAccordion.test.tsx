@@ -44,6 +44,34 @@ vi.mock("../../../cross-pipe/BudgetFieldBlock", () => ({
 vi.mock("../../header/MoveStageButton", () => ({
   MoveStageButton: () => <div data-testid="move-stage-button" />,
 }));
+vi.mock("../CustomPipeSection", () => ({
+  CustomPipeSection: ({ pipe, open, onToggle }: {
+    pipe: { pipelineId: string; pipelineName: string };
+    open: boolean;
+    onToggle: () => void;
+  }) => (
+    <button
+      type="button"
+      data-testid={`custom-stub-${pipe.pipelineId}`}
+      aria-expanded={open}
+      onClick={onToggle}
+    >
+      {pipe.pipelineName}
+    </button>
+  ),
+}));
+vi.mock("../UpsellPipeSection", () => ({
+  UpsellPipeSection: ({ open, onToggle }: { open: boolean; onToggle: () => void }) => (
+    <button
+      type="button"
+      data-testid="upsell-stub"
+      aria-expanded={open}
+      onClick={onToggle}
+    >
+      Carteira
+    </button>
+  ),
+}));
 
 function renderWithQuery(ui: React.ReactElement) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -210,6 +238,90 @@ describe("LeadCrossPipeAccordion", () => {
       expect(
         screen.getByRole("button", { name: /qualificação/i }).getAttribute("aria-expanded"),
       ).toBe("false");
+    });
+  });
+
+  describe("custom pipe sections", () => {
+    const customPipe = (overrides: Partial<{ pipelineId: string; pipelineName: string; entryId: string | null; currentStageId: string | null }>) => ({
+      type: "custom" as const,
+      pipelineId: overrides.pipelineId ?? "cp-1",
+      pipelineName: overrides.pipelineName ?? "Indicação",
+      pipelineColor: "#22c55e",
+      pipelineIcon: "users",
+      entryId: overrides.entryId ?? "entry-cp-1",
+      currentStageId: overrides.currentStageId ?? "stage-1",
+      currentStageName: "Em andamento",
+      stages: [],
+    });
+
+    it("renders custom pipe stubs after system pipes", () => {
+      allPipelinesMock.mockReturnValue({
+        data: [
+          standardPipe({ pipeType: "qualificacao", label: "Qualificação" }),
+          customPipe({ pipelineId: "cp-A", pipelineName: "Indicação" }),
+          customPipe({ pipelineId: "cp-B", pipelineName: "Reativação" }),
+        ],
+        isLoading: false,
+      });
+      renderWithQuery(<LeadCrossPipeAccordion {...baseProps} />);
+      expect(screen.getByTestId("custom-stub-cp-A")).toBeInTheDocument();
+      expect(screen.getByTestId("custom-stub-cp-B")).toBeInTheDocument();
+    });
+
+    it("clicking a custom pipe header collapses the open system pipe", () => {
+      allPipelinesMock.mockReturnValue({
+        data: [
+          standardPipe({ pipeType: "qualificacao", label: "Qualificação" }),
+          customPipe({ pipelineId: "cp-A", pipelineName: "Indicação" }),
+        ],
+        isLoading: false,
+      });
+      renderWithQuery(<LeadCrossPipeAccordion {...baseProps} />);
+      const qualifBtn = screen.getByRole("button", { name: /qualificação/i });
+      const customBtn = screen.getByTestId("custom-stub-cp-A");
+      expect(qualifBtn.getAttribute("aria-expanded")).toBe("true");
+      fireEvent.click(customBtn);
+      expect(qualifBtn.getAttribute("aria-expanded")).toBe("false");
+      expect(customBtn.getAttribute("aria-expanded")).toBe("true");
+    });
+
+    it("expands the matching custom pipe via defaultExpandedPipeEntryId", () => {
+      allPipelinesMock.mockReturnValue({
+        data: [
+          standardPipe({ pipeType: "qualificacao", label: "Qualificação", pipeId: "entry-A" }),
+          customPipe({ pipelineId: "cp-X", pipelineName: "Custom X", entryId: "entry-cp-X" }),
+        ],
+        isLoading: false,
+      });
+      renderWithQuery(
+        <LeadCrossPipeAccordion {...baseProps} defaultExpandedPipeEntryId="entry-cp-X" />,
+      );
+      expect(screen.getByTestId("custom-stub-cp-X").getAttribute("aria-expanded")).toBe("true");
+    });
+  });
+
+  describe("upsell carteira section", () => {
+    it("renders the Carteira section after all pipes", () => {
+      allPipelinesMock.mockReturnValue({
+        data: [standardPipe({ pipeType: "qualificacao", label: "Qualificação" })],
+        isLoading: false,
+      });
+      renderWithQuery(<LeadCrossPipeAccordion {...baseProps} />);
+      expect(screen.getByTestId("upsell-stub")).toBeInTheDocument();
+    });
+
+    it("clicking Carteira collapses the open system pipe (single-expand)", () => {
+      allPipelinesMock.mockReturnValue({
+        data: [standardPipe({ pipeType: "qualificacao", label: "Qualificação" })],
+        isLoading: false,
+      });
+      renderWithQuery(<LeadCrossPipeAccordion {...baseProps} />);
+      const qualifBtn = screen.getByRole("button", { name: /qualificação/i });
+      const carteiraBtn = screen.getByTestId("upsell-stub");
+      expect(qualifBtn.getAttribute("aria-expanded")).toBe("true");
+      fireEvent.click(carteiraBtn);
+      expect(qualifBtn.getAttribute("aria-expanded")).toBe("false");
+      expect(carteiraBtn.getAttribute("aria-expanded")).toBe("true");
     });
   });
 

@@ -8,12 +8,15 @@ import {
   useLeadAllPipelines,
   type PipelineStatus,
   type StandardPipelineStatus,
+  type CustomPipelineStatus,
 } from "@/hooks/useLeadAllPipelines";
 import { usePipeConfirmacaoByLeadId } from "@/hooks/usePipeConfirmacaoByLeadId";
 import { usePipePropostaByLeadId } from "@/hooks/usePipePropostaByLeadId";
 import { MeetingFieldBlock } from "../../cross-pipe/MeetingFieldBlock";
 import { BudgetFieldBlock } from "../../cross-pipe/BudgetFieldBlock";
 import { MoveStageButton } from "../header/MoveStageButton";
+import { CustomPipeSection } from "./CustomPipeSection";
+import { UpsellPipeSection } from "./UpsellPipeSection";
 
 /**
  * Lead-centric accordion of the three system pipes (Qualificação,
@@ -38,6 +41,16 @@ type SystemPipe = StandardPipelineStatus & {
 function isSystemPipe(p: PipelineStatus): p is SystemPipe {
   return p.type === "standard" && SYSTEM_PIPE_TYPES.has(p.pipeType);
 }
+
+function isCustomPipe(p: PipelineStatus): p is CustomPipelineStatus {
+  return p.type === "custom";
+}
+
+const SECTION_ID = {
+  system: (pipeType: string) => pipeType,
+  custom: (pipelineId: string) => `custom:${pipelineId}`,
+  upsell: () => "carteira",
+} as const;
 
 function isTerminated(pipe: SystemPipe): boolean {
   if (pipe.pipeType !== "propostas") return false;
@@ -89,29 +102,44 @@ export const LeadCrossPipeAccordion = memo(function LeadCrossPipeAccordion({
     () => (pipelines as PipelineStatus[]).filter(isSystemPipe),
     [pipelines],
   );
+  const customPipes = useMemo(
+    () => (pipelines as PipelineStatus[]).filter(isCustomPipe),
+    [pipelines],
+  );
+
+  const allSectionIds = useMemo(() => {
+    return [
+      ...systemPipes.map((p) => SECTION_ID.system(p.pipeType)),
+      ...customPipes.map((p) => SECTION_ID.custom(p.pipelineId)),
+      SECTION_ID.upsell(),
+    ];
+  }, [systemPipes, customPipes]);
 
   const key = storageKey(userId, leadId);
 
   const initialExpanded = useMemo<string | null>(() => {
-    if (systemPipes.length === 0) return null;
+    if (allSectionIds.length === 0) return null;
 
-    // 1. localStorage wins
+    // 1. localStorage wins (only if still valid given current pipes)
     if (typeof window !== "undefined") {
       const stored = window.localStorage.getItem(key);
-      if (stored && systemPipes.some((p) => p.pipeType === stored)) return stored;
+      if (stored && allSectionIds.includes(stored)) return stored;
     }
 
-    // 2. defaultExpandedPipeEntryId hint
+    // 2. defaultExpandedPipeEntryId hint — match system pipes first
     if (defaultExpandedPipeEntryId) {
-      const match = systemPipes.find((p) => p.pipeId === defaultExpandedPipeEntryId);
-      if (match) return match.pipeType;
+      const sysMatch = systemPipes.find((p) => p.pipeId === defaultExpandedPipeEntryId);
+      if (sysMatch) return SECTION_ID.system(sysMatch.pipeType);
+      const customMatch = customPipes.find((p) => p.entryId === defaultExpandedPipeEntryId);
+      if (customMatch) return SECTION_ID.custom(customMatch.pipelineId);
     }
 
-    // 3. first non-terminal
+    // 3. first non-terminal system pipe
     const firstActive = systemPipes.find((p) => !isTerminated(p));
-    return firstActive ? firstActive.pipeType : null;
+    if (firstActive) return SECTION_ID.system(firstActive.pipeType);
+    return null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [systemPipes, defaultExpandedPipeEntryId, key]);
+  }, [allSectionIds, systemPipes, customPipes, defaultExpandedPipeEntryId, key]);
 
   const [expanded, setExpanded] = useState<string | null>(initialExpanded);
 
@@ -121,9 +149,9 @@ export const LeadCrossPipeAccordion = memo(function LeadCrossPipeAccordion({
   }, [initialExpanded]);
 
   const toggle = useCallback(
-    (pipeType: string) => {
+    (sectionId: string) => {
       setExpanded((cur) => {
-        const next = cur === pipeType ? null : pipeType;
+        const next = cur === sectionId ? null : sectionId;
         if (typeof window !== "undefined") {
           if (next) window.localStorage.setItem(key, next);
           else window.localStorage.removeItem(key);
@@ -144,7 +172,7 @@ export const LeadCrossPipeAccordion = memo(function LeadCrossPipeAccordion({
     );
   }
 
-  if (systemPipes.length === 0) {
+  if (systemPipes.length === 0 && customPipes.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-border/40 bg-muted/10 p-6 text-center">
         <Layers className="w-6 h-6 mx-auto text-muted-foreground/60 mb-2" />
@@ -156,11 +184,12 @@ export const LeadCrossPipeAccordion = memo(function LeadCrossPipeAccordion({
   return (
     <div className="space-y-2">
       {systemPipes.map((pipe) => {
-        const open = expanded === pipe.pipeType;
+        const id = SECTION_ID.system(pipe.pipeType);
+        const open = expanded === id;
         const terminated = isTerminated(pipe);
         return (
           <PipeSection
-            key={pipe.pipeType}
+            key={id}
             pipe={pipe}
             open={open}
             terminated={terminated}
@@ -168,10 +197,30 @@ export const LeadCrossPipeAccordion = memo(function LeadCrossPipeAccordion({
             propostaData={propostaData ?? null}
             leadId={leadId}
             organizationId={organizationId}
-            onToggle={() => toggle(pipe.pipeType)}
+            onToggle={() => toggle(id)}
           />
         );
       })}
+
+      {customPipes.map((pipe) => {
+        const id = SECTION_ID.custom(pipe.pipelineId);
+        return (
+          <CustomPipeSection
+            key={id}
+            pipe={pipe}
+            leadId={leadId}
+            open={expanded === id}
+            onToggle={() => toggle(id)}
+          />
+        );
+      })}
+
+      <UpsellPipeSection
+        leadId={leadId}
+        propostaData={propostaData ?? null}
+        open={expanded === SECTION_ID.upsell()}
+        onToggle={() => toggle(SECTION_ID.upsell())}
+      />
     </div>
   );
 });
