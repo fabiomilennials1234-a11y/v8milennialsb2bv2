@@ -81,7 +81,7 @@
     "papaparse": "^5.5.3",
     "react": "^18.3.1",
     "react-big-calendar": "^1.15.0",
-    "react-day-picker": "^8.10.1",
+    "react-day-picker": "^8.10.2",
     "react-dom": "^18.3.1",
     "react-hook-form": "^7.61.1",
     "react-markdown": "^10.1.0",
