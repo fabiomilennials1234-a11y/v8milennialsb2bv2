@@ -1,4 +1,5 @@
 import { useParams, useNavigate } from "react-router-dom";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowLeft,
@@ -15,6 +16,7 @@ import type { Tables } from "@/integrations/supabase/types";
 import { useClientAlerts } from "@/hooks/useClientAlerts";
 import { useHealthHistory } from "@/hooks/useHealthHistory";
 import { HealthSparkline } from "./HealthSparkline";
+import { NewOrderModal } from "./NewOrderModal";
 
 // ─── Derived types ────────────────────────────────────────────────────────────
 
@@ -79,6 +81,7 @@ export default function ClienteDetailPage() {
         .from("upsell_orders")
         .select("*")
         .eq("client_id", clientId!)
+        .eq("approval_status", "approved")
         .order("sold_at", { ascending: false });
       return data ?? [];
     },
@@ -100,6 +103,7 @@ export default function ClienteDetailPage() {
 
   const { data: alerts = [] } = useClientAlerts(clientId);
   const { data: healthHistory = [] } = useHealthHistory(clientId);
+  const [newOrderOpen, setNewOrderOpen] = useState(false);
 
   // ── Derived ───────────────────────────────────────────────────────────────
 
@@ -239,6 +243,7 @@ export default function ClienteDetailPage() {
             <Button
               size="sm"
               className="gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"
+              onClick={() => setNewOrderOpen(true)}
             >
               <ShoppingCart size={13} />
               Novo Pedido
@@ -356,6 +361,13 @@ export default function ClienteDetailPage() {
         </div>
 
       </div>
+
+      <NewOrderModal
+        open={newOrderOpen}
+        onOpenChange={setNewOrderOpen}
+        clientId={clientId}
+        clientName={clientName}
+      />
     </div>
   );
 }

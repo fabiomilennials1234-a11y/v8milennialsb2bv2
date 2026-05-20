@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { useUpsellClients } from "@/hooks/useUpsellClients";
 import { useUpsellOrders } from "@/hooks/useUpsellOrders";
 import { ClientDetailModal } from "./ClientDetailModal";
-import { QuickSaleModal } from "./QuickSaleModal";
+import { NewOrderModal } from "@/components/carteira/NewOrderModal";
 
 interface UpsellBaseListProps {
   searchQuery: string;
@@ -128,7 +128,7 @@ export function UpsellBaseList({ searchQuery, filterPotencial, filterActive }: U
       />
 
       {quickSaleClientId && (
-        <QuickSaleModal
+        <NewOrderModal
           open={quickSaleOpen}
           onOpenChange={setQuickSaleOpen}
           clientId={quickSaleClientId}

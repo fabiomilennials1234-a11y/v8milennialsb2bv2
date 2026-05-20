@@ -4,7 +4,7 @@ import { useUpsellCampanhas, useUpdateUpsellCampanha } from "@/hooks/useUpsellCa
 import { LeadCard } from "@/components/leads/LeadCard";
 import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/components/lead-detail";
 import { LeadPanelLayout } from "@/components/layout/LeadPanelLayout";
-import { QuickSaleModal } from "./QuickSaleModal";
+import { NewOrderModal } from "@/components/carteira/NewOrderModal";
 import { useCreateAcaoDoDia } from "@/hooks/useAcoesDoDia";
 import { useUpdateLead } from "@/hooks/useLeads";
 import { toast } from "sonner";
@@ -237,7 +237,7 @@ function UpsellCampanhasKanbanInner({ searchQuery, filterStatus, filterResponsib
       </div>
 
       {quickSaleCampanha && (
-        <QuickSaleModal
+        <NewOrderModal
           open={quickSaleOpen}
           onOpenChange={(open) => {
             setQuickSaleOpen(open);
@@ -246,7 +246,7 @@ function UpsellCampanhasKanbanInner({ searchQuery, filterStatus, filterResponsib
           clientId={quickSaleCampanha.clientId}
           clientName={quickSaleCampanha.clientName}
           campanhaId={quickSaleCampanha.id}
-          onSaleComplete={handleQuickSaleComplete}
+          onComplete={handleQuickSaleComplete}
         />
       )}
     </>

@@ -22,6 +22,7 @@ export function useUpsellOrders() {
         .from("upsell_orders")
         .select("*, client:upsell_clients(id, name, company), closer:team_members(id, name)")
         .eq("organization_id", organizationId)
+        .eq("approval_status", "approved")
         .order("sold_at", { ascending: false });
 
       if (error) throw error;
@@ -43,6 +44,7 @@ export function useUpsellOrdersByClient(clientId: string | undefined) {
         .from("upsell_orders")
         .select("*, closer:team_members(id, name)")
         .eq("client_id", clientId)
+        .eq("approval_status", "approved")
         .order("sold_at", { ascending: false });
 
       if (error) throw error;
