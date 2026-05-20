@@ -8,7 +8,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter } from "react-router-dom";
 import { ResponsibleSlot } from "../header/ResponsibleSlot";
 import { QualificationSlot } from "../header/QualificationSlot";
-import { MoveStageButton } from "../header/MoveStageButton";
+import { StageRail } from "../pipes/StageRail";
 import { LeadModalToolbar } from "../LeadModalToolbar";
 
 // ─── Mocks ──────────────────────────────────────────────────────────
@@ -144,21 +144,35 @@ describe("QualificationSlot gate (canEditField)", () => {
   });
 });
 
-// ─── MoveStageButton — disabled when !canMoveMeeting ─────────────────
+// ─── StageRail — disabled when !canMoveMeeting ───────────────────────
 
-describe("MoveStageButton gate (canMoveMeeting)", () => {
-  it("disables the Mover trigger when canMoveMeeting=false even if pipeData present", () => {
+describe("StageRail gate (canMoveMeeting)", () => {
+  it("disables stage segments when canMoveMeeting=false", () => {
     gatesState.current.canMoveMeeting = { allowed: false, isLoading: false, reason: "denied" };
     renderWithQuery(
-      <MoveStageButton
-        leadId="lead-1"
-        organizationId="org-1"
-        variant="whatsapp"
-        pipeData={{ id: "entry-1", status: "novo_lead" }}
+      <StageRail
+        pipe={{
+          kind: "system",
+          recordId: "entry-1",
+          pipeRef: "whatsapp",
+          shortLabel: "Qualificação",
+          color: "#6366f1",
+          stages: [
+            { key: "novo_lead", label: "Novo lead" },
+            { key: "abordado", label: "Abordado" },
+          ],
+          currentKey: "novo_lead",
+        }}
+        pendingStageKey={null}
+        recentlyMovedStageKey={null}
+        disabled
+        disabledReason="denied"
+        onMove={vi.fn()}
       />,
     );
-    const btn = screen.getByRole("button", { name: /mover/i });
-    expect(btn).toBeDisabled();
+    const segs = screen.getAllByRole("tab");
+    expect(segs.length).toBe(2);
+    for (const s of segs) expect(s).toBeDisabled();
   });
 });
 

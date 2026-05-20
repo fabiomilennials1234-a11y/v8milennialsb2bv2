@@ -12,9 +12,9 @@ interface LeadActionsBlockProps {
 }
 
 /**
- * Header actions sem MoveStageButton — pós-#300 o stage move acontece
- * dentro do LeadCrossPipeAccordion (pipe-scoped). Header só carrega
- * responsáveis + qualificação tiers.
+ * Header actions sem botão de move stage. Pós-2026-05-19 o stage move
+ * acontece nas StageRails do `CrossPipePanel` (pipe-scoped, sempre
+ * visíveis). Header só carrega responsáveis + qualificação tiers.
  */
 export const LeadActionsBlock = memo(function LeadActionsBlock({
   leadId,

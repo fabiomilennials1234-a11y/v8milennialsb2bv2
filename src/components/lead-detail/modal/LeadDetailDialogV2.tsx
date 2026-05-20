@@ -17,7 +17,7 @@ import { LeadModalHeader } from "./header/LeadModalHeader";
 import { LeadModalToolbar } from "./LeadModalToolbar";
 import { LeadInfoColumn } from "./body/LeadInfoColumn";
 import { LeadActivityColumn } from "./activity/LeadActivityColumn";
-import { LeadCrossPipeAccordion } from "./pipes/LeadCrossPipeAccordion";
+import { CrossPipePanel } from "./pipes/CrossPipePanel";
 import { LeadModalSkeleton } from "./LeadModalSkeleton";
 import { LeadVisibilityState } from "./LeadVisibilityState";
 import { LeadDetailBanners } from "./LeadDetailBanners";
@@ -251,7 +251,7 @@ function LeadDetailContent({ onClose, isMobile }: { onClose: () => void; isMobil
             <LeadInfoColumn lead={lead as Record<string, unknown> & { id: string }} />
           </TabsContent>
           <TabsContent value="pipes" className="flex-1 min-h-0 overflow-y-auto m-0 px-4 pt-4">
-            <LeadCrossPipeAccordion
+            <CrossPipePanel
               leadId={lead.id}
               organizationId={lead.organization_id ?? ""}
               defaultExpandedPipeEntryId={defaultExpandedPipeEntryId}
@@ -266,7 +266,7 @@ function LeadDetailContent({ onClose, isMobile }: { onClose: () => void; isMobil
         <div className="grid grid-cols-12 flex-1 min-h-0">
           <div className="col-span-12 md:col-span-7 min-h-0 flex flex-col overflow-y-auto">
             <div className="px-6 pt-5">
-              <LeadCrossPipeAccordion
+              <CrossPipePanel
                 leadId={lead.id}
                 organizationId={lead.organization_id ?? ""}
                 defaultExpandedPipeEntryId={defaultExpandedPipeEntryId}
