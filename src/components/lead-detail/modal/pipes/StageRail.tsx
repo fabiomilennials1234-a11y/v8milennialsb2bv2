@@ -46,6 +46,13 @@ interface StageRailProps {
   disabled?: boolean;
   disabledReason?: string;
   onMove: (target: CrossPipeMoveTarget) => void;
+  /**
+   * "expanded" (default) renders the full stage track.
+   * "collapsed" renders a compact chip showing only dot + shortLabel + a
+   *   current-stage pill. Click/Enter/Space fires `onExpand`.
+   */
+  mode?: "expanded" | "collapsed";
+  onExpand?: () => void;
 }
 
 const PIPE_TABLE: Record<string, "pipe_whatsapp" | "pipe_confirmacao" | "pipe_propostas"> = {
@@ -54,6 +61,89 @@ const PIPE_TABLE: Record<string, "pipe_whatsapp" | "pipe_confirmacao" | "pipe_pr
   propostas: "pipe_propostas",
 };
 
+/**
+ * Collapsed chip variant — compact one-line representation of a rail when
+ * another rail is the user's focus. Same visual DNA as the expanded rail
+ * (h-9, rounded-lg, primary-tinted current pill) so it reads as a member
+ * of the same family. Click/Enter/Space promotes it to expanded.
+ *
+ * Lives next to the expanded `StageRail` so consumers route via the
+ * single `<StageRail mode="..." />` API.
+ */
+const StageRailCollapsed = memo(function StageRailCollapsed({
+  pipe,
+  disabled,
+  onExpand,
+}: {
+  pipe: StageRailPipe;
+  disabled?: boolean;
+  onExpand?: () => void;
+}) {
+  const currentStage = pipe.stages.find((s) => s.key === pipe.currentKey);
+  const handleClick = () => {
+    if (disabled) return;
+    onExpand?.();
+  };
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      aria-expanded={false}
+      aria-label={`Expandir ${pipe.shortLabel}`}
+      data-testid={`stage-rail-collapsed-${pipe.pipeRef}`}
+      data-stage-rail-mode="collapsed"
+      className={cn(
+        "group flex w-full items-center gap-3 h-9 px-2.5 rounded-lg",
+        "bg-muted/15 hover:bg-muted/35",
+        "border border-transparent hover:border-border/40",
+        "transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+        disabled && "opacity-60 cursor-not-allowed",
+      )}
+    >
+      <div className="flex items-center gap-2 w-[120px] shrink-0">
+        <span
+          className="w-1.5 h-1.5 rounded-full"
+          style={{ background: pipe.color }}
+          aria-hidden
+        />
+        <span className="text-[11px] font-medium text-muted-foreground/80 uppercase tracking-wider truncate">
+          {pipe.shortLabel}
+        </span>
+      </div>
+      <div className="flex-1 min-w-0 flex items-center">
+        {currentStage ? (
+          <span
+            className={cn(
+              "inline-flex items-center h-7 px-2.5 rounded-md",
+              "bg-primary/10 text-primary text-[11px] font-semibold",
+              "shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.2)]",
+              "truncate max-w-full",
+            )}
+            data-testid={`stage-rail-collapsed-current-${pipe.pipeRef}`}
+          >
+            <span className="truncate">{currentStage.label}</span>
+          </span>
+        ) : (
+          <span className="text-[11px] text-muted-foreground/60 italic">
+            sem estágio
+          </span>
+        )}
+      </div>
+      <span
+        className={cn(
+          "text-[10px] uppercase tracking-wider font-semibold shrink-0",
+          "text-muted-foreground/50 group-hover:text-muted-foreground",
+          "transition-colors duration-150",
+        )}
+        aria-hidden
+      >
+        Expandir
+      </span>
+    </button>
+  );
+});
+
 export const StageRail = memo(function StageRail({
   pipe,
   pendingStageKey,
@@ -61,7 +151,34 @@ export const StageRail = memo(function StageRail({
   disabled,
   disabledReason,
   onMove,
+  mode = "expanded",
+  onExpand,
 }: StageRailProps) {
+  if (mode === "collapsed") {
+    return (
+      <StageRailCollapsed pipe={pipe} disabled={disabled} onExpand={onExpand} />
+    );
+  }
+  return (
+    <StageRailExpanded
+      pipe={pipe}
+      pendingStageKey={pendingStageKey}
+      recentlyMovedStageKey={recentlyMovedStageKey}
+      disabled={disabled}
+      disabledReason={disabledReason}
+      onMove={onMove}
+    />
+  );
+});
+
+const StageRailExpanded = memo(function StageRailExpanded({
+  pipe,
+  pendingStageKey,
+  recentlyMovedStageKey,
+  disabled,
+  disabledReason,
+  onMove,
+}: Omit<StageRailProps, "mode" | "onExpand">) {
   const trackRef = useRef<HTMLDivElement | null>(null);
   const currentBtnRef = useRef<HTMLButtonElement | null>(null);
 
@@ -120,6 +237,7 @@ export const StageRail = memo(function StageRail({
     <div
       className="group flex items-center gap-3 h-9 px-2.5 rounded-lg hover:bg-muted/30 transition-colors"
       data-testid={`stage-rail-${pipe.pipeRef}`}
+      data-stage-rail-mode="expanded"
     >
       <div className="flex items-center gap-2 w-[120px] shrink-0">
         <span

@@ -248,6 +248,189 @@ describe("CrossPipePanel — localStorage migration", () => {
   });
 });
 
+describe("CrossPipePanel — collapsible rails", () => {
+  const threeActivePipes = [
+    {
+      type: "standard",
+      pipeType: "qualificacao",
+      label: "Qualificação",
+      color: "#6366f1",
+      pipeId: "entry-q",
+      currentStage: "abordado",
+      currentStageLabel: "Abordado",
+      stages: [
+        { id: "novo_lead", label: "Novo lead", color: "#fff" },
+        { id: "abordado", label: "Abordado", color: "#fff" },
+      ],
+    },
+    {
+      type: "standard",
+      pipeType: "confirmacao",
+      label: "Confirmação",
+      color: "#22c55e",
+      pipeId: "entry-c",
+      currentStage: "marcada",
+      currentStageLabel: "Marcada",
+      stages: [{ id: "marcada", label: "Marcada", color: "#fff" }],
+    },
+    {
+      type: "standard",
+      pipeType: "propostas",
+      label: "Propostas",
+      color: "#f59e0b",
+      pipeId: "entry-p",
+      currentStage: "marcar_compromisso",
+      currentStageLabel: "Marcar compromisso",
+      stages: [
+        { id: "marcar_compromisso", label: "Marcar compromisso", color: "#fff" },
+        { id: "vendido", label: "Vendido", color: "#fff" },
+      ],
+    },
+  ];
+
+  it("with a single active pipe, renders it expanded and no collapsed chips", () => {
+    allPipelinesMock.mockReturnValue({
+      data: [threeActivePipes[0]],
+      isLoading: false,
+    });
+    renderPanel();
+    expect(screen.getByTestId("stage-rail-whatsapp")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("stage-rail-collapsed-whatsapp"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("with 3 active pipes, expands the most advanced (propostas) and collapses the rest", () => {
+    allPipelinesMock.mockReturnValue({
+      data: threeActivePipes,
+      isLoading: false,
+    });
+    renderPanel();
+    // propostas wins the heuristic (upsell > propostas > confirmacao > whatsapp)
+    expect(screen.getByTestId("stage-rail-propostas")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("stage-rail-collapsed-whatsapp"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("stage-rail-collapsed-confirmacao"),
+    ).toBeInTheDocument();
+    // confirmacao current stage shown in its collapsed pill
+    expect(
+      screen.getByTestId("stage-rail-collapsed-current-confirmacao"),
+    ).toHaveTextContent("Marcada");
+  });
+
+  it("clicking a collapsed chip expands it and collapses the previous", () => {
+    allPipelinesMock.mockReturnValue({
+      data: threeActivePipes,
+      isLoading: false,
+    });
+    renderPanel();
+    expect(screen.getByTestId("stage-rail-propostas")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("stage-rail-collapsed-whatsapp"));
+    expect(screen.getByTestId("stage-rail-whatsapp")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("stage-rail-propostas"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("stage-rail-collapsed-propostas"),
+    ).toBeInTheDocument();
+  });
+
+  it("persists the focused rail in localStorage", () => {
+    allPipelinesMock.mockReturnValue({
+      data: threeActivePipes,
+      isLoading: false,
+    });
+    renderPanel();
+    fireEvent.click(screen.getByTestId("stage-rail-collapsed-confirmacao"));
+    expect(
+      window.localStorage.getItem("lead-modal:pipe-focus:user-1:lead-1"),
+    ).toBe("system:entry-c");
+  });
+
+  it("restores the focused rail from localStorage", () => {
+    window.localStorage.setItem(
+      "lead-modal:pipe-focus:user-1:lead-1",
+      "system:entry-q",
+    );
+    allPipelinesMock.mockReturnValue({
+      data: threeActivePipes,
+      isLoading: false,
+    });
+    renderPanel();
+    // qualificacao expanded despite propostas being more advanced
+    expect(screen.getByTestId("stage-rail-whatsapp")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("stage-rail-collapsed-propostas"),
+    ).toBeInTheDocument();
+  });
+
+  it("falls back to the heuristic when stored focus points to a removed pipe", () => {
+    window.localStorage.setItem(
+      "lead-modal:pipe-focus:user-1:lead-1",
+      "system:entry-removed",
+    );
+    allPipelinesMock.mockReturnValue({
+      data: threeActivePipes,
+      isLoading: false,
+    });
+    renderPanel();
+    // Heuristic: propostas wins
+    expect(screen.getByTestId("stage-rail-propostas")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("stage-rail-collapsed-whatsapp"),
+    ).toBeInTheDocument();
+  });
+
+  it("always keeps exactly one rail expanded when pipes are active", () => {
+    allPipelinesMock.mockReturnValue({
+      data: threeActivePipes,
+      isLoading: false,
+    });
+    renderPanel();
+    // Click chip -> previous collapses, clicked one expands. No way to toggle
+    // the expanded one off (no onExpand wired on the expanded variant).
+    fireEvent.click(screen.getByTestId("stage-rail-collapsed-confirmacao"));
+    expect(screen.getByTestId("stage-rail-confirmacao")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("stage-rail-collapsed-confirmacao"),
+    ).not.toBeInTheDocument();
+    // 3 rails total: 1 expanded + 2 collapsed
+    const expanded = screen
+      .getAllByTestId(/^stage-rail-(whatsapp|confirmacao|propostas)$/)
+      .filter((el) =>
+        el.getAttribute("data-testid")?.match(/^stage-rail-(whatsapp|confirmacao|propostas)$/),
+      );
+    expect(expanded).toHaveLength(1);
+  });
+
+  it("collapsed chips expose aria-expanded=false and role=region wraps the rails", () => {
+    allPipelinesMock.mockReturnValue({
+      data: threeActivePipes,
+      isLoading: false,
+    });
+    renderPanel();
+    const region = screen.getByRole("region", { name: "Pipes do lead" });
+    expect(region).toBeInTheDocument();
+    const collapsed = screen.getByTestId("stage-rail-collapsed-whatsapp");
+    expect(collapsed).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("collapsed chip is keyboard focusable and Enter expands", () => {
+    allPipelinesMock.mockReturnValue({
+      data: threeActivePipes,
+      isLoading: false,
+    });
+    renderPanel();
+    const chip = screen.getByTestId("stage-rail-collapsed-whatsapp") as HTMLButtonElement;
+    act(() => chip.focus());
+    expect(document.activeElement).toBe(chip);
+    fireEvent.click(chip); // native button: Enter/Space → click
+    expect(screen.getByTestId("stage-rail-whatsapp")).toBeInTheDocument();
+  });
+});
+
 describe("CrossPipePanel — pill toggle", () => {
   it("opens, closes and switches between meeting and budget", () => {
     allPipelinesMock.mockReturnValue({
