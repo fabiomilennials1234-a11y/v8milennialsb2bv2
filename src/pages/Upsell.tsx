@@ -72,6 +72,7 @@ export default function Upsell() {
   const { data: importStages = [] } = usePipelineStages(importPipeType);
 
   // Portfolio (carteira) state — only used when isPortfolio
+  const [quickOrderClientId, setQuickOrderClientId] = useState<string | null>(null);
   const [selectedClient, setSelectedClient] = useState<PortfolioClientRow | null>(null);
   const [carteiraSearch, setCarteiraSearch] = useState("");
   const [carteiraFilter, setCarteiraFilter] = useState("all");
@@ -299,7 +300,12 @@ export default function Upsell() {
 
         {/* Shared modals */}
         <CreateClientModal open={createClientOpen} onOpenChange={setCreateClientOpen} />
-        <NewOrderModal open={novaVendaOpen} onOpenChange={setNovaVendaOpen} />
+        <NewOrderModal
+          open={novaVendaOpen}
+          onOpenChange={setNovaVendaOpen}
+          clientId={quickOrderClientId ?? undefined}
+          clientName={selectedClient?.name}
+        />
         <PipeSettingsDialog
           open={importOpen}
           onOpenChange={setImportOpen}
@@ -458,7 +464,11 @@ export default function Upsell() {
       </Tabs>
 
       <CreateClientModal open={createClientOpen} onOpenChange={setCreateClientOpen} />
-      <NewOrderModal open={novaVendaOpen} onOpenChange={setNovaVendaOpen} />
+      <NewOrderModal
+        open={novaVendaOpen}
+        onOpenChange={setNovaVendaOpen}
+        clientId={quickOrderClientId ?? undefined}
+      />
       <PipeSettingsDialog
         open={importOpen}
         onOpenChange={setImportOpen}
