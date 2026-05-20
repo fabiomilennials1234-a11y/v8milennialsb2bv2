@@ -140,6 +140,9 @@ function PipeWhatsappInner() {
   const [stageToExport, setStageToExport] = useState<{ id: string; title: string; count: number } | null>(null);
   const [meetingModal, setMeetingModal] = useState<{
     open: boolean;
+    pipeId: string;
+    newStatus: string;
+    fromStatus: string;
     leadId: string;
     sdrId: string | null;
     closerId: string | null;
@@ -381,6 +384,28 @@ function PipeWhatsappInner() {
     const item = pipeData?.find(p => p.id === itemId);
     if (!item) return;
 
+    const movedStage = pipelineStages.find(s => s.stage_key === newStatus);
+    // `confirmacao` is the fallback target when a success stage has no
+    // target_pipe_type configured — matches the legacy default below.
+    const resolvedTargetPipe = movedStage?.target_pipe_type || "confirmacao";
+
+    // Intercept BEFORE committing the stage change: moves into a success stage
+    // that targets `confirmacao` require a meeting to be scheduled. Open the
+    // modal first and defer the pipe_whatsapp status update to its onSuccess.
+    // If the user cancels the modal, the card stays where it was.
+    if (movedStage?.is_final_positive && resolvedTargetPipe === "confirmacao") {
+      setMeetingModal({
+        open: true,
+        pipeId: itemId,
+        newStatus,
+        fromStatus: item.status,
+        leadId: item.lead_id,
+        sdrId: item.sdr_id ?? null,
+        closerId: item.lead?.closer?.id ?? null,
+      });
+      return;
+    }
+
     const stageLabel = statusColumns.find(c => c.id === newStatus)?.title || newStatus;
 
     try {
@@ -395,22 +420,11 @@ function PipeWhatsappInner() {
       if (organizationId) track({ event: "card_moved", organizationId, entityType: "pipe_whatsapp", entityId: itemId, metadata: { from_stage: item.status, to_stage: newStatus } });
 
       // If moved to a success stage, automatically create entry in the target pipe
-      const movedStage = pipelineStages.find(s => s.stage_key === newStatus);
       if (movedStage?.is_final_positive) {
-        const targetPipe = movedStage.target_pipe_type || "confirmacao"; // fallback
         const targetStage = movedStage.target_stage_key || "reuniao_marcada"; // fallback
-        const targetPipeName = getPipelineTypeName(targetPipe as any);
+        const targetPipeName = getPipelineTypeName(resolvedTargetPipe as any);
 
-        if (targetPipe === "confirmacao") {
-          // Open AddMeetingModal so the user can enter date/time and Google Calendar details
-          setMeetingModal({
-            open: true,
-            leadId: item.lead_id,
-            sdrId: item.sdr_id ?? null,
-            closerId: item.lead?.closer?.id ?? null,
-          });
-          return; // toast is shown by the modal on success
-        } else if (targetPipe === "propostas") {
+        if (resolvedTargetPipe === "propostas") {
           await createPipeProposta.mutateAsync({
             lead_id: item.lead_id,
             closer_id: item.lead?.closer?.id || null,
@@ -790,7 +804,9 @@ function PipeWhatsappInner() {
       {/* Bulk Action Bar */}
       <BulkActionBar selectedIds={bulk.selectedIds} onClear={bulk.clearSelection} leadIds={allLeadIds} />
 
-      {/* AddMeetingModal — opened when a lead is dragged to an "agendado" stage */}
+      {/* AddMeetingModal — opened when a lead is dragged to an "agendado" stage.
+          The pipe_whatsapp stage change is deferred until the meeting is saved;
+          closing the modal cancels the move. */}
       {meetingModal && (
         <AddMeetingModal
           open={meetingModal.open}
@@ -798,12 +814,27 @@ function PipeWhatsappInner() {
             if (!isOpen) setMeetingModal(null);
           }}
           prefilledLeadId={meetingModal.leadId}
-          prefilledSdrId={meetingModal.sdrId ?? undefined}
-          prefilledCloserId={meetingModal.closerId ?? undefined}
-          onSuccess={() => {
+          prefilledResponsibleId={meetingModal.sdrId ?? undefined}
+          onSuccess={async () => {
+            const pending = meetingModal;
             setMeetingModal(null);
-            refetch();
-            toast.success("Reunião agendada e lead movido para Confirmação!");
+            const stageLabel = statusColumns.find(c => c.id === pending.newStatus)?.title || pending.newStatus;
+            try {
+              await updatePipeWhatsapp.mutateAsync({
+                id: pending.pipeId,
+                status: pending.newStatus as PipeWhatsappStatus,
+                leadId: pending.leadId,
+                sdrId: pending.sdrId ?? undefined,
+              });
+              logAction({ leadId: pending.leadId, action: "stage_changed", description: `Etapa alterada para "${stageLabel}" no Funil WhatsApp` });
+              if (organizationId) track({ event: "card_moved", organizationId, entityType: "pipe_whatsapp", entityId: pending.pipeId, metadata: { from_stage: pending.fromStatus, to_stage: pending.newStatus } });
+              toast.success("Reunião agendada e lead movido para Confirmação!");
+            } catch (err) {
+              console.error("[PipeWhatsapp] Falha ao mover card após agendar reunião:", err);
+              toast.error("Reunião agendada, mas não foi possível mover o card no funil");
+            } finally {
+              refetch();
+            }
           }}
         />
       )}
