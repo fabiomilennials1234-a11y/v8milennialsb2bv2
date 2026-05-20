@@ -48,16 +48,30 @@ export class GlobalErrorBoundary extends Component<Props, State> {
       });
     }
 
-    // Auto-reload uma vez para erros de chunk (deploy novo invalidou cache)
+    // Auto-reload uma vez para erros de chunk (deploy novo invalidou cache).
+    // Desregistra SW + limpa caches antes do reload — index.html cacheado
+    // pelo SW antigo aponta para chunks que não existem mais no servidor,
+    // então reload puro reentra no mesmo loop.
     if (this.state.isChunkError) {
       const reloadKey = "chunk_error_reload";
       const lastReload = sessionStorage.getItem(reloadKey);
       const now = Date.now();
 
-      // Só faz reload automático se não fez nos últimos 10s
       if (!lastReload || now - Number(lastReload) > 10_000) {
         sessionStorage.setItem(reloadKey, String(now));
-        window.location.reload();
+        (async () => {
+          try {
+            const regs = (await navigator.serviceWorker?.getRegistrations?.()) ?? [];
+            await Promise.all(regs.map((r) => r.unregister()));
+            if (typeof caches !== "undefined") {
+              const keys = await caches.keys();
+              await Promise.all(keys.map((k) => caches.delete(k)));
+            }
+          } catch {
+            // best-effort — segue pro reload mesmo se algo falhar
+          }
+          window.location.reload();
+        })();
         return;
       }
     }
