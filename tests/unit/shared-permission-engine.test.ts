@@ -311,64 +311,111 @@ describe("canUserPerformAction — delete_lead (org permission)", () => {
   });
 });
 
-// ─── Matrix-backed actions (create_lead / view_lead / export_leads / trigger_campaign / import_leads) ───
+// ─── org-permission actions (Pitstop tab — single source of truth) ───
+// 2026-05-20: create_lead/view_lead/export_leads/trigger_campaign/move_pipe_record
+// migrated FROM matrix TO organization_role_permissions.
 
-describe("canUserPerformAction — legacy matrix", () => {
+describe("canUserPerformAction — organization_role_permissions cascade", () => {
   const asMember = (mockTable: (t: string, r: unknown[]) => void) => {
     mockTable("team_members", [
-      { id: "tm1", user_id: "u1", organization_id: "org-1", role: "membro", is_active: true },
+      { id: "tm1", user_id: "u1", organization_id: "org-1", role: "member", is_active: true },
     ]);
   };
 
-  it("allows create_lead when matrix entry missing (default allowed)", async () => {
+  it("denies create_lead when no org_role_permissions row (fail-closed)", async () => {
     const { sb, mockTable } = createMockSupabase();
     asMember(mockTable);
     const result = await canUserPerformAction({
       supabase: sb, userId: "u1", organizationId: "org-1", action: "create_lead",
     });
-    expect(result.allowed).toBe(true);
-    expect(result.reason).toBe("matrix_allowed");
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toContain("can_create_leads");
   });
 
-  it("denies view_lead when matrix value=denied", async () => {
+  it("allows create_lead when org_role_permissions has enabled=true for member", async () => {
     const { sb, mockTable } = createMockSupabase();
     asMember(mockTable);
-    mockTable("team_member_permissions", [
-      { team_member_id: "tm1", resource_key: "leads", action_key: "view", value: "denied" },
+    mockTable("organization_role_permissions", [
+      { organization_id: "org-1", role: "member", permission_key: "can_create_leads", enabled: true },
     ]);
+    const result = await canUserPerformAction({
+      supabase: sb, userId: "u1", organizationId: "org-1", action: "create_lead",
+    });
+    expect(result.allowed).toBe(true);
+    expect(result.reason).toBe("can_create_leads");
+  });
+
+  it("denies view_lead when see_all_leads=false (no row)", async () => {
+    const { sb, mockTable } = createMockSupabase();
+    asMember(mockTable);
     const result = await canUserPerformAction({
       supabase: sb, userId: "u1", organizationId: "org-1", action: "view_lead",
     });
     expect(result.allowed).toBe(false);
-    expect(result.reason).toContain("leads.view");
+    expect(result.reason).toContain("see_all_leads");
   });
 
-  it("allows export_leads when matrix value=allowed_own", async () => {
+  it("allows export_leads when org_role_permissions enables can_export_leads", async () => {
     const { sb, mockTable } = createMockSupabase();
     asMember(mockTable);
-    mockTable("team_member_permissions", [
-      { team_member_id: "tm1", resource_key: "leads", action_key: "export", value: "allowed_own" },
+    mockTable("organization_role_permissions", [
+      { organization_id: "org-1", role: "member", permission_key: "can_export_leads", enabled: true },
     ]);
     const result = await canUserPerformAction({
       supabase: sb, userId: "u1", organizationId: "org-1", action: "export_leads",
     });
     expect(result.allowed).toBe(true);
-    expect(result.reason).toBe("matrix_allowed_own");
+    expect(result.reason).toBe("can_export_leads");
   });
 
-  it("trigger_campaign maps to campanhas.edit", async () => {
+  it("denies trigger_campaign when can_manage_campaigns=false", async () => {
     const { sb, mockTable } = createMockSupabase();
     asMember(mockTable);
-    mockTable("team_member_permissions", [
-      { team_member_id: "tm1", resource_key: "campanhas", action_key: "edit", value: "denied" },
+    mockTable("organization_role_permissions", [
+      { organization_id: "org-1", role: "member", permission_key: "can_manage_campaigns", enabled: false },
     ]);
     const result = await canUserPerformAction({
       supabase: sb, userId: "u1", organizationId: "org-1", action: "trigger_campaign",
     });
     expect(result.allowed).toBe(false);
+    expect(result.reason).toContain("can_manage_campaigns");
   });
 
-  it("import_leads maps to leads.create", async () => {
+  it("individual override wins for org-permission actions", async () => {
+    const { sb, mockTable } = createMockSupabase();
+    asMember(mockTable);
+    mockTable("team_member_org_permissions", [
+      { team_member_id: "tm1", permission_key: "can_create_leads", enabled: true },
+    ]);
+    mockTable("organization_role_permissions", [
+      { organization_id: "org-1", role: "member", permission_key: "can_create_leads", enabled: false },
+    ]);
+    const result = await canUserPerformAction({
+      supabase: sb, userId: "u1", organizationId: "org-1", action: "create_lead",
+    });
+    expect(result.allowed).toBe(true);
+  });
+});
+
+// ─── import_leads stays on matrix (no equivalent org_role_permission key) ───
+
+describe("canUserPerformAction — import_leads (legacy matrix)", () => {
+  const asMember = (mockTable: (t: string, r: unknown[]) => void) => {
+    mockTable("team_members", [
+      { id: "tm1", user_id: "u1", organization_id: "org-1", role: "member", is_active: true },
+    ]);
+  };
+
+  it("allows import_leads when matrix has no denial (default allowed)", async () => {
+    const { sb, mockTable } = createMockSupabase();
+    asMember(mockTable);
+    const result = await canUserPerformAction({
+      supabase: sb, userId: "u1", organizationId: "org-1", action: "import_leads",
+    });
+    expect(result.allowed).toBe(true);
+  });
+
+  it("denies import_leads when matrix value=denied for leads.create", async () => {
     const { sb, mockTable } = createMockSupabase();
     asMember(mockTable);
     mockTable("team_member_permissions", [
@@ -381,54 +428,56 @@ describe("canUserPerformAction — legacy matrix", () => {
   });
 });
 
-// ─── move_pipe_record ───
+// ─── move_pipe_record (now org-permission, resourceId ignored) ───
 
-describe("canUserPerformAction — move_pipe_record", () => {
+describe("canUserPerformAction — move_pipe_record (org permission)", () => {
   const asMember = (mockTable: (t: string, r: unknown[]) => void) => {
     mockTable("team_members", [
-      { id: "tm1", user_id: "u1", organization_id: "org-1", role: "membro", is_active: true },
+      { id: "tm1", user_id: "u1", organization_id: "org-1", role: "member", is_active: true },
     ]);
   };
 
-  it("denies when resourceId missing (fail-closed)", async () => {
+  it("denies move when no org_role_permissions row (fail-closed)", async () => {
     const { sb, mockTable } = createMockSupabase();
     asMember(mockTable);
     const result = await canUserPerformAction({
       supabase: sb, userId: "u1", organizationId: "org-1", action: "move_pipe_record",
+      resourceId: "pipe_whatsapp",
     });
     expect(result.allowed).toBe(false);
-    expect(result.reason).toBe("permission_not_defined");
+    expect(result.reason).toContain("can_move_pipe_records");
   });
 
-  it("allows move with resourceId when matrix has no denial", async () => {
+  it("allows move when can_move_pipe_records=true regardless of resourceId", async () => {
     const { sb, mockTable } = createMockSupabase();
     asMember(mockTable);
+    mockTable("organization_role_permissions", [
+      { organization_id: "org-1", role: "member", permission_key: "can_move_pipe_records", enabled: true },
+    ]);
     const result = await canUserPerformAction({
-      supabase: sb,
-      userId: "u1",
-      organizationId: "org-1",
-      action: "move_pipe_record",
+      supabase: sb, userId: "u1", organizationId: "org-1", action: "move_pipe_record",
       resourceId: "pipe_whatsapp",
     });
     expect(result.allowed).toBe(true);
-    expect(result.reason).toBe("matrix_allowed");
+    expect(result.reason).toBe("can_move_pipe_records");
   });
 
-  it("denies move with resourceId when matrix value=denied", async () => {
+  it("does NOT consult legacy matrix for move_pipe_record (orphan rows ignored)", async () => {
     const { sb, mockTable } = createMockSupabase();
     asMember(mockTable);
+    // Legacy orphan: per-pipe denial. Should be IGNORED.
     mockTable("team_member_permissions", [
       { team_member_id: "tm1", resource_key: "pipe_whatsapp", action_key: "edit", value: "denied" },
     ]);
+    // But the global org permission is enabled.
+    mockTable("organization_role_permissions", [
+      { organization_id: "org-1", role: "member", permission_key: "can_move_pipe_records", enabled: true },
+    ]);
     const result = await canUserPerformAction({
-      supabase: sb,
-      userId: "u1",
-      organizationId: "org-1",
-      action: "move_pipe_record",
+      supabase: sb, userId: "u1", organizationId: "org-1", action: "move_pipe_record",
       resourceId: "pipe_whatsapp",
     });
-    expect(result.allowed).toBe(false);
-    expect(result.reason).toContain("mover");
+    expect(result.allowed).toBe(true);
   });
 });
 

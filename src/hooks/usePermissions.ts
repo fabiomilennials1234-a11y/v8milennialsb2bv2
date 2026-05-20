@@ -9,7 +9,11 @@ export type PermissionKey =
   | "see_subordinates_cards"
   | "see_general_info"
   | "see_all_leads"
-  | "can_delete_leads";
+  | "can_delete_leads"
+  | "can_create_leads"
+  | "can_export_leads"
+  | "can_move_pipe_records"
+  | "can_manage_campaigns";
 
 export interface OrgRolePermission {
   id: string;
@@ -115,14 +119,22 @@ const PERMISSION_KEYS: PermissionKey[] = [
   "see_general_info",
   "see_all_leads",
   "can_delete_leads",
+  "can_create_leads",
+  "can_export_leads",
+  "can_move_pipe_records",
+  "can_manage_campaigns",
 ];
 
 export const PERMISSION_LABELS: Record<PermissionKey, string> = {
-  see_unassigned_cards: "Ver cards sem responsavel",
-  see_subordinates_cards: "Ver cards da equipe",
-  see_general_info: "Informacoes gerais",
+  see_unassigned_cards: "Cards não atribuídos",
+  see_subordinates_cards: "Cards de subordinados",
+  see_general_info: "Informações gerais",
   see_all_leads: "Ver todos os leads",
-  can_delete_leads: "Excluir leads e registros",
+  can_delete_leads: "Excluir leads",
+  can_create_leads: "Criar leads",
+  can_export_leads: "Exportar leads",
+  can_move_pipe_records: "Mover cards no pipe",
+  can_manage_campaigns: "Gerenciar campanhas",
 };
 
 /**
