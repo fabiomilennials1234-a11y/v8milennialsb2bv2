@@ -268,22 +268,24 @@ describe('useCanPerformAction (sync)', () => {
     expect(result.current).toEqual({ allowed: true, reason: 'open', isLoading: false });
   });
 
-  it('11. matrix action (export_leads) without explicit denial: allowed via matrix_default_allowed (#254 parity with server engine)', () => {
+  // 2026-05-20: export_leads moved FROM matrix TO ACTION_TO_ORG_PERMISSION
+  // (can_export_leads). The sync resolver has no async RPC path, so for org-
+  // permission actions it falls through to fail-closed. Use the async variant
+  // to actually check the org permission via RPC.
+  it('11. export_leads (sync) for member — denied via fail-closed after org-permission migration', () => {
     mockMember();
-    // export_leads is in ACTION_TO_MATRIX (resource:leads, action:export).
-    // Server engine defaults to allowed when no explicit denial — sync hook now matches.
     const { result } = renderHook(() => useCanPerformAction('export_leads'), {
       wrapper: createWrapper(),
     });
-    expect(result.current.allowed).toBe(true);
-    expect(result.current.reason).toMatch(/matrix/i);
+    expect(result.current.allowed).toBe(false);
+    expect(result.current.reason).toBe('unmapped_action');
   });
 
-  it('11b. matrix action with explicit denial: blocked', () => {
+  it('11b. import_leads still uses the matrix (no org permission equivalent)', () => {
     const matrix = new Map<string, 'allowed' | 'denied'>();
-    matrix.set('leads:export', 'denied');
+    matrix.set('leads:create', 'denied');
     mockMember({}, matrix);
-    const { result } = renderHook(() => useCanPerformAction('export_leads'), {
+    const { result } = renderHook(() => useCanPerformAction('import_leads'), {
       wrapper: createWrapper(),
     });
     expect(result.current.allowed).toBe(false);

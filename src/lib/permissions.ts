@@ -44,22 +44,27 @@ interface ActionResult {
   isLoading: boolean;
 }
 
-// Mapeamento de ação para permission_key de organização
+// Mapeamento de ação para permission_key em organization_role_permissions.
+// Single source of truth para a Permissions tab (Pitstop) — alinhado com
+// supabase/functions/_shared/permission_engine.ts ACTION_TO_ORG_PERMISSION.
 const ACTION_TO_ORG_PERMISSION: Partial<Record<AppAction, PermissionKey>> = {
-  delete_lead: "can_delete_leads",
-  view_lead: "see_all_leads",
+  delete_lead:       "can_delete_leads",
+  view_lead:         "see_all_leads",
+  create_lead:       "can_create_leads",
+  export_leads:      "can_export_leads",
+  move_pipe_record:  "can_move_pipe_records",
+  trigger_campaign:  "can_manage_campaigns",
+  create_campaign:   "can_manage_campaigns",
+  edit_campaign:     "can_manage_campaigns",
+  delete_campaign:   "can_manage_campaigns",
 };
 
-// Mapeamento de ação para resource_key + action_key na matriz legada
+// Mapeamento de ação para resource_key + action_key na matriz legada.
+// Reduzido a partir de 2026-05-20 — só import_leads permanece sem equivalente
+// em organization_role_permissions (decisão CTO: importação manual não é
+// configurável pela Permissions tab).
 const ACTION_TO_MATRIX: Partial<Record<AppAction, { resource: string; action: string }>> = {
   import_leads: { resource: "leads", action: "create" },
-  create_lead: { resource: "leads", action: "create" },
-  export_leads: { resource: "leads", action: "export" },
-  move_pipe_record: { resource: "pipe", action: "move" },
-  trigger_campaign: { resource: "campanhas", action: "create" },
-  create_campaign: { resource: "campanhas", action: "create" },
-  edit_campaign: { resource: "campanhas", action: "edit" },
-  delete_campaign: { resource: "campanhas", action: "delete" },
 };
 
 // Mapeamento de ação para feature_key no novo sistema
