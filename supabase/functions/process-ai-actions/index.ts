@@ -146,7 +146,7 @@ async function processAction(
 
     // RAG observability: log tool call (fire-and-forget)
     logToolCall(supabase, {
-      conversationId: conversation_id || id, // fallback to action id if no conversation
+      conversationId: action.conversation_id || id,
       organizationId: organization_id,
       agentId: (payload as Record<string, unknown>)?.agent_id as string | undefined,
       toolName: action_type,

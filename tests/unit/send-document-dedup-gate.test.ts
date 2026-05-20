@@ -32,19 +32,28 @@ vi.mock("../../supabase/functions/_shared/logger.ts", () => ({
   logRuntime: vi.fn(async () => {}),
   redactSecrets: (v: unknown) => v,
 }));
+vi.mock("../../supabase/functions/_shared/whatsapp-dispatch.ts", () => ({
+  resolveDispatchContext: vi.fn(),
+  DispatchResolutionError: class extends Error {},
+}));
+vi.mock("../../supabase/functions/_shared/copilot/cancellation.ts", () => ({
+  isCopilotCanceled: vi.fn(async () => ({ canceled: false })),
+  logCopilotCancellation: vi.fn(),
+}));
 
-import { checkDocumentAlreadySent } from "../../supabase/functions/_shared/actions/send-document.ts";
+import { checkDocumentAlreadySent, executeSendDocument } from "../../supabase/functions/_shared/actions/send-document.ts";
 
 /* ------------------------------------------------------------------ */
 /* Helpers                                                             */
 /* ------------------------------------------------------------------ */
 
 function buildSupabaseMock(resolvedValue: { data: any[] | null; error: any }) {
-  // Supabase PostgREST chain: .from().select().eq().eq().eq() → Promise
+  // Supabase PostgREST chain: .from().select().eq().eq().in() → Promise
   // Every method returns `this`; the chain is thenable (auto-resolves).
   const builder: any = {
     select: vi.fn(() => builder),
     eq: vi.fn(() => builder),
+    in: vi.fn(() => builder),
     // Make it thenable so `await` resolves to our value
     then: (resolve: any) => resolve(resolvedValue),
   };
@@ -52,6 +61,24 @@ function buildSupabaseMock(resolvedValue: { data: any[] | null; error: any }) {
     from: vi.fn(() => builder),
     _builder: builder,
   };
+}
+
+function buildSupabaseMockMultiTable(tables: Record<string, { data: any; error: any }>) {
+  const fromFn = vi.fn((tableName: string) => {
+    const resolved = tables[tableName] || { data: null, error: null };
+    const builder: any = {
+      select: vi.fn(() => builder),
+      eq: vi.fn(() => builder),
+      in: vi.fn(() => builder),
+      gte: vi.fn(() => builder),
+      limit: vi.fn(() => builder),
+      single: vi.fn(() => builder),
+      maybeSingle: vi.fn(() => builder),
+      then: (resolve: any) => resolve(resolved),
+    };
+    return builder;
+  });
+  return { from: fromFn };
 }
 
 /* ------------------------------------------------------------------ */
@@ -108,5 +135,105 @@ describe("checkDocumentAlreadySent", () => {
       "doc-222",
     );
     expect(result).toBe(false);
+  });
+
+  it("returns true when action is in 'processing' status (retry-safe dedup)", async () => {
+    // Action sent video successfully but crashed before marking completed.
+    // Re-claim picks it up — dedup must still block.
+    const supabase = buildSupabaseMock({
+      data: [{ id: "action-1", payload: { document_id: "doc-111" } }],
+      error: null,
+    });
+    const result = await checkDocumentAlreadySent(
+      supabase as any,
+      "conv-aaa",
+      "doc-111",
+    );
+    expect(result).toBe(true);
+    // Verify query includes both completed AND processing statuses
+    expect(supabase._builder.in).toHaveBeenCalledWith(
+      "status",
+      ["completed", "processing"],
+    );
+  });
+
+  it("returns true via whatsapp_messages fallback when pending_ai_actions has no match", async () => {
+    // Scenario: action was in "pending" (not completed/processing) but video
+    // was already sent successfully. whatsapp_messages secondary gate catches it.
+    const supabase = buildSupabaseMockMultiTable({
+      pending_ai_actions: { data: [], error: null },
+      whatsapp_messages: { data: [{ id: "wm-1" }], error: null },
+      leads: { data: { phone: "+5581986416680" }, error: null },
+    });
+    const result = await checkDocumentAlreadySent(
+      supabase as any,
+      "conv-aaa",
+      "doc-111",
+      "lead-123",
+    );
+    expect(result).toBe(true);
+  });
+
+  it("returns false when no match in either pending_ai_actions or whatsapp_messages", async () => {
+    const supabase = buildSupabaseMockMultiTable({
+      pending_ai_actions: { data: [], error: null },
+      whatsapp_messages: { data: [], error: null },
+      leads: { data: { phone: "+5581986416680" }, error: null },
+    });
+    const result = await checkDocumentAlreadySent(
+      supabase as any,
+      "conv-aaa",
+      "doc-111",
+      "lead-123",
+    );
+    expect(result).toBe(false);
+  });
+
+  it("skips whatsapp_messages gate when no leadId provided", async () => {
+    const supabase = buildSupabaseMock({ data: [], error: null });
+    const result = await checkDocumentAlreadySent(
+      supabase as any,
+      "conv-aaa",
+      "doc-111",
+    );
+    expect(result).toBe(false);
+    // Only pending_ai_actions was queried (from() called once)
+    expect(supabase.from).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("executeSendDocument — UUID validation", () => {
+  it("rejects non-UUID document_id with error", async () => {
+    const supabase = buildSupabaseMockMultiTable({
+      pending_ai_actions: { data: [], error: null },
+    });
+    const result = await executeSendDocument(
+      supabase as any,
+      { document_id: "WhatsApp Video 2026-04-27 at 09.19.40.mp4" },
+      "org-111",
+      "lead-123",
+      "conv-aaa",
+    );
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("document_id");
+  });
+
+  it("accepts valid UUID document_id (fails downstream, not on validation)", async () => {
+    const supabase = buildSupabaseMockMultiTable({
+      pending_ai_actions: { data: [], error: null },
+      leads: { data: null, error: null },
+      copilot_agent_documents: { data: null, error: { message: "not found" } },
+    });
+    const result = await executeSendDocument(
+      supabase as any,
+      { document_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890" },
+      "org-111",
+      "lead-123",
+      "conv-aaa",
+    );
+    // Fails on "Document not found", NOT on UUID validation
+    expect(result.success).toBe(false);
+    expect(result.error).not.toContain("invalid");
+    expect(result.error).toContain("not found");
   });
 });

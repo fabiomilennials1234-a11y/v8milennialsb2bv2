@@ -24,31 +24,62 @@ export async function checkDocumentAlreadySent(
   supabase: SupabaseClient,
   conversationId: string,
   documentId: string,
+  leadId?: string | null,
 ): Promise<boolean> {
   const { data } = await supabase
     .from("pending_ai_actions")
     .select("id, payload")
     .eq("conversation_id", conversationId)
     .eq("action_type", "send_document")
-    .eq("status", "completed");
+    .in("status", ["completed", "processing"]);
 
-  if (!data || data.length === 0) return false;
+  if (data && data.length > 0) {
+    const isDuplicate = data.some(
+      (row: any) => (row.payload as Record<string, unknown>)?.document_id === documentId,
+    );
 
-  // Filter by document_id in payload (JSONB — can't filter server-side with .eq)
-  const isDuplicate = data.some(
-    (row: any) => (row.payload as Record<string, unknown>)?.document_id === documentId,
-  );
+    if (isDuplicate) {
+      captureMessage("copilot_duplicate_document_blocked", {
+        tags: {
+          "copilot.document_id": documentId,
+          "copilot.conversation_id": conversationId,
+        },
+      }).catch(() => {});
+      return true;
+    }
+  }
 
-  if (isDuplicate) {
-    captureMessage("copilot_duplicate_document_blocked", {
+  if (!leadId) return false;
+
+  const { data: lead } = await supabase
+    .from("leads")
+    .select("phone")
+    .eq("id", leadId)
+    .single();
+
+  if (!lead?.phone) return false;
+
+  const { data: sentMessages } = await supabase
+    .from("whatsapp_messages")
+    .select("id")
+    .eq("phone_number", lead.phone)
+    .eq("direction", "outgoing")
+    .eq("sent_by_ai", true)
+    .gte("timestamp", new Date(Date.now() - 3600_000).toISOString())
+    .limit(1);
+
+  if (sentMessages && sentMessages.length > 0) {
+    captureMessage("copilot_duplicate_document_blocked_whatsapp_fallback", {
       tags: {
         "copilot.document_id": documentId,
         "copilot.conversation_id": conversationId,
+        "copilot.lead_id": leadId,
       },
     }).catch(() => {});
+    return true;
   }
 
-  return isDuplicate;
+  return false;
 }
 
 export async function executeSendDocument(
@@ -64,13 +95,18 @@ export async function executeSendDocument(
   if (!documentId) {
     return { success: false, error: "document_id is required" };
   }
+
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!UUID_RE.test(documentId)) {
+    return { success: false, error: `invalid document_id: expected UUID, got "${documentId}"` };
+  }
   if (!leadId) {
     return { success: false, error: "lead_id is required to send document" };
   }
 
   // 0. Dedup gate — block duplicate document sends per conversation lifetime.
   if (conversationId) {
-    const alreadySent = await checkDocumentAlreadySent(supabase, conversationId, documentId);
+    const alreadySent = await checkDocumentAlreadySent(supabase, conversationId, documentId, leadId);
     if (alreadySent) {
       console.debug("[executeSendDocument] Duplicate document skipped:", { conversationId, documentId });
       return {
