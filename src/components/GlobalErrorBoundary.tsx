@@ -31,6 +31,9 @@ export class GlobalErrorBoundary extends Component<Props, State> {
       error.message?.includes("Loading chunk") ||
       error.message?.includes("Loading CSS chunk") ||
       error.message?.includes("Importing a module script failed") ||
+      error.message?.includes("Invalid or unexpected token") ||
+      error.message?.includes("Unexpected token '<'") ||
+      error.message?.includes("expected expression, got '<'") ||
       error.name === "ChunkLoadError";
 
     return { hasError: true, error, isChunkError };

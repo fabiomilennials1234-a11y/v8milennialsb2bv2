@@ -3,10 +3,17 @@
 import { clientsClaim } from 'workbox-core';
 import { precacheAndRoute, cleanupOutdatedCaches } from 'workbox-precaching';
 import { registerRoute } from 'workbox-routing';
-import { CacheFirst, NetworkFirst } from 'workbox-strategies';
+import { CacheFirst, NetworkFirst, StaleWhileRevalidate } from 'workbox-strategies';
 import { ExpirationPlugin } from 'workbox-expiration';
 
 declare let self: ServiceWorkerGlobalScope;
+
+// ─── Skip waiting when prompted by the app (registerSW → SKIP_WAITING) ──
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
 
 // ─── Workbox precache (injected by vite-plugin-pwa) ─────
 precacheAndRoute(self.__WB_MANIFEST);
@@ -16,7 +23,6 @@ clientsClaim();
 // ─── Runtime caching (mirrors workbox config from vite.config) ──
 registerRoute(
   ({ request }) =>
-    request.destination === 'script' ||
     request.destination === 'style' ||
     request.destination === 'font' ||
     request.destination === 'image',
@@ -26,6 +32,19 @@ registerRoute(
       new ExpirationPlugin({
         maxEntries: 200,
         maxAgeSeconds: 30 * 24 * 60 * 60, // 30 dias
+      }),
+    ],
+  }),
+);
+
+registerRoute(
+  ({ request }) => request.destination === 'script',
+  new StaleWhileRevalidate({
+    cacheName: 'js-assets',
+    plugins: [
+      new ExpirationPlugin({
+        maxEntries: 200,
+        maxAgeSeconds: 7 * 24 * 60 * 60, // 7 dias
       }),
     ],
   }),
