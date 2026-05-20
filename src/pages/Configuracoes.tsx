@@ -96,11 +96,6 @@ const SlaConfigPanel = lazy(() =>
     default: m.SlaConfigPanel,
   }))
 );
-const ApiKeysPanel = lazy(() =>
-  import("@/components/settings/ApiKeysPanel").then((m) => ({
-    default: m.ApiKeysPanel,
-  }))
-);
 const SandboxPanel = lazy(() =>
   import("@/components/settings/SandboxPanel").then((m) => ({
     default: m.SandboxPanel,
@@ -567,15 +562,11 @@ export default function Configuracoes() {
           </TabsTrigger>
           <TabsTrigger value="api" className="gap-2">
             <Code className="w-4 h-4" />
-            API
+            API & Chaves
           </TabsTrigger>
           <TabsTrigger value="sla" className="gap-2">
             <Timer className="w-4 h-4" />
             SLA
-          </TabsTrigger>
-          <TabsTrigger value="api-keys" className="gap-2">
-            <Key className="w-4 h-4" />
-            API Keys
           </TabsTrigger>
           <TabsTrigger value="sandbox" className="gap-2">
             <FlaskConical className="w-4 h-4" />
@@ -658,15 +649,6 @@ export default function Configuracoes() {
           </TabsContent>
 
 
-          <TabsContent value="api-keys">
-            <Suspense fallback={<TabFallback label="API Keys" />}>
-              <Card className="glass-card">
-                <CardContent className="pt-6">
-                  <ApiKeysPanel />
-                </CardContent>
-              </Card>
-            </Suspense>
-          </TabsContent>
 
           <TabsContent value="sandbox">
             <Suspense fallback={<TabFallback label="Sandbox" />}>

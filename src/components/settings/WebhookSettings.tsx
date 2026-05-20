@@ -8,8 +8,6 @@ import {
   MoreHorizontal,
   Send,
   Loader2,
-  Copy,
-  Inbox,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,11 +39,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import {
   useWebhooks,
   useCreateWebhook,
   useUpdateWebhook,
@@ -55,55 +48,11 @@ import {
   Webhook,
   WebhookInsert,
 } from "@/hooks/useWebhooks";
-import { useCampanhas, useAllCampanhaStages } from "@/hooks/useCampanhas";
 import { useOrganization } from "@/hooks/useOrganization";
 import { useIsAdmin } from "@/hooks/useUserRole";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { AlertsBanner } from "@/components/system-alerts/AlertsBanner";
-
-/** Chaves de etapa por pipe para place_in_pipe.stage (lead-webhook) */
-const PIPE_STAGES_REF: Record<string, { label: string; stages: { key: string; label: string }[] }> = {
-  whatsapp: {
-    label: "Qualificação (WhatsApp)",
-    stages: [
-      { key: "novo", label: "Novo" },
-      { key: "abordado", label: "Abordado" },
-      { key: "respondeu", label: "Respondeu" },
-      { key: "esfriou", label: "Esfriou" },
-      { key: "agendado", label: "Agendado" },
-    ],
-  },
-  confirmacao: {
-    label: "Confirmação",
-    stages: [
-      { key: "reuniao_marcada", label: "Reunião Marcada" },
-      { key: "confirmar_d5", label: "Confirmar D-5" },
-      { key: "confirmar_d3", label: "Confirmar D-3" },
-      { key: "confirmar_d2", label: "Confirmar D-2" },
-      { key: "confirmar_d1", label: "Confirmar D-1" },
-      { key: "pre_confirmada", label: "Pré-confirmada" },
-      { key: "confirmacao_no_dia", label: "Confirmação no Dia" },
-      { key: "confirmada_no_dia", label: "Confirmada no Dia" },
-      { key: "remarcar", label: "Remarcar" },
-      { key: "compareceu", label: "Compareceu" },
-      { key: "perdido", label: "Perdido" },
-    ],
-  },
-  propostas: {
-    label: "Propostas",
-    stages: [
-      { key: "marcar_compromisso", label: "Marcar Compromisso" },
-      { key: "reativar", label: "Reativar" },
-      { key: "compromisso_marcado", label: "Compromisso Marcado" },
-      { key: "proposta_enviada", label: "Proposta Enviada" },
-      { key: "esfriou", label: "Esfriou" },
-      { key: "futuro", label: "Futuro" },
-      { key: "vendido", label: "Vendido" },
-      { key: "perdido", label: "Perdido" },
-    ],
-  },
-};
 
 const DEFAULT_HEADERS = [{ key: "", value: "" }];
 
@@ -126,9 +75,6 @@ export function WebhookSettings() {
   const { organizationId, isReady } = useOrganization();
   const { isAdmin } = useIsAdmin();
   const { data: webhooks = [], isLoading } = useWebhooks();
-  const { data: campanhas = [] } = useCampanhas();
-  const campaignIds = campanhas.map((c) => c.id);
-  const { data: allStages = [] } = useAllCampanhaStages(campaignIds);
   const createWebhook = useCreateWebhook();
   const updateWebhook = useUpdateWebhook();
   const deleteWebhook = useDeleteWebhook();
@@ -305,195 +251,10 @@ export function WebhookSettings() {
     );
   }
 
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL ?? "";
-  const leadWebhookUrl = supabaseUrl ? `${supabaseUrl}/functions/v1/lead-webhook` : "";
-  const leadWebhookPayloadExample = JSON.stringify(
-    {
-      source: "meta_ads",
-      organization_id: organizationId ?? "<uuid-da-organizacao>",
-      campaign_id: "opcional",
-      campaign_name: "opcional",
-      tags: ["tag1"],
-      fields: {
-        name: "Nome do lead",
-        phone: "5511999999999",
-        email: "lead@email.com",
-        company: "Empresa",
-      },
-      place_in_pipe: {
-        pipe: "whatsapp",
-        stage: "novo",
-      },
-      place_in_campaign: {
-        campaign_id: "<uuid-da-campanha>",
-        stage_id: "<uuid-do-campanha_stages>",
-      },
-    },
-    null,
-    2
-  );
-
-  const copyToClipboard = (text: string, label: string) => {
-    navigator.clipboard.writeText(text).then(
-      () => toast.success(`${label} copiado`),
-      () => toast.error("Falha ao copiar")
-    );
-  };
-
   return (
     <div className="space-y-4">
       {/* Onda 2: alerts críticos webhook circuit breaker */}
       <AlertsBanner category="webhook_circuit_breaker" organizationId={organizationId} />
-
-      {/* Webhook inbound: integrar fontes externas */}
-      <div className="rounded-lg border border-border bg-card p-4 space-y-3">
-        <div className="flex items-center gap-2">
-          <Inbox className="w-5 h-5 text-muted-foreground" />
-          <h3 className="text-lg font-medium">Integrar fontes externas</h3>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          Use esta URL para enviar leads ao sistema (Facebook Lead Ads, Zapier, formulários, etc.). Os leads serão criados ou atualizados conforme phone/email.
-        </p>
-        {leadWebhookUrl ? (
-          <>
-            <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">URL</Label>
-              <div className="flex gap-2 items-center">
-                <code className="flex-1 text-xs bg-muted px-2 py-1.5 rounded truncate">
-                  {leadWebhookUrl}
-                </code>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => copyToClipboard(leadWebhookUrl, "URL")}
-                  className="shrink-0"
-                >
-                  <Copy className="w-4 h-4 mr-1" />
-                  Copiar URL
-                </Button>
-              </div>
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">Método e header</Label>
-              <p className="text-xs text-muted-foreground">
-                Método: <strong>POST</strong>. Envie o header <code className="bg-muted px-1 rounded">x-webhook-key</code> com a chave fornecida pelo administrador; use o mesmo valor ao chamar de Facebook, Zapier ou outras integrações.
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Opcional: <code className="bg-muted px-1 rounded">place_in_pipe</code> coloca o lead em um funil (whatsapp, confirmacao, propostas) em uma etapa; <code className="bg-muted px-1 rounded">place_in_campaign</code> coloca o lead em uma campanha em uma etapa (ex.: campanha de ads).
-              </p>
-            </div>
-            <Collapsible>
-              <CollapsibleTrigger asChild>
-                <Button type="button" variant="ghost" size="sm" className="text-xs">
-                  Ver exemplo de payload
-                </Button>
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <div className="mt-2 flex gap-2">
-                  <pre className="flex-1 text-xs bg-muted p-3 rounded overflow-auto max-h-48">
-                    {leadWebhookPayloadExample}
-                  </pre>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => copyToClipboard(leadWebhookPayloadExample, "Exemplo")}
-                    className="shrink-0 self-start"
-                  >
-                    <Copy className="w-4 h-4 mr-1" />
-                    Copiar
-                  </Button>
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
-          </>
-        ) : (
-          <p className="text-sm text-muted-foreground">URL não disponível (configure VITE_SUPABASE_URL).</p>
-        )}
-      </div>
-
-      {/* Tabela de referência: todos os IDs visíveis para consulta e cópia */}
-      <div className="rounded-lg border border-border bg-card overflow-hidden">
-        <div className="px-4 py-3 border-b border-border bg-muted/50">
-          <h3 className="text-base font-medium">Consultar IDs para integrações</h3>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Use <code className="bg-muted px-1 rounded">place_in_campaign</code> (campaign_id + stage_id) ou <code className="bg-muted px-1 rounded">place_in_pipe</code> (pipe + stage). IDs abaixo podem ser copiados.
-          </p>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-muted/30">
-                <th className="text-left font-medium py-2 px-4 w-[280px]">O que é</th>
-                <th className="text-left font-medium py-2 px-4 font-mono">ID (literal)</th>
-                <th className="w-10 py-2 px-2" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {organizationId && (
-                <tr className="hover:bg-muted/20">
-                  <td className="py-2 px-4 align-top">Organization</td>
-                  <td className="py-2 px-4 font-mono text-xs break-all select-all" title={organizationId}>{organizationId}</td>
-                  <td className="py-2 px-2">
-                    <Button type="button" variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => copyToClipboard(organizationId, "Organization ID")}>
-                      <Copy className="w-3.5 h-3.5" />
-                    </Button>
-                  </td>
-                </tr>
-              )}
-              {campanhas.length === 0 ? (
-                <tr>
-                  <td colSpan={3} className="py-3 px-4 text-muted-foreground italic text-xs">
-                    Nenhuma campanha. Crie uma campanha para listar campaign_id e stage_id aqui.
-                  </td>
-                </tr>
-              ) : (
-                campanhas.flatMap((c) => {
-                  const stages = allStages.filter((s) => s.campanha_id === c.id);
-                  return [
-                    <tr key={c.id} className="hover:bg-muted/20">
-                      <td className="py-2 px-4 align-top">Campanha: {c.name}</td>
-                      <td className="py-2 px-4 font-mono text-xs break-all select-all" title={c.id}>{c.id}</td>
-                      <td className="py-2 px-2">
-                        <Button type="button" variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => copyToClipboard(c.id, "ID da campanha")}>
-                          <Copy className="w-3.5 h-3.5" />
-                        </Button>
-                      </td>
-                    </tr>,
-                    ...stages.map((s) => (
-                      <tr key={s.id} className="hover:bg-muted/20 bg-muted/5">
-                        <td className="py-1.5 px-4 pl-8 text-muted-foreground">→ Etapa: {s.name}</td>
-                        <td className="py-1.5 px-4 font-mono text-xs break-all select-all" title={s.id}>{s.id}</td>
-                        <td className="py-1.5 px-2">
-                          <Button type="button" variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => copyToClipboard(s.id, "ID da etapa")}>
-                            <Copy className="w-3.5 h-3.5" />
-                          </Button>
-                        </td>
-                      </tr>
-                    )),
-                  ];
-                })
-              )}
-              {Object.entries(PIPE_STAGES_REF).map(([pipeKey, { label, stages }]) =>
-                stages.map(({ key, label: stageLabel }) => (
-                  <tr key={`${pipeKey}-${key}`} className="hover:bg-muted/20">
-                    <td className="py-1.5 px-4">
-                      Pipe <code className="bg-muted px-1 rounded text-xs">{pipeKey}</code> → {stageLabel}
-                    </td>
-                    <td className="py-1.5 px-4 font-mono text-xs select-all" title={key}>{key}</td>
-                    <td className="py-1.5 px-2">
-                      <Button type="button" variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => copyToClipboard(key, `stage ${key}`)}>
-                        <Copy className="w-3.5 h-3.5" />
-                      </Button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
 
       <div className="flex items-center justify-between">
         <div>

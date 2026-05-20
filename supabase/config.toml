@@ -12,6 +12,12 @@ verify_jwt = false
 [functions.lead-webhook]
 verify_jwt = false
 
+[functions.partner-webhook]
+verify_jwt = false
+
+[functions.list-organizations]
+verify_jwt = false
+
 [functions.webhook-new-lead]
 verify_jwt = false
 

@@ -1,9 +1,16 @@
 import { ApiEndpoint } from "./types";
 
+const PARTNER_API_BASE_URL = "https://api.torquecrm.com.br";
+
 export interface OrgContext {
   baseUrl: string;
   organizationId: string;
   apiKey?: string;
+}
+
+function resolveBaseUrl(endpoint: ApiEndpoint, org: OrgContext): string {
+  if (endpoint.category === "partner") return PARTNER_API_BASE_URL;
+  return org.baseUrl;
 }
 
 function injectOrgData(example: Record<string, unknown>, org: OrgContext): Record<string, unknown> {
@@ -22,9 +29,10 @@ function resolveAuthHeader(endpoint: ApiEndpoint): string | null {
 export function generateCurl(endpoint: ApiEndpoint, org: OrgContext): string {
   const headerName = resolveAuthHeader(endpoint);
   const body = injectOrgData(endpoint.requestExample, org);
+  const base = resolveBaseUrl(endpoint, org);
   const lines: string[] = [];
   lines.push(`curl -X ${endpoint.method} \\`);
-  lines.push(`  "${org.baseUrl}${endpoint.path}" \\`);
+  lines.push(`  "${base}${endpoint.path}" \\`);
   lines.push(`  -H "Content-Type: application/json" \\`);
   if (headerName) {
     lines.push(`  -H "${headerName}: ${org.apiKey || "SUA_API_KEY"}" \\`);
@@ -36,9 +44,10 @@ export function generateCurl(endpoint: ApiEndpoint, org: OrgContext): string {
 export function generateJavaScript(endpoint: ApiEndpoint, org: OrgContext): string {
   const headerName = resolveAuthHeader(endpoint);
   const body = injectOrgData(endpoint.requestExample, org);
+  const base = resolveBaseUrl(endpoint, org);
   const authLine = headerName ? `\n    "${headerName}": "${org.apiKey || "SUA_API_KEY"}",` : "";
 
-  return `const response = await fetch("${org.baseUrl}${endpoint.path}", {
+  return `const response = await fetch("${base}${endpoint.path}", {
   method: "${endpoint.method}",
   headers: {
     "Content-Type": "application/json",${authLine}
@@ -53,6 +62,7 @@ console.log(data);`;
 export function generatePython(endpoint: ApiEndpoint, org: OrgContext): string {
   const headerName = resolveAuthHeader(endpoint);
   const body = injectOrgData(endpoint.requestExample, org);
+  const base = resolveBaseUrl(endpoint, org);
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (headerName) {
     headers[headerName] = org.apiKey || "SUA_API_KEY";
@@ -61,7 +71,7 @@ export function generatePython(endpoint: ApiEndpoint, org: OrgContext): string {
   return `import requests
 
 response = requests.${endpoint.method.toLowerCase()}(
-    "${org.baseUrl}${endpoint.path}",
+    "${base}${endpoint.path}",
     headers=${JSON.stringify(headers, null, 8).replace(/"/g, '"')},
     json=${JSON.stringify(body, null, 8)},
 )

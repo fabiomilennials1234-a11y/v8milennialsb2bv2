@@ -99,6 +99,43 @@ describe("generatePython", () => {
   });
 });
 
+describe("code generators — partner endpoint uses custom domain", () => {
+  const partnerEndpoint: ApiEndpoint = {
+    ...mockEndpoint,
+    category: "partner",
+    path: "/v1/partner-webhook",
+    auth: {
+      type: "api-key",
+      header: "x-api-key",
+      description: "Partner API key",
+    },
+  };
+
+  it("curl uses api.torquecrm.com.br for partner", () => {
+    const curl = generateCurl(partnerEndpoint, org);
+    expect(curl).toContain("https://api.torquecrm.com.br/v1/partner-webhook");
+    expect(curl).not.toContain("api.example.com");
+  });
+
+  it("javascript uses api.torquecrm.com.br for partner", () => {
+    const js = generateJavaScript(partnerEndpoint, org);
+    expect(js).toContain("https://api.torquecrm.com.br/v1/partner-webhook");
+    expect(js).not.toContain("api.example.com");
+  });
+
+  it("python uses api.torquecrm.com.br for partner", () => {
+    const py = generatePython(partnerEndpoint, org);
+    expect(py).toContain("https://api.torquecrm.com.br/v1/partner-webhook");
+    expect(py).not.toContain("api.example.com");
+  });
+
+  it("non-partner endpoint still uses org baseUrl", () => {
+    const curl = generateCurl(mockEndpoint, org);
+    expect(curl).toContain("https://api.example.com");
+    expect(curl).not.toContain("torquecrm.com.br");
+  });
+});
+
 describe("code generators — no auth", () => {
   const noAuthEndpoint: ApiEndpoint = {
     ...mockEndpoint,

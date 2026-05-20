@@ -298,6 +298,7 @@ export interface ApiKeyValidation {
   organizationId?: string;
   keyId?: string;
   rateLimitPerMinute?: number;
+  scopes?: string[];
   error?: string;
 }
 
@@ -345,7 +346,7 @@ export async function validateApiKey(
 
   const { data: rows, error: dbError } = await supabase
     .from("api_keys")
-    .select("id, organization_id, key_hash, rate_limit_per_minute")
+    .select("id, organization_id, key_hash, rate_limit_per_minute, scopes")
     .eq("key_prefix", prefix)
     .eq("is_active", true)
     .or("expires_at.is.null,expires_at.gt.now()");
@@ -385,6 +386,7 @@ export async function validateApiKey(
         organizationId: row.organization_id,
         keyId: row.id,
         rateLimitPerMinute: row.rate_limit_per_minute,
+        scopes: row.scopes ?? [],
       };
     }
   }

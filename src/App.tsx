@@ -68,7 +68,6 @@ const ClienteDetail = lazy(() => lazyRetry(() => import("./components/carteira/C
 const CustomPipeline = lazy(() => lazyRetry(() => import("./pages/CustomPipeline")));
 const Agenda = lazy(() => lazyRetry(() => import("./pages/Agenda")));
 const Privacidade = lazy(() => lazyRetry(() => import("./pages/Privacidade")));
-const ApiDocs = lazy(() => lazyRetry(() => import("./pages/ApiDocs")));
 const CopilotPlayground = lazy(() => lazyRetry(() => import("@/components/copilot/playground").then(m => ({ default: m.CopilotPlayground }))));
 const ChecklistPage = lazy(() => lazyRetry(() => import("./pages/ChecklistPage")));
 const MessageTemplates = lazy(() => lazyRetry(() => import("./pages/MessageTemplates")));
@@ -202,7 +201,6 @@ function AppRoutes() {
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/signup" element={<Navigate to="/auth" replace />} />
       <Route path="/privacidade" element={<Privacidade />} />
-      <Route path="/docs" element={<ApiDocs />} />
       <Route path="/_mockup/chat" element={<MockupChat />} />
       <Route path="/_mockup/chat-v2" element={<MockupChatV2 />} />
       <Route path="/_mockup/chat-v3" element={<MockupChatV3 />} />

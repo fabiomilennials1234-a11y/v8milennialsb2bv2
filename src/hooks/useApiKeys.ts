@@ -46,30 +46,29 @@ export function useCreateApiKey() {
       rate_limit_per_minute?: number;
       expires_at?: string;
     }) => {
-      const rawKey = `tcrm_${crypto.randomUUID().replace(/-/g, "")}`;
-      const prefix = rawKey.slice(0, 12);
-
-      const encoder = new TextEncoder();
-      const hashBuffer = await crypto.subtle.digest("SHA-256", encoder.encode(rawKey));
-      const hashArray = Array.from(new Uint8Array(hashBuffer));
-      const keyHash = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
-
-      const { data, error } = await (supabase.from as any)("api_keys")
-        .insert({
-          organization_id: organizationId!,
-          name: input.name,
-          key_hash: keyHash,
-          key_prefix: prefix,
-          scopes: input.scopes ?? ["read"],
-          rate_limit_per_minute: input.rate_limit_per_minute ?? 100,
-          expires_at: input.expires_at ?? null,
-          created_by: user!.id,
-        })
-        .select("id")
-        .single();
+      const { data, error } = await supabase.rpc("generate_api_key", {
+        p_org_id: organizationId!,
+        p_name: input.name,
+        p_created_by: user!.id,
+      });
       if (error) throw error;
 
-      return { id: data.id, key: rawKey };
+      const result = data as { key_id: string; raw_key: string; prefix: string };
+
+      const hasCustomConfig =
+        input.scopes || input.rate_limit_per_minute || input.expires_at;
+      if (hasCustomConfig) {
+        const { error: updateError } = await (supabase.from as any)("api_keys")
+          .update({
+            ...(input.scopes && { scopes: input.scopes }),
+            ...(input.rate_limit_per_minute && { rate_limit_per_minute: input.rate_limit_per_minute }),
+            ...(input.expires_at && { expires_at: input.expires_at }),
+          })
+          .eq("id", result.key_id);
+        if (updateError) throw updateError;
+      }
+
+      return { id: result.key_id, key: result.raw_key };
     },
     onSuccess: () => {
       toast.success("API key criada — copie agora, não será exibida novamente");
