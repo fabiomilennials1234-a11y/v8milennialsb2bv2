@@ -23,7 +23,7 @@ export const LeadActivityColumn = memo(function LeadActivityColumn({
         </h3>
       </div>
       <CommentComposer leadId={leadId} organizationId={organizationId} />
-      <div className="flex-1 min-h-0">
+      <div className="flex-1 min-h-0 flex flex-col">
         <ActivityFeed leadId={leadId} />
       </div>
     </div>
