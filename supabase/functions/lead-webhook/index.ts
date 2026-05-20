@@ -247,6 +247,38 @@ serve(withSentry('lead-webhook', async (req) => {
     };
     const origin = originMap[payload.source.toLowerCase()] || "outro";
 
+    // ── Cal.com bypass ──────────────────────────────────────────────────
+    // Leads vindos do Cal.com já têm reunião agendada — pulam pipe_whatsapp
+    // (qualificação) e entram direto em pipe_confirmacao/reuniao_marcada.
+    // meeting_date é obrigatório (lembretes D-N dependem disso).
+    if (origin === "cal") {
+      const meetingDate =
+        payload.place_in_pipe?.meeting_date ||
+        (payload.fields?.meeting_date as string | undefined) ||
+        (payload as { meeting_date?: string }).meeting_date;
+
+      if (!meetingDate || !isValidISODate(meetingDate)) {
+        return errorResponse(
+          400,
+          "Validation failed: origin=cal requer meeting_date ISO 8601 em place_in_pipe.meeting_date ou fields.meeting_date",
+          corsHeaders,
+          { req },
+        );
+      }
+
+      if (payload.place_in_pipe && payload.place_in_pipe.pipe !== "confirmacao") {
+        console.warn(
+          `[lead-webhook] origin=cal override: caller mandou pipe="${payload.place_in_pipe.pipe}" stage="${payload.place_in_pipe.stage}", forçando confirmacao/reuniao_marcada`,
+        );
+      }
+
+      payload.place_in_pipe = {
+        pipe: "confirmacao",
+        stage: "reuniao_marcada",
+        meeting_date: meetingDate,
+      };
+    }
+
     let result: Awaited<ReturnType<typeof getOrCreateLead>>;
 
     // Padrão: sempre criar novo lead. Só busca por telefone/email quando o cliente envia update_existing_if_match = true.

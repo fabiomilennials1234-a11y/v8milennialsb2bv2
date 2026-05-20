@@ -346,7 +346,11 @@ describe("lead-webhook — origin mapping", () => {
     "unknown_source",
   ]) {
     it(`accepts source=${source}`, async () => {
-      const res = await invoke({ source, fields: { phone: "1" } });
+      // origin=cal requires meeting_date (Cal.com bypass) — inject for cal sources.
+      const isCal = ["cal", "cal.com", "calendly"].includes(source.toLowerCase());
+      const fields: Record<string, string> = { phone: "1" };
+      if (isCal) fields.meeting_date = "2026-06-01T10:00:00Z";
+      const res = await invoke({ source, fields });
       expect(res.status).toBe(200);
     });
   }
@@ -455,6 +459,79 @@ describe("lead-webhook — place_in_pipe", () => {
       fields: { phone: "1" },
       update_existing_if_match: true,
       place_in_pipe: { pipe: "propostas", stage: "proposta_enviada" },
+    });
+    expect(res.status).toBe(200);
+  });
+});
+
+// ─── Cal.com bypass (origin=cal → pipe_confirmacao) ───────────────────────
+
+describe("lead-webhook — Cal.com bypass", () => {
+  const meetingDate = "2026-06-01T10:00:00Z";
+
+  it("rejects source=cal without meeting_date", async () => {
+    const res = await invoke({
+      source: "cal",
+      update_existing_if_match: true,
+      fields: { phone: "1" },
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toContain("meeting_date");
+  });
+
+  it("rejects source=calendly with invalid meeting_date", async () => {
+    const res = await invoke({
+      source: "calendly",
+      update_existing_if_match: true,
+      fields: { phone: "1", meeting_date: "not-iso" },
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("accepts source=cal with meeting_date in fields", async () => {
+    const res = await invoke({
+      source: "cal",
+      update_existing_if_match: true,
+      fields: { phone: "1", meeting_date: meetingDate },
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.place_in_pipe?.pipe).toBe("confirmacao");
+    expect(body.place_in_pipe?.stage).toBe("reuniao_marcada");
+    expect(body.place_in_pipe?.meeting_date).toBe(meetingDate);
+  });
+
+  it("accepts source=cal with meeting_date in place_in_pipe", async () => {
+    const res = await invoke({
+      source: "cal",
+      update_existing_if_match: true,
+      fields: { phone: "1" },
+      place_in_pipe: { pipe: "confirmacao", stage: "reuniao_marcada", meeting_date: meetingDate },
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.place_in_pipe?.pipe).toBe("confirmacao");
+  });
+
+  it("overrides place_in_pipe when caller mistakenly sends pipe=whatsapp", async () => {
+    const res = await invoke({
+      source: "cal.com",
+      update_existing_if_match: true,
+      fields: { phone: "1", meeting_date: meetingDate },
+      place_in_pipe: { pipe: "whatsapp", stage: "novo_lead" },
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.place_in_pipe?.pipe).toBe("confirmacao");
+    expect(body.place_in_pipe?.stage).toBe("reuniao_marcada");
+  });
+
+  it("does not affect non-cal origins (meta_ads goes normally)", async () => {
+    const res = await invoke({
+      source: "meta_ads",
+      update_existing_if_match: true,
+      fields: { phone: "1" },
     });
     expect(res.status).toBe(200);
   });
