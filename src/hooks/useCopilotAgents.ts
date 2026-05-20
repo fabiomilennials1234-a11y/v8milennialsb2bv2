@@ -180,6 +180,21 @@ export function useCreateCopilotAgent() {
         throw agentError;
       }
 
+      // 1b. Sincronizar FK reverso whatsapp_instances.copilot_agent_id (se vinculado)
+      const createdInstanceId = (payload.agent as any)?.whatsapp_instance_id ?? null;
+      if (createdInstanceId) {
+        // Solta outros agentes que ainda apontem pra mesma instancia
+        await supabase
+          .from("copilot_agents")
+          .update({ whatsapp_instance_id: null })
+          .neq("id", agent.id)
+          .eq("whatsapp_instance_id", createdInstanceId);
+        await supabase
+          .from("whatsapp_instances")
+          .update({ copilot_agent_id: agent.id })
+          .eq("id", createdInstanceId);
+      }
+
       // 2. Criar FAQs (se houver)
       if (payload.faqs.length > 0) {
         const faqsToInsert = payload.faqs.map((faq, index) => ({
@@ -268,6 +283,7 @@ export function useCreateCopilotAgent() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["copilot_agents"] });
+      queryClient.invalidateQueries({ queryKey: ["whatsapp_instances"] });
       toast.success("Copilot criado com sucesso!", {
         description: "Seu agente está pronto para ser ativado.",
       });
@@ -917,6 +933,23 @@ export function useUpdateCopilotAgentFromWizard() {
         (agentUpdate as any).move_rules = (data as any).moveRules;
       }
 
+      // Conexao tab (WhatsApp instance link + retencao)
+      const hasConexao =
+        (data as any).whatsappInstanceId !== undefined ||
+        (data as any).retentionEnabled !== undefined ||
+        (data as any).retentionConfig !== undefined;
+      const newInstanceId: string | null =
+        (data as any).whatsappInstanceId ?? null;
+      if (hasConexao) {
+        (agentUpdate as any).whatsapp_instance_id = newInstanceId;
+        if ((data as any).retentionEnabled !== undefined) {
+          (agentUpdate as any).retention_enabled = (data as any).retentionEnabled;
+        }
+        if ((data as any).retentionConfig !== undefined) {
+          (agentUpdate as any).retention_config = (data as any).retentionConfig;
+        }
+      }
+
       const { data: updatedAgent, error: agentError } = await supabase
         .from("copilot_agents")
         .update(agentUpdate)
@@ -925,6 +958,35 @@ export function useUpdateCopilotAgentFromWizard() {
         .single();
 
       if (agentError) throw agentError;
+
+      // 1b. Sincronizar FK reverso em whatsapp_instances.copilot_agent_id
+      if (hasConexao) {
+        if (newInstanceId) {
+          // Limpa instancias antigas que ainda apontem pra este agente
+          await supabase
+            .from("whatsapp_instances")
+            .update({ copilot_agent_id: null })
+            .eq("copilot_agent_id", agentId)
+            .neq("id", newInstanceId);
+          // Solta outro agente que estivesse usando esta instancia
+          await supabase
+            .from("copilot_agents")
+            .update({ whatsapp_instance_id: null })
+            .neq("id", agentId)
+            .eq("whatsapp_instance_id", newInstanceId);
+          // Vincula a instancia ao agente
+          await supabase
+            .from("whatsapp_instances")
+            .update({ copilot_agent_id: agentId })
+            .eq("id", newInstanceId);
+        } else {
+          // Desvinculo total
+          await supabase
+            .from("whatsapp_instances")
+            .update({ copilot_agent_id: null })
+            .eq("copilot_agent_id", agentId);
+        }
+      }
 
       // 2. Sincronizar FAQs (delete all + insert)
       await supabase
@@ -1050,6 +1112,7 @@ export function useUpdateCopilotAgentFromWizard() {
       queryClient.invalidateQueries({ queryKey: ["copilot_agents"] });
       queryClient.invalidateQueries({ queryKey: ["copilot_agent_for_edit"] });
       queryClient.invalidateQueries({ queryKey: ["agent_documents"] });
+      queryClient.invalidateQueries({ queryKey: ["whatsapp_instances"] });
       toast.success("Copilot atualizado com sucesso!", {
         description: "Todas as alterações foram salvas e o prompt foi regenerado.",
       });
