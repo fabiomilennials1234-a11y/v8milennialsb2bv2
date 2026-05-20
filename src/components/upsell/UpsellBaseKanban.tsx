@@ -8,7 +8,7 @@ import { useUpsellOrders } from "@/hooks/useUpsellOrders";
 import { LeadCard, type LeadCardData } from "@/components/leads/LeadCard";
 import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/components/lead-detail";
 import { LeadPanelLayout } from "@/components/layout/LeadPanelLayout";
-import { QuickSaleModal } from "./QuickSaleModal";
+import { NewOrderModal } from "@/components/carteira/NewOrderModal";
 import { PipeSettingsDialog } from "@/components/pipelines/PipeSettingsDialog";
 import { useIsAdmin } from "@/hooks/useUserRole";
 import { useCreateAcaoDoDia } from "@/hooks/useAcoesDoDia";
@@ -241,7 +241,7 @@ function UpsellBaseKanbanInner({ searchQuery, filterPotencial, filterActive }: U
       </div>
 
       {quickSaleClientId && (
-        <QuickSaleModal
+        <NewOrderModal
           open={quickSaleOpen}
           onOpenChange={setQuickSaleOpen}
           clientId={quickSaleClientId}

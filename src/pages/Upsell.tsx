@@ -12,7 +12,7 @@ import { UpsellBaseKanban } from "@/components/upsell/UpsellBaseKanban";
 import { UpsellBaseList } from "@/components/upsell/UpsellBaseList";
 import { UpsellGestaoKanban } from "@/components/upsell/UpsellGestaoKanban";
 import { CreateClientModal } from "@/components/upsell/CreateClientModal";
-import { NovaVendaModal } from "@/components/upsell/NovaVendaModal";
+import { NewOrderModal } from "@/components/carteira/NewOrderModal";
 import { PipeSettingsDialog } from "@/components/pipelines/PipeSettingsDialog";
 import { usePipelineStages, type PipelineType } from "@/hooks/usePipelineStages";
 import { useAutoMoveUpsellClients } from "@/hooks/useAutoMoveUpsellClients";
@@ -75,7 +75,7 @@ export default function Upsell() {
   const [selectedClient, setSelectedClient] = useState<PortfolioClientRow | null>(null);
   const [carteiraSearch, setCarteiraSearch] = useState("");
   const [carteiraFilter, setCarteiraFilter] = useState("all");
-  const [quickOrderClientId, setQuickOrderClientId] = useState<string | null>(null);
+
   const [currentRows, setCurrentRows] = useState<PortfolioClientRow[]>([]);
   const [carteiraView, setCarteiraView] = useState<"clientes" | "analytics" | "aprovacoes">("clientes");
   const bulk = useBulkSelection();
@@ -299,7 +299,7 @@ export default function Upsell() {
 
         {/* Shared modals */}
         <CreateClientModal open={createClientOpen} onOpenChange={setCreateClientOpen} />
-        <NovaVendaModal open={novaVendaOpen} onOpenChange={setNovaVendaOpen} />
+        <NewOrderModal open={novaVendaOpen} onOpenChange={setNovaVendaOpen} />
         <PipeSettingsDialog
           open={importOpen}
           onOpenChange={setImportOpen}
@@ -458,7 +458,7 @@ export default function Upsell() {
       </Tabs>
 
       <CreateClientModal open={createClientOpen} onOpenChange={setCreateClientOpen} />
-      <NovaVendaModal open={novaVendaOpen} onOpenChange={setNovaVendaOpen} />
+      <NewOrderModal open={novaVendaOpen} onOpenChange={setNovaVendaOpen} />
       <PipeSettingsDialog
         open={importOpen}
         onOpenChange={setImportOpen}

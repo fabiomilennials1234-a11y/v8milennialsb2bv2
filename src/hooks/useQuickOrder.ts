@@ -18,6 +18,7 @@ export function useLastOrder(clientId: string) {
         .from("upsell_orders")
         .select("id, sale_value, sold_at, product_name, product_type")
         .eq("client_id", clientId)
+        .eq("approval_status", "approved")
         .order("sold_at", { ascending: false })
         .limit(1)
         .single();
