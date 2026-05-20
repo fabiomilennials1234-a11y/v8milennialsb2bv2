@@ -15,6 +15,7 @@ import { useLocation } from "react-router-dom";
 import { featureFlags } from "@/lib/feature-flags";
 import { useChatBubble } from "@/hooks/useChatBubble";
 import { useToast } from "@/hooks/use-toast";
+import { useViewport } from "@/hooks/use-viewport";
 import { ChatBubbleFab } from "./ChatBubbleFab";
 
 const LazyChatBubblePanel = lazy(() => import("./ChatBubblePanel"));
@@ -38,6 +39,7 @@ function shouldRenderForPath(pathname: string): boolean {
 }
 
 export function ChatBubble() {
+  const { isMobile } = useViewport();
   const { pathname } = useLocation();
   const {
     isOpen,
@@ -71,6 +73,8 @@ export function ChatBubble() {
     }
   }, [isOpen, isMinimized, close, open]);
 
+  // Gate: no bubble on mobile — avoids lazy-loading the panel chunk entirely
+  if (isMobile) return null;
   if (!featureFlags.chatBubble) return null;
   if (!shouldRenderForPath(pathname)) return null;
 

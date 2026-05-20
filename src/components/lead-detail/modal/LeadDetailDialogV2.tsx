@@ -5,7 +5,7 @@ import { Dialog, DialogPortal, DialogOverlay } from "@/components/ui/dialog";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useIsMobile } from "@/hooks/use-mobile";
+import { useViewport } from "@/hooks/use-viewport";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { useLeadSheet } from "../hooks/useLeadSheet";
 import { useLeadDetail } from "../hooks/useLeadDetail";
@@ -85,10 +85,6 @@ function LeadDetailContent({ onClose, isMobile }: { onClose: () => void; isMobil
     if (!lead) return;
     if (!window.confirm(`Excluir "${lead.name}"? Ação irreversível.`)) return;
     try {
-      // Tier 1 audit BEFORE delete — irreversible, must be on record.
-      // NOTE: useDeleteLead today hard-deletes lead_history too. The Tier 1
-      // call is the marker we expect future soft-delete work (#284 follow-up)
-      // to preserve in a compliance audit table.
       await logAction({
         leadId: lead.id,
         action: "lead_deleted",
@@ -105,8 +101,6 @@ function LeadDetailContent({ onClose, isMobile }: { onClose: () => void; isMobil
     }
   }, [lead, deleteLead, logAction, onClose]);
 
-  // Visibility gate (#305): show structured error states instead of
-  // a generic "loading" or "not found" toast.
   if (visibility === "loading" || isLoading) {
     return <LeadModalSkeleton />;
   }
@@ -133,7 +127,6 @@ function LeadDetailContent({ onClose, isMobile }: { onClose: () => void; isMobil
   }
 
   const leadAny = lead as any;
-  // Adapta tipos esperados pelos componentes (tier columns ainda fora do types.ts)
   const leadForHeader = {
     id: lead.id,
     organization_id: lead.organization_id ?? "",
@@ -148,9 +141,8 @@ function LeadDetailContent({ onClose, isMobile }: { onClose: () => void; isMobil
     qualification_tier:     (leadAny.qualification_tier ?? null) as QualificationTier | null,
   };
 
-  return (
-    <div className="flex flex-col h-full min-h-0 relative">
-      {/* Close button absoluto top-right */}
+  const headerBlock = (
+    <>
       <Button
         variant="ghost"
         size="icon"
@@ -174,68 +166,30 @@ function LeadDetailContent({ onClose, isMobile }: { onClose: () => void; isMobil
         className="contents"
         aria-disabled={!isOnline}
       >
-      <LeadModalToolbar
-        lead={{
-          id: lead.id,
-          name: lead.name,
-          phone: lead.phone,
-          email: lead.email,
-          responsible_id: lead.responsible_id,
-        }}
-        aiDisabled={aiDisabled}
-        onToggleAI={handleToggleAI}
-        onOpenCallModal={() => setCallOpen(true)}
-        onOpenEmailComposer={() => setEmailComposerOpen(true)}
-        onOpenEmailWriter={() => setEmailWriterOpen(true)}
-        onOpenScheduleModal={() => setScheduleOpen(true)}
-        onOpenSmsDialog={() => setSmsOpen(true)}
-        onDelete={handleDelete}
-        onClose={onClose}
-      />
-
-      {isMobile ? (
-        <Tabs value={mobileTab} onValueChange={setMobileTab} className="flex-1 min-h-0 flex flex-col">
-          <TabsList className="mx-3 mt-2 grid grid-cols-3" data-testid="lead-modal-mobile-tabs">
-            <TabsTrigger value="info" data-testid="tab-info">Info</TabsTrigger>
-            <TabsTrigger value="pipes" data-testid="tab-pipes">Pipes</TabsTrigger>
-            <TabsTrigger value="atividade" data-testid="tab-atividade">Atividade</TabsTrigger>
-          </TabsList>
-          <TabsContent value="info" className="flex-1 min-h-0 overflow-y-auto m-0">
-            <LeadInfoColumn lead={lead as Record<string, unknown> & { id: string }} />
-          </TabsContent>
-          <TabsContent value="pipes" className="flex-1 min-h-0 overflow-y-auto m-0 px-4 pt-4">
-            <CrossPipePanel
-              leadId={lead.id}
-              organizationId={lead.organization_id ?? ""}
-              defaultExpandedPipeEntryId={defaultExpandedPipeEntryId}
-              userId={user?.id ?? null}
-            />
-          </TabsContent>
-          <TabsContent value="atividade" className="flex-1 min-h-0 m-0 flex flex-col">
-            <LeadActivityColumn leadId={lead.id} organizationId={lead.organization_id ?? ""} />
-          </TabsContent>
-        </Tabs>
-      ) : (
-        <div className="grid grid-cols-12 flex-1 min-h-0">
-          <div className="col-span-12 md:col-span-7 min-h-0 flex flex-col overflow-y-auto">
-            <div className="px-6 pt-5">
-              <CrossPipePanel
-                leadId={lead.id}
-                organizationId={lead.organization_id ?? ""}
-                defaultExpandedPipeEntryId={defaultExpandedPipeEntryId}
-                userId={user?.id ?? null}
-              />
-            </div>
-            <LeadInfoColumn lead={lead as Record<string, unknown> & { id: string }} />
-          </div>
-          <div className="col-span-12 md:col-span-5 min-h-0 flex flex-col">
-            <LeadActivityColumn leadId={lead.id} organizationId={lead.organization_id ?? ""} />
-          </div>
-        </div>
-      )}
+        <LeadModalToolbar
+          lead={{
+            id: lead.id,
+            name: lead.name,
+            phone: lead.phone,
+            email: lead.email,
+            responsible_id: lead.responsible_id,
+          }}
+          aiDisabled={aiDisabled}
+          onToggleAI={handleToggleAI}
+          onOpenCallModal={() => setCallOpen(true)}
+          onOpenEmailComposer={() => setEmailComposerOpen(true)}
+          onOpenEmailWriter={() => setEmailWriterOpen(true)}
+          onOpenScheduleModal={() => setScheduleOpen(true)}
+          onOpenSmsDialog={() => setSmsOpen(true)}
+          onDelete={handleDelete}
+          onClose={onClose}
+        />
       </fieldset>
+    </>
+  );
 
-      {/* Sub-modais */}
+  const subModals = (
+    <>
       {scheduleOpen && lead.phone && (
         <ScheduleMessageModal
           open={scheduleOpen}
@@ -279,13 +233,62 @@ function LeadDetailContent({ onClose, isMobile }: { onClose: () => void; isMobil
           leadName={lead.name}
         />
       )}
+    </>
+  );
+
+  return (
+    <div className="flex flex-col h-full min-h-0 relative">
+      {headerBlock}
+
+      {isMobile ? (
+        <Tabs value={mobileTab} onValueChange={setMobileTab} className="flex-1 min-h-0 flex flex-col">
+          <TabsList className="mx-3 mt-2 grid grid-cols-3" data-testid="lead-modal-mobile-tabs">
+            <TabsTrigger value="info" data-testid="tab-info">Info</TabsTrigger>
+            <TabsTrigger value="pipes" data-testid="tab-pipes">Pipes</TabsTrigger>
+            <TabsTrigger value="atividade" data-testid="tab-atividade">Atividade</TabsTrigger>
+          </TabsList>
+          <TabsContent value="info" className="flex-1 min-h-0 overflow-y-auto m-0">
+            <LeadInfoColumn lead={lead as Record<string, unknown> & { id: string }} />
+          </TabsContent>
+          <TabsContent value="pipes" className="flex-1 min-h-0 overflow-y-auto m-0 px-4 pt-4">
+            <CrossPipePanel
+              leadId={lead.id}
+              organizationId={lead.organization_id ?? ""}
+              defaultExpandedPipeEntryId={defaultExpandedPipeEntryId}
+              userId={user?.id ?? null}
+            />
+          </TabsContent>
+          <TabsContent value="atividade" className="flex-1 min-h-0 m-0 flex flex-col">
+            <LeadActivityColumn leadId={lead.id} organizationId={lead.organization_id ?? ""} />
+          </TabsContent>
+        </Tabs>
+      ) : (
+        <div className="grid grid-cols-12 flex-1 min-h-0">
+          <div className="col-span-12 md:col-span-7 min-h-0 flex flex-col overflow-y-auto">
+            <div className="px-6 pt-5">
+              <CrossPipePanel
+                leadId={lead.id}
+                organizationId={lead.organization_id ?? ""}
+                defaultExpandedPipeEntryId={defaultExpandedPipeEntryId}
+                userId={user?.id ?? null}
+              />
+            </div>
+            <LeadInfoColumn lead={lead as Record<string, unknown> & { id: string }} />
+          </div>
+          <div className="col-span-12 md:col-span-5 min-h-0 flex flex-col">
+            <LeadActivityColumn leadId={lead.id} organizationId={lead.organization_id ?? ""} />
+          </div>
+        </div>
+      )}
+
+      {subModals}
     </div>
   );
 }
 
 export const LeadDetailDialogV2 = memo(function LeadDetailDialogV2(_props: LeadDetailDialogProps) {
   const { isOpen, close } = useLeadSheet();
-  const isMobile = useIsMobile();
+  const { isMobile } = useViewport();
 
   if (!isOpen) return null;
 
@@ -294,7 +297,7 @@ export const LeadDetailDialogV2 = memo(function LeadDetailDialogV2(_props: LeadD
       <Sheet open={isOpen} onOpenChange={(open) => !open && close()}>
         <SheetContent
           side="bottom"
-          className="h-[95vh] p-0 overflow-hidden flex flex-col"
+          className="h-[90vh] p-0 overflow-hidden flex flex-col rounded-t-2xl"
           aria-describedby={undefined}
         >
           <LeadDetailContent onClose={close} isMobile={isMobile} />

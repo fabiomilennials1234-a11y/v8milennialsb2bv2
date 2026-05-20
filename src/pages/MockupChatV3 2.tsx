@@ -815,7 +815,7 @@ export default function MockupChatV3() {
               variant="outline"
               className="ml-auto font-mono text-[10px] border-green-500/40 text-green-600 dark:text-green-400 gap-1 select-all shrink-0"
             >
-              VITE_CHAT_ONDA_2B=true
+              CHAT_ONDA_2B (always-on)
             </Badge>
           </div>
 
@@ -886,7 +886,7 @@ export default function MockupChatV3() {
               className="font-mono text-[10px] border-primary/40 text-primary/70 gap-1 select-all"
               title="Adicione ao seu .env para ativar o ChatShell 3-col em /chat"
             >
-              VITE_CHAT_ONDA_2B=true
+              CHAT_ONDA_2B (always-on)
             </Badge>
           </div>
           <div className="flex items-center gap-4">

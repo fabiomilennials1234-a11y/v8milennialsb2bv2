@@ -2,7 +2,7 @@ import { memo } from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { Dialog, DialogPortal, DialogOverlay } from "@/components/ui/dialog";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
-import { useIsMobile } from "@/hooks/use-mobile";
+import { useViewport } from "@/hooks/use-viewport";
 import { useLeadSheet } from "../hooks/useLeadSheet";
 import { LeadDetailSheet as LegacyLeadDetailSheet } from "../LeadDetailSheet";
 import { cn } from "@/lib/utils";
@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
  */
 export const LeadDetailDialogV1 = memo(function LeadDetailDialogV1() {
   const { isOpen, close } = useLeadSheet();
-  const isMobile = useIsMobile();
+  const { isMobile } = useViewport();
 
   if (!isOpen) return null;
 

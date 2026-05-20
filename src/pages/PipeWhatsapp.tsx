@@ -51,6 +51,8 @@ import { useTags } from "@/hooks/useTags";
 import { useBulkSelection } from "@/hooks/useBulkSelection";
 import { BulkActionBar } from "@/components/bulk-actions/BulkActionBar";
 import { PipeTableView } from "@/components/kanban/PipeTableView";
+import { PipelineListView } from "@/components/kanban/PipelineListView";
+import { useViewport } from "@/hooks/use-viewport";
 import { SavedViewsDropdown } from "@/components/saved-views/SavedViewsDropdown";
 import { useSearchParams } from "react-router-dom";
 import { matchesResponsibleFilter } from "@/lib/kanban-filters";
@@ -95,6 +97,7 @@ function PipeWhatsappInner() {
   );
 
   const { searchTerm, filterResponsible, filterOrigin, filterTags, filterScheduled, viewMode } = filterState;
+  const { isMobile } = useViewport();
 
   const setSearchTerm = useCallback(
     (v: string) => setFilterState((f) => ({ ...f, searchTerm: v })),
@@ -311,6 +314,39 @@ function PipeWhatsappInner() {
     return result;
   }, [pipeData, pipelineStages, statusColumns, searchTerm, filterResponsible, filterOrigin, filterTags, filterScheduled, leadsWithSchedule, metricsRange]);
 
+  // ---------------------------------------------------------------------------
+  // Mobile list view — derive stages + flat lead list from existing columns
+  // ---------------------------------------------------------------------------
+  const mobileStages = useMemo(
+    () => statusColumns.map((col) => ({ id: col.id, name: col.title, stage_key: col.id, color: col.color })),
+    [statusColumns]
+  );
+
+  const mobileLeads = useMemo(() => {
+    if (!pipeData) return [];
+    return pipeData
+      .filter(filterItems)
+      .map((item) => {
+        const lead = item.lead;
+        return {
+          id: item.lead_id,
+          pipeId: item.id,
+          name: lead?.name || "Sem nome",
+          company: lead?.company || undefined,
+          phone: lead?.phone || undefined,
+          rating: lead?.rating || 0,
+          stage_key: item.status,
+          created_at: item.created_at,
+          updated_at: item.stage_entered_at || item.updated_at,
+        };
+      });
+  }, [pipeData, searchTerm, filterResponsible, filterOrigin, filterTags, filterScheduled, leadsWithSchedule, metricsRange]);
+
+  const handleMobileLeadClick = useCallback((leadId: string) => {
+    const item = pipeData?.find((p) => p.lead_id === leadId);
+    if (item) openLead(item.lead_id, item.id);
+  }, [pipeData, openLead]);
+
   // Count "ghost leads" — rows do pipe que o usuário enxerga mas cujo join
   // com `leads` retornou null. Indica divergência entre RLS do pipe e de
   // `leads` (ex.: responsible_id do pipe aponta para o usuário, mas sdr_id
@@ -391,6 +427,14 @@ function PipeWhatsappInner() {
       console.error(error);
     }
   };
+
+  const handleMobileMove = useCallback(
+    async (leadId: string, newStageKey: string) => {
+      const item = pipeData?.find((p) => p.lead_id === leadId);
+      if (item) await handleStatusChange(item.id, newStageKey);
+    },
+    [pipeData, handleStatusChange]
+  );
 
   // Handle delete — always removes only from this pipe, never deletes the full lead
   const handleDelete = async () => {
@@ -580,8 +624,16 @@ function PipeWhatsappInner() {
         </div>
       )}
 
-      {/* Kanban Board / List View */}
-      {viewMode === "kanban" ? (
+      {/* Kanban Board / List View / Mobile List View */}
+      {isMobile ? (
+        <PipelineListView
+          stages={mobileStages}
+          leads={mobileLeads}
+          onLeadClick={handleMobileLeadClick}
+          onMoveLeadToStage={handleMobileMove}
+          isLoading={isLoading && !pipeData}
+        />
+      ) : viewMode === "kanban" ? (
         <DraggableKanbanBoard
           columns={columns}
           onStatusChange={handleStatusChange}

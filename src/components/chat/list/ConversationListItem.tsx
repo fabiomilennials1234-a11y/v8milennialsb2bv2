@@ -47,7 +47,7 @@ export function contactDisplayName(c: ChatContact): string {
   return (c.push_name || c.lead_name || c.phone_number || "").trim() || "Contato";
 }
 
-function formatContactTime(timestamp: string): string {
+export function formatContactTime(timestamp: string): string {
   if (!timestamp) return "";
   const date = new Date(timestamp);
   if (Number.isNaN(date.getTime())) return "";

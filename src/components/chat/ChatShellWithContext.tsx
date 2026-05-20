@@ -1,7 +1,7 @@
 /**
  * ChatShellWithContext — consumer real do ChatShell 3-col.
  *
- * Ativa sob feature flag VITE_CHAT_ONDA_2B=true em /chat.
+ * Componente principal de chat em /chat (legacy WhatsAppChat removido).
  * Onda 2b, C3.
  *
  * Wires hooks reais → ChatShell:
@@ -33,11 +33,13 @@ import { computeNeedsDeepLinkResolve } from "@/lib/computeNeedsDeepLinkResolve";
 import { useCopilotToggle } from "@/hooks/useCopilotToggle";
 import { ChatShell } from "@/components/chat/layout/ChatShell";
 import { MobileChatLayout } from "@/components/chat/layout/MobileChatLayout";
-import { useChatViewport } from "@/hooks/chat/useChatViewport";
+import { useViewport } from "@/hooks/use-viewport";
 import { ConversationList } from "@/components/chat/list/ConversationList";
 import { ChatHeader } from "@/components/chat/view/ChatHeader";
+import { MobileChatThreadHeader } from "@/components/chat/view/MobileChatThreadHeader";
 import { MessageList } from "@/components/chat/view/MessageList";
 import { ChatComposer } from "@/components/chat/composer/ChatComposer";
+import { MobileComposerContextual } from "@/components/chat/composer/MobileComposerContextual";
 import { ContextPanel } from "@/components/chat/context-panel/ContextPanel";
 import { LeadContactModal } from "@/components/chat/LeadContactModal";
 import { ImagePreviewModal } from "@/components/chat/media/ImagePreviewModal";
@@ -81,6 +83,7 @@ interface ChatViewProps {
   onOpenLeadModal: () => void;
   density: DensityMode;
   onDensityChange: (d: DensityMode) => void;
+  isMobile: boolean;
 }
 
 function ChatView({
@@ -94,6 +97,7 @@ function ChatView({
   onOpenLeadModal,
   density,
   onDensityChange,
+  isMobile,
 }: ChatViewProps) {
   const phoneNumber = selectedContact?.phone_number ?? selectedPhone;
   const conversationId = selectedContact?.conversation_id ?? null;
@@ -175,31 +179,42 @@ function ChatView({
         </div>
       )}
 
-      <ChatHeader
-        phoneNumber={phoneNumber ?? ""}
-        contactName={contactName}
-        hasLead={!!selectedContact?.lead_id}
-        leadId={selectedContact?.lead_id ?? undefined}
-        conversationId={conversationId}
-        instanceId={instanceId ?? undefined}
-        aiDisabled={aiDisabled || isHumanActive}
-        isWaitingHuman={isWaitingHuman}
-        szChatSession={null}
-        organizationId={organizationId}
-        onBack={onBack}
-        onOpenLeadModal={onOpenLeadModal}
-        onToggleAi={(checked) => {
-          if (isHumanActive) return;
-          toggleAiMutation.mutate(checked);
-        }}
-        onTransferToSzChatTeam={() => {
-          // SZ.chat transfer — Onda 6
-        }}
-        toggleAiPending={toggleAiMutation.isPending || isHumanActive}
-        transferPending={false}
-        density={density}
-        onDensityChange={onDensityChange}
-      />
+      {isMobile ? (
+        <MobileChatThreadHeader
+          contactName={contactName}
+          phoneNumber={phoneNumber ?? ""}
+          hasLead={!!selectedContact?.lead_id}
+          leadId={selectedContact?.lead_id ?? undefined}
+          onBack={onBack}
+          onTapContact={onOpenLeadModal}
+        />
+      ) : (
+        <ChatHeader
+          phoneNumber={phoneNumber ?? ""}
+          contactName={contactName}
+          hasLead={!!selectedContact?.lead_id}
+          leadId={selectedContact?.lead_id ?? undefined}
+          conversationId={conversationId}
+          instanceId={instanceId ?? undefined}
+          aiDisabled={aiDisabled || isHumanActive}
+          isWaitingHuman={isWaitingHuman}
+          szChatSession={null}
+          organizationId={organizationId}
+          onBack={onBack}
+          onOpenLeadModal={onOpenLeadModal}
+          onToggleAi={(checked) => {
+            if (isHumanActive) return;
+            toggleAiMutation.mutate(checked);
+          }}
+          onTransferToSzChatTeam={() => {
+            // SZ.chat transfer — Onda 6
+          }}
+          toggleAiPending={toggleAiMutation.isPending || isHumanActive}
+          transferPending={false}
+          density={density}
+          onDensityChange={onDensityChange}
+        />
+      )}
 
       <div className="flex-1 min-h-0 min-w-0 overflow-hidden flex flex-col">
         {messagesLoading ? (
@@ -228,22 +243,40 @@ function ChatView({
         )}
       </div>
 
-      <ChatComposer
-        conversationKey={conversationKey}
-        phoneNumber={phoneNumber ?? ""}
-        contactName={contactName}
-        instanceName={instanceName}
-        instanceId={instanceId}
-        leadId={selectedContact?.lead_id ?? undefined}
-        canReply
-        density={density}
-        selectedContact={{
-          push_name: selectedContact?.push_name ?? null,
-          lead_name: selectedContact?.lead_name ?? null,
-          phone_number: phoneNumber ?? "",
-          lead_id: selectedContact?.lead_id ?? null,
-        }}
-      />
+      {isMobile ? (
+        <MobileComposerContextual
+          conversationKey={conversationKey}
+          phoneNumber={phoneNumber ?? ""}
+          contactName={contactName}
+          instanceName={instanceName}
+          instanceId={instanceId}
+          leadId={selectedContact?.lead_id ?? undefined}
+          canReply
+          selectedContact={{
+            push_name: selectedContact?.push_name ?? null,
+            lead_name: selectedContact?.lead_name ?? null,
+            phone_number: phoneNumber ?? "",
+            lead_id: selectedContact?.lead_id ?? null,
+          }}
+        />
+      ) : (
+        <ChatComposer
+          conversationKey={conversationKey}
+          phoneNumber={phoneNumber ?? ""}
+          contactName={contactName}
+          instanceName={instanceName}
+          instanceId={instanceId}
+          leadId={selectedContact?.lead_id ?? undefined}
+          canReply
+          density={density}
+          selectedContact={{
+            push_name: selectedContact?.push_name ?? null,
+            lead_name: selectedContact?.lead_name ?? null,
+            phone_number: phoneNumber ?? "",
+            lead_id: selectedContact?.lead_id ?? null,
+          }}
+        />
+      )}
 
       {/* C6 — Image preview inline */}
       <ImagePreviewModal
@@ -533,8 +566,8 @@ export function ChatShellWithContext() {
   // ── mountTime estável (capturado uma vez no mount) ───────────────────────────
   const mountTimeRef = useRef(Date.now());
 
-  // ── Viewport: mobile <780px usa MobileChatLayout ─────────────────────────────
-  const { isMobile } = useChatViewport();
+  // ── Viewport: mobile <768px usa MobileChatLayout ─────────────────────────────
+  const { isMobile } = useViewport();
   const ShellComponent = isMobile ? MobileChatLayout : ChatShell;
 
   // ── Loading state ────────────────────────────────────────────────────────────
@@ -601,6 +634,7 @@ export function ChatShellWithContext() {
             onOpenLeadModal={handleOpenLeadModal}
             density={density}
             onDensityChange={setDensity}
+            isMobile={isMobile}
           />
         }
         context={

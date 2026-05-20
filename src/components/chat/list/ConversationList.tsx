@@ -21,14 +21,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { useViewport } from "@/hooks/use-viewport";
 import type { ChatContact, WhatsAppInstanceForUser } from "@/hooks/useWhatsAppChat";
 import { ConversationListItem, contactDisplayName } from "./ConversationListItem";
+import { MobileConversationRow } from "./MobileConversationRow";
+import { MobileChatListHeader, type MobileChatFilter } from "./MobileChatListHeader";
 import type { DensityMode } from "@/hooks/chat/useChatDensity";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
 const VIRTUALIZE_THRESHOLD = 50;
-const MOBILE_BREAKPOINT = 780;
 
 /** Altura estimada por item baseada em density CSS vars de useChatDensity. */
 function estimateItemHeight(density: DensityMode): number {
@@ -106,20 +108,33 @@ export function ConversationList({
   density = "comfortable",
 }: ConversationListProps) {
   const scrollAreaRef = useRef<HTMLDivElement | null>(null);
-  // Local toggle: BL-WA-05 added group capture. Default view hides groups so
-  // existing 1:1 sales workflow is unchanged; user opts in via the "Grupos" pill.
+  const { isMobile } = useViewport();
   const [showGroups, setShowGroups] = useState(false);
+  const [mobileFilter, setMobileFilter] = useState<MobileChatFilter>("all");
 
   const filteredContacts = contacts.filter((c) => {
-    if (showGroups) {
-      if (!c.is_group) return false;
+    // Mobile filter mapping
+    if (isMobile) {
+      if (mobileFilter === "groups") {
+        if (!c.is_group) return false;
+      } else if (mobileFilter === "unread") {
+        if (c.is_group) return false;
+        if (c.unread_count <= 0) return false;
+      } else {
+        if (c.is_group) return false;
+      }
+      if (c.archived_at) return false;
     } else {
-      if (c.is_group) return false;
+      if (showGroups) {
+        if (!c.is_group) return false;
+      } else {
+        if (c.is_group) return false;
+      }
+      if (showOnlyWithLead && !c.lead_id) return false;
+      if (showOnlyWaitingHuman && !(c.lead_id && waitingHumanLeadIds?.has(c.lead_id))) return false;
+      if (activeTab === "active" && c.archived_at) return false;
+      if (activeTab === "archived" && !c.archived_at) return false;
     }
-    if (showOnlyWithLead && !c.lead_id) return false;
-    if (showOnlyWaitingHuman && !(c.lead_id && waitingHumanLeadIds?.has(c.lead_id))) return false;
-    if (activeTab === "active" && c.archived_at) return false;
-    if (activeTab === "archived" && !c.archived_at) return false;
     const name = contactDisplayName(c).toLowerCase();
     return (
       c.phone_number.includes(searchQuery) ||
@@ -130,9 +145,9 @@ export function ConversationList({
   const activeCount = contacts.filter((c) => !c.is_group && !c.archived_at).length;
   const archivedCount = contacts.filter((c) => !c.is_group && !!c.archived_at).length;
   const groupCount = contacts.filter((c) => c.is_group).length;
+  const unreadCount = contacts.filter((c) => !c.is_group && !c.archived_at && c.unread_count > 0).length;
 
-  const isMobile = typeof window !== "undefined" && window.innerWidth < MOBILE_BREAKPOINT;
-  const shouldVirtualize = !isMobile && filteredContacts.length > VIRTUALIZE_THRESHOLD;
+  const shouldVirtualize = filteredContacts.length > VIRTUALIZE_THRESHOLD;
 
   const getScrollElement = useCallback(() => {
     return scrollAreaRef.current?.querySelector<HTMLElement>(
@@ -147,9 +162,33 @@ export function ConversationList({
     overscan: 3,
   });
 
+  const selectedInst = instances?.find((i) => i.id === selectedInstanceId);
+
   return (
-    <div className="flex flex-col h-full min-h-0 border-r border-border/60 bg-muted/20">
-      {/* ─── Cabeçalho ─────────────────────────────────────────────────────── */}
+    <div className={cn(
+      "flex flex-col h-full min-h-0 bg-muted/20",
+      !isMobile && "border-r border-border/60",
+    )}>
+      {/* ─── Header: mobile vs desktop ─────────────────────────────────────── */}
+      {isMobile ? (
+        <MobileChatListHeader
+          instanceName={selectedInst?.instance_name ?? "WhatsApp"}
+          instanceConnected={selectedInst?.status === "connected"}
+          onOpenInstanceSelector={() => {
+            // Cycle through instances on mobile (simple pill tap)
+            if (instances && instances.length > 1 && onSelectInstance) {
+              const idx = instances.findIndex((i) => i.id === selectedInstanceId);
+              const next = instances[(idx + 1) % instances.length];
+              onSelectInstance(next.id);
+            }
+          }}
+          searchQuery={searchQuery}
+          onSearchChange={onSearchChange}
+          activeFilter={mobileFilter}
+          onFilterChange={setMobileFilter}
+          unreadCount={unreadCount}
+        />
+      ) : (
       <div className="p-3 border-b bg-background shrink-0">
         {instances && instances.length > 0 && onSelectInstance && (
           <div className="mb-3">
@@ -302,6 +341,7 @@ export function ConversationList({
           </button>
         </div>
       </div>
+      )}
 
       {/* ─── Lista ──────────────────────────────────────────────────────────── */}
       <ScrollArea ref={scrollAreaRef} className="flex-1 min-h-0">
@@ -367,27 +407,37 @@ export function ConversationList({
             })}
           </div>
         ) : (
-          // ── Modo plain (≤50 contatos ou mobile) ───────────────────────────
-          <div className="divide-y divide-border/60">
-            {filteredContacts.map((contact) => (
-              <ConversationListItem
-                key={contact.phone_number}
-                contact={contact}
-                isSelected={selectedPhone === contact.phone_number}
-                onSelect={onSelectContact}
-                waitingHumanLeadIds={waitingHumanLeadIds}
-                activeTab={activeTab}
-                isAdmin={isAdmin}
-                instanceId={instanceId}
-                organizationId={organizationId}
-                allTags={allTags}
-                onArchive={onArchive}
-                onUnarchive={onUnarchive}
-                onDelete={onDelete}
-                onAddTag={onAddTag}
-                onRemoveTag={onRemoveTag}
-              />
-            ))}
+          // ── Modo plain (≤50 contatos ou fallback) ─────────────────────────
+          <div className={cn(!isMobile && "divide-y divide-border/60")}>
+            {filteredContacts.map((contact) =>
+              isMobile ? (
+                <MobileConversationRow
+                  key={contact.phone_number}
+                  contact={contact}
+                  isSelected={selectedPhone === contact.phone_number}
+                  onPress={onSelectContact}
+
+                />
+              ) : (
+                <ConversationListItem
+                  key={contact.phone_number}
+                  contact={contact}
+                  isSelected={selectedPhone === contact.phone_number}
+                  onSelect={onSelectContact}
+                  waitingHumanLeadIds={waitingHumanLeadIds}
+                  activeTab={activeTab}
+                  isAdmin={isAdmin}
+                  instanceId={instanceId}
+                  organizationId={organizationId}
+                  allTags={allTags}
+                  onArchive={onArchive}
+                  onUnarchive={onUnarchive}
+                  onDelete={onDelete}
+                  onAddTag={onAddTag}
+                  onRemoveTag={onRemoveTag}
+                />
+              ),
+            )}
           </div>
         )}
       </ScrollArea>
