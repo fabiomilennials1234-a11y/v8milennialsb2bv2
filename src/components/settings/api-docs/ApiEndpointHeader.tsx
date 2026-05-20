@@ -3,6 +3,8 @@ import { Check, Copy } from "lucide-react";
 import { MethodBadge } from "./MethodBadge";
 import type { ApiEndpoint } from "@/lib/api-docs/types";
 
+const PARTNER_API_BASE_URL = "https://api.torquecrm.com.br";
+
 interface ApiEndpointHeaderProps {
   endpoint: ApiEndpoint;
   baseUrl: string;
@@ -10,7 +12,8 @@ interface ApiEndpointHeaderProps {
 
 export function ApiEndpointHeader({ endpoint, baseUrl }: ApiEndpointHeaderProps) {
   const [copied, setCopied] = useState(false);
-  const fullUrl = `${baseUrl}${endpoint.path}`;
+  const resolvedBase = endpoint.category === "partner" ? PARTNER_API_BASE_URL : baseUrl;
+  const fullUrl = `${resolvedBase}${endpoint.path}`;
 
   const handleCopy = useCallback(() => {
     navigator.clipboard.writeText(fullUrl);
