@@ -1,16 +1,17 @@
-name: Deploy
+name: Build Image
 
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  deploy:
-    name: Build & Deploy to Production
+  build:
+    name: Build & Push Image
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -51,10 +52,8 @@ jobs:
             VITE_META_APP_ID=${{ secrets.VITE_META_APP_ID }}
             VITE_SENTRY_DSN=${{ secrets.VITE_SENTRY_DSN }}
 
-      - name: Trigger EasyPanel redeploy
-        run: |
-          curl -s -o /dev/null -w "%{http_code}" \
-            -X POST "${{ secrets.EASYPANEL_WEBHOOK_URL }}" \
-            -H "Content-Type: application/json" \
-            -d '{"image": "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"}' | \
-            grep -qE "^2" && echo "Deploy triggered" || (echo "Deploy trigger failed" && exit 1)
+      # Deploy is intentionally decoupled from main. Push to main only builds
+      # and publishes the image to ghcr.io as :latest + :sha-<short>. To ship
+      # to production, trigger a redeploy manually in the EasyPanel UI (it
+      # pulls :latest from ghcr.io). This avoids surprise prod pushes from
+      # routine merges.
