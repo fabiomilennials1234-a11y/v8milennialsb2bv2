@@ -25,6 +25,13 @@ import { ActionPanel } from "./ActionPanel";
 import { OtherPipesStrip, type InactivePipeDescriptor } from "./OtherPipesStrip";
 import { StageRail, type StageRailPipe } from "./StageRail";
 import { useCrossPipeMove } from "./useCrossPipeMove";
+import {
+  focusStorageKey,
+  loadStoredFocus,
+  persistFocus,
+  pickDefaultExpanded,
+  railKey,
+} from "./pipeRanking";
 
 /**
  * CrossPipePanel — replaces LeadCrossPipeAccordion. Three horizontal zones:
@@ -226,6 +233,45 @@ export const CrossPipePanel = memo(function CrossPipePanel({
     return list;
   }, [activeSystem, activeCustom]);
 
+  // ─── Rail focus (which rail is expanded) ───────────────────────────
+  // Single-expand: at most one rail is expanded at a time. When 2+ rails
+  // are active, the others render as compact chips. Persisted per user+lead
+  // in localStorage with a fallback heuristic (most-advanced system pipe).
+  const railFocusKey = focusStorageKey(userId, leadId);
+
+  const initialRailFocus = useMemo<string | null>(() => {
+    if (rails.length === 0) return null;
+    const stored = loadStoredFocus(railFocusKey, rails);
+    return stored ?? pickDefaultExpanded(rails);
+  }, [rails, railFocusKey]);
+
+  const [expandedRailKey, setExpandedRailKey] = useState<string | null>(
+    initialRailFocus,
+  );
+
+  // Re-sync when rails change (lead added/removed from a pipe, or modal
+  // reopens for a different lead). Also handles the storage-points-to-
+  // removed-pipe case: pickDefaultExpanded never returns a removed key.
+  useEffect(() => {
+    setExpandedRailKey((current) => {
+      if (rails.length === 0) return null;
+      const stillValid =
+        current && rails.some((r) => railKey(r) === current);
+      if (stillValid) return current;
+      const stored = loadStoredFocus(railFocusKey, rails);
+      return stored ?? pickDefaultExpanded(rails);
+    });
+  }, [rails, railFocusKey]);
+
+  const handleExpandRail = useCallback(
+    (target: StageRailPipe) => {
+      const next = railKey(target);
+      setExpandedRailKey(next);
+      persistFocus(railFocusKey, next);
+    },
+    [railFocusKey],
+  );
+
   // ─── Add handlers ──────────────────────────────────────────────────
   const handleAddSystem = useCallback(
     async (pipe: StandardPipelineStatus) => {
@@ -420,20 +466,31 @@ export const CrossPipePanel = memo(function CrossPipePanel({
 
   return (
     <div className={cn("space-y-3")} data-testid="cross-pipe-panel">
-      {/* Zone A — StageRails */}
+      {/* Zone A — StageRails (single-expand, collapsed chips for others) */}
       {rails.length > 0 && (
-        <div className="space-y-1.5" data-testid="stage-rails">
-          {rails.map((rail) => (
-            <StageRail
-              key={`${rail.kind}:${rail.pipeRef}`}
-              pipe={rail}
-              pendingStageKey={move.pendingStageKey}
-              recentlyMovedStageKey={move.recentlyMovedStageKey}
-              disabled={!canMoveMeeting.allowed}
-              disabledReason={movePipeDisabledReason}
-              onMove={move.move}
-            />
-          ))}
+        <div
+          className="space-y-1.5"
+          data-testid="stage-rails"
+          role="region"
+          aria-label="Pipes do lead"
+        >
+          {rails.map((rail) => {
+            const key = railKey(rail);
+            const isExpanded = key === expandedRailKey;
+            return (
+              <StageRail
+                key={key}
+                pipe={rail}
+                pendingStageKey={move.pendingStageKey}
+                recentlyMovedStageKey={move.recentlyMovedStageKey}
+                disabled={!canMoveMeeting.allowed}
+                disabledReason={movePipeDisabledReason}
+                onMove={move.move}
+                mode={isExpanded ? "expanded" : "collapsed"}
+                onExpand={() => handleExpandRail(rail)}
+              />
+            );
+          })}
         </div>
       )}
 
