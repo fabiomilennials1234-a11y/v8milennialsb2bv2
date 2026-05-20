@@ -13,7 +13,7 @@ interface LeadInfoColumnProps {
 export const LeadInfoColumn = memo(function LeadInfoColumn({ lead }: LeadInfoColumnProps) {
   const gates = useLeadActionGates(lead.id);
   return (
-    <div className="overflow-y-auto px-6 py-5 space-y-6 min-h-0">
+    <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6 min-h-0">
       <InfoBlockFilled lead={lead as Parameters<typeof InfoBlockFilled>[0]["lead"]} />
       <Separator className="bg-border/60" />
       <LeadCustomFieldsBlock leadId={lead.id} editable={gates.canEditField.allowed} />
