@@ -13,7 +13,6 @@ import { featureFlags } from "@/lib/feature-flags";
 import { ChatBubbleProvider } from "@/contexts/ChatBubbleContext";
 import { MobileChatProvider, useMobileChatContext } from "@/contexts/MobileChatContext";
 import { ChatBubble } from "@/components/chat/bubble";
-import { WhatsAppUpdateModal } from "@/components/shared/WhatsAppUpdateModal";
 import { SessionDeadBanner } from "@/components/whatsapp/SessionDeadBanner";
 
 // Rotas onde o checklist NÃO deve aparecer
@@ -130,8 +129,6 @@ function MainLayoutInner({ children }: MainLayoutProps) {
       />
 
       {featureFlags.chatBubble && <ChatBubble />}
-
-      <WhatsAppUpdateModal />
 
       <MobileBottomNav />
     </div>
