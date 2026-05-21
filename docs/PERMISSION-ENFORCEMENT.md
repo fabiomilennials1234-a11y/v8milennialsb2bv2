@@ -40,6 +40,32 @@ Frontend is **optimistic** — hides UI but does not prevent bypass via direct A
 |----------|--------|---------------|----------|
 | move-card (move-pipe-record) | `move_pipe_record` | `_shared/actions/move-card.ts` | #188 |
 | mass-send-create | `mass_send` | `mass-send-create/index.ts` | #189 |
+| leads DELETE (RLS) | `can_delete_leads` | `leads_delete_admin_or_permission` policy | 2026-05-20 |
+
+## Permission Tab (Pitstop) — 2026-05-20
+
+The Pitstop > Permissões tab is the canonical UI to manage the 12 toggles that control what `role='member'` can do per org. Decisions live in [ADR-2026-05-20-permission-tab-storage-split](../Obsidian/Segundo%20Cerebro/Claude%20Code%20—%20Torque%20CRM/04%20—%20Decisões/ADR-2026-05-20-permission-tab-storage-split.md).
+
+### Storage split
+
+| Storage table | Keys | Mutation destination |
+|---|---|---|
+| `organization_role_permissions` (role='member') | `see_unassigned_cards`, `see_subordinates_cards`, `see_general_info`, `see_all_leads`, `can_delete_leads`, `can_create_leads`, `can_export_leads`, `can_move_pipe_records`, `can_manage_campaigns` | UPSERT |
+| `feature_permissions.default_value` | `can_manage_workflows` → `workflows.create`; `can_manage_team` → `team.view`; `can_manage_copilot` → `copilot.create` | UPDATE |
+
+UI is unaware — `useUpdateRolePermission` reads `src/lib/permission-catalog.ts` and routes the write.
+
+### Fase 1 server-side enforcement (delivered 2026-05-20)
+
+Only **`can_delete_leads`** has RLS enforcement. DELETE on `leads` requires `is_user_admin() OR is_master_user() OR user_has_org_permission('can_delete_leads')`.
+
+### Fase 2 server-side enforcement (backlog)
+
+The other 7 keys are frontend-only. Tracked in [`server-side-enforcement-phase2`](../Obsidian/Segundo%20Cerebro/Claude%20Code%20—%20Torque%20CRM/08%20—%20Backlog/backlog/server-side-enforcement-phase2.md).
+
+### Audit log
+
+Every toggle is captured in `permission_audit_log` via SECURITY DEFINER trigger `tg_permission_audit_org_role_permissions` / `tg_permission_audit_feature_permissions`. RLS allows admin/master of the org to SELECT. INSERT only via trigger (no policy = effective deny for client).
 
 ### move-card
 

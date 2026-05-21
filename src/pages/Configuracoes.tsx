@@ -106,6 +106,16 @@ const ChecklistTemplatesManager = lazy(() =>
     default: m.ChecklistTemplatesManager,
   }))
 );
+const ApiKeysPanel = lazy(() =>
+  import("@/components/settings/ApiKeysPanel").then((m) => ({
+    default: m.ApiKeysPanel,
+  }))
+);
+const PermissionsSettings = lazy(() =>
+  import("@/components/settings/PermissionsTab").then((m) => ({
+    default: m.PermissionsTab,
+  }))
+);
 
 const colorOptions = [
   "#F5C518", "#22C55E", "#3B82F6", "#8B5CF6", "#EF4444",
@@ -632,6 +642,14 @@ export default function Configuracoes() {
             <Timer className="w-4 h-4" />
             SLA
           </TabsTrigger>
+          <TabsTrigger value="permissoes" className="gap-2">
+            <Shield className="w-4 h-4" />
+            Permissões
+          </TabsTrigger>
+          <TabsTrigger value="api-keys" className="gap-2">
+            <Key className="w-4 h-4" />
+            API Keys
+          </TabsTrigger>
           <TabsTrigger value="sandbox" className="gap-2">
             <FlaskConical className="w-4 h-4" />
             Sandbox
@@ -713,6 +731,25 @@ export default function Configuracoes() {
           </TabsContent>
 
 
+          <TabsContent value="permissoes">
+            <Suspense fallback={<TabFallback label="Permissões" />}>
+              <Card className="glass-card">
+                <CardContent className="pt-6">
+                  <PermissionsSettings />
+                </CardContent>
+              </Card>
+            </Suspense>
+          </TabsContent>
+
+          <TabsContent value="api-keys">
+            <Suspense fallback={<TabFallback label="API Keys" />}>
+              <Card className="glass-card">
+                <CardContent className="pt-6">
+                  <ApiKeysPanel />
+                </CardContent>
+              </Card>
+            </Suspense>
+          </TabsContent>
 
           <TabsContent value="sandbox">
             <Suspense fallback={<TabFallback label="Sandbox" />}>

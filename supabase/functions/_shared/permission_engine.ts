@@ -34,17 +34,20 @@ export interface PermissionResult {
   reason?: string;
 }
 
-// Mapeamento de ação legada para recurso+ação na matriz team_member_permissions
+// Mapeamento de ação legada para recurso+ação na matriz team_member_permissions.
+// A partir de 2026-05-20 (Permissions tab Pitstop), várias ações migraram para
+// ACTION_TO_ORG_PERMISSION. As entradas null aqui significam: não usar matriz
+// — usar a cascata superior (org_permission / feature / etc.).
 const ACTION_TO_MATRIX: Record<PermissionAction, { resource: string; action: string } | null> = {
-  move_pipe_record: null, // Usa permissão contextual por pipe
+  move_pipe_record: null, // Migrado para ACTION_TO_ORG_PERMISSION (can_move_pipe_records)
   import_leads:     { resource: "leads", action: "create" },
-  create_lead:      { resource: "leads", action: "create" },
-  delete_lead:      { resource: "leads", action: "delete" },
-  trigger_campaign: { resource: "campanhas", action: "edit" },
-  edit_workflow:    null, // Usa feature_permissions
-  export_leads:     { resource: "leads", action: "export" },
-  view_lead:        { resource: "leads", action: "view" },
-  send_message:     null, // Qualquer membro autenticado pode enviar
+  create_lead:      null, // Migrado para ACTION_TO_ORG_PERMISSION (can_create_leads)
+  delete_lead:      null, // Usa branch dedicada delete_lead → can_delete_leads
+  trigger_campaign: null, // Migrado para ACTION_TO_ORG_PERMISSION (can_manage_campaigns)
+  edit_workflow:    null, // Usa feature_permissions (workflows.edit)
+  export_leads:     null, // Migrado para ACTION_TO_ORG_PERMISSION (can_export_leads)
+  view_lead:        null, // Migrado para ACTION_TO_ORG_PERMISSION (see_all_leads)
+  send_message:     null, // Usa feature_permissions
   manage_team:      null, // Usa feature_permissions
   manage_copilot:   null, // Usa feature_permissions
 };
@@ -55,6 +58,16 @@ const ACTION_TO_FEATURE: Partial<Record<PermissionAction, string>> = {
   manage_team:    "team.view",
   manage_copilot: "copilot.create",
   send_message:   "whatsapp.send_messages",
+};
+
+// Mapeamento de ação para permission_key em organization_role_permissions
+// (single source of truth do Pitstop > Permissões).
+const ACTION_TO_ORG_PERMISSION: Partial<Record<PermissionAction, string>> = {
+  create_lead:      "can_create_leads",
+  export_leads:     "can_export_leads",
+  view_lead:        "see_all_leads",
+  move_pipe_record: "can_move_pipe_records",
+  trigger_campaign: "can_manage_campaigns",
 };
 
 // ─── Helper ──────────────────────────────────────────────
@@ -121,7 +134,7 @@ export async function canUserPerformAction(params: {
     return { allowed: true, reason: `feature:${featureKey}` };
   }
 
-  // 5. Permissões baseadas em org_permission_key (can_delete_leads, etc.)
+  // 5. delete_lead — branch dedicada (mantida pra preservar mensagem PT-BR)
   if (action === "delete_lead") {
     const allowed = await checkOrgPermission(supabase, tm.id, organizationId, tm.role, "can_delete_leads");
     if (!allowed) {
@@ -131,11 +144,25 @@ export async function canUserPerformAction(params: {
     return { allowed: true, reason: "can_delete_leads" };
   }
 
-  // 6. Verificar na matriz legada team_member_permissions
+  // 6. Permissões baseadas em organization_role_permissions (Pitstop tab).
+  // Single source of truth a partir de 2026-05-20.
+  const orgPermissionKey = ACTION_TO_ORG_PERMISSION[action];
+  if (orgPermissionKey) {
+    const allowed = await checkOrgPermission(
+      supabase, tm.id, organizationId, tm.role, orgPermissionKey,
+    );
+    if (!allowed) {
+      await logDenied(userId, organizationId, action, `org_permission_denied:${orgPermissionKey}`);
+      return { allowed: false, reason: `Sem permissão: ${orgPermissionKey}` };
+    }
+    return { allowed: true, reason: orgPermissionKey };
+  }
+
+  // 7. Verificar na matriz legada team_member_permissions (fallback).
   const matrixMapping = ACTION_TO_MATRIX[action];
   if (matrixMapping) {
     const matrixResult = await checkMatrixPermission(
-      supabase, tm.id, matrixMapping.resource, matrixMapping.action
+      supabase, tm.id, matrixMapping.resource, matrixMapping.action,
     );
 
     if (matrixResult === "denied") {
@@ -143,16 +170,6 @@ export async function canUserPerformAction(params: {
       return { allowed: false, reason: `Sem permissão: ${matrixMapping.resource}.${matrixMapping.action}` };
     }
 
-    return { allowed: true, reason: `matrix_${matrixResult}` };
-  }
-
-  // 7. Para move_pipe_record, verificar se tem alguma permissão no pipe
-  if (action === "move_pipe_record" && resourceId) {
-    const matrixResult = await checkMatrixPermission(supabase, tm.id, resourceId, "edit");
-    if (matrixResult === "denied") {
-      await logDenied(userId, organizationId, action, `matrix_denied_${resourceId}`);
-      return { allowed: false, reason: `Sem permissão para mover registros neste funil` };
-    }
     return { allowed: true, reason: `matrix_${matrixResult}` };
   }
 

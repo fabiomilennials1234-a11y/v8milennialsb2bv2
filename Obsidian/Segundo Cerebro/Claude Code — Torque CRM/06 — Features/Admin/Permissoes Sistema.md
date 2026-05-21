@@ -3,12 +3,20 @@ type: feature
 title: Permissões Sistema
 status: active
 created: 2026-04-12
-updated: 2026-04-12
-tags: [uncategorized]
-related: []
+updated: 2026-05-20
+tags: [permissions, multi-tenant]
+related: [ADR-2026-05-20-permission-tab-storage-split]
 owner: gabriel
-related_files: []
+related_files:
+  - src/components/settings/PermissionsTab.tsx
+  - src/lib/permission-catalog.ts
+  - src/hooks/useOrgRolePermissions.ts
+  - src/hooks/useUpdateRolePermission.ts
+  - supabase/functions/_shared/permission_engine.ts
+  - supabase/migrations/20260520000000_permission_tab_schema.sql
 ---
+
+> **2026-05-20** — Pitstop > Permissões tab introduzida. 12 toggles (9 em `organization_role_permissions`, 3 em `feature_permissions.default_value`). Fase 1 enforcement: `can_delete_leads` via RLS em `leads`. Detalhes: [ADR-2026-05-20](../../04%20—%20Decisões/ADR-2026-05-20-permission-tab-storage-split.md). Backlog server-side restante: [server-side-enforcement-phase2](../../08%20—%20Backlog/backlog/server-side-enforcement-phase2.md).
 
 # Permissões Sistema
 
