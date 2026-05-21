@@ -295,7 +295,7 @@ export function usePipeConfirmacaoMetrics(range: DateRange | null) {
   });
 }
 
-function computeConfirmacaoStats(
+export function computeConfirmacaoStats(
   list: Array<{ status: string; meeting_date?: string | null; updated_at?: string | null }>,
   isOverdue: (r: { status: string; updated_at?: string | null }) => boolean,
 ): PipeConfirmacaoMetrics {
@@ -309,24 +309,24 @@ function computeConfirmacaoStats(
   const perdido = list.filter((r) => r.status === "perdido").length;
   const remarcar = list.filter((r) => r.status === "remarcar").length;
 
-  const comDataPassada = list.filter(
-    (r) => r.meeting_date && new Date(r.meeting_date) <= today,
-  );
-  const finalizadosDataPassada = comDataPassada.filter((r) =>
+  // No-show triggered by card movement (remarcar/perdido), regardless of
+  // meeting_date. Denominator scopes to finalised stages so the rate stays
+  // in [0,100].
+  const finalizados = list.filter((r) =>
     ["compareceu", "perdido", "remarcar"].includes(r.status),
   );
-  const noShowCountDataPassada = finalizadosDataPassada.filter(
+  const noShowCount = finalizados.filter(
     (r) => r.status === "perdido" || r.status === "remarcar",
   ).length;
   const noShowRate =
-    finalizadosDataPassada.length > 0
-      ? Math.round((noShowCountDataPassada / finalizadosDataPassada.length) * 100)
+    finalizados.length > 0
+      ? Math.round((noShowCount / finalizados.length) * 100)
       : 0;
   const showRate =
-    finalizadosDataPassada.length > 0
+    finalizados.length > 0
       ? Math.round(
-          (finalizadosDataPassada.filter((r) => r.status === "compareceu").length /
-            finalizadosDataPassada.length) *
+          (finalizados.filter((r) => r.status === "compareceu").length /
+            finalizados.length) *
             100,
         )
       : 0;
