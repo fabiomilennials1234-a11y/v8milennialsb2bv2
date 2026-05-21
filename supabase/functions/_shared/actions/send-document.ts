@@ -15,16 +15,27 @@ import { isCopilotCanceled, logCopilotCancellation } from "../copilot/cancellati
 import { captureMessage } from "../sentry.ts";
 
 /**
- * Checks if a document was already sent (status=completed) in a conversation.
+ * Checks if a document was already sent in a conversation.
  * Used as hard dedup gate before dispatching the actual send.
  *
- * Scope: per conversation_id — same doc blocked for entire conversation lifetime.
+ * Two layers:
+ *   1. pending_ai_actions — primary gate scoped per conversation+document.
+ *   2. whatsapp_messages fallback — only when filePath provided. Catches the
+ *      edge case where the pending_ai_action row was lost (manual delete,
+ *      schema migration) but the media was already delivered. Matches the
+ *      exact media via media_url ILIKE on the storage path basename.
+ *
+ * Earlier revisions had a fallback that blocked on "any outgoing AI message
+ * within 1h" — that fired on every text reply and silently skipped every
+ * legitimate video. The match must be on the document itself, not on
+ * unrelated chatter.
  */
 export async function checkDocumentAlreadySent(
   supabase: SupabaseClient,
   conversationId: string,
   documentId: string,
   leadId?: string | null,
+  filePath?: string | null,
 ): Promise<boolean> {
   const { data } = await supabase
     .from("pending_ai_actions")
@@ -49,7 +60,7 @@ export async function checkDocumentAlreadySent(
     }
   }
 
-  if (!leadId) return false;
+  if (!leadId || !filePath) return false;
 
   const { data: lead } = await supabase
     .from("leads")
@@ -59,12 +70,17 @@ export async function checkDocumentAlreadySent(
 
   if (!lead?.phone) return false;
 
+  const basename = filePath.split("/").pop();
+  if (!basename) return false;
+
   const { data: sentMessages } = await supabase
     .from("whatsapp_messages")
     .select("id")
     .eq("phone_number", lead.phone)
     .eq("direction", "outgoing")
     .eq("sent_by_ai", true)
+    .in("message_type", ["document", "image", "video", "audio"])
+    .ilike("media_url", `%${basename}%`)
     .gte("timestamp", new Date(Date.now() - 3600_000).toISOString())
     .limit(1);
 
@@ -104,20 +120,8 @@ export async function executeSendDocument(
     return { success: false, error: "lead_id is required to send document" };
   }
 
-  // 0. Dedup gate — block duplicate document sends per conversation lifetime.
-  if (conversationId) {
-    const alreadySent = await checkDocumentAlreadySent(supabase, conversationId, documentId, leadId);
-    if (alreadySent) {
-      console.debug("[executeSendDocument] Duplicate document skipped:", { conversationId, documentId });
-      return {
-        success: true,
-        message: "Document already sent in this conversation — skipped",
-        data: { skipped: true, reason: "duplicate_document" },
-      };
-    }
-  }
-
-  // 1. Buscar documento e metadados
+  // 1. Buscar documento e metadados (antes do gate — fallback whatsapp_messages
+  //    precisa do file_path pra fazer match preciso via media_url ILIKE).
   const { data: doc, error: docError } = await supabase
     .from("copilot_agent_documents")
     .select("id, file_name, file_path, mime_type, organization_id, file_type")
@@ -129,7 +133,26 @@ export async function executeSendDocument(
     return { success: false, error: `Document not found: ${docError?.message || "not found"}` };
   }
 
-  // 2. Gerar URL assinada (valida por 1 hora)
+  // 2. Dedup gate — block duplicate document sends per conversation lifetime.
+  if (conversationId) {
+    const alreadySent = await checkDocumentAlreadySent(
+      supabase,
+      conversationId,
+      documentId,
+      leadId,
+      doc.file_path,
+    );
+    if (alreadySent) {
+      console.debug("[executeSendDocument] Duplicate document skipped:", { conversationId, documentId });
+      return {
+        success: true,
+        message: "Document already sent in this conversation — skipped",
+        data: { skipped: true, reason: "duplicate_document" },
+      };
+    }
+  }
+
+  // 3. Gerar URL assinada (valida por 1 hora)
   const { data: signedUrlData, error: signedUrlError } = await supabase.storage
     .from("agent-documents")
     .createSignedUrl(doc.file_path, 3600);
@@ -141,7 +164,7 @@ export async function executeSendDocument(
     };
   }
 
-  // 3. Buscar telefone do lead e instância WhatsApp
+  // 4. Buscar telefone do lead e instância WhatsApp
   const { data: lead } = await supabase
     .from("leads")
     .select("phone")
