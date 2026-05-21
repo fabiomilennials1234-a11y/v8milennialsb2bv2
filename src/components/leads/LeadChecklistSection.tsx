@@ -78,7 +78,7 @@ const LeadChecklistItems = memo(function LeadChecklistItems({ checklistId }: Lea
           <input
             type="checkbox"
             checked={item.is_completed}
-            onChange={() => toggleItem.mutate({ id: item.id, is_completed: !item.is_completed })}
+            onChange={() => toggleItem.mutate({ id: item.id, checklist_id: checklistId, is_completed: !item.is_completed })}
             className="rounded border-muted-foreground/40 text-primary focus:ring-primary/20"
           />
           <span className={cn("flex-1", item.is_completed && "line-through text-muted-foreground")}>

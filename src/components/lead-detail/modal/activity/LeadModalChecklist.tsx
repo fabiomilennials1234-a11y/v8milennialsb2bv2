@@ -274,7 +274,7 @@ function ChecklistRow({
                 <button
                   type="button"
                   onClick={() =>
-                    toggleItem.mutate({ id: item.id, is_completed: !item.is_completed })
+                    toggleItem.mutate({ id: item.id, checklist_id: checklist.id, is_completed: !item.is_completed })
                   }
                   className={cn(
                     "w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition-colors",

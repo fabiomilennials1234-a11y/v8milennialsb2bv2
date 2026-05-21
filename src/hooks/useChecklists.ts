@@ -188,26 +188,78 @@ export function useToggleChecklistItem() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ id, is_completed }: { id: string; is_completed: boolean }) => {
-      const { data, error } = await supabase
+    mutationFn: async ({
+      id,
+      is_completed,
+    }: {
+      id: string;
+      checklist_id: string;
+      is_completed: boolean;
+    }) => {
+      const { error } = await supabase
         .from("checklist_items")
         .update({
           is_completed,
           completed_at: is_completed ? new Date().toISOString() : null,
         })
-        .eq("id", id)
-        .select()
-        .single();
+        .eq("id", id);
 
       if (error) throw error;
-      return data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["checklist_items"] });
+    onMutate: async ({ id, checklist_id, is_completed }) => {
+      await queryClient.cancelQueries({ queryKey: ["checklist_items", checklist_id] });
+
+      const prevItems = queryClient.getQueryData<ChecklistItem[]>([
+        "checklist_items",
+        checklist_id,
+      ]);
+
+      const nowIso = new Date().toISOString();
+      queryClient.setQueryData<ChecklistItem[]>(
+        ["checklist_items", checklist_id],
+        (old) =>
+          (old ?? []).map((i) =>
+            i.id === id
+              ? { ...i, is_completed, completed_at: is_completed ? nowIso : null }
+              : i,
+          ),
+      );
+
+      const delta = is_completed ? 1 : -1;
+      const patchCounts = (
+        old: ChecklistWithCounts[] | undefined,
+      ): ChecklistWithCounts[] | undefined =>
+        old?.map((c) =>
+          c.id === checklist_id
+            ? {
+                ...c,
+                completed_items: Math.max(
+                  0,
+                  Math.min(c.total_items, c.completed_items + delta),
+                ),
+              }
+            : c,
+        );
+      queryClient.setQueriesData<ChecklistWithCounts[]>(
+        { queryKey: ["checklists"] },
+        patchCounts,
+      );
+
+      return { prevItems, checklist_id };
+    },
+    onError: (error, _vars, ctx) => {
+      if (ctx?.prevItems) {
+        queryClient.setQueryData(
+          ["checklist_items", ctx.checklist_id],
+          ctx.prevItems,
+        );
+      }
       queryClient.invalidateQueries({ queryKey: ["checklists"] });
-    },
-    onError: (error) => {
       toast.error("Erro ao atualizar item", { description: error.message });
+    },
+    onSettled: (_d, _e, vars) => {
+      queryClient.invalidateQueries({ queryKey: ["checklist_items", vars.checklist_id] });
+      queryClient.invalidateQueries({ queryKey: ["checklists"] });
     },
   });
 }
