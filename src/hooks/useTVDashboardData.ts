@@ -179,12 +179,12 @@ export function useTVDashboardData() {
         };
       });
       
-      // No-show: apenas reuniões cuja data já passou (não inclui agendadas futuras)
-      const finalizedConfirmacoes = currentMonthConfirmacoes.filter(c => {
-        const dataJaPassou = c.meeting_date && new Date(c.meeting_date) <= now;
-        return dataJaPassou && ["remarcar", "compareceu", "perdido"].includes(c.status);
-      });
-      const noShowCount = finalizedConfirmacoes.filter(c => 
+      // No-show: triggered by card movement to remarcar/perdido, regardless of
+      // meeting_date. Denominator scopes to finalised stages.
+      const finalizedConfirmacoes = currentMonthConfirmacoes.filter(c =>
+        ["remarcar", "compareceu", "perdido"].includes(c.status)
+      );
+      const noShowCount = finalizedConfirmacoes.filter(c =>
         c.status === "remarcar" || c.status === "perdido"
       ).length;
       const noShowGeral = finalizedConfirmacoes.length > 0 
