@@ -7,9 +7,11 @@ import { useOrganization } from "./useOrganization";
 import { useIsAdmin } from "./useUserRole";
 
 const DEFAULT_OVERDUE_DAYS = 5;
+const DEFAULT_REORDER_CYCLE_DAYS = 30;
 
 export interface OrganizationSettings {
   confirmacao_overdue_days: number;
+  default_reorder_cycle_days: number;
 }
 
 export function useOrganizationSettings() {
@@ -21,44 +23,51 @@ export function useOrganizationSettings() {
     queryKey: ["organization-settings", organizationId],
     queryFn: async (): Promise<OrganizationSettings> => {
       if (!organizationId) {
-        return { confirmacao_overdue_days: DEFAULT_OVERDUE_DAYS };
+        return { confirmacao_overdue_days: DEFAULT_OVERDUE_DAYS, default_reorder_cycle_days: DEFAULT_REORDER_CYCLE_DAYS };
       }
       const { data, error } = await supabase
         .from("organizations")
-        .select("confirmacao_overdue_days")
+        .select("confirmacao_overdue_days, default_reorder_cycle_days")
         .eq("id", organizationId)
         .single();
 
       if (error) {
-        // Coluna pode não existir ainda (migration não rodou)
         if (error.code === "PGRST116" || error.message?.includes("column")) {
-          return { confirmacao_overdue_days: DEFAULT_OVERDUE_DAYS };
+          return { confirmacao_overdue_days: DEFAULT_OVERDUE_DAYS, default_reorder_cycle_days: DEFAULT_REORDER_CYCLE_DAYS };
         }
         throw error;
       }
 
       const days = data?.confirmacao_overdue_days;
+      const cycleDays = (data as any)?.default_reorder_cycle_days;
       return {
         confirmacao_overdue_days:
           typeof days === "number" && days >= 1 && days <= 365 ? days : DEFAULT_OVERDUE_DAYS,
+        default_reorder_cycle_days:
+          typeof cycleDays === "number" && cycleDays >= 1 && cycleDays <= 365 ? cycleDays : DEFAULT_REORDER_CYCLE_DAYS,
       };
     },
     enabled: isReady && !!organizationId,
   });
 
   const updateMutation = useMutation({
-    mutationFn: async (payload: { confirmacao_overdue_days: number }) => {
+    mutationFn: async (payload: Partial<{ confirmacao_overdue_days: number; default_reorder_cycle_days: number }>) => {
       if (!organizationId) throw new Error("Sem organização");
+      const update: Record<string, number> = {};
+      if (payload.confirmacao_overdue_days != null) {
+        update.confirmacao_overdue_days = Math.min(365, Math.max(1, payload.confirmacao_overdue_days));
+      }
+      if (payload.default_reorder_cycle_days != null) {
+        update.default_reorder_cycle_days = Math.min(365, Math.max(1, payload.default_reorder_cycle_days));
+      }
       const { data, error } = await supabase
         .from("organizations")
-        .update({
-          confirmacao_overdue_days: Math.min(365, Math.max(1, payload.confirmacao_overdue_days)),
-        })
+        .update(update)
         .eq("id", organizationId)
-        .select("confirmacao_overdue_days")
+        .select("confirmacao_overdue_days, default_reorder_cycle_days")
         .single();
       if (error) throw error;
-      return data as { confirmacao_overdue_days: number };
+      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["organization-settings", organizationId] });
@@ -66,7 +75,7 @@ export function useOrganizationSettings() {
   });
 
   return {
-    settings: query.data ?? { confirmacao_overdue_days: DEFAULT_OVERDUE_DAYS },
+    settings: query.data ?? { confirmacao_overdue_days: DEFAULT_OVERDUE_DAYS, default_reorder_cycle_days: DEFAULT_REORDER_CYCLE_DAYS },
     isLoading: query.isLoading,
     isAdmin,
     updateSettings: updateMutation.mutateAsync,

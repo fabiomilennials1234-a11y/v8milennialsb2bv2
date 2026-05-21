@@ -444,6 +444,66 @@ function ConfirmacaoOverdueSettings() {
   );
 }
 
+function ReorderCycleSettings() {
+  const { settings, isAdmin, updateSettings, isUpdating } = useOrganizationSettings();
+  const [localDays, setLocalDays] = useState(settings.default_reorder_cycle_days);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    setLocalDays(settings.default_reorder_cycle_days);
+  }, [settings.default_reorder_cycle_days]);
+
+  const handleSave = async () => {
+    const value = Math.min(365, Math.max(1, Number(localDays) || 30));
+    try {
+      await updateSettings({ default_reorder_cycle_days: value });
+      setLocalDays(value);
+      setSaved(true);
+      toast.success("Ciclo de recompra salvo!");
+      setTimeout(() => setSaved(false), 2000);
+    } catch {
+      toast.error("Erro ao salvar");
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h3 className="text-lg font-medium">Carteira de Clientes</h3>
+        <p className="text-sm text-muted-foreground">
+          Ciclo padrão de recompra para clientes novos (com menos de 2 pedidos)
+        </p>
+      </div>
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="grid gap-2">
+          <Label htmlFor="reorder-cycle-days">Dias entre recompras (padrão)</Label>
+          <Input
+            id="reorder-cycle-days"
+            type="number"
+            min={1}
+            max={365}
+            value={localDays}
+            onChange={(e) => setLocalDays(Number(e.target.value) || 30)}
+            disabled={!isAdmin}
+            className="w-24"
+          />
+        </div>
+        {isAdmin && (
+          <Button
+            onClick={handleSave}
+            disabled={isUpdating || localDays === settings.default_reorder_cycle_days}
+          >
+            {isUpdating ? "Salvando..." : saved ? "Salvo!" : "Salvar"}
+          </Button>
+        )}
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Clientes com 2+ pedidos calculam o ciclo automaticamente pela média entre compras.
+      </p>
+    </div>
+  );
+}
+
 function GeneralSettings() {
   const { setTheme, resolvedTheme } = useTheme();
   const transition = useThemeTransition();
@@ -514,6 +574,10 @@ function GeneralSettings() {
 
       <div className="pt-6 border-t border-border">
         <ConfirmacaoOverdueSettings />
+      </div>
+
+      <div className="pt-6 border-t border-border">
+        <ReorderCycleSettings />
       </div>
     </div>
   );

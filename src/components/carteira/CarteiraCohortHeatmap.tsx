@@ -1,14 +1,27 @@
 import { useMemo, useState } from "react";
 import { useCohortAnalysis, type CohortRow } from "@/hooks/useCohortAnalysis";
 import { cn } from "@/lib/utils";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 function heatColor(pct: number): string {
-  if (pct >= 80) return "bg-emerald-500/70 text-emerald-100";
+  if (pct >= 80) return "bg-emerald-500/70 text-emerald-50";
   if (pct >= 60) return "bg-emerald-500/40 text-emerald-200";
-  if (pct >= 40) return "bg-amber-500/40 text-amber-200";
-  if (pct >= 20) return "bg-red-500/30 text-red-300";
-  if (pct > 0) return "bg-red-500/50 text-red-200";
-  return "bg-muted/50 text-muted-foreground";
+  if (pct >= 40) return "bg-amber-500/40 text-amber-100";
+  if (pct >= 20) return "bg-red-500/30 text-red-200";
+  if (pct > 0) return "bg-red-500/50 text-red-100";
+  return "bg-muted/30 text-muted-foreground/60";
 }
 
 function formatMonth(iso: string): string {
@@ -17,9 +30,9 @@ function formatMonth(iso: string): string {
 }
 
 export function CarteiraCohortHeatmap() {
-  const [segment, setSegment] = useState<string>("");
+  const [segment, setSegment] = useState<string>("all");
   const { data: rows = [], isLoading } = useCohortAnalysis(
-    segment ? { segment } : undefined,
+    segment && segment !== "all" ? { segment } : undefined,
   );
 
   const { cohorts, maxOffset } = useMemo(() => {
@@ -54,19 +67,25 @@ export function CarteiraCohortHeatmap() {
   return (
     <div className="bg-card border border-border rounded-xl p-5">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-semibold text-foreground">Retenção por Coorte</h3>
-        <select
-          value={segment}
-          onChange={(e) => setSegment(e.target.value)}
-          className="bg-background border border-border rounded-md px-2 py-1 text-xs text-muted-foreground"
-        >
-          <option value="">Todos segmentos</option>
-          <option value="ouro">Ouro</option>
-          <option value="prata">Prata</option>
-          <option value="novo">Novo</option>
-          <option value="resgate">Resgate</option>
-          <option value="dormindo">Dormindo</option>
-        </select>
+        <div>
+          <h3 className="text-sm font-semibold text-foreground">Retenção por Coorte</h3>
+          <p className="text-[10px] text-muted-foreground mt-0.5">
+            % de clientes que compraram novamente no mês N após primeira compra
+          </p>
+        </div>
+        <Select value={segment} onValueChange={setSegment}>
+          <SelectTrigger className="w-[160px] h-8 text-xs">
+            <SelectValue placeholder="Todos segmentos" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos segmentos</SelectItem>
+            <SelectItem value="ouro">Ouro</SelectItem>
+            <SelectItem value="prata">Prata</SelectItem>
+            <SelectItem value="novo">Novo</SelectItem>
+            <SelectItem value="resgate">Resgate</SelectItem>
+            <SelectItem value="dormindo">Dormindo</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       <div className="overflow-x-auto">
@@ -79,7 +98,7 @@ export function CarteiraCohortHeatmap() {
               {Array.from({ length: maxOffset + 1 }, (_, i) => (
                 <th
                   key={i}
-                  className="text-center text-muted-foreground font-medium py-1 px-1 min-w-[36px]"
+                  className="text-center text-muted-foreground font-medium py-1.5 px-1 min-w-[44px]"
                 >
                   M{i}
                 </th>
@@ -100,19 +119,32 @@ export function CarteiraCohortHeatmap() {
                   {Array.from({ length: maxOffset + 1 }, (_, i) => {
                     const cell = offsets.get(i);
                     if (!cell) {
-                      return <td key={i} className="p-0.5"><div className="w-full h-6" /></td>;
+                      return (
+                        <td key={i} className="p-0.5">
+                          <div className="w-full h-8 rounded border border-dashed border-border/30" />
+                        </td>
+                      );
                     }
                     return (
                       <td key={i} className="p-0.5">
-                        <div
-                          className={cn(
-                            "w-full h-6 rounded flex items-center justify-center text-[10px] font-medium tabular-nums",
-                            heatColor(cell.retention_pct),
-                          )}
-                          title={`${cell.active_clients}/${cell.total_clients} clientes (${cell.retention_pct}%)`}
-                        >
-                          {cell.retention_pct}%
-                        </div>
+                        <TooltipProvider delayDuration={100}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div
+                                className={cn(
+                                  "w-full h-8 rounded border border-border/20 flex items-center justify-center text-[10px] font-semibold tabular-nums cursor-default transition-colors",
+                                  heatColor(cell.retention_pct),
+                                )}
+                              >
+                                {cell.retention_pct}%
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="text-xs">
+                              <p>{cell.active_clients}/{cell.total_clients} clientes ativos</p>
+                              <p className="text-muted-foreground">{formatMonth(month)} — M{i}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
                       </td>
                     );
                   })}

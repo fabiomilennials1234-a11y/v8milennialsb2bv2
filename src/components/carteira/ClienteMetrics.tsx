@@ -97,7 +97,7 @@ export function ClienteMetrics({ client }: ClienteMetricsProps) {
         label="Ciclo"
         value={client.reorder_cycle_days != null ? `${client.reorder_cycle_days} dias` : "—"}
         icon={<RefreshCw size={16} />}
-        sub="entre pedidos"
+        sub={(client.order_count ?? 0) < 2 ? "estimado — poucos pedidos" : "entre pedidos"}
       />
 
       <MetricCard
@@ -115,6 +115,7 @@ export function ClienteMetrics({ client }: ClienteMetricsProps) {
             : "Sem dados"
         }
         icon={<Calendar size={16} />}
+        sub={(client.order_count ?? 0) < 2 && client.next_order_expected ? "baseado em estimativa" : undefined}
       />
 
       {/* Health card — custom */}

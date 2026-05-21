@@ -24,7 +24,8 @@ import { CarteiraAlertBanner } from "@/components/carteira/CarteiraAlertBanner";
 import { CarteiraClientTable, type PortfolioClientRow } from "@/components/carteira/CarteiraClientTable";
 import { CarteiraClientPreview } from "@/components/carteira/CarteiraClientPreview";
 import { CarteiraBulkBar } from "@/components/carteira/CarteiraBulkBar";
-import { CarteiraRevenueAtRisk } from "@/components/carteira/CarteiraRevenueAtRisk";
+import { AnalyticsKPICards } from "@/components/carteira/AnalyticsKPICards";
+import { RevenueChart } from "@/components/carteira/RevenueChart";
 import { CarteiraCohortHeatmap } from "@/components/carteira/CarteiraCohortHeatmap";
 import { CarteiraVendedorRanking } from "@/components/carteira/CarteiraVendedorRanking";
 import { CarteiraApprovals } from "@/components/carteira/CarteiraApprovals";
@@ -288,11 +289,10 @@ export default function Upsell() {
           </>
         ) : carteiraView === "analytics" ? (
           <div className="space-y-6">
-            <CarteiraRevenueAtRisk />
-            <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-6">
-              <CarteiraCohortHeatmap />
-              <CarteiraVendedorRanking />
-            </div>
+            <AnalyticsKPICards />
+            <RevenueChart />
+            <CarteiraCohortHeatmap />
+            <CarteiraVendedorRanking />
           </div>
         ) : (
           <CarteiraApprovals />

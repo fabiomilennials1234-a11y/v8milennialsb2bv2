@@ -70,8 +70,8 @@ function daysBetween(a: Date, b: Date): number {
   return Math.abs(b.getTime() - a.getTime()) / (1000 * 60 * 60 * 24);
 }
 
-function computeCycleDays(orders: Order[]): number {
-  if (orders.length < 2) return DEFAULT_CYCLE_DAYS;
+function computeCycleDays(orders: Order[], orgDefault?: number): number {
+  if (orders.length < 2) return orgDefault ?? DEFAULT_CYCLE_DAYS;
   const sorted = [...orders].sort(
     (a, b) => new Date(a.sold_at).getTime() - new Date(b.sold_at).getTime(),
   );
@@ -103,6 +103,7 @@ async function processClient(
   now: Date,
   whatsappAlertsEnabled = false,
   retentionAgent: RetentionAgent | null = null,
+  orgDefaultCycleDays?: number,
 ): Promise<{ success: boolean; error?: string }> {
   // Fetch all orders for this client
   const { data: orders, error: ordersError } = await supabase
@@ -148,7 +149,7 @@ async function processClient(
 
   const orderList: Order[] = orders ?? [];
   const orderCount = orderList.length;
-  const cycleDays = computeCycleDays(orderList);
+  const cycleDays = computeCycleDays(orderList, orgDefaultCycleDays);
 
   // Last order date + recency
   const sorted = [...orderList].sort(
@@ -484,6 +485,14 @@ async function processOrg(
     retentionAgent = { retention_config: agentRow.retention_config };
   }
 
+  // Fetch org default reorder cycle
+  const { data: orgRow } = await supabase
+    .from("organizations")
+    .select("default_reorder_cycle_days")
+    .eq("id", orgId)
+    .single();
+  const orgDefaultCycleDays: number | undefined = orgRow?.default_reorder_cycle_days ?? undefined;
+
   // Compute org-wide avg ticket for segmentation
   const { data: ticketData } = await supabase
     .from("upsell_orders")
@@ -519,7 +528,7 @@ async function processOrg(
     for (let i = 0; i < batch.length; i += CONCURRENCY) {
       const chunk = batch.slice(i, i + CONCURRENCY);
       const results = await Promise.all(
-        chunk.map((client) => processClient(supabase, client, orgAvgTicket, now, whatsappAlertsEnabled, retentionAgent)),
+        chunk.map((client) => processClient(supabase, client, orgAvgTicket, now, whatsappAlertsEnabled, retentionAgent, orgDefaultCycleDays)),
       );
       for (let j = 0; j < results.length; j++) {
         if (results[j].success) {
