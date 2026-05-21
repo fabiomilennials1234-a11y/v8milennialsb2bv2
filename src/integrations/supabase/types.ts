@@ -485,6 +485,57 @@ export type Database = {
           },
         ]
       }
+      api_key_usage_log: {
+        Row: {
+          created_at: string
+          endpoint: string
+          id: number
+          ip_address: unknown
+          key_id: string
+          method: string
+          organization_id: string
+          response_time_ms: number
+          status_code: number
+        }
+        Insert: {
+          created_at?: string
+          endpoint: string
+          id?: never
+          ip_address?: unknown
+          key_id: string
+          method?: string
+          organization_id: string
+          response_time_ms: number
+          status_code: number
+        }
+        Update: {
+          created_at?: string
+          endpoint?: string
+          id?: never
+          ip_address?: unknown
+          key_id?: string
+          method?: string
+          organization_id?: string
+          response_time_ms?: number
+          status_code?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "api_key_usage_log_key_id_fkey"
+            columns: ["key_id"]
+            isOneToOne: false
+            referencedRelation: "api_keys"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "api_key_usage_log_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       api_keys: {
         Row: {
           created_at: string
@@ -1989,6 +2040,7 @@ export type Database = {
           is_completed: boolean
           lead_id: string | null
           organization_id: string
+          source_template_id: string | null
           title: string
           updated_at: string
         }
@@ -2000,6 +2052,7 @@ export type Database = {
           is_completed?: boolean
           lead_id?: string | null
           organization_id: string
+          source_template_id?: string | null
           title: string
           updated_at?: string
         }
@@ -2011,6 +2064,7 @@ export type Database = {
           is_completed?: boolean
           lead_id?: string | null
           organization_id?: string
+          source_template_id?: string | null
           title?: string
           updated_at?: string
         }
@@ -2048,6 +2102,13 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "checklists_source_template_id_fkey"
+            columns: ["source_template_id"]
+            isOneToOne: false
+            referencedRelation: "checklists"
             referencedColumns: ["id"]
           },
         ]
@@ -4643,6 +4704,7 @@ export type Database = {
       }
       custom_pipeline_stages: {
         Row: {
+          checklist_template_id: string | null
           color: string | null
           created_at: string | null
           id: string
@@ -4661,6 +4723,7 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          checklist_template_id?: string | null
           color?: string | null
           created_at?: string | null
           id?: string
@@ -4679,6 +4742,7 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          checklist_template_id?: string | null
           color?: string | null
           created_at?: string | null
           id?: string
@@ -4697,6 +4761,13 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "custom_pipeline_stages_checklist_template_id_fkey"
+            columns: ["checklist_template_id"]
+            isOneToOne: false
+            referencedRelation: "checklists"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "custom_pipeline_stages_organization_id_fkey"
             columns: ["organization_id"]
@@ -8575,6 +8646,7 @@ export type Database = {
           confirmacao_overdue_days: number
           copilot_engine_version: string
           created_at: string | null
+          default_reorder_cycle_days: number | null
           elevenlabs_api_key: string | null
           feature_flags: Json
           id: string
@@ -8610,6 +8682,7 @@ export type Database = {
           confirmacao_overdue_days?: number
           copilot_engine_version?: string
           created_at?: string | null
+          default_reorder_cycle_days?: number | null
           elevenlabs_api_key?: string | null
           feature_flags?: Json
           id?: string
@@ -8645,6 +8718,7 @@ export type Database = {
           confirmacao_overdue_days?: number
           copilot_engine_version?: string
           created_at?: string | null
+          default_reorder_cycle_days?: number | null
           elevenlabs_api_key?: string | null
           feature_flags?: Json
           id?: string
@@ -8967,6 +9041,53 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "pending_org_invites_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      permission_audit_log: {
+        Row: {
+          changed_by_role: string
+          changed_by_user_id: string | null
+          created_at: string
+          id: string
+          new_enabled: boolean | null
+          old_enabled: boolean | null
+          organization_id: string
+          permission_key: string
+          role: string | null
+          table_name: string
+        }
+        Insert: {
+          changed_by_role: string
+          changed_by_user_id?: string | null
+          created_at?: string
+          id?: string
+          new_enabled?: boolean | null
+          old_enabled?: boolean | null
+          organization_id: string
+          permission_key: string
+          role?: string | null
+          table_name: string
+        }
+        Update: {
+          changed_by_role?: string
+          changed_by_user_id?: string | null
+          created_at?: string
+          id?: string
+          new_enabled?: boolean | null
+          old_enabled?: boolean | null
+          organization_id?: string
+          permission_key?: string
+          role?: string | null
+          table_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "permission_audit_log_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
@@ -9559,6 +9680,7 @@ export type Database = {
         Row: {
           auto_move_max_days: number | null
           auto_move_min_days: number | null
+          checklist_template_id: string | null
           color: string | null
           created_at: string | null
           default_probability: number | null
@@ -9582,6 +9704,7 @@ export type Database = {
         Insert: {
           auto_move_max_days?: number | null
           auto_move_min_days?: number | null
+          checklist_template_id?: string | null
           color?: string | null
           created_at?: string | null
           default_probability?: number | null
@@ -9605,6 +9728,7 @@ export type Database = {
         Update: {
           auto_move_max_days?: number | null
           auto_move_min_days?: number | null
+          checklist_template_id?: string | null
           color?: string | null
           created_at?: string | null
           default_probability?: number | null
@@ -9626,6 +9750,13 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "pipeline_stages_checklist_template_id_fkey"
+            columns: ["checklist_template_id"]
+            isOneToOne: false
+            referencedRelation: "checklists"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "pipeline_stages_organization_id_fkey"
             columns: ["organization_id"]
@@ -9965,6 +10096,47 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      push_subscriptions: {
+        Row: {
+          auth: string
+          created_at: string
+          endpoint: string
+          id: string
+          organization_id: string
+          p256dh: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          auth: string
+          created_at?: string
+          endpoint: string
+          id?: string
+          organization_id: string
+          p256dh: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          auth?: string
+          created_at?: string
+          endpoint?: string
+          id?: string
+          organization_id?: string
+          p256dh?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "push_subscriptions_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       quota_audit_log: {
         Row: {
@@ -15007,6 +15179,10 @@ export type Database = {
         Returns: Json
       }
       get_portfolio_kpis: { Args: { p_org_id: string }; Returns: Json }
+      get_portfolio_trends: {
+        Args: { p_months?: number; p_org_id: string }
+        Returns: Json
+      }
       get_product_ranking: {
         Args: { p_end_date: string; p_org_id: string; p_start_date: string }
         Returns: Json
@@ -15803,5 +15979,3 @@ export const Constants = {
     },
   },
 } as const
-A new version of Supabase CLI is available: v2.100.1 (currently installed v)
-We recommend updating regularly for new features and bug fixes: https://supabase.com/docs/guides/cli/getting-started#updating-the-supabase-cli
