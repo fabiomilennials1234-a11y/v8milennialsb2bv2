@@ -39,6 +39,8 @@ vi.mock("@/lib/permissions", () => ({
       create_lead: true,
       send_message: true,
       view_lead: true,
+      reassign_lead: true,
+      remove_lead_from_pipe: true,
     };
     return { allowed: memberDefaults[action] ?? false, isLoading: false };
   },
@@ -84,7 +86,7 @@ describe("useLeadActionGates", () => {
   describe("role: membro", () => {
     beforeEach(() => setRole("membro"));
 
-    it("allows cotidianos (edit field, move meeting/proposal, add to pipe, tags, AI, mention)", () => {
+    it("allows cotidianos + reassign/remove (membro herda default=true das features)", () => {
       const { result } = renderHook(() => useLeadActionGates("lead-1"));
       expect(result.current.canEditField.allowed).toBe(true);
       expect(result.current.canMoveMeeting.allowed).toBe(true);
@@ -93,13 +95,13 @@ describe("useLeadActionGates", () => {
       expect(result.current.canManageTags.allowed).toBe(true);
       expect(result.current.canToggleAi.allowed).toBe(true);
       expect(result.current.canMention.allowed).toBe(true);
+      expect(result.current.canReassign.allowed).toBe(true);
+      expect(result.current.canRemoveFromPipe.allowed).toBe(true);
     });
 
-    it("denies destrutivos (delete lead, reassign, remove from pipe)", () => {
+    it("denies delete por default (feature leads.delete default=false)", () => {
       const { result } = renderHook(() => useLeadActionGates("lead-1"));
       expect(result.current.canDelete.allowed).toBe(false);
-      expect(result.current.canReassign.allowed).toBe(false);
-      expect(result.current.canRemoveFromPipe.allowed).toBe(false);
     });
 
     it("returns a reason on denied gates", () => {
