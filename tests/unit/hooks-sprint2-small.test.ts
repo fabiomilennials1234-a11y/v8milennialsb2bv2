@@ -657,7 +657,7 @@ describe("useChecklists", () => {
         wrapper: createWrapper(),
       });
       await act(async () => {
-        await result.current.mutateAsync({ id: "ci-1", is_completed: true });
+        await result.current.mutateAsync({ id: "ci-1", checklist_id: "cl-1", is_completed: true });
       });
     });
   });

@@ -163,7 +163,7 @@ export const ChecklistCard = memo(function ChecklistCard({ checklist }: Checklis
                     <ChecklistItemRow
                       key={item.id}
                       item={item}
-                      onToggle={(id, completed) => toggleItem.mutate({ id, is_completed: completed })}
+                      onToggle={(id, completed) => toggleItem.mutate({ id, checklist_id: checklist.id, is_completed: completed })}
                       onUpdate={(id, title) => updateItem.mutate({ id, title })}
                       onDelete={(id) => deleteItem.mutate(id)}
                     />
