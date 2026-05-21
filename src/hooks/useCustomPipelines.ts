@@ -56,6 +56,7 @@ export interface CustomPipelineStage {
   target_stage_id: string | null;
   target_pipe_type: string | null;
   target_stage_key: string | null;
+  checklist_template_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -704,6 +705,7 @@ export function useUpdateCustomPipelineStage() {
       target_stage_id?: string | null;
       target_pipe_type?: string | null;
       target_stage_key?: string | null;
+      checklist_template_id?: string | null;
     }) => {
       const { data, error } = await supabase
         .from("custom_pipeline_stages")

@@ -23,6 +23,7 @@ import {
   AlertTriangle,
   Palette,
   FileSpreadsheet,
+  ClipboardList,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -76,6 +77,7 @@ import {
 } from "@/components/ui/select";
 import { PIPELINE_COLORS, PIPELINE_ICONS } from "./CreatePipelineModal";
 import { ImportCustomPipelineContent } from "./ImportCustomPipelineContent";
+import { useChecklistTemplates } from "@/hooks/useChecklistTemplates";
 
 const STANDARD_PIPES: { value: string; label: string }[] = [
   { value: "whatsapp", label: "Qualificação" },
@@ -239,6 +241,8 @@ function SortableStageItem({
   onSaveEdit,
   onCancelEdit,
   isSaving,
+  templates,
+  onChecklistTemplateChange,
 }: {
   stage: CustomPipelineStage;
   onEdit: () => void;
@@ -266,6 +270,8 @@ function SortableStageItem({
   onSaveEdit: () => void;
   onCancelEdit: () => void;
   isSaving: boolean;
+  templates: { id: string; title: string; total_items: number }[];
+  onChecklistTemplateChange: (templateId: string | null) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: stage.id });
@@ -355,19 +361,43 @@ function SortableStageItem({
       ) : (
         <>
           <div className="w-4 h-4 rounded-full shrink-0 mt-0.5" style={{ backgroundColor: stage.color || "#64748b" }} />
-          <div className="flex-1">
-            <span className="font-medium">{stage.name}</span>
-            {stage.is_final_positive && (
-              <span className="ml-2 text-xs text-green-600 bg-green-100 dark:bg-green-900/30 px-2 py-0.5 rounded">Sucesso</span>
-            )}
-            {stage.is_final_negative && (
-              <span className="ml-2 text-xs text-red-600 bg-red-100 dark:bg-red-900/30 px-2 py-0.5 rounded">Perda</span>
-            )}
-            {hasTransition && (
-              <span className="ml-2 text-xs text-blue-600 bg-blue-100 dark:bg-blue-900/30 px-2 py-0.5 rounded">
-                → Transição
-              </span>
-            )}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-medium">{stage.name}</span>
+              {stage.is_final_positive && (
+                <span className="text-xs text-green-600 bg-green-100 dark:bg-green-900/30 px-2 py-0.5 rounded">Sucesso</span>
+              )}
+              {stage.is_final_negative && (
+                <span className="text-xs text-red-600 bg-red-100 dark:bg-red-900/30 px-2 py-0.5 rounded">Perda</span>
+              )}
+              {hasTransition && (
+                <span className="text-xs text-blue-600 bg-blue-100 dark:bg-blue-900/30 px-2 py-0.5 rounded">
+                  → Transição
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-1.5 mt-1 text-xs text-muted-foreground">
+              <ClipboardList className="w-3 h-3 shrink-0" />
+              <Select
+                value={stage.checklist_template_id ?? "__none__"}
+                onValueChange={(v) =>
+                  onChecklistTemplateChange(v === "__none__" ? null : v)
+                }
+              >
+                <SelectTrigger className="h-6 text-xs border-dashed flex-1 max-w-[260px] px-2">
+                  <SelectValue placeholder="Sem checklist automático" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Sem checklist automático</SelectItem>
+                  {templates.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.title}{" "}
+                      <span className="text-muted-foreground">({t.total_items})</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           <div className="flex items-center gap-1">
             <Button size="icon" variant="ghost" onClick={onEdit}><Pencil className="w-4 h-4" /></Button>
@@ -411,6 +441,27 @@ function StagesTabContent({
   const updateStage = useUpdateCustomPipelineStage();
   const deleteStage = useDeleteCustomPipelineStage();
   const reorderStages = useReorderCustomPipelineStages();
+  const { data: templates = [] } = useChecklistTemplates();
+
+  const handleChecklistTemplateChange = async (
+    stage: CustomPipelineStage,
+    templateId: string | null,
+  ) => {
+    try {
+      await updateStage.mutateAsync({
+        id: stage.id,
+        pipeline_id: pipeline.id,
+        checklist_template_id: templateId,
+      });
+      toast.success(
+        templateId
+          ? "Checklist automático configurado"
+          : "Checklist automático removido",
+      );
+    } catch (error: any) {
+      toast.error(error.message || "Erro ao atualizar checklist automático");
+    }
+  };
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -557,6 +608,10 @@ function StagesTabContent({
                   onSaveEdit={handleSaveEdit}
                   onCancelEdit={cancelEditing}
                   isSaving={updateStage.isPending}
+                  templates={templates}
+                  onChecklistTemplateChange={(templateId) =>
+                    handleChecklistTemplateChange(stage, templateId)
+                  }
                 />
               ))}
             </div>

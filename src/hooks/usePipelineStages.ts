@@ -20,6 +20,7 @@ export interface PipelineStage {
   auto_move_max_days: number | null;
   target_pipe_type: string | null;
   target_stage_key: string | null;
+  checklist_template_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -312,6 +313,7 @@ export function useUpdatePipelineStage() {
       auto_move_max_days?: number | null;
       target_pipe_type?: string | null;
       target_stage_key?: string | null;
+      checklist_template_id?: string | null;
     }) => {
       const { data, error } = await supabase
         .from("pipeline_stages")
