@@ -57,6 +57,8 @@ export function useLeadActionGates(leadId: string | null | undefined): LeadActio
   const movePipeCheck = useCanPerformAction("move_pipe_record");
   const createLeadCheck = useCanPerformAction("create_lead");
   const sendMessageCheck = useCanPerformAction("send_message");
+  const reassignCheck = useCanPerformAction("reassign_lead");
+  const removeFromPipeCheck = useCanPerformAction("remove_lead_from_pipe");
 
   const anyLoading =
     roleLoading ||
@@ -64,7 +66,9 @@ export function useLeadActionGates(leadId: string | null | undefined): LeadActio
     deleteCheck.isLoading ||
     movePipeCheck.isLoading ||
     createLeadCheck.isLoading ||
-    sendMessageCheck.isLoading;
+    sendMessageCheck.isLoading ||
+    reassignCheck.isLoading ||
+    removeFromPipeCheck.isLoading;
 
   // Fail-closed during loading.
   if (anyLoading) {
@@ -108,12 +112,12 @@ export function useLeadActionGates(leadId: string | null | undefined): LeadActio
   const canDelete: Gate = deleteCheck.allowed
     ? allow("delete_lead")
     : deny("Sem permissão para excluir leads");
-  const canReassign: Gate = isAdmin
-    ? allow("admin_only")
-    : deny("Reatribuir responsável é restrito a admins");
-  const canRemoveFromPipe: Gate = isAdmin
-    ? allow("admin_only")
-    : deny("Remover de pipe é restrito a admins");
+  const canReassign: Gate = reassignCheck.allowed
+    ? allow(reassignCheck.reason ?? "reassign_lead")
+    : deny("Sem permissão para atribuir responsáveis");
+  const canRemoveFromPipe: Gate = removeFromPipeCheck.allowed
+    ? allow(removeFromPipeCheck.reason ?? "remove_lead_from_pipe")
+    : deny("Sem permissão para remover de pipe");
 
   // Cotidianos — admin/master sempre OK; membro OK por padrão.
   const cotidianoOk = isAdmin || isMember;

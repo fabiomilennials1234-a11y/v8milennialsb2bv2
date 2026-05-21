@@ -27,6 +27,8 @@ export type AppAction =
   | "delete_lead"
   | "export_leads"
   | "view_lead"
+  | "reassign_lead"
+  | "remove_lead_from_pipe"
   | "move_pipe_record"
   | "trigger_campaign"
   | "create_campaign"
@@ -73,6 +75,8 @@ const ACTION_TO_FEATURE: Partial<Record<AppAction, string>> = {
   create_workflow: "workflows.create",
   manage_team: "team.view",
   manage_copilot: "copilot.create",
+  reassign_lead: "leads.reassign",
+  remove_lead_from_pipe: "leads.remove_from_pipe",
 };
 
 // ─── resolveAction (pure) ─────────────────────────────────
