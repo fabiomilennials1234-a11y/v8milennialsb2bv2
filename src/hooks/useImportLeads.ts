@@ -1103,7 +1103,7 @@ export function useImportLeads() {
     }
 
     if (!response.ok) {
-      throw new Error(data?.error || data?.message || `Erro ${response.status} na importação`);
+      throw new Error(data?.message || data?.error || `Erro ${response.status} na importação`);
     }
 
     if (!data?.success) throw new Error(data?.error || "Erro desconhecido na importação");
