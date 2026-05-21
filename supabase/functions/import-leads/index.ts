@@ -1190,20 +1190,8 @@ Deno.serve(
     const userId = userData.user.id;
     const supabaseEarly = getServiceClient();
 
-    // Resolve organization from team_members (server-side — ignores body org_id)
-    const { data: membership, error: memberErr } = await supabaseEarly
-      .from("team_members")
-      .select("organization_id")
-      .eq("user_id", userId)
-      .limit(1)
-      .maybeSingle();
-
-    if (memberErr || !membership?.organization_id) {
-      return unauthorizedResponse("User not associated with any organization", corsHeaders);
-    }
-    const organizationId = membership.organization_id;
-
-    // 2. Parse body
+    // Parse body first so we can resolve the target org for master users
+    // (master may not have a team_members row in the target org).
     let body: ImportPayload;
     try {
       body = await req.json();
@@ -1212,6 +1200,45 @@ Deno.serve(
         JSON.stringify({ success: false, error: "JSON inválido" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
+    }
+
+    // Resolve organization:
+    //  1. Scoped membership match (user is member of body.organization_id)
+    //  2. Master fallback (active master may target any org via body.organization_id)
+    //  3. Legacy fallback (first membership when body.organization_id is missing)
+    let organizationId: string | null = null;
+
+    if (body.organization_id) {
+      const { data: scoped } = await supabaseEarly
+        .from("team_members")
+        .select("organization_id")
+        .eq("user_id", userId)
+        .eq("organization_id", body.organization_id)
+        .maybeSingle();
+      if (scoped?.organization_id) {
+        organizationId = scoped.organization_id;
+      } else {
+        const { data: masterRow } = await supabaseEarly
+          .from("master_users")
+          .select("id")
+          .eq("user_id", userId)
+          .eq("is_active", true)
+          .maybeSingle();
+        if (masterRow) organizationId = body.organization_id;
+      }
+    }
+
+    if (!organizationId) {
+      const { data: legacy } = await supabaseEarly
+        .from("team_members")
+        .select("organization_id")
+        .eq("user_id", userId)
+        .limit(1)
+        .maybeSingle();
+      if (!legacy?.organization_id) {
+        return unauthorizedResponse("User not associated with any organization", corsHeaders);
+      }
+      organizationId = legacy.organization_id;
     }
 
     // 4. Validate payload
